@@ -1,13 +1,16 @@
 package com.ascent
 
 import com.ascent.gui.AscentScreen
+import com.ascent.waypoints.AscentWaypoints
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.OdinMod
+import com.odtheking.odin.config.ModuleConfig
 import com.odtheking.odin.events.FloorEnterEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.features.ModuleManager
 import kotlinx.coroutines.launch
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
@@ -27,7 +30,19 @@ object AscentMod : ClientModInitializer {
     private var tickCounter = 0
 
     override fun onInitializeClient() {
-        AscentConfig.load()
+        val firstRun = AscentConfig.load()
+
+        // Register our own module into Odin's module system: own ClickGUI panel
+        // ("Ascent"), own config file (config/odin/addons/ascent.json), own event
+        // subscription lifecycle. This is Odin's documented addon path.
+        ModuleManager.registerModules(ModuleConfig("ascent.json"), AscentWaypoints)
+
+        // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
+        // fresh install nothing has saved state yet, so turn the module on once.
+        if (firstRun && !AscentWaypoints.enabled) {
+            AscentWaypoints.toggle()
+            ModuleManager.saveConfigurations()
+        }
 
         // Odin's event bus: floor entry drives profile application, world load resets detection.
         on<FloorEnterEvent> { safely("floorEnter") { ClassDetect.onFloorEnter(floor.name) } }

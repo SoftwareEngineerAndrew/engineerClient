@@ -32,15 +32,20 @@ object AscentConfig {
     var data: Data = Data()
         private set
 
-    fun load() {
+    /** Returns true when this is a fresh install (no config file existed yet). */
+    fun load(): Boolean {
         try {
             if (Files.exists(file)) {
                 data = gson.fromJson(Files.readString(file), Data::class.java) ?: Data()
                 if (data.playersOnRush !in 2..5) data.playersOnRush = 4
+                return false
             }
         } catch (t: Throwable) {
             AscentMod.logger.warn("[ascent] failed to load config, keeping defaults", t)
+            return false
         }
+        save()
+        return true
     }
 
     fun save() {

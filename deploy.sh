@@ -7,9 +7,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 MODS_DIR="${ASCENT_MODS_DIR:-$HOME/.local/share/PrismLauncher/instances/26.1.2 Ascent/minecraft/mods}"
-JAR="build/libs/ascent-0.1.0.jar"
+VERSION="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"
+JAR="build/libs/ascent-$VERSION.jar"
 
 ./gradlew build -q
+
+# clear stale ascent jars so the instance never loads two versions
+rm -f "$MODS_DIR"/ascent-*.jar
 
 TARGET="$MODS_DIR/$(basename "$JAR")"
 install -m 0644 "$JAR" "$TARGET.new"
