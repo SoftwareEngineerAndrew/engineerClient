@@ -1,4 +1,4 @@
-package com.ascent.waypoints
+package com.bloodrushwaypoints.waypoints
 
 import com.odtheking.odin.events.SecretPickupEvent
 import com.odtheking.odin.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.DungeonWaypoint
@@ -10,10 +10,10 @@ import net.minecraft.world.phys.Vec3
 
 /**
  * VENDORED from Odin `dungeonwaypoints/SecretWaypoints.kt` (upstream 0.3.1 — see
- * VENDORED.md), retargeted at [AscentWaypoints]. Marks Ascent secret/etherwarp
+ * VENDORED.md), retargeted at [BrwWaypoints]. Marks BRW secret/etherwarp
  * waypoints clicked when the corresponding pickup/teleport is observed.
  */
-object AscentSecretWaypoints {
+object BrwSecretWaypoints {
 
     fun onSecret(event: SecretPickupEvent) {
         when (event) {
@@ -26,14 +26,14 @@ object AscentSecretWaypoints {
     fun onEtherwarp(packet: ClientboundPlayerPositionPacket) {
         if (!DungeonUtils.inClear) return
         val room = DungeonUtils.currentRoom ?: return
-        val etherPos = AscentWaypoints.lastEtherPos ?: return
-        if (System.currentTimeMillis() - AscentWaypoints.lastEtherTime > 1000 || packet.change.position.distanceTo(Vec3(etherPos)) > 3) return
-        val waypoints = AscentWaypoints.getWaypoints(room)
+        val etherPos = BrwWaypoints.lastEtherPos ?: return
+        if (System.currentTimeMillis() - BrwWaypoints.lastEtherTime > 1000 || packet.change.position.distanceTo(Vec3(etherPos)) > 3) return
+        val waypoints = BrwWaypoints.getWaypoints(room)
         waypoints.find { wp -> wp.blockPos == room.getRelativeCoords(etherPos) && wp.type == WaypointType.ETHERWARP }?.let {
             it.isClicked = true
-            AscentWaypoints.lastEtherPos = null
-            AscentWaypoints.applyRoom(room)
-            AscentWaypoints.lastEtherTime = 0L
+            BrwWaypoints.lastEtherPos = null
+            BrwWaypoints.applyRoom(room)
+            BrwWaypoints.lastEtherTime = 0L
         }
     }
 
@@ -42,7 +42,7 @@ object AscentSecretWaypoints {
         val room = DungeonUtils.currentRoom ?: return
         val blockPos = room.getRelativeCoords(pos)
 
-        val waypoints = AscentWaypoints.getWaypoints(room)
+        val waypoints = BrwWaypoints.getWaypoints(room)
         if (distance == 0) waypoints.find { wp -> wp.blockPos == blockPos && wp.isSecret && !wp.isClicked }
         else {
             waypoints.fold(null) { near: DungeonWaypoint?, wp ->
@@ -52,7 +52,7 @@ object AscentSecretWaypoints {
             }
         }?.let {
             it.isClicked = true
-            AscentWaypoints.applyRoom(room)
+            BrwWaypoints.applyRoom(room)
         }
     }
 }

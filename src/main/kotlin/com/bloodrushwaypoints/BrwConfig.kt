@@ -1,4 +1,4 @@
-package com.ascent
+package com.bloodrushwaypoints
 
 import com.google.gson.GsonBuilder
 import net.minecraft.client.Minecraft
@@ -6,13 +6,13 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 /**
- * Ascent's own settings. Everything waypoint-shaped lives in Odin's pack files;
+ * BRW's own settings. Everything waypoint-shaped lives in Odin's pack files;
  * this holds only the profile axes and the class stash.
  */
-object AscentConfig {
+object BrwConfig {
 
     data class Data(
-        /** Master switch: when false Ascent never touches Odin's pack selection. */
+        /** Master switch: when false BRW never touches Odin's pack selection. */
         var enabled: Boolean = true,
         /** How many party members run the blood rush with this strategy (2..5). Manual — a team-strategy choice. */
         var playersOnRush: Int = 4,
@@ -27,7 +27,7 @@ object AscentConfig {
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("ascent").resolve("config.json")
+    private val file = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("bloodrushwaypoints").resolve("config.json")
 
     var data: Data = Data()
         private set
@@ -41,7 +41,7 @@ object AscentConfig {
                 return false
             }
         } catch (t: Throwable) {
-            AscentMod.logger.warn("[ascent] failed to load config, keeping defaults", t)
+            BrwMod.logger.warn("[brw] failed to load config, keeping defaults", t)
             return false
         }
         save()
@@ -55,7 +55,7 @@ object AscentConfig {
             Files.writeString(tmp, gson.toJson(data))
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (t: Throwable) {
-            AscentMod.logger.warn("[ascent] failed to save config", t)
+            BrwMod.logger.warn("[brw] failed to save config", t)
         }
     }
 }

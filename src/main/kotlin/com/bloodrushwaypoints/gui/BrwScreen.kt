@@ -1,10 +1,10 @@
-package com.ascent.gui
+package com.bloodrushwaypoints.gui
 
-import com.ascent.AscentConfig
-import com.ascent.AscentMod
-import com.ascent.ClassDetect
-import com.ascent.RushProfiles
-import com.ascent.waypoints.AscentPackFiles
+import com.bloodrushwaypoints.BrwConfig
+import com.bloodrushwaypoints.BrwMod
+import com.bloodrushwaypoints.ClassDetect
+import com.bloodrushwaypoints.RushProfiles
+import com.bloodrushwaypoints.waypoints.BrwPackFiles
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.layouts.FrameLayout
@@ -19,18 +19,18 @@ import net.minecraft.network.chat.Component
  * active profile pack. Waypoints themselves are edited with Odin's editor —
  * the active profile pack is always Odin's edit pack.
  */
-class AscentScreen : Screen(Component.literal("Ascent")) {
+class BrwScreen : Screen(Component.literal("Blood Rush Waypoints")) {
 
     private lateinit var layout: LinearLayout
 
     override fun init() {
         super.init()
-        val d = AscentConfig.data
+        val d = BrwConfig.data
 
         layout = LinearLayout.vertical().spacing(5)
         layout.defaultCellSetting().alignHorizontallyCenter()
 
-        layout.addChild(StringWidget(Component.literal("§6§lAscent §7— Blood Rush Waypoint Profiles"), font))
+        layout.addChild(StringWidget(Component.literal("§6§lBlood Rush Waypoints"), font))
 
         val live = ClassDetect.detected?.name?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "none"
         layout.addChild(
@@ -93,15 +93,15 @@ class AscentScreen : Screen(Component.literal("Ascent")) {
     private fun pick(label: String, selected: Boolean, w: Int, mutate: () -> Unit): Button =
         Button.builder(Component.literal(if (selected) "§a§l$label" else label)) {
             mutate()
-            AscentConfig.save()
+            BrwConfig.save()
             RushProfiles.applySelection("gui")
-            AscentMod.mc.setScreen(AscentScreen())
+            BrwMod.mc.setScreen(BrwScreen())
         }.width(w).build()
 
     private fun listCustomPacks(): List<String> = try {
-        AscentPackFiles.listPackNames().filterNot { RushProfiles.isProfilePack(it) }
+        BrwPackFiles.listPackNames().filterNot { RushProfiles.isProfilePack(it) }
     } catch (t: Throwable) {
-        AscentMod.logger.warn("[ascent] failed to list packs for GUI", t)
+        BrwMod.logger.warn("[brw] failed to list packs for GUI", t)
         emptyList()
     }
 

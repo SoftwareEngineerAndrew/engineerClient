@@ -1,6 +1,6 @@
-package com.ascent.waypoints
+package com.bloodrushwaypoints.waypoints
 
-import com.ascent.AscentMod
+import com.bloodrushwaypoints.BrwMod
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
@@ -25,14 +25,14 @@ import java.lang.reflect.Type
  * `config/DungeonWaypointConfig.kt` (upstream 0.3.1 — see VENDORED.md).
  *
  * Differences from upstream, kept deliberate and small:
- * - packs live in `config/ascent/waypoints/` instead of `config/odin/dungeon-waypoints/`
- * - `createPack` is SILENT when the pack already exists (Ascent ensures 40 packs on
+ * - packs live in `config/bloodrushwaypoints/waypoints/` instead of `config/odin/dungeon-waypoints/`
+ * - `createPack` is SILENT when the pack already exists (BRW ensures 40 packs on
  *   every launch; upstream chats an error per duplicate)
- * - no legacy-config migration (Ascent has no legacy format)
+ * - no legacy-config migration (BRW has no legacy format)
  * - reuses Odin's public `DungeonWaypoints.DungeonWaypoint` type, and the on-disk JSON
  *   shape matches Odin's pack files exactly, so packs can be copied between systems.
  */
-object AscentPackFiles {
+object BrwPackFiles {
 
     data class WaypointPack(
         val name: String,
@@ -50,7 +50,7 @@ object AscentPackFiles {
     private val packType =
         object : TypeToken<MutableMap<String, MutableList<DungeonWaypoint>>>() {}.type
 
-    val packsFolder = File(Minecraft.getInstance().gameDirectory, "config/ascent/waypoints").apply { mkdirs() }
+    val packsFolder = File(Minecraft.getInstance().gameDirectory, "config/bloodrushwaypoints/waypoints").apply { mkdirs() }
 
     private fun packFile(name: String) = File(packsFolder, "$name.json")
     private fun emptyPack() = mutableMapOf<String, MutableList<DungeonWaypoint>>()
@@ -63,7 +63,7 @@ object AscentPackFiles {
                 ?.let { gson.fromJson<MutableMap<String, MutableList<DungeonWaypoint>>>(it, packType) }
                 ?: emptyPack()
         }.getOrElse {
-            AscentMod.logger.error("[ascent] failed to load pack '$packName'", it)
+            BrwMod.logger.error("[brw] failed to load pack '$packName'", it)
             emptyPack()
         }
     }
@@ -72,14 +72,14 @@ object AscentPackFiles {
         withContext(Dispatchers.IO) {
             runCatching {
                 packFile(packName).writeText(gson.toJson(waypoints))
-            }.onFailure { AscentMod.logger.error("[ascent] failed to save pack '$packName'", it) }
+            }.onFailure { BrwMod.logger.error("[brw] failed to save pack '$packName'", it) }
         }
 
     /** Returns true only when a new pack file was actually created; silent when it already exists. */
     suspend fun createPack(packName: String): Boolean = withContext(Dispatchers.IO) {
         when {
             !isValidPackName(packName) -> {
-                AscentMod.chat("§8[§6Ascent§8]§c invalid pack name '$packName' — letters, numbers, spaces, hyphens, underscores only")
+                BrwMod.chat("§8[§6BRW§8]§c invalid pack name '$packName' — letters, numbers, spaces, hyphens, underscores only")
                 false
             }
             packFile(packName).exists() -> false
@@ -87,7 +87,7 @@ object AscentPackFiles {
                 packFile(packName).writeText(gson.toJson(emptyPack()))
                 true
             }.getOrElse {
-                AscentMod.logger.error("[ascent] failed to create pack '$packName'", it)
+                BrwMod.logger.error("[brw] failed to create pack '$packName'", it)
                 false
             }
         }
@@ -96,7 +96,7 @@ object AscentPackFiles {
     suspend fun deletePack(packName: String): Boolean = withContext(Dispatchers.IO) {
         runCatching { packFile(packName).takeIf(File::exists)?.delete() == true }
             .getOrElse {
-                AscentMod.logger.error("[ascent] failed to delete pack '$packName'", it)
+                BrwMod.logger.error("[brw] failed to delete pack '$packName'", it)
                 false
             }
     }
@@ -107,7 +107,7 @@ object AscentPackFiles {
                 runCatching {
                     WaypointPack(file.nameWithoutExtension, file, gson.fromJson(file.readText(), packType))
                 }.getOrElse {
-                    AscentMod.logger.error("[ascent] failed to read pack file ${file.name}", it)
+                    BrwMod.logger.error("[brw] failed to read pack file ${file.name}", it)
                     null
                 }
             } ?: emptyList()

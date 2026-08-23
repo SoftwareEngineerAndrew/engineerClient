@@ -1,4 +1,4 @@
-rootProject.name = "ascent"
+rootProject.name = "blood-rush-waypoints"
 
 pluginManagement {
     repositories {

@@ -1,4 +1,4 @@
-package com.ascent.waypoints
+package com.bloodrushwaypoints.waypoints
 
 import com.odtheking.odin.config.WaypointPackState
 import com.odtheking.odin.config.normalized
@@ -10,31 +10,31 @@ import net.minecraft.world.phys.AABB
 
 /**
  * VENDORED from Odin `dungeonwaypoints/DungeonWaypointPacks.kt` (upstream 0.3.1 —
- * see VENDORED.md), retargeted at [AscentWaypoints] + [AscentPackFiles]. The room
- * application writes [AscentWaypoints.roomWaypoints] instead of Odin's
+ * see VENDORED.md), retargeted at [BrwWaypoints] + [BrwPackFiles]. The room
+ * application writes [BrwWaypoints.roomWaypoints] instead of Odin's
  * `room.waypoints` field (that field belongs to Odin's own renderer).
  */
 
-suspend fun AscentWaypoints.loadWaypoints() {
+suspend fun BrwWaypoints.loadWaypoints() {
     val packState = ensurePackState()
-    loadedPacks = packState.selectedPackIds.associateWithTo(mutableMapOf()) { packId -> copyWaypointMap(AscentPackFiles.loadPack(packId)) }
+    loadedPacks = packState.selectedPackIds.associateWithTo(mutableMapOf()) { packId -> copyWaypointMap(BrwPackFiles.loadPack(packId)) }
     allActiveWaypoints = rebuildVisibleWaypoints()
     applyCurrentRoom()
 }
 
-suspend fun AscentWaypoints.saveWaypoints() {
+suspend fun BrwWaypoints.saveWaypoints() {
     ensurePackState()
-    AscentPackFiles.savePack(editPackId, copyWaypointMap(loadedPacks[editPackId] ?: mutableMapOf()))
+    BrwPackFiles.savePack(editPackId, copyWaypointMap(loadedPacks[editPackId] ?: mutableMapOf()))
 }
 
-fun AscentWaypoints.resetClickedWaypoints() {
+fun BrwWaypoints.resetClickedWaypoints() {
     loadedPacks = loadedPacks.mapValuesTo(mutableMapOf()) { (_, packWaypoints) -> copyWaypointMap(packWaypoints) }
     allActiveWaypoints = rebuildVisibleWaypoints()
     applyCurrentRoom()
 }
 
-/** World-space waypoints for [room] from the merged active set — Ascent's analog of upstream's `DungeonRoom.setWaypoints()`. */
-fun AscentWaypoints.applyRoom(room: DungeonRoom) {
+/** World-space waypoints for [room] from the merged active set — BRW's analog of upstream's `DungeonRoom.setWaypoints()`. */
+fun BrwWaypoints.applyRoom(room: DungeonRoom) {
     val name = room.data?.name ?: run {
         roomWaypoints = mutableSetOf()
         return
@@ -44,17 +44,17 @@ fun AscentWaypoints.applyRoom(room: DungeonRoom) {
         ?: mutableSetOf()
 }
 
-fun AscentWaypoints.applyCurrentRoom() {
+fun BrwWaypoints.applyCurrentRoom() {
     DungeonUtils.currentRoom?.let { applyRoom(it) } ?: run { roomWaypoints = mutableSetOf() }
 }
 
-fun AscentWaypoints.getWaypoints(room: DungeonRoom): MutableList<DungeonWaypoint> =
+fun BrwWaypoints.getWaypoints(room: DungeonRoom): MutableList<DungeonWaypoint> =
     allActiveWaypoints.getOrPut(room.data?.name ?: return mutableListOf()) { mutableListOf() }
 
-fun AscentWaypoints.getEditableWaypoints(room: DungeonRoom): MutableList<DungeonWaypoint> =
+fun BrwWaypoints.getEditableWaypoints(room: DungeonRoom): MutableList<DungeonWaypoint> =
     loadedPacks.getOrPut(editPackId) { mutableMapOf() }.getOrPut(room.data?.name ?: return mutableListOf()) { mutableListOf() }
 
-fun AscentWaypoints.syncRoomToActive(room: DungeonRoom) {
+fun BrwWaypoints.syncRoomToActive(room: DungeonRoom) {
     val name = room.data?.name ?: return
     val mergedRoom = mergeRoomWaypoints(name)
     if (mergedRoom.isEmpty()) allActiveWaypoints.remove(name)
@@ -62,14 +62,14 @@ fun AscentWaypoints.syncRoomToActive(room: DungeonRoom) {
     applyRoom(room)
 }
 
-private suspend fun AscentWaypoints.ensurePackState(
+private suspend fun BrwWaypoints.ensurePackState(
     requestedSelection: List<String> = selectedPackIds,
     requestedEditPackId: String = editPackId,
 ): WaypointPackState {
-    var availablePacks = AscentPackFiles.listPackNames()
+    var availablePacks = BrwPackFiles.listPackNames()
     if (availablePacks.isEmpty()) {
-        AscentPackFiles.createPack("default")
-        availablePacks = AscentPackFiles.listPackNames()
+        BrwPackFiles.createPack("default")
+        availablePacks = BrwPackFiles.listPackNames()
     }
 
     val normalizedState = WaypointPackState(
@@ -83,14 +83,14 @@ private suspend fun AscentWaypoints.ensurePackState(
     return normalizedState
 }
 
-private fun AscentWaypoints.rebuildVisibleWaypoints(): MutableMap<String, MutableList<DungeonWaypoint>> {
+private fun BrwWaypoints.rebuildVisibleWaypoints(): MutableMap<String, MutableList<DungeonWaypoint>> {
     val roomNames = loadedPacks.values.flatMap { it.keys }.distinct()
     return roomNames.associateWithTo(mutableMapOf()) { roomName -> mergeRoomWaypoints(roomName) }.also { merged ->
         merged.entries.removeIf { it.value.isEmpty() }
     }
 }
 
-private fun AscentWaypoints.mergeRoomWaypoints(roomName: String): MutableList<DungeonWaypoint> =
+private fun BrwWaypoints.mergeRoomWaypoints(roomName: String): MutableList<DungeonWaypoint> =
     selectedPackIds.fold(mutableListOf()) { merged, packId ->
         loadedPacks[packId]?.get(roomName)?.forEach { merged.add(it.resetRuntimeState()) }
         merged

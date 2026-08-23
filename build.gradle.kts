@@ -8,6 +8,10 @@ plugins {
 group = property("maven_group") as String
 version = property("mod_version") as String
 
+base {
+    archivesName.set(property("archives_base_name") as String)
+}
+
 repositories {
     mavenCentral()
 }
