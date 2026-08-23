@@ -4,7 +4,7 @@ import com.ascent.AscentConfig
 import com.ascent.AscentMod
 import com.ascent.ClassDetect
 import com.ascent.RushProfiles
-import com.odtheking.odin.config.WaypointPackFileUtils
+import com.ascent.waypoints.AscentPackFiles
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.layouts.FrameLayout
@@ -99,10 +99,7 @@ class AscentScreen : Screen(Component.literal("Ascent")) {
         }.width(w).build()
 
     private fun listCustomPacks(): List<String> = try {
-        WaypointPackFileUtils.packsFolder.listFiles { f -> f.extension == "json" }
-            ?.map { it.nameWithoutExtension }
-            ?.filterNot { RushProfiles.isProfilePack(it) }
-            ?.sorted() ?: emptyList()
+        AscentPackFiles.listPackNames().filterNot { RushProfiles.isProfilePack(it) }
     } catch (t: Throwable) {
         AscentMod.logger.warn("[ascent] failed to list packs for GUI", t)
         emptyList()
