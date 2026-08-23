@@ -1,6 +1,6 @@
-package com.ascent.waypoints
+package com.bloodrushwaypoints.waypoints
 
-import com.ascent.AscentMod
+import com.bloodrushwaypoints.BrwMod
 import com.odtheking.odin.OdinMod.scope
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.*
@@ -24,8 +24,8 @@ import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import org.lwjgl.glfw.GLFW
 
 /**
- * Ascent's own dungeon-waypoint module — a sibling of Odin's DungeonWaypoints,
- * registered into Odin's module system (own ClickGUI panel "Ascent", own config,
+ * BRW's own dungeon-waypoint module — a sibling of Odin's DungeonWaypoints,
+ * registered into Odin's module system (own ClickGUI panel "Blood Rush", own config,
  * own pack folder, own edit mode). Odin's module is never touched: both systems
  * store, select, and render waypoints independently and can run side by side.
  *
@@ -34,21 +34,21 @@ import org.lwjgl.glfw.GLFW
  * renderer helpers and pack file format stay shared. The one structural change:
  * upstream stores the current room's world-space waypoints on Odin's DungeonRoom
  * (`room.waypoints`), which Odin's own renderer draws — writing it would merge us
- * into Odin's rendering, so Ascent keeps its own [roomWaypoints] instead.
+ * into Odin's rendering, so BRW keeps its own [roomWaypoints] instead.
  */
-object AscentWaypoints : Module(
-    name = "Ascent Waypoints",
-    category = Category.custom("Ascent"),
-    description = "Ascent's profile-driven blood-rush waypoints. Separate from Odin's Dungeon Waypoints."
+object BrwWaypoints : Module(
+    name = "Blood Rush Waypoints",
+    category = Category.custom("Blood Rush"),
+    description = "BRW's profile-driven blood-rush waypoints. Separate from Odin's Dungeon Waypoints."
 ) {
-    var allowEdits by BooleanSetting("Allow Edits", false, desc = "Allows you to edit Ascent waypoints.")
+    var allowEdits by BooleanSetting("Allow Edits", false, desc = "Allows you to edit BRW waypoints.")
     val allowTextEdit by BooleanSetting("Allow Text Edit", false, desc = "Allows you to set the text of a waypoint while sneaking.").withDependency { allowEdits }
 
     val titleScale by NumberSetting("Title Scale", 1f, 0.1f, 4f, increment = 0.1f, desc = "The scale of the titles of waypoints.")
     val disableDepth by BooleanSetting("Global Depth", false, desc = "Disables depth testing for all waypoints.")
 
-    private val editorHud by HUD("Editor HUD", "Shows information about the Ascent waypoint you're placing or looking at.", false) {
-        drawAscentWaypointEditorHud(it)
+    private val editorHud by HUD("Editor HUD", "Shows information about the BRW waypoint you're placing or looking at.", false) {
+        drawBrwWaypointEditorHud(it)
     }
 
     private val settingsDropDown by DropdownSetting("Next Waypoint Settings")
@@ -70,10 +70,10 @@ object AscentWaypoints : Module(
         .onPress {
             if (!allowEdits) return@onPress
             when (waypointType) {
-                0 -> { color = presetNormal; AscentMod.chat("§8[§6Ascent§8]§a waypoint type changed to §cNormal§a."); waypointType++ }
-                1 -> { color = presetSecret; AscentMod.chat("§8[§6Ascent§8]§a waypoint type changed to §cSecret§a."); waypointType++ }
-                2 -> { color = presetEtherwarp; AscentMod.chat("§8[§6Ascent§8]§a waypoint type changed to §cEtherwarp§a."); waypointType++ }
-                3 -> { color = presetNone; AscentMod.chat("§8[§6Ascent§8]§a waypoint type changed to §cNone§a."); waypointType = 0 }
+                0 -> { color = presetNormal; BrwMod.chat("§8[§6BRW§8]§a waypoint type changed to §cNormal§a."); waypointType++ }
+                1 -> { color = presetSecret; BrwMod.chat("§8[§6BRW§8]§a waypoint type changed to §cSecret§a."); waypointType++ }
+                2 -> { color = presetEtherwarp; BrwMod.chat("§8[§6BRW§8]§a waypoint type changed to §cEtherwarp§a."); waypointType++ }
+                3 -> { color = presetNone; BrwMod.chat("§8[§6BRW§8]§a waypoint type changed to §cNone§a."); waypointType = 0 }
             }
         }
 
@@ -83,21 +83,21 @@ object AscentWaypoints : Module(
     var allActiveWaypoints: MutableMap<String, MutableList<DungeonWaypoint>> = mutableMapOf()
 
     /**
-     * The current room's waypoints in WORLD coordinates — Ascent's replacement for
+     * The current room's waypoints in WORLD coordinates — BRW's replacement for
      * upstream's `room.waypoints` field on Odin's DungeonRoom. Rebuilt by
      * [applyCurrentRoom] on room entry and after every edit/pack change.
      */
     @Volatile
     var roomWaypoints: MutableSet<DungeonWaypoint> = mutableSetOf()
 
-    private val resetButton by ActionSetting("Reset Current Room", desc = "Resets the Ascent waypoints for the current room.") {
-        val room = DungeonUtils.currentRoom ?: return@ActionSetting AscentMod.chat("§8[§6Ascent§8]§c room not found!")
+    private val resetButton by ActionSetting("Reset Current Room", desc = "Resets the BRW waypoints for the current room.") {
+        val room = DungeonUtils.currentRoom ?: return@ActionSetting BrwMod.chat("§8[§6BRW§8]§c room not found!")
         val waypoints = getEditableWaypoints(room)
-        if (waypoints.isEmpty()) return@ActionSetting AscentMod.chat("§8[§6Ascent§8]§c current room has no editable Ascent waypoints!")
+        if (waypoints.isEmpty()) return@ActionSetting BrwMod.chat("§8[§6BRW§8]§c current room has no editable BRW waypoints!")
         waypoints.clear()
         syncRoomToActive(room)
         scope.launch { saveWaypoints() }
-        AscentMod.chat("§8[§6Ascent§8]§a reset current room.")
+        BrwMod.chat("§8[§6BRW§8]§a reset current room.")
     }
 
     var lastEtherPos: BlockPos? = null
@@ -105,12 +105,12 @@ object AscentWaypoints : Module(
 
     init {
         onReceive<ClientboundPlayerPositionPacket> {
-            AscentSecretWaypoints.onEtherwarp(this)
+            BrwSecretWaypoints.onEtherwarp(this)
         }
 
-        on<SecretPickupEvent.Bat> { AscentSecretWaypoints.onSecret(this) }
-        on<SecretPickupEvent.Item> { AscentSecretWaypoints.onSecret(this) }
-        on<SecretPickupEvent.Interact> { AscentSecretWaypoints.onSecret(this) }
+        on<SecretPickupEvent.Bat> { BrwSecretWaypoints.onSecret(this) }
+        on<SecretPickupEvent.Item> { BrwSecretWaypoints.onSecret(this) }
+        on<SecretPickupEvent.Interact> { BrwSecretWaypoints.onSecret(this) }
 
         on<RoomEnterEvent> {
             room?.let { applyRoom(it) } ?: run { roomWaypoints = mutableSetOf() }
@@ -124,16 +124,16 @@ object AscentWaypoints : Module(
         }
 
         on<RenderEvent.Extract> {
-            renderAscentWaypoints(this)
+            renderBrwWaypoints(this)
         }
 
         on<InputEvent> {
-            handleAscentEditorInput(this)
+            handleBrwEditorInput(this)
         }
     }
 
     override fun onKeybind() {
         allowEdits = !allowEdits
-        AscentMod.chat("§8[§6Ascent§8]§r waypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
+        BrwMod.chat("§8[§6BRW§8]§r waypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
     }
 }

@@ -1,6 +1,6 @@
-package com.ascent.waypoints
+package com.bloodrushwaypoints.waypoints
 
-import com.ascent.AscentMod
+import com.bloodrushwaypoints.BrwMod
 import com.odtheking.odin.OdinMod
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.events.InputEvent
@@ -33,12 +33,12 @@ import org.lwjgl.glfw.GLFW
 /**
  * VENDORED from Odin `dungeonwaypoints/DungeonWaypointEditor.kt` +
  * `DungeonWaypointHud.kt` (upstream 0.3.1 — see VENDORED.md), retargeted at
- * [AscentWaypoints.roomWaypoints]. One addition: when Odin's own DungeonWaypoints
- * edit mode is active at the same time, Ascent's editor stands down (with a one-time
+ * [BrwWaypoints.roomWaypoints]. One addition: when Odin's own DungeonWaypoints
+ * edit mode is active at the same time, BRW's editor stands down (with a one-time
  * warning) so a right-click never places into two systems at once.
  */
 
-internal fun AscentWaypoints.renderAscentWaypoints(event: RenderEvent.Extract) {
+internal fun BrwWaypoints.renderBrwWaypoints(event: RenderEvent.Extract) {
     if (!DungeonUtils.inClear) return
     if (DungeonUtils.currentRoom == null) return
     val waypoints = roomWaypoints
@@ -52,7 +52,7 @@ internal fun AscentWaypoints.renderAscentWaypoints(event: RenderEvent.Extract) {
         )
     }
 
-    ascentReachPosition?.takeIf { allowEdits && !odinEditorActive() }?.let { pos ->
+    brwReachPosition?.takeIf { allowEdits && !odinEditorActive() }?.let { pos ->
         event.drawStyledBox(relativeAabbAt(pos).move(pos), color.withAlpha(0.3f), style = if (filled) 0 else 1, depthCheck)
     }
 }
@@ -61,25 +61,25 @@ private var warnedDualEditors = false
 
 private fun odinEditorActive(): Boolean = DungeonWaypoints.enabled && DungeonWaypoints.allowEdits
 
-internal fun AscentWaypoints.handleAscentEditorInput(event: InputEvent) {
+internal fun BrwWaypoints.handleBrwEditorInput(event: InputEvent) {
     if (event.key.value != GLFW.GLFW_MOUSE_BUTTON_RIGHT || mc.screen != null) return
     cacheEtherwarpTarget()
     if (!allowEdits) return
     if (odinEditorActive()) {
         if (!warnedDualEditors) {
             warnedDualEditors = true
-            AscentMod.chat("§8[§6Ascent§8]§e both Ascent and Odin waypoint editors are on — Ascent is standing down. Disable one edit mode.")
+            BrwMod.chat("§8[§6BRW§8]§e both BRW and Odin waypoint editors are on — BRW is standing down. Disable one edit mode.")
         }
         return
     }
     val room = DungeonUtils.currentRoom ?: return
-    val pos = ascentReachPosition ?: return
+    val pos = brwReachPosition ?: return
     val blockPos = room.getRelativeCoords(pos)
     val visibleWaypoint = roomWaypoints.firstOrNull { it.blockPos == pos }
     val editableWaypoints = getEditableWaypoints(room)
     val editableWaypoint = editableWaypoints.firstOrNull { it.blockPos == blockPos }
     if (visibleWaypoint != null && editableWaypoint == null) {
-        AscentMod.chat("§8[§6Ascent§8]§e that waypoint belongs to another active pack. Switch edit packs to change it.")
+        BrwMod.chat("§8[§6BRW§8]§e that waypoint belongs to another active pack. Switch edit packs to change it.")
         return
     }
     if (allowTextEdit && mc.player?.isCrouching == true) {
@@ -87,18 +87,18 @@ internal fun AscentWaypoints.handleAscentEditorInput(event: InputEvent) {
         return
     }
     if (editableWaypoints.removeIf { it.blockPos == blockPos }) {
-        AscentMod.logger.info("[ascent] removed waypoint at $blockPos in '$editPackId'")
+        BrwMod.logger.info("[brw] removed waypoint at $blockPos in '$editPackId'")
         syncRoomToActive(room)
         OdinMod.scope.launch { saveWaypoints() }
         return
     }
     editableWaypoints.add(createWaypoint(blockPos, relativeAabbAt(pos)))
-    AscentMod.logger.info("[ascent] added waypoint at $blockPos in '$editPackId'")
+    BrwMod.logger.info("[brw] added waypoint at $blockPos in '$editPackId'")
     syncRoomToActive(room)
     OdinMod.scope.launch { saveWaypoints() }
 }
 
-internal val ascentReachPosition: BlockPos?
+internal val brwReachPosition: BlockPos?
     get() {
         val hitResult = mc.hitResult
         return when {
@@ -108,7 +108,7 @@ internal val ascentReachPosition: BlockPos?
         }
     }
 
-private fun AscentWaypoints.cacheEtherwarpTarget() {
+private fun BrwWaypoints.cacheEtherwarpTarget() {
     mc.player?.mainHandItem?.isEtherwarpItem()?.let { item ->
         Etherwarp.getEtherPos(mc.player?.position(), 56.0 + item.getInt("tuned_transmission").orElse(0))
             .takeIf { it.succeeded && it.pos != null }
@@ -119,13 +119,13 @@ private fun AscentWaypoints.cacheEtherwarpTarget() {
     }
 }
 
-private fun AscentWaypoints.openWaypointTitlePrompt(
+private fun BrwWaypoints.openWaypointTitlePrompt(
     room: DungeonRoom,
     blockPos: BlockPos,
     aabb: AABB,
     editableWaypoints: MutableList<DungeonWaypoint>,
 ) {
-    mc.setScreen(TextPromptScreen("Ascent Waypoint Name").setCallback { text ->
+    mc.setScreen(TextPromptScreen("Blood Rush Waypoint Name").setCallback { text ->
         editableWaypoints.removeIf { it.blockPos == blockPos }
         editableWaypoints.add(createWaypoint(blockPos, aabb, text))
         syncRoomToActive(room)
@@ -134,7 +134,7 @@ private fun AscentWaypoints.openWaypointTitlePrompt(
     })
 }
 
-private fun AscentWaypoints.createWaypoint(blockPos: BlockPos, aabb: AABB, title: String? = null) = DungeonWaypoint(
+private fun BrwWaypoints.createWaypoint(blockPos: BlockPos, aabb: AABB, title: String? = null) = DungeonWaypoint(
     blockPos = blockPos,
     color = color.copy(),
     filled = filled,
@@ -144,32 +144,32 @@ private fun AscentWaypoints.createWaypoint(blockPos: BlockPos, aabb: AABB, title
     type = WaypointType.getByInt(waypointType),
 )
 
-internal fun AscentWaypoints.relativeAabbAt(pos: BlockPos): AABB =
+internal fun BrwWaypoints.relativeAabbAt(pos: BlockPos): AABB =
     if (!useBlockSize) AABB(BlockPos.ZERO).inflate((sizeX - 1.0) / 2.0, (sizeY - 1.0) / 2.0, (sizeZ - 1.0) / 2.0)
     else pos.getBlockBounds() ?: AABB(BlockPos.ZERO)
 
 // --- editor HUD (vendored from DungeonWaypointHud.kt) ---
 
-internal fun GuiGraphicsExtractor.drawAscentWaypointEditorHud(example: Boolean): Pair<Int, Int> {
+internal fun GuiGraphicsExtractor.drawBrwWaypointEditorHud(example: Boolean): Pair<Int, Int> {
     if (example) {
         return drawEditorHud(
-            title = "§fAscent Waypoints §8|§f Placing",
+            title = "§fBlood Rush Waypoints §8|§f Placing",
             text = "§fType: §5Normal§7, §r#${Colors.MINECRAFT_RED.hex()}§7, §3Outline§7, §cThrough Walls§7, §2Block Size",
             color = Colors.MINECRAFT_RED,
         )
     }
 
-    if (!AscentWaypoints.allowEdits) return 0 to 0
+    if (!BrwWaypoints.allowEdits) return 0 to 0
 
     val room = DungeonUtils.currentRoom
-    val pos = ascentReachPosition
+    val pos = brwReachPosition
     if (room == null || pos == null) return 0 to 0
 
-    val hoveredWaypoint = AscentWaypoints.roomWaypoints.firstOrNull { it.blockPos == pos }
+    val hoveredWaypoint = BrwWaypoints.roomWaypoints.firstOrNull { it.blockPos == pos }
     return drawEditorHud(
-        title = "§fAscent Waypoints §8|§f ${if (hoveredWaypoint == null) "Placing" else "Viewing"}",
-        text = hoveredWaypoint?.describe() ?: AscentWaypoints.describeNextWaypoint(),
-        color = hoveredWaypoint?.color ?: AscentWaypoints.color,
+        title = "§fBlood Rush Waypoints §8|§f ${if (hoveredWaypoint == null) "Placing" else "Viewing"}",
+        text = hoveredWaypoint?.describe() ?: BrwWaypoints.describeNextWaypoint(),
+        color = hoveredWaypoint?.color ?: BrwWaypoints.color,
     )
 }
 
@@ -179,7 +179,7 @@ private fun GuiGraphicsExtractor.drawEditorHud(title: String, text: String, colo
     return textWidth to 19
 }
 
-private fun AscentWaypoints.describeNextWaypoint(): String = buildString {
+private fun BrwWaypoints.describeNextWaypoint(): String = buildString {
     append("§fType: §5${WaypointType.getByInt(waypointType)?.displayName ?: "None"}")
     append("§7, §r#${color.hex()}§7")
     append(", ${if (filled) "§2Filled" else "§3Outline"}")

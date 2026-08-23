@@ -1,4 +1,4 @@
-package com.ascent
+package com.bloodrushwaypoints
 
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -15,7 +15,7 @@ object ClassDetect {
     var detected: DungeonClass? = null
         private set
 
-    /** Floors entered with no live detection (fallback used) — visible via /ascent status. */
+    /** Floors entered with no live detection (fallback used) — visible via /brw status. */
     var fallbackFloors: Int = 0
         private set
 
@@ -34,12 +34,12 @@ object ClassDetect {
 
         detected = clazz
         announcedFallback = false
-        AscentMod.logger.info("[ascent] detected own class from tab: ${clazz.name}")
+        BrwMod.logger.info("[brw] detected own class from tab: ${clazz.name}")
 
         RushProfiles.friendlyName(clazz)?.let { friendly ->
-            if (AscentConfig.data.lastKnownClass != friendly) {
-                AscentConfig.data.lastKnownClass = friendly
-                AscentConfig.save()
+            if (BrwConfig.data.lastKnownClass != friendly) {
+                BrwConfig.data.lastKnownClass = friendly
+                BrwConfig.save()
             }
         }
         RushProfiles.applySelection("class detected: ${clazz.name}")
@@ -50,13 +50,13 @@ object ClassDetect {
         if (detected == null && !announcedFallback) {
             announcedFallback = true
             fallbackFloors++
-            val stash = AscentConfig.data.lastKnownClass
-            AscentMod.logger.warn(
-                "[ascent] floor $floorName entered with NO tab class detection " +
+            val stash = BrwConfig.data.lastKnownClass
+            BrwMod.logger.warn(
+                "[brw] floor $floorName entered with NO tab class detection " +
                     "(miss #$fallbackFloors) — using ${stash ?: "nothing (no stash either)"}"
             )
-            if (stash != null) AscentMod.chat("§8[§6Ascent§8]§e tab class detection missed — using last known: §a$stash")
-            else AscentMod.chat("§8[§6Ascent§8]§c no class detected and no stash — pick one in /ascent")
+            if (stash != null) BrwMod.chat("§8[§6BRW§8]§e tab class detection missed — using last known: §a$stash")
+            else BrwMod.chat("§8[§6BRW§8]§c no class detected and no stash — pick one in /brw")
         }
         RushProfiles.applySelection("entered $floorName")
     }

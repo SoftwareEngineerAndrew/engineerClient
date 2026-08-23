@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "id": "ascent",
+  "id": "bloodrushwaypoints",
   "version": "${version}",
-  "name": "Ascent",
-  "description": "Class-aware blood-rush waypoint profiles built on Odin's dungeon waypoint packs.",
+  "name": "Blood Rush Waypoints",
+  "description": "Class-aware blood-rush waypoint profiles built on Odin's dungeon waypoint framework.",
   "authors": ["Andrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
   "entrypoints": {
     "client": [
-      { "adapter": "kotlin", "value": "com.ascent.AscentMod" }
+      { "adapter": "kotlin", "value": "com.bloodrushwaypoints.BrwMod" }
     ]
   },
   "depends": {
