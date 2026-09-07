@@ -3,7 +3,9 @@ package com.bloodrushwaypoints.rotation
 import com.bloodrushwaypoints.BrwConfig
 import com.bloodrushwaypoints.BrwMod
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.ChatMessageEvent
+import com.odtheking.odin.events.core.EventPriority
+import com.odtheking.odin.events.core.onReceive
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -73,9 +75,16 @@ object P3Rotation : Module(
     init {
         RotationEngine.masksAvailable = { ign -> MaskTracker.available(ign) }
 
-        on<ChatMessageEvent> {
-            if (!enabled) return@on
-            BrwMod.safely("p3 chat") { onChat(value) }
+        // Chat is read off the WIRE, not from Odin's chat event. Odin posts that event from Fabric's
+        // ClientReceiveMessageEvents.ALLOW_GAME, which short-circuits: the moment any mod registered
+        // ahead of it hides or rewrites a line (terminal-split features do exactly that to every
+        // completion line), no later listener runs and the line simply never existed for us. Two
+        // clients lost all of section 1 that way. The packet hook fires before any chat handling,
+        // on the network thread, so the text is handed to the main thread in arrival order.
+        onReceive<ClientboundSystemChatPacket>(EventPriority.HIGHEST) {
+            if (!enabled || overlay()) return@onReceive
+            val text = content().string
+            BrwMod.mc.execute { BrwMod.safely("p3 chat") { onChat(text) } }
         }
 
         on<TickEvent.Server> {
