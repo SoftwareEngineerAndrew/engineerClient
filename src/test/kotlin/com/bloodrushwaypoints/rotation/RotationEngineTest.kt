@@ -284,7 +284,7 @@ class RotationEngineTest {
     fun `core completes on its arrival message and the recore target is the first one in`() {
         val core = graph.role("r_core")!!
         assertTrue(core.completeOnArrived, "core finishes on \"out of core\"")
-        assertEquals("in core", graph.recoreArrived)
+        assertEquals("inside core", graph.recoreArrived)
 
         // Drive a run to the point where someone holds core.
         val rng = Random(77)
@@ -311,7 +311,7 @@ class RotationEngineTest {
         // Recore: only finished players leap, to the first finished player who said "in core".
         RotationEngine.begin(bindings())
         assertNull(RotationEngine.recoreTargetFor("Alpha"), "nobody has finished")
-        RotationEngine.onPartyMessage("Bravo", "in core")
+        RotationEngine.onPartyMessage("Bravo", "inside core")
         assertNull(RotationEngine.recoreTargetFor("Alpha"), "Bravo said it but has not finished section 4 — ignored")
     }
 

@@ -48,8 +48,8 @@ object SetupCheck {
         // The exact texts the rotation waits on must exist as boxes.
         val have = PositionalMessages.posMessageStrings
             .mapNotNull { it.message?.trim()?.lowercase() }.toSet()
-        RotationSpec.graph.roles
-            .map { it.arrived }.filter { it.isNotBlank() && it != RotationSpec.ARRIVED_ON_LEAP }.distinct()
+        (RotationSpec.graph.roles.map { it.arrived } + RotationSpec.graph.recoreArrived)
+            .filter { it.isNotBlank() && it != RotationSpec.ARRIVED_ON_LEAP }.distinct()
             .forEach { text ->
                 items += if (text.trim().lowercase() in have) Item(true, "posmsg \"$text\"")
                 else Item(false, "posmsg \"$text\" missing", "add a /posmsg box with exactly that text")

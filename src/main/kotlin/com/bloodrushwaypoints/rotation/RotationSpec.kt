@@ -143,7 +143,7 @@ object RotationSpec {
          * the /posmsg text a player sends on reaching it, having finished; whoever said it first
          * is who everyone else leaps to.
          */
-        val recoreArrived: String = "in core",
+        val recoreArrived: String = "inside core",
     ) {
         // Lazy, not eager: Gson builds the object through Kotlin's synthetic no-arg constructor
         // and only then fills `roles`/`pots` by reflection, so an index built in the constructor
