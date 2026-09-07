@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Replay prints its own account of each decision; the engine's INFO log would just say it twice. -->
+<Configuration status="WARN">
+  <Appenders><Console name="Console" target="SYSTEM_ERR"><PatternLayout pattern="%level %msg%n"/></Console></Appenders>
+  <Loggers><Root level="WARN"><AppenderRef ref="Console"/></Root></Loggers>
+</Configuration>

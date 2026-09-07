@@ -1,6 +1,13 @@
 package com.bloodrushwaypoints
 
 import com.bloodrushwaypoints.gui.BrwScreen
+import com.bloodrushwaypoints.rotation.BrwLog
+import com.bloodrushwaypoints.rotation.LeapHighlight
+import com.bloodrushwaypoints.rotation.P3Rotation
+import com.bloodrushwaypoints.rotation.RoleVignette
+import com.bloodrushwaypoints.rotation.RotationEngine
+import com.bloodrushwaypoints.rotation.RotationSpec
+import com.bloodrushwaypoints.rotation.SetupCheck
 import com.bloodrushwaypoints.waypoints.BrwWaypoints
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -13,6 +20,7 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.ModuleManager
 import kotlinx.coroutines.launch
 import net.fabricmc.api.ClientModInitializer
+import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
@@ -36,12 +44,13 @@ object BrwMod : ClientModInitializer {
         // Register our own module into Odin's module system: own ClickGUI panel
         // ("Blood Rush"), own config file (config/odin/addons/bloodrushwaypoints.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("bloodrushwaypoints.json"), BrwWaypoints)
+        ModuleManager.registerModules(ModuleConfig("bloodrushwaypoints.json"), BrwWaypoints, P3Rotation)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn the module on once.
-        if (firstRun && !BrwWaypoints.enabled) {
-            BrwWaypoints.toggle()
+        if (firstRun) {
+            if (!BrwWaypoints.enabled) BrwWaypoints.toggle()
+            if (!P3Rotation.enabled) P3Rotation.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -54,6 +63,23 @@ object BrwMod : ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register {
             if (++tickCounter % 20 == 0) safely("classPoll") { ClassDetect.poll() }
         }
+
+        LeapHighlight.register()
+        RoleVignette.register()
+        BrwLog.open(mc.gameDirectory.toPath(), listOf(
+            "brw ${FabricLoader.getInstance().getModContainer("bloodrushwaypoints").map { it.metadata.version.friendlyString }.orElse("?")}" +
+                "  spec v${RotationSpec.graph.version}" +
+                "  odin ${FabricLoader.getInstance().getModContainer("odin").map { it.metadata.version.friendlyString }.orElse("?")}",
+            "starting role: ${RotationSpec.graph.name(BrwConfig.data.myStartingRole)}",
+        ))
+        // The player is not known until they log in; record who this client is once they are.
+        ClientTickEvents.END_CLIENT_TICK.register(object : ClientTickEvents.EndTick {
+            var done = false
+            override fun onEndTick(client: Minecraft) {
+                if (done) return
+                client.player?.let { BrwLog.log("SESSION", "I am ${it.name.string}"); done = true }
+            }
+        })
 
         registerCommand()
 
@@ -120,6 +146,25 @@ object BrwMod : ClientModInitializer {
         )
     }
 
+    private fun roleLines(): List<String> {
+        val me = mc.player?.name?.string
+        val mineId = BrwConfig.data.myStartingRole
+        val lines = mutableListOf("§8[§6BRW§8]§7 phase-3 starting roles §8(/brw role <role> sets yours; the rest are heard from party chat)")
+        RotationSpec.graph.startingRoles.forEach { role ->
+            val ign = P3Rotation.teamRoles[role.id] ?: if (role.id == mineId) me else null
+            val mine = if (role.id == mineId) " §8(you)" else ""
+            val tasks = role.tasks.joinToString(" ") { t ->
+                val letter = t.type.first().uppercase()
+                if (t.check) "§b$letter" else "§8$letter"
+            }
+            lines += "§7 ${role.name.padEnd(7)} §f${ign ?: "§8unbound"}$mine  $tasks§7 ${role.note}"
+        }
+        if (RotationEngine.running) {
+            lines += "§7 live: §a${RotationEngine.roleOf(me ?: "")?.name ?: "§8—"}§7, section §a${P3Rotation.section}"
+        }
+        return lines
+    }
+
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // Same tree registered under the formal name (both casings, since Brigadier
@@ -151,6 +196,52 @@ object BrwMod : ClientModInitializer {
                         RushProfiles.applySelection("door set")
                         1
                     }))
+                    .then(literal("log")
+                        .executes { ctx ->
+                            ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 log: §f${BrwLog.path ?: "not open"}"))
+                            ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/brw log mark <note>§7 stamps a note into it"))
+                            1
+                        }
+                        .then(literal("mark").then(argument("note", StringArgumentType.greedyString()).executes { ctx ->
+                            val note = StringArgumentType.getString(ctx, "note")
+                            BrwLog.log("MARK", note)
+                            P3Rotation.debugLines().forEach { BrwLog.log("MARK", "  " + it.replace(Regex("§."), "")) }
+                            ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 marked: §f$note"))
+                            1
+                        })))
+                    .then(literal("debug").executes { ctx ->
+                        P3Rotation.debugLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
+                        1
+                    })
+                    .then(literal("setup").executes { ctx ->
+                        SetupCheck.lines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
+                        1
+                    })
+                    .then(literal("roles").executes { ctx ->
+                        roleLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
+                        1
+                    })
+                    .then(literal("role")
+                        .then(literal("clear").executes { ctx ->
+                            BrwConfig.data.myStartingRole = null
+                            BrwConfig.save()
+                            ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 your starting role is cleared."))
+                            1
+                        })
+                        .then(argument("role", StringArgumentType.word()).executes { ctx ->
+                            val wanted = StringArgumentType.getString(ctx, "role")
+                            val role = RotationSpec.graph.startingRoles.find { it.name.equals(wanted, true) }
+                            if (role == null) {
+                                ctx.source.sendError(Component.literal(
+                                    "§cUnknown starting role '$wanted' — use ${RotationSpec.graph.startingRoles.joinToString("/") { it.name }}"))
+                                return@executes 0
+                            }
+                            BrwConfig.data.myStartingRole = role.id
+                            BrwConfig.save()
+                            ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 you run §a${role.name}§7 — announced to the party when you enter the boss room."))
+                            P3Rotation.announceMyRole()
+                            1
+                        }))
                     .then(literal("class").then(argument("name", StringArgumentType.word()).executes { ctx ->
                         val arg = StringArgumentType.getString(ctx, "name")
                         if (arg.equals("auto", true)) {

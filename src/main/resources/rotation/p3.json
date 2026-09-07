@@ -1,0 +1,923 @@
+{
+  "assumptions": "Exactly 5 players. Perfect run \u2014 no death or degradation branches (the team resets instead).",
+  "notes": "Both section-1 levers belong to l+ee2 (untracked), so nothing in section 1 is unowned.\n\nRoles are dynamic at a sub-section level: a player can pick up a second role inside the same section \u2014 that is what the mid-section pots are for.\n\nTODO from the sketch: the brown '1 + mask' exit off the final pot's exit 1 is a later feature and is not modelled yet.\n\nAnything the node model cannot express, write it here.",
+  "pots": [
+    {
+      "after": 1,
+      "eligible": [
+        "r_ss",
+        "r_21",
+        "r_43",
+        "r_i4"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_ee3"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_2_2"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_2_4"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_2_1"
+          ]
+        }
+      ],
+      "id": "p_1",
+      "name": "Pot 1",
+      "note": "big circle, column 1"
+    },
+    {
+      "after": 2,
+      "eligible": [
+        "r_2_1",
+        "r_2_5"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_2_3"
+          ]
+        },
+        {
+          "cond": [
+            "r_2_1"
+          ],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_2b"
+          ]
+        },
+        {
+          "cond": [
+            "r_2_5"
+          ],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_2c"
+          ]
+        }
+      ],
+      "id": "p_2",
+      "name": "Pot 2",
+      "note": "middle circle. Brown '1 or 2' entrance \u2014 either may pass through."
+    },
+    {
+      "after": 2,
+      "eligible": [
+        "r_2_4"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_3_4"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_3_1"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_3_2"
+          ]
+        }
+      ],
+      "id": "p_2b",
+      "name": "Pot 2b",
+      "note": "small circle low on the sketch"
+    },
+    {
+      "after": 2,
+      "eligible": [
+        "r_2_3",
+        "r_2_2"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": true,
+          "mask": 0,
+          "note": "reserved for the LAST of terminals 2/5/3 to finish",
+          "targets": [
+            "r_core"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_2b"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_2b"
+          ]
+        }
+      ],
+      "id": "p_2c",
+      "name": "Pot 2c",
+      "note": "whoever finishes terminals 2, 5 and 3 passes through here; the last of them takes core"
+    },
+    {
+      "after": 3,
+      "eligible": [
+        "r_3_1",
+        "r_3_2",
+        "r_3_3",
+        "r_3_4"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_3_Ll"
+          ]
+        },
+        {
+          "cond": [
+            "r_3_4"
+          ],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_n1"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "sketch: blue 2 drops into the final pot",
+          "targets": [
+            "p_3b"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "sketch: blue 3 drops into the final pot",
+          "targets": [
+            "p_3b"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_3b"
+          ]
+        }
+      ],
+      "id": "p_3a",
+      "name": "Pot 3a",
+      "note": "upper small circle on the right"
+    },
+    {
+      "after": 3,
+      "eligible": [
+        "r_core",
+        "r_3_Lr"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": false,
+          "mask": 2,
+          "note": "the sketch's mask branch: the taker must have at least TWO invincibilities off cooldown",
+          "targets": [
+            "r_4_1"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_4_4"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_4_3"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_4_2"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_4_l"
+          ]
+        }
+      ],
+      "id": "p_3b",
+      "name": "Final pot",
+      "note": "big circle on the right. core always arrives first, so it takes exit 1 \u2014 unless the mask criteria are not met."
+    },
+    {
+      "after": 3,
+      "eligible": [
+        "r_3_Ll"
+      ],
+      "exits": [
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "r_3_Lr"
+          ]
+        },
+        {
+          "cond": [],
+          "last": false,
+          "mask": 0,
+          "note": "",
+          "targets": [
+            "p_3b"
+          ]
+        }
+      ],
+      "id": "p_n1",
+      "name": "Pot 3b",
+      "note": ""
+    }
+  ],
+  "roles": [
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_ss",
+      "name": "ss",
+      "note": "the first device",
+      "section": 1,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "device"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_21",
+      "name": "21",
+      "note": "reading: terminal 2 then 1",
+      "section": 1,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "terminal"
+        },
+        {
+          "check": true,
+          "label": "",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_43",
+      "name": "43",
+      "note": "reading: terminal 4 then 3",
+      "section": 1,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "terminal"
+        },
+        {
+          "check": true,
+          "label": "",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_i4",
+      "name": "i4",
+      "note": "the 4th device, done concurrently with section 1",
+      "section": 1,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "device"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": true,
+      "exit": {
+        "kind": "forced",
+        "to": "r_2_5"
+      },
+      "id": "r_lee2",
+      "name": "l+ee2",
+      "note": "both section-1 levers and the 2nd device, then early-enters section 2. None of it is tracked by the mod \u2014 the hand-off to role 5 is forced, so it needs no completion signal.",
+      "section": 1,
+      "tasks": [
+        {
+          "check": false,
+          "label": "",
+          "type": "lever"
+        },
+        {
+          "check": false,
+          "label": "",
+          "type": "lever"
+        },
+        {
+          "check": false,
+          "label": "2nd",
+          "type": "device"
+        }
+      ],
+      "entersSection": 2,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "ee2"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_2_1",
+      "name": "1",
+      "note": "terminal 1",
+      "section": 2,
+      "tasks": [
+        {
+          "check": true,
+          "label": "1st",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "wait until the 2nd-terminal player is near their terminal before leaping. Standard case: ee2 has the 2nd device by 5-6s and 2-3 people leap instantly, so by the time ss finishes at 8-9s the last person can leap instantly too.",
+      "leapRules": [
+        {
+          "target": "r_lee2",
+          "waitFor": "r_2_2"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_2_2",
+      "name": "2",
+      "note": "terminal 2",
+      "section": 2,
+      "tasks": [
+        {
+          "check": true,
+          "label": "2nd",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "2nd term s2"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_2_3",
+      "name": "3",
+      "note": "terminal 3",
+      "section": 2,
+      "tasks": [
+        {
+          "check": true,
+          "label": "3rd",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "reach the 3rd s2 terminal by leaping to the 5th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_2_5"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_2_4",
+      "name": "4",
+      "note": "the 3rd device, then the 4th terminal, plus the right lever. The device is not tracked: the 4th terminal always lands after it, so the terminal already implies it.",
+      "section": 2,
+      "tasks": [
+        {
+          "check": false,
+          "label": "3rd",
+          "type": "device"
+        },
+        {
+          "check": true,
+          "label": "4th",
+          "type": "terminal"
+        },
+        {
+          "check": true,
+          "label": "right",
+          "type": "lever"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_2_5",
+      "name": "5",
+      "note": "terminal 5",
+      "section": 2,
+      "tasks": [
+        {
+          "check": true,
+          "label": "5th",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "ee2"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_1",
+      "name": "1",
+      "note": "terminal 1",
+      "section": 3,
+      "tasks": [
+        {
+          "check": true,
+          "label": "1st",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_2",
+      "name": "2",
+      "note": "terminal 2",
+      "section": 3,
+      "tasks": [
+        {
+          "check": true,
+          "label": "2nd",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_3",
+      "name": "3",
+      "note": "terminal 3",
+      "section": 3,
+      "tasks": [
+        {
+          "check": true,
+          "label": "3rd",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "ee3"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_4",
+      "name": "4",
+      "note": "terminal 4",
+      "section": 3,
+      "tasks": [
+        {
+          "check": true,
+          "label": "4th",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "4th term s3"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "end",
+        "to": null
+      },
+      "id": "r_4_1",
+      "name": "1",
+      "note": "terminal 1 \u2014 leapable as soon as they have leapt into s4",
+      "section": 4,
+      "tasks": [
+        {
+          "check": true,
+          "label": "1st",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "@leap"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "end",
+        "to": null
+      },
+      "id": "r_4_2",
+      "name": "2",
+      "note": "terminal 2",
+      "section": 4,
+      "tasks": [
+        {
+          "check": true,
+          "label": "2nd",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "leap to the 1st-terminal player once one is assigned; until then, to core",
+      "leapRules": [
+        {
+          "target": "r_4_1"
+        },
+        {
+          "target": "r_core"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "end",
+        "to": null
+      },
+      "id": "r_4_3",
+      "name": "3",
+      "note": "terminal 3",
+      "section": 4,
+      "tasks": [
+        {
+          "check": true,
+          "label": "3rd",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "core holds a central spot until a 1st terminal is delegated; after that, leap to the 4th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_4_4",
+          "requires": "r_4_1"
+        },
+        {
+          "target": "r_core"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "end",
+        "to": null
+      },
+      "id": "r_4_4",
+      "name": "4",
+      "note": "terminal 4",
+      "section": 4,
+      "tasks": [
+        {
+          "check": true,
+          "label": "4th",
+          "type": "terminal"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "@leap"
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_Ll",
+      "name": "L left",
+      "note": "section 3 left lever",
+      "section": 3,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "lever"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "reach the s3 levers by leaping to the 4th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_3_4"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_Lr",
+      "name": "L right",
+      "note": "section 3 right lever",
+      "section": 3,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "lever"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "reach the s3 levers by leaping to the 4th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_3_4"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": false,
+      "exit": {
+        "kind": "end",
+        "to": null
+      },
+      "id": "r_4_l",
+      "name": "l",
+      "note": "reading it as section 4's lever role",
+      "section": 4,
+      "tasks": [
+        {
+          "check": true,
+          "label": "",
+          "type": "lever"
+        },
+        {
+          "check": true,
+          "label": "",
+          "type": "lever"
+        }
+      ],
+      "entersSection": 0,
+      "leapNote": "core holds a central spot until a 1st terminal is delegated; after that, leap to the 4th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_4_4",
+          "requires": "r_4_1"
+        },
+        {
+          "target": "r_core"
+        }
+      ],
+      "arrived": ""
+    },
+    {
+      "early": true,
+      "exit": {
+        "kind": "forced",
+        "to": "r_3_3"
+      },
+      "id": "r_ee3",
+      "name": "ee3",
+      "note": "does the section-2 left lever, then early-enters section 3 \u2014 the team leaps over",
+      "section": 2,
+      "tasks": [
+        {
+          "check": true,
+          "label": "left",
+          "type": "lever"
+        }
+      ],
+      "entersSection": 3,
+      "leapNote": "",
+      "leapRules": [],
+      "arrived": "ee3"
+    },
+    {
+      "early": true,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_core",
+      "name": "core",
+      "note": "no task of its own \u2014 the terminal they did as their previous role is what qualifies them, so they enter the final pot the moment they are assigned, and arrive first",
+      "section": 2,
+      "tasks": [],
+      "entersSection": 4,
+      "leapNote": "no leap \u2014 mines through the core, then holds a central spot for the team to leap to",
+      "leapRules": [
+        {
+          "target": "none"
+        }
+      ],
+      "arrived": "out of core"
+    }
+  ],
+  "sections": [
+    {
+      "label": "Section 1",
+      "n": 1
+    },
+    {
+      "label": "Section 2",
+      "n": 2
+    },
+    {
+      "label": "Section 3",
+      "n": 3
+    },
+    {
+      "label": "Section 4",
+      "n": 4
+    }
+  ],
+  "version": 4
+}

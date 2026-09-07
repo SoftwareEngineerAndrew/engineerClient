@@ -23,7 +23,10 @@ dependencies {
     implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")
 
     // Odin is a required runtime mod (declared in fabric.mod.json); compile against its release jar.
-    compileOnly(files("libs/Odin-0.3.1.jar"))
+    compileOnly(files("libs/Odin-0.3.2.jar"))
+
+    // The rotation engine is deliberately free of Minecraft/Odin, so it tests headlessly.
+    testImplementation(kotlin("test"))
 }
 
 tasks {
@@ -42,5 +45,20 @@ tasks {
     compileJava {
         options.release = 25
         options.encoding = "UTF-8"
+    }
+
+    test {
+        useJUnitPlatform()
+        testLogging { events("passed", "failed", "skipped") }
+    }
+
+    // ./gradlew replay -Plog=/path/to/brw-session.log — replays a BRW log through the real engine.
+    register<JavaExec>("replay") {
+        group = "verification"
+        description = "Replay a BRW session log through the rotation engine and diff it against what ran live."
+        classpath = sourceSets["test"].runtimeClasspath
+        mainClass.set("com.bloodrushwaypoints.rotation.LogReplayKt")
+        jvmArgs("-Dlog4j.configurationFile=${projectDir}/src/test/resources/log4j2-replay.xml", "--enable-final-field-mutation=ALL-UNNAMED")
+        args(project.findProperty("log")?.toString() ?: "")
     }
 }
