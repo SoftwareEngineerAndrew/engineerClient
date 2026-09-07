@@ -51,3 +51,22 @@ waypoint packs, and Odin addon settings are moved on first launch).
 - Compiles against `libs/Odin-0.3.1.jar` (BSD-3-Clause). The waypoint module is a vendored copy of
   Odin's DungeonWaypoints — see `src/main/kotlin/com/bloodrushwaypoints/waypoints/VENDORED.md` for
   the upstream pin, the deliberate divergences, and the re-vendoring procedure.
+
+## Phase-3 rotation (M7 terminals)
+
+The `Blood Rush Roles` module runs the team's phase-3 role rotation. The strategy is **data**:
+`src/main/resources/rotation/p3.json`, authored in the rotation editor and shipped inside the jar so
+every client provably runs the same graph. Roles hold task lists; pots hand out the next role in
+finish order; exits carry `cond` (role just finished), `last` (reserved for the final arrival — must
+sit at position 1), and `mask` (invincibilities the taker needs, scaled to what the party has).
+
+- Every decision derives from party/system chat that all five clients see in the same order —
+  completions, `brw s1 <role>` starting-role announcements, Odin's proc and leap announcements, and
+  the `/posmsg` arrival texts. Nothing local is used directly, so the clients cannot disagree.
+- `/brw role <role>` sets **your** starting role (announced on entering the boss room). `/brw setup`
+  reads Odin's live settings and reports what is wrong. `/brw debug` dumps the engine's state.
+- HUD: **Your Role**, **Debug HUD**. The leap menu rings who to leap to — soft until they have
+  announced arrival, solid after — with a sound and screen-edge flash.
+- Each session writes `logs/brw/brw-<stamp>.log`; `./gradlew replay -Plog=<file>` replays it through
+  the real engine and diffs against what ran live. `/brw log mark <note>` stamps a note into it.
+- `./gradlew test` drives 20,000 random finish schedules through the engine (~3s).

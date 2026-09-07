@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MODS_DIR="${BRW_MODS_DIR:-$HOME/.local/share/PrismLauncher/instances/26.1.2 Blood Rush/minecraft/mods}"
+MODS_DIR="${BRW_MODS_DIR:-$HOME/.local/share/PrismLauncher/instances/26.1.2 BRW/minecraft/mods}"
 VERSION="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"
 JAR="build/libs/bloodrushwaypoints-$VERSION.jar"
 
