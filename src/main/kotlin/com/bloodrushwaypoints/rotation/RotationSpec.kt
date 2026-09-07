@@ -57,6 +57,13 @@ object RotationSpec {
         val name: String = "",
         val tasks: List<Task> = emptyList(),
         val note: String = "",
+        /**
+         * Which of the five colour/sound identities this role signals with, 1-5. The same slot
+         * means the same job across sections — every "1st terminal" is slot 1 — and a section's
+         * special role (levers, the 5th terminal, an early-enter) takes a spare slot. 0 = infer:
+         * a numbered name is its number, anything else is 5.
+         */
+        val slot: Int = 0,
         /** Early-enter roles are the ones the team leaps to: `l+ee2`, `ee3`, `core`. */
         val early: Boolean = false,
         /** For an early-enter role: the section it opens up, i.e. the section people leap into. */
@@ -91,6 +98,13 @@ object RotationSpec {
     ) {
         /** Tasks the mod actually waits for. Empty means the role completes on assignment. */
         val checked: List<Task> get() = tasks.filter { it.check }
+
+        /** The slot this role signals with, resolved: explicit, else its number, else 5. */
+        val signalSlot: Int get() = when {
+            slot in 1..5 -> slot
+            name.toIntOrNull() in 1..5 -> name.toInt()
+            else -> 5
+        }
     }
 
     data class PotExit(
