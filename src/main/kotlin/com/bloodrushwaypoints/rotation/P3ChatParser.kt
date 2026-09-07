@@ -18,7 +18,9 @@ object P3ChatParser {
     }
 
     private val colorCodes = Regex("§[0-9a-fk-orA-FK-OR]")
-    private val completed = Regex("(?:^|\\s)(\\w{1,16}) (?:activated|completed) (?:an? )?(terminal|lever|device)! \\((\\d+)/(\\d+)\\)")
+    // Anchored at the start: Hypixel's line begins with the IGN. Mods relay completions into party
+    // chat ("Party > p3wr: p3wr activated lever! (2/7)"), and those must never count.
+    private val completed = Regex("^(\\w{1,16}) (?:activated|completed) (?:an? )?(terminal|lever|device)! \\((\\d+)/(\\d+)\\)")
     private val goldor = Regex("\\[BOSS] Goldor: Who dares trespass into my domain\\?")
     private val coreOpening = Regex("The Core entrance is opening!")
     private val gate = Regex("The gate has been destroyed!")
@@ -26,7 +28,9 @@ object P3ChatParser {
     fun clean(raw: String): String = colorCodes.replace(raw, "").trim()
 
     fun completion(line: String): Completion? {
-        val m = completed.find(clean(line)) ?: return null
+        val cleaned = clean(line)
+        if (cleaned.startsWith("Party >")) return null
+        val m = completed.find(cleaned) ?: return null
         val (ign, type, done, total) = m.destructured
         return Completion(ign, type, done.toIntOrNull() ?: return null, total.toIntOrNull() ?: return null)
     }

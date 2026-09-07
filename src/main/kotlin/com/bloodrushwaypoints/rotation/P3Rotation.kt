@@ -91,18 +91,12 @@ object P3Rotation : Module(
         // its second hook, which should post each inner packet, demonstrably did not deliver a
         // single completion line in a real run. So bundles are opened here, by hand, and every
         // packet is remembered by identity so a line is never processed twice if both paths fire.
-        on<PacketEvent.Receive>(EventPriority.HIGHEST) {
-            if (!enabled) return@on
-            when (val p = packet) {
-                is ClientboundSystemChatPacket -> take(p, "direct")
-                is ClientboundBundlePacket -> {
-                    var n = 0
-                    p.subPackets().forEach { inner -> if (inner is ClientboundSystemChatPacket) { take(inner, "bundle"); n++ } }
-                    if (n > 0 && DungeonUtils.inBoss) BrwLog.log("PKT", "bundle with $n chat packet(s)")
-                }
-                else -> {}
-            }
-        }
+        //
+        // And even that was not enough: blade-addons and devonian inject into the same network
+        // method Odin does, ahead of it, and consume completion packets before Odin's hook ever
+        // fires. So BRW has its own mixin there at priority 1 (ConnectionTapMixin -> [tap]) — first
+        // in line, read-only. Odin's event stays as a second path; [take] dedupes by identity.
+        on<PacketEvent.Receive>(EventPriority.HIGHEST) { handlePacket(packet, "odin") }
 
         on<TickEvent.Server> {
             if (!enabled) return@on
@@ -144,6 +138,24 @@ object P3Rotation : Module(
             section = 1
             sectionComplete = false
             gateBlown = false
+        }
+    }
+
+    /** Called from [com.bloodrushwaypoints.mixin.ConnectionTapMixin] on the network thread, for every inbound packet. */
+    fun tap(packet: Packet<*>) {
+        BrwMod.safely("packet tap") { handlePacket(packet, "tap") }
+    }
+
+    private fun handlePacket(packet: Packet<*>, via: String) {
+        if (!enabled) return
+        when (packet) {
+            is ClientboundSystemChatPacket -> take(packet, via)
+            is ClientboundBundlePacket -> {
+                var n = 0
+                packet.subPackets().forEach { inner -> if (inner is ClientboundSystemChatPacket) { take(inner, "$via-bundle"); n++ } }
+                if (n > 0 && DungeonUtils.inBoss) BrwLog.log("PKT", "bundle via $via with $n chat packet(s)")
+            }
+            else -> {}
         }
     }
 

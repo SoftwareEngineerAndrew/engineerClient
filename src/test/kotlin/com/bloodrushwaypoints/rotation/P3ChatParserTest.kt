@@ -131,5 +131,7 @@ class P3ChatParserTest {
         assertNull(P3ChatParser.completion("§9Party §8> §b[MVP§c+§b] cancelledpackets§f: Melody Terminal start!"))
         assertNull(P3ChatParser.completion("§9Party §8> §a[VIP§6+§a] Strohhut6246§f: At Simon Says Device!"))
         assertNull(P3ChatParser.completion("[BOSS] Goldor: What do you think you are doing there!"))
+        // A mod relaying completions into party chat — verbatim from a run — must not be credited.
+        assertNull(P3ChatParser.completion("§9Party §8> §b[MVP§4+§b] p3wr§f: p3wr activated lever! (2/7)"))
     }
 }

@@ -62,10 +62,22 @@ object SetupCheck {
         items += if (mine != null) Item(true, "your starting role: ${mine.name}")
         else Item(false, "no starting role set", "/brw role <${RotationSpec.graph.startingRoles.joinToString("|") { it.name }}>")
 
+        // Other mods that intercept system chat at the network layer. BRW reads packets ahead of
+        // them now, but say so anyway: a run that still misses lines starts here.
+        interceptor("blade-addons.json", "enableTerminalSplits", "blade-addons Terminal Splits rewrites completion lines")?.let { items += it }
+        interceptor("devonianConfig.json", "terminalHideCompletion", "devonian Hide Terminal Completion drops completion lines")?.let { items += it }
+
         if (P3Rotation.announceToParty) {
             items += Item(false, "BRW Announce Procs & Leaps is ON while Odin announces too", "turn one off or the party hears everything twice")
         }
         return items
+    }
+
+    private fun interceptor(file: String, key: String, what: String): Item? {
+        val path = com.bloodrushwaypoints.BrwMod.mc.gameDirectory.toPath().resolve("config").resolve(file)
+        if (!java.nio.file.Files.exists(path)) return null
+        val on = Regex("\"$key\"\\s*:\\s*true").containsMatchIn(runCatching { java.nio.file.Files.readString(path) }.getOrDefault(""))
+        return if (on) Item(false, "$what is ON", "BRW copes, but turn it off if completions still go missing") else Item(true, "$what is off")
     }
 
     fun lines(): List<String> {
