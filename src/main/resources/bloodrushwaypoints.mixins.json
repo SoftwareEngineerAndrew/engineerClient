@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.bloodrushwaypoints.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ConnectionTapMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
