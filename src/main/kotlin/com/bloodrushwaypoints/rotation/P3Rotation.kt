@@ -3,6 +3,9 @@ package com.bloodrushwaypoints.rotation
 import com.bloodrushwaypoints.BrwConfig
 import com.bloodrushwaypoints.BrwMod
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.events.PacketEvent
 import com.odtheking.odin.events.core.EventPriority
 import net.minecraft.network.protocol.Packet
@@ -20,7 +23,9 @@ import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.render.textDim
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.createSoundSettings
 import com.odtheking.odin.utils.playSoundAtPlayer
+import com.odtheking.odin.utils.playSoundSettings
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.sounds.SoundEvents
@@ -43,9 +48,31 @@ object P3Rotation : Module(
         "Highlight Leap Target", true,
         desc = "Rings the player you should leap to in Odin's leap menu — soft while they are still on their way, solid once they are in place.",
     )
-    private val leapSound by BooleanSetting("Leap Ready Sound", true, desc = "Plays a sound the moment your leap target reaches their section.")
+    private val leapSound by BooleanSetting("Sounds", true, desc = "Plays the role's sound when you are handed one, and the leap-ready sound when your target is in place.")
     val dimOthers by BooleanSetting("Dim Other Players", false, desc = "Greys out the three players you should NOT leap to in Odin's leap menu, as well as ringing the one you should.")
-    private val roleVignette by BooleanSetting("Role Vignette", true, desc = "Flashes the screen edge when you are handed a new role, and again when your leap target is in place.")
+    private val roleVignette by BooleanSetting("Role Vignette", true, desc = "Flashes the screen edge in the role's colour when you are handed a new role, and amber when your leap target is in place.")
+
+    // One identity per slot: the same job is the same colour and the same note in every section.
+    private val slotColors by DropdownSetting("Slot Colours")
+    private val slot1 by ColorSetting("Slot 1", Color(255, 85, 85), desc = "1st terminal / ss").withDependency { slotColors }
+    private val slot2 by ColorSetting("Slot 2", Color(255, 170, 0), desc = "2nd terminal / 21").withDependency { slotColors }
+    private val slot3 by ColorSetting("Slot 3", Color(85, 255, 85), desc = "3rd terminal / i4 / ee3").withDependency { slotColors }
+    private val slot4 by ColorSetting("Slot 4", Color(85, 255, 255), desc = "4th terminal / 43").withDependency { slotColors }
+    private val slot5 by ColorSetting("Slot 5", Color(170, 85, 255), desc = "5th terminal / levers / early-enter / core").withDependency { slotColors }
+
+    fun slotColor(slot: Int): Color = when (slot) { 1 -> slot1; 2 -> slot2; 3 -> slot3; 4 -> slot4; else -> slot5 }
+
+    // One sound per slot, each with its own id, pitch and volume and a "Play sound" button to
+    // audition it. Defaults are five different note-block instruments so they tell apart untuned.
+    private val slotSounds by DropdownSetting("Slot Sounds")
+    private val sound1 = createSoundSettings("Slot 1 Sound", "block.note_block.pling") { slotSounds }
+    private val sound2 = createSoundSettings("Slot 2 Sound", "block.note_block.bell") { slotSounds }
+    private val sound3 = createSoundSettings("Slot 3 Sound", "block.note_block.chime") { slotSounds }
+    private val sound4 = createSoundSettings("Slot 4 Sound", "block.note_block.xylophone") { slotSounds }
+    private val sound5 = createSoundSettings("Slot 5 Sound", "block.note_block.bit") { slotSounds }
+    private val readySound = createSoundSettings("Leap Ready Sound", "entity.experience_orb.pickup") { slotSounds }
+
+    private fun playSlot(slot: Int) = playSoundSettings(when (slot) { 1 -> sound1(); 2 -> sound2(); 3 -> sound3(); 4 -> sound4(); else -> sound5() })
     val announceToParty by BooleanSetting(
         "Announce Procs & Leaps", false,
         desc = "Only if you cannot run Odin's own Leap Announce and Announce Invincibility: BRW sends them instead. With both on, the party hears everything twice.",
@@ -122,7 +149,7 @@ object P3Rotation : Module(
             // The second half of the cue: your target has arrived, so it is time to click.
             BrwMod.safely("leap ready") {
                 if (LeapSignal.pollBecameReady()) {
-                    if (leapSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, 1.6f)
+                    if (leapSound) playSoundSettings(readySound())
                     if (roleVignette) RoleVignette.flash(LEAP_READY_COLOR, 20)
                 }
             }
@@ -290,15 +317,17 @@ object P3Rotation : Module(
 
     private fun signalRecore() {
         LeapSignal.reset()
-        if (roleVignette) RoleVignette.flash(EARLY_COLOR)
-        if (leapSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, 1.9f)
+        // Core's identity: slot 5, played twice so it reads as "core" rather than a hand-off.
+        if (roleVignette) RoleVignette.flash(slotColor(5))
+        if (leapSound) { playSlot(5); playSlot(5) }
         if (announce) BrwMod.chat("§8[§6BRW§8]§7 next: §a§lcore§r §7— rush in; the first one there is who you leap to.")
     }
 
     private fun signalRole(next: RotationSpec.Role) {
         LeapSignal.reset()
-        if (roleVignette) RoleVignette.flash(if (next.early) EARLY_COLOR else ROLE_COLOR)
-        if (leapSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, if (next.early) 1.9f else 1.2f)
+        val slot = next.signalSlot
+        if (roleVignette) RoleVignette.flash(slotColor(slot))
+        if (leapSound) playSlot(slot)
         if (announce) {
             val tail = if (next.early) " §7(early enter — the team leaps to you)" else ""
             BrwMod.chat("§8[§6BRW§8]§7 next: §a§l${next.name}§r$tail")
@@ -370,15 +399,16 @@ object P3Rotation : Module(
         RotationEngine.stuck?.let { lines += "§cstuck at ${it.potName}" }
 
         var width = 0
+        val chip = role?.let { slotColor(it.signalSlot) } ?: if (RotationEngine.isFinished(me)) slotColor(5) else null
+        val x0 = if (chip != null) 11 else 0
+        chip?.let { gfx.fill(0, 1, 8, 9, it.rgba) }
         lines.forEachIndexed { i, s ->
-            width = maxOf(width, gfx.textDim(s, 0, i * 10, Colors.WHITE).first)
-            gfx.text(s, 0, i * 10, Colors.WHITE)
+            width = maxOf(width, gfx.textDim(s, x0, i * 10, Colors.WHITE).first + x0)
+            gfx.text(s, x0, i * 10, Colors.WHITE)
         }
         return width to lines.size * 10
     }
 
-    private val ROLE_COLOR = Color(90, 170, 255)
-    private val EARLY_COLOR = Color(80, 235, 140)
     private val LEAP_READY_COLOR = Color(255, 200, 70)
 
     /** The debug lines, shared by the HUD and `/brw debug`. */

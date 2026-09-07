@@ -316,6 +316,20 @@ class RotationEngineTest {
     }
 
     @Test
+    fun `every role signals with one of five slots, numbered terminals by their number`() {
+        graph.roles.forEach { r ->
+            assertTrue(r.signalSlot in 1..5, "${r.name} has slot ${r.signalSlot}")
+            // "21" and "43" are pairs of terminals, not terminal numbers — only 1..5 name a slot.
+            r.name.toIntOrNull()?.takeIf { it in 1..5 }?.let { n -> assertEquals(n, r.signalSlot, "terminal ${r.name} must be slot $n in every section") }
+        }
+        assertEquals(5, graph.role("r_core")!!.signalSlot)
+        assertEquals(5, graph.role("r_3_Ll")!!.signalSlot)
+        // Inference when the spec leaves it out.
+        assertEquals(3, RotationSpec.Role(name = "3").signalSlot)
+        assertEquals(5, RotationSpec.Role(name = "levers").signalSlot)
+    }
+
+    @Test
     fun `a reserved exit sits first or it never catches the last arrival`() {
         // Ordering trap: "reserved for the last one in" only restricts who may take an exit, it
         // does not make anyone prefer it. Behind an unconditional exit it can never fire.
