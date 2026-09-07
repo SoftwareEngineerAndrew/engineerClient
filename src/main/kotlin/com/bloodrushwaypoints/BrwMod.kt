@@ -165,6 +165,11 @@ object BrwMod : ClientModInitializer {
         return lines
     }
 
+    private fun mark(note: String) {
+        BrwLog.log("MARK", note.ifBlank { "(no note)" })
+        P3Rotation.debugLines().forEach { BrwLog.log("MARK", "  " + it.replace(Regex("§."), "")) }
+    }
+
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // Same tree registered under the formal name (both casings, since Brigadier
@@ -202,13 +207,14 @@ object BrwMod : ClientModInitializer {
                             ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/brw log mark <note>§7 stamps a note into it"))
                             1
                         }
-                        .then(literal("mark").then(argument("note", StringArgumentType.greedyString()).executes { ctx ->
-                            val note = StringArgumentType.getString(ctx, "note")
-                            BrwLog.log("MARK", note)
-                            P3Rotation.debugLines().forEach { BrwLog.log("MARK", "  " + it.replace(Regex("§."), "")) }
-                            ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 marked: §f$note"))
-                            1
-                        })))
+                        .then(literal("mark")
+                            .executes { ctx -> mark(""); ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 marked.")); 1 }
+                            .then(argument("note", StringArgumentType.greedyString()).executes { ctx ->
+                                val note = StringArgumentType.getString(ctx, "note")
+                                mark(note)
+                                ctx.source.sendFeedback(Component.literal("§8[§6BRW§8]§7 marked: §f$note"))
+                                1
+                            })))
                     .then(literal("debug").executes { ctx ->
                         P3Rotation.debugLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1

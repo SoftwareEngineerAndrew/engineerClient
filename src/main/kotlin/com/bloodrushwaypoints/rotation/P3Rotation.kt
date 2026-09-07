@@ -3,9 +3,13 @@ package com.bloodrushwaypoints.rotation
 import com.bloodrushwaypoints.BrwConfig
 import com.bloodrushwaypoints.BrwMod
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.events.PacketEvent
 import com.odtheking.odin.events.core.EventPriority
-import com.odtheking.odin.events.core.onReceive
+import net.minecraft.network.protocol.Packet
+import net.minecraft.network.protocol.game.ClientboundBundlePacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import java.util.Collections
+import java.util.IdentityHashMap
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -81,10 +85,23 @@ object P3Rotation : Module(
         // completion line), no later listener runs and the line simply never existed for us. Two
         // clients lost all of section 1 that way. The packet hook fires before any chat handling,
         // on the network thread, so the text is handed to the main thread in arrival order.
-        onReceive<ClientboundSystemChatPacket>(EventPriority.HIGHEST) {
-            if (!enabled || overlay()) return@onReceive
-            val text = content().string
-            BrwMod.mc.execute { BrwMod.safely("p3 chat") { onChat(text) } }
+        //
+        // Hypixel sends a terminal completion together with its sound and title, and the protocol
+        // delivers that as ONE bundle packet. Odin's connection hook posts only the outer bundle;
+        // its second hook, which should post each inner packet, demonstrably did not deliver a
+        // single completion line in a real run. So bundles are opened here, by hand, and every
+        // packet is remembered by identity so a line is never processed twice if both paths fire.
+        on<PacketEvent.Receive>(EventPriority.HIGHEST) {
+            if (!enabled) return@on
+            when (val p = packet) {
+                is ClientboundSystemChatPacket -> take(p, "direct")
+                is ClientboundBundlePacket -> {
+                    var n = 0
+                    p.subPackets().forEach { inner -> if (inner is ClientboundSystemChatPacket) { take(inner, "bundle"); n++ } }
+                    if (n > 0 && DungeonUtils.inBoss) BrwLog.log("PKT", "bundle with $n chat packet(s)")
+                }
+                else -> {}
+            }
         }
 
         on<TickEvent.Server> {
@@ -127,6 +144,26 @@ object P3Rotation : Module(
             section = 1
             sectionComplete = false
             gateBlown = false
+        }
+    }
+
+    /** Packets already handed to [onChat], by identity — the last few hundred is plenty. */
+    private val seenPackets: MutableSet<Packet<*>> = Collections.newSetFromMap(IdentityHashMap())
+    private val seenOrder = ArrayDeque<Packet<*>>()
+
+    private fun take(p: ClientboundSystemChatPacket, via: String) {
+        if (p.overlay()) return
+        synchronized(seenPackets) {
+            if (!seenPackets.add(p)) return
+            seenOrder.addLast(p)
+            while (seenOrder.size > 512) seenPackets.remove(seenOrder.removeFirst())
+        }
+        val text = p.content().string
+        BrwMod.mc.execute {
+            BrwMod.safely("p3 chat") {
+                if (DungeonUtils.inBoss && P3ChatParser.completion(text) != null) BrwLog.log("PKT", "completion via $via")
+                onChat(text)
+            }
         }
     }
 
