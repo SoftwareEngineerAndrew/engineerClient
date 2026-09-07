@@ -322,12 +322,16 @@
   ],
   "roles": [
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_ss",
+      "leapNote": "",
+      "leapRules": [],
       "name": "ss",
       "note": "the first device",
       "section": 1,
@@ -337,19 +341,19 @@
           "label": "",
           "type": "device"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_21",
+      "leapNote": "",
+      "leapRules": [],
       "name": "21",
       "note": "reading: terminal 2 then 1",
       "section": 1,
@@ -364,19 +368,19 @@
           "label": "",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_43",
+      "leapNote": "",
+      "leapRules": [],
       "name": "43",
       "note": "reading: terminal 4 then 3",
       "section": 1,
@@ -391,19 +395,19 @@
           "label": "",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_i4",
+      "leapNote": "",
+      "leapRules": [],
       "name": "i4",
       "note": "the 4th device, done concurrently with section 1",
       "section": 1,
@@ -413,19 +417,19 @@
           "label": "",
           "type": "device"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "ee2",
       "early": true,
+      "entersSection": 2,
       "exit": {
         "kind": "forced",
         "to": "r_2_5"
       },
       "id": "r_lee2",
+      "leapNote": "",
+      "leapRules": [],
       "name": "l+ee2",
       "note": "both section-1 levers and the 2nd device, then early-enters section 2. None of it is tracked by the mod \u2014 the hand-off to role 5 is forced, so it needs no completion signal.",
       "section": 1,
@@ -445,19 +449,24 @@
           "label": "2nd",
           "type": "device"
         }
-      ],
-      "entersSection": 2,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "ee2"
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_2_1",
+      "leapNote": "wait until the 2nd-terminal player is near their terminal before leaping. Standard case: ee2 has the 2nd device by 5-6s and 2-3 people leap instantly, so by the time ss finishes at 8-9s the last person can leap instantly too.",
+      "leapRules": [
+        {
+          "target": "r_lee2",
+          "waitFor": "r_2_2"
+        }
+      ],
       "name": "1",
       "note": "terminal 1",
       "section": 2,
@@ -467,24 +476,19 @@
           "label": "1st",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "wait until the 2nd-terminal player is near their terminal before leaping. Standard case: ee2 has the 2nd device by 5-6s and 2-3 people leap instantly, so by the time ss finishes at 8-9s the last person can leap instantly too.",
-      "leapRules": [
-        {
-          "target": "r_lee2",
-          "waitFor": "r_2_2"
-        }
-      ],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "2nd term s2",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_2_2",
+      "leapNote": "",
+      "leapRules": [],
       "name": "2",
       "note": "terminal 2",
       "section": 2,
@@ -494,19 +498,23 @@
           "label": "2nd",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "2nd term s2"
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_2_3",
+      "leapNote": "reach the 3rd s2 terminal by leaping to the 5th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_2_5"
+        }
+      ],
       "name": "3",
       "note": "terminal 3",
       "section": 2,
@@ -516,23 +524,19 @@
           "label": "3rd",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "reach the 3rd s2 terminal by leaping to the 5th-terminal player",
-      "leapRules": [
-        {
-          "target": "r_2_5"
-        }
-      ],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_2_4",
+      "leapNote": "",
+      "leapRules": [],
       "name": "4",
       "note": "the 3rd device, then the 4th terminal, plus the right lever. The device is not tracked: the 4th terminal always lands after it, so the terminal already implies it.",
       "section": 2,
@@ -552,21 +556,21 @@
           "label": "right",
           "type": "lever"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "5th term s2",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_2_5",
+      "leapNote": "",
+      "leapRules": [],
       "name": "5",
-      "note": "terminal 5",
+      "note": "the 5th s2 terminal \u2014 the 3rd-terminal player leaps to them once they announce 5th term s2",
       "section": 2,
       "tasks": [
         {
@@ -574,19 +578,19 @@
           "label": "5th",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "ee2"
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_3_1",
+      "leapNote": "",
+      "leapRules": [],
       "name": "1",
       "note": "terminal 1",
       "section": 3,
@@ -596,19 +600,19 @@
           "label": "1st",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_3_2",
+      "leapNote": "",
+      "leapRules": [],
       "name": "2",
       "note": "terminal 2",
       "section": 3,
@@ -618,19 +622,19 @@
           "label": "2nd",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "ee3",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_3_3",
+      "leapNote": "",
+      "leapRules": [],
       "name": "3",
       "note": "terminal 3",
       "section": 3,
@@ -640,19 +644,19 @@
           "label": "3rd",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "ee3"
+      ]
     },
     {
+      "arrived": "4th term s3",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_3_4",
+      "leapNote": "",
+      "leapRules": [],
       "name": "4",
       "note": "terminal 4",
       "section": 3,
@@ -662,19 +666,19 @@
           "label": "4th",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "4th term s3"
+      ]
     },
     {
+      "arrived": "@leap",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "end",
         "to": null
       },
       "id": "r_4_1",
+      "leapNote": "",
+      "leapRules": [],
       "name": "1",
       "note": "terminal 1 \u2014 leapable as soon as they have leapt into s4",
       "section": 4,
@@ -684,30 +688,17 @@
           "label": "1st",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "@leap"
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "end",
         "to": null
       },
       "id": "r_4_2",
-      "name": "2",
-      "note": "terminal 2",
-      "section": 4,
-      "tasks": [
-        {
-          "check": true,
-          "label": "2nd",
-          "type": "terminal"
-        }
-      ],
-      "entersSection": 0,
       "leapNote": "leap to the 1st-terminal player once one is assigned; until then, to core",
       "leapRules": [
         {
@@ -717,15 +708,36 @@
           "target": "r_core"
         }
       ],
-      "arrived": ""
+      "name": "2",
+      "note": "terminal 2",
+      "section": 4,
+      "tasks": [
+        {
+          "check": true,
+          "label": "2nd",
+          "type": "terminal"
+        }
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "end",
         "to": null
       },
       "id": "r_4_3",
+      "leapNote": "core holds a central spot until a 1st terminal is delegated; after that, leap to the 4th-terminal player",
+      "leapRules": [
+        {
+          "requires": "r_4_1",
+          "target": "r_4_4"
+        },
+        {
+          "target": "r_core"
+        }
+      ],
       "name": "3",
       "note": "terminal 3",
       "section": 4,
@@ -735,27 +747,19 @@
           "label": "3rd",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "core holds a central spot until a 1st terminal is delegated; after that, leap to the 4th-terminal player",
-      "leapRules": [
-        {
-          "target": "r_4_4",
-          "requires": "r_4_1"
-        },
-        {
-          "target": "r_core"
-        }
-      ],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "@leap",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "end",
         "to": null
       },
       "id": "r_4_4",
+      "leapNote": "",
+      "leapRules": [],
       "name": "4",
       "note": "terminal 4",
       "section": 4,
@@ -765,19 +769,23 @@
           "label": "4th",
           "type": "terminal"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "@leap"
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_3_Ll",
+      "leapNote": "reach the s3 levers by leaping to the 4th-terminal player",
+      "leapRules": [
+        {
+          "target": "r_3_4"
+        }
+      ],
       "name": "L left",
       "note": "section 3 left lever",
       "section": 3,
@@ -787,23 +795,23 @@
           "label": "",
           "type": "lever"
         }
-      ],
+      ]
+    },
+    {
+      "arrived": "",
+      "early": false,
       "entersSection": 0,
+      "exit": {
+        "kind": "pool",
+        "to": null
+      },
+      "id": "r_3_Lr",
       "leapNote": "reach the s3 levers by leaping to the 4th-terminal player",
       "leapRules": [
         {
           "target": "r_3_4"
         }
       ],
-      "arrived": ""
-    },
-    {
-      "early": false,
-      "exit": {
-        "kind": "pool",
-        "to": null
-      },
-      "id": "r_3_Lr",
       "name": "L right",
       "note": "section 3 right lever",
       "section": 3,
@@ -813,23 +821,27 @@
           "label": "",
           "type": "lever"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "reach the s3 levers by leaping to the 4th-terminal player",
-      "leapRules": [
-        {
-          "target": "r_3_4"
-        }
-      ],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "",
       "early": false,
+      "entersSection": 0,
       "exit": {
         "kind": "end",
         "to": null
       },
       "id": "r_4_l",
+      "leapNote": "core holds a central spot until a 1st terminal is delegated; after that, leap to the 4th-terminal player",
+      "leapRules": [
+        {
+          "requires": "r_4_1",
+          "target": "r_4_4"
+        },
+        {
+          "target": "r_core"
+        }
+      ],
       "name": "l",
       "note": "reading it as section 4's lever role",
       "section": 4,
@@ -844,27 +856,19 @@
           "label": "",
           "type": "lever"
         }
-      ],
-      "entersSection": 0,
-      "leapNote": "core holds a central spot until a 1st terminal is delegated; after that, leap to the 4th-terminal player",
-      "leapRules": [
-        {
-          "target": "r_4_4",
-          "requires": "r_4_1"
-        },
-        {
-          "target": "r_core"
-        }
-      ],
-      "arrived": ""
+      ]
     },
     {
+      "arrived": "ee3",
       "early": true,
+      "entersSection": 3,
       "exit": {
         "kind": "forced",
         "to": "r_3_3"
       },
       "id": "r_ee3",
+      "leapNote": "",
+      "leapRules": [],
       "name": "ee3",
       "note": "does the section-2 left lever, then early-enters section 3 \u2014 the team leaps over",
       "section": 2,
@@ -874,31 +878,27 @@
           "label": "left",
           "type": "lever"
         }
-      ],
-      "entersSection": 3,
-      "leapNote": "",
-      "leapRules": [],
-      "arrived": "ee3"
+      ]
     },
     {
+      "arrived": "out of core",
       "early": true,
+      "entersSection": 4,
       "exit": {
         "kind": "pool",
         "to": null
       },
       "id": "r_core",
-      "name": "core",
-      "note": "no task of its own \u2014 the terminal they did as their previous role is what qualifies them, so they enter the final pot the moment they are assigned, and arrive first",
-      "section": 2,
-      "tasks": [],
-      "entersSection": 4,
       "leapNote": "no leap \u2014 mines through the core, then holds a central spot for the team to leap to",
       "leapRules": [
         {
           "target": "none"
         }
       ],
-      "arrived": "out of core"
+      "name": "core",
+      "note": "no task of its own \u2014 the terminal they did as their previous role is what qualifies them, so they enter the final pot the moment they are assigned, and arrive first",
+      "section": 2,
+      "tasks": []
     }
   ],
   "sections": [
