@@ -23,7 +23,9 @@ import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.render.textDim
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.createSoundSettings
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.utils.playSoundAtPlayer
 import com.odtheking.odin.utils.playSoundSettings
 import com.odtheking.odin.utils.sendCommand
@@ -64,13 +66,25 @@ object P3Rotation : Module(
 
     // One sound per slot, each with its own id, pitch and volume and a "Play sound" button to
     // audition it. Defaults are five different note-block instruments so they tell apart untuned.
+    // For now every slot is a note-block pling on a rising scale, one pitch per slot — Odin's own
+    // sound-settings helper cannot take a default pitch, hence the local copy of it below.
     private val slotSounds by DropdownSetting("Slot Sounds")
-    private val sound1 = createSoundSettings("Slot 1 Sound", "block.note_block.pling") { slotSounds }
-    private val sound2 = createSoundSettings("Slot 2 Sound", "block.note_block.bell") { slotSounds }
-    private val sound3 = createSoundSettings("Slot 3 Sound", "block.note_block.chime") { slotSounds }
-    private val sound4 = createSoundSettings("Slot 4 Sound", "block.note_block.xylophone") { slotSounds }
-    private val sound5 = createSoundSettings("Slot 5 Sound", "block.note_block.bit") { slotSounds }
-    private val readySound = createSoundSettings("Leap Ready Sound", "entity.experience_orb.pickup") { slotSounds }
+    private val sound1 = soundSettings("Slot 1 Sound", "block.note_block.pling", 0.6f) { slotSounds }
+    private val sound2 = soundSettings("Slot 2 Sound", "block.note_block.pling", 0.8f) { slotSounds }
+    private val sound3 = soundSettings("Slot 3 Sound", "block.note_block.pling", 1.0f) { slotSounds }
+    private val sound4 = soundSettings("Slot 4 Sound", "block.note_block.pling", 1.3f) { slotSounds }
+    private val sound5 = soundSettings("Slot 5 Sound", "block.note_block.pling", 1.7f) { slotSounds }
+    private val readySound = soundSettings("Leap Ready Sound", "block.note_block.pling", 2.0f) { slotSounds }
+
+    /** Odin's `createSoundSettings`, plus a default pitch. Same four settings, same Play button. */
+    private fun soundSettings(name: String, sound: String, pitchDefault: Float, deps: () -> Boolean): () -> Triple<String, Float, Float> {
+        val id = +StringSetting(name, sound, desc = "Sound id, as /playsound takes it.", length = 64).withDependency { deps() }
+        val pitch = +NumberSetting("$name Pitch", pitchDefault, 0.1f, 2f, 0.01f, desc = "Pitch.").withDependency { deps() }
+        val volume = +NumberSetting("$name Volume", 1f, 0.1f, 1f, 0.01f, desc = "Volume.").withDependency { deps() }
+        val get = { Triple(id.value, volume.value, pitch.value) }
+        +ActionSetting("Play $name", desc = "Plays it.") { playSoundSettings(get()) }.withDependency { deps() }
+        return get
+    }
 
     private fun playSlot(slot: Int) = playSoundSettings(when (slot) { 1 -> sound1(); 2 -> sound2(); 3 -> sound3(); 4 -> sound4(); else -> sound5() })
     val announceToParty by BooleanSetting(
