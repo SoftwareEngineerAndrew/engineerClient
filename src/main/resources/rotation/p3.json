@@ -341,7 +341,8 @@
           "label": "",
           "type": "device"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -368,7 +369,8 @@
           "label": "",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -395,7 +397,8 @@
           "label": "",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -417,7 +420,8 @@
           "label": "",
           "type": "device"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "ee2",
@@ -449,7 +453,8 @@
           "label": "2nd",
           "type": "device"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -476,7 +481,8 @@
           "label": "1st",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "2nd term s2",
@@ -498,7 +504,8 @@
           "label": "2nd",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -524,7 +531,8 @@
           "label": "3rd",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -556,7 +564,8 @@
           "label": "right",
           "type": "lever"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "5th term s2",
@@ -578,7 +587,8 @@
           "label": "5th",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -600,7 +610,8 @@
           "label": "1st",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -622,7 +633,8 @@
           "label": "2nd",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "ee3",
@@ -644,7 +656,8 @@
           "label": "3rd",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "4th term s3",
@@ -666,7 +679,8 @@
           "label": "4th",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "@leap",
@@ -688,7 +702,8 @@
           "label": "1st",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -717,7 +732,8 @@
           "label": "2nd",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -747,7 +763,8 @@
           "label": "3rd",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "@leap",
@@ -769,7 +786,8 @@
           "label": "4th",
           "type": "terminal"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -795,7 +813,8 @@
           "label": "",
           "type": "lever"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -821,7 +840,8 @@
           "label": "",
           "type": "lever"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "",
@@ -856,7 +876,8 @@
           "label": "",
           "type": "lever"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "ee3",
@@ -878,7 +899,8 @@
           "label": "left",
           "type": "lever"
         }
-      ]
+      ],
+      "completeOnArrived": false
     },
     {
       "arrived": "out of core",
@@ -896,9 +918,10 @@
         }
       ],
       "name": "core",
-      "note": "no task of its own \u2014 the terminal they did as their previous role is what qualifies them, so they enter the final pot the moment they are assigned, and arrive first",
+      "note": "no chat line of its own: complete when the holder announces \"out of core\", which drops them into the final pot. Mines into the core, walks across, early-enters section 4 (skipping 3).",
       "section": 2,
-      "tasks": []
+      "tasks": [],
+      "completeOnArrived": true
     }
   ],
   "sections": [
@@ -919,5 +942,6 @@
       "n": 4
     }
   ],
-  "version": 4
+  "version": 4,
+  "recoreArrived": "in core"
 }

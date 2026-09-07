@@ -49,6 +49,12 @@ object RotationEngine {
     /** Party messages each player has sent this run, lower-cased — the arrival announcements. */
     private val said = HashMap<String, MutableSet<String>>()
 
+    /** Players whose section-4 (end) role is done, in order: they are heading for the core. */
+    private val finished = LinkedHashSet<String>()
+
+    /** Players who announced the recore arrival after finishing, in order — the first is the leap target. */
+    private val inCore = LinkedHashSet<String>()
+
     /**
      * Every decision the engine makes, newest last, so a clip of a run can be read against what
      * the mod believed at each moment. Also written to the game log at INFO under `[brw]`, which
@@ -87,6 +93,8 @@ object RotationEngine {
         usedExits.clear()
         history.clear()
         said.clear()
+        finished.clear()
+        inCore.clear()
         trail.clear()
         stuck = null
         running = false
@@ -150,7 +158,41 @@ object RotationEngine {
         val text = message.trim().lowercase()
         if (graph.roles.any { it.arrived.equals(text, ignoreCase = true) }) note("$ign arrived: \"$text\"")
         said.getOrPut(ign.lowercase()) { mutableSetOf() }.add(text)
+
+        // Some roles finish on their arrival announcement rather than on a completion line.
+        holders[ign]?.let { h ->
+            val role = graph.role(h.roleId)
+            if (role != null && role.completeOnArrived && role.arrived.equals(text, ignoreCase = true)) {
+                h.remaining.clear()
+                note("$ign ${role.name} COMPLETE (arrived)")
+                complete(ign, depth = 0)
+            }
+        }
+        // Recore: in the core, having finished section 4.
+        if (text == graph.recoreArrived.trim().lowercase() && ign in finished && inCore.add(ign)) note("$ign is in the core")
     }
+
+    /**
+     * The section's counter hit its total, so every role still open in that section was done by
+     * someone else — count it as complete for whoever holds it. Called AFTER the closing line's own
+     * credit, so the player who actually finished it is routed first.
+     */
+    fun completeSection(section: Int) {
+        holders.values.toList().forEach { h ->
+            val role = graph.role(h.roleId) ?: return@forEach
+            if (role.section == section && h.remaining.isNotEmpty() && holders[h.ign] === h) {
+                note("${h.ign} ${role.name} COMPLETE (section $section done, still had ${h.remaining})")
+                h.remaining.clear()
+                complete(h.ign, depth = 0)
+            }
+        }
+    }
+
+    fun isFinished(ign: String): Boolean = ign in finished
+
+    /** Who [ign] leaps to for the recore: the first teammate in the core, or null while nobody is. */
+    fun recoreTargetFor(ign: String): String? =
+        if (ign !in finished) null else inCore.firstOrNull { !it.equals(ign, ignoreCase = true) }
 
     /**
      * Odin's leap announcement — "Leaped to X!". Whoever leapt is now wherever X is, so they
@@ -251,7 +293,7 @@ object RotationEngine {
         said[ign.lowercase()]?.remove(RotationSpec.ARRIVED_ON_LEAP)
         // A role with nothing to wait for is done the moment it is handed out — that is how
         // `core` reaches the final pot first, and how `l+ee2` hands straight on to role 5.
-        if (role.checked.isEmpty() && depth < MAX_DEPTH) return complete(ign, depth + 1) ?: role
+        if (role.checked.isEmpty() && !role.completeOnArrived && depth < MAX_DEPTH) return complete(ign, depth + 1) ?: role
         return role
     }
 
@@ -264,8 +306,9 @@ object RotationEngine {
         }
         return when (finished.exit.kind) {
             "end" -> {
-                note("$ign done (${finished.name} was an end role)")
+                note("$ign done (${finished.name} was an end role) — recore")
                 holders.remove(ign)
+                this.finished.add(ign)
                 null
             }
 

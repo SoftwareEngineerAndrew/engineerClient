@@ -35,10 +35,16 @@ class RotationEngineTest {
             val live = RotationEngine.tracked()
             if (live.isEmpty()) return heldRoles()
             val holder = live[rng.nextInt(live.size)]
-            // Land every outstanding task for that player; the last one completes the role.
-            holder.remaining.toList().forEach { type -> RotationEngine.onTaskDone(holder.ign, type) }
+            finish(holder)
         }
         return heldRoles()
+    }
+
+    /** Finish [h]'s role the way the game would: its chat lines, or its arrival message. */
+    private fun finish(h: RotationEngine.Holder) {
+        val role = graph.role(h.roleId)!!
+        if (role.completeOnArrived) RotationEngine.onPartyMessage(h.ign, role.arrived)
+        else h.remaining.toList().forEach { type -> RotationEngine.onTaskDone(h.ign, type) }
     }
 
     private fun heldRoles(): Set<String> =
@@ -161,8 +167,7 @@ class RotationEngineTest {
                     }
                 }
 
-                val holder = live[rng.nextInt(live.size)]
-                holder.remaining.toList().forEach { type -> RotationEngine.onTaskDone(holder.ign, type) }
+                finish(live[rng.nextInt(live.size)])
             }
         }
         assertTrue(sawHandOver, "never observed the section-4 hand-over to the 4th terminal")
@@ -240,8 +245,7 @@ class RotationEngineTest {
                     checked = true
                     break
                 }
-                val h = live[rng.nextInt(live.size)]
-                h.remaining.toList().forEach { RotationEngine.onTaskDone(h.ign, it) }
+                finish(live[rng.nextInt(live.size)])
             }
             if (checked) break
         }
@@ -262,6 +266,53 @@ class RotationEngineTest {
         RotationEngine.addStarter("Imposter", "r_i4")       // role already held
         RotationEngine.addStarter("Late", "r_2_1")          // not a section-1 role
         assertEquals(5, RotationEngine.tracked().size)
+    }
+
+    @Test
+    fun `a finished section completes whoever still holds a role in it`() {
+        RotationEngine.begin(bindings())
+        // Only ss finishes on its own line; the section then reads 7/7, so 21, 43 and i4 are done too.
+        RotationEngine.onTaskDone(bindings()["r_ss"]!!, "device")
+        assertEquals(3, RotationEngine.tracked().count { graph.role(it.roleId)!!.section == 1 && it.remaining.isNotEmpty() })
+        RotationEngine.completeSection(1)
+        assertTrue(RotationEngine.tracked().none { graph.role(it.roleId)!!.section == 1 }, "nobody should still hold a section-1 role")
+        assertTrue(RotationEngine.tracked().all { graph.role(it.roleId)!!.section == 2 }, "everyone moved on to section 2")
+        assertNull(RotationEngine.stuck)
+    }
+
+    @Test
+    fun `core completes on its arrival message and the recore target is the first one in`() {
+        val core = graph.role("r_core")!!
+        assertTrue(core.completeOnArrived, "core finishes on \"out of core\"")
+        assertEquals("in core", graph.recoreArrived)
+
+        // Drive a run to the point where someone holds core.
+        val rng = Random(77)
+        var holder: String? = null
+        for (run in 0 until 200) {
+            RotationEngine.begin(bindings())
+            for (step in 0 until 200) {
+                val live = RotationEngine.tracked()
+                if (live.isEmpty()) break
+                live.find { it.roleId == "r_core" }?.let { holder = it.ign }
+                if (holder != null) break
+                finish(live[rng.nextInt(live.size)])
+            }
+            if (holder != null) break
+        }
+        val who = holder ?: error("never saw core held")
+        // Core is still held (it no longer completes on assignment) until the arrival message.
+        assertEquals("r_core", RotationEngine.tracked().find { it.ign == who }?.roleId)
+        RotationEngine.onPartyMessage(who, "some other message")
+        assertEquals("r_core", RotationEngine.tracked().find { it.ign == who }?.roleId, "unrelated party chat must not finish it")
+        RotationEngine.onPartyMessage(who, "Out Of Core")
+        assertTrue(RotationEngine.tracked().find { it.ign == who }?.roleId != "r_core", "\"out of core\" finishes core")
+
+        // Recore: only finished players leap, to the first finished player who said "in core".
+        RotationEngine.begin(bindings())
+        assertNull(RotationEngine.recoreTargetFor("Alpha"), "nobody has finished")
+        RotationEngine.onPartyMessage("Bravo", "in core")
+        assertNull(RotationEngine.recoreTargetFor("Alpha"), "Bravo said it but has not finished section 4 — ignored")
     }
 
     @Test

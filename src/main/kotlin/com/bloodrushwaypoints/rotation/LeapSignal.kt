@@ -42,7 +42,8 @@ object LeapSignal {
     /** The current leap cue for this client, or null when there is nobody to leap to. */
     fun current(): Target? {
         val me = BrwMod.mc.player?.name?.string ?: return null
-        val role = RotationEngine.roleOf(me) ?: return null
+        val role = RotationEngine.roleOf(me)
+            ?: return RotationEngine.recoreTargetFor(me)?.let { Target(it, 5, true, "recore — everyone into the core") }
         val targetIgn = RotationEngine.leapTargetFor(me) ?: return null
         return Target(
             ign = targetIgn,

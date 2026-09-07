@@ -70,14 +70,41 @@ object LeapHighlight {
     private fun drawOnOdinMenu(gfx: GuiGraphicsExtractor, ign: String, color: Color) {
         val index = DungeonUtils.leapTeammates.indexOfFirst { it.name.equals(ign, ignoreCase = true) }
         if (index < 0) return
+        for (i in 0 until 4) {
+            val player = DungeonUtils.leapTeammates.getOrNull(i) ?: continue
+            if (player.name == "Empty") continue
+            val r = odinBox(i)
+            if (i == index) outline(gfx, r[0], r[1], r[2], r[3], color, 9)
+            else if (P3Rotation.dimOthers) gfx.roundedFill(r[0], r[1], r[2], r[3], DIM.rgba, 9)
+        }
+    }
+
+    private val DIM = Color(0, 0, 0, 0.62f)
+
+    /**
+     * Odin's box for quadrant [i], on screen, honouring its Render Scale: it translates to the
+     * corner nearest the centre and scales the box outward from there, so width and height scale
+     * but the near corner stays put. The scale is a private setting, read reflectively.
+     */
+    private fun odinBox(i: Int): IntArray {
         val halfW = BrwMod.mc.window.guiScaledWidth / 2
         val halfH = BrwMod.mc.window.guiScaledHeight / 2
-        val col = index % 2
-        val row = index / 2
-        val x = if (col == 0) halfW - 24 - LeapMenu.BOX_WIDTH else halfW + 24
-        val y = if (row == 0) halfH - 24 - LeapMenu.BOX_HEIGHT else halfH + 24
-        outline(gfx, x, y, x + LeapMenu.BOX_WIDTH, y + LeapMenu.BOX_HEIGHT, color, 9)
+        val col = i % 2
+        val row = i / 2
+        val s = odinScale()
+        val w = (LeapMenu.BOX_WIDTH * s).toInt()
+        val h = (LeapMenu.BOX_HEIGHT * s).toInt()
+        val x0 = if (col == 0) halfW - 24 - w else halfW + 24
+        val y0 = if (row == 0) halfH - 24 - h else halfH + 24
+        return intArrayOf(x0, y0, x0 + w, y0 + h)
     }
+
+    private val scaleGetter by lazy {
+        runCatching { LeapMenu::class.java.getDeclaredMethod("getScale").apply { isAccessible = true } }.getOrNull()
+    }
+
+    private fun odinScale(): Float =
+        runCatching { scaleGetter?.invoke(LeapMenu) as? Float }.getOrNull() ?: 1f
 
     private fun outline(gfx: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int, color: Color, radius: Int) {
         // A translucent wash plus a hard ring: the wash reads at a glance, the ring survives
