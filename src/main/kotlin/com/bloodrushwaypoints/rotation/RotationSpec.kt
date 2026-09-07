@@ -82,6 +82,11 @@ object RotationSpec {
          * [ARRIVED_ON_LEAP] means any leap announcement made while holding this role.
          */
         val arrived: String = "",
+        /**
+         * The role is complete when its holder sends [arrived], not on a chat completion line —
+         * `core`: "out of core" is what finishes it and drops them into the final pot.
+         */
+        val completeOnArrived: Boolean = false,
         val exit: Exit = Exit(),
     ) {
         /** Tasks the mod actually waits for. Empty means the role completes on assignment. */
@@ -119,6 +124,12 @@ object RotationSpec {
         val version: Int = 0,
         val roles: List<Role> = emptyList(),
         val pots: List<Pot> = emptyList(),
+        /**
+         * Recore: once your section-4 role is done you rush into the core for the fight. This is
+         * the /posmsg text a player sends on reaching it, having finished; whoever said it first
+         * is who everyone else leaps to.
+         */
+        val recoreArrived: String = "in core",
     ) {
         // Lazy, not eager: Gson builds the object through Kotlin's synthetic no-arg constructor
         // and only then fills `roles`/`pots` by reflection, so an index built in the constructor

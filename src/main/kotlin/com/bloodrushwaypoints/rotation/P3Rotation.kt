@@ -44,6 +44,7 @@ object P3Rotation : Module(
         desc = "Rings the player you should leap to in Odin's leap menu — soft while they are still on their way, solid once they are in place.",
     )
     private val leapSound by BooleanSetting("Leap Ready Sound", true, desc = "Plays a sound the moment your leap target reaches their section.")
+    val dimOthers by BooleanSetting("Dim Other Players", false, desc = "Greys out the three players you should NOT leap to in Odin's leap menu, as well as ringing the one you should.")
     private val roleVignette by BooleanSetting("Role Vignette", true, desc = "Flashes the screen edge when you are handed a new role, and again when your leap target is in place.")
     val announceToParty by BooleanSetting(
         "Announce Procs & Leaps", false,
@@ -206,10 +207,13 @@ object P3Rotation : Module(
             }
 
             else -> P3ChatParser.completion(raw)?.let { done ->
+                credit(done.ign, done.type)
                 if (done.sectionDone) {
+                    // 7/7 (8/8): whoever still holds an open role here had it done for them.
+                    RotationEngine.completeSection(section)
+                    myAfterSweep()
                     if (gateBlown) nextSection() else sectionComplete = true
                 }
-                credit(done.ign, done.type)
             }
         }
     }
@@ -228,7 +232,11 @@ object P3Rotation : Module(
             // Arrival announcements from /posmsg boxes, and "Leaped to X!" — both are how the
             // leap cue learns that its target is in place.
             P3ChatParser.leapedTo(party.message)?.let { target -> RotationEngine.onLeapAnnounce(party.ign, target) }
-                ?: RotationEngine.onPartyMessage(party.ign, party.message)
+                ?: run {
+                    RotationEngine.onPartyMessage(party.ign, party.message)
+                    // My own arrival can finish my role (core: "out of core") or put me in the core.
+                    if (party.ign.equals(BrwMod.mc.player?.name?.string, true)) myAfterSweep()
+                }
             return
         }
         if (!announceToParty) return
@@ -262,11 +270,44 @@ object P3Rotation : Module(
         BrwMod.chat("§8[§6BRW§8]§7 phase 3 — you are §a${mine?.name ?: "§cunassigned"}§7.")
     }
 
-    /** Say which section-1 role I run, in the form every client parses. */
+    /** Say which section-1 role I run, in the form every client parses. Only where it means anything: F7/M7. */
     fun announceMyRole() {
         val role = RotationSpec.graph.role(BrwConfig.data.myStartingRole) ?: return
-        if (!DungeonUtils.inDungeons) return
+        if (!DungeonUtils.inDungeons || DungeonUtils.floor?.floorNumber != 7) return
         sendCommand("pc brw s1 ${role.name}")
+    }
+
+    /** After a section sweep my role may have changed without a line of mine — signal it like any hand-off. */
+    private var lastSignalledRole: String? = null
+    private fun myAfterSweep() {
+        val me = BrwMod.mc.player?.name?.string ?: return
+        val now = RotationEngine.roleOf(me)?.id ?: if (RotationEngine.isFinished(me)) "recore" else null
+        if (now == lastSignalledRole) return
+        lastSignalledRole = now
+        val role = RotationEngine.roleOf(me)
+        if (role != null) signalRole(role) else if (RotationEngine.isFinished(me)) signalRecore()
+    }
+
+    private fun signalRecore() {
+        LeapSignal.reset()
+        if (roleVignette) RoleVignette.flash(EARLY_COLOR)
+        if (leapSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, 1.9f)
+        if (announce) BrwMod.chat("§8[§6BRW§8]§7 next: §a§lcore§r §7— rush in; the first one there is who you leap to.")
+    }
+
+    private fun signalRole(next: RotationSpec.Role) {
+        LeapSignal.reset()
+        if (roleVignette) RoleVignette.flash(if (next.early) EARLY_COLOR else ROLE_COLOR)
+        if (leapSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, if (next.early) 1.9f else 1.2f)
+        if (announce) {
+            val tail = if (next.early) " §7(early enter — the team leaps to you)" else ""
+            BrwMod.chat("§8[§6BRW§8]§7 next: §a§l${next.name}§r$tail")
+            LeapSignal.current()?.let { leap ->
+                BrwMod.chat("§8[§6BRW§8]§7 leap to §b${leap.ign}§7 once they are in section ${leap.section}." +
+                    if (leap.note.isNotBlank()) " §8${leap.note}" else "")
+            }
+            if (next.leapNote.isNotBlank() && LeapSignal.current() == null) BrwMod.chat("§8[§6BRW§8]§8 ${next.leapNote}")
+        }
     }
 
     private fun onRoleAnnouncement(ign: String, roleName: String) {
@@ -284,21 +325,13 @@ object P3Rotation : Module(
     }
 
     private fun credit(ign: String, type: String) {
-        val next = RotationEngine.onTaskDone(ign, type) ?: return
-        if (!ign.equals(BrwMod.mc.player?.name?.string, ignoreCase = true)) return
-
-        LeapSignal.reset()
-        if (roleVignette) RoleVignette.flash(if (next.early) EARLY_COLOR else ROLE_COLOR)
-        if (leapSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, if (next.early) 1.9f else 1.2f)
-
-        if (announce) {
-            val tail = if (next.early) " §7(early enter — the team leaps to you)" else ""
-            BrwMod.chat("§8[§6BRW§8]§7 next: §a§l${next.name}§r$tail")
-            LeapSignal.current()?.let { leap ->
-                BrwMod.chat("§8[§6BRW§8]§7 leap to §b${leap.ign}§7 once they are in section ${leap.section}." +
-                    if (leap.note.isNotBlank()) " §8${leap.note}" else "")
-            }
-            if (next.leapNote.isNotBlank() && LeapSignal.current() == null) BrwMod.chat("§8[§6BRW§8]§8 ${next.leapNote}")
+        val me = BrwMod.mc.player?.name?.string
+        val mine = ign.equals(me, ignoreCase = true)
+        val next = RotationEngine.onTaskDone(ign, type)
+        if (!mine) return
+        when {
+            next != null -> { lastSignalledRole = next.id; signalRole(next) }
+            me != null && RotationEngine.isFinished(me) && lastSignalledRole != "recore" -> { lastSignalledRole = "recore"; signalRecore() }
         }
     }
 
@@ -318,7 +351,7 @@ object P3Rotation : Module(
         val lines = mutableListOf<String>()
 
         val role = RotationEngine.roleOf(me)
-        lines += if (role == null) "§6Role §8—" else {
+        lines += if (role == null) (if (RotationEngine.isFinished(me)) "§6Role §a§lcore §7— rush in" else "§6Role §8—") else {
             val left = RotationEngine.remainingFor(me).joinToString(" ") { shortType(it) }
             val flag = if (role.early) " §a✦" else ""
             "§6Role §a§l${role.name}§r$flag${if (left.isEmpty()) "" else "  §7$left"}"
