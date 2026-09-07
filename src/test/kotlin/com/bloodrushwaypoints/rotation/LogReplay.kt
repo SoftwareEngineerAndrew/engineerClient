@@ -31,6 +31,13 @@ fun main(args: Array<String>) {
 
     val team = LinkedHashMap<String, String>()
     var section = 1; var sectionDone = false; var gate = false
+    // Cooldowns run on the game clock live; here they run on the log's own timestamps, or every
+    // proc would stay on cooldown forever and the mask gate would replay wrong.
+    var lastMillis = -1L
+    fun millisOf(t: String): Long {
+        val (h, m, rest) = t.split(":"); val (sec, ms) = rest.split(".")
+        return ((h.toLong() * 60 + m.toLong()) * 60 + sec.toLong()) * 1000 + ms.toLong()
+    }
     println("replaying ${path.fileName} as $me\n")
 
     for (raw in lines) {
@@ -38,6 +45,9 @@ fun main(args: Array<String>) {
         if (parts.size < 3 || parts[1] != "CHAT") continue
         val time = parts[0]; val chat = parts[2]
         val before = replayed.size
+        val now = millisOf(time)
+        if (lastMillis >= 0 && now > lastMillis) repeat(((now - lastMillis) / 50).toInt().coerceAtMost(20 * 600)) { MaskTracker.tick() }
+        lastMillis = now
 
         P3ChatParser.partyLine(chat)?.let { party ->
             P3ChatParser.startingRole(party.message)?.let { name ->
