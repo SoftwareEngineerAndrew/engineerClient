@@ -14,8 +14,8 @@
         {
           "cond": [],
           "last": false,
-          "mask": 0,
-          "note": "",
+          "mask": 2,
+          "note": "ee3 early-enters section 3 and sits through death ticks: needs 2 invincibilities off cooldown, like the 1st s4 terminal",
           "targets": [
             "r_ee3"
           ]
