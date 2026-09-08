@@ -109,8 +109,9 @@ class RotationEngineTest {
 
     @Test
     fun `the mask branch holds however few masks the party has`() {
-        val maskExit = graph.pots.flatMap { it.exits }.count { it.mask > 0 }
-        assertEquals(1, maskExit, "the sketch has exactly one mask-gated exit")
+        val gated = graph.pots.flatMap { p -> p.exits.mapIndexed { i, e -> Triple(p.name, i + 1, e) } }.filter { it.third.mask > 0 }
+        assertEquals(2, gated.size, "two mask-gated exits: the 1st s4 terminal and ee3, got $gated")
+        assertTrue(gated.all { it.third.mask == 2 }, "both ask for two invincibilities")
 
         // Nobody qualifying must not stall the board: the requirement is a preference, and the
         // engine takes the exit anyway rather than leaving the last arrival with nowhere to go.
