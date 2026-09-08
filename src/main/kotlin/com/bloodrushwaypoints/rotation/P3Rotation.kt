@@ -384,8 +384,8 @@ object P3Rotation : Module(
 
     private fun drawRoleHud(gfx: net.minecraft.client.gui.GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
         if (example) {
-            val w = gfx.textDim("§6Role §a§l4  §7T L", 0, 0, Colors.WHITE).first
-            gfx.text("§6Role §a§l4  §7T L", 0, 0, Colors.WHITE)
+            val w = gfx.textDim("§62§7:§a§l4  §7T L", 0, 0, Colors.WHITE).first
+            gfx.text("§62§7:§a§l4  §7T L", 0, 0, Colors.WHITE)
             return w to 9
         }
         if (!RotationEngine.running || DungeonUtils.getF7Phase() != M7Phases.P3) return 0 to 0
@@ -397,7 +397,9 @@ object P3Rotation : Module(
         lines += if (role == null) (if (RotationEngine.isFinished(me)) "§6Role §a§lcore §7— rush in" else "§6Role §8—") else {
             val left = RotationEngine.remainingFor(me).joinToString(" ") { shortType(it) }
             val flag = if (role.early) " §a✦" else ""
-            "§6Role §a§l${role.name}§r$flag${if (left.isEmpty()) "" else "  §7$left"}"
+            // "2:4" — section in orange, role name in green — so the same job in a different
+            // section reads differently at a glance.
+            "§6${role.section}§7:§a§l${role.name}§r$flag${if (left.isEmpty()) "" else "  §7$left"}"
         }
 
         if (showTeam) {
