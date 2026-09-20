@@ -4,7 +4,12 @@
   "package": "com.bloodrushwaypoints.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "ConnectionTapMixin"
+    "CameraAccessor",
+    "ConnectionTapMixin",
+    "GameRendererInvoker",
+    "GameRendererMixin",
+    "LivingEntityAccessor",
+    "MinecraftAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -3,6 +3,7 @@ package com.bloodrushwaypoints
 import com.bloodrushwaypoints.gui.BrwScreen
 import com.bloodrushwaypoints.rotation.BrwLog
 import com.bloodrushwaypoints.rotation.LeapHighlight
+import com.bloodrushwaypoints.pov.PovPreviews
 import com.bloodrushwaypoints.rotation.P3Rotation
 import com.bloodrushwaypoints.rotation.RoleVignette
 import com.bloodrushwaypoints.rotation.RotationEngine
@@ -44,7 +45,7 @@ object BrwMod : ClientModInitializer {
         // Register our own module into Odin's module system: own ClickGUI panel
         // ("Blood Rush"), own config file (config/odin/addons/bloodrushwaypoints.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("bloodrushwaypoints.json"), BrwWaypoints, P3Rotation)
+        ModuleManager.registerModules(ModuleConfig("bloodrushwaypoints.json"), BrwWaypoints, P3Rotation, PovPreviews)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn the module on once.

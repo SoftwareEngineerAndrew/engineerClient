@@ -3,6 +3,8 @@ package com.bloodrushwaypoints.rotation
 import com.bloodrushwaypoints.BrwConfig
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.dungeon.PositionalMessages
+import net.fabricmc.loader.api.FabricLoader
+import net.minecraft.client.GraphicsPreset
 
 /**
  * Reads the client's ACTUAL configuration and says what is wrong with it — not a checklist to
@@ -66,6 +68,28 @@ object SetupCheck {
         // them now, but say so anyway: a run that still misses lines starts here.
         interceptor("blade-addons.json", "enableTerminalSplits", "blade-addons Terminal Splits rewrites completion lines")?.let { items += it }
         interceptor("devonianConfig.json", "terminalHideCompletion", "devonian Hide Terminal Completion drops completion lines")?.let { items += it }
+
+        // POV previews render a second world pass into their own target. The Fabulous preset
+        // (and its Improved Transparency post-chain, which a Custom preset can also switch on)
+        // owns extra render targets the nested pass cannot borrow.
+        val options = com.bloodrushwaypoints.BrwMod.mc.options
+        val preset = options.graphicsPreset().get()
+        items += when {
+            preset == GraphicsPreset.FABULOUS ->
+                Item(false, "graphics preset is Fabulous", "POV previews need Fancy or Fast")
+            options.improvedTransparency().get() ->
+                Item(false, "Improved Transparency is ON", "POV previews need Fancy or Fast")
+            else -> Item(true, "graphics preset ${preset.serializedName}")
+        }
+
+        // Informational: both are assumed present on a team client and both are bridged, but a
+        // preview that looks wrong (missing terrain, missing entities) starts with which is loaded.
+        fun optionalMod(id: String, name: String) {
+            items += if (FabricLoader.getInstance().isModLoaded(id)) Item(true, "$name present")
+            else Item(true, "$name not installed")
+        }
+        optionalMod("sodium", "Sodium")
+        optionalMod("entityculling", "EntityCulling")
 
         if (P3Rotation.announceToParty) {
             items += Item(false, "BRW Announce Procs & Leaps is ON while Odin announces too", "turn one off or the party hears everything twice")
