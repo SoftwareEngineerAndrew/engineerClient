@@ -25,6 +25,10 @@ dependencies {
     // Odin is a required runtime mod (declared in fabric.mod.json); compile against its release jar.
     compileOnly(files("libs/Odin-0.3.2.jar"))
 
+    // Sodium replaces the terrain renderer on every team client; the POV previews drive its
+    // terrain pass directly. Optional at runtime (guarded by FabricLoader.isModLoaded).
+    compileOnly(files("libs/sodium-fabric-0.9.2-alpha.4+mc26.1.2.jar"))
+
     // The rotation engine is deliberately free of Minecraft/Odin, so it tests headlessly.
     testImplementation(kotlin("test"))
 }
