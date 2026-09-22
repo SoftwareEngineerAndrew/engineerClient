@@ -55,6 +55,7 @@ input[type=text],select{font:inherit;color:var(--ink);background:var(--panel);bo
 .covers{font-size:12px;color:var(--muted)}
 .covers summary{cursor:pointer}
 .covers ul{margin:4px 0 0;padding-left:18px}
+.why{font-size:13px;color:var(--ink);max-width:75ch}
 .rx{font-size:11.5px;color:var(--muted);word-break:break-all}
 .empty{color:var(--muted);padding:30px 0;text-align:center}
 .pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500}
@@ -66,7 +67,6 @@ input[type=text],select{font:inherit;color:var(--ink);background:var(--panel);bo
     <h1>Chat Hider Generalisations</h1>
     <div class="sub" id="sub">Broader rules built from the types you blocked. Each one lists what it would <em>also</em> hide in the rest of the logs — that list is what to check.</div>
   </div>
-  <select id="kind"><option value="*">all kinds</option><option value="prefix">starts with</option><option value="suffix">ends with</option><option value="slot">one word varies</option></select>
   <select id="state"><option value="*">all</option><option value="open">undecided</option><option value="accept">accepted</option><option value="reject">rejected</option></select>
   <input class="search mono" type="text" id="q" placeholder="filter" autocomplete="off">
   <span class="status" id="tally"></span>
@@ -85,7 +85,7 @@ input[type=text],select{font:inherit;color:var(--ink);background:var(--panel);bo
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const fmt = n => n.toLocaleString();
-  const KIND = {prefix:"starts with", suffix:"ends with", slot:"one word varies"};
+  const KIND = {prefix:"starts with", suffix:"ends with", slot:"one word varies", curated:"rule"};
 
   function visible(){
     return C.filter(c => (kind==="*" || c.kind===kind)
@@ -101,10 +101,11 @@ input[type=text],select{font:inherit;color:var(--ink);background:var(--panel);bo
     $("#list").innerHTML = vis.length ? vis.map(c => {
       const dcs = decisions[c.id] || "";
       return `<div class="card ${dcs==="accept"?"accepted":dcs==="reject"?"rejected":""}" data-id="${c.id}">
-        <div class="head"><span class="kind">${KIND[c.kind]||c.kind}</span><span class="label mono">${esc(c.label)}</span>
+        <div class="head"><span class="kind">${KIND[c.kind]||c.kind}</span><span class="label">${esc(c.label)}</span>
           <div class="seg"><button class="acc ${dcs==="accept"?"on":""}" data-a="accept">Accept</button><button class="rej ${dcs==="reject"?"on":""}" data-a="reject">Reject</button></div></div>
+        ${c.why?`<div class="why">${esc(c.why)}</div>`:""}
         <div class="nums"><span>already blocked: <b>${c.blocked.length}</b> types, <b>${fmt(c.blockedLines)}</b> lines</span><span class="adds">would also hide: <b>${c.adds.length}</b> types, <b>${fmt(c.addsLines)}</b> lines</span></div>
-        <div class="adds-list"><div class="h">would also hide</div>${c.adds.slice(0,40).map(a => `<div class="addrow"><span class="c">${fmt(a.count)}</span><span class="t mono">${esc(a.template)}</span><span class="e mono">${esc(a.example)}</span></div>`).join("")}${c.adds.length>40?`<div class="covers">… and ${c.adds.length-40} more</div>`:""}</div>
+        <div class="adds-list"><div class="h">${c.adds.length?"would also hide":"hides nothing new — only replaces your per-line picks"}</div>${c.adds.slice(0,40).map(a => `<div class="addrow"><span class="c">${fmt(a.count)}</span><span class="t mono">${esc(a.template)}</span><span class="e mono">${esc(a.example)}</span></div>`).join("")}${c.adds.length>40?`<div class="covers">… and ${c.adds.length-40} more</div>`:""}</div>
         <details class="covers"><summary>the ${c.blocked.length} blocked types it covers</summary><ul>${c.blockedTemplates.map(t=>`<li class="mono">${esc(t)}</li>`).join("")}</ul></details>
         <div class="rx mono">${esc(c.regex)}</div>
       </div>`;
@@ -128,16 +129,15 @@ input[type=text],select{font:inherit;color:var(--ink);background:var(--panel);bo
     try { await doc.set({decisions, accepted: C.filter(c=>decisions[c.id]==="accept").map(c=>({id:c.id,label:c.label,regex:c.regex,blocked:c.blocked,adds:c.adds.map(a=>a.id)})), updatedAt: Date.now()}); $("#saveState").textContent = "saved"; }
     catch(e){ $("#saveState").textContent = "could not save: " + (e && e.code || e); }
   }
-  $("#kind").onchange = e => { kind = e.target.value; render(); };
   $("#state").onchange = e => { state = e.target.value; render(); };
   $("#q").oninput = e => { query = e.target.value; render(); };
-  $("#sub").textContent = `${C.length} candidate rules built from the ${fmt(D.blockedTypes)} types you blocked. Each lists what it would also hide in the rest of the ${fmt(D.total)} logged lines — that list is what to check. Accept the ones that look right; anything wrong in the "would also hide" list means reject.`;
+  $("#sub").textContent = `${C.length} rules, each one idea written from the types you blocked. None overlaps another or the [BOSS] and \u201chit you for # damage\u201d rules already shipped. Each lists what it would also hide in the rest of the ${fmt(D.total)} logged lines — that list is what to check. Accept the ones that look right; anything wrong in the "would also hide" list means reject.`;
   render();
   (async () => {
     try {
       const db = await window.claude?.use?.("db");
       if (!db){ $("#saveState").textContent = "not signed in — choices stay on this page"; return; }
-      doc = db.doc("general/decisions");
+      doc = db.doc("general/curated");
       doc.onSnapshot(snap => {
         const d = snap && (snap.data ? snap.data() : snap);
         applyingRemote = true;
