@@ -1,7 +1,7 @@
 package com.engineerclient.misc
 
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.ChatMessageEvent
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -21,7 +21,7 @@ object RandomStuff : Module(
     private val hideDamage by BooleanSetting("Hide Damage Indicators", false, desc = "Suppresses the red hurt-flash overlay when you take damage.")
 
     init {
-        on<ChatMessageEvent> {
+        on<MessageEvent.Chat> {
             if (hideChat) cancel()
         }
 
