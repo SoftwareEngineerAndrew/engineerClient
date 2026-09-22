@@ -1,0 +1,152 @@
+<title>Chat Hider Generalisations</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f4f3ee; --panel:#ffffff; --ink:#1d1c19; --muted:#6f6c64; --line:#e1ded5; --line2:#cfcbc0;
+  --chat:#1f2023; --chat-ink:#e4e4e2; --chat-dim:#8a8c92;
+  --block:#c2401b; --block-soft:#fbe9e2; --show:#2a7f52; --show-soft:#e3f2e9; --amber:#b9770e; --amber-soft:#fbefd7;
+  --focus:#3b6fd1;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#141517; --panel:#1c1d21; --ink:#e9e7e1; --muted:#9a978f; --line:#2b2d33; --line2:#3a3d45;
+  --chat:#101114; --chat-ink:#e4e4e2; --chat-dim:#7d8088;
+  --block:#ec6a42; --block-soft:#3a1f16; --show:#4fbf82; --show-soft:#173125; --amber:#e0a63a; --amber-soft:#3a2c12;
+  --focus:#7ea3ec;
+}}
+:root[data-theme="dark"]{
+  --bg:#141517; --panel:#1c1d21; --ink:#e9e7e1; --muted:#9a978f; --line:#2b2d33; --line2:#3a3d45;
+  --chat:#101114; --chat-ink:#e4e4e2; --chat-dim:#7d8088;
+  --block:#ec6a42; --block-soft:#3a1f16; --show:#4fbf82; --show-soft:#173125; --amber:#e0a63a; --amber-soft:#3a2c12;
+  --focus:#7ea3ec;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 32px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+button{font:inherit;color:inherit;background:none;border:1px solid var(--line2);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input[type=text],select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:6px 9px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.top .sub{color:var(--muted);font-size:13px;max-width:70ch}
+.status{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.search{flex:1 1 200px;min-width:160px}
+.list{margin-top:14px;display:grid;gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:grid;gap:8px}
+.card.accepted{border-color:color-mix(in srgb,var(--show) 55%,var(--line))}
+.card.rejected{opacity:.55}
+.head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.head .label{font-size:14px;font-weight:500;word-break:break-word}
+.head .kind{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden;margin-left:auto}
+.seg button{border:0;border-radius:0;padding:4px 10px;font-size:12px;font-weight:500;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button.acc.on{background:var(--show-soft);color:var(--show)}
+.seg button.rej.on{background:var(--block-soft);color:var(--block)}
+.nums{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.nums b{color:var(--ink);font-weight:500}
+.nums .adds b{color:var(--amber)}
+.adds-list{display:grid;gap:4px}
+.adds-list .h{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.addrow{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:baseline;font-size:12.5px}
+.addrow .c{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;min-width:4ch}
+.addrow .t{word-break:break-word}
+.addrow .e{grid-column:2;color:var(--chat-dim);background:var(--chat);border-radius:4px;padding:2px 6px;font-size:12px;white-space:pre;overflow-x:auto}
+.covers{font-size:12px;color:var(--muted)}
+.covers summary{cursor:pointer}
+.covers ul{margin:4px 0 0;padding-left:18px}
+.rx{font-size:11.5px;color:var(--muted);word-break:break-all}
+.empty{color:var(--muted);padding:30px 0;text-align:center}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500}
+.pill.s{background:var(--show-soft);color:var(--show)} .pill.b{background:var(--block-soft);color:var(--block)}
+</style>
+
+<div class="top">
+  <div>
+    <h1>Chat Hider Generalisations</h1>
+    <div class="sub" id="sub">Broader rules built from the types you blocked. Each one lists what it would <em>also</em> hide in the rest of the logs — that list is what to check.</div>
+  </div>
+  <select id="kind"><option value="*">all kinds</option><option value="prefix">starts with</option><option value="suffix">ends with</option><option value="slot">one word varies</option></select>
+  <select id="state"><option value="*">all</option><option value="open">undecided</option><option value="accept">accepted</option><option value="reject">rejected</option></select>
+  <input class="search mono" type="text" id="q" placeholder="filter" autocomplete="off">
+  <span class="status" id="tally"></span>
+  <span class="status" id="saveState">…</span>
+</div>
+<div class="list" id="list"></div>
+
+<script src="general.js"></script>
+<script>
+(() => {
+  const D = window.GENERAL || {total:0, candidates:[]};
+  const C = D.candidates;
+  let decisions = {};
+  let kind = "*", state = "*", query = "";
+  let doc = null, saveTimer = null, applyingRemote = false;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const fmt = n => n.toLocaleString();
+  const KIND = {prefix:"starts with", suffix:"ends with", slot:"one word varies"};
+
+  function visible(){
+    return C.filter(c => (kind==="*" || c.kind===kind)
+      && (state==="*" ? true : state==="open" ? !decisions[c.id] : decisions[c.id]===state)
+      && (!query || (c.label + " " + c.adds.map(a=>a.template).join(" ") + " " + c.blockedTemplates.join(" ")).toLowerCase().includes(query.toLowerCase())));
+  }
+  function render(){
+    const vis = visible();
+    const acc = C.filter(c => decisions[c.id]==="accept");
+    const addLines = new Set(); let addTotal = 0;
+    for (const c of acc) for (const a of c.adds) if (!addLines.has(a.id)) { addLines.add(a.id); addTotal += a.count; }
+    $("#tally").textContent = `${acc.length} accepted → +${fmt(addLines.size)} types, +${fmt(addTotal)} lines (${(100*addTotal/Math.max(1,D.total)).toFixed(1)}%)`;
+    $("#list").innerHTML = vis.length ? vis.map(c => {
+      const dcs = decisions[c.id] || "";
+      return `<div class="card ${dcs==="accept"?"accepted":dcs==="reject"?"rejected":""}" data-id="${c.id}">
+        <div class="head"><span class="kind">${KIND[c.kind]||c.kind}</span><span class="label mono">${esc(c.label)}</span>
+          <div class="seg"><button class="acc ${dcs==="accept"?"on":""}" data-a="accept">Accept</button><button class="rej ${dcs==="reject"?"on":""}" data-a="reject">Reject</button></div></div>
+        <div class="nums"><span>already blocked: <b>${c.blocked.length}</b> types, <b>${fmt(c.blockedLines)}</b> lines</span><span class="adds">would also hide: <b>${c.adds.length}</b> types, <b>${fmt(c.addsLines)}</b> lines</span></div>
+        <div class="adds-list"><div class="h">would also hide</div>${c.adds.slice(0,40).map(a => `<div class="addrow"><span class="c">${fmt(a.count)}</span><span class="t mono">${esc(a.template)}</span><span class="e mono">${esc(a.example)}</span></div>`).join("")}${c.adds.length>40?`<div class="covers">… and ${c.adds.length-40} more</div>`:""}</div>
+        <details class="covers"><summary>the ${c.blocked.length} blocked types it covers</summary><ul>${c.blockedTemplates.map(t=>`<li class="mono">${esc(t)}</li>`).join("")}</ul></details>
+        <div class="rx mono">${esc(c.regex)}</div>
+      </div>`;
+    }).join("") : `<div class="empty">Nothing here.</div>`;
+    $("#list").querySelectorAll(".card").forEach(card => {
+      card.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+        const id = card.dataset.id, a = b.dataset.a;
+        if (decisions[id] === a) delete decisions[id]; else decisions[id] = a;
+        changed();
+      });
+    });
+  }
+  function changed(){
+    render();
+    if (applyingRemote) return;
+    $("#saveState").textContent = "saving…";
+    clearTimeout(saveTimer); saveTimer = setTimeout(save, 500);
+  }
+  async function save(){
+    if (!doc){ $("#saveState").textContent = "not signed in — choices stay on this page"; return; }
+    try { await doc.set({decisions, accepted: C.filter(c=>decisions[c.id]==="accept").map(c=>({id:c.id,label:c.label,regex:c.regex,blocked:c.blocked,adds:c.adds.map(a=>a.id)})), updatedAt: Date.now()}); $("#saveState").textContent = "saved"; }
+    catch(e){ $("#saveState").textContent = "could not save: " + (e && e.code || e); }
+  }
+  $("#kind").onchange = e => { kind = e.target.value; render(); };
+  $("#state").onchange = e => { state = e.target.value; render(); };
+  $("#q").oninput = e => { query = e.target.value; render(); };
+  $("#sub").textContent = `${C.length} candidate rules built from the ${fmt(D.blockedTypes)} types you blocked. Each lists what it would also hide in the rest of the ${fmt(D.total)} logged lines — that list is what to check. Accept the ones that look right; anything wrong in the "would also hide" list means reject.`;
+  render();
+  (async () => {
+    try {
+      const db = await window.claude?.use?.("db");
+      if (!db){ $("#saveState").textContent = "not signed in — choices stay on this page"; return; }
+      doc = db.doc("general/decisions");
+      doc.onSnapshot(snap => {
+        const d = snap && (snap.data ? snap.data() : snap);
+        applyingRemote = true;
+        decisions = (d && d.decisions) ? Object.assign({}, d.decisions) : {};
+        render();
+        applyingRemote = false;
+        $("#saveState").textContent = d ? "saved" : "nothing decided yet";
+      });
+    } catch(e){ $("#saveState").textContent = "storage unavailable"; }
+  })();
+})();
+</script>
