@@ -25,17 +25,21 @@ def ign_sub(m):
 ign_re=True
 RANK=re.compile(r"\[(?:VIP|VIP\+|MVP|MVP\+|MVP\+\+|ADMIN|GM|YOUTUBE|MOD|HELPER|OWNER)\]")
 NUM=re.compile(r"(?<![A-Za-z_\d])\d[\d,.]*")
-N,NM,RK="\ue000","\ue001","\ue002"
+N,NM,RK,UU,SV="\ue000","\ue001","\ue002","\ue004","\ue005"
+UUID=re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+SERVER=re.compile(r"\b(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*\b")
 def template(m):
-    t=RANK.sub(RK,m)
+    t=UUID.sub(UU,m)
+    t=SERVER.sub(SV,t)
+    t=RANK.sub(RK,t)
     t=WORD.sub(ign_sub,t)
     t=NUM.sub(N,t)
     return t
 def display(t):
-    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]")
+    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>")
 def regex(t):
     r=re.escape(t.replace("\n","\ue003"))
-    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*")
+    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
     r=r.replace("\ue003",r"\n")
     return "^"+r+"$"
 FAMILIES=[
