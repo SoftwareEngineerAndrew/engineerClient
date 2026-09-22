@@ -13,7 +13,8 @@
     "GameRendererMixin",
     "ItemFoilMixin",
     "LivingEntityAccessor",
-    "MinecraftAccessor"
+    "MinecraftAccessor",
+    "SignEnterMixin"
   ],
   "injectors": {
     "defaultRequire": 1
