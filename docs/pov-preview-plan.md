@@ -2,7 +2,7 @@
 
 Goal: while the Spirit Leap menu is open, each quarter of the screen shows the world rendered
 from the eyes of the teammate Odin puts in that quadrant (top-left, top-right, bottom-left,
-bottom-right = `DungeonUtils.leapTeammates[0..3]`). Odin's leap boxes, BRW's ring/dim and the
+bottom-right = `DungeonUtils.leapTeammates[0..3]`). Odin's leap boxes, EC's ring/dim and the
 role HUD draw on top as today. A teammate whose entity is not loaded on this client (out of
 entity range, dead, not in the party) gets an "out of range" quadrant.
 
@@ -79,9 +79,9 @@ copy every feed that has a valid image into its quadrant of the real main target
 
 The previews cover the vanilla HUD (hotbar, scoreboard, boss bar) and Odin's ordinary HUDs, and
 sit UNDER: Odin's leap boxes (player names), Odin's Tick Timers HUDs, the Invincibility Timer
-HUD, the Melody display and BRW's role HUD — each "keep on top" group a toggle. Because the HUD
+HUD, the Melody display and EC's role HUD — each "keep on top" group a toggle. Because the HUD
 phase is extracted before the screen, the blit is submitted from a handler that runs before
-Odin's CustomGUIImpl `ScreenEvent.Render` handler (a BRW `Screen` mixin at HEAD, priority 1, or
+Odin's CustomGUIImpl `ScreenEvent.Render` handler (a EC `Screen` mixin at HEAD, priority 1, or
 an Odin subscription that beats HIGHEST), and the kept Odin HUDs are re-drawn on top right
 after (`ModuleManager.hudSettingsCache` by name → `value.draw(gfx, false)` under 1/guiScale).
 So the GUI-pass blit is the only route; the texture copy is out.
@@ -95,13 +95,13 @@ Round-robin: `Previews Per Frame` (1–4, default 1) quadrants render per frame;
 keep their last image. `Resolution` scales the feed (0.25–1.0 of the quadrant, default 0.5) —
 when below 1.0 the copy must scale, so use the GUI-pass blit instead
 (`GuiGraphicsExtractor.blit(GpuTextureView, GpuSampler, x0,y0,x1,y1, u0,u1, v0=1,v1=0)` with
-`RenderPipelines.GUI_TEXTURED_PREMULTIPLIED_ALPHA`) drawn from BRW's `CustomGUIImpl` handler
+`RenderPipelines.GUI_TEXTURED_PREMULTIPLIED_ALPHA`) drawn from EC's `CustomGUIImpl` handler
 *before* the ring/dim. Pick ONE route and keep it: the GUI blit handles both scaling and
 alpha, so prefer it unless it proves to draw above Odin's boxes (then fall back to the copy at
 resolution 1.0).
 
-## Files (all new code under `src/main/kotlin/com/bloodrushwaypoints/pov/` and
-`src/main/java/com/bloodrushwaypoints/mixin/`)
+## Files (all new code under `src/main/kotlin/com/engineerclient/pov/` and
+`src/main/java/com/engineerclient/mixin/`)
 
 - `mixin/MinecraftAccessor.java` — `@Mutable @Accessor("mainRenderTarget")` setter.
 - `mixin/GameRendererMixin.java` — `@Inject(method="renderLevel", at=@At("RETURN"))` →
@@ -131,7 +131,7 @@ resolution 1.0).
 - `RAW`: write the packet targets into the entity for the pass: `xo=x=interp.position().x`
   (same y, z), `yHeadRotO=yHeadRot=lerpYHeadRot`, `xRotO=xRot=interp.xRot()`; `Restore` puts
   every field back. Lowest latency, 20 Hz steps.
-- `CUSTOM(ticks)`: BRW keeps a per-player ring of packet targets stamped with
+- `CUSTOM(ticks)`: EC keeps a per-player ring of packet targets stamped with
   `System.nanoTime()` (sampled every client tick from `getInterpolation()`/`lerpYHeadRot`,
   which is what the server last sent), and renders the pose `ticks × 50 ms` in the past by
   lerping between the two samples bracketing that time (rotations via shortest-arc). Writes
@@ -144,7 +144,7 @@ resolution 1.0).
   or tick handler.
 - Nothing here changes what the rotation engine decides; it is display only.
 - Team-mod scope: Sodium + EntityCulling are assumed present but every bridge no-ops without
-  them (the BRW instance is the reference config).
+  them (the EC instance is the reference config).
 - Every exception inside a pass is caught, the feature disables itself for the session with
   one chat line, and all saved state is restored in a `finally`.
 - Version bump to 0.5.0; `./deploy.sh` after the build.

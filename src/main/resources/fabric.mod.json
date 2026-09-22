@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "id": "bloodrushwaypoints",
+  "id": "engineerclient",
   "version": "${version}",
-  "name": "Blood Rush Waypoints",
-  "description": "Class-aware blood-rush waypoint profiles built on Odin's dungeon waypoint framework.",
+  "name": "Engineer Client",
+  "description": "Andrew's Odin addon: blood-rush waypoint profiles, M7 phase-3 role rotation, leap-menu POV previews and Party Finder stats.",
   "authors": ["Andrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
-  "mixins": ["bloodrushwaypoints.mixins.json"],
+  "mixins": ["engineerclient.mixins.json"],
   "entrypoints": {
     "client": [
-      { "adapter": "kotlin", "value": "com.bloodrushwaypoints.BrwMod" }
+      { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" }
     ]
   },
   "depends": {
