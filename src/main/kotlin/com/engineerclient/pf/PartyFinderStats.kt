@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Catacombs level, secret count and personal best for the floor the party is listed for.
  *
  * ```
- *   Members: · missing Mage, Tank
+ *   Members: · missing: Mage, Tank
  *   TimTaroo: Berserk (47) | 47.3 | 41.2k | 4:31
  * ```
  *
@@ -115,12 +115,15 @@ object PartyFinderStats : Module(
         val missing = missingClasses(lines)
         val out = ArrayList<Component>(lines.size)
         for (line in lines) {
-            val text = clean(line.string).trim()
+            val raw = clean(line.string)
+            val text = raw.trim()
             floorLine.find(text)?.let { floor = romanFloors[it.groupValues[1].trim()] }
             dungeonLine.find(text)?.let { master = it.groupValues[1].contains("Master", ignoreCase = true) }
             if (text == "Members:") {
                 inMembers = true
-                out += if (missing.isEmpty()) line else line.copy().append(Component.literal(missing))
+                // Hypixel's own header already ends in a space; only pad when it does not.
+                val pad = if (raw.endsWith(" ")) "" else " "
+                out += if (missing.isEmpty()) line else line.copy().append(Component.literal(pad + missing))
                 continue
             }
 
@@ -131,7 +134,9 @@ object PartyFinderStats : Module(
     }
 
     /**
-     * Which of the five classes nobody in the listing has taken, rendered for the `Members:` line.
+     * Which of the five classes nobody in the listing has taken, rendered for the `Members:`
+     * line. Carries no leading space of its own — the caller pads it, because Hypixel's header
+     * already ends in one and two spaces showed.
      *
      * Read off the same member rows the stat columns use, so it costs one extra walk of a tooltip
      * that is already being rebuilt every frame. Empty string when the module setting is off, when
@@ -156,11 +161,11 @@ object PartyFinderStats : Module(
             classNamed(member.groupValues[2])?.let { taken += it }
         }
         if (members == 0) return ""
-        if (members >= PARTY_SIZE) return " §8· §7full"
+        if (members >= PARTY_SIZE) return "§8· §7full"
         val absent = PLAYABLE.filter { it !in taken }
         if (absent.isEmpty()) return ""
         val mine = if (markMyClass) RushProfiles.effectiveClass() else null
-        return " §8· §7missing " + absent.joinToString("§8, ") { clazz ->
+        return "§8· §cmissing: " + absent.joinToString("§8, ") { clazz ->
             // Party Finder's own spelling, so the list matches the rows under it — it writes
             // "Berserk" where the mod's pack names and class override say "Berserker", which is
             // why the ownership test goes through friendlyName rather than the label.
