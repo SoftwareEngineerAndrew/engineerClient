@@ -1,6 +1,7 @@
 package com.engineerclient.pf
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.RushProfiles
 import com.odtheking.odin.OdinMod
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
@@ -9,6 +10,7 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.calculateDungeonLevel
 import com.odtheking.odin.utils.network.hypixelapi.HypixelData
 import com.odtheking.odin.utils.network.hypixelapi.RequestUtils
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import kotlinx.coroutines.launch
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
@@ -25,9 +27,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Catacombs level, secret count and personal best for the floor the party is listed for.
  *
  * ```
- *   Members:
+ *   Members: · missing Mage, Tank
  *   TimTaroo: Berserk (47) | 47.3 | 41.2k | 4:31
  * ```
+ *
+ * The header also says which of the five classes nobody in the party has taken, so scrolling the
+ * listings answers "does this party have room for what I play" without opening any of them.
+ * Your own class is bolded in that list when it is one of them.
  *
  * Same data as Odin's Better Party Finder autokick: `RequestUtils.getProfile` (Odin's own
  * API, cached by Odin), Catacombs level from `dungeons.dungeon_types.catacombs.experience`,
@@ -52,6 +58,8 @@ object PartyFinderStats : Module(
     private val showCata by BooleanSetting("Cata Level", true, desc = "Catacombs level, one decimal.")
     private val showSecrets by BooleanSetting("Secrets", true, desc = "Total secrets found, in thousands.")
     private val showPb by BooleanSetting("Floor PB", true, desc = "Fastest time on the floor the party is listed for, master mode aware.")
+    private val showMissing by BooleanSetting("Missing Classes", true, desc = "On the Members line, which of the five classes nobody in the party has taken.")
+    private val markMyClass by BooleanSetting("Mark My Class", true, desc = "Bold your own class in that list — your override, else live tab detection, else your last known class.")
     private val pbType by SelectorSetting("PB Type", "S+", arrayListOf("S+", "S", "Any"), desc = "Which fastest-time the PB column shows. Autokick uses S+.")
 
     private sealed interface Entry
@@ -69,6 +77,9 @@ object PartyFinderStats : Module(
         val any: Map<String, Map<String, Double>> = emptyMap(),
         val fetchedAt: Long = 0,
     )
+
+    private const val PARTY_SIZE = 5
+    private val PLAYABLE = DungeonClass.entries.filter { it != DungeonClass.EMPTY }
 
     private const val RETRY_FAILED_MS = 60_000L
     private const val STATS_TTL_MS = 24 * 60 * 60 * 1000L
@@ -101,17 +112,73 @@ object PartyFinderStats : Module(
         var floor: String? = null
         var master = false
         var inMembers = false
+        val missing = missingClasses(lines)
         val out = ArrayList<Component>(lines.size)
         for (line in lines) {
             val text = clean(line.string).trim()
             floorLine.find(text)?.let { floor = romanFloors[it.groupValues[1].trim()] }
             dungeonLine.find(text)?.let { master = it.groupValues[1].contains("Master", ignoreCase = true) }
-            if (text == "Members:") inMembers = true
+            if (text == "Members:") {
+                inMembers = true
+                out += if (missing.isEmpty()) line else line.copy().append(Component.literal(missing))
+                continue
+            }
 
             val member = if (inMembers) memberLine.find(text) else null
             out += if (member == null) line else line.copy().append(Component.literal(statsFor(member.groupValues[1], floor, master)))
         }
         return out
+    }
+
+    /**
+     * Which of the five classes nobody in the listing has taken, rendered for the `Members:` line.
+     *
+     * Read off the same member rows the stat columns use, so it costs one extra walk of a tooltip
+     * that is already being rebuilt every frame. Empty string when the module setting is off, when
+     * the party has no seat left, or when no row parsed — a listing whose wording we do not
+     * recognise says nothing rather than claiming all five classes are missing.
+     *
+     * A party can be short of more classes than it has seats (two Mages in a 4/5 party leaves one
+     * seat and two classes absent), so this is deliberately "missing" and not "needs": every class
+     * named really is absent, but filling them all is not always possible.
+     */
+    private fun missingClasses(lines: List<Component>): String {
+        if (!showMissing) return ""
+        var inMembers = false
+        var members = 0
+        val taken = HashSet<DungeonClass>()
+        for (line in lines) {
+            val text = clean(line.string).trim()
+            if (text == "Members:") { inMembers = true; continue }
+            if (!inMembers) continue
+            val member = memberLine.find(text) ?: continue
+            members++
+            classNamed(member.groupValues[2])?.let { taken += it }
+        }
+        if (members == 0) return ""
+        if (members >= PARTY_SIZE) return " §8· §7full"
+        val absent = PLAYABLE.filter { it !in taken }
+        if (absent.isEmpty()) return ""
+        val mine = if (markMyClass) RushProfiles.effectiveClass() else null
+        return " §8· §7missing " + absent.joinToString("§8, ") { clazz ->
+            // Party Finder's own spelling, so the list matches the rows under it — it writes
+            // "Berserk" where the mod's pack names and class override say "Berserker", which is
+            // why the ownership test goes through friendlyName rather than the label.
+            val label = clazz.name.lowercase(Locale.ROOT).replaceFirstChar(Char::titlecase)
+            // Odin's own per-class colour, so this reads like the leap menu and the role HUD.
+            if (RushProfiles.friendlyName(clazz) == mine) "§l§${clazz.colorCode}$label§r"
+            else "§${clazz.colorCode}$label"
+        }
+    }
+
+    /**
+     * The class a member row names. Both spellings are accepted — Odin's enum and Party Finder
+     * say "Berserk", the mod's pack names and class override say "Berserker" — because getting
+     * this wrong is silent and wrong in the worst direction: an unrecognised spelling would leave
+     * that class out of the taken set and report a class the party already has as missing.
+     */
+    private fun classNamed(text: String): DungeonClass? = PLAYABLE.firstOrNull {
+        it.name.equals(text, ignoreCase = true) || RushProfiles.friendlyName(it).equals(text, ignoreCase = true)
     }
 
     private fun statsFor(name: String, floor: String?, master: Boolean): String {
