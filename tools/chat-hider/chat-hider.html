@@ -1,0 +1,303 @@
+<title>Dungeon Chat Hider</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f4f3ee; --panel:#ffffff; --ink:#1d1c19; --muted:#6f6c64; --line:#e1ded5; --line2:#cfcbc0;
+  --chat:#1f2023; --chat-ink:#e4e4e2; --chat-dim:#8a8c92;
+  --block:#c2401b; --block-soft:#fbe9e2; --show:#2a7f52; --show-soft:#e3f2e9; --amber:#b9770e; --amber-soft:#fbefd7;
+  --focus:#3b6fd1;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#141517; --panel:#1c1d21; --ink:#e9e7e1; --muted:#9a978f; --line:#2b2d33; --line2:#3a3d45;
+  --chat:#101114; --chat-ink:#e4e4e2; --chat-dim:#7d8088;
+  --block:#ec6a42; --block-soft:#3a1f16; --show:#4fbf82; --show-soft:#173125; --amber:#e0a63a; --amber-soft:#3a2c12;
+  --focus:#7ea3ec;
+}}
+:root[data-theme="dark"]{
+  --bg:#141517; --panel:#1c1d21; --ink:#e9e7e1; --muted:#9a978f; --line:#2b2d33; --line2:#3a3d45;
+  --chat:#101114; --chat-ink:#e4e4e2; --chat-dim:#7d8088;
+  --block:#ec6a42; --block-soft:#3a1f16; --show:#4fbf82; --show-soft:#173125; --amber:#e0a63a; --amber-soft:#3a2c12;
+  --focus:#7ea3ec;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 32px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+button{font:inherit;color:inherit;background:none;border:1px solid var(--line2);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--ink)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input[type=text],textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:6px 9px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.top .sub{color:var(--muted);font-size:13px}
+.meter{display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums}
+.bar{width:180px;height:8px;border-radius:4px;background:var(--show-soft);overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--block);width:0}
+.search{flex:1 1 220px;min-width:180px}
+.status{font-size:12px;color:var(--muted)}
+.wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px;margin-top:16px}
+@media (max-width:820px){.wrap{grid-template-columns:1fr}.side{position:static}}
+.side{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 90px);overflow:auto}
+.fam{width:100%;text-align:left;border:0;border-radius:6px;padding:7px 9px;display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
+.fam:hover{background:var(--panel)}
+.fam.on{background:var(--panel);box-shadow:inset 0 0 0 1px var(--line2)}
+.fam .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fam .stack{grid-column:1/-1;height:4px;border-radius:2px;background:var(--line);overflow:hidden;display:flex}
+.fam .stack i{display:block;height:100%}
+.fam .stack .b{background:var(--block)} .fam .stack .s{background:var(--show)}
+.main{min-width:0}
+.famhead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;margin-bottom:10px}
+.famhead h2{font-size:16px;margin:0;font-weight:600}
+.famhead .n{color:var(--muted);font-size:13px}
+.famhead .acts{margin-left:auto;display:flex;gap:6px}
+.row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;align-items:start}
+.row.blocked{border-color:color-mix(in srgb,var(--block) 45%,var(--line))}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:4px 10px;font-size:12px;font-weight:500;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button.show.on{background:var(--show-soft);color:var(--show)}
+.seg button.block.on{background:var(--block-soft);color:var(--block)}
+.tmpl{font-size:13px;word-break:break-word}
+.tmpl .ph{background:var(--amber-soft);color:var(--amber);border-radius:3px;padding:0 3px}
+.meta{grid-column:2;display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.meta button{border:0;padding:0;color:var(--muted);text-decoration:underline dotted;font-size:12px}
+.ex{grid-column:1/-1;background:var(--chat);color:var(--chat-ink);border-radius:6px;padding:8px 10px;font-size:12.5px;line-height:1.5;overflow-x:auto}
+.ex div{white-space:pre}
+.ex .src{color:var(--chat-dim);font-size:11px;margin-top:4px;font-family:"IBM Plex Sans",system-ui,sans-serif}
+.rx{grid-column:1/-1;font-size:12px;color:var(--muted);word-break:break-all}
+.more{color:var(--muted);text-align:center;padding:10px}
+.custom{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+.custom h2{font-size:16px;margin:0 0 6px;font-weight:600}
+.custom p{color:var(--muted);margin:0 0 10px;max-width:65ch}
+.crow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.crow input[type=text]{flex:1 1 320px}
+.hit{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hit.bad{color:var(--block)}
+.export{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+.export textarea{width:100%;min-height:140px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500}
+.pill.b{background:var(--block-soft);color:var(--block)} .pill.s{background:var(--show-soft);color:var(--show)}
+.empty{color:var(--muted);padding:30px 0;text-align:center}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .25s}}
+</style>
+
+<div class="top">
+  <div>
+    <h1>Dungeon Chat Hider</h1>
+    <div class="sub" id="subtitle">Loading your chat lines…</div>
+  </div>
+  <div class="meter"><span class="status">blocked</span><div class="bar"><i id="meterBar"></i></div><span id="meterText" class="status">0%</span></div>
+  <input class="search mono" type="text" id="q" placeholder="filter templates or examples (regex ok)" autocomplete="off">
+  <span class="status" id="saveState">not saved yet</span>
+</div>
+
+<div class="wrap">
+  <nav class="side" id="families" aria-label="message families"></nav>
+  <section class="main">
+    <div class="famhead">
+      <h2 id="famTitle">All families</h2>
+      <span class="n" id="famCount"></span>
+      <div class="acts">
+        <button id="blockAll">Block all shown</button>
+        <button id="showAll">Show all shown</button>
+      </div>
+    </div>
+    <div id="rows"></div>
+    <div class="more" id="more" hidden><button id="moreBtn">Show more</button></div>
+
+    <div class="custom">
+      <h2>Your own rules</h2>
+      <p>A regex here is matched against the whole message after colour codes are stripped. The count is how many of the logged lines it would hit, so you can see it lands where you meant. A custom rule wins over the template rules above.</p>
+      <div id="customList"></div>
+      <div class="crow">
+        <input type="text" class="mono" id="customRx" placeholder="^Party > .*: gg$" autocomplete="off">
+        <div class="seg"><button class="show on" id="customShow">Show</button><button class="block" id="customBlock">Block</button></div>
+        <span class="hit" id="customHit"></span>
+        <button id="customAdd">Add rule</button>
+      </div>
+    </div>
+
+    <div class="export">
+      <h2 style="font-size:16px;margin:0 0 6px;font-weight:600">Rules for the mod</h2>
+      <p style="color:var(--muted);margin:0 0 10px;max-width:65ch">Saved automatically for Claude to pull into Engineer Client. This is the same JSON, for copying by hand.</p>
+      <textarea id="exportBox" readonly spellcheck="false"></textarea>
+    </div>
+  </section>
+</div>
+
+<script src="data.js"></script>
+<script>
+(() => {
+  const D = window.CHAT_DATA || {total:0, rules:[], long_tail:[]};
+  const rules = D.rules.concat(D.long_tail.map(r => Object.assign({}, r, {tail:true})));
+  const byId = new Map(rules.map(r => [r.id, r]));
+  const families = [...new Set(rules.map(r => r.family))];
+  const famCount = {}; families.forEach(f => famCount[f] = rules.filter(r => r.family===f).reduce((a,r)=>a+r.count,0));
+  families.sort((a,b) => famCount[b]-famCount[a]);
+
+  // state
+  let decisions = {};          // id -> "block" | "show"
+  let custom = [];             // {regex, action}
+  let selected = "*";
+  let query = "";
+  let limit = 120;
+  let db = null, doc = null, saveTimer = null, applyingRemote = false;
+
+  const $ = s => document.querySelector(s);
+  const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const fmt = n => n.toLocaleString();
+
+  document.title = "Dungeon Chat Hider";
+  $("#subtitle").textContent = `${fmt(D.total)} chat lines from your recent sessions, folded into ${fmt(D.rules.length)} message types` + (D.long_tail.length ? ` plus ${fmt(D.long_tail.length)} one-offs` : "");
+
+  function customCompiled(){
+    return custom.map(c => { try { return {rx:new RegExp(c.regex), action:c.action, regex:c.regex}; } catch(e){ return null; } }).filter(Boolean);
+  }
+  function effective(r, cc){
+    // a custom rule that matches any example of this template overrides it
+    for (const c of cc) if (r.examples.some(e => c.rx.test(e))) return c.action;
+    return decisions[r.id] || "show";
+  }
+  function stats(){
+    const cc = customCompiled();
+    let blocked = 0; const fam = {};
+    for (const r of rules){ const e = effective(r, cc); if (e==="block") blocked += r.count; (fam[r.family] ||= {b:0,s:0})[e==="block"?"b":"s"] += r.count; }
+    return {blocked, fam};
+  }
+  function tmplHtml(t){
+    return esc(t).replace(/&lt;name&gt;/g,'<span class="ph">name</span>').replace(/\[RANK\]/g,'<span class="ph">[RANK]</span>').replace(/#/g,'<span class="ph">#</span>');
+  }
+  function matchesQuery(r){
+    if (!query) return true;
+    let rx = null; try { rx = new RegExp(query, "i"); } catch(e){}
+    const hay = [r.template, ...r.examples];
+    return hay.some(h => rx ? rx.test(h) : h.toLowerCase().includes(query.toLowerCase()));
+  }
+  function visible(){
+    return rules.filter(r => (selected==="*" || r.family===selected) && matchesQuery(r));
+  }
+
+  function renderFamilies(){
+    const st = stats();
+    const nav = $("#families");
+    const all = `<button class="fam ${selected==="*"?"on":""}" data-f="*"><span>All families</span><span class="n">${fmt(D.total)}</span><span class="stack"><i class="b" style="width:${100*st.blocked/Math.max(1,D.total)}%"></i></span></button>`;
+    nav.innerHTML = all + families.map(f => {
+      const s = st.fam[f] || {b:0,s:0}; const tot = s.b+s.s;
+      return `<button class="fam ${selected===f?"on":""}" data-f="${esc(f)}"><span>${esc(f)}</span><span class="n">${fmt(tot)}</span><span class="stack"><i class="b" style="width:${100*s.b/Math.max(1,tot)}%"></i></span></button>`;
+    }).join("");
+    nav.querySelectorAll(".fam").forEach(b => b.onclick = () => { selected = b.dataset.f; limit = 120; render(); });
+    $("#meterBar").style.width = (100*st.blocked/Math.max(1,D.total)) + "%";
+    $("#meterText").textContent = (100*st.blocked/Math.max(1,D.total)).toFixed(1) + "% of lines";
+  }
+
+  function renderRows(){
+    const cc = customCompiled();
+    const vis = visible();
+    $("#famTitle").textContent = selected==="*" ? "All families" : selected;
+    $("#famCount").textContent = `${fmt(vis.length)} types · ${fmt(vis.reduce((a,r)=>a+r.count,0))} lines`;
+    const slice = vis.slice(0, limit);
+    $("#rows").innerHTML = slice.length ? slice.map(r => {
+      const e = effective(r, cc);
+      const overridden = cc.some(c => r.examples.some(x => c.rx.test(x)));
+      return `<div class="row ${e==="block"?"blocked":""}" data-id="${r.id}">
+        <div class="seg" role="group" aria-label="decision"><button class="show ${e==="show"?"on":""}" data-a="show">Show</button><button class="block ${e==="block"?"on":""}" data-a="block">Block</button></div>
+        <div class="tmpl mono">${tmplHtml(r.template)}</div>
+        <div class="meta"><span>${fmt(r.count)} line${r.count===1?"":"s"}</span><span>${esc(r.family)}</span>${overridden?'<span class="pill '+(e==="block"?"b":"s")+'">custom rule</span>':""}<button data-t="ex">${r.examples.length} example${r.examples.length===1?"":"s"}</button><button data-t="rx">regex</button></div>
+        <div class="ex mono" hidden>${r.examples.map(x=>`<div>${esc(x)}</div>`).join("")}<div class="src">as logged, colour codes removed</div></div>
+        <div class="rx mono" hidden>${esc(r.regex)}</div>
+      </div>`;
+    }).join("") : `<div class="empty">Nothing matches.</div>`;
+    $("#more").hidden = vis.length <= limit;
+    $("#rows").querySelectorAll(".row").forEach(row => {
+      const id = row.dataset.id;
+      row.querySelectorAll(".seg button").forEach(b => b.onclick = () => { decide(id, b.dataset.a); });
+      row.querySelector('[data-t="ex"]').onclick = () => { const x = row.querySelector(".ex"); x.hidden = !x.hidden; };
+      row.querySelector('[data-t="rx"]').onclick = () => { const x = row.querySelector(".rx"); x.hidden = !x.hidden; };
+    });
+  }
+
+  function renderCustom(){
+    const box = $("#customList");
+    box.innerHTML = custom.map((c,i) => {
+      let hit = 0, bad = false;
+      try { const rx = new RegExp(c.regex); for (const r of rules) if (r.examples.some(e => rx.test(e))) hit += r.count; } catch(e){ bad = true; }
+      return `<div class="crow"><span class="pill ${c.action==="block"?"b":"s"}">${c.action}</span><code class="mono" style="flex:1 1 320px;word-break:break-all">${esc(c.regex)}</code><span class="hit ${bad?"bad":""}">${bad?"invalid regex":fmt(hit)+" lines"}</span><button data-i="${i}">Remove</button></div>`;
+    }).join("");
+    box.querySelectorAll("button").forEach(b => b.onclick = () => { custom.splice(+b.dataset.i, 1); changed(); });
+  }
+
+  function exportJson(){
+    const cc = customCompiled();
+    const blocked = rules.filter(r => effective(r, cc)==="block" && !cc.some(c => r.examples.some(x => c.rx.test(x))))
+      .map(r => ({id:r.id, family:r.family, template:r.template, regex:r.regex, count:r.count}));
+    return {version:1, updatedAt:new Date().toISOString(), custom:custom.slice(), block:blocked};
+  }
+
+  function render(){
+    renderFamilies(); renderRows(); renderCustom();
+    $("#exportBox").value = JSON.stringify(exportJson(), null, 1);
+  }
+
+  function decide(id, action){
+    if (action==="show") delete decisions[id]; else decisions[id] = action;
+    changed();
+  }
+  function changed(){
+    render();
+    if (applyingRemote) return;
+    $("#saveState").textContent = "saving…";
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 600);
+  }
+  async function save(){
+    if (!doc){ $("#saveState").textContent = "not signed in — changes stay on this page"; return; }
+    try {
+      await doc.set({decisions, custom, export:exportJson(), updatedAt:Date.now()});
+      $("#saveState").textContent = "saved";
+    } catch(e){ $("#saveState").textContent = "could not save: " + (e && e.code || e); }
+  }
+
+  // bulk actions
+  $("#blockAll").onclick = () => { visible().forEach(r => decisions[r.id] = "block"); changed(); };
+  $("#showAll").onclick = () => { visible().forEach(r => delete decisions[r.id]); changed(); };
+  $("#moreBtn").onclick = () => { limit += 200; renderRows(); };
+  $("#q").oninput = e => { query = e.target.value; limit = 120; render(); };
+
+  // custom rule composer
+  let customAction = "show";
+  const previewHits = () => {
+    const v = $("#customRx").value.trim(); const out = $("#customHit");
+    if (!v){ out.textContent = ""; return; }
+    try { const rx = new RegExp(v); let hit = 0, types = 0; for (const r of rules) if (r.examples.some(e => rx.test(e))) { hit += r.count; types++; } out.className = "hit"; out.textContent = `${fmt(hit)} lines in ${types} types`; }
+    catch(e){ out.className = "hit bad"; out.textContent = "invalid regex"; }
+  };
+  $("#customRx").oninput = previewHits;
+  $("#customShow").onclick = () => { customAction = "show"; $("#customShow").classList.add("on"); $("#customBlock").classList.remove("on"); };
+  $("#customBlock").onclick = () => { customAction = "block"; $("#customBlock").classList.add("on"); $("#customShow").classList.remove("on"); };
+  $("#customAdd").onclick = () => {
+    const v = $("#customRx").value.trim(); if (!v) return;
+    try { new RegExp(v); } catch(e){ previewHits(); return; }
+    custom.push({regex:v, action:customAction}); $("#customRx").value = ""; previewHits(); changed();
+  };
+
+  render();
+
+  // persistence
+  (async () => {
+    try {
+      db = await window.claude?.use?.("db");
+      if (!db){ $("#saveState").textContent = "not signed in — changes stay on this page"; return; }
+      doc = db.doc("chat/filters");
+      doc.onSnapshot(snap => {
+        const d = snap && (snap.data ? snap.data() : snap);
+        if (!d || typeof d !== "object") { $("#saveState").textContent = "nothing saved yet"; return; }
+        applyingRemote = true;
+        decisions = Object.assign({}, d.decisions || {});
+        custom = Array.isArray(d.custom) ? d.custom.slice() : [];
+        render();
+        applyingRemote = false;
+        $("#saveState").textContent = "saved";
+      });
+    } catch(e){ $("#saveState").textContent = "storage unavailable"; }
+  })();
+})();
+</script>
