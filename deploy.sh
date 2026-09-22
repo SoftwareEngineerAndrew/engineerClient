@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MODS_DIR="${EC_MODS_DIR:-${BRW_MODS_DIR:-$HOME/.local/share/PrismLauncher/instances/26.1.2 EC/minecraft/mods}}"
+MODS_DIR="${EC_MODS_DIR:-${BRW_MODS_DIR:-$HOME/.local/share/PrismLauncher/instances/26.1.2 BRW/minecraft/mods}}"
 VERSION="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"
 JAR="build/libs/engineerclient-$VERSION.jar"
 

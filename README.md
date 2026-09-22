@@ -83,6 +83,6 @@ sit at position 1), and `mask` (invincibilities the taker needs, scaled to what 
   reads Odin's live settings and reports what is wrong. `/ec debug` dumps the engine's state.
 - HUD: **Your Role**, **Debug HUD**. The leap menu rings who to leap to — soft until they have
   announced arrival, solid after — with a sound and screen-edge flash.
-- Each session writes `logs/engineerclient/brw-<stamp>.log`; `./gradlew replay -Plog=<file>` replays it through
-  the real engine and diffs against what ran live. `/brw log mark <note>` stamps a note into it.
+- Each session writes `logs/engineerclient/ec-<stamp>.log`; `./gradlew replay -Plog=<file>` replays it through
+  the real engine and diffs against what ran live. `/ec log mark <note>` stamps a note into it.
 - `./gradlew test` drives 20,000 random finish schedules through the engine (~3s).
