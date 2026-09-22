@@ -90,4 +90,13 @@ class ChatRulesTest {
             assertNull(rules.hides(line), "should stay visible: $line")
         }
     }
+
+    @Test
+    fun `centred lines with leading spaces are matched`() {
+        for (raw in listOf("     §aGranted you +29 & +1.15x §b\uE01E Intelligence and +24 §f\u2726 Speed.",
+                           "     Granted you +29 & +1.15x  Intelligence and +24  Speed.",
+                           "   Also granted you +12 & +1.1x  Crit Damage.")) {
+            assertNotNull(rules.hides(ChatRules.strip(raw)), "should be hidden: $raw")
+        }
+    }
 }

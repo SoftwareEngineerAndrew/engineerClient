@@ -54,7 +54,11 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
         private val gson = GsonBuilder().create()
         private val formatting = Regex("§.")
 
-        fun strip(text: String): String = formatting.replace(text, "")
+        /**
+         * What rules match against: colour codes removed and the whole message trimmed. Hypixel
+         * centres many lines with leading spaces, and the rules were built from trimmed log lines.
+         */
+        fun strip(text: String): String = formatting.replace(text, "").trim()
 
         fun parse(json: String): ChatRules {
             val file = gson.fromJson(json, RulesFile::class.java) ?: RulesFile()
