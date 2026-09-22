@@ -13,8 +13,12 @@ import kotlinx.coroutines.launch
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
+import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
+import java.nio.file.Files
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Party Finder listings, in-line: every member row of a party's tooltip gets that player's
@@ -30,6 +34,11 @@ import java.util.concurrent.ConcurrentHashMap
  * `dungeons.secrets`, and the S+ / S / any-score fastest time for the listing's floor, master
  * mode or not. The tooltip is rebuilt every frame, so a row shows `…` until the fetch lands
  * and then fills in on its own.
+ *
+ * Stats change rarely and the same few hundred players list night after night, so the three
+ * numbers (well, the cata XP, secrets and every floor's fastest times for both modes, so the PB
+ * Type switch still works) are kept on disk for a day: `config/bloodrushwaypoints/pfstats.json`.
+ * Odin's own profile cache only lives five minutes, and only in memory.
  *
  * Hooked at `AbstractContainerScreen.getTooltipFromContainerItem` (see ContainerTooltipMixin):
  * the lines are rewritten, never a second GUI.
@@ -48,12 +57,29 @@ object PartyFinderStats : Module(
     private sealed interface Entry
     private object Loading : Entry
     private class Failed(val at: Long) : Entry
-    private class Ready(val member: HypixelData.MemberData) : Entry
+    private class Ready(val stats: Stats) : Entry
+
+    /** What a row needs, small enough to keep on disk for everyone you have ever scrolled past. */
+    data class Stats(
+        val cataXp: Double = 0.0,
+        val secrets: Long = 0,
+        /** "f"/"m" → floor "0".."7" → ms, one map per PB type. */
+        val sPlus: Map<String, Map<String, Double>> = emptyMap(),
+        val s: Map<String, Map<String, Double>> = emptyMap(),
+        val any: Map<String, Map<String, Double>> = emptyMap(),
+        val fetchedAt: Long = 0,
+    )
 
     private const val RETRY_FAILED_MS = 60_000L
+    private const val STATS_TTL_MS = 24 * 60 * 60 * 1000L
+    private const val MAX_STORED = 2000
 
-    /** Lower-case IGN → state. Odin caches the profile itself; this only remembers the outcome. */
+    /** Lower-case IGN → state. Loaded from disk once; a Ready entry older than a day is refetched. */
     private val cache = ConcurrentHashMap<String, Entry>()
+    private val loaded = AtomicBoolean(false)
+    private val dirty = AtomicBoolean(false)
+    private val gson = GsonBuilder().create()
+    private val file = BrwMod.mc.gameDirectory.toPath().resolve("config").resolve("bloodrushwaypoints").resolve("pfstats.json")
 
     private val memberLine = Regex("^(\\w{1,16}): (\\w+) \\((\\d+)\\)$")
     private val floorLine = Regex("^Floor: (.+)$")
@@ -70,6 +96,7 @@ object PartyFinderStats : Module(
         if (!enabled) return lines
         if (!screen.title.string.startsWith("Party Finder")) return lines
         if (!clean(stack.hoverName.string).endsWith("'s Party")) return lines
+        if (loaded.compareAndSet(false, true)) load()
 
         var floor: String? = null
         var master = false
@@ -90,35 +117,85 @@ object PartyFinderStats : Module(
     private fun statsFor(name: String, floor: String?, master: Boolean): String {
         val key = name.lowercase()
         val entry = cache[key]
-        if (entry == null || (entry is Failed && System.currentTimeMillis() - entry.at > RETRY_FAILED_MS)) {
+        val now = System.currentTimeMillis()
+        if (entry == null || (entry is Failed && now - entry.at > RETRY_FAILED_MS)) {
             cache[key] = Loading
             fetch(name, key)
             return " §8· §7…"
         }
+        if (entry is Ready && now - entry.stats.fetchedAt > STATS_TTL_MS && key !in refreshing) {
+            // A day old: refresh in the background, keep showing what we have meanwhile.
+            refreshing += key
+            fetch(name, key)
+        }
         return when (entry) {
             is Loading -> " §8· §7…"
             is Failed -> " §8· §c?"
-            is Ready -> render(entry.member, floor, master)
+            is Ready -> render(entry.stats, floor, master)
         }
     }
+
+    private val refreshing = ConcurrentHashMap.newKeySet<String>()
 
     private fun fetch(name: String, key: String) {
         OdinMod.scope.launch {
             val result = runCatching { RequestUtils.getProfile(name) }.getOrElse { Result.failure(it) }
-            cache[key] = result.fold(
-                onSuccess = { it.memberData?.let(::Ready) ?: Failed(System.currentTimeMillis()) },
-                onFailure = { Failed(System.currentTimeMillis()) },
-            )
-            if (cache.size > 300) cache.clear() // a night of scrolling listings; nothing here is precious
+            val fresh = result.getOrNull()?.memberData?.let { Ready(toStats(it)) }
+            when {
+                fresh != null -> { cache[key] = fresh; dirty.set(true) }
+                // A failed refresh keeps yesterday's numbers rather than replacing them with "?".
+                cache[key] !is Ready -> cache[key] = Failed(System.currentTimeMillis())
+            }
+            refreshing -= key
+            if (dirty.compareAndSet(true, false)) save()
         }
     }
 
-    private fun render(member: HypixelData.MemberData, floor: String?, master: Boolean): String {
-        val d = member.dungeons
+    private fun toStats(member: HypixelData.MemberData): Stats {
+        val d = member.dungeons.dungeonTypes
+        fun times(pick: (HypixelData.DungeonTypeData) -> Map<String, Number>) =
+            mapOf("f" to pick(d.catacombs).mapValues { it.value.toDouble() }, "m" to pick(d.mastermode).mapValues { it.value.toDouble() })
+        return Stats(
+            cataXp = d.catacombs.experience,
+            secrets = member.dungeons.secrets,
+            sPlus = times { it.fastestTimeSPlus },
+            s = times { it.fastestTimeS },
+            any = times { it.fastestTimes },
+            fetchedAt = System.currentTimeMillis(),
+        )
+    }
+
+    // ------------------------------------------------------------------ disk
+
+    private fun load() {
+        BrwMod.safely("pf stats load") {
+            if (!Files.exists(file)) return@safely
+            val type = object : TypeToken<Map<String, Stats>>() {}.type
+            val stored: Map<String, Stats> = gson.fromJson(Files.readString(file), type) ?: return@safely
+            stored.forEach { (key, stats) -> cache[key] = Ready(stats) }
+            BrwMod.logger.info("[brw] pf stats: ${stored.size} players from disk")
+        }
+    }
+
+    /** Off the render thread (called from the fetch coroutine). Atomic rename, oldest evicted past the cap. */
+    private fun save() {
+        BrwMod.safely("pf stats save") {
+            val ready = cache.entries.mapNotNull { (k, v) -> (v as? Ready)?.let { k to it.stats } }
+                .sortedByDescending { it.second.fetchedAt }
+                .take(MAX_STORED)
+                .toMap()
+            Files.createDirectories(file.parent)
+            val tmp = file.resolveSibling("pfstats.json.tmp")
+            Files.writeString(tmp, gson.toJson(ready))
+            Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        }
+    }
+
+    private fun render(stats: Stats, floor: String?, master: Boolean): String {
         val parts = ArrayList<String>(3)
-        if (showCata) parts += "§e" + String.format(Locale.ROOT, "%.1f", calculateDungeonLevel(d.dungeonTypes.catacombs.experience))
-        if (showSecrets) parts += "§b" + secrets(d.secrets)
-        if (showPb) parts += "§d" + pb(if (master) d.dungeonTypes.mastermode else d.dungeonTypes.catacombs, floor)
+        if (showCata) parts += "§e" + String.format(Locale.ROOT, "%.1f", calculateDungeonLevel(stats.cataXp))
+        if (showSecrets) parts += "§b" + secrets(stats.secrets)
+        if (showPb) parts += "§d" + pb(stats, if (master) "m" else "f", floor)
         if (parts.isEmpty()) return ""
         return " §8| " + parts.joinToString(" §8| ")
     }
@@ -129,12 +206,12 @@ object PartyFinderStats : Module(
         else -> count.toString()
     }
 
-    private fun pb(type: HypixelData.DungeonTypeData, floor: String?): String {
+    private fun pb(stats: Stats, mode: String, floor: String?): String {
         if (floor == null) return "§7—"
         val ms: Double? = when (pbType) {
-            0 -> type.fastestTimeSPlus[floor]
-            1 -> type.fastestTimeS[floor]
-            else -> type.fastestTimes[floor]?.toDouble()
+            0 -> stats.sPlus[mode]?.get(floor)
+            1 -> stats.s[mode]?.get(floor)
+            else -> stats.any[mode]?.get(floor)
         }
         if (ms == null || ms <= 0) return "§7—"
         val total = (ms / 1000).toLong()
