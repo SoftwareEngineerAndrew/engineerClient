@@ -1,4 +1,4 @@
-import json, re, collections
+import json, re, collections, hashlib
 S="/home/andrew/Cluade/engineerClient/tools/chat-hider"
 msgs=[m for f,m in json.load(open(S+"/all.json"))]
 # compact-chat repeat counter "(3)" at the end (not "(1/7)")
@@ -18,20 +18,22 @@ for m in raw:
         if g: ign.add(g.group(1))
 ign={i for i in ign if not re.fullmatch(r"\d+",i) and i.lower() not in {"you","the","a","an","your","party","guild"}}
 ign.add("p3wr")
-WORD=re.compile(r"(?<![\w])[A-Za-z_][A-Za-z0-9_]{0,15}(?![\w])")
+WORD=re.compile(r"(?<![\w])[A-Za-z0-9_]{1,16}(?![\w])")
 def ign_sub(m):
     w=m.group(0)
     return NM if w in ign else w
 ign_re=True
 RANK=re.compile(r"\[(?:VIP|VIP\+|MVP|MVP\+|MVP\+\+|ADMIN|GM|YOUTUBE|MOD|HELPER|OWNER)\]")
 NUM=re.compile(r"(?<![A-Za-z_\d])\d[\d,.]*")
-N,NM,RK,UU,SV="\ue000","\ue001","\ue002","\ue004","\ue005"
+N,NM,RK,UU,SV="\U000F0000","\U000F0001","\U000F0002","\U000F0004","\U000F0005"
 UUID=re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SERVER=re.compile(r"\b(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*\b")
-PR="\ue006"
+PR,BL,TR="\U000F0006","\U000F0007","\U000F0008"
+BLESS=re.compile(r"(Blessing of )(Power|Life|Wisdom|Stone|Time)( [IVX]+)?\b")
 PROFILE=re.compile(r"^(You are playing on profile: |Your profile was changed to: |Switching to profile |You have switched to profile ).+$")
 def template(m):
     t=PROFILE.sub(lambda g: g.group(1)+PR, m)
+    t=BLESS.sub(lambda g: g.group(1)+BL+(" "+TR if g.group(3) else ""), t)
     t=UUID.sub(UU,t)
     t=SERVER.sub(SV,t)
     t=RANK.sub(RK,t)
@@ -39,11 +41,11 @@ def template(m):
     t=NUM.sub(N,t)
     return t
 def display(t):
-    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>").replace(PR,"<profile>")
+    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>").replace(PR,"<profile>").replace(BL,"<blessing>").replace(TR,"<tier>")
 def regex(t):
-    r=re.escape(t.replace("\n","\ue003"))
-    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(PR,r".+").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
-    r=r.replace("\ue003",r"\n")
+    r=re.escape(t.replace("\n","\U000F0003"))
+    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(PR,r".+").replace(BL,r"(?:Power|Life|Wisdom|Stone|Time)").replace(TR,r"[IVX]+").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
+    r=r.replace("\U000F0003",r"\n")
     return "^"+r+"$"
 FAMILIES=[
  ("Party chat", r"^Party > "), ("Friend list", r"^Friend > "), ("Bazaar / AH", r"^\[Bazaar\]|^\[Auction\]"), ("Guild chat", r"^Guild > "), ("Co-op chat", r"^Co-op > "), ("Private messages", r"^(From|To) "),
@@ -77,7 +79,7 @@ for t,n in cnt.most_common():
     r=regex(t); rx=re.compile(r)
     for e in ex[t]:
         if not rx.match(e): bad+=1; print("NOMATCH",r,"|",e); break
-    rules.append({"id":"t%05d"%len(rules),"family":family(display(t)),"template":display(t),"regex":r,"count":n,"examples":ex[t]})
+    rules.append({"id":"h"+hashlib.sha1(display(t).encode()).hexdigest()[:10],"family":family(display(t)),"template":display(t),"regex":r,"count":n,"examples":ex[t]})
 print("templates",len(rules),"bad",bad,"total",total,"igns",len(ign))
 fam=collections.Counter()
 for r in rules: fam[r["family"]]+=r["count"]
