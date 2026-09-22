@@ -74,4 +74,20 @@ class ChatRulesTest {
             assertNull(rules.hides(line), "quiz line must show: $line")
         }
     }
+
+    @Test
+    fun `generalised rules catch variants that were never logged`() {
+        for (line in listOf(
+            "Moved 3 Some Future Item from your Sacks to your inventory.",
+            "Your Frost Nova hit 4 enemies for 12,345 damage.",
+            "Seismic Wave is ready to use! Press DROP to activate it!",
+            "ESSENCE! SomePlayer found x5 Crimson Essence!",
+            "RARE DROP! Some New Sword (+123  Magic Find)",
+            "Tank Milestone ❾: You have tanked and dealt 1,000,000 Total Damage so far! 3m 2s",
+        )) assertNotNull(rules.hides(line), "should be hidden: $line")
+        for (line in listOf("Party > [MVP+] p3wr: leap to me", "Party > [MVP+] Friend: [Skyblocker] Leaped to p3wr!",
+                            "You cannot invite that player since they're not online.")) {
+            assertNull(rules.hides(line), "should stay visible: $line")
+        }
+    }
 }
