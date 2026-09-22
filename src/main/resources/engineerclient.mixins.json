@@ -4,11 +4,13 @@
   "package": "com.engineerclient.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ArmorFoilMixin",
     "CameraAccessor",
     "ConnectionTapMixin",
     "ContainerTooltipMixin",
     "GameRendererInvoker",
     "GameRendererMixin",
+    "ItemFoilMixin",
     "LivingEntityAccessor",
     "MinecraftAccessor"
   ],
