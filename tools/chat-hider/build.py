@@ -28,18 +28,21 @@ NUM=re.compile(r"(?<![A-Za-z_\d])\d[\d,.]*")
 N,NM,RK,UU,SV="\ue000","\ue001","\ue002","\ue004","\ue005"
 UUID=re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SERVER=re.compile(r"\b(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*\b")
+PR="\ue006"
+PROFILE=re.compile(r"^(You are playing on profile: |Your profile was changed to: |Switching to profile |You have switched to profile ).+$")
 def template(m):
-    t=UUID.sub(UU,m)
+    t=PROFILE.sub(lambda g: g.group(1)+PR, m)
+    t=UUID.sub(UU,t)
     t=SERVER.sub(SV,t)
     t=RANK.sub(RK,t)
     t=WORD.sub(ign_sub,t)
     t=NUM.sub(N,t)
     return t
 def display(t):
-    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>")
+    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>").replace(PR,"<profile>")
 def regex(t):
     r=re.escape(t.replace("\n","\ue003"))
-    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
+    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(PR,r".+").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
     r=r.replace("\ue003",r"\n")
     return "^"+r+"$"
 FAMILIES=[
