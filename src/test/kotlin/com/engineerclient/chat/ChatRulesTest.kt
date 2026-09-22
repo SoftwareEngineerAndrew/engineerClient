@@ -99,4 +99,13 @@ class ChatRulesTest {
             assertNotNull(rules.hides(ChatRules.strip(raw)), "should be hidden: $raw")
         }
     }
+
+    @Test
+    fun `compact chat repeat counters do not defeat a rule`() {
+        for (raw in listOf("§cThere are blocks in the way!§7 (3)", "Your Implosion hit 4 enemies for 1,234 damage. (12)",
+                           "     Granted you +29 & +1.15x  Intelligence and +24  Speed. (2)")) {
+            assertNotNull(rules.hides(ChatRules.strip(raw)), "should be hidden: $raw")
+        }
+        assertEquals("Question #1", ChatRules.strip("Question #1"))
+    }
 }

@@ -53,12 +53,15 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
     companion object {
         private val gson = GsonBuilder().create()
         private val formatting = Regex("§.")
+        /** Compact-chat repeat counters, e.g. Devonian's " (3)" sibling on a stacked line. */
+        private val repeatCounter = Regex("""\s\(\d+\)$""")
 
         /**
          * What rules match against: colour codes removed and the whole message trimmed. Hypixel
-         * centres many lines with leading spaces, and the rules were built from trimmed log lines.
+         * centres many lines with leading spaces, and the rules were built from trimmed log lines
+         * with compact-chat counters removed, so the counter comes off here too.
          */
-        fun strip(text: String): String = formatting.replace(text, "").trim()
+        fun strip(text: String): String = repeatCounter.replace(formatting.replace(text, "").trim(), "")
 
         fun parse(json: String): ChatRules {
             val file = gson.fromJson(json, RulesFile::class.java) ?: RulesFile()
