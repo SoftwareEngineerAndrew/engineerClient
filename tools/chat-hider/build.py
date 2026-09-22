@@ -28,12 +28,16 @@ NUM=re.compile(r"(?<![A-Za-z_\d])\d[\d,.]*")
 N,NM,RK,UU,SV="\U000F0000","\U000F0001","\U000F0002","\U000F0004","\U000F0005"
 UUID=re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SERVER=re.compile(r"\b(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*\b")
-PR,BL,TR="\U000F0006","\U000F0007","\U000F0008"
+PR,BL,TR,MS,TM="\U000F0006","\U000F0007","\U000F0008","\U000F0009","\U000F000A"
+MILESTONE=re.compile(r"^(Healer|Mage|Berserk|Archer|Tank) Milestone [\u2776-\u277e]: (.+ so far!) (.+)$")
+TIME=re.compile(r"(?<![\w.])(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s(?![\w])")
 BLESS=re.compile(r"(Blessing of )(Power|Life|Wisdom|Stone|Time)( [IVX]+)?\b")
 PROFILE=re.compile(r"^(You are playing on profile: |Your profile was changed to: |Switching to profile |You have switched to profile ).+$")
 def template(m):
     t=PROFILE.sub(lambda g: g.group(1)+PR, m)
     t=BLESS.sub(lambda g: g.group(1)+BL+(" "+TR if g.group(3) else ""), t)
+    t=MILESTONE.sub(lambda g: MS+" "+g.group(2)+" "+TM, t)
+    t=TIME.sub(TM, t)
     t=UUID.sub(UU,t)
     t=SERVER.sub(SV,t)
     t=RANK.sub(RK,t)
@@ -41,10 +45,10 @@ def template(m):
     t=NUM.sub(N,t)
     return t
 def display(t):
-    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>").replace(PR,"<profile>").replace(BL,"<blessing>").replace(TR,"<tier>")
+    return t.replace(N,"#").replace(NM,"<name>").replace(RK,"[RANK]").replace(UU,"<uuid>").replace(SV,"<server>").replace(PR,"<profile>").replace(BL,"<blessing>").replace(TR,"<tier>").replace(MS,"<class> Milestone <n>:").replace(TM,"<time>")
 def regex(t):
     r=re.escape(t.replace("\n","\U000F0003"))
-    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(PR,r".+").replace(BL,r"(?:Power|Life|Wisdom|Stone|Time)").replace(TR,r"[IVX]+").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
+    r=r.replace(re.escape(RK+" "),r"(?:\[[A-Z+]+\] )?").replace(RK,r"(?:\[[A-Z+]+\])?").replace(NM,r"\w{1,16}").replace(N,r"\d[\d,.]*").replace(UU,r"[0-9a-f-]{36}").replace(PR,r".+").replace(BL,r"(?:Power|Life|Wisdom|Stone|Time)").replace(TR,r"[IVX]+").replace(MS,r"(?:Healer|Mage|Berserk|Archer|Tank) Milestone [\u2776-\u277e]:").replace(TM,r"(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s").replace(SV,r"(?:mini|mega|sim|dynamic|lobby)\d+[A-Z]*")
     r=r.replace("\U000F0003",r"\n")
     return "^"+r+"$"
 FAMILIES=[
