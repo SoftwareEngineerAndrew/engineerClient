@@ -52,4 +52,18 @@ class ChatRulesTest {
         assertNull(r.hides("Party > p3wr: gg"))
         assertNotNull(r.hides("Party > p3wr: hello"))
     }
+
+    @Test
+    fun `every boss line is hidden, including speakers never logged`() {
+        assertNotNull(rules.hides("[BOSS] Goldor: Who dares trespass into my domain?"))
+        assertNotNull(rules.hides("[BOSS] Sadan: So you made it all the way here... Now you wish to defy me?"))
+        assertNull(rules.hides("Party > [MVP+] p3wr: [BOSS] is not at the start"))
+    }
+
+    @Test
+    fun `any hit-you-for-damage line is hidden`() {
+        assertNotNull(rules.hides("Bonzo's Balloon hit you for 1,234 damage."))
+        assertNotNull(rules.hides("Some New Mob's Laser hit you for 50 damage."))
+        assertNull(rules.hides("Party > [MVP+] p3wr: it hit you for 5 damage. lol"))
+    }
 }

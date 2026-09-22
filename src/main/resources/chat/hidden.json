@@ -1,8 +1,17 @@
 {
  "version": 1,
- "updatedAt": "2026-09-22T22:34:01Z",
- "source": "Dungeon Chat Hider artifact, db doc chat/filters v?",
- "custom": [],
+ "updatedAt": "2026-09-22T22:43:44Z",
+ "source": "Dungeon Chat Hider artifact, db doc chat/filters v1790116446338",
+ "custom": [
+  {
+   "regex": "^\\[BOSS\\] ",
+   "action": "block"
+  },
+  {
+   "regex": "hit you for \\d[\\d,.]* damage\\.$",
+   "action": "block"
+  }
+ ],
  "block": [
   {
    "regex": "^There\\ are\\ blocks\\ in\\ the\\ way!$",
@@ -155,6 +164,11 @@
    "family": "Mob / boss mechanics"
   },
   {
+   "regex": "^(?:\\[[A-Z+]+\\] )?\\w{1,16}\\ joined\\ the\\ lobby!$",
+   "template": "[RANK] <name> joined the lobby!",
+   "family": "Lobby / hub spam"
+  },
+  {
    "regex": "^\\w{1,16}\\ found\\ a\\ Wither\\ Essence!\\ Everyone\\ gains\\ an\\ extra\\ essence!$",
    "template": "<name> found a Wither Essence! Everyone gains an extra essence!",
    "family": "Other"
@@ -210,11 +224,6 @@
    "family": "Secrets / items pickup"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ What\\ do\\ you\\ think\\ you\\ are\\ doing\\ there!$",
-   "template": "[BOSS] Goldor: What do you think you are doing there!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Used\\ Healing\\ Circle!$",
    "template": "Used Healing Circle!",
    "family": "Ability status"
@@ -240,49 +249,9 @@
    "family": "Mob / boss mechanics"
   },
   {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ This\\ guy\\ looks\\ like\\ a\\ fighter\\.$",
-   "template": "[BOSS] The Watcher: This guy looks like a fighter.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Go\\ and\\ live\\ again!$",
-   "template": "[BOSS] The Watcher: Go and live again!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Go,\\ fight!$",
-   "template": "[BOSS] The Watcher: Go, fight!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ You'll\\ do\\.$",
-   "template": "[BOSS] The Watcher: You'll do.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Hmmm\\.\\.\\.\\ this\\ one!$",
-   "template": "[BOSS] The Watcher: Hmmm... this one!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Command\\ Failed:\\ This\\ command\\ is\\ on\\ cooldown!\\ Try\\ again\\ in\\ about\\ a\\ second!$",
    "template": "Command Failed: This command is on cooldown! Try again in about a second!",
    "family": "Ability status"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ I'm\\ impressed\\.$",
-   "template": "[BOSS] The Watcher: I'm impressed.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Aw,\\ I\\ liked\\ that\\ one\\.$",
-   "template": "[BOSS] The Watcher: Aw, I liked that one.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Not\\ bad\\.$",
-   "template": "[BOSS] The Watcher: Not bad.",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^DUNGEON\\ BUFF!\\ You\\ found\\ a\\ Blessing\\ of\\ (?:Power|Life|Wisdom|Stone|Time)\\ [IVX]+!\\ \\((?:\\d+h )?(?:\\d+m )?\\d+(?:\\.\\d+)?s\\)$",
@@ -290,19 +259,9 @@
    "family": "Dungeon buffs / blessings"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ ARGH!$",
-   "template": "[BOSS] Necron: ARGH!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Someone\\ has\\ already\\ activated\\ this\\ lever!$",
    "template": "Someone has already activated this lever!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ That\\ one\\ was\\ weak\\ anyway\\.$",
-   "template": "[BOSS] The Watcher: That one was weak anyway.",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^\\[NPC\\]\\ Mort:\\ Here,\\ I\\ found\\ this\\ map\\ when\\ I\\ first\\ entered\\ the\\ dungeon\\.$",
@@ -323,11 +282,6 @@
    "regex": "^Already\\ connecting\\ to\\ this\\ server!$",
    "template": "Already connecting to this server!",
    "family": "Mob / boss mechanics"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Very\\ nice\\.$",
-   "template": "[BOSS] The Watcher: Very nice.",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Kicked\\ whilst\\ connecting\\ to\\ (?:mini|mega|sim|dynamic|lobby)\\d+[A-Z]*:\\ Connection\\ throttled!\\ Please\\ wait\\ before\\ reconnecting\\.$",
@@ -390,11 +344,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Let's\\ see\\ how\\ you\\ can\\ handle\\ this\\.$",
-   "template": "[BOSS] The Watcher: Let's see how you can handle this.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬$",
    "template": "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬",
    "family": "Other"
@@ -410,23 +359,8 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ WELL!\\ WELL!\\ WELL!\\ LOOK\\ WHO'S\\ HERE!$",
-   "template": "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ You\\ have\\ proven\\ yourself\\.\\ You\\ may\\ pass\\.$",
-   "template": "[BOSS] The Watcher: You have proven yourself. You may pass.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Creeper\\ Veil\\ De\\-activated!$",
    "template": "Creeper Veil De-activated!",
-   "family": "Other"
-  },
-  {
-   "regex": "^Maxor's\\ Frenzy\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "Maxor's Frenzy hit you for # damage.",
    "family": "Other"
   },
   {
@@ -438,36 +372,6 @@
    "regex": "^Talk\\ to\\ the\\ Summer\\ Sloth\\ in\\ the\\ Hub!$",
    "template": "Talk to the Summer Sloth in the Hub!",
    "family": "Lobby / hub spam"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Things\\ feel\\ a\\ little\\ more\\ roomy\\ now,\\ eh\\?$",
-   "template": "[BOSS] The Watcher: Things feel a little more roomy now, eh?",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ I've\\ knocked\\ down\\ those\\ pillars\\ to\\ go\\ for\\ a\\ more\\.\\.\\.open\\ concept\\.$",
-   "template": "[BOSS] The Watcher: I've knocked down those pillars to go for a more...open concept.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ Plus\\ I\\ needed\\ to\\ give\\ my\\ new\\ friends\\ some\\ space\\ to\\ roam\\.\\.\\.$",
-   "template": "[BOSS] The Watcher: Plus I needed to give my new friends some space to roam...",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ THAT\\ BEAM!\\ IT\\ HURTS!\\ IT\\ HURTS!!$",
-   "template": "[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ I'VE\\ BEEN\\ TOLD\\ I\\ COULD\\ HAVE\\ A\\ BIT\\ OF\\ FUN\\ WITH\\ YOU\\.$",
-   "template": "[BOSS] Maxor: I'VE BEEN TOLD I COULD HAVE A BIT OF FUN WITH YOU.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ DON'T\\ DISAPPOINT\\ ME,\\ I\\ HAVEN'T\\ HAD\\ A\\ GOOD\\ FIGHT\\ IN\\ A\\ WHILE\\.$",
-   "template": "[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^\\w{1,16}\\ formed\\ a\\ tether\\ with\\ you!$",
@@ -485,79 +389,9 @@
    "family": "Mob / boss mechanics"
   },
   {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ The\\ power\\ of\\ lightning\\ is\\ quite\\ phenomenal\\.\\ A\\ single\\ strike\\ can\\ vaporize\\ a\\ person\\ whole\\.$",
-   "template": "[BOSS] <name>: The power of lightning is quite phenomenal. A single strike can vaporize a person whole.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ I'd\\ be\\ happy\\ to\\ show\\ you\\ what\\ that's\\ like!$",
-   "template": "[BOSS] <name>: I'd be happy to show you what that's like!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ Pathetic\\ Maxor,\\ just\\ like\\ expected\\.$",
-   "template": "[BOSS] <name>: Pathetic Maxor, just like expected.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ Don't\\ boast\\ about\\ beating\\ this\\ simple\\-minded\\ Wither\\.$",
-   "template": "[BOSS] <name>: Don't boast about beating this simple-minded Wither.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ My\\ abilities\\ are\\ unparalleled,\\ in\\ many\\ ways\\ I\\ am\\ the\\ last\\ bastion\\.$",
-   "template": "[BOSS] <name>: My abilities are unparalleled, in many ways I am the last bastion.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ The\\ memory\\ of\\ your\\ death\\ will\\ be\\ your\\ fondest,\\ focus\\ up!$",
-   "template": "[BOSS] <name>: The memory of your death will be your fondest, focus up!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ YOU\\ TRICKED\\ ME!$",
-   "template": "[BOSS] Maxor: YOU TRICKED ME!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Who\\ dares\\ trespass\\ into\\ my\\ domain\\?$",
-   "template": "[BOSS] Goldor: Who dares trespass into my domain?",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ Ouch,\\ that\\ hurt!$",
-   "template": "[BOSS] <name>: Ouch, that hurt!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ I\\ should\\ have\\ known\\ that\\ I\\ stood\\ no\\ chance\\.$",
-   "template": "[BOSS] <name>: I should have known that I stood no chance.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ At\\ least\\ my\\ son\\ died\\ by\\ your\\ hands\\.$",
-   "template": "[BOSS] <name>: At least my son died by your hands.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Party\\ >\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}:\\ Mimic\\ Killed!$",
    "template": "Party > [RANK] <name>: Mimic Killed!",
    "family": "Party chat"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Little\\ ants,\\ plotting\\ and\\ scheming,\\ thinking\\ they\\ are\\ invincible\\.\\.\\.$",
-   "template": "[BOSS] Goldor: Little ants, plotting and scheming, thinking they are invincible...",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ I\\ won't\\ let\\ you\\ break\\ the\\ factory\\ core,\\ I\\ gave\\ my\\ life\\ to\\ my\\ Master\\.$",
-   "template": "[BOSS] Goldor: I won't let you break the factory core, I gave my life to my Master.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ YOUR\\ END\\ IS\\ NEAR!!$",
-   "template": "[BOSS] Goldor: YOUR END IS NEAR!!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Party\\ >\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}:\\ Bat\\ Killed!$",
@@ -565,34 +399,9 @@
    "family": "Party chat"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ No\\ one\\ matches\\ me\\ in\\ close\\ quarters\\.$",
-   "template": "[BOSS] Goldor: No one matches me in close quarters.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ The\\ little\\ ants\\ have\\ a\\ brain\\ it\\ seems\\.$",
-   "template": "[BOSS] Goldor: The little ants have a brain it seems.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ Oof$",
-   "template": "[BOSS] <name>: Oof",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ Sometimes\\ when\\ you\\ have\\ a\\ problem,\\ you\\ just\\ need\\ to\\ destroy\\ it\\ all\\ and\\ start\\ again\\.$",
-   "template": "[BOSS] Necron: Sometimes when you have a problem, you just need to destroy it all and start again.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^The\\ Core\\ entrance\\ is\\ opening!$",
    "template": "The Core entrance is opening!",
    "family": "Terminals / devices / levers"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ \\.\\.\\.\\.$",
-   "template": "[BOSS] Goldor: ....",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Queuing\\.\\.\\.\\ \\(Attempt\\ \\d[\\d,.]*/\\d[\\d,.]*\\)$",
@@ -605,49 +414,9 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ You\\ went\\ further\\ than\\ any\\ human\\ before,\\ congratulations\\.$",
-   "template": "[BOSS] Necron: You went further than any human before, congratulations.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ I'm\\ afraid,\\ your\\ journey\\ ends\\ now\\.$",
-   "template": "[BOSS] Necron: I'm afraid, your journey ends now.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^\\w{1,16}'s\\ Giga\\ Lightning\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ true\\ damage\\.$",
    "template": "<name>'s Giga Lightning hit you for # true damage.",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ I\\ will\\ replace\\ that\\ gate\\ with\\ a\\ stronger\\ one!$",
-   "template": "[BOSS] Goldor: I will replace that gate with a stronger one!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Necron,\\ forgive\\ me\\.$",
-   "template": "[BOSS] Goldor: Necron, forgive me.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ Goodbye\\.$",
-   "template": "[BOSS] Necron: Goodbye.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ That's\\ a\\ very\\ impressive\\ trick\\.\\ I\\ guess\\ I'll\\ have\\ to\\ handle\\ this\\ myself\\.$",
-   "template": "[BOSS] Necron: That's a very impressive trick. I guess I'll have to handle this myself.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ Let's\\ make\\ some\\ space!$",
-   "template": "[BOSS] Necron: Let's make some space!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ All\\ this,\\ for\\ nothing\\.\\.\\.$",
-   "template": "[BOSS] Necron: All this, for nothing...",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^(?:\\[[A-Z+]+\\] )?\\w{1,16}\\ has\\ obtained\\ Superboom\\ TNT\\ x2!$",
@@ -663,11 +432,6 @@
    "regex": "^You\\ earned\\ \\d[\\d,.]*\\ GEXP\\ from\\ playing\\ SkyBlock!$",
    "template": "You earned # GEXP from playing SkyBlock!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ WITNESS\\ MY\\ RAW\\ NUCLEAR\\ POWER!$",
-   "template": "[BOSS] Necron: WITNESS MY RAW NUCLEAR POWER!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^ESSENCE!\\ \\w{1,16}\\ found\\ x10\\ Ice\\ Essence!$",
@@ -755,11 +519,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ I'M\\ TOO\\ YOUNG\\ TO\\ DIE\\ AGAIN!$",
-   "template": "[BOSS] Maxor: I'M TOO YOUNG TO DIE AGAIN!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^◕\\ \\w{1,16}\\ picked\\ up\\ your\\ Defense\\ Orb!$",
    "template": "◕ <name> picked up your Defense Orb!",
    "family": "Other"
@@ -785,29 +544,9 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ THUNDER\\ LET\\ ME\\ BE\\ YOUR\\ CATALYST!$",
-   "template": "[BOSS] <name>: THUNDER LET ME BE YOUR CATALYST!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\w{1,16}'s\\ Static\\ Field\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "<name>'s Static Field hit you for # damage.",
-   "family": "Other"
-  },
-  {
    "regex": "^Woah\\ slow\\ down,\\ you're\\ doing\\ that\\ too\\ fast!$",
    "template": "Woah slow down, you're doing that too fast!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\w{1,16}'s\\ Lightning\\ Fireball\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "<name>'s Lightning Fireball hit you for # damage.",
-   "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ ENERGY\\ HEED\\ MY\\ CALL!$",
-   "template": "[BOSS] <name>: ENERGY HEED MY CALL!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Your\\ Mage\\ stats\\ are\\ doubled\\ because\\ you\\ are\\ the\\ only\\ player\\ using\\ this\\ class!$",
@@ -940,11 +679,6 @@
    "family": "Secrets / items pickup"
   },
   {
-   "regex": "^Necron's\\ Nuclear\\ Frenzy\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "Necron's Nuclear Frenzy hit you for # damage.",
-   "family": "Other"
-  },
-  {
    "regex": "^Only\\ the\\ instance\\ creator\\ can\\ re\\-queue!$",
    "template": "Only the instance creator can re-queue!",
    "family": "Other"
@@ -990,19 +724,9 @@
    "family": "Other"
   },
   {
-   "regex": "^Goldor's\\ Frenzy\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "Goldor's Frenzy hit you for # damage.",
-   "family": "Other"
-  },
-  {
    "regex": "^ⓑ\\ \\d[\\d,.]*\\ Fairy\\ Souls$",
    "template": "ⓑ # Fairy Souls",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ The\\ Watcher:\\ That\\ will\\ be\\ enough\\ for\\ now\\.$",
-   "template": "[BOSS] The Watcher: That will be enough for now.",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Attempting\\ to\\ add\\ you\\ to\\ the\\ party\\.\\.\\.$",
@@ -1065,11 +789,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Slowing\\ me\\ down\\ only\\ prolongs\\ your\\ pain!$",
-   "template": "[BOSS] Goldor: Slowing me down only prolongs your pain!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Someone\\ else\\ is\\ currently\\ reviving\\ that\\ player!$",
    "template": "Someone else is currently reviving that player!",
    "family": "Other"
@@ -1078,11 +797,6 @@
    "regex": "^One\\ or\\ more\\ items\\ didn't\\ fit\\ in\\ your\\ inventory\\ and\\ were\\ added\\ to\\ your\\ item\\ stash!\\ Click\\ here\\ to\\ pick\\ them\\ up!$",
    "template": "One or more items didn't fit in your inventory and were added to your item stash! Click here to pick them up!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ There\\ is\\ no\\ stopping\\ me\\ down\\ there!$",
-   "template": "[BOSS] Goldor: There is no stopping me down there!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^✮\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}\\ is\\ on\\ your\\ server$",
@@ -1095,11 +809,6 @@
    "family": "Mob / boss mechanics"
   },
   {
-   "regex": "^\\w{1,16}'s\\ Frenzy\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "<name>'s Frenzy hit you for # damage.",
-   "family": "Other"
-  },
-  {
    "regex": "^\\[Devonian\\]\\ Switched\\ leaderboard\\ category\\ to\\ F7$",
    "template": "[Devonian] Switched leaderboard category to F7",
    "family": "Mod messages"
@@ -1110,11 +819,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Come\\ closer!$",
-   "template": "[BOSS] Goldor: Come closer!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^That\\ chest\\ is\\ locked!$",
    "template": "That chest is locked!",
    "family": "Other"
@@ -1123,16 +827,6 @@
    "regex": "^ESSENCE!\\ You\\ found\\ x10\\ Gold\\ Essence!$",
    "template": "ESSENCE! You found x10 Gold Essence!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ You\\ have\\ done\\ it,\\ you\\ destroyed\\ the\\ factory\\.\\.\\.$",
-   "template": "[BOSS] Goldor: You have done it, you destroyed the factory...",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ But\\ you\\ have\\ nowhere\\ to\\ hide\\ anymore!$",
-   "template": "[BOSS] Goldor: But you have nowhere to hide anymore!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^RARE\\ DROP!\\ Machine\\ Gun\\ Shortbow\\ \\(\\+\\d[\\d,.]*\\ \\ Magic\\ Find\\)$",
@@ -1148,11 +842,6 @@
    "regex": "^Party\\ >\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}:\\ Bat\\ Killed$",
    "template": "Party > [RANK] <name>: Bat Killed",
    "family": "Party chat"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ YOU\\ ARE\\ FACE\\ TO\\ FACE\\ WITH\\ GOLDOR!$",
-   "template": "[BOSS] Goldor: YOU ARE FACE TO FACE WITH GOLDOR!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Moved\\ \\d[\\d,.]*\\ Superboom\\ TNT\\ from\\ your\\ Sacks\\ to\\ your\\ inventory\\.$",
@@ -1180,11 +869,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Stop\\ touching\\ those\\ terminals!$",
-   "template": "[BOSS] Goldor: Stop touching those terminals!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^(?:\\[[A-Z+]+\\] )?\\w{1,16}\\ has\\ obtained\\ Premium\\ Flesh!$",
    "template": "[RANK] <name> has obtained Premium Flesh!",
    "family": "Other"
@@ -1205,11 +889,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ You\\ can't\\ damage\\ me,\\ you\\ can\\ barely\\ slow\\ me\\ down!$",
-   "template": "[BOSS] Goldor: You can't damage me, you can barely slow me down!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^ESSENCE!\\ You\\ found\\ x10\\ Diamond\\ Essence!$",
    "template": "ESSENCE! You found x10 Diamond Essence!",
    "family": "Other"
@@ -1220,24 +899,9 @@
    "family": "Ability damage"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ I\\ am\\ the\\ death\\ zone,\\ you\\ are\\ smart\\ to\\ flee\\.$",
-   "template": "[BOSS] Goldor: I am the death zone, you are smart to flee.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^OBSIDIAN\\ CHEST\\ REWARDS$",
    "template": "OBSIDIAN CHEST REWARDS",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Do\\ you\\ really\\ think\\ we\\ won't\\ repair\\ everything\\?\\ Your\\ impact\\ will\\ be\\ minuscule!$",
-   "template": "[BOSS] Goldor: Do you really think we won't repair everything? Your impact will be minuscule!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ CLOSER!$",
-   "template": "[BOSS] Goldor: CLOSER!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^\\[NPC\\]\\ Centauri:\\ Pro\\ tip:\\ use\\ /centauri$",
@@ -1253,16 +917,6 @@
    "regex": "^You\\ cannot\\ trade\\ while\\ the\\ server\\ is\\ lagging!$",
    "template": "You cannot trade while the server is lagging!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ You\\ are\\ breaking\\ precious\\ materials,\\ unforgivable\\.$",
-   "template": "[BOSS] Goldor: You are breaking precious materials, unforgivable.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Goldor:\\ Closer\\ to\\ me!$",
-   "template": "[BOSS] Goldor: Closer to me!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^BUFF!\\ You\\ have\\ gained\\ Regeneration\\ IV!\\ Press\\ TAB\\ or\\ type\\ /effects\\ to\\ view\\ your\\ active\\ effects!$",
@@ -1343,11 +997,6 @@
    "regex": "^Used\\ Explosive\\ Shot!$",
    "template": "Used Explosive Shot!",
    "family": "Ability status"
-  },
-  {
-   "regex": "^Maxor's\\ Wither\\ TNT\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "Maxor's Wither TNT hit you for # damage.",
-   "family": "Other"
   },
   {
    "regex": "^CHARM!\\ You\\ charmed\\ the\\ Zombie\\ Soldier\\ and\\ received\\ \\d[\\d,.]*\\ Zombie\\ Soldier\\ Shard!$",
@@ -1445,11 +1094,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ My\\ soul\\ is\\ disposable\\.$",
-   "template": "[BOSS] Wither King: My soul is disposable.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^◕\\ You\\ picked\\ up\\ a\\ Defense\\ Orb\\ from\\ \\w{1,16}\\ healing\\ you\\ for\\ \\d[\\d,.]*❤\\ and\\ granting\\ you\\ \\+\\d[\\d,.]*%\\ Defense\\ for\\ \\d[\\d,.]*\\ seconds\\.$",
    "template": "◕ You picked up a Defense Orb from <name> healing you for #❤ and granting you +#% Defense for # seconds.",
    "family": "Other"
@@ -1468,11 +1112,6 @@
    "regex": "^RARE\\ DROP!\\ Zombie\\ Commander\\ Whip\\ \\(\\+\\d[\\d,.]*\\ \\ Magic\\ Find\\)$",
    "template": "RARE DROP! Zombie Commander Whip (+#  Magic Find)",
    "family": "Secrets / items pickup"
-  },
-  {
-   "regex": "^Goldor's\\ Greatsword\\ hit\\ you\\ for\\ \\d[\\d,.]*\\ damage\\.$",
-   "template": "Goldor's Greatsword hit you for # damage.",
-   "family": "Other"
   },
   {
    "regex": "^Talk\\ to\\ Vincent\\ in\\ the\\ Artist's\\ Abode\\ to\\ learn\\ more\\ about\\ this\\ dye!$",
@@ -1510,21 +1149,6 @@
    "family": "Run summary / splits"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ YOUR\\ MOBILITY\\ TRICKS\\ DON'T\\ WORK\\ IN\\ MY\\ DOMAIN!$",
-   "template": "[BOSS] Maxor: YOUR MOBILITY TRICKS DON'T WORK IN MY DOMAIN!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ I\\ have\\ more\\ of\\ those\\.$",
-   "template": "[BOSS] Wither King: I have more of those.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ Oh,\\ this\\ one\\ hurts!$",
-   "template": "[BOSS] Wither King: Oh, this one hurts!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^\\+\\d[\\d,.]*\\ Mage\\ Experience\\ \\(Team\\ Bonus\\)$",
    "template": "+# Mage Experience (Team Bonus)",
    "family": "Run summary / splits"
@@ -1558,21 +1182,6 @@
    "regex": "^Don't\\ move\\ diagonally!\\ Bad!$",
    "template": "Don't move diagonally! Bad!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ MY\\ MINIONS\\ WILL\\ HAVE\\ TO\\ WIPE\\ THE\\ FLOOR\\ AFTER\\ I'M\\ DONE\\ WITH\\ YOU\\ ALL!$",
-   "template": "[BOSS] Maxor: MY MINIONS WILL HAVE TO WIPE THE FLOOR AFTER I'M DONE WITH YOU ALL!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ Not\\ just\\ your\\ land,\\ but\\ every\\ kingdom\\ will\\ soon\\ be\\ ruled\\ by\\ our\\ army\\ of\\ undead!$",
-   "template": "[BOSS] <name>: Not just your land, but every kingdom will soon be ruled by our army of undead!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ I\\ HOPE\\ YOU\\ LIKE\\ EXPLOSIONS\\ TOO!$",
-   "template": "[BOSS] Maxor: I HOPE YOU LIKE EXPLOSIONS TOO!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Couldn't\\ unstash\\ your\\ material\\ stash!\\ Your\\ inventory\\ is\\ full!$",
@@ -1655,11 +1264,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ Necron:\\ I\\ understand\\ your\\ words\\ now,\\ my\\ master\\.$",
-   "template": "[BOSS] Necron: I understand your words now, my master.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^\\[SKULL\\]\\ Wither\\ Skull:\\ That's\\ a\\ door,\\ and\\ I\\ keep\\ the\\ door\\.\\.\\.there\\.$",
    "template": "[SKULL] Wither Skull: That's a door, and I keep the door...there.",
    "family": "Other"
@@ -1740,11 +1344,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ The\\ Age\\ of\\ Men\\ is\\ over,\\ we\\ are\\ creating\\ tens,\\ hundreds\\ of\\ withers!!$",
-   "template": "[BOSS] <name>: The Age of Men is over, we are creating tens, hundreds of withers!!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Used\\ Thunderstorm!$",
    "template": "Used Thunderstorm!",
    "family": "Ability status"
@@ -1755,41 +1354,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ BEGONE\\ PILLAR!$",
-   "template": "[BOSS] <name>: BEGONE PILLAR!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ No\\ more\\ adventurers,\\ no\\ more\\ heroes,\\ death\\ and\\ thunder!$",
-   "template": "[BOSS] <name>: No more adventurers, no more heroes, death and thunder!",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ You\\.\\.\\.\\ again\\?$",
-   "template": "[BOSS] Wither King: You... again?",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ I\\ no\\ longer\\ wish\\ to\\ fight,\\ but\\ I\\ know\\ that\\ will\\ not\\ stop\\ you\\.$",
-   "template": "[BOSS] Wither King: I no longer wish to fight, but I know that will not stop you.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ We\\ will\\ decide\\ it\\ all,\\ here,\\ now\\.$",
-   "template": "[BOSS] Wither King: We will decide it all, here, now.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ Incredible\\.\\ You\\ did\\ what\\ I\\ couldn't\\ do\\ myself\\.$",
-   "template": "[BOSS] Wither King: Incredible. You did what I couldn't do myself.",
-   "family": "Boss dialogue"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ In\\ a\\ way\\ I\\ should\\ thank\\ you,\\ I\\ lost\\ all\\ hopes\\ centuries\\ ago\\ that\\ it\\ would\\ ever\\ end\\.$",
-   "template": "[BOSS] Wither King: In a way I should thank you, I lost all hopes centuries ago that it would ever end.",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^BEDROCK\\ CHEST\\ REWARDS$",
    "template": "BEDROCK CHEST REWARDS",
    "family": "Other"
@@ -1798,11 +1362,6 @@
    "regex": "^CHARM!\\ You\\ charmed\\ the\\ Zombie\\ Soldier\\ and\\ received\\ \\d[\\d,.]*\\ Zombie\\ Soldier\\ Shards!$",
    "template": "CHARM! You charmed the Zombie Soldier and received # Zombie Soldier Shards!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Wither\\ King:\\ I\\ hope\\ you'll\\ become\\ the\\ Heroes\\ I\\ could\\ never\\ be\\.$",
-   "template": "[BOSS] Wither King: I hope you'll become the Heroes I could never be.",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^\\w{1,16}\\ has\\ obtained\\ Blessing\\ of\\ (?:Power|Life|Wisdom|Stone|Time)!$",
@@ -1838,11 +1397,6 @@
    "regex": "^(?:\\[[A-Z+]+\\] )?\\w{1,16}\\ has\\ obtained\\ Beating\\ Heart!$",
    "template": "[RANK] <name> has obtained Beating Heart!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ YOUR\\ WEAPONS\\ CAN'T\\ PIERCE\\ THROUGH\\ MY\\ SHIELD!$",
-   "template": "[BOSS] Maxor: YOUR WEAPONS CAN'T PIERCE THROUGH MY SHIELD!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^GOLD\\ CHEST\\ REWARDS$",
@@ -1885,11 +1439,6 @@
    "family": "Other"
   },
   {
-   "regex": "^\\[BOSS\\]\\ \\w{1,16}:\\ The\\ days\\ are\\ numbered\\ until\\ I\\ am\\ finally\\ unleashed\\ again\\ on\\ the\\ world!$",
-   "template": "[BOSS] <name>: The days are numbered until I am finally unleashed again on the world!",
-   "family": "Boss dialogue"
-  },
-  {
    "regex": "^Your\\ Wish\\ healed\\ you\\ for\\ \\d[\\d,.]*\\ health\\ and\\ granted\\ you\\ an\\ absorption\\ shield\\ with\\ \\d[\\d,.]*\\ health!$",
    "template": "Your Wish healed you for # health and granted you an absorption shield with # health!",
    "family": "Other"
@@ -1908,11 +1457,6 @@
    "regex": "^CHARM!\\ You\\ charmed\\ the\\ Zombie\\ Commander\\ and\\ received\\ \\d[\\d,.]*\\ Zombie\\ Soldier\\ Shard!$",
    "template": "CHARM! You charmed the Zombie Commander and received # Zombie Soldier Shard!",
    "family": "Other"
-  },
-  {
-   "regex": "^\\[BOSS\\]\\ Maxor:\\ How\\ about\\ you\\ taste\\ some\\ rapid\\ fire\\ Wither\\ Skulls!$",
-   "template": "[BOSS] Maxor: How about you taste some rapid fire Wither Skulls!",
-   "family": "Boss dialogue"
   },
   {
    "regex": "^Oops!\\ You\\ stepped\\ on\\ the\\ wrong\\ block!$",
