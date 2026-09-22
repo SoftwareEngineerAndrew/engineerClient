@@ -53,6 +53,7 @@ object P3Rotation : Module(
     private val leapSound by BooleanSetting("Sounds", true, desc = "Plays the role's sound when you are handed one, and the leap-ready sound when your target is in place.")
     val dimOthers by BooleanSetting("Dim Other Players", false, desc = "Greys out the three players you should NOT leap to in Odin's leap menu, as well as ringing the one you should.")
     private val roleVignette by BooleanSetting("Role Vignette", true, desc = "Flashes the screen edge in the role's colour when you are handed a new role, and amber when your leap target is in place.")
+    private val vignetteCorner by BooleanSetting("Vignette In Leap Corner", false, desc = "Flashes only the corner of the screen where your leap target sits in Odin's leap menu, so you know which quadrant to click before it is open.").withDependency { roleVignette }
 
     // One identity per slot: the same job is the same colour and the same note in every section.
     private val slotColors by DropdownSetting("Slot Colours")
@@ -164,7 +165,7 @@ object P3Rotation : Module(
             BrwMod.safely("leap ready") {
                 if (LeapSignal.pollBecameReady()) {
                     if (leapSound) playSoundSettings(readySound())
-                    if (roleVignette) RoleVignette.flash(LEAP_READY_COLOR, 20)
+                    if (roleVignette) RoleVignette.flash(LEAP_READY_COLOR, 20, leapQuadrant())
                 }
             }
         }
@@ -329,10 +330,22 @@ object P3Rotation : Module(
         if (role != null) signalRole(role) else if (RotationEngine.isFinished(me)) signalRecore()
     }
 
+    /**
+     * The leap-menu quadrant your current leap target occupies (Odin's `leapTeammates` order,
+     * the same one LeapHighlight rings), or null when the option is off or they are not listed —
+     * then the vignette falls back to the whole edge.
+     */
+    private fun leapQuadrant(): Int? {
+        if (!vignetteCorner) return null
+        val ign = LeapSignal.current()?.ign ?: return null
+        val index = DungeonUtils.leapTeammates.indexOfFirst { it.name.equals(ign, ignoreCase = true) }
+        return index.takeIf { it in 0..3 }
+    }
+
     private fun signalRecore() {
         LeapSignal.reset()
         // Core's identity: slot 5, played twice so it reads as "core" rather than a hand-off.
-        if (roleVignette) RoleVignette.flash(slotColor(5))
+        if (roleVignette) RoleVignette.flash(slotColor(5), quadrant = leapQuadrant())
         if (leapSound) { playSlot(5); playSlot(5) }
         if (announce) BrwMod.chat("§8[§6BRW§8]§7 next: §a§lcore§r §7— rush in; the first one there is who you leap to.")
     }
@@ -340,7 +353,7 @@ object P3Rotation : Module(
     private fun signalRole(next: RotationSpec.Role) {
         LeapSignal.reset()
         val slot = next.signalSlot
-        if (roleVignette) RoleVignette.flash(slotColor(slot))
+        if (roleVignette) RoleVignette.flash(slotColor(slot), quadrant = leapQuadrant())
         if (leapSound) playSlot(slot)
         if (announce) {
             val tail = if (next.early) " §7(early enter — the team leaps to you)" else ""

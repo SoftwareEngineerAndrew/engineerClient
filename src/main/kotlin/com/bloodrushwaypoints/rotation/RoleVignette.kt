@@ -23,6 +23,13 @@ object RoleVignette {
     private var ticksLeft = 0
     private var startedAt = 0
 
+    /**
+     * Odin leap-menu quadrant to confine the glow to — 0 top-left, 1 top-right, 2 bottom-left,
+     * 3 bottom-right, the same order as `DungeonUtils.leapTeammates` — or null for the whole
+     * edge. The corner tells you where your leap target's box will be before the menu is open.
+     */
+    private var quadrant: Int? = null
+
     fun register() {
         HudElementRegistry.attachElementBefore(
             VanillaHudElements.SLEEP,
@@ -31,11 +38,12 @@ object RoleVignette {
         )
     }
 
-    /** Flash the screen edge. Later calls simply restart it. */
-    fun flash(color: Color, ticks: Int = FADE_TICKS) {
+    /** Flash the screen edge, or just one leap-menu corner of it. Later calls simply restart it. */
+    fun flash(color: Color, ticks: Int = FADE_TICKS, quadrant: Int? = null) {
         this.color = color
         this.ticksLeft = ticks
         this.startedAt = ticks
+        this.quadrant = quadrant?.takeIf { it in 0..3 }
     }
 
     fun tick() {
@@ -59,14 +67,31 @@ object RoleVignette {
         // Four gradient bands rather than a texture: cheap, and it never fights the crosshair.
         val edge = color.withAlpha(0.55f * strength).rgba
         val fade = color.withAlpha(0f).rgba
-        gfx.fillGradient(0, 0, w, depth, edge, fade)
-        gfx.fillGradient(0, h - depth, w, h, fade, edge)
-        verticalBand(gfx, 0, depth, h, edge, fade, leftToRight = true)
-        verticalBand(gfx, w - depth, w, h, edge, fade, leftToRight = false)
+        val q = quadrant
+        if (q == null) {
+            gfx.fillGradient(0, 0, w, depth, edge, fade)
+            gfx.fillGradient(0, h - depth, w, h, fade, edge)
+            verticalBand(gfx, 0, depth, 0, h, edge, fade, leftToRight = true)
+            verticalBand(gfx, w - depth, w, 0, h, edge, fade, leftToRight = false)
+            return
+        }
+        // One corner: the two bands that meet there, each running to the middle of its edge, so
+        // the glow sits exactly where that player's box will be in the leap menu.
+        val right = q % 2 == 1
+        val bottom = q / 2 == 1
+        val x0 = if (right) w / 2 else 0
+        val x1 = if (right) w else w / 2
+        val y0 = if (bottom) h / 2 else 0
+        val y1 = if (bottom) h else h / 2
+        val cornerDepth = (depth * 1.4f).toInt()
+        if (bottom) gfx.fillGradient(x0, h - cornerDepth, x1, h, fade, edge)
+        else gfx.fillGradient(x0, 0, x1, cornerDepth, edge, fade)
+        if (right) verticalBand(gfx, w - cornerDepth, w, y0, y1, edge, fade, leftToRight = false)
+        else verticalBand(gfx, 0, cornerDepth, y0, y1, edge, fade, leftToRight = true)
     }
 
     /** fillGradient only runs top-to-bottom, so the side bands are drawn as thin columns. */
-    private fun verticalBand(gfx: GuiGraphicsExtractor, x0: Int, x1: Int, h: Int, edge: Int, fade: Int, leftToRight: Boolean) {
+    private fun verticalBand(gfx: GuiGraphicsExtractor, x0: Int, x1: Int, y0: Int, y1: Int, edge: Int, fade: Int, leftToRight: Boolean) {
         val width = x1 - x0
         if (width <= 0) return
         val steps = 12
@@ -76,7 +101,7 @@ object RoleVignette {
             val sliceX1 = x0 + (width * (i + 1f) / steps).toInt()
             val mix = if (leftToRight) 1f - a else a
             val c = blend(edge, fade, mix)
-            gfx.fill(sliceX0, 0, sliceX1, h, c)
+            gfx.fill(sliceX0, y0, sliceX1, y1, c)
         }
     }
 
