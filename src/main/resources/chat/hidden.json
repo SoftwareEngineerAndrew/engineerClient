@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": "2026-09-22T22:43:44Z",
+ "updatedAt": "2026-09-22T22:55:59Z",
  "source": "Dungeon Chat Hider artifact, db doc chat/filters v1790116446338",
  "custom": [
   {
@@ -709,23 +709,8 @@
    "family": "Other"
   },
   {
-   "regex": "^ⓒ\\ \\d[\\d,.]*\\ Fairy\\ Souls$",
-   "template": "ⓒ # Fairy Souls",
-   "family": "Other"
-  },
-  {
-   "regex": "^ⓐ\\ \\d[\\d,.]*\\ Fairy\\ Souls$",
-   "template": "ⓐ # Fairy Souls",
-   "family": "Other"
-  },
-  {
    "regex": "^You\\ have\\ \\d[\\d,.]*\\ item\\ stashed\\ away!$",
    "template": "You have # item stashed away!",
-   "family": "Other"
-  },
-  {
-   "regex": "^ⓑ\\ \\d[\\d,.]*\\ Fairy\\ Souls$",
-   "template": "ⓑ # Fairy Souls",
    "family": "Other"
   },
   {

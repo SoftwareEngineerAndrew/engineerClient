@@ -28,7 +28,6 @@ RULES=[
  ("Mort's intro", r"^\[NPC\] Mort: ", "All of Mort's lines at run start."),
  ("Oruo quiz dialogue", r"^\[STATUE\] Oruo the Omniscient: (?!.*(?:answered|questions? left|One more question))", "Oruo's speeches. Quiz progress ('answered Question #1 correctly', 'questions left', 'One more question') stays visible."),
  ("Wither Skull hints", r"^\[SKULL\] ", "You accepted '[SKULL] …'."),
- ("Fairy soul counts", r"^[ⓐ-ⓩ] \d[\d,.]* Fairy Souls$", "The ⓐ/ⓑ/ⓒ fairy soul lines."),
  ("Server moves", rf"^(?:Sending to (?:server )?\S+\.\.\.|Request join for .+\.\.\.|Warping\.\.\.|Already connecting to this server!|Kicked whilst connecting to .+|Queu(?:e)?ing .+|I'm already sending you to SkyBlock!|Attempting to add you to the party\.\.\.)$", "Every 'sending / warping / queueing' line, whichever server."),
  ("Hypixel notices", r"^(?:\[WATCHDOG ANNOUNCEMENT\]|Watchdog has banned .+|Staff have banned .+|Blacklisted modifications are a bannable offense!|Link looks suspicious\? - Don't click it!|Clicking sketchy links can result in your account|being stolen!|Latest update: SkyBlock .+)$", "Watchdog stats and the link-safety block."),
  ("GEXP", r"^You earned .+ GEXP", "Guild XP notices, with or without event XP."),
