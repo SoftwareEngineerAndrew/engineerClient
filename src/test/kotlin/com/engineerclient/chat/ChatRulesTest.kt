@@ -66,4 +66,12 @@ class ChatRulesTest {
         assertNotNull(rules.hides("Some New Mob's Laser hit you for 50 damage."))
         assertNull(rules.hides("Party > [MVP+] p3wr: it hit you for 5 damage. lol"))
     }
+
+    @Test
+    fun `Oruo quiz answers and progress stay visible`() {
+        for (line in listOf("ⓐ 10 Fairy Souls", "ⓑ Apprentice Necromancer", "ⓒ 42 Fairy Souls", "Question #1",
+                            "[STATUE] Oruo the Omniscient: p3wr answered Question #2 correctly!")) {
+            assertNull(rules.hides(line), "quiz line must show: $line")
+        }
+    }
 }
