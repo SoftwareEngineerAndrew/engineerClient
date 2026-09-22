@@ -1,4 +1,4 @@
-rootProject.name = "blood-rush-waypoints"
+rootProject.name = "engineerClient"
 
 pluginManagement {
     repositories {

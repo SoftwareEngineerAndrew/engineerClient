@@ -56,12 +56,12 @@ tasks {
         testLogging { events("passed", "failed", "skipped") }
     }
 
-    // ./gradlew replay -Plog=/path/to/brw-session.log — replays a BRW log through the real engine.
+    // ./gradlew replay -Plog=/path/to/brw-session.log — replays a EC log through the real engine.
     register<JavaExec>("replay") {
         group = "verification"
-        description = "Replay a BRW session log through the rotation engine and diff it against what ran live."
+        description = "Replay a EC session log through the rotation engine and diff it against what ran live."
         classpath = sourceSets["test"].runtimeClasspath
-        mainClass.set("com.bloodrushwaypoints.rotation.LogReplayKt")
+        mainClass.set("com.engineerclient.rotation.LogReplayKt")
         jvmArgs("-Dlog4j.configurationFile=${projectDir}/src/test/resources/log4j2-replay.xml", "--enable-final-field-mutation=ALL-UNNAMED")
         args(project.findProperty("log")?.toString() ?: "")
     }
