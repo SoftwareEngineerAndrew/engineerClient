@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.events.GuiEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RenderBossBarEvent
 import com.odtheking.odin.events.RenderItemNameEvent
@@ -13,6 +14,8 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.render.RenderOptimizer
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
+import com.odtheking.odin.utils.Color.Companion.multiplyAlpha
+import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
@@ -36,6 +39,20 @@ object RandomStuff : Module(
     private val hideBossBarOutsideBoss by BooleanSetting("Hide Boss Bar Outside Boss", false, desc = "Hides the boss health bar unless you're actually in a dungeon boss fight.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "Hides every armor stand in the world (except terminals, active or inactive) and removes fishing bobbers' extended line.")
+    private val junkHighlight by BooleanSetting("Junk Highlight", false, desc = "Faint red backdrop on inventory slots holding known-useless dungeon drops.")
+
+    /**
+     * Odin has no "junk drop" list of its own (checked - nothing under features/impl/dungeon or
+     * events/EventDispatcher's dungeonItemDrops covers this, that list is the opposite: things
+     * worth grabbing). This starter set is the small, uncontroversial core of Catacombs trash -
+     * common mob drops that pad out a dungeon inventory and never do anything - not a full sweep
+     * of every situational item.
+     */
+    private val junkNames = hashSetOf(
+        "Bone", "Rotten Flesh", "String", "Spider Eye", "Gunpowder", "Arrow",
+        "Ink Sac", "Spider's Eye", "Wither Skeleton Skull", "Egg",
+    )
+    private val junkColor = Colors.MINECRAFT_RED.multiplyAlpha(0.35f)
 
     /**
      * Whether [key] should finish the open sign edit screen. Read by SignEnterMixin.
@@ -67,6 +84,13 @@ object RandomStuff : Module(
 
         on<MessageEvent.Overlay> {
             if (hideActionBar) cancel()
+        }
+
+        on<GuiEvent.RenderSlot> {
+            if (!junkHighlight) return@on
+            val item = slot.item
+            if (item.isEmpty || item.hoverName.string !in junkNames) return@on
+            guiGraphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, junkColor.rgba)
         }
     }
 }
