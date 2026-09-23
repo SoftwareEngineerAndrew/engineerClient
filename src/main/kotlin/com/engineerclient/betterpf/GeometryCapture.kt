@@ -30,21 +30,26 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
     private val queuedRooms = HashSet<String>()
     private var ticksWaitingForLibrary = 0
 
-    // Every place a door can be: the middle of each tile edge inside the grid, as Odin's door box
-    // (3 wide across the gap, 3 along it, y 69-72). Written whole, air included.
+    // Every place a door can be: the middle of each tile edge inside the grid. The box is generous
+    // (DOOR_ALONG either side of the middle, DOOR_ACROSS blocks into each room, y DOOR_Y up
+    // DOOR_H) so everything around a doorway that differs between runs - the door, the opening,
+    // or the wall filling it - comes from this run. Written whole, air included.
+    // Each spot: x0, z0, w, d.
     private val doorSpots = ArrayList<IntArray>().apply {
+        val across = 2 * DOOR_ACROSS + 1; val along = 2 * DOOR_ALONG + 1
         for (i in 1..5) for (j in 0..5) {
             val gap = GRID_ORIGIN - 1 + 32 * i; val mid = GRID_ORIGIN + 32 * j + 15
-            add(intArrayOf(gap - 1, mid - 1)); add(intArrayOf(mid - 1, gap - 1))
+            add(intArrayOf(gap - DOOR_ACROSS, mid - DOOR_ALONG, across, along))
+            add(intArrayOf(mid - DOOR_ALONG, gap - DOOR_ACROSS, along, across))
         }
     }
     private val doorsDone = HashSet<Int>()
 
     private fun queueDoors(level: ClientLevel) {
         for ((i, spot) in doorSpots.withIndex()) {
-            if (i in doorsDone || !loaded(level, spot[0], spot[1], 3, 3)) continue
+            if (i in doorsDone || !loaded(level, spot[0], spot[1], spot[2], spot[3])) continue
             doorsDone += i
-            jobs.addFirst(VolumeJob("door", null, spot[0], DOOR_Y, spot[1], 3, DOOR_H, 3, null))
+            jobs.addFirst(VolumeJob("door", null, spot[0], DOOR_Y, spot[1], spot[2], DOOR_H, spot[3], null))
         }
     }
 
@@ -210,8 +215,10 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
         /** World x/z of tile 0's first block; tile i covers [ORIGIN + 32i, ORIGIN + 32i + 30], gaps between. */
         const val GRID_ORIGIN = -200
         const val BLOCKS_PER_TICK = 24_000
-        const val DOOR_Y = 69
-        const val DOOR_H = 4
+        const val DOOR_Y = 67
+        const val DOOR_H = 10
+        const val DOOR_ALONG = 3
+        const val DOOR_ACROSS = 2
         /** How far past the boss limit to look, in chunks (F7's arena is about 9x10). */
         const val BOSS_CHUNKS = 13
 
