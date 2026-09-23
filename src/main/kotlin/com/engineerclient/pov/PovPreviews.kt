@@ -64,6 +64,13 @@ object PovPreviews : Module(
      * whole world render saved per frame, and costs nothing to resume: the next frame simply does
      * not take that branch.
      */
+    /**
+     * Below 1, the previews blend over your own view instead of replacing it - and your own view
+     * keeps rendering underneath regardless of [skipOwnView], since there's something to see
+     * through to now.
+     */
+    val opacity by NumberSetting("Opacity", 1f, 0.1f, 1f, 0.05f, desc = "How opaque the previews are. Below 1 you can see your own game through them (your own view keeps rendering, so this costs a world render).", unit = "x")
+
     val skipOwnView by BooleanSetting("Skip Own View", true, desc = "Skips rendering your own view while the previews cover the screen. Saves a full world render per frame.")
 
     /**

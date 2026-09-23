@@ -182,6 +182,14 @@ object PovCapture {
         val guiWidth = gfx.guiWidth()
         val guiHeight = gfx.guiHeight()
         val pose = Matrix3x2f(gfx.pose())
+        val opacity = PovPreviews.opacity
+        val opaque = opacity >= 1f
+        // Opaque stays on the no-blend pipeline (see below). Translucent has to blend, so it uses
+        // GUI_TEXTURED with the opacity as the vertex tint's alpha - the catch being that fragments
+        // the level pass left at alpha zero (mostly open sky) come out fully see-through rather than
+        // at [opacity]. Indoors, which is nearly every leap, that's no difference at all.
+        val pipeline = if (opaque) RenderPipelines.GUI_OPAQUE_TEXTURED_BACKGROUND else RenderPipelines.GUI_TEXTURED
+        val tint = if (opaque) -1 else ((opacity * 255f).toInt().coerceIn(0, 255) shl 24) or 0xFFFFFF
         for (index in 0 until FEEDS) {
             if (empty[index]) continue
             val view = feeds[index]?.colorTextureView ?: continue
@@ -196,13 +204,13 @@ object PovCapture {
                     // Opaque, not GUI_TEXTURED: the level pass clears its target to alpha ZERO
                     // (`LevelRenderer` clear pass), so anything that blends on source alpha would
                     // drop the sky and every other fragment that did not write alpha.
-                    RenderPipelines.GUI_OPAQUE_TEXTURED_BACKGROUND,
+                    pipeline,
                     TextureSetup.singleTexture(view, sampler),
                     pose,
                     x0, y0, x1, y1,
                     // v is flipped: texture row 0 is the BOTTOM of a render target's image.
                     0f, 1f, 1f, 0f,
-                    -1,
+                    tint,
                     null,
                 )
             )
@@ -252,7 +260,7 @@ object PovCapture {
         // tells the RETURN injector "the passes already ran" is cleared. Doing it here rather
         // than in `afterLevelRender` matters because a cancelled call may never reach RETURN.
         skippedMainPass = false
-        if (!PovPreviews.skipOwnView || !canCapture()) return false
+        if (!PovPreviews.skipOwnView || PovPreviews.opacity < 1f || !canCapture()) return false
         // Only when every quadrant has an image to show: otherwise cancelling would leave bare
         // black where a quadrant has no teammate.
         if (blitsSubmitted < FEEDS) return false
