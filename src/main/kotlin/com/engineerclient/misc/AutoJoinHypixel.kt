@@ -10,7 +10,6 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.minecraft.client.gui.screens.ConnectScreen
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.client.multiplayer.ServerData
-import net.minecraft.client.multiplayer.TransferState
 import net.minecraft.client.multiplayer.resolver.ServerAddress
 
 /**
@@ -49,7 +48,12 @@ object AutoJoinHypixel : Module(
                 ServerAddress.parseString(HYPIXEL_ADDRESS),
                 ServerData("Hypixel", HYPIXEL_ADDRESS, ServerData.Type.OTHER),
                 false,
-                TransferState(emptyMap(), emptyMap(), false),
+                // null, not an empty TransferState: ConnectScreen$1.run() checks this for null to
+                // decide whether to tell the server "this is a transfer" (initiateServerboundPlay-
+                // Connection's transferConnection flag). A non-null value here - even an "empty"
+                // one - declares an illegitimate transfer with nothing having actually transferred
+                // us, which is exactly the "you cannot transfer to this server" rejection.
+                null,
             )
         }
 
