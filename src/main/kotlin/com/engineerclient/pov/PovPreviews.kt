@@ -69,7 +69,7 @@ object PovPreviews : Module(
     // Separate from [opacity]: these apply to Odin's own leap boxes (colour, head, name, class)
     // drawn on top of the previews, only while the previews are actually up.
     val leapBoxScale by NumberSetting("Leap Box Size", 1f, 0.3f, 1f, 0.05f, desc = "Shrinks Odin's leap boxes toward the centre while the previews are showing.", unit = "x")
-    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 1f, 0.1f, 1f, 0.05f, desc = "Fades Odin's leap boxes (colour, head, name, class) while the previews are showing.", unit = "x")
+    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 1f, 0.1f, 1f, 0.05f, desc = "Fades the background of Odin's leap boxes (not the head or name) while the previews are showing.", unit = "x")
 
     /**
      * With four previews tiling the screen, your own view is behind all of them. Skipping it is a
