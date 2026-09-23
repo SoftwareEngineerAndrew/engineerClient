@@ -23,7 +23,7 @@ dependencies {
     implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")
 
     // Odin is a required runtime mod (declared in fabric.mod.json); compile against its release jar.
-    compileOnly(files("libs/Odin-0.3.6.jar"))
+    compileOnly(files("libs/Odin-0.3.7.jar"))
 
     // Sodium replaces the terrain renderer on every team client; the POV previews drive its
     // terrain pass directly. Optional at runtime (guarded by FabricLoader.isModLoaded).
