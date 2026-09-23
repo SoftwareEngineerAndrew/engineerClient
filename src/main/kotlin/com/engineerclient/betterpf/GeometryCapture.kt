@@ -9,9 +9,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
 
 /**
  * Captures dungeon geometry once instead of streaming it: every block of each ROOM goes to the
- * server's room library (keyed "Name|ROTATION", identical in every run), and only the 1-block GAPS
- * between rooms (doors, walls between rooms - which differ per run) are captured per run. After
- * that, the run only records changes (block updates).
+ * server's room library (keyed "Name|ROTATION", identical in every run). The 1-block gaps between
+ * rooms aren't captured at all - the viewer leaves them as air. After that, the run only records
+ * changes (block updates).
  *
  * Geometry comes out as volume lines: palette + run-length encoded block indices in y, z, x order
  * (x fastest). Palette index 0 is always "" = not part of this volume (outside an L-shaped room's
@@ -24,36 +24,17 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
     private var jobs = ArrayDeque<VolumeJob>()
     private var active: VolumeJob? = null
     private val queuedRooms = HashSet<String>()
-    private val gapSegments = ArrayList<Seg>()
     private var ticksWaitingForLibrary = 0
-
-    private class Seg(val x0: Int, val z0: Int, val w: Int, val d: Int, var done: Boolean = false)
-
-    fun start() {
-        // x-gap lines (x = const) and z-gap lines (z = const) around every tile of the 6x6 grid.
-        for (i in 0..6) for (j in 0..5) {
-            gapSegments += Seg(GRID_ORIGIN - 1 + 32 * i, GRID_ORIGIN - 1 + 32 * j, 1, 32)
-            gapSegments += Seg(GRID_ORIGIN + 32 * j, GRID_ORIGIN - 1 + 32 * i, 31, 1)
-        }
-    }
 
     fun tick(level: ClientLevel, t: Int) {
         if (t % 10 == 0) queueRooms(level)
         var budget = BLOCKS_PER_TICK
         while (budget > 0) {
-            val job = active ?: nextJob(level) ?: return
+            val job = active ?: jobs.removeFirstOrNull() ?: return
             active = job
             budget -= job.step(level, budget)
             if (job.done) { emit(job.toLine(t)); active = null }
         }
-    }
-
-    private fun nextJob(level: ClientLevel): VolumeJob? {
-        jobs.removeFirstOrNull()?.let { return it }
-        val seg = gapSegments.firstOrNull { !it.done && loaded(level, it.x0, it.z0, it.w, it.d) } ?: return null
-        seg.done = true
-        val (y0, h) = yRange(level)
-        return VolumeJob("vol", null, seg.x0, y0, seg.z0, seg.w, h, seg.d, null)
     }
 
     /**

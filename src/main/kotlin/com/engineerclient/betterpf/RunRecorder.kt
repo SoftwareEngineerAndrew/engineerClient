@@ -129,7 +129,6 @@ class RunRecorder(
         writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry}""")
         backlog.forEach(::writeNow)
         backlog.clear()
-        if (captureGeometry) geometry.start()
         EngineerClient.chat("§8[§6EC§8]§7 Better PF: recording this run")
     }
 
