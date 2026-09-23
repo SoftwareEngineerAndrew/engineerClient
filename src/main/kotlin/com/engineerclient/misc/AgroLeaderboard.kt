@@ -38,7 +38,7 @@ object AgroLeaderboard : Module(
 
     private val leaderboardHud by HUD("Agro Leaderboard", "Party ordered by distance to Maxor/Storm.", toggleable = false) { example ->
         if (example) return@HUD draw(this, "Maxor", true, listOf(
-            Entry("Cameron", mc.player?.skin, 4.2), Entry("Teammate", null, 9.8), Entry("Another", null, 15.1),
+            Entry("undonecoffee", mc.player?.skin, 4.2), Entry("Teammate", null, 9.8), Entry("Another", null, 15.1),
         ))
         val name = bossName ?: return@HUD 0 to 0
         draw(this, name, bossFound, entries)

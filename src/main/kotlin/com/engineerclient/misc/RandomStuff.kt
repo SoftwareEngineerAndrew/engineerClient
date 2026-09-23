@@ -45,7 +45,7 @@ object RandomStuff : Module(
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
 
     /**
-     * Step 1 of the scoreboard line hider Cameron asked for (time/season/keys/%cleared): Odin has
+     * Step 1 of the scoreboard line hider (time/season/keys/%cleared): Odin has
      * no scoreboard-line infrastructure at all to build on, and Hypixel's sidebar text lives in
      * each line's team prefix+suffix (same trick LocationUtils already reads off
      * ClientboundSetPlayerTeamPacket for area detection), not anywhere guessable from outside the
