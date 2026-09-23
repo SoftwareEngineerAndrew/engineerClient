@@ -10,7 +10,18 @@ MODS_DIR="${EC_MODS_DIR:-${BRW_MODS_DIR:-$HOME/.local/share/PrismLauncher/instan
 VERSION="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"
 JAR="build/libs/engineerclient-$VERSION.jar"
 
-./gradlew build -q
+# gradle.properties hardcodes org.gradle.java.home to a real FHS path (works for most teammates).
+# On a machine where that path doesn't exist (e.g. NixOS, no /usr/lib/jvm), fall back to whatever
+# `java` resolves to on PATH instead - only kicks in when the configured path is actually missing,
+# so this is a no-op everywhere the hardcoded path is valid.
+GRADLE_ARGS=()
+CONFIGURED_JAVA_HOME="$(grep '^org.gradle.java.home=' gradle.properties | cut -d= -f2-)"
+if [ -n "$CONFIGURED_JAVA_HOME" ] && [ ! -x "$CONFIGURED_JAVA_HOME/bin/java" ] && command -v java >/dev/null; then
+    JAVA_HOME_OVERRIDE="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
+    GRADLE_ARGS+=("-Dorg.gradle.java.home=$JAVA_HOME_OVERRIDE")
+fi
+
+./gradlew build -q "${GRADLE_ARGS[@]}"
 
 # clear stale ascent jars so the instance never loads two versions
 rm -f "$MODS_DIR"/ascent-*.jar "$MODS_DIR"/bloodrushwaypoints-*.jar "$MODS_DIR"/engineerclient-*.jar

@@ -77,6 +77,26 @@ object RandomStuff : Module(
     private val junkNames = hashSetOf(
         "Bone", "Rotten Flesh", "String", "Spider Eye", "Gunpowder", "Arrow",
         "Ink Sac", "Spider's Eye", "Wither Skeleton Skull", "Egg", "Revive Stone",
+        // Dungeon trash-mob armor/weapon drops, from the same allModules AutoSell.js source
+        // (CoffeeClient/features/AutoSell.js) - the stuff that clutters a run inventory, as
+        // opposed to worthless.txt above (end-of-run Croesus chest evaluation, different context).
+        // Left out on purpose: Training Weights and Defuse Kit are also in that source but conflict
+        // with Odin's own "worth grabbing" dungeonItemDrops list - not overriding that silently.
+        // Also left out: Rune I/II/III (too broad, would catch real valuable runes too), Ender
+        // Pearl and Enchanted Rotten Flesh/Bone/Ice (real bazaar value), and Conjuring (may be the
+        // real Conjuring enchant book, not the mob drop - too ambiguous to risk).
+        "Bouncy Boots", "Bouncy Leggings", "Bouncy Chestplate", "Bouncy Helmet",
+        "Super Heavy Boots", "Super Heavy Leggings", "Super Heavy Chestplate", "Super Heavy Helmet",
+        "Zombie Soldier Boots", "Zombie Soldier Leggings", "Zombie Soldier Chestplate", "Zombie Soldier Helmet",
+        "Zombie Knight Boots", "Zombie Knight Leggings", "Zombie Knight Chestplate", "Zombie Knight Helmet",
+        "Zombie Commander Boots", "Zombie Commander Leggings", "Zombie Commander Chestplate", "Zombie Commander Helmet",
+        "Skeletor Boots", "Skeletor Leggings", "Skeletor Chestplate", "Skeletor Helmet",
+        "Skeleton Soldier Boots", "Skeleton Soldier Leggings", "Skeleton Soldier Chestplate", "Skeleton Soldier Helmet",
+        "Skeleton Master Boots", "Skeleton Master Leggings", "Skeleton Master Chestplate", "Skeleton Master Helmet",
+        "Sniper Boots", "Sniper Leggings", "Sniper Chestplate", "Sniper Helmet",
+        "Zombie Knight Sword", "Dreadlord Sword", "Earth Shard", "Zombie Commander Whip",
+        "Zombie Soldier Cutlass", "Premium Flesh", "The Study", "Soulstealer Bow",
+        "Silent Death", "Stone Button",
     )
     private val junkColor = Colors.MINECRAFT_RED.multiplyAlpha(0.35f)
 
