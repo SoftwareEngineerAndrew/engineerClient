@@ -10,7 +10,11 @@ import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.core.component.DataComponents
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.state.BlockState
 import java.io.BufferedWriter
@@ -203,8 +207,11 @@ class RunRecorder(
         for (p in level.players()) {
             val name = p.name.string
             seen += name
-            val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { BuiltInRegistries.ITEM.getKey(it.item).toString() } }
-            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()}]"
+            val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { vanillaId(it) } }
+            if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
+            recordEquipment(p, "\"name\":${str(name)}", name)
+            // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one.
+            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))}]"
             if (lastPlayer.put(name, entry) == entry) continue
             if (changed++ > 0) sb.append(',')
             sb.append(entry)
@@ -231,6 +238,7 @@ class RunRecorder(
                 emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)},"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}}""")
                 continue
             }
+            if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
             if (name != t.name) {
                 t.name = name
                 emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}}""")
@@ -246,9 +254,31 @@ class RunRecorder(
         val gone = tracked.keys.filter { it !in seen }
         for (id in gone) {
             tracked.remove(id)
+            lastEquipment.remove("#$id")
             emit("""{"k":"gone","t":$tick,"id":$id}""")
         }
     }
+
+    // Players' skins (their profile's "textures" property, base64) once per name.
+    private val skinsWritten = HashSet<String>()
+
+    // Held item and armour per player name / "#entityId", written when it changes: vanilla ids, plus
+    // the head item's skin texture when it's a player head (dungeon mobs wear those).
+    private val lastEquipment = HashMap<String, String>()
+
+    private fun recordEquipment(e: LivingEntity, who: String, key: String) {
+        val head = e.getItemBySlot(EquipmentSlot.HEAD)
+        val items = listOf(e.mainHandItem, head, e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
+        val headTex = head.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
+        val body = items.joinToString(",", "[", "]") { str(vanillaId(it)) } + (headTex?.let { ",\"headTex\":${str(it)}" } ?: "")
+        val previous = lastEquipment.put(key, body)
+        if (previous == body || (previous == null && body == NO_EQUIPMENT)) return
+        emit("""{"k":"eq","t":$tick,$who,"eq":$body}""")
+    }
+
+    private fun vanillaId(stack: ItemStack): String = if (stack.isEmpty) "" else BuiltInRegistries.ITEM.getKey(stack.item).toString()
+
+    private fun texturesOf(props: com.mojang.authlib.properties.PropertyMap): String? = props.get("textures").firstOrNull()?.value()
 
     // ------------------------------------------------------------------ block palette (for "block" change lines)
 
@@ -279,6 +309,7 @@ class RunRecorder(
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
+        const val NO_EQUIPMENT = """["","","","",""]"""
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
     }
 }
