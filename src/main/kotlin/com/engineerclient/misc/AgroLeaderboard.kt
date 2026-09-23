@@ -3,6 +3,8 @@ package com.engineerclient.misc
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -24,6 +26,11 @@ import java.util.Locale
 /**
  * F7 P1/P2: Maxor and Storm aggro onto whoever is closest, so this lists the party by distance
  * to the boss, closest (the one holding aggro) in green. Hidden outside those two phases.
+ *
+ * The phase that is actually running comes from the boss dialogue (Odin's phase is just your
+ * height), and the board only shows while you are in that phase's arena: fall below Maxor's
+ * platform during P1, or below Storm's during P2, and it disappears instead of switching to the
+ * next boss. Before any boss line has been seen (joined mid-fight) it goes by height alone.
  *
  * The boss is the nearest live WitherBoss to you, preferring one whose name mentions the boss -
  * the other withers sit in their own arenas further down, so nearest is the one you're fighting.
@@ -48,6 +55,14 @@ object AgroLeaderboard : Module(
     private var bossFound = false
     private var entries: List<Entry> = emptyList()
 
+    /** The boss phase that is running, from chat; null before the first boss line or after Storm. */
+    private var activePhase: M7Phases? = null
+    private var sawBossLine = false
+    private val maxorRegex = Regex("^\\[BOSS] Maxor: ")
+    private val stormStartRegex = Regex("^\\[BOSS] Storm: Pathetic Maxor, just like expected\\.$")
+    private val stormEndRegex = Regex("^\\[BOSS] Storm: I should have known that I stood no chance\\.$")
+    private val goldorStartRegex = Regex("^\\[BOSS] Goldor: Who dares trespass into my domain\\?$")
+
     private const val LINE_HEIGHT = 10
     private const val HEAD_SIZE = 8
 
@@ -60,8 +75,20 @@ object AgroLeaderboard : Module(
     }
 
     init {
+        on<LevelEvent.Load> { activePhase = null; sawBossLine = false }
+
+        on<MessageEvent.Chat> {
+            when {
+                stormStartRegex.matches(message) -> { activePhase = M7Phases.P2; sawBossLine = true }
+                stormEndRegex.matches(message) || goldorStartRegex.matches(message) -> { activePhase = null; sawBossLine = true }
+                maxorRegex.containsMatchIn(message) && !sawBossLine -> { activePhase = M7Phases.P1; sawBossLine = true }
+            }
+        }
+
         on<TickEvent.End> {
-            bossName = when (DungeonUtils.getF7Phase()) {
+            val here = DungeonUtils.getF7Phase()
+            val phase = if (sawBossLine) activePhase?.takeIf { it == here } else here
+            bossName = when (phase) {
                 M7Phases.P1 -> "Maxor"
                 M7Phases.P2 -> "Storm"
                 else -> null
