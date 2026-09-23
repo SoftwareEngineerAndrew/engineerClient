@@ -38,7 +38,7 @@ import java.util.zip.GZIPOutputStream
  *
  * Disk writes happen on a single background thread; the client thread only builds strings.
  */
-class RunRecorder(private val dir: Path, private val captureGeometry: Boolean) {
+class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, private val onSaved: (Path) -> Unit = {}) {
 
     private var tick = 0
     private var confirmed = false
@@ -107,6 +107,7 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean) {
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
                 val mb = Files.size(target) / 1_000_000.0
                 EngineerClient.chat("§8[§6EC§8]§7 Better PF: saved run §f$finalName §7(${String.format(Locale.ROOT, "%.1f", mb)} MB, $lines lines, ${tick / 20}s)")
+                onSaved(target)
             } catch (t: Throwable) {
                 EngineerClient.logger.error("[ec] betterpf: failed to finish run file", t)
             }
