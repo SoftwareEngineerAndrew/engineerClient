@@ -16,6 +16,7 @@ import com.odtheking.odin.features.impl.render.RenderOptimizer
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
 import com.odtheking.odin.utils.Color.Companion.multiplyAlpha
 import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.containsOneOf
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
@@ -43,14 +44,13 @@ object RandomStuff : Module(
 
     /**
      * Odin has no "junk drop" list of its own (checked - nothing under features/impl/dungeon or
-     * events/EventDispatcher's dungeonItemDrops covers this, that list is the opposite: things
-     * worth grabbing). This starter set is the small, uncontroversial core of Catacombs trash -
-     * common mob drops that pad out a dungeon inventory and never do anything - not a full sweep
-     * of every situational item.
+     * events/EventDispatcher's dungeonItemDrops covers this; that list is actually the opposite -
+     * things worth grabbing, and Revive Stone is on it there). This list is Cameron's own call on
+     * what's junk for him, not an objective classification - add/remove freely.
      */
     private val junkNames = hashSetOf(
         "Bone", "Rotten Flesh", "String", "Spider Eye", "Gunpowder", "Arrow",
-        "Ink Sac", "Spider's Eye", "Wither Skeleton Skull", "Egg",
+        "Ink Sac", "Spider's Eye", "Wither Skeleton Skull", "Egg", "Revive Stone",
     )
     private val junkColor = Colors.MINECRAFT_RED.multiplyAlpha(0.35f)
 
@@ -89,7 +89,10 @@ object RandomStuff : Module(
         on<GuiEvent.RenderSlot> {
             if (!junkHighlight) return@on
             val item = slot.item
-            if (item.isEmpty || item.hoverName.string !in junkNames) return@on
+            // hoverName.string keeps its color/formatting codes (e.g. "§fRevive Stone"), so an
+            // exact match against plain names never hit - contains catches it regardless of rarity
+            // color, same fix EventDispatcher's own item-name matching already relies on.
+            if (item.isEmpty || !item.hoverName.string.containsOneOf(junkNames)) return@on
             guiGraphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, junkColor.rgba)
         }
     }
