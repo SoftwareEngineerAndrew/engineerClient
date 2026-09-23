@@ -32,7 +32,7 @@ happened, so a reader can play the file start to finish.
 | `name` | `t, id, name` | an entity's custom name changed (Hypixel nametags/health bars) |
 | `gone` | `t, id` | entity despawned |
 | `pal` | `i, s` | block-state palette entry, e.g. `minecraft:oak_stairs[facing=north,...]` |
-| `lib` | `t, key, x0, y0, z0, w, h, d, pal, rle` | every block of a room the library didn't have yet; `key` is `Name\|ROTATION` (a volume, see below) |
+| `lib` | `t, key, x0, y0, z0, w, h, d, pal, rle` | every block of a room the library didn't have yet; `key` is `Name\|ROTATION`, or `Boss\|FLOOR\|cx,cz` for one 16x16 chunk column of the boss arena (a volume, see below) |
 | `vol` | `t, x0, y0, z0, w, h, d, pal, rle` | (no longer written) the 1-block gaps between rooms; the viewer ignores it and leaves gaps as air |
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
 | `chat` | `t, m` | chat line, formatting stripped |
@@ -50,7 +50,8 @@ Rooms are identical in every run, so the website keeps one copy of each (the roo
 to the library when the run is uploaded (first copy wins). A run therefore only needs its `rooms`
 lines (where each room is) and `block` changes; the 1-block gaps between rooms are left as air.
 The viewer fetches rooms with `GET /betterpf/api/rooms/data?keys=<JSON array>` and places each at the grid position of its
-lowest tile: `x = -200 + 32 * minTx`, `z = -200 + 32 * minTz`. The boss arena isn't captured.
+lowest tile: `x = -200 + 32 * minTx`, `z = -200 + 32 * minTz`. Boss chunk columns are captured as their
+chunks load (air-only chunks and sections skipped) and sit at their own `x0, y0, z0`.
 
 A volume is a `w`×`h`×`d` box starting at `(x0, y0, z0)`. `pal` is its own palette of block states
 and `rle` is run-length encoded palette indices `[count, index, count, index, ...]` in y, z, x order
