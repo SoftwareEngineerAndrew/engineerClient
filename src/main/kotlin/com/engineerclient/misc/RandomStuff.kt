@@ -15,6 +15,7 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.render.RenderOptimizer
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
 import com.odtheking.odin.utils.modMessage
+import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.scores.DisplaySlot
@@ -39,6 +40,9 @@ object RandomStuff : Module(
     private val hideBossBarOutsideBoss by BooleanSetting("Hide Boss Bar Outside Boss", false, desc = "Hides the boss health bar unless you're actually in a dungeon boss fight.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "Hides every armor stand in the world (except terminals, active or inactive) and removes fishing bobbers' extended line.")
+    private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
+
+    private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
 
     /**
      * Step 1 of the scoreboard line hider Cameron asked for (time/season/keys/%cleared): Odin has
@@ -95,6 +99,10 @@ object RandomStuff : Module(
 
         on<MessageEvent.Overlay> {
             if (hideActionBar) cancel()
+        }
+
+        on<MessageEvent.Chat> {
+            if (blessOnLeave && partyLeaveRegex.matches(message)) sendCommand("pc bless")
         }
     }
 }
