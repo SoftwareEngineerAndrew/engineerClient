@@ -41,6 +41,7 @@ object RandomStuff : Module(
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "In dungeons only: hides every armor stand (except terminals, active or inactive) and removes fishing bobbers' extended line.")
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
+    private val blackSky by BooleanSetting("Black Sky", false, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
 
@@ -77,6 +78,9 @@ object RandomStuff : Module(
      * writing four lines on. Off the island the vanilla behaviour is left alone, and even with
      * this on the arrow keys still move between lines.
      */
+    /** Read by FogColorMixin every frame. */
+    fun blackSkyActive(): Boolean = enabled && blackSky
+
     fun signEnterFinishes(key: Int): Boolean =
         enabled && signEnterConfirms && LocationUtils.isInSkyblock &&
             (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)
