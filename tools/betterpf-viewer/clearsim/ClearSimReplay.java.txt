@@ -1,0 +1,155 @@
+package com.precisionsnipes;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * <b>A watchable recording of one simulated clear.</b>
+ *
+ * <p>Andrew, 2026-08-20: <i>"can you use 3d renderer so I can optionally watch the
+ * simulations"</i>. This is the capture half — it accumulates a per-tick trace while
+ * {@link ClearSim} runs and serialises it as JSON that the viewer page embeds directly.
+ *
+ * <h2>What it stores, and what it deliberately leaves out</h2>
+ * A room's full volume is around 100,000 cells and none of it needs to be on screen to follow a
+ * clear. So the geometry stored is:
+ * <ul>
+ *   <li>the room's <b>standable set</b> — which IS the floor, and the surface a viewer reads the
+ *       room's shape from;</li>
+ *   <li>a <b>decimated wall shell</b>, the solid cells that border air, sampled, so the room reads
+ *       as a room rather than a floating carpet.</li>
+ * </ul>
+ * Per tick it stores the body's position and look, and the live star set. Casts and kills are
+ * stamped as events so the viewer can flash them.
+ *
+ * <h2>⚠ It is a RECORDING, not a second implementation</h2>
+ * Nothing here decides anything. Every value written is read straight off the sim, so a viewer can
+ * never disagree with the run it is showing — the class of bug where a debug view and the thing it
+ * draws drift apart, which this project has hit before (a debug panel that was the only consumer
+ * of a measurement, and a map that painted a room that certainly did not exist).
+ */
+public final class ClearSimReplay {
+
+    private final String design;
+    private final String strategy;
+    private final List<int[]> floor = new ArrayList<>();
+    private final List<int[]> walls = new ArrayList<>();
+    private final List<double[]> frames = new ArrayList<>();
+    private final List<double[]> starPositions = new ArrayList<>();
+    private final List<int[]> starAlive = new ArrayList<>();
+    private final List<double[]> events = new ArrayList<>();
+
+    public ClearSimReplay(String design, String strategy) {
+        this.design = design;
+        this.strategy = strategy;
+    }
+
+    /** Called once, before the run: the geometry the viewer draws. */
+    public void captureGeometry(StoredRoomWorld world, EtherWarpRegion region) {
+        Set<Long> standable = new LinkedHashSet<>();
+        for (BlockPos c : region.candidates) {
+            floor.add(new int[]{ c.getX(), c.getY(), c.getZ() });
+            standable.add(key(c.getX(), c.getY(), c.getZ()));
+        }
+        // A decimated shell: solid cells with air above, sampled every other cell so the wall
+        // reads as a surface without shipping the whole volume.
+        int[] b = bounds();
+        for (int x = b[0]; x <= b[3]; x += 2) {
+            for (int z = b[2]; z <= b[5]; z += 2) {
+                for (int y = b[1]; y <= b[4]; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    if (world.getBlockState(p).getCollisionShape(world, p).isEmpty()) continue;
+                    BlockPos up = new BlockPos(x, y + 1, z);
+                    if (!world.getBlockState(up).getCollisionShape(world, up).isEmpty()) continue;
+                    if (standable.contains(key(x, y, z))) continue;
+                    walls.add(new int[]{ x, y, z });
+                }
+            }
+        }
+    }
+
+    /** The bounding box the shell scan covers, derived from the floor cells actually found. */
+    private int[] bounds() {
+        int minX = 0, minY = -40, minZ = 0, maxX = 0, maxY = 4, maxZ = 0;
+        for (int[] f : floor) {
+            minX = Math.min(minX, f[0]); maxX = Math.max(maxX, f[0]);
+            minY = Math.min(minY, f[1]); maxY = Math.max(maxY, f[1]);
+            minZ = Math.min(minZ, f[2]); maxZ = Math.max(maxZ, f[2]);
+        }
+        return new int[]{ minX - 2, minY - 2, minZ - 2, maxX + 2, maxY + 3, maxZ + 2 };
+    }
+
+    /** The star set, captured once — positions do not change (see the static-mob note on the sim). */
+    public void captureStars(List<ClearSim.Star> stars) {
+        for (ClearSim.Star s : stars) {
+            starPositions.add(new double[]{ s.pos().x, s.pos().y, s.pos().z, s.fels() ? 1 : 0 });
+        }
+    }
+
+    /** One frame per simulated tick. */
+    public void frame(int tick, Vec3 feet, float yaw, float pitch, List<ClearSim.Star> live,
+                      List<ClearSim.Star> all) {
+        frames.add(new double[]{ tick, feet.x, feet.y, feet.z, yaw, pitch });
+        int[] alive = new int[all.size()];
+        for (int i = 0; i < all.size(); i++) {
+            for (ClearSim.Star l : live) if (l.id() == all.get(i).id()) { alive[i] = 1; break; }
+        }
+        starAlive.add(alive);
+    }
+
+    /** A cast: where it was fired from, where it ended, and whether the server refused it. */
+    public void cast(int tick, Vec3 from, Vec3 to, boolean refused, int killed) {
+        events.add(new double[]{ tick, from.x, from.y, from.z, to.x, to.y, to.z,
+            refused ? 1 : 0, killed });
+    }
+
+    public String toJson() {
+        StringBuilder sb = new StringBuilder(1 << 16);
+        sb.append("{\"design\":\"").append(design).append("\",\"strategy\":\"")
+          .append(strategy.replace("\"", "'")).append("\",");
+        sb.append("\"floor\":").append(intArr(floor)).append(',');
+        sb.append("\"walls\":").append(intArr(walls)).append(',');
+        sb.append("\"stars\":").append(dblArr(starPositions)).append(',');
+        sb.append("\"frames\":").append(dblArr(frames)).append(',');
+        sb.append("\"alive\":").append(intArr(starAlive)).append(',');
+        sb.append("\"events\":").append(dblArr(events)).append('}');
+        return sb.toString();
+    }
+
+    private static String intArr(List<int[]> v) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < v.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append('[');
+            int[] a = v.get(i);
+            for (int j = 0; j < a.length; j++) { if (j > 0) sb.append(','); sb.append(a[j]); }
+            sb.append(']');
+        }
+        return sb.append(']').toString();
+    }
+
+    private static String dblArr(List<double[]> v) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < v.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append('[');
+            double[] a = v.get(i);
+            for (int j = 0; j < a.length; j++) {
+                if (j > 0) sb.append(',');
+                sb.append(String.format(Locale.ROOT, "%.2f", a[j]));
+            }
+            sb.append(']');
+        }
+        return sb.append(']').toString();
+    }
+
+    private static long key(int x, int y, int z) {
+        return (((long) (x + 512)) << 40) | (((long) (y + 512)) << 20) | (z + 512);
+    }
+}
