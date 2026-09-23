@@ -9,6 +9,7 @@
     "ChatComponentMixin",
     "ConnectionTapMixin",
     "ContainerTooltipMixin",
+    "FogColorMixin",
     "GameRendererInvoker",
     "GameRendererMixin",
     "ItemFoilMixin",
