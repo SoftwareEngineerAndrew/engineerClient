@@ -323,7 +323,13 @@ class RunRecorder(
         emit("""{"k":"eq","t":$tick,$who,"eq":$body}""")
     }
 
-    private fun vanillaId(stack: ItemStack): String = if (stack.isEmpty) "" else BuiltInRegistries.ITEM.getKey(stack.item).toString()
+    /** The game item id, plus "#rrggbb" for dyed items (leather armour) so the viewer can colour it. */
+    private fun vanillaId(stack: ItemStack): String {
+        if (stack.isEmpty) return ""
+        val id = BuiltInRegistries.ITEM.getKey(stack.item).toString()
+        val dye = stack.get(DataComponents.DYED_COLOR) ?: return id
+        return id + "#" + String.format(Locale.ROOT, "%06x", dye.rgb() and 0xFFFFFF)
+    }
 
     private fun texturesOf(props: com.mojang.authlib.properties.PropertyMap): String? = props.get("textures").firstOrNull()?.value()
 
