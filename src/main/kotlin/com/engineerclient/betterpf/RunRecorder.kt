@@ -12,9 +12,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
-import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.block.state.BlockState
-import net.minecraft.world.level.chunk.status.ChunkStatus
 import java.io.BufferedWriter
 import java.io.OutputStreamWriter
 import java.nio.file.Files
@@ -39,7 +37,12 @@ import java.util.zip.GZIPOutputStream
  *
  * Disk writes happen on a single background thread; the client thread only builds strings.
  */
-class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, private val onSaved: (Path) -> Unit = {}) {
+class RunRecorder(
+    private val dir: Path,
+    private val captureGeometry: Boolean,
+    libraryKeys: () -> Set<String>? = { null },
+    private val onSaved: (Path) -> Unit = {},
+) {
 
     private var tick = 0
     private var confirmed = false
@@ -60,9 +63,8 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
     private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String)
     private val tracked = HashMap<Int, Tracked>()
 
-    // Geometry: chunks seen loading, scanned a couple per tick once the run is confirmed.
-    private val pendingChunks = ArrayDeque<ChunkPos>()
-    private val scannedChunks = HashSet<Long>()
+    // Geometry: rooms go to the server's room library once, gaps between rooms per run (GeometryCapture).
+    private val geometry = GeometryCapture(::emit, libraryKeys)
     private val palette = HashMap<BlockState, Int>()
 
     // ------------------------------------------------------------------ inputs
@@ -80,11 +82,7 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
         if (tick % 10 == 0) recordRooms()
         recordPlayers(level)
         recordEntities(level)
-        if (confirmed && captureGeometry) scanSomeChunks(level)
-    }
-
-    fun onChunkLoad(pos: ChunkPos) {
-        if (captureGeometry && scannedChunks.add((pos.x().toLong() shl 32) or (pos.z().toLong() and 0xffffffffL))) pendingChunks.addLast(pos)
+        if (confirmed && captureGeometry) geometry.tick(level, tick)
     }
 
     fun onBlockUpdate(pos: BlockPos, state: BlockState) {
@@ -128,9 +126,10 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
         val self = EngineerClient.mc.player?.name?.string ?: "?"
         val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient")
             .map { it.metadata.version.friendlyString }.orElse("?")
-        writeNow("""{"k":"meta","format":1,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry}""")
+        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry}""")
         backlog.forEach(::writeNow)
         backlog.clear()
+        if (captureGeometry) geometry.start()
         EngineerClient.chat("§8[§6EC§8]§7 Better PF: recording this run")
     }
 
@@ -138,7 +137,6 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
         abandoned = true
         backlog.clear()
         tracked.clear()
-        pendingChunks.clear()
         io.shutdown()
     }
 
@@ -196,19 +194,27 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
         emit("""{"k":"rooms","t":$tick,"r":[$body]}""")
     }
 
+    // Last written entry per player name; only players whose entry changed go in a "p" line.
+    private val lastPlayer = HashMap<String, String>()
+
     private fun recordPlayers(level: ClientLevel) {
-        val players = level.players()
-        if (players.isEmpty()) return
-        val sb = StringBuilder(64 * players.size).append("""{"k":"p","t":$tick,"d":[""")
-        players.forEachIndexed { i, p ->
-            if (i > 0) sb.append(',')
+        val sb = StringBuilder()
+        var changed = 0
+        val seen = HashSet<String>()
+        for (p in level.players()) {
+            val name = p.name.string
+            seen += name
             val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { BuiltInRegistries.ITEM.getKey(it.item).toString() } }
-            sb.append('[').append(str(p.name.string)).append(',')
-                .append(n(p.x)).append(',').append(n(p.y)).append(',').append(n(p.z)).append(',')
-                .append(a(p.yRot)).append(',').append(a(p.xRot)).append(',').append(str(held)).append(',')
-                .append(p.uuid.version()).append(']')
+            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()}]"
+            if (lastPlayer.put(name, entry) == entry) continue
+            if (changed++ > 0) sb.append(',')
+            sb.append(entry)
         }
-        emit(sb.append("]}").toString())
+        if (changed > 0) emit("""{"k":"p","t":$tick,"d":[$sb]}""")
+        for (name in lastPlayer.keys.filter { it !in seen }) {
+            lastPlayer.remove(name)
+            emit("""{"k":"pgone","t":$tick,"name":${str(name)}}""")
+        }
     }
 
     private fun recordEntities(level: ClientLevel) {
@@ -245,43 +251,7 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
         }
     }
 
-    // ------------------------------------------------------------------ geometry
-
-    /**
-     * Writes a chunk's "shell": solid blocks with at least one air neighbour. That is the whole
-     * visible/collidable surface of a room without the solid interior, which is most of the volume.
-     * Doors, levers and anything else that changes later arrives as "block" lines on top of this.
-     */
-    private fun scanSomeChunks(level: ClientLevel) {
-        repeat(CHUNKS_PER_TICK) {
-            val pos = pendingChunks.removeFirstOrNull() ?: return
-            val chunk = level.chunkSource.getChunk(pos.x(), pos.z(), ChunkStatus.FULL, false) ?: return@repeat
-            val flat = StringBuilder()
-            var count = 0
-            val sections = chunk.sections
-            val cursor = BlockPos.MutableBlockPos()
-            for ((index, section) in sections.withIndex()) {
-                if (section.hasOnlyAir()) continue
-                val baseY = chunk.getSectionYFromSectionIndex(index) shl 4
-                for (ly in 0 until 16) for (lz in 0 until 16) for (lx in 0 until 16) {
-                    val state = section.getBlockState(lx, ly, lz)
-                    if (state.isAir) continue
-                    val x = pos.minBlockX + lx
-                    val y = baseY + ly
-                    val z = pos.minBlockZ + lz
-                    if (!exposed(level, cursor, x, y, z)) continue
-                    if (count++ > 0) flat.append(',')
-                    flat.append(x).append(',').append(y).append(',').append(z).append(',').append(paletteIndex(state))
-                }
-            }
-            if (count > 0) emit("""{"k":"chunk","t":$tick,"cx":${pos.x()},"cz":${pos.z()},"b":[$flat]}""")
-        }
-    }
-
-    private fun exposed(level: ClientLevel, c: BlockPos.MutableBlockPos, x: Int, y: Int, z: Int): Boolean =
-        level.getBlockState(c.set(x + 1, y, z)).isAir || level.getBlockState(c.set(x - 1, y, z)).isAir ||
-            level.getBlockState(c.set(x, y + 1, z)).isAir || level.getBlockState(c.set(x, y - 1, z)).isAir ||
-            level.getBlockState(c.set(x, y, z + 1)).isAir || level.getBlockState(c.set(x, y, z - 1)).isAir
+    // ------------------------------------------------------------------ block palette (for "block" change lines)
 
     private fun paletteIndex(state: BlockState): Int = palette.getOrPut(state) {
         val i = palette.size
@@ -310,7 +280,6 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
-        const val CHUNKS_PER_TICK = 2
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
     }
 }
