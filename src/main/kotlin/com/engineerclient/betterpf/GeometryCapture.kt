@@ -12,9 +12,10 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
 /**
  * Captures dungeon geometry once instead of streaming it: every block of each ROOM goes to the
  * server's room library (keyed "Name|ROTATION", identical in every run). The 1-block gaps between
- * rooms aren't captured at all - the viewer leaves them as air. The boss arena goes to the library
- * too, one 16x16 chunk column at a time (keyed "Boss|FLOOR|cx,cz"), as its chunks load. After that,
- * the run only records changes (block updates).
+ * rooms aren't captured - the viewer leaves them as air - except the door boxes, which differ per run
+ * (wither/blood doors, openings walled up where no room connects) and go in the run as "door"
+ * volumes. The boss arena goes to the library too, one 16x16 chunk column at a time (keyed
+ * "Boss|FLOOR|cx,cz"), as its chunks load. After that, the run only records changes (block updates).
  *
  * Geometry comes out as volume lines: palette + run-length encoded block indices in y, z, x order
  * (x fastest). Palette index 0 is always "" = not part of this volume (outside an L-shaped room's
@@ -29,8 +30,26 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
     private val queuedRooms = HashSet<String>()
     private var ticksWaitingForLibrary = 0
 
+    // Every place a door can be: the middle of each tile edge inside the grid, as Odin's door box
+    // (3 wide across the gap, 3 along it, y 69-72). Written whole, air included.
+    private val doorSpots = ArrayList<IntArray>().apply {
+        for (i in 1..5) for (j in 0..5) {
+            val gap = GRID_ORIGIN - 1 + 32 * i; val mid = GRID_ORIGIN + 32 * j + 15
+            add(intArrayOf(gap - 1, mid - 1)); add(intArrayOf(mid - 1, gap - 1))
+        }
+    }
+    private val doorsDone = HashSet<Int>()
+
+    private fun queueDoors(level: ClientLevel) {
+        for ((i, spot) in doorSpots.withIndex()) {
+            if (i in doorsDone || !loaded(level, spot[0], spot[1], 3, 3)) continue
+            doorsDone += i
+            jobs.addFirst(VolumeJob("door", null, spot[0], DOOR_Y, spot[1], 3, DOOR_H, 3, null))
+        }
+    }
+
     fun tick(level: ClientLevel, t: Int) {
-        if (t % 10 == 0) { queueRooms(level); queueBoss(level) }
+        if (t % 10 == 0) { queueDoors(level); queueRooms(level); queueBoss(level) }
         var budget = BLOCKS_PER_TICK
         while (budget > 0) {
             val job = active ?: jobs.removeFirstOrNull() ?: return
@@ -191,6 +210,8 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
         /** World x/z of tile 0's first block; tile i covers [ORIGIN + 32i, ORIGIN + 32i + 30], gaps between. */
         const val GRID_ORIGIN = -200
         const val BLOCKS_PER_TICK = 24_000
+        const val DOOR_Y = 69
+        const val DOOR_H = 4
         /** How far past the boss limit to look, in chunks (F7's arena is about 9x10). */
         const val BOSS_CHUNKS = 13
 

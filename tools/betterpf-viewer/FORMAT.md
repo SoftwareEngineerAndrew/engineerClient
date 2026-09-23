@@ -25,8 +25,10 @@ happened, so a reader can play the file start to finish.
 | `time` | `t, ms` | wall-clock sync every 20 ticks |
 | `floor` | `t, floor` | floor once known (e.g. `F7`, `M7`) |
 | `party` | `t, m: [[name, class], ...]` | party and classes, rewritten whenever they change |
-| `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) |
+| `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion, vanillaItem], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) (`heldItemId` is the Skyblock id when there is one; `vanillaItem` is always the game item, e.g. `minecraft:iron_sword`) |
 | `pgone` | `t, name` | player no longer in the world |
+| `skin` | `t, name, tex` | a player's skin, once: their profile's `textures` property (base64 JSON with the skin URL and model) |
+| `eq` | `t, name` or `t, id`, `eq: [mainHand, head, chest, legs, feet], headTex?` | a player's or mob's held item and armour changed (vanilla item ids); `headTex` is the skin of a worn player head |
 | `spawn` | `t, id, type, name, x, y, z, yaw` | non-player entity appeared (`type` e.g. `minecraft:zombie`) |
 | `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
 | `name` | `t, id, name` | an entity's custom name changed (Hypixel nametags/health bars) |
@@ -34,6 +36,7 @@ happened, so a reader can play the file start to finish.
 | `pal` | `i, s` | block-state palette entry, e.g. `minecraft:oak_stairs[facing=north,...]` |
 | `lib` | `t, key, x0, y0, z0, w, h, d, pal, rle` | every block of a room the library didn't have yet; `key` is `Name\|ROTATION`, or `Boss\|FLOOR\|cx,cz` for one 16x16 chunk column of the boss arena (a volume, see below) |
 | `vol` | `t, x0, y0, z0, w, h, d, pal, rle` | (no longer written) the 1-block gaps between rooms; the viewer ignores it and leaves gaps as air |
+| `door` | `t, x0, y0, z0, w, h, d, pal, rle` | a 3x4x3 box where a door can be (middle of a tile edge, y 69-72), air included: the door, the opening, or the wall filling it |
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
 | `chat` | `t, m` | chat line, formatting stripped |
 | `room` | `t, name` | you entered a room |
