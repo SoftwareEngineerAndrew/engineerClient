@@ -35,6 +35,7 @@ happened, so a reader can play the file start to finish.
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
 | `chat` | `t, m` | chat line, formatting stripped |
 | `room` | `t, name` | you entered a room |
+| `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...]], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes |
 | `end` | `t, ms` | last line |
 
 A `pal` line always comes before the first line that uses its index.

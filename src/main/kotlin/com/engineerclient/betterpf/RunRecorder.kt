@@ -1,6 +1,7 @@
 package com.engineerclient.betterpf
 
 import com.engineerclient.EngineerClient
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.skyblock.Island
 import com.odtheking.odin.utils.skyblock.LocationUtils
@@ -76,6 +77,7 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
         }
         if (tick % 20 == 0) emit("""{"k":"time","t":$tick,"ms":${System.currentTimeMillis()}}""")
         recordFloorAndParty()
+        if (tick % 10 == 0) recordRooms()
         recordPlayers(level)
         recordEntities(level)
         if (confirmed && captureGeometry) scanSomeChunks(level)
@@ -167,6 +169,31 @@ class RunRecorder(private val dir: Path, private val captureGeometry: Boolean, p
             partyKey = key
             emit("""{"k":"party","t":$tick,"m":[${party.joinToString(",") { "[${str(it.name)},${str(it.clazz.name)}]" }}]}""")
         }
+    }
+
+    private var roomsKey = ""
+
+    /**
+     * Odin's own room classification: every room it knows (from the dungeon map, and named once its
+     * core has been seen), with type, shape, rotation and checkmark. Rewritten whenever any of that
+     * changes, which is also how cleared/failed state shows up over time.
+     */
+    private fun recordRooms() {
+        val rooms = DungeonScan.rooms
+        if (rooms.isEmpty()) return
+        val sb = StringBuilder()
+        rooms.forEachIndexed { i, r ->
+            if (i > 0) sb.append(',')
+            sb.append('[').append(str(r.name ?: "")).append(',').append(str(r.type.name)).append(',')
+                .append(str(r.shape.name)).append(',').append(str(r.rotation?.name ?: "")).append(',')
+                .append(str(r.checkmark.name)).append(",[")
+            r.tiles.forEachIndexed { j, t -> if (j > 0) sb.append(','); sb.append('[').append(t.x).append(',').append(t.z).append(']') }
+            sb.append("]]")
+        }
+        val body = sb.toString()
+        if (body == roomsKey) return
+        roomsKey = body
+        emit("""{"k":"rooms","t":$tick,"r":[$body]}""")
     }
 
     private fun recordPlayers(level: ClientLevel) {
