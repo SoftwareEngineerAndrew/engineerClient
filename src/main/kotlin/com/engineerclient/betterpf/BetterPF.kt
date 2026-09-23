@@ -11,6 +11,8 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -75,6 +77,13 @@ object BetterPF : Module(
         on<BlockUpdateEvent> { EngineerClient.safely("betterpf block") { session?.onBlockUpdate(pos, updated) } }
         on<MessageEvent.Chat> { EngineerClient.safely("betterpf chat") { session?.onChat(message) } }
         on<RoomEnterEvent> { EngineerClient.safely("betterpf room") { session?.onRoomEnter(room?.name) } }
+
+        // Container screens you open (terminal GUIs among them), for exact terminal times.
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (screen !is AbstractContainerScreen<*>) return@register
+            EngineerClient.safely("betterpf gui") { session?.onGuiOpen(screen.title.string) }
+            ScreenEvents.remove(screen).register { EngineerClient.safely("betterpf gui close") { session?.onGuiClose() } }
+        }
     }
 
     private fun fetchLibraryKeys() {

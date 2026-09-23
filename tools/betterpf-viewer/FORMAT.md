@@ -29,6 +29,9 @@ happened, so a reader can play the file start to finish.
 | `pgone` | `t, name` | player no longer in the world |
 | `skin` | `t, name, tex` | a player's skin, once: their profile's `textures` property (base64 JSON with the skin URL and model) |
 | `eq` | `t, name` or `t, id`, `eq: [mainHand, head, chest, legs, feet], headTex?` | a player's or mob's held item and armour changed (vanilla item ids); `headTex` is the skin of a worn player head |
+| `sw` | `t, d: [name, ...]` | players who started an arm swing this tick (left click, or a right click that hit something - opening a terminal swings) |
+| `mp` | `t, d: [[name, x, z, yaw], ...]` | teammates the game isn't rendering: their position from the dungeon map (clear only, about 1.6 blocks per map pixel), written when it changes |
+| `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
 | `spawn` | `t, id, type, name, x, y, z, yaw` | non-player entity appeared (`type` e.g. `minecraft:zombie`) |
 | `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
 | `name` | `t, id, name` | an entity's custom name changed (Hypixel nametags/health bars) |
@@ -40,7 +43,7 @@ happened, so a reader can play the file start to finish.
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
 | `chat` | `t, m` | chat line, formatting stripped |
 | `room` | `t, name` | you entered a room |
-| `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...]], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes |
+| `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...], secretsFound, secretsTotal], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes |
 | `end` | `t, ms` | last line |
 
 A `pal` line always comes before the first line that uses its index.
