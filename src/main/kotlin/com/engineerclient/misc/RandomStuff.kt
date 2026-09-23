@@ -17,6 +17,7 @@ import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
 import com.odtheking.odin.utils.Color.Companion.multiplyAlpha
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.containsOneOf
+import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
@@ -43,10 +44,35 @@ object RandomStuff : Module(
     private val junkHighlight by BooleanSetting("Junk Highlight", false, desc = "Faint red backdrop on inventory slots holding known-useless dungeon drops.")
 
     /**
-     * Odin has no "junk drop" list of its own (checked - nothing under features/impl/dungeon or
-     * events/EventDispatcher's dungeonItemDrops covers this; that list is actually the opposite -
-     * things worth grabbing, and Revive Stone is on it there). This list is Cameron's own call on
-     * what's junk for him, not an objective classification - add/remove freely.
+     * SkyBlock item IDs, matched via [itemId] rather than display name - immune to color codes,
+     * rarity prefixes, and localization. Sourced from Cameron's own AutoCroesus worthless.txt
+     * (github.com/undonecoffee/allModules) - dungeon discs, the M7 boss fish, and enchant book
+     * duplicates past the level that actually matters (e.g. Feather Falling 6-10, once you've
+     * got the useful lower levels or a higher one already).
+     */
+    private val junkItemIds = hashSetOf(
+        "DUNGEON_DISC_1", "DUNGEON_DISC_2", "DUNGEON_DISC_3", "DUNGEON_DISC_4", "DUNGEON_DISC_5",
+        "MAXOR_THE_FISH", "STORM_THE_FISH", "GOLDOR_THE_FISH",
+        "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_1", "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_2",
+        "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_3", "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_4",
+        "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_5",
+        "ENCHANTMENT_ULTIMATE_COMBO_1", "ENCHANTMENT_ULTIMATE_COMBO_2", "ENCHANTMENT_ULTIMATE_COMBO_3",
+        "ENCHANTMENT_ULTIMATE_COMBO_4", "ENCHANTMENT_ULTIMATE_COMBO_5",
+        "ENCHANTMENT_ULTIMATE_BANK_1", "ENCHANTMENT_ULTIMATE_BANK_2", "ENCHANTMENT_ULTIMATE_BANK_3",
+        "ENCHANTMENT_ULTIMATE_BANK_4", "ENCHANTMENT_ULTIMATE_BANK_5",
+        "ENCHANTMENT_ULTIMATE_JERRY_1", "ENCHANTMENT_ULTIMATE_JERRY_2", "ENCHANTMENT_ULTIMATE_JERRY_3",
+        "ENCHANTMENT_ULTIMATE_JERRY_4", "ENCHANTMENT_ULTIMATE_JERRY_5",
+        "ENCHANTMENT_FEATHER_FALLING_6", "ENCHANTMENT_FEATHER_FALLING_7", "ENCHANTMENT_FEATHER_FALLING_8",
+        "ENCHANTMENT_FEATHER_FALLING_9", "ENCHANTMENT_FEATHER_FALLING_10",
+        "ENCHANTMENT_INFINITE_QUIVER_6", "ENCHANTMENT_INFINITE_QUIVER_7", "ENCHANTMENT_INFINITE_QUIVER_8",
+        "ENCHANTMENT_INFINITE_QUIVER_9", "ENCHANTMENT_INFINITE_QUIVER_10",
+    )
+
+    /**
+     * A handful of extras called out by name in chat rather than by ID - matched against
+     * hoverName instead, since that's all that's known about them. This list is Cameron's own
+     * call on what's junk for him, not an objective classification (Revive Stone, for instance,
+     * is on Odin's own "worth grabbing" dungeonItemDrops list) - add/remove freely.
      */
     private val junkNames = hashSetOf(
         "Bone", "Rotten Flesh", "String", "Spider Eye", "Gunpowder", "Arrow",
@@ -89,10 +115,12 @@ object RandomStuff : Module(
         on<GuiEvent.RenderSlot> {
             if (!junkHighlight) return@on
             val item = slot.item
+            if (item.isEmpty) return@on
             // hoverName.string keeps its color/formatting codes (e.g. "§fRevive Stone"), so an
             // exact match against plain names never hit - contains catches it regardless of rarity
             // color, same fix EventDispatcher's own item-name matching already relies on.
-            if (item.isEmpty || !item.hoverName.string.containsOneOf(junkNames)) return@on
+            val isJunk = item.itemId in junkItemIds || item.hoverName.string.containsOneOf(junkNames)
+            if (!isJunk) return@on
             guiGraphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, junkColor.rgba)
         }
     }
