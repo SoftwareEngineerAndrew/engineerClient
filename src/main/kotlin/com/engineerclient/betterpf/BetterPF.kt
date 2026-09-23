@@ -5,13 +5,14 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
@@ -49,6 +50,7 @@ object BetterPF : Module(
 
     /** Rooms the server's library already has ("Name|ROTATION"); null until the fetch lands. */
     @Volatile private var libraryKeys: Set<String>? = null
+    private val CONTROL_CODES = Regex("\u00a7.")
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
     private var session: RunRecorder? = null
@@ -75,7 +77,13 @@ object BetterPF : Module(
         }
 
         on<BlockUpdateEvent> { EngineerClient.safely("betterpf block") { session?.onBlockUpdate(pos, updated) } }
-        on<MessageEvent.Chat> { EngineerClient.safely("betterpf chat") { session?.onChat(message) } }
+        // Chat straight off the network, before any mod can hide it (chat cleaners hide the terminal /
+        // device / gate messages the report needs). Handed to the client thread, where ticks happen.
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (overlay) return@onReceive
+            val text = content.string.replace(CONTROL_CODES, "")
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text) } }
+        }
         on<RoomEnterEvent> { EngineerClient.safely("betterpf room") { session?.onRoomEnter(room?.name) } }
 
         // Container screens you open (terminal GUIs among them), for exact terminal times.
