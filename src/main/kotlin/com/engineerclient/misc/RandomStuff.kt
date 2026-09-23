@@ -5,7 +5,6 @@ import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.events.GuiEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RenderBossBarEvent
 import com.odtheking.odin.events.RenderItemNameEvent
@@ -15,10 +14,6 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.render.RenderOptimizer
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
-import com.odtheking.odin.utils.Color.Companion.multiplyAlpha
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.containsOneOf
-import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -44,7 +39,6 @@ object RandomStuff : Module(
     private val hideBossBarOutsideBoss by BooleanSetting("Hide Boss Bar Outside Boss", false, desc = "Hides the boss health bar unless you're actually in a dungeon boss fight.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "Hides every armor stand in the world (except terminals, active or inactive) and removes fishing bobbers' extended line.")
-    private val junkHighlight by BooleanSetting("Junk Highlight", false, desc = "Faint red backdrop on inventory slots holding known-useless dungeon drops.")
 
     /**
      * Step 1 of the scoreboard line hider Cameron asked for (time/season/keys/%cleared): Odin has
@@ -70,63 +64,6 @@ object RandomStuff : Module(
             modMessage("§7$i: §f$prefix§8|§f$suffix")
         }
     }
-
-    /**
-     * SkyBlock item IDs, matched via [itemId] rather than display name - immune to color codes,
-     * rarity prefixes, and localization. Sourced from Cameron's own AutoCroesus worthless.txt
-     * (github.com/undonecoffee/allModules) - dungeon discs, the M7 boss fish, and enchant book
-     * duplicates past the level that actually matters (e.g. Feather Falling 6-10, once you've
-     * got the useful lower levels or a higher one already).
-     */
-    private val junkItemIds = hashSetOf(
-        "DUNGEON_DISC_1", "DUNGEON_DISC_2", "DUNGEON_DISC_3", "DUNGEON_DISC_4", "DUNGEON_DISC_5",
-        "MAXOR_THE_FISH", "STORM_THE_FISH", "GOLDOR_THE_FISH",
-        "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_1", "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_2",
-        "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_3", "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_4",
-        "ENCHANTMENT_ULTIMATE_NO_PAIN_NO_GAIN_5",
-        "ENCHANTMENT_ULTIMATE_COMBO_1", "ENCHANTMENT_ULTIMATE_COMBO_2", "ENCHANTMENT_ULTIMATE_COMBO_3",
-        "ENCHANTMENT_ULTIMATE_COMBO_4", "ENCHANTMENT_ULTIMATE_COMBO_5",
-        "ENCHANTMENT_ULTIMATE_BANK_1", "ENCHANTMENT_ULTIMATE_BANK_2", "ENCHANTMENT_ULTIMATE_BANK_3",
-        "ENCHANTMENT_ULTIMATE_BANK_4", "ENCHANTMENT_ULTIMATE_BANK_5",
-        "ENCHANTMENT_ULTIMATE_JERRY_1", "ENCHANTMENT_ULTIMATE_JERRY_2", "ENCHANTMENT_ULTIMATE_JERRY_3",
-        "ENCHANTMENT_ULTIMATE_JERRY_4", "ENCHANTMENT_ULTIMATE_JERRY_5",
-        "ENCHANTMENT_FEATHER_FALLING_6", "ENCHANTMENT_FEATHER_FALLING_7", "ENCHANTMENT_FEATHER_FALLING_8",
-        "ENCHANTMENT_FEATHER_FALLING_9", "ENCHANTMENT_FEATHER_FALLING_10",
-        "ENCHANTMENT_INFINITE_QUIVER_6", "ENCHANTMENT_INFINITE_QUIVER_7", "ENCHANTMENT_INFINITE_QUIVER_8",
-        "ENCHANTMENT_INFINITE_QUIVER_9", "ENCHANTMENT_INFINITE_QUIVER_10",
-    )
-
-    /**
-     * A handful of extras called out by name in chat rather than by ID - matched against
-     * hoverName instead, since that's all that's known about them. This list is Cameron's own
-     * call on what's junk for him, not an objective classification (Revive Stone, for instance,
-     * is on Odin's own "worth grabbing" dungeonItemDrops list) - add/remove freely.
-     */
-    private val junkNames = hashSetOf(
-        "Bone", "Rotten Flesh", "String", "Spider Eye", "Gunpowder", "Arrow",
-        "Ink Sac", "Spider's Eye", "Wither Skeleton Skull", "Egg", "Revive Stone",
-        // Dungeon trash-mob armor/weapon drops, from the same allModules AutoSell.js source
-        // (CoffeeClient/features/AutoSell.js) - the stuff that clutters a run inventory, as
-        // opposed to worthless.txt above (end-of-run Croesus chest evaluation, different context).
-        // Left out on purpose: Training Weights and Defuse Kit are also in that source but conflict
-        // with Odin's own "worth grabbing" dungeonItemDrops list - not overriding that silently.
-        // Also left out: Rune I/II/III (too broad, would catch real valuable runes too), Ender
-        // Pearl and Enchanted Rotten Flesh/Bone/Ice (real bazaar value), and Conjuring (may be the
-        // real Conjuring enchant book, not the mob drop - too ambiguous to risk).
-        "Bouncy Boots", "Bouncy Leggings", "Bouncy Chestplate", "Bouncy Helmet",
-        "Super Heavy Boots", "Super Heavy Leggings", "Super Heavy Chestplate", "Super Heavy Helmet",
-        "Zombie Soldier Boots", "Zombie Soldier Leggings", "Zombie Soldier Chestplate", "Zombie Soldier Helmet",
-        "Zombie Knight Boots", "Zombie Knight Leggings", "Zombie Knight Chestplate", "Zombie Knight Helmet",
-        "Zombie Commander Boots", "Zombie Commander Leggings", "Zombie Commander Chestplate", "Zombie Commander Helmet",
-        "Skeletor Boots", "Skeletor Leggings", "Skeletor Chestplate", "Skeletor Helmet",
-        "Skeleton Soldier Boots", "Skeleton Soldier Leggings", "Skeleton Soldier Chestplate", "Skeleton Soldier Helmet",
-        "Skeleton Master Boots", "Skeleton Master Leggings", "Skeleton Master Chestplate", "Skeleton Master Helmet",
-        "Sniper Boots", "Sniper Leggings", "Sniper Chestplate", "Sniper Helmet",
-        "Zombie Knight Sword", "Dreadlord Sword", "Earth Shard", "Zombie Commander Whip",
-        "Zombie Soldier Cutlass", "Premium Flesh", "The Study", "Soulstealer Bow",
-        "Silent Death", "Stone Button",
-    )
-    private val junkColor = Colors.MINECRAFT_RED.multiplyAlpha(0.35f)
 
     /**
      * Whether [key] should finish the open sign edit screen. Read by SignEnterMixin.
@@ -158,18 +95,6 @@ object RandomStuff : Module(
 
         on<MessageEvent.Overlay> {
             if (hideActionBar) cancel()
-        }
-
-        on<GuiEvent.RenderSlot> {
-            if (!junkHighlight) return@on
-            val item = slot.item
-            if (item.isEmpty) return@on
-            // hoverName.string keeps its color/formatting codes (e.g. "§fRevive Stone"), so an
-            // exact match against plain names never hit - contains catches it regardless of rarity
-            // color, same fix EventDispatcher's own item-name matching already relies on.
-            val isJunk = item.itemId in junkItemIds || item.hoverName.string.containsOneOf(junkNames)
-            if (!isJunk) return@on
-            guiGraphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, junkColor.rgba)
         }
     }
 }
