@@ -1,17 +1,20 @@
 package com.engineerclient.betterpf
 
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.level.chunk.status.ChunkStatus
 
 /**
  * Captures dungeon geometry once instead of streaming it: every block of each ROOM goes to the
  * server's room library (keyed "Name|ROTATION", identical in every run). The 1-block gaps between
- * rooms aren't captured at all - the viewer leaves them as air. After that, the run only records
- * changes (block updates).
+ * rooms aren't captured at all - the viewer leaves them as air. The boss arena goes to the library
+ * too, one 16x16 chunk column at a time (keyed "Boss|FLOOR|cx,cz"), as its chunks load. After that,
+ * the run only records changes (block updates).
  *
  * Geometry comes out as volume lines: palette + run-length encoded block indices in y, z, x order
  * (x fastest). Palette index 0 is always "" = not part of this volume (outside an L-shaped room's
@@ -27,7 +30,7 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
     private var ticksWaitingForLibrary = 0
 
     fun tick(level: ClientLevel, t: Int) {
-        if (t % 10 == 0) queueRooms(level)
+        if (t % 10 == 0) { queueRooms(level); queueBoss(level) }
         var budget = BLOCKS_PER_TICK
         while (budget > 0) {
             val job = active ?: jobs.removeFirstOrNull() ?: return
@@ -48,7 +51,8 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
         for (room in DungeonScan.rooms) {
             val name = room.data?.name ?: continue
             val rotation = room.rotation ?: continue
-            if (room.tiles.size != room.shape.tileAmount) continue
+            // room.shape stays OneByOne until Odin infers the layout; data.shape is the real one.
+            if (room.tiles.size != (room.data?.shape?.tileAmount ?: continue)) continue
             val key = "$name|${rotation.name}"
             if (key in queuedRooms || (have != null && key in have)) continue
             val tiles = room.tiles.map { it.x to it.z }.toSet()
@@ -60,6 +64,41 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
             queuedRooms += key
             val (y0, h) = yRange(level)
             jobs.addLast(VolumeJob("lib", key, x0, y0, z0, w, h, d) { lx, lz -> inRoom(tiles, x0 + lx, z0 + lz) })
+        }
+    }
+
+    /**
+     * In the boss: queues every loaded chunk column of the arena the library doesn't have. The arena
+     * is where Odin says the boss starts (x and z past a per-floor limit), and its far edge is
+     * wherever the chunks stop having blocks: air-only chunks and air-only 16-high sections are
+     * skipped without scanning, so the void around the arena costs nothing.
+     */
+    private fun queueBoss(level: ClientLevel) {
+        if (!DungeonUtils.inBoss) return
+        val have = libraryKeys()
+        val floor = DungeonUtils.floor ?: return
+        // Odin's inBoss test: x > limitX && z > limitZ.
+        val (limitX, limitZ) = when (floor.floorNumber) {
+            1 -> -71 to -39
+            in 2..4 -> -39 to -39
+            in 5..6 -> -39 to -7
+            7 -> -7 to -7
+            else -> return
+        }
+        // First chunk entirely past the limit, so no column overlaps the room grid.
+        val cx0 = Math.floorDiv(limitX + 16, 16); val cz0 = Math.floorDiv(limitZ + 16, 16)
+        for (cx in cx0..cx0 + BOSS_CHUNKS) for (cz in cz0..cz0 + BOSS_CHUNKS) {
+            val key = "Boss|${floor.name}|$cx,$cz"
+            if (key in queuedRooms || (have != null && key in have)) continue
+            val chunk = level.chunkSource.getChunk(cx, cz, ChunkStatus.FULL, false) as? LevelChunk ?: continue
+            queuedRooms += key
+            val sections = chunk.sections
+            val filled = sections.indices.filter { !sections[it].hasOnlyAir() }
+            if (filled.isEmpty()) continue
+            val y0 = maxOf(0, level.getSectionYFromSectionIndex(filled.first()) * 16)
+            val y1 = minOf(256, (level.getSectionYFromSectionIndex(filled.last()) + 1) * 16)
+            if (y1 <= y0) continue
+            jobs.addLast(VolumeJob("lib", key, cx * 16, y0, cz * 16, 16, y1 - y0, 16, null))
         }
     }
 
@@ -152,6 +191,8 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
         /** World x/z of tile 0's first block; tile i covers [ORIGIN + 32i, ORIGIN + 32i + 30], gaps between. */
         const val GRID_ORIGIN = -200
         const val BLOCKS_PER_TICK = 24_000
+        /** How far past the boss limit to look, in chunks (F7's arena is about 9x10). */
+        const val BOSS_CHUNKS = 13
 
         fun jsonString(s: String): String {
             val sb = StringBuilder(s.length + 2).append('"')
