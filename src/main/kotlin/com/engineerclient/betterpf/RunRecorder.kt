@@ -14,6 +14,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.item.FallingBlockEntity
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.state.BlockState
@@ -282,7 +283,9 @@ class RunRecorder(
             val t = tracked[id]
             if (t == null) {
                 tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, name)
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)},"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}}""")
+                // Falling blocks carry which block they are, so the viewer can draw it.
+                val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)},"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}$block}""")
                 continue
             }
             if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")

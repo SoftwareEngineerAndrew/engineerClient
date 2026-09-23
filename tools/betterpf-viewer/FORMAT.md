@@ -32,7 +32,7 @@ happened, so a reader can play the file start to finish.
 | `sw` | `t, d: [name, ...]` | players who started an arm swing this tick (left click, or a right click that hit something - opening a terminal swings) |
 | `mp` | `t, d: [[name, x, z, yaw], ...]` | teammates the game isn't rendering: their position from the dungeon map (clear only, about 1.6 blocks per map pixel), written when it changes |
 | `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
-| `spawn` | `t, id, type, name, x, y, z, yaw` | non-player entity appeared (`type` e.g. `minecraft:zombie`) |
+| `spawn` | `t, id, type, name, x, y, z, yaw, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
 | `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
 | `name` | `t, id, name` | an entity's custom name changed (Hypixel nametags/health bars) |
 | `gone` | `t, id` | entity despawned |
