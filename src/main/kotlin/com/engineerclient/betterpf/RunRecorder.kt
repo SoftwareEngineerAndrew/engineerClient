@@ -85,6 +85,8 @@ class RunRecorder(
         recordFloorAndParty()
         if (tick % 10 == 0) recordRooms()
         recordPlayers(level)
+        recordSwings(level)
+        if (tick % 5 == 0) recordMapPlayers()
         recordEntities(level)
         if (confirmed && captureGeometry) geometry.tick(level, tick)
     }
@@ -96,6 +98,10 @@ class RunRecorder(
     fun onChat(message: String) = emit("""{"k":"chat","t":$tick,"m":${str(message)}}""")
 
     fun onRoomEnter(name: String?) = emit("""{"k":"room","t":$tick,"name":${str(name ?: "Unknown")}}""")
+
+    /** Your own container screens (terminals are GUIs with fixed titles): exact open/close times. */
+    fun onGuiOpen(title: String) = emit("""{"k":"gui","t":$tick,"title":${str(title)}}""")
+    fun onGuiClose() = emit("""{"k":"guiclose","t":$tick}""")
 
     /** Ends the session: closes the file (on the writer thread) and gives it its final name. */
     fun finish() {
@@ -189,7 +195,9 @@ class RunRecorder(
                 .append(str(r.shape.name)).append(',').append(str(r.rotation?.name ?: "")).append(',')
                 .append(str(r.checkmark.name)).append(",[")
             r.tiles.forEachIndexed { j, t -> if (j > 0) sb.append(','); sb.append('[').append(t.x).append(',').append(t.z).append(']') }
-            sb.append("]]")
+            // Secrets found / total. "Found" comes from the action bar (the room you're in) and other
+            // Odin users, so it's a lower bound for rooms nobody running Odin is in.
+            sb.append("],").append(r.foundSecrets ?: -1).append(',').append(r.data?.maxSecrets ?: -1).append(']')
         }
         val body = sb.toString()
         if (body == roomsKey) return
@@ -221,6 +229,45 @@ class RunRecorder(
             lastPlayer.remove(name)
             emit("""{"k":"pgone","t":$tick,"name":${str(name)}}""")
         }
+    }
+
+    // Arm swings: a left click, or a right click that hit something (opening a terminal swings too).
+    // Other players' swings arrive as animation packets; a new one shows as swinging with swingTime
+    // at -1 or 0 (depending on whether the entity has ticked since), so -1 then 0 is one swing.
+    private val lastSwingTime = HashMap<String, Int>()
+
+    private fun recordSwings(level: ClientLevel) {
+        val sb = StringBuilder()
+        var count = 0
+        for (p in level.players()) {
+            val name = p.name.string
+            val prev = lastSwingTime.put(name, if (p.swinging) p.swingTime else 99) ?: 99
+            if (!p.swinging || p.swingTime > 0 || prev == -1) continue
+            if (count++ > 0) sb.append(',')
+            sb.append(str(name))
+        }
+        if (count > 0) emit("""{"k":"sw","t":$tick,"d":[$sb]}""")
+    }
+
+    // Teammates the game isn't rendering: where the dungeon map puts them (Odin decodes the map's
+    // player markers), turned into world coordinates the way Odin's map draws them. Clear only -
+    // the map shows the room grid, not the boss.
+    private val lastMapPos = HashMap<String, String>()
+
+    private fun recordMapPlayers() {
+        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) return
+        val sb = StringBuilder()
+        var count = 0
+        for (p in DungeonUtils.dungeonTeammatesNoSelf) {
+            if (p.isDead || p.entity != null) { lastMapPos.remove(p.name); continue }
+            val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
+            val z = ((p.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
+            val entry = "[${str(p.name)},${n(x)},${n(z)},${a(p.yaw)}]"
+            if (lastMapPos.put(p.name, entry) == entry) continue
+            if (count++ > 0) sb.append(',')
+            sb.append(entry)
+        }
+        if (count > 0) emit("""{"k":"mp","t":$tick,"d":[$sb]}""")
     }
 
     private fun recordEntities(level: ClientLevel) {
