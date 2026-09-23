@@ -60,17 +60,22 @@ object PovPreviews : Module(
     val recullTerrain by BooleanSetting("Re-cull Terrain", true, desc = "Re-runs Sodium's terrain cull from the teammate's eyes. Off is cheaper but shows only the chunks already visible to you.")
 
     /**
-     * With four previews tiling the screen, your own view is behind all of them. Skipping it is a
-     * whole world render saved per frame, and costs nothing to resume: the next frame simply does
-     * not take that branch.
-     */
-    /**
      * Below 1, the previews blend over your own view instead of replacing it - and your own view
      * keeps rendering underneath regardless of [skipOwnView], since there's something to see
      * through to now.
      */
     val opacity by NumberSetting("Opacity", 1f, 0.1f, 1f, 0.05f, desc = "How opaque the previews are. Below 1 you can see your own game through them (your own view keeps rendering, so this costs a world render).", unit = "x")
 
+    // Separate from [opacity]: these apply to Odin's own leap boxes (colour, head, name, class)
+    // drawn on top of the previews, only while the previews are actually up.
+    val leapBoxScale by NumberSetting("Leap Box Size", 1f, 0.3f, 1f, 0.05f, desc = "Shrinks Odin's leap boxes toward the centre while the previews are showing.", unit = "x")
+    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 1f, 0.1f, 1f, 0.05f, desc = "Fades Odin's leap boxes (colour, head, name, class) while the previews are showing.", unit = "x")
+
+    /**
+     * With four previews tiling the screen, your own view is behind all of them. Skipping it is a
+     * whole world render saved per frame, and costs nothing to resume: the next frame simply does
+     * not take that branch.
+     */
     val skipOwnView by BooleanSetting("Skip Own View", true, desc = "Skips rendering your own view while the previews cover the screen. Saves a full world render per frame.")
 
     /**
@@ -134,6 +139,10 @@ object PovPreviews : Module(
         // descending, so this runs first and everything Odin submits for the leap menu — its
         // boxes, the names, EC's own ring — is submitted after the previews and lands on top.
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
+            // Runs before Odin draws its boxes (see the priority note above), so this frame picks it up.
+            val active = wants()
+            LeapMenu.overlayScale = if (active) leapBoxScale else 1f
+            LeapMenu.overlayAlpha = if (active) leapBoxOpacity else 1f
             EngineerClient.safely("pov gui") { PovCapture.onScreenExtract(guiGraphics) }
         }
 
@@ -152,6 +161,8 @@ object PovPreviews : Module(
     }
 
     override fun onDisable() {
+        LeapMenu.overlayScale = 1f
+        LeapMenu.overlayAlpha = 1f
         PovPose.reset()
         // The feeds are GPU targets; they are freed on the render thread, next time the capture
         // path runs, not here — a module toggle can come from a keybind at any point in the frame.
