@@ -11,12 +11,19 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.zip.GZIPInputStream
 
 /**
  * Better PF, step 1: record everything about a dungeon run, from instance load to leaving, so it
@@ -31,11 +38,12 @@ object BetterPF : Module(
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
 ) {
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Captures each dungeon room once (every block) for the viewer's shared room library, plus the doors/walls between rooms each run. Rooms the library already has are skipped.")
-    private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (cameronwilcox.com/betterpf). Needs the upload key.")
+    private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf). Needs the upload key.")
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
 
-    private const val UPLOAD_URL = "https://www.cameronwilcox.com/betterpf/api/runs"
-    private const val ROOMS_URL = "https://www.cameronwilcox.com/betterpf/api/rooms"
+    private const val SITE = "undonecoffee.com"
+    private const val RUNS_URL = "https://$SITE/betterpf/api/runs"
+    private const val ROOMS_URL = "https://$SITE/betterpf/api/rooms"
 
     /** Rooms the server's library already has ("Name|ROTATION"); null until the fetch lands. */
     @Volatile private var libraryKeys: Set<String>? = null
@@ -74,32 +82,75 @@ object BetterPF : Module(
         http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete { res, err ->
             if (err != null || res.statusCode() != 200) return@whenComplete
             EngineerClient.safely("betterpf library keys") {
-                val keys = com.google.gson.JsonParser.parseString(res.body()).asJsonObject.getAsJsonArray("keys")
+                val keys = JsonParser.parseString(res.body()).asJsonObject.getAsJsonArray("keys")
                 libraryKeys = keys.map { it.asString }.toSet()
             }
         }
     }
 
     /**
-     * Posts a finished run to the viewer. www directly: the bare domain 301s to www, and a redirected
-     * POST turns into a GET. Runs on the recorder's writer thread, after the file is closed.
+     * Sends a finished run to the viewer, off the game thread: first the room captures the library
+     * didn't have (one request each), then the run itself with its summary in a header - the site
+     * stores files as-is and never unpacks them, so it needs to be told what the list shows.
      */
     private fun upload(file: Path) {
         val key = uploadKey.trim()
         if (!uploadRuns || key.isEmpty()) return
-        val request = HttpRequest.newBuilder(URI.create(UPLOAD_URL))
-            .header("X-Upload-Key", key)
-            .header("Content-Type", "application/octet-stream")
-            .timeout(Duration.ofMinutes(5))
-            .POST(HttpRequest.BodyPublishers.ofFile(file))
-            .build()
-        http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete { res, err ->
-            when {
-                err != null -> EngineerClient.chat("§8[§6EC§8]§c Better PF: upload failed (${err.javaClass.simpleName}). The run is still saved locally.")
-                res.statusCode() == 200 -> EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded - §fwww.cameronwilcox.com/betterpf")
-                else -> EngineerClient.chat("§8[§6EC§8]§c Better PF: upload refused (${res.statusCode()}: ${res.body().trim().take(80)}). The run is still saved locally.")
+        Thread.ofVirtual().name("betterpf-upload").start {
+            try {
+                val (summary, rooms) = readForUpload(file)
+                for ((roomKey, line) in rooms) {
+                    val req = HttpRequest.newBuilder(URI.create(ROOMS_URL))
+                        .header("X-Upload-Key", key).header("X-Room-Key", roomKey).header("Content-Type", "application/json")
+                        .timeout(Duration.ofMinutes(2)).POST(HttpRequest.BodyPublishers.ofString(line)).build()
+                    val res = http.send(req, HttpResponse.BodyHandlers.ofString())
+                    if (res.statusCode() != 200) EngineerClient.logger.warn("[ec] betterpf: room $roomKey refused (${res.statusCode()})")
+                }
+                val req = HttpRequest.newBuilder(URI.create(RUNS_URL))
+                    .header("X-Upload-Key", key)
+                    .header("X-Run-Summary", summary.toString())
+                    .header("Content-Type", "application/octet-stream")
+                    .timeout(Duration.ofMinutes(5))
+                    .POST(HttpRequest.BodyPublishers.ofFile(file))
+                    .build()
+                val res = http.send(req, HttpResponse.BodyHandlers.ofString())
+                if (res.statusCode() == 200) {
+                    val id = runCatching { JsonParser.parseString(res.body()).asJsonObject["id"].asString }.getOrDefault("")
+                    EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded - §f$SITE/betterpf/$id")
+                } else {
+                    EngineerClient.chat("§8[§6EC§8]§c Better PF: upload refused (${res.statusCode()}: ${res.body().trim().take(80)}). The run is still saved locally.")
+                }
+            } catch (t: Throwable) {
+                EngineerClient.logger.error("[ec] betterpf upload failed", t)
+                EngineerClient.chat("§8[§6EC§8]§c Better PF: upload failed (${t.javaClass.simpleName}). The run is still saved locally.")
             }
         }
+    }
+
+    private val KIND = Regex("""^\{"k":"([a-z]+)"""")
+    private val TICK = Regex(""""t":(\d+)""")
+
+    /** One pass over the run file: the list summary (self, startMs, floor, party, ticks) and its room captures. */
+    private fun readForUpload(file: Path): Pair<JsonObject, List<Pair<String, String>>> {
+        val summary = JsonObject()
+        val rooms = ArrayList<Pair<String, String>>()
+        var ticks = 0
+        BufferedReader(InputStreamReader(GZIPInputStream(Files.newInputStream(file)), Charsets.UTF_8), 1 shl 16).useLines { lines ->
+            for (line in lines) {
+                val kind = KIND.find(line)?.groupValues?.get(1) ?: continue
+                TICK.find(line.take(48))?.groupValues?.get(1)?.toIntOrNull()?.let { if (it > ticks) ticks = it }
+                when (kind) {
+                    "meta" -> JsonParser.parseString(line).asJsonObject.let { summary.add("self", it["self"]); summary.add("startMs", it["startMs"]) }
+                    "floor" -> summary.add("floor", JsonParser.parseString(line).asJsonObject["floor"])
+                    "party" -> summary.add("party", JsonParser.parseString(line).asJsonObject["m"])
+                    "lib" -> JsonParser.parseString(line).asJsonObject["key"]?.asString?.let { rooms += it to line }
+                }
+            }
+        }
+        if (!summary.has("floor")) summary.addProperty("floor", "")
+        if (!summary.has("party")) summary.add("party", JsonArray())
+        summary.addProperty("ticks", ticks)
+        return summary to rooms
     }
 
     override fun onDisable() {
