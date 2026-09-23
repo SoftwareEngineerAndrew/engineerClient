@@ -2,6 +2,7 @@ package com.engineerclient.misc
 
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.GuiEvent
@@ -18,8 +19,10 @@ import com.odtheking.odin.utils.Color.Companion.multiplyAlpha
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.containsOneOf
 import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.world.scores.DisplaySlot
 
 /**
  * Grab bag of small independent toggles that don't warrant their own module.
@@ -42,6 +45,31 @@ object RandomStuff : Module(
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "Hides every armor stand in the world (except terminals, active or inactive) and removes fishing bobbers' extended line.")
     private val junkHighlight by BooleanSetting("Junk Highlight", false, desc = "Faint red backdrop on inventory slots holding known-useless dungeon drops.")
+
+    /**
+     * Step 1 of the scoreboard line hider Cameron asked for (time/season/keys/%cleared): Odin has
+     * no scoreboard-line infrastructure at all to build on, and Hypixel's sidebar text lives in
+     * each line's team prefix+suffix (same trick LocationUtils already reads off
+     * ClientboundSetPlayerTeamPacket for area detection), not anywhere guessable from outside the
+     * game. This prints exactly what's really there so the actual hider can match real text
+     * instead of a guess.
+     */
+    private val dumpScoreboard by ActionSetting("Dump Scoreboard", desc = "Prints every current sidebar line to chat, so the scoreboard line hider below can be built off the real text.") {
+        val scoreboard = mc.level?.scoreboard
+        val objective = scoreboard?.getDisplayObjective(DisplaySlot.SIDEBAR)
+        if (scoreboard == null || objective == null) {
+            modMessage("§cNo sidebar is showing right now — open one first.")
+            return@ActionSetting
+        }
+        val entries = scoreboard.listPlayerScores(objective).sortedByDescending { it.value() }
+        modMessage("§a--- Scoreboard dump (${entries.size} lines) ---")
+        entries.forEachIndexed { i, entry ->
+            val team = scoreboard.getPlayerTeam(entry.owner())
+            val prefix = team?.playerPrefix?.string ?: ""
+            val suffix = team?.playerSuffix?.string ?: ""
+            modMessage("§7$i: §f$prefix§8|§f$suffix")
+        }
+    }
 
     /**
      * SkyBlock item IDs, matched via [itemId] rather than display name - immune to color codes,
