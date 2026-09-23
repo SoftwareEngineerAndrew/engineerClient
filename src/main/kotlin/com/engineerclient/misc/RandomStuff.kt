@@ -39,7 +39,7 @@ object RandomStuff : Module(
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideBossBarOutsideBoss by BooleanSetting("Hide Boss Bar Outside Boss", false, desc = "Hides the boss health bar unless you're actually in a dungeon boss fight.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
-    private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "Hides every armor stand in the world (except terminals, active or inactive) and removes fishing bobbers' extended line.")
+    private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "In dungeons only: hides every armor stand (except terminals, active or inactive) and removes fishing bobbers' extended line.")
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
@@ -86,7 +86,7 @@ object RandomStuff : Module(
             if (hideDamage) mc.player?.hurtTime = 0
             PlayerDisplay.onlyShowWhenLow = hideHealthManaUnlessLow
             PlayerDisplay.lowThreshold = healthManaThreshold.toFloat() / 100f
-            RenderOptimizer.forceHideAllArmorStands = hideArmorStands
+            RenderOptimizer.forceHideAllArmorStands = hideArmorStands && DungeonUtils.inDungeons
         }
 
         on<RenderItemNameEvent> {
