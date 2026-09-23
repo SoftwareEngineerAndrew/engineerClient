@@ -1,15 +1,22 @@
 package com.engineerclient.misc
 
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
+import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.player.PlayerSkin
 import java.util.Locale
@@ -27,8 +34,16 @@ object AgroLeaderboard : Module(
     category = Category.custom("Blood Rush"),
     description = "In F7 P1/P2, lists the party by distance to Maxor/Storm. Closest (who has aggro) is green.",
 ) {
-    private class Entry(val name: String, val skin: PlayerSkin?, val distance: Double)
+    private class Entry(val name: String, val skin: PlayerSkin?, val distance: Double, val player: Player? = null)
 
+    val sphereMode by BooleanSetting("Sphere Mode", false, desc = "Draws a see-through sphere around Maxor/Storm through the closest player: the aggro boundary. If you are the closest, it goes through the 2nd closest instead, showing your margin.")
+    private val sphereColor by ColorSetting("Sphere Color", Color(255, 85, 85, 0.18f), true, desc = "Sphere colour when someone else has aggro.").withDependency { sphereMode }
+    private val aggroColor by ColorSetting("Sphere Color (Your Aggro)", Color(85, 255, 85, 0.18f), true, desc = "Sphere colour when you are the closest and it shows the 2nd closest.").withDependency { sphereMode }
+
+    private const val LAT_BANDS = 24
+    private const val LON_BANDS = 48
+
+    private var boss: WitherBoss? = null
     private var bossName: String? = null
     private var bossFound = false
     private var entries: List<Entry> = emptyList()
@@ -51,13 +66,14 @@ object AgroLeaderboard : Module(
                 M7Phases.P2 -> "Storm"
                 else -> null
             }
-            val name = bossName ?: run { entries = emptyList(); return@on }
+            val name = bossName ?: run { entries = emptyList(); boss = null; return@on }
             val me = mc.player ?: return@on
 
             val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { it.isAlive }
             val boss = withers.filter { it.name.string.contains(name, true) }.minByOrNull { it.distanceToSqr(me) }
                 ?: withers.minByOrNull { it.distanceToSqr(me) }
             bossFound = boss != null
+            this@AgroLeaderboard.boss = boss
             if (boss == null) { entries = emptyList(); return@on }
 
             entries = DungeonUtils.dungeonTeammates.mapNotNull { teammate ->
@@ -65,9 +81,60 @@ object AgroLeaderboard : Module(
                 val player = teammate.entity?.takeIf { it.isAlive }
                     ?: level.players().firstOrNull { it.name.string == teammate.name }
                     ?: return@mapNotNull null
-                Entry(teammate.name, teammate.playerSkin, player.distanceTo(boss).toDouble())
+                Entry(teammate.name, teammate.playerSkin, player.distanceTo(boss).toDouble(), player)
             }.sortedBy { it.distance }
         }
+
+        on<RenderEvent.Last> {
+            if (!sphereMode) return@on
+            val boss = boss?.takeIf { it.isAlive } ?: return@on
+            val me = mc.player ?: return@on
+            val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false)
+            val center = boss.getPosition(pt)
+            // Measured per frame from interpolated positions, so the sphere moves smoothly
+            // instead of stepping each tick; same feet-to-feet distance as the leaderboard.
+            val members = entries.mapNotNull { e ->
+                val p = e.player?.takeIf { it.isAlive } ?: return@mapNotNull null
+                AgroSphere.Member(p === me, p.getPosition(pt).distanceTo(center))
+            }
+            val result = AgroSphere.radius(members) ?: return@on
+            val color = if (result.youHaveAggro) aggroColor else sphereColor
+            drawSphere(context.poseStack(), context.bufferSource(), center, result.radius, color)
+        }
+    }
+
+    /** Translucent, depth-tested, not culled: reads from inside the sphere as well as outside. */
+    private fun drawSphere(
+        pose: com.mojang.blaze3d.vertex.PoseStack,
+        buffers: net.minecraft.client.renderer.MultiBufferSource.BufferSource,
+        center: net.minecraft.world.phys.Vec3,
+        radius: Double,
+        color: Color,
+    ) {
+        if (radius <= 0.05) return
+        val cam = mc.gameRenderer.mainCamera.position()
+        pose.pushPose()
+        pose.translate(center.x - cam.x, center.y - cam.y, center.z - cam.z)
+        val matrix = pose.last().pose()
+        val argb = color.rgba
+        val buffer = buffers.getBuffer(RenderTypes.debugQuads())
+        val r = radius.toFloat()
+        fun point(lat: Int, lon: Int): FloatArray {
+            val theta = Math.PI * lat / LAT_BANDS          // 0 at the top, PI at the bottom
+            val phi = 2 * Math.PI * lon / LON_BANDS
+            return floatArrayOf(
+                (r * Math.sin(theta) * Math.cos(phi)).toFloat(),
+                (r * Math.cos(theta)).toFloat(),
+                (r * Math.sin(theta) * Math.sin(phi)).toFloat(),
+            )
+        }
+        for (lat in 0 until LAT_BANDS) for (lon in 0 until LON_BANDS) {
+            for (v in arrayOf(point(lat, lon), point(lat + 1, lon), point(lat + 1, lon + 1), point(lat, lon + 1))) {
+                buffer.addVertex(matrix, v[0], v[1], v[2]).setColor(argb)
+            }
+        }
+        buffers.endBatch(RenderTypes.debugQuads())
+        pose.popPose()
     }
 
     private fun draw(gfx: GuiGraphicsExtractor, boss: String, found: Boolean, list: List<Entry>): Pair<Int, Int> {
