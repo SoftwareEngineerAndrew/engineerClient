@@ -8,6 +8,7 @@ import com.engineerclient.misc.SoundEditor
 import com.engineerclient.rotation.EcLog
 import com.engineerclient.rotation.LeapHighlight
 import com.engineerclient.chat.ChatHider
+import com.engineerclient.pf.HubNametags
 import com.engineerclient.pf.PartyFinderStats
 import com.engineerclient.pov.PovPreviews
 import com.engineerclient.price.LowestBin
@@ -54,7 +55,7 @@ object EngineerClient : ClientModInitializer {
         // Register our own module into Odin's module system: own ClickGUI panel
         // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, RandomStuff, ChatHider, LowestBin, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor)
+        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, HubNametags, RandomStuff, ChatHider, LowestBin, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn the module on once.
