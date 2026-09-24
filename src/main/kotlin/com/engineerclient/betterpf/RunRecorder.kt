@@ -101,8 +101,13 @@ class RunRecorder(
     private var lastFrameYaw = Float.NaN
     private var lastFramePitch = Float.NaN
     private var heldFrame: String? = null
+    private var lastFrameNs = 0L
 
     fun onFrame(partialTick: Float, yaw: Float, pitch: Float) {
+        // At most 60 a second, whatever the game's frame rate.
+        val now = System.nanoTime()
+        if (now - lastFrameNs < FRAME_NS) return
+        lastFrameNs = now
         val entry = "[${f2(partialTick)},${f2(yaw)},${f2(pitch)}]"
         if (yaw == lastFrameYaw && pitch == lastFramePitch) { heldFrame = entry; return }
         heldFrame?.let { if (frames.isNotEmpty()) frames.append(','); frames.append(it) }
@@ -392,6 +397,8 @@ class RunRecorder(
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
+        // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
+        const val FRAME_NS = 16_000_000L
         const val NO_EQUIPMENT = """["","","","",""]"""
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
     }
