@@ -11,6 +11,7 @@
     "ConnectionTapMixin",
     "ContainerTooltipMixin",
     "FogColorMixin",
+    "GameModeRecordMixin",
     "GameRendererInvoker",
     "GameRendererMixin",
     "ItemFoilMixin",

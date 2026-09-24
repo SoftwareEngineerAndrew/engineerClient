@@ -23,6 +23,8 @@ happened, so a reader can play the file start to finish.
 |---|---|---|
 | `meta` | `format, mod, mc, self, startMs, confirmedAtTick, geometry` | first line; `startMs` is wall-clock time at tick 0 |
 | `time` | `t, ms` | wall-clock sync every 20 ticks |
+| `st` | `t, n` | server ticks since the world loaded (Odin's per-tick ping), when it moved; falls behind `t` when the server lags |
+| `ether` | `t, merge, tuners` | your held item's etherwarp: `merge` 1 if Etherwarp is merged into it, `tuners` Transmission Tuners applied (+1 block each), when it changes |
 | `floor` | `t, floor` | floor once known (e.g. `F7`, `M7`) |
 | `party` | `t, m: [[name, class], ...]` | party and classes, rewritten whenever they change |
 | `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion, vanillaItem, crouching], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) (`heldItemId` is the Skyblock id when there is one; `vanillaItem` is always the game item, e.g. `minecraft:iron_sword`; `crouching` is 1 while sneaking, else 0 (newer runs) - the item it is drawn as when it has a vanilla `item_model`: Hypixel builds many items on another base item, like paper drawn as TNT) |
@@ -38,11 +40,17 @@ happened, so a reader can play the file start to finish.
 | `skull` | `t, x, y, z, tex` | a player head placed as a block: its skin (`textures` property, base64), once per position (again if it changes); heads within 12 chunks of you, checked every second |
 | `bev` | `t, x, y, z, b` | a chest, trapped chest or ender chest lid event: `b` players have it open now (0 = it closes) |
 | `gui` / `guiclose` | `t, title, menu, w, h, slots` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles). `menu` is the menu type (`minecraft:generic_9x6`..., `inventory` for your own), `w`/`h` the window's size and `slots` every slot's `[x, y]` in menu order, all in GUI pixels from the window's top-left |
-| `slots` | `t, s: [[index, vanillaItem, count, headTex?], ...]` | the open container's slots: all of them right after the `gui` line, then only those that changed (`""`/0 = empty; `headTex` for a player head) |
+| `slots` | `t, s: [[index, vanillaItem, count, headTex, name, glint], ...]` | the open container's slots: all of them right after the `gui` line, then only those that changed (`""`/0 = empty; `headTex` a player head's skin or `""`; `name` the plain hover name; `glint` 1 if it shines - Hypixel marks clicked terminal items that way). Older runs: `[index, vanillaItem, count, headTex?]` |
 | `carried` | `t, id, count` | the item on your mouse cursor in the open container, when it changes (`""`/0 = none) |
 | `mouse` | `t, d: [[partialTick, x, y], ...]` | the mouse over the open container at every rendered frame since the last tick (at most 60 a second, still frames left out as for `cam`), GUI pixels from the window's top-left |
 | `click` | `t, x, y, button` | a mouse click in the open container (same coordinates; button 0 left, 1 right, 2 middle) |
-| `spawn` | `t, id, type, name, c?, x, y, z, yaw, baby?, headYaw?, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state; `baby: 1` for baby mobs) |
+| `slotclick` | `t, slot, button, type` | a container slot click you sent to the server, whatever sent it (mouse, Odin's custom terminal window - which `click` misses -, hotbar/drop keys); `type` e.g. `PICKUP`, `CLONE`, `SWAP`, `THROW` |
+| `use` | `t, x, y, z` | a block you right-clicked |
+| `tp` | `t, x, y, z, yaw, pitch, rel?` | the server teleported you (etherwarp, leaps, Teleport Maze pads): where to, absolute; `rel` lists parts that stayed relative only if that couldn't be worked out |
+| `batsound` | `t, x, y, z, v` | a bat hurt/death sound (secret bats squeak at volume 0.1) |
+| `pickup` | `t, id, by` | item entity `id` picked up by `by` (a player's name, else the collector's entity id) |
+| `frame` | `t, id, item, rot` | an item frame's item (vanilla id or `""`) and rotation 0-7, on spawn and when either changes (Arrow Align) |
+| `spawn` | `t, id, type, name, c?, x, y, z, yaw, baby?, headYaw?, block?, item?, itemId?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state; `baby: 1` for baby mobs; dropped items have `item`, the plain hover name, and `itemId`, the vanilla id) |
 | `e` | `t, d: [[id, x, y, z, yaw, headYaw?], ...]` | non-player entities that moved (or turned their head) this tick; `headYaw` (also on `spawn`) is where a mob's head faces, for living entities only |
 | `name` | `t, id, name, c?` | an entity's custom name changed (Hypixel nametags/health bars); `c` is the name with its § colour codes when it has any (also on `spawn`) |
 | `gone` | `t, id` | entity despawned |
