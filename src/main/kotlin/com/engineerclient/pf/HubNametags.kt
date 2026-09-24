@@ -10,6 +10,8 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.skyblock.Island
 import com.odtheking.odin.utils.skyblock.LocationUtils
+import net.minecraft.world.scores.DisplaySlot
+import net.minecraft.world.scores.PlayerTeam
 
 /**
  * In the Dungeon Hub, every real player gets a stat line floating over their nametag — the same
@@ -43,6 +45,10 @@ object HubNametags : Module(
     /** Vanilla stops rendering nametags past 64 blocks; match it. */
     private const val RANGE_SQ = 64.0 * 64.0
 
+    // Last render pass, for /ec sb: how many players the level had and how many got a line.
+    @Volatile private var lastSeen = 0
+    @Volatile private var lastDrawn = 0
+
     init {
         on<RenderEvent.Extract> {
             if (!LocationUtils.isCurrentArea(Island.DungeonHub)) return@on
@@ -52,16 +58,54 @@ object HubNametags : Module(
             // Selector index → PB mode and floor: 0 is Entrance, then F1..F7, then M1..M7.
             val mode = if (pbFloor >= 8) "m" else "f"
             val floor = if (pbFloor >= 8) (pbFloor - 7).toString() else pbFloor.toString()
+            var seen = 0
+            var drawn = 0
             for (p in level.players()) {
+                seen++
                 if (p === me || !p.isAlive || p.isInvisible) continue
                 if (p.uuid.version() != 4) continue // hub NPCs pose as players; real ones are v4
                 if (p.distanceToSqr(me) > RANGE_SQ) continue
                 val line = lineFor(p.name.string, mode, floor)
                 if (line.isEmpty()) continue
+                drawn++
                 drawText(line, p.getPosition(pt).add(0.0, p.bbHeight + height.toDouble(), 0.0), scale, false)
             }
+            lastSeen = seen
+            lastDrawn = drawn
         }
     }
+
+    /**
+     * One-off diagnostics for `/ec sb`: Odin's parsed location (what the Dungeon Hub gate reads),
+     * this module's own gates and last-frame draw counters, the scoreboard sidebar, and the tab
+     * list's info lines — Odin's LocationUtils parses the tab list ("Area: …"), not the sidebar.
+     * § is shown as & so the formatting codes are readable in chat.
+     */
+    fun debugLines(): List<String> {
+        val lines = mutableListOf("§8[§6EC§8]§7 location / scoreboard debug")
+        lines += "§7 odin: inSkyblock=§f${LocationUtils.isInSkyblock}§7 area=§f${LocationUtils.currentArea.name}§7 " +
+            "(display '${amp(LocationUtils.currentArea.displayName)}') lobby=§f${LocationUtils.lobbyId}"
+        lines += "§7 module: enabled=§f$enabled§7 hubGate=§f${LocationUtils.isCurrentArea(Island.DungeonHub)}§7 " +
+            "drawn=§f$lastDrawn§7 of §f$lastSeen§7 players last frame, statsCached=§f${PlayerStats.cached()}"
+        val level = mc.level ?: run { lines += "§7 no level"; return lines }
+        val sb = level.scoreboard
+        val obj = sb.getDisplayObjective(DisplaySlot.SIDEBAR)
+        if (obj == null) lines += "§7 sidebar: §cnone"
+        else {
+            lines += "§7 sidebar objective '§f${obj.name}§7' title '§f${amp(obj.displayName.string)}§7':"
+            sb.listPlayerScores(obj).sortedByDescending { it.value() }.forEach { entry ->
+                val text = PlayerTeam.formatNameForTeam(sb.getPlayersTeam(entry.owner()), entry.ownerName()).string
+                lines += "§7  ${entry.value()}: '§f${amp(text)}§7'"
+            }
+        }
+        val infos = mc.connection?.listedOnlinePlayers ?: emptyList()
+        val infoLines = infos.mapNotNull { it.tabListDisplayName?.string }.filter { ':' in it }
+        lines += "§7 tab list: ${infos.size} entries, ${infoLines.size} info lines with ':'"
+        infoLines.take(15).forEach { lines += "§7  '§f${amp(it)}§7'" }
+        return lines
+    }
+
+    private fun amp(s: String) = s.replace('§', '&')
 
     private fun lineFor(name: String, mode: String, floor: String): String =
         when (val entry = PlayerStats.lookup(name)) {
