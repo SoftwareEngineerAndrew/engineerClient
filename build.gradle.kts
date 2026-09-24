@@ -35,6 +35,9 @@ dependencies {
 
 tasks {
     processResources {
+        // Declared as an input, or the task stays UP-TO-DATE across a version bump and ships
+        // the previous version string inside fabric.mod.json (0.6.13 reported itself as 0.6.12).
+        inputs.property("version", version)
         filesMatching("fabric.mod.json") {
             expand(mapOf("version" to version))
         }
