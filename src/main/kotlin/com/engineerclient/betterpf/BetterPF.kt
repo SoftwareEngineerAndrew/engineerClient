@@ -24,6 +24,12 @@ import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket
+import net.minecraft.world.entity.PositionMoveRotation
+import net.minecraft.sounds.SoundEvents
+import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.Blocks
 import java.util.Optional
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
@@ -110,6 +116,28 @@ object BetterPF : Module(
         }
 
         on<BlockUpdateEvent> { EngineerClient.safely("betterpf block") { session?.onBlockUpdate(pos, updated) } }
+        // Server ticks (Odin's, from the server's per-tick ping): the server's own clock, which falls
+        // behind the client's 20 a second when the server lags (what split timers and tick timers use).
+        on<TickEvent.Server> { EngineerClient.safely("betterpf server tick") { session?.onServerTick() } }
+        // Teleports the server puts you through (etherwarp, leaps, the Teleport Maze pads...).
+        onReceive<ClientboundPlayerPositionPacket> {
+            val player = EngineerClient.mc.player
+            val abs = if (player != null) PositionMoveRotation.calculateAbsolute(PositionMoveRotation.of(player), change(), relatives()) else change()
+            val rel = relatives().map { it.name }
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf tp") { session?.onTeleport(abs.position().x, abs.position().y, abs.position().z, abs.yRot(), abs.xRot(), if (player == null) rel else emptyList()) } }
+        }
+        // Bats hit or killed (secret bats: their squeak is quieter than any other bat's).
+        onReceive<ClientboundSoundPacket> {
+            val sound = getSound().value()
+            if (sound != SoundEvents.BAT_HURT && sound != SoundEvents.BAT_DEATH) return@onReceive
+            val x = getX(); val y = getY(); val z = getZ(); val v = getVolume()
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf bat sound") { session?.onBatSound(x, y, z, v) } }
+        }
+        // Items picked up, and who picked them up.
+        onReceive<ClientboundTakeItemEntityPacket> {
+            val item = getItemId(); val by = getPlayerId()
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf pickup") { session?.onPickup(item, by) } }
+        }
         // Chat straight off the network, before any mod can hide it (chat cleaners hide the terminal /
         // device / gate messages the report needs). Handed to the client thread, where ticks happen.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
@@ -149,6 +177,12 @@ object BetterPF : Module(
             ScreenEvents.remove(screen).register { EngineerClient.safely("betterpf gui close") { session?.onGuiClose() } }
         }
     }
+
+    /** A container slot click sent to the server (from GameModeRecordMixin, whatever sent it). */
+    fun onSlotClick(slot: Int, button: Int, type: String) = EngineerClient.safely("betterpf slot click") { session?.onSlotClick(slot, button, type) }
+
+    /** A block you right-clicked (from GameModeRecordMixin). */
+    fun onBlockUse(pos: BlockPos) = EngineerClient.safely("betterpf use") { session?.onBlockUse(pos) }
 
     /**
      * A chat line with its formatting as § codes: colour (the nearest of the 16 chat colours, or

@@ -16,6 +16,8 @@ import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.item.FallingBlockEntity
+import net.minecraft.world.entity.item.ItemEntity
+import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.entity.SkullBlockEntity
@@ -88,6 +90,8 @@ class RunRecorder(
             else if (tick > ABANDON_AFTER_TICKS || !LocationUtils.isCurrentArea(Island.Unknown)) { abandon(); return }
         }
         if (tick % 20 == 0) emit("""{"k":"time","t":$tick,"ms":${System.currentTimeMillis()}}""")
+        if (serverTicks != lastServerTicks) { lastServerTicks = serverTicks; emit("""{"k":"st","t":$tick,"n":$serverTicks}""") }
+        recordEther()
         recordFloorAndParty()
         if (tick % 10 == 0) recordRooms()
         recordPlayers(level)
@@ -134,6 +138,51 @@ class RunRecorder(
     }
 
     /** A chat line: plain [message], plus [colored] (with § formatting codes) when it has any formatting. */
+    // ------------------------------------------------------------------ server ticks
+    // The server's own tick count (Odin's per-tick ping), written when it moved: split and tick
+    // timers count these, and they fall behind the client's ticks when the server lags.
+    private var serverTicks = 0
+    private var lastServerTicks = 0
+    fun onServerTick() { serverTicks++ }
+
+    // ------------------------------------------------------------------ what you do
+    /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
+    fun onSlotClick(slot: Int, button: Int, type: String) =
+        emit("""{"k":"slotclick","t":$tick,"slot":$slot,"button":$button,"type":${str(type)}}""")
+
+    /** A block you right-clicked (chests, levers, secrets...). */
+    fun onBlockUse(pos: BlockPos) = emit("""{"k":"use","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z}}""")
+
+    /**
+     * A teleport the server put you through, where it put you (absolute); rel lists any parts the
+     * packet gave relative to where you were, when that couldn't be worked out.
+     */
+    fun onTeleport(x: Double, y: Double, z: Double, yaw: Float, pitch: Float, rel: List<String>) {
+        val r = if (rel.isEmpty()) "" else rel.joinToString(",", ",\"rel\":[", "]") { str(it) }
+        emit("""{"k":"tp","t":$tick,"x":${n(x)},"y":${n(y)},"z":${n(z)},"yaw":${a(yaw)},"pitch":${a(pitch)}$r}""")
+    }
+
+    /** A bat hurt or killed (the sound's position and volume: secret bats squeak at 0.1). */
+    fun onBatSound(x: Double, y: Double, z: Double, volume: Float) =
+        emit("""{"k":"batsound","t":$tick,"x":${n(x)},"y":${n(y)},"z":${n(z)},"v":${f2(volume)}}""")
+
+    /** An item entity picked up, and by whom (a player's name, else the collector's entity id). */
+    fun onPickup(itemId: Int, collectorId: Int) {
+        val by = EngineerClient.mc.level?.getEntity(collectorId)?.let { if (it is Player) str(it.name.string) else null } ?: collectorId.toString()
+        emit("""{"k":"pickup","t":$tick,"id":$itemId,"by":$by}""")
+    }
+
+    // Your held item's etherwarp: whether it has Etherwarp merged and how many Transmission Tuners
+    // (each +1 block of range), written when it changes.
+    private var lastEther = ""
+    private fun recordEther() {
+        val tag = EngineerClient.mc.player?.mainHandItem?.get(DataComponents.CUSTOM_DATA)?.copyTag()
+        val entry = """"merge":${tag?.getIntOr("ethermerge", 0) ?: 0},"tuners":${tag?.getIntOr("tuned_transmission", 0) ?: 0}"""
+        if (entry == lastEther) return
+        lastEther = entry
+        emit("""{"k":"ether","t":$tick,$entry}""")
+    }
+
     fun onChat(message: String, colored: String? = null) {
         val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
         emit("""{"k":"chat","t":$tick,"m":${str(message)}$c}""")
@@ -184,7 +233,11 @@ class RunRecorder(
 
     private fun slotEntry(i: Int, stack: ItemStack): String {
         val tex = stack.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
-        return "[$i,${str(vanillaId(stack))},${if (stack.isEmpty) 0 else stack.count}${tex?.let { "," + str(it) } ?: ""}]"
+        // [index, id, count, head skin or "", plain name, glint 0/1] - terminals are solved by names
+        // and Hypixel marks clicked items with the enchantment glint.
+        val name = if (stack.isEmpty) "" else stack.hoverName.string.replace(FORMAT_CODES, "")
+        val glint = if (!stack.isEmpty && (stack.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) || stack.hasFoil())) 1 else 0
+        return "[$i,${str(vanillaId(stack))},${if (stack.isEmpty) 0 else stack.count},${str(tex ?: "")},${str(name)},$glint]"
     }
 
     private val mouse = StringBuilder()
@@ -430,12 +483,16 @@ class RunRecorder(
                 tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored, headYaw)
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block}""")
+                // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
+                val item = (e as? ItemEntity)?.item?.let { ",\"item\":" + str(it.hoverName.string.replace(FORMAT_CODES, "")) + ",\"itemId\":" + str(vanillaId(it)) } ?: ""
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item}""")
                 if (e is ArmorStand) recordStand(e)
+                if (e is ItemFrame) recordFrame(e)
                 continue
             }
             if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
             if (e is ArmorStand) recordStand(e)
+            if (e is ItemFrame) recordFrame(e)
             if (colored != t.name) {
                 t.name = colored
                 emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}$c}""")
@@ -455,8 +512,18 @@ class RunRecorder(
             tracked.remove(id)
             lastEquipment.remove("#$id")
             lastStand.remove(id)
+            lastFrame.remove(id)
             emit("""{"k":"gone","t":$tick,"id":$id}""")
         }
+    }
+
+    // Item frames: what they hold and how it's turned (0-7), on spawn and when either changes
+    // (the Arrow Align device's arrows).
+    private val lastFrame = HashMap<Int, String>()
+    private fun recordFrame(f: ItemFrame) {
+        val entry = """"item":${str(vanillaId(f.item))},"rot":${f.rotation}"""
+        if (lastFrame.put(f.id, entry) == entry) return
+        emit("""{"k":"frame","t":$tick,"id":${f.id},$entry}""")
     }
 
     // Players' skins (their profile's "textures" property, base64) once per name.
@@ -553,6 +620,7 @@ class RunRecorder(
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
+        private val FORMAT_CODES = Regex("\u00a7.")
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
         const val NO_EQUIPMENT = """["","","","",""]"""
