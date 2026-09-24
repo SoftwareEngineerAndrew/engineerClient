@@ -73,11 +73,10 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
         val have = libraryKeys()
         if (have == null && ticksWaitingForLibrary++ < 10) return
         for (room in DungeonScan.rooms) {
-            val name = room.data?.name ?: continue
-            val rotation = room.rotation ?: continue
             // room.shape stays OneByOne until Odin infers the layout; data.shape is the real one.
             if (room.tiles.size != (room.data?.shape?.tileAmount ?: continue)) continue
-            val key = "$name|${rotation.name}"
+            // Only once the rotation is real and, for rooms with variants, which variant it is.
+            val key = RoomKeys.key(room) ?: continue
             if (key in queuedRooms || (have != null && key in have)) continue
             val tiles = room.tiles.map { it.x to it.z }.toSet()
             val minX = tiles.minOf { it.first }; val maxX = tiles.maxOf { it.first }

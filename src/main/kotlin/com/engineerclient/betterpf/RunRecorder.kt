@@ -242,7 +242,10 @@ class RunRecorder(
             r.tiles.forEachIndexed { j, t -> if (j > 0) sb.append(','); sb.append('[').append(t.x).append(',').append(t.z).append(']') }
             // Secrets found / total. "Found" comes from the action bar (the room you're in) and other
             // Odin users, so it's a lower bound for rooms nobody running Odin is in.
-            sb.append("],").append(r.foundSecrets ?: -1).append(',').append(r.data?.maxSecrets ?: -1).append(']')
+            sb.append("],").append(r.foundSecrets ?: -1).append(',').append(r.data?.maxSecrets ?: -1)
+            // [8]: the room's library key when it's known (rotation found, variant told apart).
+            RoomKeys.key(r)?.let { sb.append(',').append(str(it)) }
+            sb.append(']')
         }
         val body = sb.toString()
         if (body == roomsKey) return
@@ -344,6 +347,8 @@ class RunRecorder(
         var movedCount = 0
         for (e in level.entitiesForRendering()) {
             if (e is Player) continue
+            // An entity the game hasn't placed yet (NaN position) would make an unreadable line.
+            if (!e.x.isFinite() || !e.y.isFinite() || !e.z.isFinite()) continue
             val id = e.id
             seen += id
             val name = e.customName?.string ?: ""
