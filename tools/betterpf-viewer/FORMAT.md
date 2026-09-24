@@ -31,6 +31,7 @@ happened, so a reader can play the file start to finish.
 | `eq` | `t, name` or `t, id`, `eq: [mainHand, head, chest, legs, feet], headTex?` | a player's or mob's held item and armour changed (vanilla item ids, with `#rrggbb` appended for dyed items like leather armour); `headTex` is the skin of a worn player head |
 | `sw` | `t, d: [name, ...]` | players who started an arm swing this tick (left click, or a right click that hit something - opening a terminal swings) |
 | `mp` | `t, d: [[name, x, z, yaw], ...]` | teammates the game isn't rendering: their position from the dungeon map (clear only, about 1.6 blocks per map pixel), written when it changes |
+| `cam` | `t, d: [[partialTick, yaw, pitch], ...]` | your own look direction at every rendered frame since the last tick (frames that didn't move are left out, except the one just before it moves again). A frame's time on the `p` timeline is `t - 1 + partialTick`: it was drawn between your `p` entries at `t - 1` and `t` |
 | `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
 | `spawn` | `t, id, type, name, x, y, z, yaw, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
 | `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
