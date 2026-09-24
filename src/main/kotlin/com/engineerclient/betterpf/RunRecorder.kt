@@ -252,6 +252,14 @@ class RunRecorder(
     // Last written entry per player name; only players whose entry changed go in a "p" line.
     private val lastPlayer = HashMap<String, String>()
 
+    // The skin of a player head someone holds (the leap item, for one), written when it changes.
+    private val lastHeldHead = HashMap<String, String>()
+    private fun recordHeldHead(p: Player, name: String) {
+        val tex = p.mainHandItem.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) } ?: ""
+        val prev = lastHeldHead.put(name, tex)
+        if (prev != tex && !(prev == null && tex.isEmpty())) emit("""{"k":"held","t":$tick,"name":${str(name)},"tex":${str(tex)}}""")
+    }
+
     private fun recordPlayers(level: ClientLevel) {
         val sb = StringBuilder()
         var changed = 0
@@ -264,6 +272,7 @@ class RunRecorder(
             recordEquipment(p, "\"name\":${str(name)}", name)
             // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one.
             val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))}]"
+            recordHeldHead(p, name)
             if (lastPlayer.put(name, entry) == entry) continue
             if (changed++ > 0) sb.append(',')
             sb.append(entry)
@@ -323,20 +332,23 @@ class RunRecorder(
             val id = e.id
             seen += id
             val name = e.customName?.string ?: ""
+            // The name with its colours (§ codes), when it has any: "c" next to the plain "name".
+            val colored = e.customName?.let { BetterPF.legacyText(it) } ?: ""
+            val c = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
             val t = tracked[id]
             if (t == null) {
-                tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, name)
+                tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored)
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)},"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}$block}""")
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}$block}""")
                 if (e is ArmorStand) recordStand(e)
                 continue
             }
             if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
             if (e is ArmorStand) recordStand(e)
-            if (name != t.name) {
-                t.name = name
-                emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}}""")
+            if (colored != t.name) {
+                t.name = colored
+                emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}$c}""")
             }
             if (e.x != t.x || e.y != t.y || e.z != t.z || e.yRot != t.yaw) {
                 t.x = e.x; t.y = e.y; t.z = e.z; t.yaw = e.yRot
@@ -409,7 +421,10 @@ class RunRecorder(
     /** The game item id, plus "#rrggbb" for dyed items (leather armour) so the viewer can colour it. */
     private fun vanillaId(stack: ItemStack): String {
         if (stack.isEmpty) return ""
-        val id = BuiltInRegistries.ITEM.getKey(stack.item).toString()
+        // The item it looks like: Hypixel builds many items on a base item with another item's model
+        // (paper that is drawn as TNT), so a vanilla item_model wins over the base item.
+        val model = stack.get(DataComponents.ITEM_MODEL)?.takeIf { it.namespace == "minecraft" }?.toString()
+        val id = model ?: BuiltInRegistries.ITEM.getKey(stack.item).toString()
         val dye = stack.get(DataComponents.DYED_COLOR) ?: return id
         return id + "#" + String.format(Locale.ROOT, "%06x", dye.rgb() and 0xFFFFFF)
     }
