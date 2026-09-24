@@ -13,6 +13,10 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
+import com.engineerclient.mixin.ContainerScreenAccessor
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.FormattedText
@@ -83,6 +87,9 @@ object BetterPF : Module(
         on<TickEvent.End> {
             val s = session ?: return@on
             EngineerClient.safely("betterpf tick") { s.onTick(level) }
+            (EngineerClient.mc.screen as? AbstractContainerScreen<*>)?.let { screen ->
+                EngineerClient.safely("betterpf gui tick") { s.onContainerTick(screen.menu.slots.map { it.item }, screen.menu.carried) }
+            }
             if (s.abandoned) session = null
         }
 
@@ -90,7 +97,16 @@ object BetterPF : Module(
         on<RenderEvent.Last> {
             val s = session ?: return@on
             val player = EngineerClient.mc.player ?: return@on
-            EngineerClient.safely("betterpf frame") { s.onFrame(EngineerClient.mc.deltaTracker.getGameTimeDeltaPartialTick(true), player.yRot, player.xRot) }
+            val pt = EngineerClient.mc.deltaTracker.getGameTimeDeltaPartialTick(true)
+            EngineerClient.safely("betterpf frame") { s.onFrame(pt, player.yRot, player.xRot) }
+            // The mouse over an open container, relative to its window (GUI pixels).
+            (EngineerClient.mc.screen as? AbstractContainerScreen<*>)?.let { screen ->
+                EngineerClient.safely("betterpf gui mouse") {
+                    val mc = EngineerClient.mc
+                    val box = screen as ContainerScreenAccessor
+                    s.onContainerMouse(pt, (mc.mouseHandler.getScaledXPos(mc.window) - box.betterpfLeftPos()).toFloat(), (mc.mouseHandler.getScaledYPos(mc.window) - box.betterpfTopPos()).toFloat())
+                }
+            }
         }
 
         on<BlockUpdateEvent> { EngineerClient.safely("betterpf block") { session?.onBlockUpdate(pos, updated) } }
@@ -114,7 +130,22 @@ object BetterPF : Module(
         // Container screens you open (terminal GUIs among them), for exact terminal times.
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
             if (screen !is AbstractContainerScreen<*>) return@register
-            EngineerClient.safely("betterpf gui") { session?.onGuiOpen(screen.title.string) }
+            EngineerClient.safely("betterpf gui") {
+                val s = session ?: return@safely
+                val menu = screen.menu
+                val box = screen as ContainerScreenAccessor
+                // Your own inventory's menu has no registered type.
+                val type = if (menu is InventoryMenu) "inventory" else runCatching { BuiltInRegistries.MENU.getKey(menu.type)?.toString() }.getOrNull() ?: "unknown"
+                s.onContainerOpen(screen.title.string, type, box.betterpfImageWidth(), box.betterpfImageHeight(), menu.slots.map { intArrayOf(it.x, it.y) })
+                s.onContainerTick(menu.slots.map { it.item }, menu.carried)
+            }
+            ScreenMouseEvents.afterMouseClick(screen).register { _, click, _ ->
+                EngineerClient.safely("betterpf gui click") {
+                    val box = screen as ContainerScreenAccessor
+                    session?.onContainerClick((click.x() - box.betterpfLeftPos()).toFloat(), (click.y() - box.betterpfTopPos()).toFloat(), click.button())
+                }
+                false
+            }
             ScreenEvents.remove(screen).register { EngineerClient.safely("betterpf gui close") { session?.onGuiClose() } }
         }
     }
