@@ -37,7 +37,11 @@ happened, so a reader can play the file start to finish.
 | `stand` | `t, id, f, pose: [18 numbers]` | an armor stand's look, on spawn and when it changes: `f` flags (1 small, 2 invisible, 4 arms shown, 8 no base plate, 16 marker); `pose` is head, body, left arm, right arm, left leg, right leg, each x, y, z in degrees |
 | `skull` | `t, x, y, z, tex` | a player head placed as a block: its skin (`textures` property, base64), once per position (again if it changes); heads within 12 chunks of you, checked every second |
 | `bev` | `t, x, y, z, b` | a chest, trapped chest or ender chest lid event: `b` players have it open now (0 = it closes) |
-| `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
+| `gui` / `guiclose` | `t, title, menu, w, h, slots` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles). `menu` is the menu type (`minecraft:generic_9x6`..., `inventory` for your own), `w`/`h` the window's size and `slots` every slot's `[x, y]` in menu order, all in GUI pixels from the window's top-left |
+| `slots` | `t, s: [[index, vanillaItem, count, headTex?], ...]` | the open container's slots: all of them right after the `gui` line, then only those that changed (`""`/0 = empty; `headTex` for a player head) |
+| `carried` | `t, id, count` | the item on your mouse cursor in the open container, when it changes (`""`/0 = none) |
+| `mouse` | `t, d: [[partialTick, x, y], ...]` | the mouse over the open container at every rendered frame since the last tick (at most 60 a second, still frames left out as for `cam`), GUI pixels from the window's top-left |
+| `click` | `t, x, y, button` | a mouse click in the open container (same coordinates; button 0 left, 1 right, 2 middle) |
 | `spawn` | `t, id, type, name, c?, x, y, z, yaw, baby?, headYaw?, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state; `baby: 1` for baby mobs) |
 | `e` | `t, d: [[id, x, y, z, yaw, headYaw?], ...]` | non-player entities that moved (or turned their head) this tick; `headYaw` (also on `spawn`) is where a mob's head faces, for living entities only |
 | `name` | `t, id, name, c?` | an entity's custom name changed (Hypixel nametags/health bars); `c` is the name with its § colour codes when it has any (also on `spawn`) |

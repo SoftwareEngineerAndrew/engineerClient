@@ -79,6 +79,7 @@ class RunRecorder(
 
     fun onTick(level: ClientLevel) {
         flushFrames()
+        flushMouse()
         tick++
         if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
@@ -145,8 +146,75 @@ class RunRecorder(
     fun onRoomEnter(name: String?) = emit("""{"k":"room","t":$tick,"name":${str(name ?: "Unknown")}}""")
 
     /** Your own container screens (terminals are GUIs with fixed titles): exact open/close times. */
-    fun onGuiOpen(title: String) = emit("""{"k":"gui","t":$tick,"title":${str(title)}}""")
-    fun onGuiClose() = emit("""{"k":"guiclose","t":$tick}""")
+    fun onGuiClose() {
+        flushMouse()
+        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
+        emit("""{"k":"guiclose","t":$tick}""")
+    }
+
+    // ------------------------------------------------------------------ what's in your open container
+    // So the viewer can redraw the window you had open: its layout (on the gui line), every slot's
+    // item (changes only), the item on your cursor, the mouse at every frame (up to 60 a second,
+    // like the camera) and your clicks. Positions are GUI pixels from the window's top-left.
+
+    /** A container screen opened: its menu type ("inventory" for your own), size and slot positions. */
+    fun onContainerOpen(title: String, menu: String, w: Int, h: Int, slots: List<IntArray>) {
+        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
+        val sb = StringBuilder()
+        slots.forEachIndexed { i, p -> if (i > 0) sb.append(','); sb.append('[').append(p[0]).append(',').append(p[1]).append(']') }
+        emit("""{"k":"gui","t":$tick,"title":${str(title)},"menu":${str(menu)},"w":$w,"h":$h,"slots":[$sb]}""")
+    }
+
+    private val lastSlots = HashMap<Int, String>()
+    private var lastCarried: String? = null
+
+    /** Each tick while a container is open: slots that changed since the last line, and the cursor's item. */
+    fun onContainerTick(items: List<ItemStack>, carried: ItemStack) {
+        val sb = StringBuilder()
+        items.forEachIndexed { i, stack ->
+            val entry = slotEntry(i, stack)
+            if (lastSlots.put(i, entry) == entry) return@forEachIndexed
+            if (sb.isNotEmpty()) sb.append(',')
+            sb.append(entry)
+        }
+        if (sb.isNotEmpty()) emit("""{"k":"slots","t":$tick,"s":[$sb]}""")
+        val c = """"id":${str(vanillaId(carried))},"count":${if (carried.isEmpty) 0 else carried.count}"""
+        if (c != lastCarried) { lastCarried = c; emit("""{"k":"carried","t":$tick,$c}""") }
+    }
+
+    private fun slotEntry(i: Int, stack: ItemStack): String {
+        val tex = stack.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
+        return "[$i,${str(vanillaId(stack))},${if (stack.isEmpty) 0 else stack.count}${tex?.let { "," + str(it) } ?: ""}]"
+    }
+
+    private val mouse = StringBuilder()
+    private var lastMouseNs = 0L
+    private var lastMouseX = Float.NaN
+    private var lastMouseY = Float.NaN
+    private var heldMouse: String? = null
+
+    /** The mouse over the open container, per rendered frame (60 a second at most); still frames skipped. */
+    fun onContainerMouse(partialTick: Float, x: Float, y: Float) {
+        val now = System.nanoTime()
+        if (now - lastMouseNs < FRAME_NS) return
+        lastMouseNs = now
+        val entry = "[${f2(partialTick)},${f2(x)},${f2(y)}]"
+        if (x == lastMouseX && y == lastMouseY) { heldMouse = entry; return }
+        heldMouse?.let { if (mouse.isNotEmpty()) mouse.append(','); mouse.append(it) }
+        heldMouse = null
+        lastMouseX = x; lastMouseY = y
+        if (mouse.isNotEmpty()) mouse.append(',')
+        mouse.append(entry)
+    }
+
+    private fun flushMouse() {
+        if (mouse.isEmpty()) return
+        emit("""{"k":"mouse","t":$tick,"d":[$mouse]}""")
+        mouse.setLength(0)
+    }
+
+    fun onContainerClick(x: Float, y: Float, button: Int) =
+        emit("""{"k":"click","t":$tick,"x":${f2(x)},"y":${f2(y)},"button":$button}""")
 
     /** Ends the session: closes the file (on the writer thread) and gives it its final name. */
     fun finish() {
