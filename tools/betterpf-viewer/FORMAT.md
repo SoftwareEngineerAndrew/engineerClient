@@ -25,7 +25,8 @@ happened, so a reader can play the file start to finish.
 | `time` | `t, ms` | wall-clock sync every 20 ticks |
 | `floor` | `t, floor` | floor once known (e.g. `F7`, `M7`) |
 | `party` | `t, m: [[name, class], ...]` | party and classes, rewritten whenever they change |
-| `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion, vanillaItem], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) (`heldItemId` is the Skyblock id when there is one; `vanillaItem` is always the game item, e.g. `minecraft:iron_sword`) |
+| `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion, vanillaItem], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) (`heldItemId` is the Skyblock id when there is one; `vanillaItem` is always the game item, e.g. `minecraft:iron_sword` - the item it is drawn as when it has a vanilla `item_model`: Hypixel builds many items on another base item, like paper drawn as TNT) |
+| `held` | `t, name, tex` | the skin of the player head a player is holding (the leap item, for one), when it changes; `""` when they stop holding one |
 | `pgone` | `t, name` | player no longer in the world |
 | `skin` | `t, name, tex` | a player's skin, once: their profile's `textures` property (base64 JSON with the skin URL and model) |
 | `eq` | `t, name` or `t, id`, `eq: [mainHand, head, chest, legs, feet], headTex?` | a player's or mob's held item and armour changed (vanilla item ids, with `#rrggbb` appended for dyed items like leather armour); `headTex` is the skin of a worn player head |
@@ -36,9 +37,9 @@ happened, so a reader can play the file start to finish.
 | `skull` | `t, x, y, z, tex` | a player head placed as a block: its skin (`textures` property, base64), once per position (again if it changes); heads within 12 chunks of you, checked every second |
 | `bev` | `t, x, y, z, b` | a chest, trapped chest or ender chest lid event: `b` players have it open now (0 = it closes) |
 | `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
-| `spawn` | `t, id, type, name, x, y, z, yaw, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
+| `spawn` | `t, id, type, name, c?, x, y, z, yaw, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
 | `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
-| `name` | `t, id, name` | an entity's custom name changed (Hypixel nametags/health bars) |
+| `name` | `t, id, name, c?` | an entity's custom name changed (Hypixel nametags/health bars); `c` is the name with its § colour codes when it has any (also on `spawn`) |
 | `gone` | `t, id` | entity despawned |
 | `pal` | `i, s` | block-state palette entry, e.g. `minecraft:oak_stairs[facing=north,...]` |
 | `lib` | `t, key, x0, y0, z0, w, h, d, pal, rle` | every block of a room the library didn't have yet; `key` is `Name\|ROTATION`, or `Boss\|FLOOR\|cx,cz` for one 16x16 chunk column of the boss arena (a volume, see below; the column the arena starts in is only captured from the room grid's last gap on, so it can be narrower) |

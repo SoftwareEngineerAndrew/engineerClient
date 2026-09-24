@@ -123,7 +123,7 @@ object BetterPF : Module(
      * §#rrggbb for any other), then bold/italic/underline/strikethrough/obfuscated, written again
      * wherever the style changes. § codes already inside the text are kept as they are.
      */
-    private fun legacyText(message: Component): String {
+    internal fun legacyText(message: Component): String {
         val sb = StringBuilder()
         var last = ""
         message.visit(FormattedText.StyledContentConsumer<Unit> { style, text ->
