@@ -357,7 +357,7 @@ class RunRecorder(
                 tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored, headYaw)
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}$block}""")
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block}""")
                 if (e is ArmorStand) recordStand(e)
                 continue
             }
