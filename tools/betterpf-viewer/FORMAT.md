@@ -32,6 +32,9 @@ happened, so a reader can play the file start to finish.
 | `sw` | `t, d: [name, ...]` | players who started an arm swing this tick (left click, or a right click that hit something - opening a terminal swings) |
 | `mp` | `t, d: [[name, x, z, yaw], ...]` | teammates the game isn't rendering: their position from the dungeon map (clear only, about 1.6 blocks per map pixel), written when it changes |
 | `cam` | `t, d: [[partialTick, yaw, pitch], ...]` | your own look direction at every rendered frame (at most 60 a second) since the last tick (frames that didn't move are left out, except the one just before it moves again). A frame's time on the `p` timeline is `t - 1 + partialTick`: it was drawn between your `p` entries at `t - 1` and `t` |
+| `stand` | `t, id, f, pose: [18 numbers]` | an armor stand's look, on spawn and when it changes: `f` flags (1 small, 2 invisible, 4 arms shown, 8 no base plate, 16 marker); `pose` is head, body, left arm, right arm, left leg, right leg, each x, y, z in degrees |
+| `skull` | `t, x, y, z, tex` | a player head placed as a block: its skin (`textures` property, base64), once per position (again if it changes); heads within 12 chunks of you, checked every second |
+| `bev` | `t, x, y, z, b` | a chest, trapped chest or ender chest lid event: `b` players have it open now (0 = it closes) |
 | `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
 | `spawn` | `t, id, type, name, x, y, z, yaw, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
 | `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
@@ -42,7 +45,7 @@ happened, so a reader can play the file start to finish.
 | `vol` | `t, x0, y0, z0, w, h, d, pal, rle` | (no longer written) the 1-block gaps between rooms; the viewer ignores it and leaves gaps as air |
 | `door` | `t, x0, y0, z0, w, h, d, pal, rle` | a box where a door can be (middle of a tile edge; now 7 along the wall, 2 blocks into each room, y 67-76 - older runs: 3x3, y 69-72), air included: the door, the opening, or the wall filling it |
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
-| `chat` | `t, m` | chat line, formatting stripped |
+| `chat` | `t, m, c?` | chat line: `m` with formatting stripped; `c` the same line with `§` codes (`§0`-`§f` colours, `§#rrggbb` for other colours, `§k§l§m§n§o`, `§r` reset between styled parts), only when it has formatting |
 | `room` | `t, name` | you entered a room |
 | `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...], secretsFound, secretsTotal], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes |
 | `end` | `t, ms` | last line |
@@ -72,5 +75,5 @@ Format 1 had no `lib`/`vol`/`pgone`, wrote every player every tick and sent `chu
 
 - Other players' clicks, abilities and held-item swaps beyond what `heldItemId` shows.
 - Your own inputs (keys, clicks).
-- Entity health beyond what's in their nametag, and entity equipment.
+- Entity health beyond what's in their nametag.
 - Anything before you load into the instance (party finder, queueing).

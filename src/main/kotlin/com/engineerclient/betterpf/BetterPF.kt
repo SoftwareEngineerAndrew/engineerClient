@@ -13,7 +13,15 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.minecraft.ChatFormatting
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.FormattedText
+import net.minecraft.network.chat.Style
+import net.minecraft.network.chat.TextColor
+import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.world.level.block.Blocks
+import java.util.Optional
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
@@ -90,7 +98,15 @@ object BetterPF : Module(
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
-            EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text) } }
+            val colored = legacyText(content)
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored) } }
+        }
+        // Chests opening and closing (the lid's block event: how many players have it open), so the
+        // viewer can open the chests people looted.
+        onReceive<ClientboundBlockEventPacket> {
+            if (b0 != 1 || (block != Blocks.CHEST && block != Blocks.TRAPPED_CHEST && block != Blocks.ENDER_CHEST)) return@onReceive
+            val at = pos.immutable(); val open = b1
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf chest") { session?.onChestEvent(at, open) } }
         }
         on<RoomEnterEvent> { EngineerClient.safely("betterpf room") { session?.onRoomEnter(room?.name) } }
 
@@ -100,6 +116,41 @@ object BetterPF : Module(
             EngineerClient.safely("betterpf gui") { session?.onGuiOpen(screen.title.string) }
             ScreenEvents.remove(screen).register { EngineerClient.safely("betterpf gui close") { session?.onGuiClose() } }
         }
+    }
+
+    /**
+     * A chat line with its formatting as § codes: colour (the nearest of the 16 chat colours, or
+     * §#rrggbb for any other), then bold/italic/underline/strikethrough/obfuscated, written again
+     * wherever the style changes. § codes already inside the text are kept as they are.
+     */
+    private fun legacyText(message: Component): String {
+        val sb = StringBuilder()
+        var last = ""
+        message.visit(FormattedText.StyledContentConsumer<Unit> { style, text ->
+            if (text.isNotEmpty()) {
+                val codes = styleCodes(style)
+                if (codes != last) { if (last.isNotEmpty()) sb.append("§r"); sb.append(codes); last = codes }
+                sb.append(text)
+            }
+            Optional.empty()
+        }, Style.EMPTY)
+        return sb.toString()
+    }
+
+    private fun styleCodes(style: Style): String {
+        val sb = StringBuilder()
+        style.color?.let { sb.append(colorCode(it)) }
+        if (style.isObfuscated) sb.append("§k")
+        if (style.isBold) sb.append("§l")
+        if (style.isStrikethrough) sb.append("§m")
+        if (style.isUnderlined) sb.append("§n")
+        if (style.isItalic) sb.append("§o")
+        return sb.toString()
+    }
+
+    private fun colorCode(color: TextColor): String {
+        val legacy = ChatFormatting.entries.firstOrNull { it.isColor && it.color == color.value }
+        return if (legacy != null) "§" + legacy.char else "§#" + String.format(java.util.Locale.ROOT, "%06x", color.value and 0xFFFFFF)
     }
 
     private fun fetchLibraryKeys() {
