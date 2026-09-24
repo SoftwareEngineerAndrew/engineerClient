@@ -17,6 +17,11 @@ Modules, all under the "Engineer Client" panel in Odin's ClickGUI:
 | Sub Splits | Devonian's splits, the whole run on one draggable HUD, timed on both the real clock and the server's tick clock. Plus one "{split} Sub Splits" HUD per split listing what happened inside it — a data-gathering pass, all off by default. |
 | Party Finder Stats | Cata level, secrets and floor PB in-line on every member row of a Party Finder listing, cached on disk for a day. The `Members:` header says which classes the party is missing, yours bolded. |
 | Hub Nametag Stats | The same stat line floating over every real player's nametag, Dungeon Hub only (F7 PB by default; floor and PB type are settings). Shares Party Finder Stats' disk cache. |
+
+Both stat views read one store (`PlayerStats`). With [Devonian](https://modrinth.com/mod/devonian)
+installed, its session cache answers first, misses go through its faster fetcher (Odin's profile
+fetch is the fallback), and every player Devonian prefetches for its own Party Finder features
+lands in the store as it arrives. Optional: everything works without it.
 | Lowest BIN | An item's lowest auction-house BIN on its tooltip, priced from Coflnet one item at a time. Silent for anything not auctionable. |
 | Random Stuff | Grab bag of small toggles — hiding chat, damage flash, item names, the action bar, armour stands; Enter confirms a sign; black sky; the enchantment-glint remover; Auto Join Hypixel. Always trims the Skyblock sidebar down to what matters (`Dump Scoreboard` prints the real text, and a text field adds your own lines). |
 
