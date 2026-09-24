@@ -49,7 +49,7 @@ happened, so a reader can play the file start to finish.
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
 | `chat` | `t, m, c?` | chat line: `m` with formatting stripped; `c` the same line with `§` codes (`§0`-`§f` colours, `§#rrggbb` for other colours, `§k§l§m§n§o`, `§r` reset between styled parts), only when it has formatting |
 | `room` | `t, name` | you entered a room |
-| `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...], secretsFound, secretsTotal], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes |
+| `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...], secretsFound, secretsTotal, libraryKey?], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes; `libraryKey` once the room's rotation is really known (1x1 rooms: Odin found its blue clay) and, for 1x1 rooms with several variants, which one (`Name\|ROTATION\|core`) |
 | `end` | `t, ms` | last line |
 
 A `pal` line always comes before the first line that uses its index.

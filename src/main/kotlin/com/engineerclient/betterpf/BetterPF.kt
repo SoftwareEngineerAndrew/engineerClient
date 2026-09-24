@@ -71,6 +71,7 @@ object BetterPF : Module(
                 session?.finish()
                 libraryKeys = null
                 fetchLibraryKeys()
+                RoomKeys.reset()
                 session = RunRecorder(runsDir, captureGeometry, { libraryKeys }, ::upload)
             }
         }
