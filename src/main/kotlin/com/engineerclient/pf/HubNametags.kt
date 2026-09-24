@@ -42,23 +42,35 @@ object HubNametags : Module(
     /** Vanilla stops rendering nametags past 64 blocks; match it. */
     private const val RANGE_SQ = 64.0 * 64.0
 
+    // Last render pass, for the diagnostic log line.
+    @Volatile private var lastSeen = 0
+    @Volatile private var lastDrawn = 0
+
     init {
         on<RenderEvent.Extract> {
-            if (!inDungeonHub()) return@on
+            val hub = inDungeonHub()
+            diagLog(hub)
+            if (!hub) return@on
             val level = mc.level ?: return@on
             val me = mc.player ?: return@on
             val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false)
             // Selector index → PB mode and floor: 0 is Entrance, then F1..F7, then M1..M7.
             val mode = if (pbFloor >= 8) "m" else "f"
             val floor = if (pbFloor >= 8) (pbFloor - 7).toString() else pbFloor.toString()
+            var seen = 0
+            var drawn = 0
             for (p in level.players()) {
+                seen++
                 if (p === me || !p.isAlive || p.isInvisible) continue
                 if (p.uuid.version() != 4) continue // hub NPCs pose as players; real ones are v4
                 if (p.distanceToSqr(me) > RANGE_SQ) continue
                 val line = lineFor(p.name.string, mode, floor)
                 if (line.isEmpty()) continue
+                drawn++
                 drawText(line, p.getPosition(pt).add(0.0, p.bbHeight + height.toDouble(), 0.0), scale, false)
             }
+            lastSeen = seen
+            lastDrawn = drawn
         }
     }
 
@@ -66,14 +78,38 @@ object HubNametags : Module(
      * The tab list's "Area: Dungeon Hub" info line, read live every frame. Odin's LocationUtils
      * parses the same line off player-info packets, but only while its cached area is Unknown —
      * an Area packet that lands before Odin's world-load reset is missed for the whole lobby.
-     * Reading the current tab list directly has no ordering to get wrong.
+     * Reading the current tab entries directly has no ordering to get wrong. All entries, not
+     * just the listed ones: Hypixel's info lines are fake players that need not be listed.
      */
     private fun inDungeonHub(): Boolean {
-        val infos = mc.connection?.listedOnlinePlayers ?: return false
+        val infos = mc.connection?.onlinePlayers ?: return false
         return infos.any { info ->
             val s = info.tabListDisplayName?.string?.trim() ?: return@any false
             s.startsWith("Area:") && "Dungeon Hub" in s
         }
+    }
+
+    // ------------------------------------------------------------------ diagnostics
+    //
+    // Into the game log (not chat), readable from logs/latest.log after a session: the gate,
+    // what the tab list actually contains, and how many players got a line last frame.
+
+    private var lastLog = 0L
+    private var lastHub = false
+
+    private fun diagLog(hub: Boolean) {
+        val now = System.currentTimeMillis()
+        if (hub == lastHub && now - lastLog < 15_000) return
+        lastLog = now
+        lastHub = hub
+        val all = mc.connection?.onlinePlayers ?: emptyList()
+        val listed = mc.connection?.listedOnlinePlayers ?: emptyList()
+        val areaIsh = all.mapNotNull { it.tabListDisplayName?.string?.trim() }
+            .filter { "Area" in it || "Dungeon" in it || "Hub" in it }
+        com.engineerclient.EngineerClient.logger.info(
+            "[ec] hub nametags: gate=$hub tab=${all.size} entries (${listed.size} listed) " +
+                "drawn=$lastDrawn/$lastSeen area-ish=${areaIsh.take(4)}"
+        )
     }
 
     private fun lineFor(name: String, mode: String, floor: String): String =
