@@ -14,10 +14,13 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.item.FallingBlockEntity
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.chunk.status.ChunkStatus
 import java.io.BufferedWriter
 import java.io.OutputStreamWriter
 import java.nio.file.Files
@@ -90,6 +93,7 @@ class RunRecorder(
         recordSwings(level)
         if (tick % 5 == 0) recordMapPlayers()
         recordEntities(level)
+        if (confirmed && tick % 20 == 0) recordSkulls(level)
         if (confirmed && captureGeometry) geometry.tick(level, tick)
     }
 
@@ -127,7 +131,15 @@ class RunRecorder(
         emit("""{"k":"block","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"s":${paletteIndex(state)}}""")
     }
 
-    fun onChat(message: String) = emit("""{"k":"chat","t":$tick,"m":${str(message)}}""")
+    /** A chat line: plain [message], plus [colored] (with § formatting codes) when it has any formatting. */
+    fun onChat(message: String, colored: String? = null) {
+        val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
+        emit("""{"k":"chat","t":$tick,"m":${str(message)}$c}""")
+    }
+
+    /** A chest (or ender chest) lid event: [openCount] players now have it open (0 = it closes). */
+    fun onChestEvent(pos: BlockPos, openCount: Int) =
+        emit("""{"k":"bev","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"b":$openCount}""")
 
     fun onRoomEnter(name: String?) = emit("""{"k":"room","t":$tick,"name":${str(name ?: "Unknown")}}""")
 
@@ -317,9 +329,11 @@ class RunRecorder(
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
                 emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)},"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}$block}""")
+                if (e is ArmorStand) recordStand(e)
                 continue
             }
             if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
+            if (e is ArmorStand) recordStand(e)
             if (name != t.name) {
                 t.name = name
                 emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}}""")
@@ -336,6 +350,7 @@ class RunRecorder(
         for (id in gone) {
             tracked.remove(id)
             lastEquipment.remove("#$id")
+            lastStand.remove(id)
             emit("""{"k":"gone","t":$tick,"id":$id}""")
         }
     }
@@ -346,6 +361,40 @@ class RunRecorder(
     // Held item and armour per player name / "#entityId", written when it changes: vanilla ids, plus
     // the head item's skin texture when it's a player head (dungeon mobs wear those).
     private val lastEquipment = HashMap<String, String>()
+
+    // Armor stands: size, visibility, arms/base plate and their pose (Hypixel poses them for heads,
+    // held items and nametags), written when any of it changes.
+    private val lastStand = HashMap<Int, String>()
+
+    private fun recordStand(e: ArmorStand) {
+        val f = (if (e.isSmall) 1 else 0) or (if (e.isInvisible) 2 else 0) or (if (e.showArms()) 4 else 0) or
+            (if (!e.showBasePlate()) 8 else 0) or (if (e.isMarker) 16 else 0)
+        val pose = listOf(e.headPose, e.bodyPose, e.leftArmPose, e.rightArmPose, e.leftLegPose, e.rightLegPose)
+            .joinToString(",") { "${a(it.x())},${a(it.y())},${a(it.z())}" }
+        val body = """"f":$f,"pose":[$pose]"""
+        if (lastStand.put(e.id, body) == body) return
+        emit("""{"k":"stand","t":$tick,"id":${e.id},$body}""")
+    }
+
+    // Player heads placed as blocks (skulls on walls, floors, the boss arena): their skin, once per
+    // position and again if it changes. The viewer would otherwise draw a default head.
+    private val lastSkull = HashMap<BlockPos, String>()
+
+    private fun recordSkulls(level: ClientLevel) {
+        val player = EngineerClient.mc.player ?: return
+        val cx = player.blockPosition().x shr 4
+        val cz = player.blockPosition().z shr 4
+        for (x in cx - SKULL_CHUNKS..cx + SKULL_CHUNKS) for (z in cz - SKULL_CHUNKS..cz + SKULL_CHUNKS) {
+            val chunk = level.chunkSource.getChunk(x, z, ChunkStatus.FULL, false) ?: continue
+            for (be in chunk.blockEntities.values) {
+                if (be !is SkullBlockEntity) continue
+                val tex = be.ownerProfile?.let { texturesOf(it.partialProfile().properties()) } ?: continue
+                val pos = be.blockPos
+                if (lastSkull.put(pos.immutable(), tex) == tex) continue
+                emit("""{"k":"skull","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"tex":${str(tex)}}""")
+            }
+        }
+    }
 
     private fun recordEquipment(e: LivingEntity, who: String, key: String) {
         val head = e.getItemBySlot(EquipmentSlot.HEAD)
@@ -400,6 +449,8 @@ class RunRecorder(
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
         const val NO_EQUIPMENT = """["","","","",""]"""
+        // How far around you (in chunks) placed player heads are looked for, every second.
+        const val SKULL_CHUNKS = 12
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
     }
 }
