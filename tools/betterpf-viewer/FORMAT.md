@@ -71,6 +71,6 @@ Format 1 had no `lib`/`vol`/`pgone`, wrote every player every tick and sent `chu
 ## Not captured yet
 
 - Other players' clicks, abilities and held-item swaps beyond what `heldItemId` shows.
-- Your own inputs (keys, clicks, look deltas finer than per tick).
+- Your own inputs (keys, clicks).
 - Entity health beyond what's in their nametag, and entity equipment.
 - Anything before you load into the instance (party finder, queueing).
