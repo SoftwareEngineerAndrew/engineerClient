@@ -4,6 +4,7 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
@@ -72,6 +73,13 @@ object HubNametags : Module(
             lastSeen = seen
             lastDrawn = drawn
         }
+
+        // Odin's Module only EventBus-subscribes on an enabled TRANSITION (onEnable) or, in the
+        // constructor, when alwaysActive. A module born on (toggled = true) whose saved state is
+        // also on never transitions, so its listeners register but never dispatch — Party Finder
+        // Stats never hit this because it has no listeners. Mirror the alwaysActive path; the
+        // set-based bus makes a later toggle's subscribe/unsubscribe idempotent on top of this.
+        if (enabled) EventBus.subscribe(this)
     }
 
     /**
