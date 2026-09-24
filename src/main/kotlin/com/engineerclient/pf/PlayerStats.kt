@@ -7,6 +7,7 @@ import com.odtheking.odin.OdinMod
 import com.odtheking.odin.utils.calculateDungeonLevel
 import com.odtheking.odin.utils.network.hypixelapi.HypixelData
 import com.odtheking.odin.utils.network.hypixelapi.RequestUtils
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.nio.file.Files
 import java.util.Locale
@@ -20,6 +21,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Same data as Odin's Better Party Finder autokick: `RequestUtils.getProfile` (Odin's own
  * API, cached by Odin), Catacombs level from `dungeons.dungeon_types.catacombs.experience`,
  * `dungeons.secrets`, and the S+ / S / any-score fastest times.
+ *
+ * With Devonian installed ([DevonianBridge]) its session cache answers first and misses route
+ * through its faster fetcher (Odin's profile fetch stays as the fallback), and everything
+ * Devonian fetches for its own features — it prefetches whole Party Finder listings — lands in
+ * this store as it arrives.
  *
  * Stats change rarely and the same few hundred players show up night after night, so everything
  * is kept on disk for a day: `config/engineerclient/pfstats.json`. Odin's own profile cache only
@@ -62,20 +68,58 @@ object PlayerStats {
      * refreshed while its old numbers keep showing.
      */
     fun lookup(name: String): Lookup {
-        if (loaded.compareAndSet(false, true)) load()
+        if (loaded.compareAndSet(false, true)) {
+            load()
+            // Everything Devonian fetches for its own features flows into this store too.
+            DevonianBridge.onResult(::offer)
+        }
         val key = name.lowercase()
         val entry = cache[key]
         val now = System.currentTimeMillis()
         if (entry == null || (entry is Failed && now - entry.at > RETRY_FAILED_MS)) {
+            DevonianBridge.cached(name)?.let { stats ->
+                val ready = Ready(stats)
+                cache[key] = ready
+                dirty.set(true)
+                OdinMod.scope.launch { if (dirty.compareAndSet(true, false)) save() }
+                return ready
+            }
             cache[key] = Loading
-            fetch(name, key)
+            fetch(name, key, tryDevonian = true)
             return Loading
         }
-        if (entry is Ready && now - entry.stats.fetchedAt > STATS_TTL_MS && refreshing.add(key)) fetch(name, key)
+        // A day old: refresh in the background, keep showing what we have. Straight through
+        // Odin — a background refresh is not latency-sensitive, and its bookkeeping (the
+        // refreshing set) stays with the one fetcher that always answers.
+        if (entry is Ready && now - entry.stats.fetchedAt > STATS_TTL_MS && refreshing.add(key)) fetch(name, key, tryDevonian = false)
         return entry
     }
 
-    private fun fetch(name: String, key: String) {
+    /** A result from the Devonian feed: into the cache and onto disk. */
+    private fun offer(name: String, stats: Stats) {
+        val key = name.lowercase()
+        cache[key] = Ready(stats)
+        refreshing -= key
+        dirty.set(true)
+        OdinMod.scope.launch { if (dirty.compareAndSet(true, false)) save() }
+    }
+
+    private const val DEVONIAN_GRACE_MS = 6_000L
+
+    private fun fetch(name: String, key: String, tryDevonian: Boolean) {
+        if (tryDevonian && DevonianBridge.request(name)) {
+            // The result lands through the Devonian feed; if it has not after a grace period
+            // (dropped from their queue, backend down), fall through to Odin's own fetch.
+            OdinMod.scope.launch {
+                delay(DEVONIAN_GRACE_MS)
+                if (cache[key] is Loading) odinFetch(name, key)
+            }
+            return
+        }
+        odinFetch(name, key)
+    }
+
+    private fun odinFetch(name: String, key: String) {
         OdinMod.scope.launch {
             val result = runCatching { RequestUtils.getProfile(name) }.getOrElse { Result.failure(it) }
             val fresh = result.getOrNull()?.memberData?.let { Ready(toStats(it)) }
