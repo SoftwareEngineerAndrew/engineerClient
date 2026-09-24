@@ -25,8 +25,9 @@ happened, so a reader can play the file start to finish.
 | `time` | `t, ms` | wall-clock sync every 20 ticks |
 | `floor` | `t, floor` | floor once known (e.g. `F7`, `M7`) |
 | `party` | `t, m: [[name, class], ...]` | party and classes, rewritten whenever they change |
-| `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion, vanillaItem], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) (`heldItemId` is the Skyblock id when there is one; `vanillaItem` is always the game item, e.g. `minecraft:iron_sword` - the item it is drawn as when it has a vanilla `item_model`: Hypixel builds many items on another base item, like paper drawn as TNT) |
+| `p` | `t, d: [[name, x, y, z, yaw, pitch, heldItemId, uuidVersion, vanillaItem, crouching], ...]` | players whose entry changed since their last one (a player keeps their last entry until the next) (`heldItemId` is the Skyblock id when there is one; `vanillaItem` is always the game item, e.g. `minecraft:iron_sword`; `crouching` is 1 while sneaking, else 0 (newer runs) - the item it is drawn as when it has a vanilla `item_model`: Hypixel builds many items on another base item, like paper drawn as TNT) |
 | `held` | `t, name, tex` | the skin of the player head a player is holding (the leap item, for one), when it changes; `""` when they stop holding one |
+| `hotbar` | `t, items: [9 vanilla ids], sel, tex: {slot: skin}` | your own hotbar (vanilla ids as in `p`), the selected slot 0-8, and the skins of player heads in it by slot; written when any of it changes |
 | `pgone` | `t, name` | player no longer in the world |
 | `skin` | `t, name, tex` | a player's skin, once: their profile's `textures` property (base64 JSON with the skin URL and model) |
 | `eq` | `t, name` or `t, id`, `eq: [mainHand, head, chest, legs, feet], headTex?` | a player's or mob's held item and armour changed (vanilla item ids, with `#rrggbb` appended for dyed items like leather armour); `headTex` is the skin of a worn player head |
@@ -37,8 +38,8 @@ happened, so a reader can play the file start to finish.
 | `skull` | `t, x, y, z, tex` | a player head placed as a block: its skin (`textures` property, base64), once per position (again if it changes); heads within 12 chunks of you, checked every second |
 | `bev` | `t, x, y, z, b` | a chest, trapped chest or ender chest lid event: `b` players have it open now (0 = it closes) |
 | `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
-| `spawn` | `t, id, type, name, c?, x, y, z, yaw, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
-| `e` | `t, d: [[id, x, y, z, yaw], ...]` | non-player entities that moved this tick |
+| `spawn` | `t, id, type, name, c?, x, y, z, yaw, headYaw?, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
+| `e` | `t, d: [[id, x, y, z, yaw, headYaw?], ...]` | non-player entities that moved (or turned their head) this tick; `headYaw` (also on `spawn`) is where a mob's head faces, for living entities only |
 | `name` | `t, id, name, c?` | an entity's custom name changed (Hypixel nametags/health bars); `c` is the name with its § colour codes when it has any (also on `spawn`) |
 | `gone` | `t, id` | entity despawned |
 | `pal` | `i, s` | block-state palette entry, e.g. `minecraft:oak_stairs[facing=north,...]` |
