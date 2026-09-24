@@ -582,8 +582,11 @@ class RunRecorder(
         if (stack.isEmpty) return ""
         // The item it looks like: Hypixel builds many items on a base item with another item's model
         // (paper that is drawn as TNT), so a vanilla item_model wins over the base item.
-        val model = stack.get(DataComponents.ITEM_MODEL)?.takeIf { it.namespace == "minecraft" }?.toString()
-        val id = model ?: BuiltInRegistries.ITEM.getKey(stack.item).toString()
+        val modelId = stack.get(DataComponents.ITEM_MODEL)
+        val model = modelId?.takeIf { it.namespace == "minecraft" }?.toString()
+        var id = model ?: BuiltInRegistries.ITEM.getKey(stack.item).toString()
+        // A model from another namespace (Hypixel's own) is kept after "@", for the viewer to map.
+        if (modelId != null && model == null) id += "@" + modelId
         val dye = stack.get(DataComponents.DYED_COLOR) ?: return id
         return id + "#" + String.format(Locale.ROOT, "%06x", dye.rgb() and 0xFFFFFF)
     }
