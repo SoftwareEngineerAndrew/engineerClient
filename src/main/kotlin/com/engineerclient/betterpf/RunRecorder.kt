@@ -68,7 +68,7 @@ class RunRecorder(
     private var partyKey = ""
 
     // Entity tracking: last written position/name per entity id, to only write changes.
-    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String)
+    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float)
     private val tracked = HashMap<Int, Tracked>()
 
     // Geometry: rooms go to the server's room library once, gaps between rooms per run (GeometryCapture).
@@ -90,6 +90,7 @@ class RunRecorder(
         recordFloorAndParty()
         if (tick % 10 == 0) recordRooms()
         recordPlayers(level)
+        recordHotbar()
         recordSwings(level)
         if (tick % 5 == 0) recordMapPlayers()
         recordEntities(level)
@@ -252,6 +253,20 @@ class RunRecorder(
     // Last written entry per player name; only players whose entry changed go in a "p" line.
     private val lastPlayer = HashMap<String, String>()
 
+    // Your own hotbar: the nine items, which slot is selected, and the skins of any player heads in it.
+    private var lastHotbar = ""
+    private fun recordHotbar() {
+        val inv = EngineerClient.mc.player?.inventory ?: return
+        val items = (0 until 9).joinToString(",", "[", "]") { str(vanillaId(inv.getItem(it))) }
+        val tex = (0 until 9).mapNotNull { i ->
+            inv.getItem(i).get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }?.let { "\"$i\":${str(it)}" }
+        }.joinToString(",", "{", "}")
+        val body = """"items":$items,"sel":${inv.selectedSlot},"tex":$tex"""
+        if (body == lastHotbar) return
+        lastHotbar = body
+        emit("""{"k":"hotbar","t":$tick,$body}""")
+    }
+
     // The skin of a player head someone holds (the leap item, for one), written when it changes.
     private val lastHeldHead = HashMap<String, String>()
     private fun recordHeldHead(p: Player, name: String) {
@@ -270,8 +285,8 @@ class RunRecorder(
             val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { vanillaId(it) } }
             if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
             recordEquipment(p, "\"name\":${str(name)}", name)
-            // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one.
-            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))}]"
+            // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one; [9] 1 while crouching.
+            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
             recordHeldHead(p, name)
             if (lastPlayer.put(name, entry) == entry) continue
             if (changed++ > 0) sb.append(',')
@@ -336,11 +351,13 @@ class RunRecorder(
             val colored = e.customName?.let { BetterPF.legacyText(it) } ?: ""
             val c = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
             val t = tracked[id]
+            // Mobs turn their heads apart from their bodies (the way they look at you).
+            val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
             if (t == null) {
-                tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored)
+                tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored, headYaw)
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}$block}""")
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}$block}""")
                 if (e is ArmorStand) recordStand(e)
                 continue
             }
@@ -350,11 +367,13 @@ class RunRecorder(
                 t.name = colored
                 emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}$c}""")
             }
-            if (e.x != t.x || e.y != t.y || e.z != t.z || e.yRot != t.yaw) {
-                t.x = e.x; t.y = e.y; t.z = e.z; t.yaw = e.yRot
+            if (e.x != t.x || e.y != t.y || e.z != t.z || e.yRot != t.yaw || headYaw != t.headYaw) {
+                t.x = e.x; t.y = e.y; t.z = e.z; t.yaw = e.yRot; t.headYaw = headYaw
                 if (movedCount++ > 0) moved.append(',')
                 moved.append('[').append(id).append(',').append(n(e.x)).append(',').append(n(e.y)).append(',')
-                    .append(n(e.z)).append(',').append(a(e.yRot)).append(']')
+                    .append(n(e.z)).append(',').append(a(e.yRot))
+                if (e is LivingEntity) moved.append(',').append(a(headYaw))
+                moved.append(']')
             }
         }
         if (movedCount > 0) emit("""{"k":"e","t":$tick,"d":[$moved]}""")
