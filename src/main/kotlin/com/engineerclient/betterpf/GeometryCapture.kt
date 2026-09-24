@@ -109,8 +109,11 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
             7 -> -7 to -7
             else -> return
         }
-        // First chunk entirely past the limit, so no column overlaps the room grid.
-        val cx0 = Math.floorDiv(limitX + 16, 16); val cz0 = Math.floorDiv(limitZ + 16, 16)
+        // The arena starts right after the room grid's last gap (limit - 1), which is inside a chunk:
+        // that first column is only captured from there on, so it never overlaps the rooms. (Starting at
+        // the first whole chunk instead left out the arena's walls on the dungeon side.)
+        val startX = limitX - 1; val startZ = limitZ - 1
+        val cx0 = Math.floorDiv(startX, 16); val cz0 = Math.floorDiv(startZ, 16)
         for (cx in cx0..cx0 + BOSS_CHUNKS) for (cz in cz0..cz0 + BOSS_CHUNKS) {
             val key = "Boss|${floor.name}|$cx,$cz"
             if (key in queuedRooms || (have != null && key in have)) continue
@@ -122,7 +125,8 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
             val y0 = maxOf(0, level.getSectionYFromSectionIndex(filled.first()) * 16)
             val y1 = minOf(256, (level.getSectionYFromSectionIndex(filled.last()) + 1) * 16)
             if (y1 <= y0) continue
-            jobs.addLast(VolumeJob("lib", key, cx * 16, y0, cz * 16, 16, y1 - y0, 16, null))
+            val x0 = maxOf(cx * 16, startX); val z0 = maxOf(cz * 16, startZ)
+            jobs.addLast(VolumeJob("lib", key, x0, y0, z0, cx * 16 + 16 - x0, y1 - y0, cz * 16 + 16 - z0, null))
         }
     }
 
