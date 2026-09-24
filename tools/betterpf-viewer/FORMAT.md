@@ -38,7 +38,7 @@ happened, so a reader can play the file start to finish.
 | `skull` | `t, x, y, z, tex` | a player head placed as a block: its skin (`textures` property, base64), once per position (again if it changes); heads within 12 chunks of you, checked every second |
 | `bev` | `t, x, y, z, b` | a chest, trapped chest or ender chest lid event: `b` players have it open now (0 = it closes) |
 | `gui` / `guiclose` | `t, title` / `t` | a container screen you opened / closed (terminal GUIs have fixed titles) |
-| `spawn` | `t, id, type, name, c?, x, y, z, yaw, headYaw?, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state) |
+| `spawn` | `t, id, type, name, c?, x, y, z, yaw, baby?, headYaw?, block?` | non-player entity appeared (`type` e.g. `minecraft:zombie`; falling blocks also have `block`, the block state; `baby: 1` for baby mobs) |
 | `e` | `t, d: [[id, x, y, z, yaw, headYaw?], ...]` | non-player entities that moved (or turned their head) this tick; `headYaw` (also on `spawn`) is where a mob's head faces, for living entities only |
 | `name` | `t, id, name, c?` | an entity's custom name changed (Hypixel nametags/health bars); `c` is the name with its § colour codes when it has any (also on `spawn`) |
 | `gone` | `t, id` | entity despawned |
