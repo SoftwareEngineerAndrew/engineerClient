@@ -75,6 +75,7 @@ class RunRecorder(
     // ------------------------------------------------------------------ inputs
 
     fun onTick(level: ClientLevel) {
+        flushFrames()
         tick++
         if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
@@ -90,6 +91,31 @@ class RunRecorder(
         if (tick % 5 == 0) recordMapPlayers()
         recordEntities(level)
         if (confirmed && captureGeometry) geometry.tick(level, tick)
+    }
+
+    // Your own look direction every rendered frame, not just every tick: the mouse turns the camera
+    // between ticks, so this is what you actually saw. Written once per tick as a "cam" line. Frames
+    // where the view didn't move are left out, except the last one before it moves again, so a
+    // replay holds still through the gap instead of drifting across it.
+    private val frames = StringBuilder()
+    private var lastFrameYaw = Float.NaN
+    private var lastFramePitch = Float.NaN
+    private var heldFrame: String? = null
+
+    fun onFrame(partialTick: Float, yaw: Float, pitch: Float) {
+        val entry = "[${f2(partialTick)},${f2(yaw)},${f2(pitch)}]"
+        if (yaw == lastFrameYaw && pitch == lastFramePitch) { heldFrame = entry; return }
+        heldFrame?.let { if (frames.isNotEmpty()) frames.append(','); frames.append(it) }
+        heldFrame = null
+        lastFrameYaw = yaw; lastFramePitch = pitch
+        if (frames.isNotEmpty()) frames.append(',')
+        frames.append(entry)
+    }
+
+    private fun flushFrames() {
+        if (frames.isEmpty()) return
+        emit("""{"k":"cam","t":$tick,"d":[$frames]}""")
+        frames.setLength(0)
     }
 
     fun onBlockUpdate(pos: BlockPos, state: BlockState) {
@@ -350,6 +376,7 @@ class RunRecorder(
 
     private fun n(v: Double) = String.format(Locale.ROOT, "%.3f", v)
     private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
+    private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
 
     private fun str(s: String): String {
         val sb = StringBuilder(s.length + 2).append('"')

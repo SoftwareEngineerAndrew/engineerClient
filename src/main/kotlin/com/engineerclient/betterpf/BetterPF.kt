@@ -5,6 +5,7 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -74,6 +75,13 @@ object BetterPF : Module(
             val s = session ?: return@on
             EngineerClient.safely("betterpf tick") { s.onTick(level) }
             if (s.abandoned) session = null
+        }
+
+        // Every rendered frame: your own camera, so POV replays show exactly what you saw.
+        on<RenderEvent.Last> {
+            val s = session ?: return@on
+            val player = EngineerClient.mc.player ?: return@on
+            EngineerClient.safely("betterpf frame") { s.onFrame(EngineerClient.mc.deltaTracker.getGameTimeDeltaPartialTick(true), player.yRot, player.xRot) }
         }
 
         on<BlockUpdateEvent> { EngineerClient.safely("betterpf block") { session?.onBlockUpdate(pos, updated) } }
