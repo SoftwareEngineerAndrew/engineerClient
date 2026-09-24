@@ -241,6 +241,10 @@ object EngineerClient : ClientModInitializer {
                         P3Rotation.debugLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1
                     })
+                    .then(literal("sb").executes { ctx ->
+                        HubNametags.debugLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
+                        1
+                    })
                     .then(literal("setup").executes { ctx ->
                         SetupCheck.lines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1
