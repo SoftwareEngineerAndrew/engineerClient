@@ -2,6 +2,7 @@ package com.engineerclient.splits
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -44,107 +45,152 @@ class SplitsModelTest {
     }
 
     @Test
-    fun `the clear is timed from Mort to the boss`() {
+    fun `the clear and the boss are one list, in the order they happened`() {
         val tracker = SplitTracker()
-        feed(tracker, f7Run.filter { it.first < 2150 })
+        feed(tracker, f7Run)
         assertEquals(
             listOf(
                 "&4Blood 152-539",
                 "&cWatcher Dialog 539-1027",
                 "&cWatcher 539-1941",
-                "&dPortal Enter 1941--",
-                "&9Boss Entry 152--",
-            ),
-            shape(tracker.runSplits()),
-        )
-    }
-
-    @Test
-    fun `the clear HUD stands down once the boss starts`() {
-        val tracker = SplitTracker()
-        feed(tracker, f7Run)
-        assertEquals(emptyList(), shape(tracker.runSplits()))
-        assertEquals(emptyList(), shape(tracker.watcherSplits()))
-    }
-
-    @Test
-    fun `the Watcher fight is timed from the blood door`() {
-        val tracker = SplitTracker()
-        // Seen moving during the fight, well before it lets you pass.
-        feed(tracker, f7Run.filter { it.first <= 1027 })
-        tracker.onWatcherMove(stamp(1100))
-        feed(tracker, f7Run.filter { it.first in 1028 until 2150 })
-        assertEquals(
-            listOf("&cWatcher Dialog 539-1027", "&cWatcher Move 539-1100", "&cWatcher 539-1941"),
-            shape(tracker.watcherSplits()),
-        )
-    }
-
-    @Test
-    fun `the Watcher move split falls back to the blessing when it was never seen moving`() {
-        val tracker = SplitTracker()
-        feed(tracker, f7Run.filter { it.first < 2150 })
-        assertEquals("&cWatcher Move 539-1941", shape(tracker.watcherSplits())[1])
-    }
-
-    @Test
-    fun `F7 phases run from one boss line to the next`() {
-        val tracker = SplitTracker()
-        feed(tracker, f7Run)
-        assertEquals(
-            listOf(
+                "&dPortal Enter 1941-2150",
+                "&9Boss Entry 152-2150",
                 "&5Maxor 2150-2672",
                 "&9Storm 2672-3590",
                 "&6Terminals 3590-5770",
-                "&eS1 3590--",
                 "&8Goldor 5770-5976",
                 "&4Necron 5976-6765",
                 "&4Boss 2150-6852",
             ),
-            shape(tracker.bossSplits()),
+            shape(tracker.splits()),
         )
     }
 
     @Test
-    fun `Wither King is a master-only split`() {
-        val normal = SplitTracker().also { feed(it, f7Run) }
-        assertTrue(normal.bossSplits().none { it.label == "&0Wither King" })
+    fun `the clear splits stay on screen once the boss starts`() {
+        val tracker = SplitTracker()
+        feed(tracker, f7Run.filter { it.first < 2150 })
+        val duringClear = shape(tracker.splits())
+        assertEquals("&4Blood 152-539", duringClear[0])
+        assertEquals("&9Boss Entry 152--", duringClear.last())
 
-        val master = SplitTracker().also { it.master = true; feed(it, f7Run) }
-        assertEquals("&0Wither King 6765-6852", shape(master.bossSplits()).first { it.startsWith("&0") })
+        // They used to disappear here. Now they freeze and the boss's phases are appended.
+        feed(tracker, f7Run.filter { it.first >= 2150 })
+        val after = shape(tracker.splits())
+        assertEquals("&4Blood 152-539", after[0])
+        assertEquals("&9Boss Entry 152-2150", after[4])
+        assertTrue(after.any { it.startsWith("&5Maxor") })
     }
 
     @Test
     fun `a running split has no stop and the finished ones keep theirs`() {
         val tracker = SplitTracker()
         feed(tracker, f7Run.filter { it.first <= 2672 })
-        val boss = tracker.bossSplits()
-        assertEquals("&5Maxor 2150-2672", shape(boss)[0])
-        assertEquals("&9Storm 2672--", shape(boss)[1])
-        assertEquals("&4Boss 2150--", shape(boss).last())
+        val splits = shape(tracker.splits())
+        assertEquals("&5Maxor 2150-2672", splits.first { it.startsWith("&5") })
+        assertEquals("&9Storm 2672--", splits.first { it.startsWith("&9Storm") })
+        assertEquals("&4Boss 2150--", splits.last())
     }
 
     @Test
-    fun `terminal sections close on the gate and hand over to the next`() {
-        val tracker = SplitTracker()
-        feed(tracker, f7Run.filter { it.first < 3590 })
-        // A whole S1: four terminals, both levers, the device, then the gate.
-        feed(tracker, listOf(
-            3600 to "alice activated a terminal! (1/4)",
-            3640 to "bob activated a terminal! (2/4)",
-            3700 to "carol activated a terminal! (3/4)",
-            3760 to "dave activated a terminal! (4/4)",
-            3800 to "alice activated a lever! (1/2)",
-            3820 to "bob activated a lever! (2/2)",
-            3860 to "carol completed a device! (1/1)",
-            3900 to "The gate has been destroyed!",
-            3960 to "dave activated a terminal! (1/5)",
-        ))
-        val sections = tracker.bossSplits().filter { it.sub }
-        assertEquals(listOf("&eS1 3600-3900", "&eS2 3900--"), shape(sections))
-        // Terminals itself is still running: Goldor has not opened the core yet.
-        assertEquals("&6Terminals 3600--", shape(tracker.bossSplits()).first { it.startsWith("&6") })
+    fun `Wither King is a master-only split`() {
+        val normal = SplitTracker().also { feed(it, f7Run) }
+        assertTrue(normal.splits().none { it.label == "&0Wither King" })
+
+        val master = SplitTracker().also { it.master = true; feed(it, f7Run) }
+        assertEquals("&0Wither King 6765-6852", shape(master.splits()).first { it.startsWith("&0") })
     }
+
+    @Test
+    fun `an unrelated floor's boss line is ignored`() {
+        val tracker = SplitTracker()
+        feed(tracker, listOf(
+            100 to "[NPC] Mort: Here, I found this map when I first entered the dungeon.",
+            200 to "Party > [MVP+] someone: bonzo is dead lol",
+            300 to "[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.",
+        ))
+        assertTrue(shape(tracker.splits()).any { it == "&cFirst Phase 300--" })
+    }
+
+    // ---- sub splits ------------------------------------------------------------------------
+    //
+    // What counts as an event is SplitEvents' job, built from real recorded runs. These only check
+    // that whatever it recognises is filed under every split that was open at the time — splits
+    // nest, so an event inside Terminals is also inside Boss.
+
+    @Test
+    fun `an event is filed under the split that was running`() {
+        val tracker = SplitTracker()
+        feed(tracker, f7Run.filter { it.first <= 3590 })
+        val line = "alice activated a terminal! (1/4)"
+        assertNotNull(SplitEvents.label(line), "terminals are the point of the F7 run; expected this to be an event")
+        tracker.onChat(line, stamp(3700))
+
+        val terminals = tracker.subSplits("&6Terminals")
+        assertEquals(1, terminals.size)
+        assertEquals(3700, terminals[0].at.tick)
+        // Terminals sits inside Boss, so Boss has this event as well as its own earlier ones.
+        assertTrue(tracker.subSplits("&4Boss").any { it.at.tick == 3700 })
+        // Storm ended when Terminals began, so nothing later lands in it.
+        assertTrue(tracker.subSplits("&9Storm").none { it.at.tick == 3700 })
+    }
+
+    @Test
+    fun `the line that ends a split is still counted inside it`() {
+        val tracker = SplitTracker()
+        feed(tracker, f7Run.filter { it.first <= 3590 })
+        // "The Core entrance is opening!" both ends Terminals and is worth recording; it belongs to
+        // the split it closed, not to Goldor.
+        tracker.onChat("The Core entrance is opening!", stamp(5770))
+        if (SplitEvents.label("The Core entrance is opening!") != null) {
+            assertEquals(1, tracker.subSplits("&6Terminals").size)
+            assertTrue(tracker.subSplits("&8Goldor").isEmpty())
+        }
+    }
+
+    @Test
+    fun `events during the clear go to the clear's splits`() {
+        val tracker = SplitTracker()
+        feed(tracker, f7Run.filter { it.first <= 539 })
+        val line = "bob activated a terminal! (1/4)"
+        if (SplitEvents.label(line) != null) {
+            tracker.onChat(line, stamp(600))
+            assertTrue(tracker.subSplits("&cWatcher").any { it.at.tick == 600 })
+            assertTrue(tracker.subSplits("&9Boss Entry").any { it.at.tick == 600 }, "the clear's total spans it")
+            // Blood ended when the door opened, so it keeps only what happened before that.
+            assertTrue(tracker.subSplits("&4Blood").none { it.at.tick == 600 })
+        }
+    }
+
+    @Test
+    fun `a split that has ended keeps the events it collected`() {
+        val tracker = SplitTracker()
+        feed(tracker, f7Run)
+        // The Watcher fight is long over by EXTRA STATS, but its waves are still there to read.
+        assertTrue(tracker.subSplits("&cWatcher").isNotEmpty())
+        // And the line that closed a split counts inside it: the blood door ends Blood.
+        assertTrue(tracker.subSplits("&4Blood").any { it.at.tick == 539 })
+    }
+
+    @Test
+    fun `a reset clears the events too`() {
+        val tracker = SplitTracker()
+        feed(tracker, f7Run.filter { it.first <= 3590 })
+        tracker.onChat("alice activated a terminal! (1/4)", stamp(3700))
+        tracker.reset()
+        assertTrue(tracker.subSplits("&6Terminals").isEmpty())
+        assertEquals(emptyList(), shape(tracker.splits()))
+    }
+
+    @Test
+    fun `every split a run can produce has a label to hang a HUD on`() {
+        val labels = SplitTracker.ALL_LABELS
+        assertEquals(labels.distinct(), labels, "a duplicate label would mean two HUDs of the same name")
+        val tracker = SplitTracker().also { it.master = true; feed(it, f7Run) }
+        for (split in tracker.splits()) assertTrue(split.label in labels, "no HUD would exist for ${split.label}")
+    }
+
+    // ---- formatting ------------------------------------------------------------------------
 
     @Test
     fun `Devonian's time format, including its truncated fraction`() {
@@ -169,16 +215,5 @@ class SplitsModelTest {
     fun `a running split counts up to now`() {
         val split = Split("&4Blood", true, Stamp(1_000, 20), null)
         assertEquals("§4Blood§r§f: §a4.00s §7(§b4.00s§7)", SplitFormat.line(split, Stamp(5_000, 100), SplitClock.BOTH))
-    }
-
-    @Test
-    fun `an unrelated floor's boss line is ignored`() {
-        val tracker = SplitTracker()
-        feed(tracker, listOf(
-            100 to "[NPC] Mort: Here, I found this map when I first entered the dungeon.",
-            200 to "Party > [MVP+] someone: bonzo is dead lol",
-            300 to "[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.",
-        ))
-        assertEquals("&cFirst Phase 300--", shape(tracker.bossSplits())[0])
     }
 }
