@@ -79,9 +79,10 @@ class BloodRunDetailTest {
     }
 
     @Test
-    fun `a room fills in as it is run and its total waits for the end`() {
+    fun `the room being run counts up live, all but its total`() {
         val lines = rush(until = 300).lines(BloodRunDetail.Level.COMPACT, stamp(300)).map(::row)
-        assertEquals(listOf("Pipes: 0.55s | 7.95s"), lines)
+        // Key pickup is next: 8 ticks since the key appeared at 292.
+        assertEquals(listOf("Pipes: 0.55s | 7.95s | 0.40s"), lines)
     }
 
     @Test

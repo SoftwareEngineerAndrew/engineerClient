@@ -234,12 +234,22 @@ object DungeonSplits : Module(
      * between two map tiles, which are 32 blocks apart with the grid's first at -185.
      */
     private fun door(blocks: List<Pair<Int, Int>>, sink: (Stamp, BloodRunDetail.MapRoom?, BloodRunDetail.MapRoom?) -> Unit) {
-        val tx = (blocks.sumOf { it.first }.toDouble() / blocks.size + 185) / 32
-        val tz = (blocks.sumOf { it.second }.toDouble() / blocks.size + 185) / 32
-        val a = room(Math.floor(tx + 0.01).toInt(), Math.floor(tz + 0.01).toInt())
-        val b = room(Math.ceil(tx - 0.01).toInt(), Math.ceil(tz - 0.01).toInt())
-        if (abs(tx - Math.round(tx)) < 0.1 && abs(tz - Math.round(tz)) < 0.1) return // not between two tiles
-        sink(now(), a, b)
+        // Two doors can fall on the same tick — at the start, fairy's and the one out of Entrance —
+        // so the blocks are split into doors first. Doors are at least 16 blocks apart.
+        val doors = mutableListOf<MutableList<Pair<Int, Int>>>()
+        for (p in blocks) {
+            val d = doors.firstOrNull { abs(it[0].first - p.first) <= 4 && abs(it[0].second - p.second) <= 4 }
+            if (d != null) d += p else doors += mutableListOf(p)
+        }
+        for (d in doors) {
+            if (d.size < DOOR_BLOCKS) continue
+            val tx = (d.sumOf { it.first }.toDouble() / d.size + 185) / 32
+            val tz = (d.sumOf { it.second }.toDouble() / d.size + 185) / 32
+            if (abs(tx - Math.round(tx)) < 0.1 && abs(tz - Math.round(tz)) < 0.1) continue // not between two tiles
+            val a = room(Math.floor(tx + 0.01).toInt(), Math.floor(tz + 0.01).toInt())
+            val b = room(Math.ceil(tx - 0.01).toInt(), Math.ceil(tz - 0.01).toInt())
+            sink(now(), a, b)
+        }
     }
 
     private fun room(x: Int, z: Int): BloodRunDetail.MapRoom? {
@@ -301,9 +311,9 @@ object DungeonSplits : Module(
     }
 
     /**
-     * Tab-separated rows drawn as a table: the first column left-aligned, the rest right-aligned in
-     * columns as wide as their widest cell, with a dark-grey `|` at the same x on every row. Text
-     * padded with spaces cannot do this — a digit and a space are different widths.
+     * Tab-separated rows drawn as a table: every column left-aligned and as wide as its widest
+     * cell, with a dark-grey `|` at the same x on every row. Text padded with spaces cannot do
+     * this — a digit and a space are different widths.
      */
     private fun table(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         val rows = lines.map { it.split('\t') }
@@ -318,7 +328,7 @@ object DungeonSplits : Module(
             val y = i * LINE_HEIGHT
             row.forEachIndexed { c, cell ->
                 if (cell.isEmpty()) return@forEachIndexed
-                val x = if (c == 0) 0 else starts[c] + widths[c] - mc.font.width(cell)
+                val x = starts[c]
                 gfx.text(cell, x, y, Colors.WHITE, shadow = true)
                 if (c >= 2) gfx.text("§8|", starts[c] - space - bar, y, Colors.WHITE, shadow = true)
             }

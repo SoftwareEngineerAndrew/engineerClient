@@ -207,25 +207,34 @@ class BloodRunDetail {
     private fun span(from: Stamp?, to: Stamp?): Pair<Long, Long>? =
         if (from == null || to == null) null else (to.realMs - from.realMs) to (to.tick - from.tick).toLong()
 
-    /** door fell, last mob killed, key pickup delta, door opened delta, total — in that order. */
-    private fun stats(r: Room, now: Stamp): List<Pair<Long, Long>?> = listOf(
-        span(r.start, r.doorFell),
-        span(r.start, r.mobKilled),
-        span(r.mobKilled, r.keyPicked),
-        span(r.keyPicked, r.doorOpened),
-        // The one line that is not live: a room's total means nothing until it is over.
-        span(r.start, r.doorOpened),
-    )
+    /**
+     * door fell, last mob killed, key pickup delta, door opened delta, total — in that order. In
+     * the room being run, the next thing still to happen counts up to [now]; the total is the one
+     * line that is not live, since a room's time means nothing until it is over.
+     */
+    private fun stats(r: Room, now: Stamp): List<Pair<Long, Long>?> {
+        val live = if (r === room) now else null
+        return listOf(
+            span(r.start, r.doorFell ?: live),
+            span(r.start, r.mobKilled ?: live),
+            span(r.mobKilled, r.keyPicked ?: live),
+            span(r.keyPicked, r.doorOpened ?: live),
+            span(r.start, r.doorOpened),
+        )
+    }
 
-    private fun full(r: Room, now: Stamp): List<Triple<Int, Pair<Long, Long>?, String>> = listOf(
-        Triple(0, span(r.start, r.doorFell), ""),
-        Triple(1, span(r.start, r.mobKilled), ""),
-        Triple(2, span(r.start, r.keyPicked), r.keyBy),
-        Triple(3, span(r.mobKilled, r.keyPicked), ""),
-        Triple(4, span(r.start, r.doorOpened), r.doorBy),
-        Triple(5, span(r.keyPicked, r.doorOpened), ""),
-        Triple(6, span(r.start, r.doorOpened), ""),
-    )
+    private fun full(r: Room, now: Stamp): List<Triple<Int, Pair<Long, Long>?, String>> {
+        val live = if (r === room) now else null
+        return listOf(
+            Triple(0, span(r.start, r.doorFell ?: live), ""),
+            Triple(1, span(r.start, r.mobKilled ?: live), ""),
+            Triple(2, span(r.start, r.keyPicked ?: live?.takeIf { r.mobKilled != null }), r.keyBy),
+            Triple(3, span(r.mobKilled, r.keyPicked ?: live), ""),
+            Triple(4, span(r.start, r.doorOpened ?: live?.takeIf { r.keyPicked != null }), r.doorBy),
+            Triple(5, span(r.keyPicked, r.doorOpened ?: live), ""),
+            Triple(6, span(r.start, r.doorOpened), ""),
+        )
+    }
 
     /** The averages, only once the rush is over — a running average of one room is noise. */
     private fun averages(): List<Pair<Long, Long>?>? {
