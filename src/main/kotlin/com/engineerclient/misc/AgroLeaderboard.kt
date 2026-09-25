@@ -38,7 +38,7 @@ import java.util.Locale
  */
 object AgroLeaderboard : Module(
     name = "Agro Leaderboard",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "In F7 P1/P2, lists the party by distance to Maxor/Storm. Closest (who has aggro) is green.",
 ) {
     private class Entry(val name: String, val skin: PlayerSkin?, val distance: Double, val player: Player? = null)

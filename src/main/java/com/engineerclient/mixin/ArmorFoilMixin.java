@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.NoGlint;
+import com.engineerclient.misc.RandomStuff;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.client.renderer.entity.layers.EquipmentLayerRenderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * The worn-armour half of {@link NoGlint}.
+ * The worn-armour half of the No Enchant Glint setting in {@link RandomStuff}.
  *
  * <p>Armour on a body never becomes an {@code ItemStackRenderState} — it is drawn straight from
  * the equipment models, and its glint is a {@code RenderTypes.armorEntityGlint()} pass gated on
@@ -23,7 +23,7 @@ public class ArmorFoilMixin {
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;hasFoil()Z")
     )
     private boolean ec$noArmorGlint(ItemStack stack) {
-        if (NoGlint.INSTANCE.hidesArmorGlint()) return false;
+        if (RandomStuff.INSTANCE.hidesArmorGlint()) return false;
         return stack.hasFoil();
     }
 }

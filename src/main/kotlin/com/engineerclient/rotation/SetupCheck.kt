@@ -57,8 +57,8 @@ object SetupCheck {
                 else Item(false, "posmsg \"$text\" missing", "add a /posmsg box with exactly that text")
             }
 
-        items += if (P3Rotation.enabled) Item(true, "EC Blood Rush Roles on")
-        else Item(false, "EC Blood Rush Roles is OFF", "enable it in the Blood Rush panel")
+        items += if (P3Rotation.enabled) Item(true, "EC Dynamic Term Roles on")
+        else Item(false, "EC Dynamic Term Roles is OFF", "enable it in the Engineer Client panel")
 
         val mine = RotationSpec.graph.role(EcConfig.data.myStartingRole)
         items += if (mine != null) Item(true, "your starting role: ${mine.name}")

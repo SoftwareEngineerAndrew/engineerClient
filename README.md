@@ -7,17 +7,17 @@ same way; `/ec setup` reads the live Odin config and says what is wrong.
 **Odin (>= 0.3.2) is a required dependency.** Sodium and EntityCulling are expected on every
 client (the POV previews drive Sodium's terrain pass directly) but the mod runs without them.
 
-Modules, all under the "Blood Rush" panel in Odin's ClickGUI:
+Modules, all under the "Engineer Client" panel in Odin's ClickGUI:
 
 | Module | What it does |
 |---|---|
 | Blood Rush Waypoints | Class-aware blood-rush waypoint profiles (see below). |
-| Blood Rush Roles | M7 phase-3 dynamic role rotation driven by party/system chat, leap-target highlight in Odin's leap menu, per-role colour vignette + sound. Strategy is data: `src/main/resources/rotation/p3.json`. |
+| Dynamic Term Roles | M7 phase-3 dynamic role rotation driven by party/system chat, leap-target highlight in Odin's leap menu, per-role colour vignette + sound. Strategy is data: `src/main/resources/rotation/p3.json`. |
 | POV Previews | Each quarter of Odin's Spirit Leap menu rendered from that teammate's eyes. Design notes in `docs/pov-preview-plan.md`. |
-| Dungeon Splits | Devonian's run, boss and Watcher splits as three draggable HUDs, each section timed on the real clock and the server's tick clock. |
+| Sub Splits | Devonian's run, boss and Watcher splits as three draggable HUDs, each section timed on the real clock and the server's tick clock. |
 | Party Finder Stats | Cata level, secrets and floor PB in-line on every member row of a Party Finder listing, cached on disk for a day. The `Members:` header says which classes the party is missing, yours bolded. |
 | Lowest BIN | An item's lowest auction-house BIN on its tooltip, priced from Coflnet one item at a time. Silent for anything not auctionable. |
-| No Enchant Glint | Removes the enchantment glint from items, held/dropped items and worn armour, each switchable. Leaves inventory glint alone while a terminal is open. |
+| Random Stuff | Grab bag of small toggles — hiding chat, damage flash, item names, the boss bar, the action bar, armour stands; Enter confirms a sign; black sky; hiding chosen sidebar lines (`Dump Scoreboard` prints the real text to match against). Also holds the enchantment-glint remover, the F7 restart keybind and Auto Join Hypixel, which used to be modules of their own. |
 
 Commands: `/ec` (also `/engineerclient`; `/brw` still works) — `setup`, `roles`, `role <role>`,
 `debug`, `log`, `log mark [note]`, plus the waypoint-profile commands below.
@@ -52,7 +52,7 @@ alongside this mod's.**
 - `/ec class <auto|Mage|Archer|Berserker|Healer|Tank>`, `/ec players <2-5>`,
   `/ec door <on|off>`, `/ec apply` — the same knobs as commands.
 - Waypoint editing, colors, sizes, editor HUD, and the type-cycle keybind live in the
-  **Blood Rush panel of Odin's ClickGUI** (the module mirrors Odin's Dungeon Waypoints controls:
+  **Engineer Client panel of Odin's ClickGUI** (the module mirrors Odin's Dungeon Waypoints controls:
   enable *Allow Edits*, right-click blocks to place/remove, sneak-right-click for titles).
 - If both this mod's and Odin's edit modes are on at once, this mod's editor stands down and says
   so, so a right-click never places into two systems.
@@ -73,7 +73,7 @@ waypoint packs, and Odin addon settings are moved on first launch).
 
 ## Phase-3 rotation (M7 terminals)
 
-The `Blood Rush Roles` module runs the team's phase-3 role rotation. The strategy is **data**:
+The `Dynamic Term Roles` module runs the team's phase-3 role rotation. The strategy is **data**:
 `src/main/resources/rotation/p3.json`, authored in the rotation editor and shipped inside the jar so
 every client provably runs the same graph. Roles hold task lists; pots hand out the next role in
 finish order; exits carry `cond` (role just finished), `last` (reserved for the final arrival — must

@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object PartyFinderStats : Module(
     name = "Party Finder Stats",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "Shows every listed player's Catacombs level, secrets and floor PB in the Party Finder tooltip.",
     toggled = true, // existing installs have no saved state for a new module; on by default
 ) {

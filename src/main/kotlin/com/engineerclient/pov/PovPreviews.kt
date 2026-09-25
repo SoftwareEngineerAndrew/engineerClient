@@ -33,7 +33,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
  */
 object PovPreviews : Module(
     name = "POV Previews",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "Renders each teammate's first-person view into their quarter of Odin's Spirit Leap menu.",
 ) {
 

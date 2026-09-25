@@ -29,8 +29,8 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
  * Watcher's first movement, and draws the result.
  */
 object DungeonSplits : Module(
-    name = "Dungeon Splits",
-    category = Category.custom("Blood Rush"),
+    name = "Sub Splits",
+    category = Category.custom("Engineer Client"),
     description = "Devonian's run, boss and Watcher splits: each section timed on the real clock and the server's tick clock.",
 ) {
     private val clockMode by SelectorSetting("Clock", "Both", listOf("Real", "Ticks", "Both"), desc = "Real time, the server's tick time, or both (Devonian's default: real, then ticks in brackets).")
