@@ -1,12 +1,13 @@
 package com.engineerclient.splits
 
 /**
- * The blood rush, one block of lines per room.
+ * The blood rush, one column per room, built fresh every frame so the room being run counts up as
+ * it happens rather than appearing once it is over.
  *
  * A room starts the moment the door into it begins falling and ends when the door out of it does,
  * so the rush tiles end to end with nothing counted twice. The first room starts with the run
  * itself — the entrance door falls as Mort speaks — and the last ends on the blood door. Every time
- * in a room's block is measured from that room's own start, so two rooms can be compared by eye.
+ * in a room's column is measured from that room's own start, so two rooms can be compared by eye.
  *
  * The chain comes straight out of chat, and a real run reads like this:
  *
@@ -24,7 +25,7 @@ package com.engineerclient.splits
  * moment the key item exists is the moment that mob died. Neither of those can name a player —
  * Minecraft has no kill attribution at all — so "last mob killed" is timed but never credited.
  */
-class BloodRunDetail(private val detail: SplitDetail) {
+class BloodRunDetail {
 
     private class Room(val name: String, val start: Stamp) {
         var doorFell: Stamp? = null
@@ -35,25 +36,16 @@ class BloodRunDetail(private val detail: SplitDetail) {
         var doorBy: String = ""
     }
 
+    private val rooms = mutableListOf<Room>()
     private var room: Room? = null
     private var done = false
     private var roomName = ""
 
-    /** Every room's measurements, for the averages at the end. */
-    private val doorFell = mutableListOf<Long>()
-    private val mobKilled = mutableListOf<Long>()
-    private val keyPicked = mutableListOf<Long>()
-    private val keyDelta = mutableListOf<Long>()
-    private val doorOpened = mutableListOf<Long>()
-    private val doorDelta = mutableListOf<Long>()
-    private val totals = mutableListOf<Long>()
-
     fun reset() {
-        room = null; done = false; roomName = ""
-        for (l in listOf(doorFell, mobKilled, keyPicked, keyDelta, doorOpened, doorDelta, totals)) l.clear()
+        rooms.clear(); room = null; done = false; roomName = ""
     }
 
-    /** The room name Odin reports, kept so the next room's block can be titled with it. */
+    /** The room name Odin reports, kept so the next room's column can be titled with it. */
     fun onRoom(name: String) {
         if (name.isNotBlank()) roomName = name
     }
@@ -95,87 +87,100 @@ class BloodRunDetail(private val detail: SplitDetail) {
         if (door != null) {
             r.doorOpened = at
             r.doorBy = door.groupValues[1]
-            emit(r)
+            rooms += r
             room = Room(roomName.ifBlank { "Room" }, at)
             return
         }
 
         if (msg == BLOOD_DOOR) {
             r.doorOpened = at
-            emit(r)
+            rooms += r
             room = null
             done = true
-            emitAverages(at)
         }
     }
 
-    /** One room's block of lines, every time measured from that room's own start. */
-    private fun emit(r: Room) {
-        val end = r.doorOpened ?: return
-        detail.add(SplitTracker.BLOOD, r.start, "§f" + r.name, raw = true)
+    /**
+     * A column per room, the one being run included, and the averages once the rush is over. [now]
+     * is what an unfinished line counts up to.
+     */
+    fun columns(now: Stamp): List<List<String>> {
+        val all = rooms + listOfNotNull(room)
+        if (all.isEmpty()) return emptyList()
+        val out = all.map { column(it, now) }.toMutableList()
+        if (done) averages()?.let { out += it }
+        return out
+    }
 
-        r.doorFell?.let {
-            detail.add(SplitTracker.BLOOD, it, line(r.start, it, "door fell"), raw = true)
-            doorFell += it.realMs - r.start.realMs
-        }
-        val mob = r.mobKilled
-        if (mob != null) {
-            detail.add(SplitTracker.BLOOD, mob, line(r.start, mob, "last mob killed"), raw = true)
-            mobKilled += mob.realMs - r.start.realMs
-        }
+    /** One room, every time measured from that room's own start. */
+    private fun column(r: Room, now: Stamp): List<String> {
+        val lines = mutableListOf(NAME_COLOUR + r.name)
+        r.doorFell?.let { lines += row(r.start, it, DOOR_FELL_COLOUR, "door fell") }
+        r.mobKilled?.let { lines += row(r.start, it, DOOR_FELL_COLOUR, "last mob killed") }
         val key = r.keyPicked
         if (key != null) {
-            detail.add(SplitTracker.BLOOD, key, line(r.start, key, "key picked up" + by(r.keyBy)), raw = true)
-            keyPicked += key.realMs - r.start.realMs
+            lines += row(r.start, key, KEY_COLOUR, "key picked up" + by(r.keyBy))
+            r.mobKilled?.let { lines += gap(key, it, KEY_COLOUR, "key delta") }
         }
-        // The deltas are gaps between two moments rather than offsets from the room's start.
-        if (mob != null && key != null) {
-            detail.add(SplitTracker.BLOOD, key, gap(key.realMs - mob.realMs, key.tick - mob.tick, "key delta"), raw = true)
-            keyDelta += key.realMs - mob.realMs
+        val end = r.doorOpened
+        if (end != null) {
+            lines += row(r.start, end, DOOR_COLOUR, "door opened" + by(r.doorBy))
+            key?.let { lines += gap(end, it, DOOR_COLOUR, "door delta") }
         }
-        detail.add(SplitTracker.BLOOD, end, line(r.start, end, "door opened" + by(r.doorBy)), raw = true)
-        doorOpened += end.realMs - r.start.realMs
-        if (key != null) {
-            detail.add(SplitTracker.BLOOD, end, gap(end.realMs - key.realMs, end.tick - key.tick, "door delta"), raw = true)
-            doorDelta += end.realMs - key.realMs
-        }
-        detail.add(SplitTracker.BLOOD, end, line(r.start, end, "total room time"), raw = true)
-        totals += end.realMs - r.start.realMs
-
-        // A blank line, so one room's block reads apart from the next.
-        detail.add(SplitTracker.BLOOD, end, " ", raw = true)
+        // The room's total runs to the door out of it, or up to now while it is still being run.
+        lines += row(r.start, end ?: now, TOTAL_COLOUR, "total room time")
+        return lines
     }
 
-    /** The whole rush averaged, in gold, once the blood door is down. */
-    private fun emitAverages(at: Stamp) {
+    /** The whole rush averaged: gold text, green times, like every other line. */
+    private fun averages(): List<String>? {
+        val fromStart = { pick: (Room) -> Stamp? -> rooms.mapNotNull { r -> span(pick(r), r.start) } }
         val rows = listOf(
-            doorFell to "average door fell",
-            mobKilled to "average last mob killed",
-            keyPicked to "average key picked up",
-            keyDelta to "average key delta",
-            doorOpened to "average door opened",
-            doorDelta to "average door delta",
-            totals to "average total room time",
+            fromStart { it.doorFell } to "average door fell",
+            fromStart { it.mobKilled } to "average last mob killed",
+            fromStart { it.keyPicked } to "average key picked up",
+            rooms.mapNotNull { span(it.keyPicked, it.mobKilled) } to "average key delta",
+            fromStart { it.doorOpened } to "average door opened",
+            rooms.mapNotNull { span(it.doorOpened, it.keyPicked) } to "average door delta",
+            fromStart { it.doorOpened } to "average total room time",
         )
-        for ((values, what) in rows) {
-            if (values.isEmpty()) continue
-            val ms = values.sum() / values.size
-            detail.add(SplitTracker.BLOOD, at, "§6" + times(ms, ms / 50) + " " + what, raw = true)
+        val out = rows.mapNotNull { (spans, what) ->
+            if (spans.isEmpty()) null
+            else times(spans.sumOf { it.first } / spans.size, spans.sumOf { it.second } / spans.size) +
+                " " + AVERAGE_COLOUR + what
         }
+        return out.ifEmpty { null }
     }
+
+    /** How long between two moments, on both clocks, or null if either never happened. */
+    private fun span(later: Stamp?, earlier: Stamp?): Pair<Long, Long>? =
+        if (later == null || earlier == null) null
+        else (later.realMs - earlier.realMs) to (later.tick - earlier.tick).toLong()
 
     private fun by(who: String) = if (who.isEmpty()) "" else " §7($who)"
 
-    private fun line(from: Stamp, at: Stamp, what: String) =
-        "§f" + times(at.realMs - from.realMs, (at.tick - from.tick).toLong()) + " " + what
+    private fun row(from: Stamp, at: Stamp, colour: String, what: String) =
+        times(at.realMs - from.realMs, (at.tick - from.tick).toLong()) + " " + colour + what
 
-    private fun gap(ms: Long, ticks: Int, what: String) = "§f" + times(ms, ticks.toLong()) + " " + what
+    private fun gap(later: Stamp, earlier: Stamp, colour: String, what: String) =
+        times(later.realMs - earlier.realMs, (later.tick - earlier.tick).toLong()) + " " + colour + what
 
-    /** "0.86s (0.85s)" — the real clock, then the server's own. */
+    /**
+     * "§a0.86s §7(§b0.85s§7)" — the real clock in green, then the server's own in brackets. The
+     * tick count is the server's own, not the real time divided down: the two coming apart is the
+     * lag the run ate, and deriving one from the other would hide exactly that.
+     */
     private fun times(ms: Long, ticks: Long) =
-        SplitFormat.time(ms, true) + " §7(§b" + SplitFormat.time(ticks * 50L, true) + "§7)§f"
+        "§a" + SplitFormat.time(ms, true) + " §7(§b" + SplitFormat.time(ticks * 50L, true) + "§7)"
 
     private companion object {
+        const val NAME_COLOUR = "§f"
+        const val DOOR_FELL_COLOUR = "§7"
+        const val KEY_COLOUR = "§8"
+        const val DOOR_COLOUR = "§c"
+        const val TOTAL_COLOUR = "§6"
+        const val AVERAGE_COLOUR = "§6"
+
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
         // Verified against the 32 recorded runs. The rank prefix is optional (unranked players have
