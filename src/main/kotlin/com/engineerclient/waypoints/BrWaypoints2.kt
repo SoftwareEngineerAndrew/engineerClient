@@ -44,8 +44,9 @@ import java.io.File
  * with "Make Held Item Wand". With Edit Mode on and the wand in hand:
  *
  *  - Drop places a 1x1x1 box on the block at your feet, or deletes the box you are looking at.
- *  - Look at a box to select a face ([BoxFaces]: the far one, or the top from any angle). Left
- *    click or scroll up pushes it out a block, right click or scroll down pulls it in. A box never
+ *  - Look through a box to select the side behind ([BoxFaces]); stand inside it and look up to
+ *    select its top. Left click or scroll up pushes it out a block, right click or scroll down
+ *    pulls it in. A box never
  *    gets thinner than a block, and its bottom never moves.
  *
  * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
@@ -368,6 +369,14 @@ object BrWaypoints2 : Module(
         val v = player.getViewVector(partial)
         val eye = doubleArrayOf(e.x, e.y, e.z)
         val dir = doubleArrayOf(v.x, v.y, v.z)
+        // Standing in a box and looking up: its top, whatever the view passes through.
+        val feet = doubleArrayOf(player.x, player.y, player.z)
+        val pitch = player.getViewXRot(partial)
+        for (box in shown()) {
+            val min = doubleArrayOf(box.c[0].toDouble(), box.c[1].toDouble(), box.c[2].toDouble())
+            val max = doubleArrayOf(box.c[3].toDouble(), box.c[4].toDouble(), box.c[5].toDouble())
+            if (BoxFaces.editsTop(feet, pitch, min, max)) return box to Face.UP
+        }
         var best: Pair<Box, Face>? = null
         var bestT = REACH
         for (box in shown()) {

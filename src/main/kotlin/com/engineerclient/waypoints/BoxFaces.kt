@@ -8,11 +8,12 @@ enum class Face { EAST, WEST, SOUTH, NORTH, UP }
 /**
  * Which face of a box the view selects — pure maths, so it tests without the game.
  *
- * The selected face is the one the view passes out through, not the one it comes in by: a box
- * seen head on selects its far face. The top is the exception — look at it from any angle, coming
- * down onto it or leaving up through it, and it is the top. The bottom cannot be edited, so a side
- * is chosen by where the view leaves the box *horizontally*: looking down at a box through one of
- * its sides still picks the side behind it rather than the floor.
+ * A side is selected by looking through the box: the one the view leaves by, not the one it comes
+ * in by, so a box seen head on selects its far side. It is where the view leaves *horizontally*
+ * that counts, so looking down through a side or through the top still picks the side behind —
+ * never the top or the floor. Looking straight up or down picks nothing.
+ *
+ * The top is edited another way: stand inside the box and look up ([editsTop]).
  */
 object BoxFaces {
 
@@ -22,13 +23,12 @@ object BoxFaces {
 
     fun select(eye: DoubleArray, dir: DoubleArray, min: DoubleArray, max: DoubleArray): Face? {
         val hit = cross(eye, dir, min, max) ?: return null
-        if ((hit.enter >= 0 && hit.enterAxis == Y && hit.enterHigh) || (hit.exitAxis == Y && hit.exitHigh)) return Face.UP
 
         var exit = Double.POSITIVE_INFINITY
         var face: Face? = null
         for (axis in intArrayOf(X, Z)) {
             val d = dir[axis]
-            if (abs(d) < 1e-9) continue
+            if (abs(d) < 1e-6) continue
             val far = maxOf((min[axis] - eye[axis]) / d, (max[axis] - eye[axis]) / d)
             if (far < exit) {
                 exit = far
@@ -37,6 +37,13 @@ object BoxFaces {
         }
         return face
     }
+
+    /** Looking up past this pitch (Minecraft's: negative is up) from inside a box selects its top. */
+    const val TOP_PITCH = -10f
+
+    /** Whether standing at [feet] and looking at [pitch] selects the top: inside the box, looking up. */
+    fun editsTop(feet: DoubleArray, pitch: Float, min: DoubleArray, max: DoubleArray): Boolean =
+        pitch < TOP_PITCH && (0..2).all { feet[it] >= min[it] && feet[it] < max[it] }
 
     /** A box as its corners, in blocks: minX, minY, minZ, maxX, maxY, maxZ (the max side exclusive). */
     const val MIN_X = 0; const val MIN_Y = 1; const val MIN_Z = 2; const val MAX_X = 3; const val MAX_Y = 4; const val MAX_Z = 5
