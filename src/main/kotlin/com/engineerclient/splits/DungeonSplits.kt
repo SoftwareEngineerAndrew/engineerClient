@@ -40,7 +40,6 @@ object DungeonSplits : Module(
     category = Category.custom("Engineer Client"),
     description = "Devonian's run, boss and Watcher splits: each section timed on the real clock and the server's tick clock.",
 ) {
-    private val detailMode by SelectorSetting("Sub Split Detail", "Steps", listOf("Steps", "Everything"), desc = "Steps: the boss's named sub-splits. Everything: every moment of the split the game reported, which is noisy on purpose - it is how you find out what is worth keeping.")
 
     private val CONTROL_CODES = Regex("\u00a7.")
     private val tracker = SplitTracker()
@@ -57,6 +56,7 @@ object DungeonSplits : Module(
     private val watchedMobs = HashMap<Int, Triple<String, String, Stamp>>()
     private var serverTicks = 0
     private val COLOUR_CODE = Regex("&.")
+    private val LEVELS = listOf("Off", "Compact", "Detailed", "Extreme")
 
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
 
@@ -70,16 +70,26 @@ object DungeonSplits : Module(
      * before the run that would fill it, and Odin registers a setting the same way whether it came
      * from a `by` delegate or from here.
      */
+    /** How much each sub-split shows. One dropdown per split, next to its HUD. */
+    private val levels = SplitTracker.ALL_LABELS.associateWith { label ->
+        val plain = label.replace(COLOUR_CODE, "")
+        registerSetting(SelectorSetting("$plain Detail", "Compact", LEVELS, desc = "How much the $plain sub-split HUD shows."))
+    }
+
+    private fun level(label: String): BloodRunDetail.Level =
+        BloodRunDetail.Level.entries[levels[label]?.value ?: 1]
+
     private val subHuds = SplitTracker.ALL_LABELS.associateWith { label ->
         val plain = label.replace(COLOUR_CODE, "")
         registerSetting(
-            HUD("$plain Sub Splits", "What happened inside the $plain split, and how far into it.", false, 0, 0, 1f) { example ->
-                if (example) return@HUD if (label == SplitTracker.BLOOD) drawColumns(this, listOf(
-                    listOf("§fEntrance", "§f0.75s §7(§b0.75s§7)§f door fell", "§f7.20s §7(§b7.20s§7)§f key picked up §7(Bob)"),
-                    listOf("§fWater Board", "§f0.80s §7(§b0.80s§7)§f door fell", "§f6.40s §7(§b6.40s§7)§f key picked up §7(Sue)"),
-                )) else draw(this, listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)", "§cDps§r§f: §a11.52s §7(§b11.25s§7)"))
-                if (label == SplitTracker.BLOOD && detailMode == 1) drawColumns(this, blood.columns(now()))
-                else draw(this, subLines(label))
+            HUD("$plain Sub Splits", "What happened inside the $plain split.", false, 0, 0, 1f) { example ->
+                if (example) return@HUD draw(this, if (label == SplitTracker.BLOOD) listOf(
+                    "§aBlood Rush",
+                    "§dHallway§f: §f1.52s §8| §70.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
+                    "§dDino§f: §f1.52s §8| §70.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
+                    "§6Total§f: §f1.52s §8| §70.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
+                ) else listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)"))
+                draw(this, subLines(label))
             }
         )
     }
@@ -169,7 +179,6 @@ object DungeonSplits : Module(
         ?.label
 
     private const val LINE_HEIGHT = 10
-    private const val COLUMN_GAP = 12
 
     /** A wither or blood door takes about this long to finish falling. */
     private const val DOOR_FALL_TICKS = 60
@@ -181,37 +190,24 @@ object DungeonSplits : Module(
      * comparable between runs, so it leads.
      */
     private fun subLines(label: String): List<String> {
-        val split = tracker.splits().firstOrNull { it.label == label } ?: return emptyList()
-        // The boss phases have a real breakdown, ported from the team's own module. The clear's
-        // splits have none, so those HUDs keep listing whatever the dungeon announced.
+        val level = level(label)
+        if (level == BloodRunDetail.Level.OFF) return emptyList()
         val now = now()
-        val steps = subs.forSplit(label)
-        if (detailMode == 0) return steps.map { SplitFormat.line(it, now, SplitClock.BOTH) }
+        if (label == SplitTracker.BLOOD) return blood.lines(level, now)
 
-        // Everything: the phase's own steps and everything reported inside it, in the order it
-        // happened and never cut short - the whole point is to see the lot.
-        if (label == SplitTracker.BLOOD) return blood.columns(now()).flatten()
-        val stepLines = steps.map { it.start to SplitFormat.line(it, now, SplitClock.BOTH) }
-        val detailLines = detail.lines(label).map { event ->
+        val split = tracker.splits().firstOrNull { it.label == label } ?: return emptyList()
+        val steps = subs.forSplit(label).map { it.start to SplitFormat.line(it, now, SplitClock.BOTH) }
+        if (level == BloodRunDetail.Level.COMPACT) return steps.map { it.second }
+
+        // Detailed and Extreme add what was reported inside the split; Extreme keeps every last
+        // line of it, which is what it is for.
+        val reported = detail.lines(label).map { event ->
             if (event.raw) return@map event.at to event.label
             val real = SplitFormat.time(event.at.realMs - split.start.realMs, true)
             val ticks = SplitFormat.time((event.at.tick - split.start.tick) * 50L, true)
             event.at to "§a$real §7(§b$ticks§7) §f" + event.label
         }
-        return (stepLines + detailLines).sortedBy { it.first.realMs }.map { it.second }
-    }
-
-    /** Columns side by side, each as wide as its widest line. */
-    private fun drawColumns(gfx: GuiGraphicsExtractor, columns: List<List<String>>): Pair<Int, Int> {
-        if (columns.isEmpty()) return 0 to 0
-        var x = 0
-        var height = 0
-        for (column in columns) {
-            column.forEachIndexed { i, line -> gfx.text(line, x, i * LINE_HEIGHT, Colors.WHITE) }
-            x += (column.maxOfOrNull { mc.font.width(it) } ?: 0) + COLUMN_GAP
-            height = maxOf(height, column.size * LINE_HEIGHT)
-        }
-        return (x - COLUMN_GAP) to height
+        return (steps + reported).sortedBy { it.first.realMs }.map { it.second }
     }
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
