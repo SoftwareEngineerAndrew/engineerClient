@@ -7,16 +7,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The sidebar line hider's matching, over plain text.
+ * The sidebar line hider's matching.
  *
- * READ THIS BEFORE TRUSTING IT: the sample lines below are what Hypixel's sidebar is *believed* to
- * look like, written from memory rather than captured from the game. Nobody has run "Dump
- * Scoreboard" in-game since the dump was fixed. So this file pins the patterns to an assumption,
- * not to reality — it will tell you if a pattern changes behaviour, and it will happily pass while
- * matching the wrong thing.
- *
- * When a real dump exists: replace these samples with the real lines, and any test that then fails
- * is a pattern in ScoreboardLines that needs correcting — that is the point of the exercise.
+ * The lines in `realDump` came off a real Hypixel sidebar and are the ones that matter. The rest
+ * are still written from memory — they will tell you if a pattern changes behaviour, but they can
+ * pass while matching the wrong thing, so correct them from a dump when one turns up.
  */
 class ScoreboardLinesTest {
 
@@ -63,6 +58,20 @@ class ScoreboardLinesTest {
         assertTrue(ScoreboardLines.hides("Cleared: 42% (180)"))
         assertTrue(ScoreboardLines.hides("Dungeon Cleared: 7%"))
         assertKeepsTheRest()
+    }
+
+    /**
+     * Straight off a real sidebar. Hypixel salts each line with a § and a letter so that no two
+     * are identical, and it lands mid-word — which is exactly what defeated the first version of
+     * these patterns.
+     */
+    @Test
+    fun `the real sidebar's salted lines are matched`() {
+        assertTrue(ScoreboardLines.hidesRaw("Early Summer 19\u00a7wth"), "the season, salted between the number and its suffix")
+        assertTrue(ScoreboardLines.hidesRaw(" The Catac\u00a7uombs (F7)"), "the location, salted inside the word")
+        assertTrue(ScoreboardLines.hidesRaw("\u00a7j"), "a spacer that is nothing but salt")
+        // The salt must not make everything vanish.
+        assertFalse(ScoreboardLines.hidesRaw("Coins: \u00a7a1,234,567"))
     }
 
     @Test

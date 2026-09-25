@@ -52,11 +52,11 @@ object ScoreboardLines {
 
     // --- what gets hidden ----------------------------------------------------------------------
     //
-    // A fixed list now rather than a toggle each: the sidebar's noise is the same noise every run.
-    // UNVERIFIED wording — these were written without a capture of the real sidebar, so if one of
-    // them misses, run "Dump Scoreboard" and correct it here. Each leads with \W* because Hypixel
-    // decorates several of these lines with a symbol, and a pattern anchored on the text would
-    // silently never fire.
+    // A fixed list rather than a toggle each: the sidebar's noise is the same noise every run.
+    // The season, location and blank-spacer patterns are confirmed against a real dump; the rest
+    // are still written from memory, so if one misses, run "Dump Scoreboard" and correct it here.
+    // Each leads with \W* because Hypixel decorates several of these lines with a symbol, and a
+    // pattern anchored on the text would silently never fire.
 
     /** UNVERIFIED — the top line, e.g. "11/12/23 m1CK" (real-world date plus the server id). */
     private val REAL_DATE_PATTERN = Regex("""^\W*\d{2}/\d{2}/\d{2}\b.*$""")
@@ -64,7 +64,7 @@ object ScoreboardLines {
     /** UNVERIFIED — the Skyblock clock, e.g. " ☀ 12:10pm" (the sun/moon glyph leads the line). */
     private val TIME_OF_DAY_PATTERN = Regex("""^\W*\d{1,2}:\d{2}\s*[ap]m\b.*$""", RegexOption.IGNORE_CASE)
 
-    /** UNVERIFIED — the season and day, e.g. "Early Summer 15th" or "Late Winter 31st". */
+    /** Verified from a real dump: "Early Summer 19§wth" once the salt is stripped. */
     private val SEASON_PATTERN = Regex("""^\W*(?:Early|Late)?\s*(?:Spring|Summer|Autumn|Winter)\s+\d{1,2}(?:st|nd|rd|th)\b.*$""", RegexOption.IGNORE_CASE)
 
     /** UNVERIFIED — the dungeon key counter, e.g. "Keys: ☠ x1 ✦". */
@@ -73,7 +73,7 @@ object ScoreboardLines {
     /** UNVERIFIED — the dungeon clear percentage, e.g. "Cleared: 42% (180)". */
     private val CLEARED_PATTERN = Regex("""^\W*(?:Dungeon\s+)?Cleared:\s*\d+%.*$""", RegexOption.IGNORE_CASE)
 
-    /** UNVERIFIED — where you are, e.g. "⏣ The Catacombs (F7)". The glyph is part of the line. */
+    /** Verified from a real dump: " The Catac§uombs (F7)". */
     private val LOCATION_PATTERN = Regex("""^\W*The Catacombs\b.*$""", RegexOption.IGNORE_CASE)
 
     /** The header, "SKYBLOCK" or "SKYBLOCK CO-OP", drawn as the objective's own title. */
@@ -147,6 +147,9 @@ object ScoreboardLines {
      * The whole decision, over a line's plain text. Split out from [shouldHide] so it can be tested
      * without a running game: everything above this point needs Minecraft, nothing below it does.
      */
+    /** Like [hides] but takes a line exactly as Hypixel sent it, salt and all. */
+    internal fun hidesRaw(raw: String): Boolean = hides(raw.replace(FORMATTING, ""))
+
     internal fun hides(raw: String): Boolean {
         // Hypixel pads the sidebar with blank lines to space it out, and some of them are spaces
         // rather than nothing. With most of the content gone they would be all that is left.
@@ -197,10 +200,19 @@ object ScoreboardLines {
 
     // --- text helpers --------------------------------------------------------------------------
 
-    /** Colour codes stripped, ends trimmed: the form every pattern above is written against. */
+    /** Codes stripped, ends trimmed: the form every pattern above is written against. */
     private fun plain(component: Component): String = component.string.replace(FORMATTING, "").trim()
 
-    private val FORMATTING = Regex("§[0-9a-fk-orA-FK-OR]")
+    /**
+     * Every § and the character after it, not just the legacy colour and format codes.
+     *
+     * A scoreboard cannot hold two identical lines, so Hypixel makes each one unique by salting it
+     * with a § followed by some letter outside the legacy set — and it lands mid-word, so a real
+     * sidebar says "Early Summer 19§wth" and "The Catac§uombs (F7)". Stripping only the legacy
+     * codes left that salt in place and every pattern here missed. One line is nothing but salt,
+     * "§j", which is how Hypixel draws a blank spacer.
+     */
+    private val FORMATTING = Regex("§.")
 
     /**
      * Component tree flattened back to a §-coded string. Components carry style as objects, not as
