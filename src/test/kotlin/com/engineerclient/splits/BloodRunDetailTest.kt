@@ -15,6 +15,9 @@ class BloodRunDetailTest {
     private fun stamp(t: Int) = Stamp(t * 50L, t)
     private fun plain(line: String) = line.replace(Regex("§."), "")
 
+    /** A compact row read back the way it looks on screen. */
+    private fun row(line: String) = plain(line).split('\t').let { it[0] + it.drop(1).joinToString(" | ") }
+
     private val entrance = MapRoom("e", "Entrance", fairy = false, entrance = true)
     private val fairy = MapRoom("f", "Fairy", fairy = true, entrance = false)
     private fun room(name: String) = MapRoom(name, name, fairy = false, entrance = false)
@@ -60,7 +63,7 @@ class BloodRunDetailTest {
 
     @Test
     fun `compact is door fell, last mob, key pickup delta, door opened delta, total`() {
-        val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700)).map(::plain)
+        val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700)).map(::row)
         // Pipes starts when the start door starts falling (133), not on Mort's line.
         assertEquals("Pipes: 0.55s | 7.95s | 0.60s | 0.10s | 8.65s", lines[0])
         // The key was never seen on the ground here, so last mob falls back to the pickup.
@@ -77,7 +80,7 @@ class BloodRunDetailTest {
 
     @Test
     fun `a room fills in as it is run and its total waits for the end`() {
-        val lines = rush(until = 300).lines(BloodRunDetail.Level.COMPACT, stamp(300)).map(::plain)
+        val lines = rush(until = 300).lines(BloodRunDetail.Level.COMPACT, stamp(300)).map(::row)
         assertEquals(listOf("Pipes: 0.55s | 7.95s"), lines)
     }
 
