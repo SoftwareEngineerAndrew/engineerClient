@@ -100,4 +100,11 @@ class BloodRunDetailTest {
         assertEquals("door opened > 8.65s (8.65s) TheBadOne", lines[5])
         assertTrue(lines.any { it.startsWith("average total room time > ") })
     }
+
+    @Test
+    fun `the total row can be turned off`() {
+        val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700), totalRow = false).map(::row)
+        assertEquals(6, lines.size)
+        assertTrue(lines.none { it.startsWith("Total: ") })
+    }
 }

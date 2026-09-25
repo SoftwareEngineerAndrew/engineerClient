@@ -138,9 +138,9 @@ class BloodRunDetail {
 
     private fun all() = rooms + listOfNotNull(room)
 
-    fun lines(level: Level, now: Stamp): List<String> = when (level) {
+    fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> = when (level) {
         Level.OFF -> emptyList()
-        Level.COMPACT -> compact(now)
+        Level.COMPACT -> compact(now, totalRow)
         Level.DETAILED -> detailed(now)
         Level.EXTREME -> extreme(now)
     }
@@ -150,10 +150,10 @@ class BloodRunDetail {
      * the separators drawn by the HUD.
      * A row fills in as the room is run; the total waits for the room to end.
      */
-    private fun compact(now: Stamp): List<String> {
+    private fun compact(now: Stamp, totalRow: Boolean): List<String> {
         val out = mutableListOf<String>()
         for (r in all()) out += row(name(r) + ": ", stats(r, now))
-        averages()?.let { out += row(TOTAL + "Total: ", it) }
+        if (totalRow) averages()?.let { out += row(TOTAL + "Total: ", it) }
         return out
     }
 
