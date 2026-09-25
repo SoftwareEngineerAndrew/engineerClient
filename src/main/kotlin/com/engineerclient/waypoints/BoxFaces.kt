@@ -38,6 +38,25 @@ object BoxFaces {
         return face
     }
 
+    /**
+     * Moves [face] by [by] blocks, out if positive. [out] is how far each face sits outside the
+     * block the box was placed on, negative for inside it. The one rule: the box stays at least a
+     * block across in every direction. Returns false, changing nothing, if the move would break it.
+     */
+    fun move(out: IntArray, face: Face, by: Int): Boolean {
+        val opposite = when (face) {
+            Face.EAST -> out[Face.WEST.ordinal]
+            Face.WEST -> out[Face.EAST.ordinal]
+            Face.SOUTH -> out[Face.NORTH.ordinal]
+            Face.NORTH -> out[Face.SOUTH.ordinal]
+            Face.UP -> 0 // the bottom, which never moves
+        }
+        val next = out[face.ordinal] + by
+        if (1 + next + opposite < 1) return false
+        out[face.ordinal] = next
+        return true
+    }
+
     private const val X = 0
     private const val Y = 1
     private const val Z = 2

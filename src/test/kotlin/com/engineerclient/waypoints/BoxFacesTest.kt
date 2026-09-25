@@ -45,4 +45,17 @@ class BoxFacesTest {
         assertNull(pick(v(-3.0, 5.0, 5.0), v(1.0, 0.0, 0.0)))    // passes beside it
         assertNull(pick(v(3.0, 0.5, 0.5), v(1.0, 0.0, 0.0)))     // it is behind you
     }
+
+    @Test
+    fun `a face moves freely, in past the start block too, but never below a block across`() {
+        val out = IntArray(Face.entries.size)
+        assertEquals(false, BoxFaces.move(out, Face.EAST, -1))       // 1 wide already
+        BoxFaces.move(out, Face.EAST, +3)                             // 4 wide
+        assertEquals(true, BoxFaces.move(out, Face.WEST, -3))         // west pulled in 3, past the start block
+        assertEquals(-3, out[Face.WEST.ordinal])
+        assertEquals(false, BoxFaces.move(out, Face.WEST, -1))        // would be 0 wide
+        assertEquals(false, BoxFaces.move(out, Face.UP, -1))          // the top cannot sink below a block tall
+        BoxFaces.move(out, Face.UP, +2)
+        assertEquals(true, BoxFaces.move(out, Face.UP, -2))
+    }
 }

@@ -23,13 +23,13 @@ import net.minecraft.world.phys.AABB
  * An in-game box editor, driven by a "wand": any item you pick with "Make Held Item Wand". With
  * Edit Mode on and the wand in hand:
  *
- *  - Drop places a 1x1x1 box on the block at your feet.
+ *  - Drop places a 1x1x1 box on the block at your feet, or deletes the box you are looking at.
  *  - Look at a box to select one of its faces, then left click or scroll up to push that face out
  *    a block, right click or scroll down to pull it back in a block.
  *
  * A box is the block it was placed on plus how far each face has been pushed out from that block.
- * None of those can go below zero, so a box never shrinks past its own block — which is also what
- * keeps it at least 1x1x1. The bottom never moves.
+ * A face can go anywhere, in past that block too, as long as the box stays at least a block
+ * across in every direction. The bottom never moves.
  *
  * Which face is selected is [BoxFaces]' job: the far one, or the top from any angle.
  *
@@ -53,7 +53,7 @@ object BrWaypoints2 : Module(
     /** Which item is the wand, saved with the config so it survives a restart. */
     private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.").hide()
 
-    /** A box: the block it was placed on, and how many blocks each face is pushed out from it. */
+    /** A box: the block it was placed on, and how many blocks each face is pushed out from it (negative is in). */
     class Box(val origin: BlockPos) {
         val out = IntArray(Face.entries.size)
 
@@ -75,6 +75,8 @@ object BrWaypoints2 : Module(
     init {
         on<RenderEvent.Extract> {
             for (box in boxes) drawStyledBox(box.aabb(), BOX_COLOUR, 1, true)
+            // The selection only shows with the wand in hand, when it can actually be edited.
+            if (!editing()) return@on
             val (box, face) = target(mc.deltaTracker.getGameTimeDeltaPartialTick(true)) ?: return@on
             drawFilledBox(faceSlab(box.aabb(), face), FACE_COLOUR, true)
         }
@@ -85,11 +87,13 @@ object BrWaypoints2 : Module(
 
     // --- input, called from the mixins -----------------------------------------------------------
 
-    /** Drop: place a box. True means the drop was the wand being used and must not happen. */
+    /** Drop: delete the box you are looking at, or place one. True means the drop was the wand being used and must not happen. */
     @JvmStatic
     fun onDrop(): Boolean {
         if (!editing()) return false
         val player = mc.player ?: return false
+        // Looking at a box: drop deletes it. Otherwise it places a new one at your feet.
+        target(1f)?.let { (box, _) -> boxes -= box; return true }
         val feet = BlockPos.containing(player.x, player.y, player.z)
         if (boxes.none { it.origin == feet }) boxes += Box(feet)
         return true
@@ -118,7 +122,7 @@ object BrWaypoints2 : Module(
     private fun move(by: Int): Boolean {
         if (!editing()) return false
         val (box, face) = target(1f) ?: return false
-        box.out[face.ordinal] = (box.out[face.ordinal] + by).coerceAtLeast(0)
+        BoxFaces.move(box.out, face, by)
         return true
     }
 
