@@ -12,7 +12,8 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import net.minecraft.ChatFormatting
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
@@ -284,34 +285,7 @@ object DungeonSplits : Module(
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0
-        lines.forEachIndexed { i, line ->
-            val y = i * LINE_HEIGHT
-            shadow(gfx, line, y)
-            gfx.text(mc.font, line, 0, y, WHITE, false)
-        }
-        return lines.maxOf { mc.font.width(it) } + 1 to lines.size * LINE_HEIGHT
+        lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE, shadow = true) }
+        return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
     }
-
-    /**
-     * The text shadow, drawn by hand: vanilla's own never showed up in game (something in the mod
-     * list drops it), so each coloured piece is drawn again one pixel down and right at a quarter
-     * of its brightness — exactly what vanilla's shadow is.
-     */
-    private fun shadow(gfx: GuiGraphicsExtractor, line: String, y: Int) {
-        var x = 1
-        var rgb = 0xFFFFFF
-        for (piece in line.split('§').withIndex()) {
-            var text = piece.value
-            if (piece.index > 0 && text.isNotEmpty()) {
-                ChatFormatting.getByCode(text[0])?.let { f -> f.color?.let { rgb = it } ?: run { if (f == ChatFormatting.RESET) rgb = 0xFFFFFF } }
-                text = text.substring(1)
-            }
-            if (text.isEmpty()) continue
-            val dark = ((rgb shr 16 and 0xFF) / 4 shl 16) or ((rgb shr 8 and 0xFF) / 4 shl 8) or ((rgb and 0xFF) / 4)
-            gfx.text(mc.font, text, x, y + 1, 0xFF000000.toInt() or dark, false)
-            x += mc.font.width(text)
-        }
-    }
-
-    private const val WHITE = 0xFFFFFFFF.toInt()
 }
