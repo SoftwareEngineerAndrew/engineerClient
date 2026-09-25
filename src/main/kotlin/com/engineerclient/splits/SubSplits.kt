@@ -64,7 +64,7 @@ class SubSplitTracker {
             if (step.split != split) return@forEachIndexed
             val start = starts[i] ?: return@forEachIndexed
             val stop = (i + 1 until starts.size).firstNotNullOfOrNull { starts[it] }
-            out += Split(step.label, true, start, stop)
+            out += Split(step.label, start, stop)
         }
         return out
     }
@@ -198,20 +198,20 @@ class SubSplitTracker {
          * slow.
          */
         val SEQUENCE: List<Step> = listOf(
-            Step("&5Maxor", "&6Move"), Step("&5Maxor", "&5Stun"), Step("&5Maxor", "&cDps"),
-            Step("&5Maxor", "&5Stun"), Step("&5Maxor", "&cDps"), Step("&5Maxor", "&dAnimation"),
+            Step(SplitTracker.MAXOR, "&6Move"), Step(SplitTracker.MAXOR, "&5Stun"), Step(SplitTracker.MAXOR, "&cDps"),
+            Step(SplitTracker.MAXOR, "&5Stun"), Step(SplitTracker.MAXOR, "&cDps"), Step(SplitTracker.MAXOR, "&dAnimation"),
 
-            Step("&9Storm", "&aAnimation"), Step("&9Storm", "&6Crush"), Step("&9Storm", "&cDps"),
-            Step("&9Storm", "&6Crush"), Step("&9Storm", "&cDps"), Step("&9Storm", "&aAnimation"),
+            Step(SplitTracker.STORM, "&aAnimation"), Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cDps"),
+            Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cDps"), Step(SplitTracker.STORM, "&aAnimation"),
 
-            Step("&6Terminals", "&6S1"), Step("&6Terminals", "&6S2"),
-            Step("&6Terminals", "&6S3"), Step("&6Terminals", "&6S4"),
+            Step(SplitTracker.TERMS, "&6S1"), Step(SplitTracker.TERMS, "&6S2"),
+            Step(SplitTracker.TERMS, "&6S3"), Step(SplitTracker.TERMS, "&6S4"),
 
-            Step("&8Goldor", "&5Leaps"), Step("&8Goldor", "&cKill"),
+            Step(SplitTracker.GOLDOR, "&5Leaps"), Step(SplitTracker.GOLDOR, "&cKill"),
 
-            Step("&4Necron", "&dAnimation"), Step("&4Necron", "&aMid"), Step("&4Necron", "&cDps"),
-            Step("&4Necron", "&cDps"), Step("&4Necron", "&aMid"), Step("&4Necron", "&cDps"),
-            Step("&4Necron", "&dAnimation"),
+            Step(SplitTracker.NECRON, "&dAnimation"), Step(SplitTracker.NECRON, "&aMid"), Step(SplitTracker.NECRON, "&cDps"),
+            Step(SplitTracker.NECRON, "&cDps"), Step(SplitTracker.NECRON, "&aMid"), Step(SplitTracker.NECRON, "&cDps"),
+            Step(SplitTracker.NECRON, "&dAnimation"),
         )
     }
 }
