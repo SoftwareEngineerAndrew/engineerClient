@@ -1,8 +1,10 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
@@ -42,6 +44,7 @@ object DungeonSplits : Module(
 ) {
 
     private val CONTROL_CODES = Regex("\u00a7.")
+    private val backdrop by BooleanSetting("Backdrop", true, desc = "Draws a dark panel behind the splits so they stay readable over a bright floor.")
     private val tracker = SplitTracker()
     private val subs = SubSplitTracker()
     private val detail = SplitDetail()
@@ -57,6 +60,7 @@ object DungeonSplits : Module(
     private var serverTicks = 0
     private val COLOUR_CODE = Regex("&.")
     private val LEVELS = listOf("Off", "Compact", "Detailed", "Extreme")
+    private const val BACKDROP = 0xB0101010.toInt()
 
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
 
@@ -127,7 +131,13 @@ object DungeonSplits : Module(
         // Goldor's leap ends when the last teammate is inside the core. Only looked for while the
         // sequence says the team is on its way there, so it costs nothing the rest of the run.
         on<TickEvent.End> {
-            if (DungeonUtils.inDungeons) blood.onRoom(DungeonUtils.currentRoomName)
+            if (DungeonUtils.inDungeons) blood.onMapRooms(
+                DungeonScan.rooms.mapNotNull { r ->
+                    val name = r.name ?: return@mapNotNull null
+                    val tile = r.tiles.firstOrNull() ?: return@mapNotNull null
+                    (tile.x.toString() + "," + tile.z) to name
+                }
+            )
             // A door falls over about a second; the last of its blocks to turn to air is when it is
             // down. Only watched in the few seconds after a door is opened, so ordinary mining
             // elsewhere in the dungeon cannot be mistaken for it.
@@ -212,11 +222,11 @@ object DungeonSplits : Module(
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0
-        var width = 0
-        lines.forEachIndexed { i, line ->
-            gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE)
-            width = maxOf(width, mc.font.width(line))
-        }
-        return width to lines.size * LINE_HEIGHT
+        val width = lines.maxOf { mc.font.width(it) }
+        val height = lines.size * LINE_HEIGHT
+        // A dark backing first: white text over a snow floor or a lit terminal is unreadable.
+        if (backdrop) gfx.fill(-2, -2, width + 2, height, BACKDROP)
+        lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE) }
+        return width to height
     }
 }

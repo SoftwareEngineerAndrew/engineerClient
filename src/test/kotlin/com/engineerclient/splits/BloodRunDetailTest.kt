@@ -12,12 +12,12 @@ class BloodRunDetailTest {
 
     private fun rush(): BloodRunDetail {
         val blood = BloodRunDetail()
-        blood.onRoom("Hallway")
+        blood.onMapRooms(listOf("Hallway" to "Hallway"))
         blood.onChat("[NPC] Mort: Here, I found this map when I first entered the dungeon.", stamp(100))
         blood.onKeyDropped(stamp(120))
         blood.onChat("[MVP+] a has obtained Wither Key!", stamp(130))
         blood.onChat("a opened a WITHER door!", stamp(160))
-        blood.onRoom("Dino")   // named once the party is actually in it
+        blood.onMapRooms(listOf("Dino" to "Dino"))
         blood.onDoorFell(stamp(170))          // the door just opened finishes coming down
         return blood
     }
@@ -25,16 +25,15 @@ class BloodRunDetailTest {
     @Test
     fun `compact is one row a room, five times in a fixed order`() {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(200))
-        assertEquals("Blood Rush", plain(lines[0]))
         // droped, pickup, opened, lowered, room total
-        assertEquals("Hallway: 1.00s | 0.50s | 1.50s | 0.50s | 3.00s", plain(lines[1]))
+        assertEquals("Hallway: 1.00s | 0.50s | 1.50s | 0.50s | 3.00s", plain(lines[0]))
         // The room being run has nothing yet: a row fills in as it is run, no dashes standing in.
-        assertEquals("Dino: ", plain(lines[2]))
+        assertEquals("Dino: ", plain(lines[1]))
     }
 
     @Test
     fun `each column keeps its colour`() {
-        val row = rush().lines(BloodRunDetail.Level.COMPACT, stamp(200))[1]
+        val row = rush().lines(BloodRunDetail.Level.COMPACT, stamp(200))[0]
         assertTrue(row.startsWith("§5Hallway: "), row)
         for (code in listOf("§f1.00s", "§70.50s", "§c1.50s", "§40.50s", "§63.00s")) assertTrue(row.contains(code), code)
     }
@@ -43,9 +42,9 @@ class BloodRunDetailTest {
     fun `detailed is the same order, one labelled line each`() {
         val lines = rush().lines(BloodRunDetail.Level.DETAILED, stamp(200)).map { plain(it) }
         assertEquals(
-            listOf("Blood Rush", "Hallway:", "droped > 1.00s", "pickup > 0.50s", "opened > 1.50s",
+            listOf("Hallway", "droped > 1.00s", "pickup > 0.50s", "opened > 1.50s",
                    "lowered > 0.50s", "room total > 3.00s"),
-            lines.take(7),
+            lines.take(6),
         )
     }
 
@@ -75,13 +74,13 @@ class BloodRunDetailTest {
     @Test
     fun `the room that leads into fairy is pink, the rest purple`() {
         val blood = BloodRunDetail()
-        blood.onRoom("Hallway")
+        blood.onMapRooms(listOf("Hallway" to "Hallway"))
         blood.onChat("[NPC] Mort: Here, I found this map when I first entered the dungeon.", stamp(100))
         blood.onChat("a opened a WITHER door!", stamp(200))
-        blood.onRoom("Fairy")   // walking in marks the room just left, not this one
+        blood.onMapRooms(listOf("Fairy" to "Fairy"))
         blood.onChat("a opened a WITHER door!", stamp(300))
         val rows = blood.lines(BloodRunDetail.Level.COMPACT, stamp(400))
-        assertTrue(rows[1].startsWith("§dHallway:"), rows[1])
-        assertTrue(rows[2].startsWith("§5Fairy:"), rows[2])
+        assertTrue(rows[0].startsWith("§dHallway:"), rows[0])
+        assertTrue(rows[1].startsWith("§5Fairy:"), rows[1])
     }
 }

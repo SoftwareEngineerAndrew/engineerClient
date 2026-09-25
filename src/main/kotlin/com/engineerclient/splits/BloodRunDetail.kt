@@ -43,24 +43,32 @@ class BloodRunDetail {
     private val rooms = mutableListOf<Room>()
     private var room: Room? = null
     private var done = false
-    private var roomName = ""
+    /** Rooms the dungeon map has already revealed, so a newly revealed one can be spotted. */
+    private val seenRooms = mutableSetOf<String>()
+
+    /** The most recent room the map revealed, which is the one the party is standing in. */
+    private var lastRevealed: String? = null
 
     fun reset() {
-        rooms.clear(); room = null; done = false; roomName = ""
+        rooms.clear(); room = null; done = false; seenRooms.clear(); lastRevealed = null
     }
 
     /**
-     * The room name Odin reports, kept so the next room's block can be titled with it. Walking into
-     * the fairy room marks the room just left as the one that leads there — the room *to* fairy,
-     * not the one coming out of it.
+     * The rooms the dungeon map has revealed so far, as (id, name). Taken from the map rather than
+     * from the room you are standing in, because whoever is running this mod is often not the one
+     * doing the rush — their own position says nothing about which room the rush just opened.
+     *
+     * A room appearing on the map for the first time is the rush having opened into it, so it names
+     * the room being timed. A newly revealed fairy room marks the room before it as the one that
+     * leads there — the room *to* fairy, not the one coming out of it.
      */
-    fun onRoom(name: String) {
-        if (name.isBlank() || name == roomName) return
-        roomName = name
-        // A room is opened before it is walked into, so at that moment Odin still reports the room
-        // being left. The first new name after it opened is the room it actually is.
-        room?.let { if (!it.named) { it.name = name; it.named = true } }
-        if (name.contains("Fairy", ignoreCase = true)) rooms.lastOrNull()?.toFairy = true
+    fun onMapRooms(revealed: List<Pair<String, String>>) {
+        for ((id, name) in revealed) {
+            if (name.isBlank() || !seenRooms.add(id)) continue
+            lastRevealed = name
+            room?.let { if (!it.named) { it.name = name; it.named = true } }
+            if (name.contains("Fairy", ignoreCase = true)) rooms.lastOrNull()?.toFairy = true
+        }
     }
 
     /**
@@ -84,8 +92,9 @@ class BloodRunDetail {
 
         // The run starting is the entrance door falling, which is the first room's start.
         if (room == null && msg == MORT) {
-            // The entrance is where you already are, so its name needs no waiting.
-            room = Room(roomName.ifBlank { "Entrance" }, at).also { it.named = true }
+            // The first room is the one the party is already standing in, so the map has named it
+            // already. Every room after it is opened into and named when the map reveals it.
+            room = Room(lastRevealed ?: UNNAMED, at).also { it.named = lastRevealed != null }
             return
         }
         val r = room ?: return
@@ -106,7 +115,7 @@ class BloodRunDetail {
             r.doorOpened = at
             r.doorBy = door.groupValues[1]
             rooms += r
-            room = Room("...", at)
+            room = Room(UNNAMED, at)
             return
         }
 
@@ -139,14 +148,14 @@ class BloodRunDetail {
     private fun compact(): List<String> {
         val all = rooms + listOfNotNull(room)
         if (all.isEmpty()) return emptyList()
-        val out = mutableListOf(HEADER + "Blood Rush")
+        val out = mutableListOf<String>()
         for (r in all) {
             // Only what has happened: a room fills its row in as it is run rather than starting as
             // a line of dashes.
             val cells = stats(r).mapIndexedNotNull { i, ms ->
                 ms?.let { COLOURS[i] + SplitFormat.time(it, true) }
             }
-            out += name(r) + " " + cells.joinToString(" §8| ")
+            out += name(r) + ": " + cells.joinToString(" §8| ")
         }
         averageStats()?.let { avg ->
             out += TOTAL + "Total: " + avg.mapIndexedNotNull { i, ms ->
@@ -160,7 +169,7 @@ class BloodRunDetail {
     private fun detailed(): List<String> {
         val all = rooms + listOfNotNull(room)
         if (all.isEmpty()) return emptyList()
-        val out = mutableListOf(HEADER + "Blood Rush")
+        val out = mutableListOf<String>()
         for (r in all) {
             out += name(r)
             stats(r).forEachIndexed { i, ms ->
@@ -170,7 +179,7 @@ class BloodRunDetail {
         }
         averageStats()?.let { avg ->
             avg.forEachIndexed { i, ms ->
-                if (ms != null) out += TOTAL + "total " + LABELS[i] + " avg §f> §a" + SplitFormat.time(ms, true)
+                if (ms != null) out += TOTAL + LABELS[i] + " avg §b> §a" + SplitFormat.time(ms, true)
             }
         }
         return out
@@ -180,7 +189,7 @@ class BloodRunDetail {
     private fun extreme(now: Stamp): List<String> {
         val all = rooms + listOfNotNull(room)
         if (all.isEmpty()) return emptyList()
-        val out = mutableListOf(HEADER + "Blood Rush")
+        val out = mutableListOf<String>()
         for (r in all) {
             out += name(r)
             r.mobKilled?.let { out += row(r.start, it, COLOURS[0], LABELS[0]) }
@@ -223,8 +232,8 @@ class BloodRunDetail {
     private fun ms(later: Stamp?, earlier: Stamp?): Long? =
         if (later == null || earlier == null) null else later.realMs - earlier.realMs
 
-    /** The room's name and colon: purple, or pink for the room that leads into fairy. */
-    private fun name(r: Room) = (if (r.toFairy) FAIRY else NAME) + r.name + ":"
+    /** The room's name: purple, or pink for the room that leads into fairy. */
+    private fun name(r: Room) = (if (r.toFairy) FAIRY else NAME) + r.name
 
     private fun by(who: String) = if (who.isEmpty()) "" else " §7($who)"
 
@@ -243,7 +252,7 @@ class BloodRunDetail {
         "§a" + SplitFormat.time(ms, true) + " §7(§b" + SplitFormat.time(ticks * 50L, true) + "§7)"
 
     private companion object {
-        const val HEADER = "§a"
+        const val UNNAMED = "..."
         const val NAME = "§5"
         const val FAIRY = "§d"
         const val TOTAL = "§6"
