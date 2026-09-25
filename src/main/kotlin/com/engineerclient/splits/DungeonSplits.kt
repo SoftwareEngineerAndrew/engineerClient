@@ -91,8 +91,8 @@ object DungeonSplits : Module(
         registerSetting(
             HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", false, 0, 0, 1f) { example ->
                 if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
-                    "§5Hallway: §71.52s §8| §80.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
-                    "§dDino: §71.52s §8| §80.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
+                    "§5Hallway: §71.52s §8| §80.21s §8| §70.06s §8| §80.52s §8| §62.31s",
+                    "§dDino: §71.52s §8| §80.21s §8| §70.06s §8| §80.52s §8| §62.31s",
                 ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
                 draw(this, subLines(s))
             }

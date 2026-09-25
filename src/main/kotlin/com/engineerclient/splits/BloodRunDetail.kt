@@ -245,13 +245,13 @@ class BloodRunDetail {
         const val FAIRY = "§d"
         const val TOTAL = "§6"
 
-        /** The five columns, in order, and their colours from the compact screenshot. */
+        /** The five columns, in order, and their colours: the screenshot's, with key pickup light grey and door opened dark grey. */
         val LABELS = listOf("door fell", "last mob", "pickup", "opened", "room total")
-        val COLOURS = listOf("§7", "§8", "§c", "§4", "§6")
+        val COLOURS = listOf("§7", "§8", "§7", "§8", "§6")
 
         /** Extreme's seven lines, coloured to match the column each one feeds. */
         val FULL_LABELS = listOf("door fell", "last mob killed", "key picked up", "key delta", "door opened", "door delta", "total room time")
-        val FULL_COLOURS = listOf("§7", "§8", "§c", "§c", "§4", "§4", "§6")
+        val FULL_COLOURS = listOf("§7", "§8", "§7", "§7", "§8", "§8", "§6")
 
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
