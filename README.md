@@ -14,6 +14,7 @@ Modules, all under the "Blood Rush" panel in Odin's ClickGUI:
 | Blood Rush Waypoints | Class-aware blood-rush waypoint profiles (see below). |
 | Blood Rush Roles | M7 phase-3 dynamic role rotation driven by party/system chat, leap-target highlight in Odin's leap menu, per-role colour vignette + sound. Strategy is data: `src/main/resources/rotation/p3.json`. |
 | POV Previews | Each quarter of Odin's Spirit Leap menu rendered from that teammate's eyes. Design notes in `docs/pov-preview-plan.md`. |
+| Dungeon Splits | Devonian's run, boss and Watcher splits as three draggable HUDs, each section timed on the real clock and the server's tick clock. |
 | Party Finder Stats | Cata level, secrets and floor PB in-line on every member row of a Party Finder listing, cached on disk for a day. The `Members:` header says which classes the party is missing, yours bolded. |
 | Lowest BIN | An item's lowest auction-house BIN on its tooltip, priced from Coflnet one item at a time. Silent for anything not auctionable. |
 | No Enchant Glint | Removes the enchantment glint from items, held/dropped items and worn armour, each switchable. Leaves inventory glint alone while a terminal is open. |

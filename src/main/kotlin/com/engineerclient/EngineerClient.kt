@@ -19,6 +19,7 @@ import com.engineerclient.rotation.RoleVignette
 import com.engineerclient.rotation.RotationEngine
 import com.engineerclient.rotation.RotationSpec
 import com.engineerclient.rotation.SetupCheck
+import com.engineerclient.splits.DungeonSplits
 import com.engineerclient.waypoints.BrwWaypoints
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -55,7 +56,7 @@ object EngineerClient : ClientModInitializer {
         // Register our own module into Odin's module system: own ClickGUI panel
         // ("Blood Rush"), own config file (config/odin/addons/engineerclient.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, NoGlint, RandomStuff, ChatHider, LowestBin, SimplifySkeletors, RestartGame, AutoJoinHypixel, AgroLeaderboard, BetterPF)
+        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, NoGlint, RandomStuff, ChatHider, LowestBin, SimplifySkeletors, RestartGame, AutoJoinHypixel, AgroLeaderboard, BetterPF, DungeonSplits)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn the module on once.
