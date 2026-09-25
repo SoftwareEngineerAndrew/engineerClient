@@ -46,15 +46,16 @@ import java.io.File
  *    gets thinner than a block, and its bottom never moves.
  *
  * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
- * it overlaps most, if several); one in no box goes to the nearest box in its room. A box is green
- * while any of its mobs is alive and red once they are all dead.
+ * it overlaps most, if several); one in no box goes to the nearest box in its room. A box
+ * shows, in purple, while any of its mobs is alive; with none alive it is hidden (never deleted)
+ * unless Keep All Boxes is on.
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  */
 object BrWaypoints2 : Module(
     name = "BR Waypoints 2",
     category = Category.custom("Engineer Client"),
-    description = "Boxes that group a room's starred mobs: green while any are alive, red once all are dead. Made in game with a wand.",
+    description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made in game with a wand.",
 ) {
 
     private val editMode by BooleanSetting("Edit Mode", false, desc = "Edits only happen while this is on. Off, the wand is just an item.")
@@ -74,6 +75,8 @@ object BrWaypoints2 : Module(
         write()
         modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }
+
+    private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box. Off, a box only shows while one of its starred mobs is alive.")
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
@@ -112,9 +115,7 @@ object BrWaypoints2 : Module(
 
     private var useHeld = false
 
-    private val TEAL = Color(0, 255, 221, 1f)
-    private val GREEN = Color(85, 255, 85, 1f)
-    private val RED = Color(255, 85, 85, 1f)
+    private val PURPLE = Color(170, 0, 170, 1f)
 
     /** How far away a box can be selected from. */
     private const val REACH = 48.0
@@ -139,23 +140,16 @@ object BrWaypoints2 : Module(
         on<RenderEvent.Extract> {
             if (!DungeonUtils.inDungeons) return@on
 
-            // Each box's colour from its mobs: none yet, any alive, or all dead.
-            val alive = HashMap<Box, Boolean>()
-            for (mob in mobs) {
-                val box = claimOf(mob) ?: continue
-                alive[box] = (alive[box] ?: false) || !mob.dead
-            }
-            for (box in boxes) {
-                val colour = when (alive[box]) { null -> TEAL; true -> GREEN; false -> RED }
+            for (box in shown()) {
                 val bb = box.aabb()
                 // Seen through walls; the faces faint enough to walk through without noticing.
-                drawFilledBox(bb, colour.withAlpha(0.08f), depth = false)
-                drawWireFrameBox(bb, colour, depth = false)
+                drawFilledBox(bb, PURPLE.withAlpha(0.08f), depth = false)
+                drawWireFrameBox(bb, PURPLE, depth = false)
             }
 
             // The selected face, only with the wand in hand, when it can actually be edited.
             if (editing()) target(mc.deltaTracker.getGameTimeDeltaPartialTick(true))?.let { (box, face) ->
-                drawFilledBox(faceSlab(box.aabb(), face), TEAL.withAlpha(0.35f), depth = false)
+                drawFilledBox(faceSlab(box.aabb(), face), PURPLE.withAlpha(0.35f), depth = false)
             }
 
             if (spawnMarkers) {
@@ -200,6 +194,18 @@ object BrWaypoints2 : Module(
                 mob.entity = null
             }
         }
+    }
+
+    /**
+     * The boxes on screen: all of them with Keep All Boxes on, otherwise only those with a claimed
+     * starred mob still alive. A hidden box is only hidden — it stays saved, and comes back with
+     * its room in the next run.
+     */
+    private fun shown(): List<Box> {
+        if (keepAll) return boxes
+        val live = HashSet<Box>()
+        for (mob in mobs) if (!mob.dead) claimOf(mob)?.let { live += it }
+        return boxes.filter { it in live }
     }
 
     /**
@@ -304,7 +310,7 @@ object BrWaypoints2 : Module(
         val dir = doubleArrayOf(v.x, v.y, v.z)
         var best: Pair<Box, Face>? = null
         var bestT = REACH
-        for (box in boxes) {
+        for (box in shown()) {
             val min = doubleArrayOf(box.c[0].toDouble(), box.c[1].toDouble(), box.c[2].toDouble())
             val max = doubleArrayOf(box.c[3].toDouble(), box.c[4].toDouble(), box.c[5].toDouble())
             val t = BoxFaces.distance(eye, dir, min, max) ?: continue
