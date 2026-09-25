@@ -73,8 +73,8 @@ object Testing : Module(
             if (!starredSpawns || !DungeonUtils.inDungeons) return@on
             val colour = (Highlight.settings["Highlight color"] as? ColorSetting)?.value ?: Colors.WHITE
             val style = (Highlight.settings["Render Style"] as? SelectorSetting)?.value ?: 1
-            // 1x1 on the floor, half a block tall, centred on where the mob stood.
-            for (s in spawns) drawStyledBox(AABB(s.x - 0.5, s.y, s.z - 0.5, s.x + 0.5, s.y + 0.5, s.z + 0.5), colour, style, true)
+            // 1x1 on the floor, a quarter block tall, centred exactly on where the mob stood (not snapped).
+            for (s in spawns) drawStyledBox(AABB(s.x - 0.5, s.y, s.z - 0.5, s.x + 0.5, s.y + 0.25, s.z + 0.5), colour, style, true)
         }
     }
 
