@@ -17,7 +17,7 @@ Modules, all under the "Engineer Client" panel in Odin's ClickGUI:
 | Sub Splits | Devonian's splits, the whole run on one draggable HUD, timed on both the real clock and the server's tick clock. Plus one "{split} Sub Splits" HUD per split listing what happened inside it — a data-gathering pass, all off by default. |
 | Party Finder Stats | Cata level, secrets and floor PB in-line on every member row of a Party Finder listing, cached on disk for a day. The `Members:` header says which classes the party is missing, yours bolded. |
 | Lowest BIN | An item's lowest auction-house BIN on its tooltip, priced from Coflnet one item at a time. Silent for anything not auctionable. |
-| Random Stuff | Grab bag of small toggles — hiding chat, damage flash, item names, the boss bar, the action bar, armour stands; Enter confirms a sign; black sky; hiding chosen sidebar lines (`Dump Scoreboard` prints the real text to match against). Also holds the enchantment-glint remover, the F7 restart keybind and Auto Join Hypixel, which used to be modules of their own. |
+| Random Stuff | Grab bag of small toggles — hiding chat, damage flash, item names, the action bar, armour stands; Enter confirms a sign; black sky; the enchantment-glint remover; Auto Join Hypixel. Always trims the Skyblock sidebar down to what matters (`Dump Scoreboard` prints the real text, and a text field adds your own lines). |
 
 Commands: `/ec` (also `/engineerclient`; `/brw` still works) — `setup`, `roles`, `role <role>`,
 `debug`, `log`, `log mark [note]`, plus the waypoint-profile commands below.

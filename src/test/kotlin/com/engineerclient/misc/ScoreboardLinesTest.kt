@@ -24,19 +24,13 @@ class ScoreboardLinesTest {
     @AfterTest
     fun reset() {
         ScoreboardLines.hideLines = false
-        ScoreboardLines.hideDateTime = false
-        ScoreboardLines.hideSeason = false
-        ScoreboardLines.hideKeys = false
-        ScoreboardLines.hideCleared = false
         ScoreboardLines.customPatterns = ""
     }
 
-    /** Lines that must never be hidden by the built-in patterns, whatever is switched on. */
+    /** Lines that must survive: the sidebar would be pointless if these went too. */
     private val keep = listOf(
-        "⏣ The Catacombs (F7)",
         "Coins: 1,234,567",
         "Bits: 0",
-        "SKYBLOCK CO-OP",
         "Team Score: 305 (S+)",
         "undonecoffee",
         "Cleared by: someone",
@@ -48,29 +42,23 @@ class ScoreboardLinesTest {
 
     @Test
     fun `date and time lines`() {
-        ScoreboardLines.hideDateTime = true
         assertTrue(ScoreboardLines.hides("11/12/23 m1CK"))
         // The clock line leads with a sun or moon glyph, so the pattern cannot be anchored on a digit.
         assertTrue(ScoreboardLines.hides("☀ 12:10pm"))
         assertTrue(ScoreboardLines.hides("☽ 4:20am"))
         assertKeepsTheRest()
-        assertFalse(ScoreboardLines.hides("Late Summer 13th"))
     }
 
     @Test
     fun `season lines`() {
-        ScoreboardLines.hideSeason = true
         assertTrue(ScoreboardLines.hides("Late Summer 13th"))
         assertTrue(ScoreboardLines.hides("Early Winter 1st"))
         assertTrue(ScoreboardLines.hides("Spring 22nd"))
         assertKeepsTheRest()
-        assertFalse(ScoreboardLines.hides("11/12/23 m1CK"))
     }
 
     @Test
     fun `dungeon counters`() {
-        ScoreboardLines.hideKeys = true
-        ScoreboardLines.hideCleared = true
         assertTrue(ScoreboardLines.hides("Keys: ✗ 1"))
         assertTrue(ScoreboardLines.hides("Cleared: 42% (180)"))
         assertTrue(ScoreboardLines.hides("Dungeon Cleared: 7%"))
@@ -78,11 +66,12 @@ class ScoreboardLinesTest {
     }
 
     @Test
-    fun `each toggle only hides its own lines`() {
-        ScoreboardLines.hideSeason = true
-        assertFalse(ScoreboardLines.hides("Keys: ✗ 1"))
-        assertFalse(ScoreboardLines.hides("Cleared: 42% (180)"))
-        assertFalse(ScoreboardLines.hides("☀ 12:10pm"))
+    fun `the header, the location and blank lines go too`() {
+        assertTrue(ScoreboardLines.hides("SKYBLOCK"))
+        assertTrue(ScoreboardLines.hides("SKYBLOCK CO-OP"))
+        assertTrue(ScoreboardLines.hides("⏣ The Catacombs (F7)"))
+        assertTrue(ScoreboardLines.hides(""))
+        assertTrue(ScoreboardLines.hides("   "))
     }
 
     @Test
@@ -104,24 +93,22 @@ class ScoreboardLinesTest {
     fun `a custom pattern that is not valid regex is still matched as text`() {
         // Hypixel's lines are full of brackets, so someone pasting one straight out of the dump
         // hands us something that does not compile as a regex.
-        ScoreboardLines.customPatterns = "(F7)"
-        assertTrue(ScoreboardLines.hides("⏣ The Catacombs (F7)"))
+        ScoreboardLines.customPatterns = "(S+"
+        assertTrue(ScoreboardLines.hides("Team Score: 305 (S+)"))
         assertFalse(ScoreboardLines.hides("Coins: 1,234,567"))
     }
 
     @Test
-    fun `blank and empty patterns hide nothing`() {
+    fun `blank custom patterns hide nothing extra`() {
         ScoreboardLines.customPatterns = "  ;  ; "
         for (line in keep) assertFalse(ScoreboardLines.hides(line))
-        assertFalse(ScoreboardLines.hides(""))
     }
 
     @Test
     fun `the master switch is what the mixin asks`() {
-        ScoreboardLines.hideSeason = true
         ScoreboardLines.hideLines = false
-        // hides() is the matcher; the master switch is checked by shouldHide() at the render call,
-        // so a line still "matches" here — this pins that split so it is not silently inverted.
+        // hides() is the matcher; whether the module is on is checked by shouldHide() at the render
+        // call, so a line still "matches" here — this pins that split so it is not silently inverted.
         assertTrue(ScoreboardLines.hides("Late Summer 13th"))
     }
 }
