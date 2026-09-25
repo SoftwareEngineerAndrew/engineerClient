@@ -20,10 +20,15 @@ data class Stamp(val realMs: Long, val tick: Int)
 
 /**
  * One timed section. [stop] is null while it is still running — the HUD counts it up to now.
- * [long] picks the plain-seconds format, [sub] marks a terminal section (S1-S4) so it can be
- * indented under Terminals.
+ * [long] picks the plain-seconds format.
  */
-data class Split(val label: String, val long: Boolean, val start: Stamp, val stop: Stamp?, val sub: Boolean = false)
+data class Split(val label: String, val long: Boolean, val start: Stamp, val stop: Stamp?)
+
+/**
+ * Something that happened inside a split: a terminal done, a death, a blessing. [at] is when, so
+ * a sub-split HUD can show it as an offset from the split it belongs to.
+ */
+data class SubSplit(val label: String, val at: Stamp)
 
 /** Which clock a split line shows. */
 enum class SplitClock { REAL, TICKS, BOTH }
@@ -76,30 +81,26 @@ class SplitTracker {
     private var blood: Stamp? = null         // the blood door opens / the Watcher speaks
     private var dialogEnd: Stamp? = null
     private var proven: Stamp? = null        // the Watcher lets you pass
-    private var watcherMove: Stamp? = null   // the Watcher itself starts moving (fed by the module)
     private var end: Stamp? = null           // EXTRA STATS: the run is over
     private var floorNo: Int? = null
     private var floorStart: Stamp? = null
     private var bossStarts: Array<Stamp?> = emptyArray()
-    private var sections: List<Section>? = null
+
+    /**
+     * What happened inside each split, by split label. Every dungeon event goes to whichever split
+     * was running when it arrived; which of them are worth keeping is the thing we are collecting
+     * this data to find out, so nothing is filtered here beyond [SplitEvents] recognising the line
+     * as an event at all.
+     */
+    private val subSplits = linkedMapOf<String, MutableList<SubSplit>>()
 
     /** Master mode, for the splits only master runs have. The module sets it from the floor. */
     var master: Boolean = false
 
-    /** When the Watcher finished speaking — the module only watches it for movement after this. */
-    val dialogueEnd: Stamp? get() = dialogEnd
-
-    /** Whether the Watcher has already been seen moving (or the fight is over). */
-    val watcherMoved: Boolean get() = watcherMove != null || proven != null || blood == null
-
     fun reset() {
-        mort = null; blood = null; dialogEnd = null; proven = null; watcherMove = null; end = null
-        floorNo = null; floorStart = null; bossStarts = emptyArray(); sections = null
-    }
-
-    /** The Watcher's first movement after its dialogue (the module watches the entity for this). */
-    fun onWatcherMove(at: Stamp) {
-        if (watcherMove == null && blood != null && proven == null) watcherMove = at
+        mort = null; blood = null; dialogEnd = null; proven = null; end = null
+        floorNo = null; floorStart = null; bossStarts = emptyArray()
+        subSplits.clear()
     }
 
     fun onChat(msg: String, at: Stamp) {
@@ -107,7 +108,7 @@ class SplitTracker {
         // boss's first words, EXTRA STATS) still counts inside it.
         val closed = clearEnd()
         val ended = end
-        val goldorWas = goldorStart()
+        val openBefore = openLabels()
 
         if (mort == null && msg == MORT) mort = at
         if (end == null && EXTRA_STATS.matches(msg)) end = at
@@ -139,154 +140,83 @@ class SplitTracker {
                 if (i == 0 || bossStarts[i] != null) return@forEachIndexed
                 if (split.starts?.invoke(msg) != true) return@forEachIndexed
                 bossStarts[i] = at
-                if (split.label == TERMINALS) sections = List(4) { Section(SECTION_TERMINALS[it], it == 3) }.also { it[0].start = at }
             }
         }
 
-        // Terminal sections see every line from the one that starts Terminals to the one that
-        // starts Goldor (which isn't a terminal line, so feeding it changes nothing).
-        if (sections != null && goldorWas == null) feedSections(msg, at)
-    }
-
-    /** The clear HUD: hidden once the boss has started or the run has ended. */
-    fun runSplits(): List<Split> {
-        val mort = mort ?: return emptyList()
-        if (clearEnd() != null) return emptyList()
-        val out = mutableListOf(Split("&4Blood", true, mort, blood))
-        blood?.let {
-            out += Split("&cWatcher Dialog", true, it, dialogEnd)
-            out += Split("&cWatcher", true, it, proven)
+        // Anything notable in the line is filed under every split that was open when it arrived.
+        // Splits nest — Boss Entry spans the whole clear, Boss spans every phase — so an event
+        // belongs to all of them, not just the innermost; that is what makes a HUD like "Boss Entry
+        // Sub Splits" worth having. Open *before* this line, so the message that ends a split is
+        // still counted inside it rather than opening the next one's list.
+        SplitEvents.label(msg)?.let { event ->
+            val owners = openBefore.ifEmpty { openLabels() }
+            for (owner in owners) subSplits.getOrPut(owner) { mutableListOf() } += SubSplit(event, at)
         }
-        proven?.let { out += Split("&dPortal Enter", true, it, null) }
-        out += Split("&9Boss Entry", false, mort, null)
-        return out
     }
 
-    /** The Watcher HUD: the dialogue, how long until it moved, and the whole fight. */
-    fun watcherSplits(): List<Split> {
-        val blood = blood ?: return emptyList()
-        if (clearEnd() != null) return emptyList()
-        return listOf(
-            Split("&cWatcher Dialog", true, blood, dialogEnd),
-            Split("&cWatcher Move", false, blood, watcherMove ?: proven),
-            Split("&cWatcher", true, blood, proven),
-        )
-    }
+    /** The splits being timed right now: started, not yet ended. */
+    private fun openLabels(): List<String> = splits().filter { it.stop == null }.map { it.label }
 
-    /** The boss HUD: this floor's phases, the terminal sections inside Terminals, and the total. */
-    fun bossSplits(): List<Split> {
-        val floorStart = floorStart ?: return emptyList()
-        val floor = FLOORS[floorNo] ?: return emptyList()
+    /**
+     * Every split of the run in the order it happened: the clear, then the boss's phases. The clear
+     * splits used to vanish the moment the boss started — they stay now, frozen at their final
+     * times, so one HUD carries the whole run.
+     */
+    fun splits(): List<Split> {
         val out = mutableListOf<Split>()
-        floor.splits.forEachIndexed { i, split ->
-            val start = (if (i == 0) floorStart else bossStarts[i]) ?: return@forEachIndexed
-            if (split.label == WITHER_KING && !master) return@forEachIndexed
-            val next = (i + 1 until floor.splits.size).firstNotNullOfOrNull { bossStarts[it] }
-            out += Split(split.label, split.long, start, next ?: end)
-            if (split.label == TERMINALS) out += terminalSplits()
+        val mort = mort
+        if (mort != null) {
+            val closed = clearEnd()
+            out += Split(BLOOD, true, mort, blood ?: closed)
+            blood?.let {
+                out += Split(WATCHER_DIALOG, true, it, dialogEnd ?: closed)
+                out += Split(WATCHER, true, it, proven ?: closed)
+            }
+            proven?.let { out += Split(PORTAL_ENTER, true, it, closed) }
+            out += Split(BOSS_ENTRY, false, mort, closed)
         }
-        out += Split("&4Boss", false, floorStart, end)
+        val floorStart = floorStart
+        val floor = FLOORS[floorNo]
+        if (floorStart != null && floor != null) {
+            floor.splits.forEachIndexed { i, split ->
+                val start = (if (i == 0) floorStart else bossStarts[i]) ?: return@forEachIndexed
+                if (split.label == WITHER_KING && !master) return@forEachIndexed
+                val next = (i + 1 until floor.splits.size).firstNotNullOfOrNull { bossStarts[it] }
+                out += Split(split.label, split.long, start, next ?: end)
+            }
+            out += Split(BOSS, false, floorStart, end)
+        }
         return out
     }
 
-    private fun terminalSplits(): List<Split> =
-        sections.orEmpty().mapIndexedNotNull { i, s -> s.start?.let { Split("&eS${i + 1}", true, it, s.stop, sub = true) } }
+    /** What happened inside the split with this label, oldest first. */
+    fun subSplits(label: String): List<SubSplit> = subSplits[label].orEmpty()
 
     /** When the clear stopped being the thing you're timing: the boss starting, or the run ending. */
     private fun clearEnd(): Stamp? = listOfNotNull(floorStart, end).minByOrNull { it.realMs }
 
-    private fun goldorStart(): Stamp? {
-        val floor = FLOORS[floorNo] ?: return null
-        val i = floor.splits.indexOfFirst { it.label == GOLDOR }
-        return if (i < 0) null else bossStarts.getOrNull(i)
-    }
-
-    /**
-     * Devonian's terminal sections, quirks and all. Each section ends when its terminals, both
-     * levers, the device and (S1-S3) the gate are done; the next then starts on the same line and
-     * ignores it. The device bookkeeping is odd because Hypixel's device line carries no section:
-     * a repeated count means the message belongs to a later section, so the credit is pushed there.
-     */
-    private fun feedSections(msg: String, at: Stamp) {
-        val secs = sections ?: return
-        secs.forEachIndexed { i, s ->
-            if (!s.active) return@forEachIndexed
-            if (s.ignoreFirst) { s.ignoreFirst = false; return@forEachIndexed }
-            if (msg == GATE_DESTROYED) {
-                s.gateDestroyed = true
-            } else {
-                val m = TERMINAL_LINE.find(msg) ?: return@forEachIndexed
-                val (ign, type, indexText) = m.destructured
-                val index = indexText.toInt()
-                if (index == s.lastIndex) {
-                    if (ign == s.lastIgn) return@forEachIndexed
-                    if (type == "device") {
-                        when (i) {
-                            0 -> if (!secs[3].deviceDone) secs[3].deviceDone = true
-                                 else if (!secs[1].deviceDone) secs[1].deviceDone = true
-                                 else secs[2].deviceDone = true
-                            1 -> if (!secs[2].deviceDone) secs[2].deviceDone = true else secs[3].deviceDone = true
-                            2 -> secs[3].deviceDone = true
-                        }
-                        return@forEachIndexed
-                    }
-                    if (s.lastType == "device") s.deviceDone = false
-                } else if (index == 2 && s.lastIndex == 0) {
-                    s.deviceDone = true
-                } else if (index == 1 && type != "device") {
-                    s.deviceDone = false
-                }
-                when (type) {
-                    "terminal" -> s.termsDone++
-                    "lever" -> s.leversDone++
-                    else -> {
-                        if (s.deviceDone && i == 1) secs[3].deviceDone = true
-                        s.deviceDone = true
-                    }
-                }
-                s.lastIgn = ign; s.lastIndex = index; s.lastType = type
-            }
-            if (s.termsDone >= s.terms && s.leversDone >= 2 && s.deviceDone && s.gateDestroyed) {
-                s.stop = at
-                if (i < 3) { secs[i + 1].ignoreFirst = true; secs[i + 1].start = at }
-            }
-        }
-    }
-
-    private class Section(val terms: Int, var gateDestroyed: Boolean) {
-        var termsDone = 0
-        var leversDone = 0
-        var deviceDone = false
-        var lastIgn = ""
-        var lastIndex = 0
-        var lastType = ""
-        var ignoreFirst = false
-        var start: Stamp? = null
-        var stop: Stamp? = null
-        val active get() = start != null && stop == null
-    }
-
     private class BossSplit(val label: String, val long: Boolean = false, val starts: ((String) -> Boolean)? = null)
     private class FloorSplits(val start: String, val splits: List<BossSplit>)
 
-    private companion object {
+    companion object {
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         const val WATCHER_DIALOG_END = "[BOSS] The Watcher: Let's see how you can handle this."
         const val WATCHER_END = "[BOSS] The Watcher: You have proven yourself. You may pass."
-        const val GATE_DESTROYED = "The gate has been destroyed!"
         const val TERMINALS = "&6Terminals"
         const val GOLDOR = "&8Goldor"
         const val WITHER_KING = "&0Wither King"
+        const val BLOOD = "&4Blood"
+        const val WATCHER_DIALOG = "&cWatcher Dialog"
+        const val WATCHER = "&cWatcher"
+        const val PORTAL_ENTER = "&dPortal Enter"
+        const val BOSS_ENTRY = "&9Boss Entry"
+        const val BOSS = "&4Boss"
         val BLOOD_OPEN = Regex("^(\\[BOSS] The Watcher: .+?|The BLOOD DOOR has been opened!)$")
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
-        val TERMINAL_LINE = Regex("^(\\w+) (?:activated|completed) a (terminal|lever|device)! \\((\\d)/\\d\\)$")
         // Terminals starts on the first one done, or on Goldor's greeting if the team is that fast.
         val TERMINALS_START = Regex("^(?:\\w+ (?:activated|completed) a (?:terminal|lever|device)! \\(\\d/\\d\\)|\\[BOSS] Goldor: Who dares trespass into my domain\\?)$")
-        /** Terminals per section: S1 4, S2 5, S3 4, S4 4. S4 has no gate. */
-        val SECTION_TERMINALS = intArrayOf(4, 5, 4, 4)
-
         /** Each floor: the line its boss starts on, then its phases (the first starts with the boss). */
-        val FLOORS: Map<Int, FloorSplits> = mapOf(
+        private val FLOORS: Map<Int, FloorSplits> = mapOf(
             1 to FloorSplits("[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.", listOf(
                 BossSplit("&cFirst Phase"),
                 BossSplit("&cSecond Phase") { it == "[BOSS] Bonzo: Oh I'm dead!" },
@@ -320,5 +250,16 @@ class SplitTracker {
                 BossSplit(WITHER_KING) { it == "[BOSS] Necron: All this, for nothing..." },
             )),
         )
+
+        /**
+         * Every label a run can produce: the clear first, then each floor's phases, then the total.
+         * The module makes one sub-split HUD per entry up front, because a HUD has to exist before
+         * the run that would fill it — most of them stay empty on any given floor.
+         */
+        val ALL_LABELS: List<String> = buildList {
+            add(BLOOD); add(WATCHER_DIALOG); add(WATCHER); add(PORTAL_ENTER); add(BOSS_ENTRY)
+            for (floor in FLOORS.values) for (split in floor.splits) add(split.label)
+            add(BOSS)
+        }.distinct()
     }
 }

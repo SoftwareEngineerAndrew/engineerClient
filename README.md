@@ -14,7 +14,7 @@ Modules, all under the "Engineer Client" panel in Odin's ClickGUI:
 | Blood Rush Waypoints | Class-aware blood-rush waypoint profiles (see below). |
 | Dynamic Term Roles | M7 phase-3 dynamic role rotation driven by party/system chat, leap-target highlight in Odin's leap menu, per-role colour vignette + sound. Strategy is data: `src/main/resources/rotation/p3.json`. |
 | POV Previews | Each quarter of Odin's Spirit Leap menu rendered from that teammate's eyes. Design notes in `docs/pov-preview-plan.md`. |
-| Sub Splits | Devonian's run, boss and Watcher splits as three draggable HUDs, each section timed on the real clock and the server's tick clock. |
+| Sub Splits | Devonian's splits, the whole run on one draggable HUD, timed on both the real clock and the server's tick clock. Plus one "{split} Sub Splits" HUD per split listing what happened inside it — a data-gathering pass, all off by default. |
 | Party Finder Stats | Cata level, secrets and floor PB in-line on every member row of a Party Finder listing, cached on disk for a day. The `Members:` header says which classes the party is missing, yours bolded. |
 | Lowest BIN | An item's lowest auction-house BIN on its tooltip, priced from Coflnet one item at a time. Silent for anything not auctionable. |
 | Random Stuff | Grab bag of small toggles — hiding chat, damage flash, item names, the boss bar, the action bar, armour stands; Enter confirms a sign; black sky; hiding chosen sidebar lines (`Dump Scoreboard` prints the real text to match against). Also holds the enchantment-glint remover, the F7 restart keybind and Auto Join Hypixel, which used to be modules of their own. |
