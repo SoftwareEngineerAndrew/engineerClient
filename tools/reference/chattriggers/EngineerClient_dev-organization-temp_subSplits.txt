@@ -1,0 +1,25 @@
+imports
+
+COMMANDS
+
+worldload / overlay
+declairing splits
+mian loop
+
+reset splits / newSubSplit / SetSubSplit 
+scanWhoseInRenderAndAlive
+
+
+main message triggers
+term triggers
+tick triggers
+    
+plaers alive
+core leaps
+
+ticks
+
+mainToggle
+
+
+dialogue
