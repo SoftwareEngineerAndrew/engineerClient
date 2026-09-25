@@ -27,7 +27,11 @@ package com.engineerclient.splits
  */
 class BloodRunDetail {
 
-    private class Room(val name: String, val start: Stamp) {
+    private class Room(var name: String, val start: Stamp) {
+        /** Set once the party has actually walked in and Odin has named the room they are in. */
+        var named = false
+        /** The room whose door leads into the fairy room, which is worth picking out of the chain. */
+        var toFairy = false
         var doorFell: Stamp? = null
         var mobKilled: Stamp? = null
         var keyPicked: Stamp? = null
@@ -45,9 +49,18 @@ class BloodRunDetail {
         rooms.clear(); room = null; done = false; roomName = ""
     }
 
-    /** The room name Odin reports, kept so the next room's column can be titled with it. */
+    /**
+     * The room name Odin reports, kept so the next room's block can be titled with it. Walking into
+     * the fairy room marks the room just left as the one that leads there — the room *to* fairy,
+     * not the one coming out of it.
+     */
     fun onRoom(name: String) {
-        if (name.isNotBlank()) roomName = name
+        if (name.isBlank() || name == roomName) return
+        roomName = name
+        // A room is opened before it is walked into, so at that moment Odin still reports the room
+        // being left. The first new name after it opened is the room it actually is.
+        room?.let { if (!it.named) { it.name = name; it.named = true } }
+        if (name.contains("Fairy", ignoreCase = true)) rooms.lastOrNull()?.toFairy = true
     }
 
     /**
@@ -71,7 +84,8 @@ class BloodRunDetail {
 
         // The run starting is the entrance door falling, which is the first room's start.
         if (room == null && msg == MORT) {
-            room = Room(roomName.ifBlank { "Entrance" }, at)
+            // The entrance is where you already are, so its name needs no waiting.
+            room = Room(roomName.ifBlank { "Entrance" }, at).also { it.named = true }
             return
         }
         val r = room ?: return
@@ -92,7 +106,7 @@ class BloodRunDetail {
             r.doorOpened = at
             r.doorBy = door.groupValues[1]
             rooms += r
-            room = Room(roomName.ifBlank { "Room" }, at)
+            room = Room("...", at)
             return
         }
 
@@ -127,12 +141,16 @@ class BloodRunDetail {
         if (all.isEmpty()) return emptyList()
         val out = mutableListOf(HEADER + "Blood Rush")
         for (r in all) {
-            val cells = stats(r).mapIndexed { i, ms -> COLOURS[i] + (ms?.let { SplitFormat.time(it, true) } ?: "-") }
-            out += NAME + r.name + "§f: " + cells.joinToString(" §8| ")
+            // Only what has happened: a room fills its row in as it is run rather than starting as
+            // a line of dashes.
+            val cells = stats(r).mapIndexedNotNull { i, ms ->
+                ms?.let { COLOURS[i] + SplitFormat.time(it, true) }
+            }
+            out += name(r) + " " + cells.joinToString(" §8| ")
         }
         averageStats()?.let { avg ->
-            out += TOTAL + "Total§f: " + avg.mapIndexed { i, ms ->
-                COLOURS[i] + (ms?.let { SplitFormat.time(it, true) } ?: "-")
+            out += TOTAL + "Total: " + avg.mapIndexedNotNull { i, ms ->
+                ms?.let { COLOURS[i] + SplitFormat.time(it, true) }
             }.joinToString(" §8| ")
         }
         return out
@@ -144,9 +162,9 @@ class BloodRunDetail {
         if (all.isEmpty()) return emptyList()
         val out = mutableListOf(HEADER + "Blood Rush")
         for (r in all) {
-            out += NAME + r.name + ":"
+            out += name(r)
             stats(r).forEachIndexed { i, ms ->
-                if (ms != null) out += COLOURS[i] + LABELS[i] + " §f> §a" + SplitFormat.time(ms, true)
+                if (ms != null) out += COLOURS[i] + LABELS[i] + " §b> §a" + SplitFormat.time(ms, true)
             }
             out += " "
         }
@@ -164,7 +182,7 @@ class BloodRunDetail {
         if (all.isEmpty()) return emptyList()
         val out = mutableListOf(HEADER + "Blood Rush")
         for (r in all) {
-            out += NAME + r.name + ":"
+            out += name(r)
             r.mobKilled?.let { out += row(r.start, it, COLOURS[0], LABELS[0]) }
             val key = r.keyPicked
             if (key != null) {
@@ -194,8 +212,9 @@ class BloodRunDetail {
         )
     }
 
+    /** The averages, and only once the whole rush is over — a running average of one room is noise. */
     private fun averageStats(): List<Long?>? {
-        if (rooms.isEmpty()) return null
+        if (!done || rooms.isEmpty()) return null
         val cols = (0..4).map { i -> rooms.mapNotNull { stats(it)[i] } }
         if (cols.all { it.isEmpty() }) return null
         return cols.map { if (it.isEmpty()) null else it.sum() / it.size }
@@ -203,6 +222,9 @@ class BloodRunDetail {
 
     private fun ms(later: Stamp?, earlier: Stamp?): Long? =
         if (later == null || earlier == null) null else later.realMs - earlier.realMs
+
+    /** The room's name and colon: purple, or pink for the room that leads into fairy. */
+    private fun name(r: Room) = (if (r.toFairy) FAIRY else NAME) + r.name + ":"
 
     private fun by(who: String) = if (who.isEmpty()) "" else " §7($who)"
 
@@ -222,7 +244,8 @@ class BloodRunDetail {
 
     private companion object {
         const val HEADER = "§a"
-        const val NAME = "§d"
+        const val NAME = "§5"
+        const val FAIRY = "§d"
         const val TOTAL = "§6"
 
         /** The five, in the order they happen, and the colour each is read in. */
