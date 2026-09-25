@@ -95,6 +95,9 @@ object BrWaypoints2 : Module(
 
     /** A box in the world, as its corners ([BoxFaces.MIN_X]..), and the room it belongs to. */
     class Box(val c: IntArray, val room: String?) {
+        /** Written to the file. A box placed before Odin has worked out its room waits to be. */
+        var saved = false
+
         fun aabb() = AABB(c[0].toDouble(), c[1].toDouble(), c[2].toDouble(), c[3].toDouble(), c[4].toDouble(), c[5].toDouble())
     }
 
@@ -105,7 +108,8 @@ object BrWaypoints2 : Module(
      * coordinates (rotated to north, as Odin's waypoints are): x1 y1 z1 x2 y2 z2.
      */
     private val saved: MutableMap<String, MutableList<IntArray>> by lazy { read() }
-    private val loadedRooms = HashSet<String>()
+    /** Each room whose boxes are in the world, and the rotation and clay block they were placed by. */
+    private val loadedRooms = HashMap<String, String>()
 
     // --- starred mobs ----------------------------------------------------------------------------
 
@@ -312,7 +316,7 @@ object BrWaypoints2 : Module(
         if (boxes.any { it.c.contentEquals(c) }) return true
         val box = Box(c, roomAt(player.x, player.z)?.name)
         boxes += box
-        if (!save(box.room)) modMessage("§eThis box is not saved: Odin has not worked out this room yet.")
+        if (!save(box.room)) modMessage("§eOdin has not worked out this room yet; the box saves once it has.")
         return true
     }
 
@@ -392,39 +396,59 @@ object BrWaypoints2 : Module(
         return if (tx !in 0..5 || tz !in 0..5) null else DungeonScan.tiles[tx + tz * 6].room
     }
 
-    /** A room Odin has placed well enough to turn room coordinates into world ones. */
-    private fun placed(name: String): DungeonRoom? =
-        DungeonScan.rooms.firstOrNull { it.name == name && it.rotation != null && it.clayPos != null }
+    /**
+     * A room Odin has worked out well enough to turn room coordinates into world ones: rotation and
+     * clay block known, and every one of its tiles found. That last part matters — until the whole
+     * room is in, Odin reads a big room as a 1x1 and guesses its rotation from that. In the recorded
+     * runs Pipes, Pit, Waterfall, Hallway and Quartz Knight all read NORTH first and only turned WEST
+     * 10-180 ticks later, and boxes placed or saved by the first guess came out rotated.
+     */
+    private fun placed(name: String): DungeonRoom? = DungeonScan.rooms.firstOrNull { r ->
+        r.name == name && r.rotation != null && r.clayPos != null &&
+            r.tiles.size == (r.data?.shape?.tileAmount ?: r.tiles.size)
+    }
 
-    /** Puts each saved room's boxes into the world once Odin has placed that room this run. */
+    /** The rotation and clay block a room's boxes are placed by. */
+    private fun transform(room: DungeonRoom) = "${room.rotation}|${room.clayPos}"
+
+    /**
+     * Puts each saved room's boxes into the world once Odin has worked the room out, and puts them
+     * again if Odin later changes its mind about the room. Boxes placed before the room was worked
+     * out are kept where they are and saved now.
+     */
     private fun loadRooms() {
-        for ((name, list) in saved) {
-            if (name in loadedRooms) continue
+        val names = saved.keys + boxes.filter { !it.saved }.mapNotNull { it.room }
+        for (name in names.toSet()) {
             val room = placed(name) ?: continue
-            loadedRooms += name
-            for (r in list) {
+            val t = transform(room)
+            if (loadedRooms[name] == t) continue
+            boxes.removeAll { it.room == name && it.saved }
+            for (r in saved[name].orEmpty()) {
                 val a = room.getRealCoords(BlockPos(r[0], r[1], r[2]))
                 val b = room.getRealCoords(BlockPos(r[3], r[4], r[5]))
                 boxes += Box(intArrayOf(
                     minOf(a.x, b.x), minOf(a.y, b.y), minOf(a.z, b.z),
                     maxOf(a.x, b.x) + 1, maxOf(a.y, b.y) + 1, maxOf(a.z, b.z) + 1,
-                ), name)
+                ), name).also { it.saved = true }
             }
+            loadedRooms[name] = t
+            if (boxes.any { it.room == name && !it.saved }) save(name)
         }
     }
 
-    /** Saves a room's boxes as they are now. False if the room cannot be placed yet. */
+    /** Saves a room's boxes as they are now. False if Odin has not worked the room out yet. */
     private fun save(name: String?): Boolean {
         if (name == null) return false
         val room = placed(name) ?: return false
-        // A room whose saved boxes have not been put back yet would be saved as empty.
-        if (name in saved && name !in loadedRooms) return false
-        loadedRooms += name
-        val list = boxes.filter { it.room == name }.map { box ->
+        // Not yet put back by this room's current placement: [loadRooms] saves it once it has.
+        if (loadedRooms[name] != transform(room)) return false
+        val mine = boxes.filter { it.room == name }
+        val list = mine.map { box ->
             val a = room.getRelativeCoords(BlockPos(box.c[0], box.c[1], box.c[2]))
             val b = room.getRelativeCoords(BlockPos(box.c[3] - 1, box.c[4] - 1, box.c[5] - 1))
             intArrayOf(a.x, a.y, a.z, b.x, b.y, b.z)
         }
+        mine.forEach { it.saved = true }
         if (list.isEmpty()) saved.remove(name) else saved[name] = list.toMutableList()
         write()
         return true
