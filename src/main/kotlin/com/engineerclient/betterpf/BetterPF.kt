@@ -63,7 +63,10 @@ object BetterPF : Module(
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf). Needs the upload key.")
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
 
-    private const val SITE = "undonecoffee.com"
+    /** The upload key, for other features that write to the site (BR Waypoints 2's boxes). */
+    val siteKey: String get() = uploadKey.trim()
+
+    const val SITE = "undonecoffee.com"
     private const val RUNS_URL = "https://$SITE/betterpf/api/runs"
     private const val ROOMS_URL = "https://$SITE/betterpf/api/rooms"
 

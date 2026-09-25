@@ -2,6 +2,7 @@ package com.engineerclient.waypoints
 
 import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
@@ -168,6 +169,7 @@ object BrWaypoints2 : Module(
 
     init {
         on<LevelEvent.Load> {
+            pull()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
             rushing = false; rushRoom = null; rushed.clear(); watchDoorUntil = 0; barriers.clear()
         }
@@ -590,6 +592,42 @@ object BrWaypoints2 : Module(
             file.parentFile.mkdirs()
             file.writeText(gson.toJson(saved))
         }.onFailure { modMessage("§cCould not save BR Waypoints 2 boxes: ${it.message}") }
+        push()
+    }
+
+    // --- the site's copy (undonecoffee.com/brroles) -----------------------------------------------
+
+    /** The site's copy this file last matched: its updatedAt, from a pull or a push. */
+    private var siteVersion = 0L
+
+    private fun push() {
+        val json = gson.toJson(mapOf("rooms" to saved, "lastId" to maxOf(nextId - 1, lastId.toIntOrNull() ?: 0)))
+        BoxSync.push(json) { at -> mc.execute { siteVersion = maxOf(siteVersion, at) } }
+    }
+
+    /**
+     * Takes the site's copy if it is newer than this file, or sends this file if the site's is
+     * older (or empty). Boxes edited on the site show up here from the next world load.
+     */
+    private fun pull() = BoxSync.pull { body -> mc.execute { adopt(body) } }
+
+    private fun adopt(body: String) {
+        val site = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
+        val at = site["updatedAt"]?.asLong ?: 0L
+        if (at != 0L && at <= siteVersion) return
+        saved.size // the file is read before it is compared
+        if (at == 0L || (file.exists() && file.lastModified() > at)) { if (saved.isNotEmpty()) push(); return }
+        val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
+        val rooms = runCatching { gson.fromJson<MutableMap<String, MutableList<IntArray>>>(site["rooms"], type) }.getOrNull() ?: return
+        siteVersion = at
+        saved.clear(); saved.putAll(rooms)
+        val top = rooms.values.flatten().maxOfOrNull { it[6] } ?: 0
+        nextId = maxOf(nextId, top + 1)
+        if (top > (lastId.toIntOrNull() ?: 0)) lastId = top.toString()
+        runCatching { file.parentFile.mkdirs(); file.writeText(gson.toJson(saved)); file.setLastModified(at) }
+        // Put the boxes back from the new copy; ones placed here and not saved yet stay.
+        boxes.removeAll { it.saved }
+        loadedRooms.clear()
     }
 
     /**
