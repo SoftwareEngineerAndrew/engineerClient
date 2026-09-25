@@ -28,7 +28,7 @@ data class Split(val label: String, val long: Boolean, val start: Stamp, val sto
  * Something that happened inside a split: a terminal done, a death, a blessing. [at] is when, so
  * a sub-split HUD can show it as an offset from the split it belongs to.
  */
-data class SubSplit(val label: String, val at: Stamp)
+data class SubSplit(val label: String, val at: Stamp, val raw: Boolean = false)
 
 /** Which clock a split line shows. */
 enum class SplitClock { REAL, TICKS, BOTH }

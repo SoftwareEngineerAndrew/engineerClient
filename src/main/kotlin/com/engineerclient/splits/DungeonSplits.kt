@@ -2,6 +2,7 @@ package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
@@ -15,6 +16,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.item.ItemEntity
 
 /**
  * Devonian's dungeon splits, the whole run on one HUD: the clear (blood door, the Watcher, boss
@@ -46,6 +48,10 @@ object DungeonSplits : Module(
     private val detail = SplitDetail()
     private val boss = BossDetail(detail)
     private val blood = BloodRunDetail(detail)
+
+    /** The most recent block-to-air while a door is coming down, and how long to keep watching. */
+    private var doorFallAt: Stamp? = null
+    private var doorFallUntil = 0
 
     /** Mobs being timed: entity id -> the split it spawned in, its name, and when. */
     private val watchedMobs = HashMap<Int, Triple<String, String, Stamp>>()
@@ -98,7 +104,8 @@ object DungeonSplits : Module(
                     subs.onChat(text, at)
                     boss.onChat(text, at)
                     blood.onChat(text, at)
-                    if (text == "The BLOOD DOOR has been opened!") blood.onBloodDoorOpen(at)
+                    if (DOOR_OPENED.containsMatchIn(text)) doorFallUntil = serverTicks + DOOR_FALL_TICKS
+
                 }
             }
         }
@@ -106,14 +113,25 @@ object DungeonSplits : Module(
         // Goldor's leap ends when the last teammate is inside the core. Only looked for while the
         // sequence says the team is on its way there, so it costs nothing the rest of the run.
         on<TickEvent.End> {
-            val me = mc.player
-            if (DungeonUtils.inDungeons && me != null) blood.onTick(DungeonUtils.currentRoomName, me.x, me.z, now())
+            if (DungeonUtils.inDungeons) blood.onRoom(DungeonUtils.currentRoomName)
+            // A door falls over about a second; the last of its blocks to turn to air is when it is
+            // down. Only watched in the few seconds after a door is opened, so ordinary mining
+            // elsewhere in the dungeon cannot be mistaken for it.
+            val fell = doorFallAt
+            if (fell != null && serverTicks > doorFallUntil) { doorFallAt = null; blood.onDoorFell(fell) }
         }
 
         // The Watcher's waves: how long a mob stayed up. Nothing reports who killed it - Minecraft
         // sends no mob death message and no damage attribution - so this times the entity's life
         // and says nothing about who ended it.
+        on<BlockUpdateEvent> {
+            if (serverTicks <= doorFallUntil && updated.isAir) doorFallAt = now()
+        }
+
         on<EntityEvent.Add> {
+            (entity as? ItemEntity)?.let { item ->
+                if (KEY_ITEM.containsMatchIn(item.item.hoverName.string)) blood.onKeyDropped(now())
+            }
             val split = mobSplit() ?: return@on
             val e = entity as? LivingEntity ?: return@on
             val name = e.customName?.string?.replace(CONTROL_CODES, "")?.takeIf { it.isNotBlank() } ?: return@on
@@ -148,6 +166,11 @@ object DungeonSplits : Module(
 
     private const val LINE_HEIGHT = 10
 
+    /** A wither or blood door takes about this long to finish falling. */
+    private const val DOOR_FALL_TICKS = 60
+    private val DOOR_OPENED = Regex("""opened a WITHER door!$|^The BLOOD DOOR has been opened!$""")
+    private val KEY_ITEM = Regex("""(?:Wither|Blood) Key""")
+
     /**
      * A split's events as "+<time into the split> <what happened>". The offset is what makes these
      * comparable between runs, so it leads.
@@ -162,8 +185,10 @@ object DungeonSplits : Module(
 
         // Everything: the phase's own steps and everything reported inside it, in the order it
         // happened and never cut short - the whole point is to see the lot.
+        if (label == SplitTracker.BLOOD) return detail.lines(label).map { it.label }
         val stepLines = steps.map { it.start to SplitFormat.line(it, now, SplitClock.BOTH) }
         val detailLines = detail.lines(label).map { event ->
+            if (event.raw) return@map event.at to event.label
             val real = SplitFormat.time(event.at.realMs - split.start.realMs, true)
             val ticks = SplitFormat.time((event.at.tick - split.start.tick) * 50L, true)
             event.at to "§a$real §7(§b$ticks§7) §f" + event.label

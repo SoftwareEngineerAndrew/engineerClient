@@ -17,11 +17,15 @@ class SplitDetail {
 
     fun reset() = entries.clear()
 
-    /** Files a line under a split. Repeated identical lines at the same moment are dropped. */
-    fun add(split: String, at: Stamp, line: String) {
+    /**
+     * Files a line under a split. [raw] means the source has already written the whole line,
+     * timings included, and the HUD should print it untouched — the blood rush does that, because
+     * its times are measured from each room rather than from the split.
+     */
+    fun add(split: String, at: Stamp, line: String, raw: Boolean = false) {
         val list = entries.getOrPut(split) { mutableListOf() }
-        if (list.lastOrNull()?.let { it.at == at && it.label == line } == true) return
-        list += SubSplit(line, at)
+        if (!raw && list.lastOrNull()?.let { it.at == at && it.label == line } == true) return
+        list += SubSplit(line, at, raw)
     }
 
     fun lines(split: String): List<SubSplit> = entries[split].orEmpty()

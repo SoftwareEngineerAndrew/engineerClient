@@ -1,179 +1,186 @@
 package com.engineerclient.splits
 
 /**
- * The blood rush, room by room.
+ * The blood rush, one block of lines per room.
  *
- * Between Mort's map and the blood door the party runs a chain of rooms, each one ending in a wither
- * door and the last in the blood door. The Blood split times that whole chain as one number, which
- * tells you the rush was slow but not which room ate the time. This fills the Blood split's detail
- * HUD with a line per room instead: the door into it, the wither key that opened the next one, how
- * long the room took and how long the party spent walking to the one after it. When the blood door
- * finally opens it adds an average of each of those, which is the number worth comparing between
- * runs — a single slow room is noise, a door average of three seconds is a habit.
+ * A room starts the moment the door into it begins falling and ends when the door out of it does,
+ * so the rush tiles end to end with nothing counted twice. The first room starts with the run
+ * itself — the entrance door falls as Mort speaks — and the last ends on the blood door. Every time
+ * in a room's block is measured from that room's own start, so two rooms can be compared by eye.
  *
- * Only two things are known for certain here, and both come from chat Hypixel actually sends: who
- * opened a wither door, and who picked up a wither key. Everything else — which room those belong
- * to, when the party got there — comes from the room name, read once a tick. That is why a room is
- * only counted when a door opened into it: the room name also changes when someone backtracks
- * through a door that was already open, and those are not rooms the rush is waiting on.
+ * The chain comes straight out of chat, and a real run reads like this:
  *
- * ASKED FOR AND DELIBERATELY ABSENT: "how long the last mob took to die, and who killed it". There
- * is no kill attribution anywhere in Minecraft, Odin or Hypixel chat, and no chat line for a mob
- * dying at all, so neither the time nor the player can be known — not approximately, not by guessing
- * from the key pickup. It is left out rather than shipped as something that looks like it works.
+ *     135  [NPC] Mort: Here, I found this map...     <- room 1 starts
+ *     279  ... has obtained Wither Key!              <- room 1's key
+ *     328  ... opened a WITHER door!                 <- room 1 ends, room 2 starts
+ *     442  ... has obtained Wither Key!
+ *     489  ... opened a WITHER door!
+ *     ...
+ *     878  The BLOOD DOOR has been opened!           <- the rush ends
  *
- * No Minecraft types are touched, so this tests headlessly: feed it chat lines, room names and the
- * clock readings they arrived at.
+ * Two of the lines are not in chat and are measured from the world instead. **Door fell** is the
+ * door's blocks turning to air, which the module watches for and feeds in. **Last mob killed** is
+ * the wither key appearing on the ground: the key drops off the mob that was holding it, so the
+ * moment the key item exists is the moment that mob died. Neither of those can name a player —
+ * Minecraft has no kill attribution at all — so "last mob killed" is timed but never credited.
  */
 class BloodRunDetail(private val detail: SplitDetail) {
 
-    // The room being timed right now. Null between the door opening and the party walking in.
-    private var enteredAt: Stamp? = null
-    private var keyAt: Stamp? = null
-
-    // The door that opened into the room we are waiting to walk into.
-    private var doorAt: Stamp? = null
-
-    // The most recent wither key pickup, held until a door is opened with it and then consumed. A
-    // door opened with no key waiting is one that was already unlocked by an earlier key, so it gets
-    // no time — see [onChat].
-    private var keyInHand: Stamp? = null
-
-    // The room name the last tick reported, and which cell of the dungeon's 32-block grid the
-    // player was standing in. The cell is what actually decides "we are in the next room now":
-    // a rush runs through rooms that often share a name, so waiting for the name to change misses
-    // most of the entries and with them most of the gaps.
-    private var lastRoomName = ""
-    private var lastCell = Int.MIN_VALUE
-
-    // Set once the blood door is open: the rush is over and the blood room is not one of its rooms.
-    private var done = false
-
-    private val doorTimes = mutableListOf<Long>()
-    private val keyTimes = mutableListOf<Long>()
-    private val roomTimes = mutableListOf<Long>()
-    private val gapTimes = mutableListOf<Long>()
-
-    fun reset() {
-        enteredAt = null; keyAt = null; doorAt = null; keyInHand = null
-        lastRoomName = ""; lastCell = Int.MIN_VALUE; done = false
-        doorTimes.clear(); keyTimes.clear(); roomTimes.clear(); gapTimes.clear()
+    private class Room(val name: String, val start: Stamp) {
+        var doorFell: Stamp? = null
+        var mobKilled: Stamp? = null
+        var keyPicked: Stamp? = null
+        var keyBy: String = ""
+        var doorOpened: Stamp? = null
+        var doorBy: String = ""
     }
 
-    /** Every chat line, colour codes already stripped. */
+    private var room: Room? = null
+    private var done = false
+    private var roomName = ""
+
+    /** Every room's measurements, for the averages at the end. */
+    private val doorFell = mutableListOf<Long>()
+    private val mobKilled = mutableListOf<Long>()
+    private val keyPicked = mutableListOf<Long>()
+    private val keyDelta = mutableListOf<Long>()
+    private val doorOpened = mutableListOf<Long>()
+    private val doorDelta = mutableListOf<Long>()
+    private val totals = mutableListOf<Long>()
+
+    fun reset() {
+        room = null; done = false; roomName = ""
+        for (l in listOf(doorFell, mobKilled, keyPicked, keyDelta, doorOpened, doorDelta, totals)) l.clear()
+    }
+
+    /** The room name Odin reports, kept so the next room's block can be titled with it. */
+    fun onRoom(name: String) {
+        if (name.isNotBlank()) roomName = name
+    }
+
+    /** The door's blocks finished turning to air. */
+    fun onDoorFell(at: Stamp) {
+        val r = room ?: return
+        if (r.doorFell == null && at.realMs >= r.start.realMs) r.doorFell = at
+    }
+
+    /** A wither or blood key has appeared on the ground: the mob holding it just died. */
+    fun onKeyDropped(at: Stamp) {
+        val r = room ?: return
+        if (r.mobKilled == null) r.mobKilled = at
+    }
+
     fun onChat(msg: String, at: Stamp) {
         if (done) return
 
-        WITHER_DOOR.find(msg)?.let { m ->
-            // Opening the door out of a room is the moment that room is finished with, so it closes
-            // the one being timed before starting the wait for the next.
-            closeRoom(at)
-            doorAt = at
-            // Time from the key being in someone's hand to the door actually opening: a door that is
-            // slow here is the party regrouping, not the room being hard. The first door of the rush
-            // has no key before it, and so no time — it still names the opener, and is left out of
-            // the average rather than being counted as zero.
-            val key = keyInHand
-            keyInHand = null
-            val who = m.groupValues[1]
-            if (key == null) {
-                detail.add(SplitTracker.BLOOD, at, "Door §7($who)")
-            } else {
-                val ms = at.realMs - key.realMs
-                doorTimes += ms
-                detail.add(SplitTracker.BLOOD, at, "Door ${SplitFormat.time(ms, true)} §7($who)")
+        // The run starting is the entrance door falling, which is the first room's start.
+        if (room == null && msg == MORT) {
+            room = Room(roomName.ifBlank { "Entrance" }, at)
+            return
+        }
+        val r = room ?: return
+
+        val key = KEY_PICKED.find(msg)
+        if (key != null) {
+            if (r.keyPicked == null) {
+                r.keyPicked = at
+                r.keyBy = key.groupValues.drop(1).firstOrNull { it.isNotEmpty() }.orEmpty()
+                // A key picked up with no drop seen means the item was never in render distance.
+                if (r.mobKilled == null) r.mobKilled = at
             }
             return
         }
 
-        WITHER_KEY.find(msg)?.let { m ->
-            // The key drops in the room the party is standing in and opens the next room's door, so
-            // it is timed from walking into this room: that is how long the room took to solve.
-            keyInHand = at
-            val start = enteredAt ?: return
-            if (keyAt != null) return   // a second key in one room is a spare; the first is the one that cost time
-            keyAt = at
-            val ms = at.realMs - start.realMs
-            keyTimes += ms
-            // Hypixel drops the player's name when the key falls to someone out of render distance,
-            // so the line is written without an opener rather than with a guessed one.
-            val who = m.groupValues.getOrNull(1).orEmpty()
-            val suffix = if (who.isEmpty()) "" else " §7($who)"
-            detail.add(SplitTracker.BLOOD, at, "Key ${SplitFormat.time(ms, true)}$suffix")
+        val door = WITHER_DOOR.find(msg)
+        if (door != null) {
+            r.doorOpened = at
+            r.doorBy = door.groupValues[1]
+            emit(r)
+            room = Room(roomName.ifBlank { "Room" }, at)
             return
         }
 
-        // The blood door ends the last room. Hypixel announces it without a name — unlike a wither
-        // door, nobody is credited with opening it — so there is no opener to record here.
-        if (msg == BLOOD_DOOR || msg == SHIVER) closeRoom(at)
+        if (msg == BLOOD_DOOR) {
+            r.doorOpened = at
+            emit(r)
+            room = null
+            done = true
+            emitAverages(at)
+        }
     }
 
-    /**
-     * Once a tick, with the room's name and the player's position. Rooms sit on a 32-block grid,
-     * so the cell the player stands in says which room they are in even when two rooms in a row
-     * are both called "Corridor".
-     */
-    fun onTick(currentRoom: String, x: Double, z: Double, at: Stamp) {
-        if (done) return
-        if (currentRoom.isNotBlank()) lastRoomName = currentRoom
-        val cell = cellOf(x, z)
-        if (cell == lastCell) return
-        lastCell = cell
+    /** One room's block of lines, every time measured from that room's own start. */
+    private fun emit(r: Room) {
+        val end = r.doorOpened ?: return
+        detail.add(SplitTracker.BLOOD, r.start, "§f" + r.name, raw = true)
 
-        // A new room with no door waiting on it is the party walking back through something already
-        // open, which is not a room the rush is held up by. Ignored on purpose.
-        val door = doorAt ?: return
-        if (enteredAt != null) return
-        doorAt = null
-        enteredAt = at
-        keyAt = null
-        detail.add(SplitTracker.BLOOD, at, "Entered " + lastRoomName.ifBlank { "room" })
-        // The walk from the door opening to being inside: the "space before next room", and the part
-        // of a slow rush that no amount of clearing faster will fix.
-        val ms = at.realMs - door.realMs
-        gapTimes += ms
-        detail.add(SplitTracker.BLOOD, at, "Gap ${SplitFormat.time(ms, true)}")
+        r.doorFell?.let {
+            detail.add(SplitTracker.BLOOD, it, line(r.start, it, "door fell"), raw = true)
+            doorFell += it.realMs - r.start.realMs
+        }
+        val mob = r.mobKilled
+        if (mob != null) {
+            detail.add(SplitTracker.BLOOD, mob, line(r.start, mob, "last mob killed"), raw = true)
+            mobKilled += mob.realMs - r.start.realMs
+        }
+        val key = r.keyPicked
+        if (key != null) {
+            detail.add(SplitTracker.BLOOD, key, line(r.start, key, "key picked up" + by(r.keyBy)), raw = true)
+            keyPicked += key.realMs - r.start.realMs
+        }
+        // The deltas are gaps between two moments rather than offsets from the room's start.
+        if (mob != null && key != null) {
+            detail.add(SplitTracker.BLOOD, key, gap(key.realMs - mob.realMs, key.tick - mob.tick, "key delta"), raw = true)
+            keyDelta += key.realMs - mob.realMs
+        }
+        detail.add(SplitTracker.BLOOD, end, line(r.start, end, "door opened" + by(r.doorBy)), raw = true)
+        doorOpened += end.realMs - r.start.realMs
+        if (key != null) {
+            detail.add(SplitTracker.BLOOD, end, gap(end.realMs - key.realMs, end.tick - key.tick, "door delta"), raw = true)
+            doorDelta += end.realMs - key.realMs
+        }
+        detail.add(SplitTracker.BLOOD, end, line(r.start, end, "total room time"), raw = true)
+        totals += end.realMs - r.start.realMs
+
+        // A blank line, so one room's block reads apart from the next.
+        detail.add(SplitTracker.BLOOD, end, " ", raw = true)
     }
 
-    /** Called when the blood door opens: emit the averages. */
-    fun onBloodDoorOpen(at: Stamp) {
-        if (done) return
-        closeRoom(at)
-        done = true
-        detail.average(doorTimes)?.let { detail.add(SplitTracker.BLOOD, at, "Door $it") }
-        detail.average(keyTimes)?.let { detail.add(SplitTracker.BLOOD, at, "Key $it") }
-        detail.average(roomTimes)?.let { detail.add(SplitTracker.BLOOD, at, "Room $it") }
-        detail.average(gapTimes)?.let { detail.add(SplitTracker.BLOOD, at, "Gap $it") }
+    /** The whole rush averaged, in gold, once the blood door is down. */
+    private fun emitAverages(at: Stamp) {
+        val rows = listOf(
+            doorFell to "average door fell",
+            mobKilled to "average last mob killed",
+            keyPicked to "average key picked up",
+            keyDelta to "average key delta",
+            doorOpened to "average door opened",
+            doorDelta to "average door delta",
+            totals to "average total room time",
+        )
+        for ((values, what) in rows) {
+            if (values.isEmpty()) continue
+            val ms = values.sum() / values.size
+            detail.add(SplitTracker.BLOOD, at, "§6" + times(ms, ms / 50) + " " + what, raw = true)
+        }
     }
 
-    /**
-     * Finishes the room being timed, from walking in to the door out of it opening. The walk in is
-     * left to the gap, so a room's time is the time the party was actually inside it, and gap plus
-     * room covers the rush end to end with nothing counted twice.
-     */
-    private fun closeRoom(at: Stamp) {
-        val start = enteredAt ?: return
-        enteredAt = null
-        keyAt = null
-        val ms = at.realMs - start.realMs
-        roomTimes += ms
-        detail.add(SplitTracker.BLOOD, at, "Room ${SplitFormat.time(ms, true)}")
-    }
+    private fun by(who: String) = if (who.isEmpty()) "" else " §7($who)"
 
-    /** Which 32-block room cell a position is in — the same grid the dungeon map is drawn on. */
-    private fun cellOf(x: Double, z: Double): Int {
-        val cx = (Math.floor(x).toInt() + 200) shr 5
-        val cz = (Math.floor(z).toInt() + 200) shr 5
-        return cx * 64 + cz
-    }
+    private fun line(from: Stamp, at: Stamp, what: String) =
+        "§f" + times(at.realMs - from.realMs, (at.tick - from.tick).toLong()) + " " + what
+
+    private fun gap(ms: Long, ticks: Int, what: String) = "§f" + times(ms, ticks.toLong()) + " " + what
+
+    /** "0.86s (0.85s)" — the real clock, then the server's own. */
+    private fun times(ms: Long, ticks: Long) =
+        SplitFormat.time(ms, true) + " §7(§b" + SplitFormat.time(ticks * 50L, true) + "§7)§f"
 
     private companion object {
-        // Both verified against the 32 recorded F7 runs; see SplitEvents for the lines themselves.
-        // The rank prefix is optional because unranked players have none, and the player group is
-        // optional because the pickup line loses the name when the key drops out of render distance.
-        val WITHER_DOOR = Regex("""^(\w+) opened a WITHER door!$""")
-        val WITHER_KEY = Regex("""^(?:\[[^\]]+] )?(\w+) has obtained Wither Key!$|^A Wither Key was picked up!$""")
+        const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
-        const val SHIVER = "A shiver runs down your spine..."
+        // Verified against the 32 recorded runs. The rank prefix is optional (unranked players have
+        // none) and the whole name is missing when the key drops out of render distance.
+        val KEY_PICKED = Regex("""^(?:\[[^\]]+] )?(\w+) has obtained (?:Wither|Blood) Key!$|^A (?:Wither|Blood) Key was picked up!$""")
+        val WITHER_DOOR = Regex("""^(\w+) opened a WITHER door!$""")
     }
 }
