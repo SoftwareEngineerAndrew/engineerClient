@@ -1,10 +1,8 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
@@ -12,105 +10,114 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import net.minecraft.world.entity.LivingEntity
-import net.minecraft.world.entity.item.ItemEntity
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal
+import net.minecraft.world.entity.boss.wither.WitherBoss
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import kotlin.math.abs
 
 /**
- * Devonian's dungeon splits, the whole run on one HUD: the clear (blood door, the Watcher, boss
- * entry) and then the boss's phases, each counting up live and freezing when it ends.
+ * The run's splits — a copy of the team's EngineerSplits — and one sub-split HUD per section of the
+ * run, each with a dropdown for how much it shows:
  *
- * Alongside it, one HUD per split — "Blood Sub Splits", "Terminals Sub Splits" and so on — listing
- * what happened inside that split and how far into it. Those are a data-gathering exercise: we do
- * not yet know which moments are worth timing, so [SplitEvents] recognises everything the dungeon
- * announces and the useful ones get picked out once there is a run's worth to look at. They are all
- * off by default; turn on the one you are studying.
+ *  - Compact: one row, the section's times left to right, `Name: 1.52s | 0.21s | ...`.
+ *  - Detailed: the same, vertical and labelled, `Move > 8.12s (8.00s)`.
+ *  - Extreme: Detailed plus every extra moment known about the section.
  *
- * Both clocks are shown by default, the way Devonian's "Both" format does it: real time, then the
- * server's own tick time in brackets. They come apart when the server lags — the tick time is what
- * the run is actually judged on, and the gap between them is how much lag you ate.
- *
- * [SplitTracker] holds the timing; this module only supplies it with chat, the clocks and the
- * Watcher's first movement, and draws the result.
+ * [SplitTracker] times the splits, [SubSplitTracker] the 25 boss steps, [BloodRunDetail] the rush
+ * room by room and [BossDetail] everything else; this module feeds them chat, the two clocks and
+ * what it sees in the world, and draws the result.
  */
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("Engineer Client"),
-    description = "Devonian's run, boss and Watcher splits: each section timed on the real clock and the server's tick clock.",
+    description = "EngineerSplits, and a sub-split HUD per section of the run on the real and server-tick clocks.",
 ) {
 
-    private val CONTROL_CODES = Regex("\u00a7.")
-    private val backdrop by BooleanSetting("Backdrop", true, desc = "Draws a dark panel behind the splits so they stay readable over a bright floor.")
+    private val CONTROL_CODES = Regex("§.")
     private val tracker = SplitTracker()
     private val subs = SubSplitTracker()
     private val detail = SplitDetail()
     private val boss = BossDetail(detail)
     private val blood = BloodRunDetail()
 
-    /** The most recent block-to-air while a door is coming down, and how long to keep watching. */
-    private var doorFallAt: Stamp? = null
-    private var doorFallUntil = 0
-
-    /** Mobs being timed: entity id -> the split it spawned in, its name, and when. */
-    private val watchedMobs = HashMap<Int, Triple<String, String, Stamp>>()
     private var serverTicks = 0
-    private val COLOUR_CODE = Regex("&.")
-    private val LEVELS = listOf("Off", "Compact", "Detailed", "Extreme")
-    private const val BACKDROP = 0xB0101010.toInt()
-
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
 
-    private val splitsHud by HUD("Splits", "The whole run: the clear, then the boss's phases.") { example ->
-        if (example) return@HUD draw(this, listOf("§4Blood§r§f: §a31.24s §7(§b31.05s§7)", "§9Boss Entry§r§f: §a1m 12.30s §7(§b1m 12.05s§7)", "§5Maxor§r§f: §a26.10s §7(§b26.10s§7)", "§6Terminals§r§f: §a1m 09.40s §7(§b1m 09.40s§7)"))
-        draw(this, tracker.splits().map { SplitFormat.line(it, now(), SplitClock.BOTH) })
+    /** One sub-split HUD: its name, the split whose window it covers, and the colour of its name. */
+    private class Section(val name: String, val window: String, val colour: String)
+
+    private val SECTIONS = listOf(
+        Section("Blood Rush", SplitTracker.OPEN, "§a"),
+        Section("Watcher", SplitTracker.BLOOD, "§c"),
+        Section("Portal", SplitTracker.PORTAL, "§d"),
+        // The phase headers' colours from EngineerSubSplits.
+        Section("Maxor", SplitTracker.MAXOR, "§a"),
+        Section("Storm", SplitTracker.STORM, "§b"),
+        Section("Terminals", SplitTracker.TERMS, "§6"),
+        Section("Goldor", SplitTracker.GOLDOR, "§e"),
+        Section("Necron", SplitTracker.NECRON, "§c"),
+    )
+
+    private val LEVELS = listOf("Off", "Compact", "Detailed", "Extreme")
+
+    private val splitsHud by HUD("Splits", "EngineerSplits: the run, phase by phase.") { example ->
+        if (example) return@HUD draw(this, listOf(
+            "§3Pace §b> §33m 8.2s §8(§73m 8.2s§8)", "§aOpen §b> §a59.00s §8(§759.00s§8)",
+            "§cBlood §b> §c30.10s §8(§730.00s§8)", "§dPortal §b> §d4.20s §8(§74.20s§8)",
+            "§9Enter §b> §91m 33.3s §8(§71m 33.2s§8)", "§5Maxor §b> §525.50s §8(§725.50s§8)",
+        ))
+        draw(this, tracker.lines(now()))
     }
 
-    /**
-     * One HUD per split, made up front from every label a run can produce — a HUD has to exist
-     * before the run that would fill it, and Odin registers a setting the same way whether it came
-     * from a `by` delegate or from here.
-     */
-    /** How much each sub-split shows. One dropdown per split, next to its HUD. */
-    private val levels = SplitTracker.ALL_LABELS.associateWith { label ->
-        val plain = label.replace(COLOUR_CODE, "")
-        registerSetting(SelectorSetting("$plain Detail", "Compact", LEVELS, desc = "How much the $plain sub-split HUD shows."))
+    private val levels = SECTIONS.associateWith { s ->
+        registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows."))
     }
 
-    private fun level(label: String): BloodRunDetail.Level =
-        BloodRunDetail.Level.entries[levels[label]?.value ?: 1]
+    private fun level(s: Section) = BloodRunDetail.Level.entries[levels[s]?.value ?: 1]
 
-    private val subHuds = SplitTracker.ALL_LABELS.associateWith { label ->
-        val plain = label.replace(COLOUR_CODE, "")
+    /** Made up front: a HUD has to exist before the run that fills it. */
+    private val subHuds = SECTIONS.associateWith { s ->
         registerSetting(
-            HUD("$plain Sub Splits", "What happened inside the $plain split.", false, 0, 0, 1f) { example ->
-                if (example) return@HUD draw(this, if (label == SplitTracker.BLOOD) listOf(
-                    "§aBlood Rush",
-                    "§dHallway§f: §f1.52s §8| §70.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
-                    "§dDino§f: §f1.52s §8| §70.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
-                    "§6Total§f: §f1.52s §8| §70.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
-                ) else listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)"))
-                draw(this, subLines(label))
+            HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", false, 0, 0, 1f) { example ->
+                if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
+                    "§5Hallway: §71.52s §8| §80.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
+                    "§dDino: §71.52s §8| §80.21s §8| §c0.06s §8| §40.52s §8| §62.31s",
+                ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
+                draw(this, subLines(s))
             }
         )
     }
 
+    // What the world shows, watched only while it can matter.
+    private val barriers = mutableListOf<Pair<Int, Int>>()
+    private val cleared = mutableListOf<Pair<Int, Int>>()
+    private val keysSeen = HashSet<Int>()
+    private val crystalsSeen = HashSet<Int>()
+    private val watchedMobs = HashMap<Int, Pair<String, Stamp>>()
+
     init {
         on<LevelEvent.Load> {
             tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset()
-            watchedMobs.clear(); serverTicks = 0
+            barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
+            serverTicks = 0
         }
 
-        // Odin's server tick: the server's own clock, which falls behind the client's 20 a second
-        // when it lags. That is the clock a run is judged on.
+        // Odin's server tick: the server's own clock, which falls behind when it lags.
         on<TickEvent.Server> { serverTicks++; subs.onServerTick() }
 
-        // Chat straight off the network, before any mod can hide it: chat cleaners drop exactly the
-        // terminal, device and gate lines the sections are timed from. Handed to the client thread,
-        // where the tick count is read.
+        // Chat straight off the network, before any mod can hide it — chat cleaners drop exactly
+        // the terminal and gate lines the splits are timed from.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
@@ -122,111 +129,163 @@ object DungeonSplits : Module(
                     subs.onChat(text, at)
                     boss.onChat(text, at)
                     blood.onChat(text, at)
-                    if (DOOR_OPENED.containsMatchIn(text)) doorFallUntil = serverTicks + DOOR_FALL_TICKS
-
                 }
             }
         }
 
-        // Goldor's leap ends when the last teammate is inside the core. Only looked for while the
-        // sequence says the team is on its way there, so it costs nothing the rest of the run.
-        on<TickEvent.End> {
-            if (DungeonUtils.inDungeons) blood.onMapRooms(
-                DungeonScan.rooms.mapNotNull { r ->
-                    val name = r.name ?: return@mapNotNull null
-                    val tile = r.tiles.firstOrNull() ?: return@mapNotNull null
-                    (tile.x.toString() + "," + tile.z) to name
-                }
-            )
-            // A door falls over about a second; the last of its blocks to turn to air is when it is
-            // down. Only watched in the few seconds after a door is opened, so ordinary mining
-            // elsewhere in the dungeon cannot be mistaken for it.
-            val fell = doorFallAt
-            if (fell != null && serverTicks > doorFallUntil) { doorFallAt = null; blood.onDoorFell(fell) }
+        // A door falling: its 36 blocks turn to barrier as it starts, and those barriers to air
+        // when it is down. Nothing else in the rush does either 36 at a time.
+        on<BlockUpdateEvent> {
+            if (blood.active) {
+                if (updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
+                else if (old.block == Blocks.BARRIER && updated.isAir) cleared += pos.x to pos.z
+            }
+            // Simon Says: a button on the device's face, or its start button, pressed.
+            if (open(SplitTracker.TERMS) && pos.x == 110 && updated.block == Blocks.STONE_BUTTON &&
+                old.block == Blocks.STONE_BUTTON && updated.getValue(BlockStateProperties.POWERED)
+            ) {
+                val face = pos.y in 120..123 && pos.z in 92..95
+                if (face || (pos.y == 121 && pos.z == 91)) boss.onSimonPress(now(), nearestTeammate(110.5, pos.y + 0.5, pos.z + 0.5))
+            }
         }
 
-        // The Watcher's waves: how long a mob stayed up. Nothing reports who killed it - Minecraft
-        // sends no mob death message and no damage attribution - so this times the entity's life
-        // and says nothing about who ended it.
-        on<BlockUpdateEvent> {
-            if (serverTicks <= doorFallUntil && updated.isAir) doorFallAt = now()
+        on<TickEvent.End> {
+            if (!DungeonUtils.inDungeons) return@on
+            if (barriers.size >= DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
+            if (cleared.size >= DOOR_BLOCKS) door(cleared) { at, a, b -> blood.onDoorDown(at, a, b) }
+            barriers.clear(); cleared.clear()
+
+            // The key is an armor stand named "Wither Key"; it appears where the last mob died.
+            if (blood.active) for (e in level.entitiesForRendering()) {
+                if (e !is ArmorStand || e.id in keysSeen) continue
+                val name = e.customName?.string ?: continue
+                if (KEY.containsMatchIn(name)) { keysSeen += e.id; blood.onKeySpawned(now()) }
+            }
+
+            // Goldor's leap ends when the last teammate is inside the core.
+            if (subs.watchingCore) {
+                val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
+                if (alive.isNotEmpty()) {
+                    val inCore = alive.count { mate ->
+                        val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
+                        p != null && p.x >= 39 && p.x < 71 && p.y >= 112 && p.y < 155.5 && p.z >= 54 && p.z < 118
+                    }
+                    if (inCore >= alive.size) subs.onEveryoneInCore(now())
+                }
+            }
         }
 
         on<EntityEvent.Add> {
-            (entity as? ItemEntity)?.let { item ->
-                if (KEY_ITEM.containsMatchIn(item.item.hoverName.string)) blood.onKeyDropped(now())
+            val e = entity
+            when {
+                e is EndCrystal && open(SplitTracker.MAXOR) && crystalsSeen.add(e.id) -> {
+                    // Fresh crystals sit on the upper platforms (y 238), placed ones on the lower (y 224).
+                    val placed = e.y < 231
+                    boss.onCrystal(now(), placed, if (placed) nearestTeammate(e.x, e.y, e.z) else null)
+                }
+                // The Watcher's mobs are player entities that are not on the team.
+                e is Player && open(SplitTracker.BLOOD) && e.name.string !in teamNames() -> {
+                    val name = e.name.string.trim()
+                    val at = now()
+                    if (watchedMobs.put(e.id, name to at) == null) boss.onMobSpawn(at, name)
+                }
             }
-            val split = mobSplit() ?: return@on
-            val e = entity as? LivingEntity ?: return@on
-            val name = e.customName?.string?.replace(CONTROL_CODES, "")?.takeIf { it.isNotBlank() } ?: return@on
-            val at = now()
-            if (watchedMobs.put(e.id, Triple(split, name, at)) == null) boss.onMobSpawn(split, at, name)
         }
         on<EntityEvent.Remove> {
-            val (split, name, spawned) = watchedMobs.remove(entity.id) ?: return@on
+            val (name, spawned) = watchedMobs.remove(entity.id) ?: return@on
             val at = now()
-            boss.onMobGone(split, at, name, at.realMs - spawned.realMs)
+            boss.onMobGone(at, name, at.realMs - spawned.realMs)
         }
 
-        on<TickEvent.End> {
-            if (!subs.watchingCore) return@on
-            val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
-            if (alive.isEmpty()) return@on
-            val inCore = alive.count { mate ->
-                val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
-                p != null && p.x >= 39 && p.x < 71 && p.y >= 112 && p.y < 155.5 && p.z >= 54 && p.z < 118
+        // A wither hurt: Goldor's hits and Necron's first. Hits carry no attacker, so uncredited.
+        onReceive<ClientboundDamageEventPacket> {
+            val id = entityId()
+            EngineerClient.mc.execute {
+                val e = EngineerClient.mc.level?.getEntity(id) as? WitherBoss ?: return@execute
+                val at = now()
+                if (open(SplitTracker.GOLDOR)) boss.onBossHit(SplitTracker.GOLDOR, at)
+                else if (open(SplitTracker.NECRON) && e.isAlive) boss.onBossHit(SplitTracker.NECRON, at)
             }
-            if (inCore >= alive.size) subs.onEveryoneInCore(now())
         }
     }
 
-    /**
-     * Which split a mob spawning right now belongs to: the blood rush or the Watcher fight. Null
-     * anywhere else, so the rest of the run costs nothing.
-     */
-    private fun mobSplit(): String? = tracker.splits()
-        .lastOrNull { it.stop == null && (it.label == SplitTracker.BLOOD || it.label == SplitTracker.WATCHER) }
-        ?.label
+    private fun open(label: String) = tracker.split(label)?.stop == null && tracker.split(label) != null
 
+    private fun teamNames(): Set<String> =
+        DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name }.also { set -> mc.player?.let { set += it.name.string } }
+
+    private fun nearestTeammate(x: Double, y: Double, z: Double): String? {
+        val team = teamNames()
+        return mc.level?.players()?.filter { it.name.string in team }?.minByOrNull { it.distanceToSqr(x, y, z) }?.name?.string
+    }
+
+    /**
+     * A door's blocks, handed to [sink] with the two rooms either side of it. A door sits halfway
+     * between two map tiles, which are 32 blocks apart with the grid's first at -185.
+     */
+    private fun door(blocks: List<Pair<Int, Int>>, sink: (Stamp, BloodRunDetail.MapRoom?, BloodRunDetail.MapRoom?) -> Unit) {
+        val tx = (blocks.sumOf { it.first }.toDouble() / blocks.size + 185) / 32
+        val tz = (blocks.sumOf { it.second }.toDouble() / blocks.size + 185) / 32
+        val a = room(Math.floor(tx + 0.01).toInt(), Math.floor(tz + 0.01).toInt())
+        val b = room(Math.ceil(tx - 0.01).toInt(), Math.ceil(tz - 0.01).toInt())
+        if (abs(tx - Math.round(tx)) < 0.1 && abs(tz - Math.round(tz)) < 0.1) return // not between two tiles
+        sink(now(), a, b)
+    }
+
+    private fun room(x: Int, z: Int): BloodRunDetail.MapRoom? {
+        if (x !in 0..5 || z !in 0..5) return null
+        val r = DungeonScan.tiles[x + z * 6].room ?: return null
+        return BloodRunDetail.MapRoom(
+            id = System.identityHashCode(r).toString(),
+            name = r.name ?: return null,
+            fairy = r.type == RoomType.FAIRY,
+            entrance = r.type == RoomType.ENTRANCE,
+        )
+    }
+
+    private const val DOOR_BLOCKS = 30
     private const val LINE_HEIGHT = 10
+    private val KEY = Regex("""(?:Wither|Blood) Key""")
 
-    /** A wither or blood door takes about this long to finish falling. */
-    private const val DOOR_FALL_TICKS = 60
-    private val DOOR_OPENED = Regex("""opened a WITHER door!$|^The BLOOD DOOR has been opened!$""")
-    private val KEY_ITEM = Regex("""(?:Wither|Blood) Key""")
+    /** One timed thing in a section: its label, when it started, and how long it has run. */
+    private class Row(val label: String, val at: Stamp, val ms: Long, val ticks: Long, val who: String = "")
 
-    /**
-     * A split's events as "+<time into the split> <what happened>". The offset is what makes these
-     * comparable between runs, so it leads.
-     */
-    private fun subLines(label: String): List<String> {
-        val level = level(label)
+    private fun subLines(s: Section): List<String> {
+        val level = level(s)
         if (level == BloodRunDetail.Level.OFF) return emptyList()
         val now = now()
-        if (label == SplitTracker.BLOOD) return blood.lines(level, now)
+        if (s.window == SplitTracker.OPEN) return blood.lines(level, now)
 
-        val split = tracker.splits().firstOrNull { it.label == label } ?: return emptyList()
-        val steps = subs.forSplit(label).map { it.start to SplitFormat.line(it, now, SplitClock.BOTH) }
-        if (level == BloodRunDetail.Level.COMPACT) return steps.map { it.second }
+        val split = tracker.split(s.window) ?: return emptyList()
+        val since = { at: Stamp -> Row("", at, at.realMs - split.start.realMs, (at.tick - split.start.tick).toLong()) }
 
-        // Detailed and Extreme add what was reported inside the split; Extreme keeps every last
-        // line of it, which is what it is for.
-        val reported = detail.lines(label).map { event ->
-            if (event.raw) return@map event.at to event.label
-            val real = SplitFormat.time(event.at.realMs - split.start.realMs, true)
-            val ticks = SplitFormat.time((event.at.tick - split.start.tick) * 50L, true)
-            event.at to "§a$real §7(§b$ticks§7) §f" + event.label
+        // The boss's own steps each run until the next; the Watcher's and Portal's are moments,
+        // timed from the start of the split.
+        val boss = subs.forSplit(s.window)
+        val steps = boss.map { st ->
+            val stop = st.stop ?: now
+            Row(st.label, st.start, stop.realMs - st.start.realMs, (stop.tick - st.start.tick).toLong())
+        } + detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks) } }
+
+        if (level == BloodRunDetail.Level.COMPACT) {
+            if (steps.isEmpty()) return emptyList()
+            return listOf(s.colour + s.name + ": " + steps.joinToString(" §8| ") {
+                it.label.take(2).replace('&', '§') + SplitFormat.seconds(it.ms)
+            })
         }
-        return (steps + reported).sortedBy { it.first.realMs }.map { it.second }
+
+        var rows = steps
+        if (level == BloodRunDetail.Level.EXTREME) {
+            rows = rows + detail.lines(s.window).filter { !it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, e.who) } }
+        }
+        return rows.sortedBy { it.at.realMs }.map { r ->
+            SplitFormat.line(r.label, r.ms, r.ticks) + if (r.who.isEmpty()) "" else " §7" + r.who
+        }
     }
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0
-        val width = lines.maxOf { mc.font.width(it) }
-        val height = lines.size * LINE_HEIGHT
-        // A dark backing first: white text over a snow floor or a lit terminal is unreadable.
-        if (backdrop) gfx.fill(-2, -2, width + 2, height, BACKDROP)
-        lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE) }
-        return width to height
+        lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE, shadow = true) }
+        return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
     }
 }

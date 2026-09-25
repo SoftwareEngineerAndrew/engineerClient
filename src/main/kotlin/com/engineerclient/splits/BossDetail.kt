@@ -1,105 +1,87 @@
 package com.engineerclient.splits
 
 /**
- * The detail behind the Watcher, Portal and the boss phases — only the moments that were asked
- * for, nothing else, because a detail list is only readable if everything on it was wanted.
+ * What happens inside the Watcher, Portal and boss splits beyond the 25 named boss steps — only
+ * the moments that were asked for, each filed under the split it actually happens in.
  *
- * Four of the requested items are absent, and always for the same reason: nothing reports them.
- * Minecraft sends no mob death message and no damage attribution to a player, so **who killed a
- * mob**, **each hit on Goldor** and **Necron's first hit** cannot be known. Storm's **crusher
- * heights and who moved one** are silent block movements with no player attached. And a terminal
- * announces only that it finished, never a **single click inside Select All**.
+ * Checked against the 32 recorded F7 runs:
+ *  - The energy crystals are Maxor's: two spawn on the upper platforms (y 238) when he starts,
+ *    get picked up ("X picked up an Energy Crystal!"), and reappear placed on the lower ones
+ *    (y 224). Chat's "1/2 Energy Crystals are now active!" says 1/2 for both, so the placed
+ *    crystal appearing is what counts, and whoever stands nearest it placed it.
+ *  - Goldor dies on "[BOSS] Goldor: Necron, forgive me."
+ *  - Simon Says presses are its buttons turning powered; the nearest player pressed them.
  *
- * The closest honest thing to a kill is a mob entity's lifetime, which is here — it knows when,
- * never who. The rest are left out rather than approximated.
+ * Not possible: who hit Goldor or Necron (hits arrive with no attacker), and Storm's crushers
+ * (silent block movements with nobody attached). The hit *times* are here, uncredited.
  */
 class BossDetail(private val detail: SplitDetail) {
 
-    private var watcherMoves = 0
+    private val pickedAt = HashMap<String, Stamp>()
+    private var necronHit = false
 
     fun reset() {
-        watcherMoves = 0
+        pickedAt.clear(); necronHit = false
     }
-
-    /** A mob spawning, in the Watcher fight or during the blood rush. */
-    fun onMobSpawn(split: String, at: Stamp, name: String) = detail.add(split, at, "Spawn $name")
-
-    /**
-     * A mob gone, with how long it was up. Nothing reports who killed it, so this is the mob's
-     * lifetime and nothing more.
-     */
-    fun onMobGone(split: String, at: Stamp, name: String, lifeMs: Long) =
-        detail.add(split, at, "Killed $name §7(" + SplitFormat.time(lifeMs, true) + ")")
 
     fun onChat(msg: String, at: Stamp) {
         when {
-            // The Watcher moves to each new wave, and its taunt is the only sign that it did.
-            WATCHER_MOVE.matches(msg) -> {
-                watcherMoves++
-                detail.add(SplitTracker.WATCHER, at, "Watcher move $watcherMoves")
-            }
-            // The blessing is what opens the portal.
-            msg == WATCHER_DONE -> detail.add(SplitTracker.PORTAL, at, "Portal open")
-            // The boss loading is the moment you were actually through it.
-            msg == MAXOR_START -> detail.add(SplitTracker.PORTAL, at, "Portal entered")
-
-            msg in LIGHTNING -> detail.add(STORM, at, "Lightning")
-
-            // Goldor dies silently; Necron speaking is the only thing that marks it.
-            msg in NECRON_START -> detail.add(GOLDOR, at, "Goldor killed")
-
+            msg == WATCHER_HANDLE -> detail.add(SplitTracker.BLOOD, at, "§chandle this", step = true)
+            WATCHER_TAUNT.matches(msg) -> detail.add(SplitTracker.BLOOD, at, "§7" + msg.removePrefix(WATCHER).trimEnd('.'), step = true)
+            msg == WATCHER_DONE -> detail.add(SplitTracker.PORTAL, at, "§dopen", step = true)
+            msg == MAXOR_START -> detail.add(SplitTracker.PORTAL, at, "§dentered", step = true)
+            msg in LIGHTNING -> detail.add(SplitTracker.STORM, at, "§elightning")
+            msg == GOLDOR_DEAD -> detail.add(SplitTracker.GOLDOR, at, "§ckilled")
             else -> {
-                val section = SECTION_DONE.find(msg)
-                if (section != null) {
-                    val what = when (section.groupValues[2]) {
-                        "terminal" -> "Term"
-                        "lever" -> "Lever"
-                        else -> "Device"
-                    }
-                    val count = section.groupValues[3] + "/" + section.groupValues[4]
-                    detail.add(TERMINALS, at, "$what $count §7(" + section.groupValues[1] + ")")
+                SECTION_DONE.find(msg)?.let { m ->
+                    val what = when (m.groupValues[2]) { "terminal" -> "§6term"; "lever" -> "§6lever"; else -> "§6device" }
+                    detail.add(SplitTracker.TERMS, at, what + " " + m.groupValues[3] + "/" + m.groupValues[4], m.groupValues[1])
                     return
                 }
-                // The crystals were asked for under Maxor, but they are the Wither King's and only
-                // exist once Necron has started, so they are filed where they actually happen.
-                val picked = CRYSTAL_PICKUP.find(msg)
-                if (picked != null) {
-                    detail.add(NECRON, at, "Crystal picked §7(" + picked.groupValues[1] + ")")
-                    return
-                }
-                val active = CRYSTAL_ACTIVE.find(msg)
-                if (active != null) {
-                    detail.add(NECRON, at, "Crystal placed " + active.groupValues[1] + "/" + active.groupValues[2])
+                CRYSTAL_PICKUP.find(msg)?.let { m ->
+                    pickedAt[m.groupValues[1]] = at
+                    detail.add(SplitTracker.MAXOR, at, "§dcrystal picked up", m.groupValues[1])
                 }
             }
         }
     }
 
-    private companion object {
-        const val STORM = "&9Storm"
-        const val TERMINALS = "&6Terminals"
-        const val GOLDOR = "&8Goldor"
-        const val NECRON = "&4Necron"
+    /** An end crystal appeared during Maxor: [placed] on a lower platform, otherwise a fresh spawn. */
+    fun onCrystal(at: Stamp, placed: Boolean, placer: String?) {
+        if (!placed) return detail.add(SplitTracker.MAXOR, at, "§dcrystal spawned")
+        val who = placer.orEmpty()
+        detail.add(SplitTracker.MAXOR, at, "§dcrystal placed", who)
+        val picked = pickedAt.remove(who) ?: return
+        detail.add(SplitTracker.MAXOR, at, "§dcrystal took §f" + SplitFormat.seconds(at.realMs - picked.realMs), who)
+    }
 
+    fun onSimonPress(at: Stamp, who: String?) = detail.add(SplitTracker.TERMS, at, "§ass button", who.orEmpty())
+
+    /** A wither took a hit. Goldor's every hit while he is alive; Necron's only the first. */
+    fun onBossHit(split: String, at: Stamp) {
+        when (split) {
+            SplitTracker.GOLDOR -> detail.add(split, at, "§ehit")
+            SplitTracker.NECRON -> if (!necronHit) { necronHit = true; detail.add(split, at, "§cfirst hit") }
+        }
+    }
+
+    /** A blood mob spawned by the Watcher, and later its death with how long it lived. */
+    fun onMobSpawn(at: Stamp, name: String) = detail.add(SplitTracker.BLOOD, at, "§fspawn $name")
+
+    fun onMobGone(at: Stamp, name: String, lifeMs: Long) =
+        detail.add(SplitTracker.BLOOD, at, "§fkilled $name §7(" + SplitFormat.seconds(lifeMs) + ")")
+
+    private companion object {
+        const val WATCHER = "[BOSS] The Watcher: "
+        const val WATCHER_HANDLE = "[BOSS] The Watcher: Let's see how you can handle this."
         const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
+        const val GOLDOR_DEAD = "[BOSS] Goldor: Necron, forgive me."
 
-        val LIGHTNING = setOf(
-            "[BOSS] Storm: ENERGY HEED MY CALL!",
-            "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!",
-        )
+        val LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
 
-        val NECRON_START = setOf(
-            "[BOSS] Necron: Finally, I heard so much about you. The Eye likes you very much.",
-            "[BOSS] Necron: You went further than any human before, congratulations.",
-        )
-
-        /**
-         * The Watcher's between-wave taunts. All ten were counted in the recorded runs; the three
-         * least obvious ("Hmmm... this one!", "Very nice.", "This guy looks like a fighter.") are
-         * as common as the rest, so leaving them out would drop a third of the moves.
-         */
-        val WATCHER_MOVE = Regex(
+        /** The Watcher's lines between waves. All ten appear in the recorded runs. */
+        val WATCHER_TAUNT = Regex(
             "^\\[BOSS] The Watcher: (?:Not bad\\.|Aw, I liked that one\\.|You'll do\\.|" +
                 "That one was weak anyway\\.|I'm impressed\\.|Go, fight!|Go and live again!|" +
                 "Hmmm\\.\\.\\. this one!|Very nice\\.|This guy looks like a fighter\\.)$"
@@ -107,6 +89,5 @@ class BossDetail(private val detail: SplitDetail) {
 
         val SECTION_DONE = Regex("""^(\w+) (?:activated|completed) a (terminal|lever|device)! \((\d+)/(\d+)\)$""")
         val CRYSTAL_PICKUP = Regex("""^(\w+) picked up an Energy Crystal!$""")
-        val CRYSTAL_ACTIVE = Regex("""^(\d+)/(\d+) Energy Crystals are now active!$""")
     }
 }

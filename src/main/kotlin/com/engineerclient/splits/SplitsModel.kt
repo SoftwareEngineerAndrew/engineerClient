@@ -3,236 +3,162 @@ package com.engineerclient.splits
 import java.util.Locale
 
 /**
- * Dungeon splits: which chat line starts and ends each timed section of a run, worked out as chat
- * arrives.
+ * The run's splits, copied from the team's own ChatTriggers module
+ * (tools/reference/chattriggers/EngineerClient_features_EngineerSplits.js): the same eleven lines,
+ * names, colours, order and format.
  *
- * The sections, their names and the time format are the ones Devonian shows, so a run timed here
- * reads the same as a run timed there and the team can compare times. It is written from that
- * behaviour — the lines Hypixel sends and what each one starts or stops — not from Devonian's code,
- * which is GPL while this mod is not.
+ *     Pace       &3   everything so far
+ *     Open       &a   run start -> the Watcher's first line (the blood rush)
+ *     Blood      &c   the Watcher's first line -> "You have proven yourself" (the camp)
+ *     Portal     &d   -> Maxor's first line
+ *     Enter      &9   Open + Blood + Portal
+ *     Maxor      &5   -> Storm's first line
+ *     Storm      &b   -> Goldor's first line
+ *     Terms      &6   -> "The Core entrance is opening!"
+ *     Goldor     &e   -> Necron's first line
+ *     Necron     &c   -> "All this, for nothing..."
+ *     Animation  &d   -> EXTRA STATS
+ *
+ * Two things differ from the original, both on purpose. A split only appears once it has started,
+ * rather than as a blank line. And Pace has no PB targets behind it — the original's
+ * `/splits pace` numbers — so it is the run's running total.
  *
  * Nothing here touches Minecraft, so it tests headlessly: feed it chat lines with the clock
- * readings they arrived at, then ask for the splits.
+ * readings they arrived at, then ask for the lines.
  */
 
 /** The two clocks a split is measured on: real time, and the server's own tick count. */
 data class Stamp(val realMs: Long, val tick: Int)
 
-/**
- * One timed section. [stop] is null while it is still running — the HUD counts it up to now.
- * [long] picks the plain-seconds format.
- */
-data class Split(val label: String, val long: Boolean, val start: Stamp, val stop: Stamp?)
-
-/**
- * Something that happened inside a split: a terminal done, a death, a blessing. [at] is when, so
- * a sub-split HUD can show it as an offset from the split it belongs to.
- */
-data class SubSplit(val label: String, val at: Stamp, val raw: Boolean = false)
-
-/** Which clock a split line shows. */
-enum class SplitClock { REAL, TICKS, BOTH }
+/** One timed section. [stop] is null while it is still running — the HUD counts it up to now. */
+data class Split(val label: String, val start: Stamp, val stop: Stamp?)
 
 object SplitFormat {
 
-    /**
-     * Devonian's time format: "long" splits as plain seconds, the rest as 9.35s / 1m 27.01s /
-     * 1h 02m 03.45s. The fraction is worked out on its own and never carries into the seconds, so
-     * 12.996s reads as 12.00s — Devonian does that too, and matching it matters more than being
-     * right, because the times get compared.
-     */
-    fun time(ms: Long, long: Boolean): String {
-        if (long) return String.format(Locale.ROOT, "%.2f", ms / 1000.0) + "s"
-        if (ms < 0) return "-" + time(-ms, false)
-        val frac = String.format(Locale.ROOT, "%.2f", ms % 1000 / 1000.0).substring(1)
-        val s = ms / 1000
-        val m = s / 60
-        val h = m / 60
-        val ss = (s % 60).toString().padStart(2, '0')
-        return when {
-            s < 60 -> "$s${frac}s"
-            m < 60 -> "${m}m $ss${frac}s"
-            else -> "${h}h ${(m % 60).toString().padStart(2, '0')}m $ss${frac}s"
-        }
+    /** Plain seconds to two places, the way the original's `.toFixed(2)` wrote every split. */
+    fun seconds(ms: Long): String = String.format(Locale.ROOT, "%.2f", ms / 1000.0) + "s"
+
+    /** The original's `formatTime` for Pace and Enter: `3m 8.2s`. */
+    fun minutes(ms: Long): String {
+        val s = ms / 1000.0
+        return "${(s / 60).toInt()}m " + String.format(Locale.ROOT, "%.1f", s % 60) + "s"
     }
 
     /**
-     * One HUD line, exactly as the team's ChatTriggers module wrote it (see
-     * tools/reference/chattriggers/EngineerClient_features_EngineerSplits.js):
+     * One line, exactly as the original wrote it:
      *
      *     ${colour}${name} &b> ${colour}${time}s &8(&7${serverTime}s&8)
      *
-     * The name and the real time share the split's colour, the arrow is aqua, and the server's
-     * tick time sits in dark-grey brackets with grey digits.
+     * The name and the real time share the colour, the arrow is aqua, and the server's tick time
+     * sits in dark-grey brackets with grey digits.
      */
-    fun line(split: Split, now: Stamp, clock: SplitClock): String {
+    fun line(label: String, realMs: Long, ticks: Long, format: (Long) -> String = ::seconds): String {
+        val colour = label.take(2).replace('&', '§')
+        val name = label.drop(2)
+        return "$colour$name §b> $colour${format(realMs)} §8(§7${format(ticks * 50L)}§8)"
+    }
+
+    fun line(split: Split, now: Stamp): String {
         val stop = split.stop ?: now
-        val colour = split.label.take(2).replace('&', '§')
-        val name = split.label.drop(2)
-        val real = time(stop.realMs - split.start.realMs, split.long)
-        val ticks = time((stop.tick - split.start.tick) * 50L, split.long)
-        return when (clock) {
-            SplitClock.REAL -> "$colour$name §b> $colour$real"
-            SplitClock.TICKS -> "$colour$name §b> §7$ticks"
-            SplitClock.BOTH -> "$colour$name §b> $colour$real §8(§7$ticks§8)"
-        }
+        return line(split.label, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong())
     }
 }
 
 /**
- * The state of one run's splits. Feed every chat line to [onChat] (colour codes stripped) and read
- * the three HUDs' splits back. One tracker per run: [reset] on world load.
+ * One run's splits. Feed every chat line to [onChat] (colour codes stripped) and read [lines] back.
+ * [reset] on world load.
  */
 class SplitTracker {
 
-    private var mort: Stamp? = null          // Mort hands you the map: the clear starts
-    private var blood: Stamp? = null         // the blood door opens / the Watcher speaks
-    private var proven: Stamp? = null        // the Watcher lets you pass
-    private var end: Stamp? = null           // EXTRA STATS: the run is over
-    private var floorNo: Int? = null
-    private var floorStart: Stamp? = null
-    private var bossStarts: Array<Stamp?> = emptyArray()
-
-    /**
-     * What happened inside each split, by split label. Every dungeon event goes to whichever split
-     * was running when it arrived; which of them are worth keeping is the thing we are collecting
-     * this data to find out, so nothing is filtered here beyond [SplitEvents] recognising the line
-     * as an event at all.
-     */
-    private val subSplits = linkedMapOf<String, MutableList<SubSplit>>()
+    private var start: Stamp? = null
+    private val starts = arrayOfNulls<Stamp>(PHASES.size)
+    private var end: Stamp? = null
 
     fun reset() {
-        mort = null; blood = null; proven = null; end = null
-        floorNo = null; floorStart = null; bossStarts = emptyArray()
-        subSplits.clear()
+        start = null; end = null
+        starts.fill(null)
     }
 
     fun onChat(msg: String, at: Stamp) {
-        // The windows below are the ones this line was sent in, so a line that closes a window (the
-        // boss's first words, EXTRA STATS) still counts inside it.
-        val closed = clearEnd()
-        val ended = end
-        val openBefore = openLabels()
-
-        if (mort == null && msg == MORT) mort = at
-        if (end == null && EXTRA_STATS.matches(msg)) end = at
-
-        if (floorStart == null) {
-            for ((no, floor) in FLOORS) if (msg == floor.start) {
-                floorNo = no
-                floorStart = at
-                bossStarts = arrayOfNulls(floor.splits.size)
-                bossStarts[0] = at
-                break
-            }
+        if (start == null) {
+            if (msg == MORT) { start = at; starts[0] = at }
+            return
         }
-
-        // The clear: the blood door, then the Watcher's blessing. Both are "[BOSS] The Watcher:"
-        // lines, so the first opens blood and the later one falls through to proven.
-        if (mort != null && closed == null) {
-            when {
-                blood == null && BLOOD_OPEN.matches(msg) -> blood = at
-                blood != null && proven == null && msg == WATCHER_END -> proven = at
-            }
-        }
-
-        // The boss: each split starts on its own line and runs until the next one starts.
-        val floor = FLOORS[floorNo]
-        if (floor != null && ended == null) {
-            floor.splits.forEachIndexed { i, split ->
-                if (i == 0 || bossStarts[i] != null) return@forEachIndexed
-                if (split.starts?.invoke(msg) != true) return@forEachIndexed
-                bossStarts[i] = at
-            }
-        }
-
-        // Anything notable in the line is filed under every split that was open when it arrived.
-        // Splits nest — Boss Entry spans the whole clear, Boss spans every phase — so an event
-        // belongs to all of them, not just the innermost; that is what makes a HUD like "Boss Entry
-        // Sub Splits" worth having. Open *before* this line, so the message that ends a split is
-        // still counted inside it rather than opening the next one's list.
-        SplitEvents.label(msg)?.let { event ->
-            val owners = openBefore.ifEmpty { openLabels() }
-            for (owner in owners) subSplits.getOrPut(owner) { mutableListOf() } += SubSplit(event, at)
+        if (end != null) return
+        if (EXTRA_STATS.matches(msg)) { end = at; return }
+        for (i in 1 until PHASES.size) {
+            if (starts[i] == null && PHASES[i].starts(msg)) starts[i] = at
         }
     }
 
-    /** The splits being timed right now: started, not yet ended. */
-    private fun openLabels(): List<String> = splits().filter { it.stop == null }.map { it.label }
+    /** Every phase that has started, in order, each running until the next one starts. */
+    fun splits(): List<Split> = PHASES.indices.mapNotNull { i ->
+        val from = starts[i] ?: return@mapNotNull null
+        val next = (i + 1 until PHASES.size).firstNotNullOfOrNull { starts[it] }
+        Split(PHASES[i].label, from, next ?: end)
+    }
 
-    /**
-     * Every split of the run in the order it happened: the clear, then the boss's phases. The clear
-     * splits used to vanish the moment the boss started — they stay now, frozen at their final
-     * times, so one HUD carries the whole run.
-     */
-    fun splits(): List<Split> {
-        val out = mutableListOf<Split>()
-        val mort = mort
-        if (mort != null) {
-            val closed = clearEnd()
-            out += Split(BLOOD, true, mort, blood ?: closed)
-            blood?.let { out += Split(WATCHER, true, it, proven ?: closed) }
-            proven?.let { out += Split(PORTAL, true, it, closed) }
-        }
-        val floorStart = floorStart
-        val floor = FLOORS[floorNo]
-        if (floorStart != null && floor != null) {
-            floor.splits.forEachIndexed { i, split ->
-                val start = (if (i == 0) floorStart else bossStarts[i]) ?: return@forEachIndexed
-                val next = (i + 1 until floor.splits.size).firstNotNullOfOrNull { bossStarts[it] }
-                out += Split(split.label, split.long, start, next ?: end)
-            }
+    /** The split with this label, if it has started. */
+    fun split(label: String): Split? = splits().firstOrNull { it.label == label }
+
+    /** The HUD: Pace, then the phases so far with Enter after Portal. */
+    fun lines(now: Stamp): List<String> {
+        val splits = splits()
+        if (splits.isEmpty()) return emptyList()
+        val out = mutableListOf(total(PACE, splits, now))
+        for (split in splits) {
+            out += SplitFormat.line(split, now)
+            if (split.label == PORTAL) out += total(ENTER, splits.take(3), now)
         }
         return out
     }
 
-    /** What happened inside the split with this label, oldest first. */
-    fun subSplits(label: String): List<SubSplit> = subSplits[label].orEmpty()
+    private fun total(label: String, splits: List<Split>, now: Stamp): String {
+        var ms = 0L; var ticks = 0L
+        for (s in splits) {
+            val stop = s.stop ?: now
+            ms += stop.realMs - s.start.realMs
+            ticks += stop.tick - s.start.tick
+        }
+        return SplitFormat.line(label, ms, ticks, SplitFormat::minutes)
+    }
 
-    /** When the clear stopped being the thing you're timing: the boss starting, or the run ending. */
-    private fun clearEnd(): Stamp? = listOfNotNull(floorStart, end).minByOrNull { it.realMs }
-
-    private class BossSplit(val label: String, val long: Boolean = false, val starts: ((String) -> Boolean)? = null)
-    private class FloorSplits(val start: String, val splits: List<BossSplit>)
+    private class Phase(val label: String, val starts: (String) -> Boolean)
 
     companion object {
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
-        const val WATCHER_END = "[BOSS] The Watcher: You have proven yourself. You may pass."
-        const val TERMINALS = "&6Terminals"
-        const val GOLDOR = "&eGoldor"
-        const val BLOOD = "&aBlood"
-        const val WATCHER = "&cWatcher"
+
+        const val PACE = "&3Pace"
+        const val OPEN = "&aOpen"
+        const val BLOOD = "&cBlood"
         const val PORTAL = "&dPortal"
+        const val ENTER = "&9Enter"
+        const val MAXOR = "&5Maxor"
+        const val STORM = "&bStorm"
+        const val TERMS = "&6Terms"
+        const val GOLDOR = "&eGoldor"
+        const val NECRON = "&cNecron"
+        const val ANIMATION = "&dAnimation"
 
-        val BLOOD_OPEN = Regex("^(\\[BOSS] The Watcher: .+?|The BLOOD DOOR has been opened!)$")
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
-        // Terminals starts on the first one done, or on Goldor's greeting if the team is that fast.
-        val TERMINALS_START = Regex("^(?:\\w+ (?:activated|completed) a (?:terminal|lever|device)! \\(\\d/\\d\\)|\\[BOSS] Goldor: Who dares trespass into my domain\\?)$")
-        /**
-         * The floor, the line its boss starts on, and its phases (the first starts with the boss).
-         *
-         * F7 only, which is M7 as well — this team runs nothing else, all 32 recorded runs are F7,
-         * and the floors 1-6 that used to sit here were lines nobody could check against real chat.
-         * Another floor goes back in when there is a recording of it to write it from.
-         */
-        private val FLOORS: Map<Int, FloorSplits> = mapOf(
-            7 to FloorSplits("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", listOf(
-                BossSplit("&5Maxor"),
-                BossSplit("&bStorm", long = true) { it == "[BOSS] Storm: Pathetic Maxor, just like expected." },
-                BossSplit(TERMINALS) { TERMINALS_START.matches(it) },
-                BossSplit(GOLDOR) { it == "The Core entrance is opening!" },
-                BossSplit("&cNecron") { it == "[BOSS] Necron: You went further than any human before, congratulations." },
-            )),
-        )
 
         /**
-         * Every label a run can produce: the clear first, then the boss's phases.
-         * The module makes one sub-split HUD per entry up front, because a HUD has to exist before
-         * the run that would fill it — most of them stay empty on any given floor.
+         * What starts each phase. The Watcher's greeting varies, so any line of his opens Blood;
+         * the one-shot guard in [onChat] makes it the first. Every other line is the one the
+         * original listed, checked against the 32 recorded F7 runs.
          */
-        val ALL_LABELS: List<String> = buildList {
-            add(BLOOD); add(WATCHER); add(PORTAL)
-            for (floor in FLOORS.values) for (split in floor.splits) add(split.label)
-        }.distinct()
+        private val PHASES = listOf(
+            Phase(OPEN) { false },
+            Phase(BLOOD) { it.startsWith("[BOSS] The Watcher: ") },
+            Phase(PORTAL) { it == "[BOSS] The Watcher: You have proven yourself. You may pass." },
+            Phase(MAXOR) { it == "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!" },
+            Phase(STORM) { it == "[BOSS] Storm: Pathetic Maxor, just like expected." },
+            Phase(TERMS) { it == "[BOSS] Goldor: Who dares trespass into my domain?" },
+            Phase(GOLDOR) { it == "The Core entrance is opening!" },
+            // The original waited for "Finally, I heard so much about you.", which F7 never says;
+            // in every recording Necron's first line is this one.
+            Phase(NECRON) { it == "[BOSS] Necron: You went further than any human before, congratulations." },
+            Phase(ANIMATION) { it == "[BOSS] Necron: All this, for nothing..." },
+        )
     }
 }
