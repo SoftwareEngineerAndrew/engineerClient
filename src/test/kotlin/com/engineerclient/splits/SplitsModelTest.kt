@@ -102,14 +102,16 @@ class SplitsModelTest {
     }
 
     @Test
-    fun `an unrelated floor's boss line is ignored`() {
+    fun `a floor that is not F7 gets the clear but no boss phases`() {
+        // Only F7 is described, so another floor's clear still times and its boss simply never
+        // starts a phase - rather than being timed against lines nobody has checked.
         val tracker = SplitTracker()
         feed(tracker, listOf(
             100 to "[NPC] Mort: Here, I found this map when I first entered the dungeon.",
-            200 to "Party > [MVP+] someone: bonzo is dead lol",
             300 to "[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.",
         ))
-        assertTrue(shape(tracker.splits()).any { it == "&cFirst Phase 300--" })
+        val splits = shape(tracker.splits())
+        assertEquals(listOf("&4Blood 100--", "&9Boss Entry 100--"), splits)
     }
 
     // ---- sub splits ------------------------------------------------------------------------
