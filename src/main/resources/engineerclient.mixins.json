@@ -20,6 +20,8 @@
     "MinecraftAccessor",
     "ScoreboardSidebarMixin",
     "SignEnterMixin",
+    "SoundChannelMixin",
+    "SoundVolumeMixin",
     "WandInputMixin",
     "WandScrollMixin"
   ],
