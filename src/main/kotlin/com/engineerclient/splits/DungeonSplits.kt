@@ -47,7 +47,7 @@ object DungeonSplits : Module(
     private val subs = SubSplitTracker()
     private val detail = SplitDetail()
     private val boss = BossDetail(detail)
-    private val blood = BloodRunDetail(detail)
+    private val blood = BloodRunDetail()
 
     /** The most recent block-to-air while a door is coming down, and how long to keep watching. */
     private var doorFallAt: Stamp? = null
@@ -78,7 +78,7 @@ object DungeonSplits : Module(
                     listOf("§fEntrance", "§f0.75s §7(§b0.75s§7)§f door fell", "§f7.20s §7(§b7.20s§7)§f key picked up §7(Bob)"),
                     listOf("§fWater Board", "§f0.80s §7(§b0.80s§7)§f door fell", "§f6.40s §7(§b6.40s§7)§f key picked up §7(Sue)"),
                 )) else draw(this, listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)", "§cDps§r§f: §a11.52s §7(§b11.25s§7)"))
-                if (label == SplitTracker.BLOOD && detailMode == 1) drawColumns(this, bloodColumns())
+                if (label == SplitTracker.BLOOD && detailMode == 1) drawColumns(this, blood.columns(now()))
                 else draw(this, subLines(label))
             }
         )
@@ -190,7 +190,7 @@ object DungeonSplits : Module(
 
         // Everything: the phase's own steps and everything reported inside it, in the order it
         // happened and never cut short - the whole point is to see the lot.
-        if (label == SplitTracker.BLOOD) return detail.lines(label).map { it.label }.filter { it.isNotBlank() }
+        if (label == SplitTracker.BLOOD) return blood.columns(now()).flatten()
         val stepLines = steps.map { it.start to SplitFormat.line(it, now, SplitClock.BOTH) }
         val detailLines = detail.lines(label).map { event ->
             if (event.raw) return@map event.at to event.label
@@ -199,22 +199,6 @@ object DungeonSplits : Module(
             event.at to "§a$real §7(§b$ticks§7) §f" + event.label
         }
         return (stepLines + detailLines).sortedBy { it.first.realMs }.map { it.second }
-    }
-
-    /**
-     * The blood rush a column per room, in the order they were run, with the averages as the last
-     * column. The blank line each room's block ends with is what separates them.
-     */
-    private fun bloodColumns(): List<List<String>> {
-        val columns = mutableListOf<MutableList<String>>()
-        var current = mutableListOf<String>()
-        for (entry in detail.lines(SplitTracker.BLOOD)) {
-            if (entry.label.isBlank()) {
-                if (current.isNotEmpty()) { columns += current; current = mutableListOf() }
-            } else current += entry.label
-        }
-        if (current.isNotEmpty()) columns += current
-        return columns
     }
 
     /** Columns side by side, each as wide as its widest line. */
