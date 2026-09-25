@@ -3,6 +3,7 @@ package com.engineerclient.splits
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -14,6 +15,7 @@ import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.world.entity.LivingEntity
 
 /**
  * Devonian's dungeon splits, the whole run on one HUD: the clear (blood door, the Watcher, boss
@@ -38,11 +40,18 @@ object DungeonSplits : Module(
     description = "Devonian's run, boss and Watcher splits: each section timed on the real clock and the server's tick clock.",
 ) {
     private val clockMode by SelectorSetting("Clock", "Both", listOf("Real", "Ticks", "Both"), desc = "Real time, the server's tick time, or both (Devonian's default: real, then ticks in brackets).")
-    private val subSplitLines by NumberSetting("Sub Split Lines", 12, 3, 40, 1, desc = "How many of a split's most recent events each sub-split HUD shows.")
+    private val subSplitLines by NumberSetting("Sub Split Lines", 12, 3, 40, 1, desc = "How many lines each sub-split HUD shows at most.")
+    private val detailMode by SelectorSetting("Sub Split Detail", "Steps", listOf("Steps", "Everything"), desc = "Steps: the boss's named sub-splits. Everything: every moment of the split the game reported, which is noisy on purpose - it is how you find out what is worth keeping.")
 
     private val CONTROL_CODES = Regex("\u00a7.")
     private val tracker = SplitTracker()
     private val subs = SubSplitTracker()
+    private val detail = SplitDetail()
+    private val boss = BossDetail(detail)
+    private val blood = BloodRunDetail(detail)
+
+    /** Mobs being watched through the Watcher fight: entity id -> the name it spawned with. */
+    private val watchedMobs = HashMap<Int, String>()
     private var serverTicks = 0
     private val COLOUR_CODE = Regex("&.")
 
@@ -75,7 +84,10 @@ object DungeonSplits : Module(
     }
 
     init {
-        on<LevelEvent.Load> { tracker.reset(); subs.reset(); serverTicks = 0 }
+        on<LevelEvent.Load> {
+            tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset()
+            watchedMobs.clear(); serverTicks = 0
+        }
 
         // Odin's server tick: the server's own clock, which falls behind the client's 20 a second
         // when it lags. That is the clock a run is judged on.
@@ -93,12 +105,33 @@ object DungeonSplits : Module(
                     if (!DungeonUtils.inDungeons) return@safely
                     tracker.onChat(text, at)
                     subs.onChat(text, at)
+                    boss.onChat(text, at)
+                    blood.onChat(text, at)
+                    if (text == "The BLOOD DOOR has been opened!") blood.onBloodDoorOpen(at)
                 }
             }
         }
 
         // Goldor's leap ends when the last teammate is inside the core. Only looked for while the
         // sequence says the team is on its way there, so it costs nothing the rest of the run.
+        on<TickEvent.End> {
+            if (DungeonUtils.inDungeons) blood.onTick(DungeonUtils.currentRoomName, now())
+        }
+
+        // The Watcher's waves: how long a mob stayed up. Nothing reports who killed it - Minecraft
+        // sends no mob death message and no damage attribution - so this times the entity's life
+        // and says nothing about who ended it.
+        on<EntityEvent.Add> {
+            if (!inWatcher()) return@on
+            val e = entity as? LivingEntity ?: return@on
+            val name = e.customName?.string?.replace(CONTROL_CODES, "")?.takeIf { it.isNotBlank() } ?: return@on
+            if (watchedMobs.put(e.id, name) == null) boss.onMobSpawn(SplitTracker.WATCHER, now(), name)
+        }
+        on<EntityEvent.Remove> {
+            val name = watchedMobs.remove(entity.id) ?: return@on
+            boss.onMobGone(SplitTracker.WATCHER, now(), name)
+        }
+
         on<TickEvent.End> {
             if (!subs.watchingCore) return@on
             val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
@@ -111,6 +144,10 @@ object DungeonSplits : Module(
         }
     }
 
+    /** Between the blood door opening and the Watcher letting you pass. */
+    private fun inWatcher(): Boolean =
+        tracker.splits().any { it.label == SplitTracker.WATCHER && it.stop == null }
+
     private const val LINE_HEIGHT = 10
 
     /**
@@ -122,8 +159,10 @@ object DungeonSplits : Module(
         // The boss phases have a real breakdown, ported from the team's own module. The clear's
         // splits have none, so those HUDs keep listing whatever the dungeon announced.
         val steps = subs.forSplit(label)
-        if (steps.isNotEmpty()) return steps.map { SplitFormat.line(it, now(), clock) }
-        val events = tracker.subSplits(label)
+        if (detailMode == 0 && steps.isNotEmpty()) return steps.map { SplitFormat.line(it, now(), clock) }
+        // Everything: the detail sources first (they know what the moment actually was), then
+        // whatever else the dungeon announced during the split.
+        val events = if (detailMode == 1 && detail.has(label)) detail.lines(label) else tracker.subSplits(label)
         return events.takeLast(subSplitLines).map { event ->
             val real = SplitFormat.time(event.at.realMs - split.start.realMs, true)
             val ticks = SplitFormat.time((event.at.tick - split.start.tick) * 50L, true)

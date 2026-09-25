@@ -195,6 +195,7 @@ class SplitTracker {
         const val BLOOD = "&4Blood Rush"
         const val WATCHER = "&cWatcher"
         const val PORTAL = "&dPortal"
+
         val BLOOD_OPEN = Regex("^(\\[BOSS] The Watcher: .+?|The BLOOD DOOR has been opened!)$")
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
         // Terminals starts on the first one done, or on Goldor's greeting if the team is that fast.
