@@ -101,7 +101,7 @@ object P3Rotation : Module(
      * Everything the mod believes, on screen, so a clip of a run is enough to see where it went
      * wrong. Off by default; the same content is in `/brw debug` and in the game log under `[ec]`.
      */
-    private val debugHud by HUD("Debug HUD", "Full internal state of the rotation: every player's role, tasks, masks, arrivals, pot exits used, and the last decisions.", false, x = 10, y = 120, scale = 1f) { example ->
+    private val debugHud by HUD("Debug HUD", "Full internal state of the rotation: every player's role, tasks, masks, arrivals, pot exits used, and the last decisions.", true, x = 10, y = 120, scale = 1f) { example ->
         drawDebugHud(this, example)
     }
 

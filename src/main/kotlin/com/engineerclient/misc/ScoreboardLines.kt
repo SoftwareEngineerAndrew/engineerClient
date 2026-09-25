@@ -39,20 +39,8 @@ object ScoreboardLines {
 
     // --- config, written by the Random Stuff module each tick ---------------------------------
 
-    /** Master switch. Nothing is hidden while this is false, whatever the toggles below say. */
+    /** Off only while the module is off — there are no per-line toggles any more. */
     @JvmField var hideLines: Boolean = false
-
-    /** Hide the real-world date/server-id line and the Skyblock time-of-day line. */
-    @JvmField var hideDateTime: Boolean = false
-
-    /** Hide the season + day line ("Late Summer 13th"). */
-    @JvmField var hideSeason: Boolean = false
-
-    /** Hide the dungeon "Keys:" line. */
-    @JvmField var hideKeys: Boolean = false
-
-    /** Hide the dungeon "Cleared: 42%" line. */
-    @JvmField var hideCleared: Boolean = false
 
     /**
      * Extra patterns from the Random Stuff setting, separated by `;`. Plain text is matched as a
@@ -62,14 +50,13 @@ object ScoreboardLines {
      */
     @JvmField var customPatterns: String = ""
 
-    // --- what each toggle matches --------------------------------------------------------------
+    // --- what gets hidden ----------------------------------------------------------------------
     //
-    // UNVERIFIED. These are written from memory of Hypixel's sidebar, not from a capture: nobody
-    // has run the fixed dump in-game yet. Run "Dump Scoreboard" on Skyblock and in a dungeon and
-    // correct these against the strings it prints — that is what the dump exists for. Each is
-    // matched against the line's *plain* text (colour codes stripped, ends trimmed), so the
-    // patterns never have to mention §-codes, and each is anchored so a pattern cannot quietly
-    // eat a line it was not meant to.
+    // A fixed list now rather than a toggle each: the sidebar's noise is the same noise every run.
+    // UNVERIFIED wording — these were written without a capture of the real sidebar, so if one of
+    // them misses, run "Dump Scoreboard" and correct it here. Each leads with \W* because Hypixel
+    // decorates several of these lines with a symbol, and a pattern anchored on the text would
+    // silently never fire.
 
     /** UNVERIFIED — the top line, e.g. "11/12/23 m1CK" (real-world date plus the server id). */
     private val REAL_DATE_PATTERN = Regex("""^\W*\d{2}/\d{2}/\d{2}\b.*$""")
@@ -77,7 +64,7 @@ object ScoreboardLines {
     /** UNVERIFIED — the Skyblock clock, e.g. " ☀ 12:10pm" (the sun/moon glyph leads the line). */
     private val TIME_OF_DAY_PATTERN = Regex("""^\W*\d{1,2}:\d{2}\s*[ap]m\b.*$""", RegexOption.IGNORE_CASE)
 
-    /** UNVERIFIED — the season and day, e.g. "Late Summer 13th" or "Spring 1st". */
+    /** UNVERIFIED — the season and day, e.g. "Early Summer 15th" or "Late Winter 31st". */
     private val SEASON_PATTERN = Regex("""^\W*(?:Early|Late)?\s*(?:Spring|Summer|Autumn|Winter)\s+\d{1,2}(?:st|nd|rd|th)\b.*$""", RegexOption.IGNORE_CASE)
 
     /** UNVERIFIED — the dungeon key counter, e.g. "Keys: ☠ x1 ✦". */
@@ -85,6 +72,12 @@ object ScoreboardLines {
 
     /** UNVERIFIED — the dungeon clear percentage, e.g. "Cleared: 42% (180)". */
     private val CLEARED_PATTERN = Regex("""^\W*(?:Dungeon\s+)?Cleared:\s*\d+%.*$""", RegexOption.IGNORE_CASE)
+
+    /** UNVERIFIED — where you are, e.g. "⏣ The Catacombs (F7)". The glyph is part of the line. */
+    private val LOCATION_PATTERN = Regex("""^\W*The Catacombs\b.*$""", RegexOption.IGNORE_CASE)
+
+    /** The header, "SKYBLOCK" or "SKYBLOCK CO-OP", drawn as the objective's own title. */
+    private val TITLE_PATTERN = Regex("""^\W*SKYBLOCK(?:\s+CO-OP)?\W*$""", RegexOption.IGNORE_CASE)
 
     // --- reading the sidebar -------------------------------------------------------------------
 
@@ -145,15 +138,26 @@ object ScoreboardLines {
     fun shouldHide(line: Component): Boolean = hideLines && hides(plain(line))
 
     /**
+     * The sidebar's title, which the renderer draws separately from the lines — hiding it needs its
+     * own hook, see ScoreboardSidebarMixin.
+     */
+    fun hidesTitle(): Boolean = hideLines
+
+    /**
      * The whole decision, over a line's plain text. Split out from [shouldHide] so it can be tested
      * without a running game: everything above this point needs Minecraft, nothing below it does.
      */
-    internal fun hides(text: String): Boolean {
-        if (text.isEmpty()) return false
-        if (hideDateTime && (REAL_DATE_PATTERN.matches(text) || TIME_OF_DAY_PATTERN.matches(text))) return true
-        if (hideSeason && SEASON_PATTERN.matches(text)) return true
-        if (hideKeys && KEYS_PATTERN.matches(text)) return true
-        if (hideCleared && CLEARED_PATTERN.matches(text)) return true
+    internal fun hides(raw: String): Boolean {
+        // Hypixel pads the sidebar with blank lines to space it out, and some of them are spaces
+        // rather than nothing. With most of the content gone they would be all that is left.
+        val text = raw.trim()
+        if (text.isEmpty()) return true
+        if (REAL_DATE_PATTERN.matches(text) || TIME_OF_DAY_PATTERN.matches(text)) return true
+        if (SEASON_PATTERN.matches(text)) return true
+        if (KEYS_PATTERN.matches(text)) return true
+        if (CLEARED_PATTERN.matches(text)) return true
+        if (LOCATION_PATTERN.matches(text)) return true
+        if (TITLE_PATTERN.matches(text)) return true
         return matchesCustom(text)
     }
 

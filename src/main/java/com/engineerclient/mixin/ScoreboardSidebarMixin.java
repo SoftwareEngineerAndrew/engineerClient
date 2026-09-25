@@ -2,6 +2,7 @@ package com.engineerclient.mixin;
 
 import com.engineerclient.misc.ScoreboardLines;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.PlayerScoreEntry;
 import net.minecraft.world.scores.Scoreboard;
@@ -36,6 +37,26 @@ public class ScoreboardSidebarMixin {
         } catch (Throwable t) {
             // a broken pattern must never cost you the sidebar mid-run
             return scoreboard.listPlayerScores(objective);
+        }
+    }
+
+    /**
+     * The sidebar's title ("SKYBLOCK") is drawn from the objective rather than from a score entry,
+     * so filtering the lines cannot reach it. Handing back an empty component removes the text
+     * without touching the objective itself.
+     */
+    @Redirect(
+        method = "displayScoreboardSidebar",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/scores/Objective;getDisplayName()Lnet/minecraft/network/chat/Component;"
+        )
+    )
+    private Component ec$hideSidebarTitle(Objective objective) {
+        try {
+            return ScoreboardLines.INSTANCE.hidesTitle() ? Component.empty() : objective.getDisplayName();
+        } catch (Throwable t) {
+            return objective.getDisplayName();
         }
     }
 }

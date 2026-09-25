@@ -39,7 +39,6 @@ object DungeonSplits : Module(
     category = Category.custom("Engineer Client"),
     description = "Devonian's run, boss and Watcher splits: each section timed on the real clock and the server's tick clock.",
 ) {
-    private val clockMode by SelectorSetting("Clock", "Both", listOf("Real", "Ticks", "Both"), desc = "Real time, the server's tick time, or both (Devonian's default: real, then ticks in brackets).")
     private val subSplitLines by NumberSetting("Sub Split Lines", 12, 3, 40, 1, desc = "How many lines each sub-split HUD shows at most.")
     private val detailMode by SelectorSetting("Sub Split Detail", "Steps", listOf("Steps", "Everything"), desc = "Steps: the boss's named sub-splits. Everything: every moment of the split the game reported, which is noisy on purpose - it is how you find out what is worth keeping.")
 
@@ -55,17 +54,11 @@ object DungeonSplits : Module(
     private var serverTicks = 0
     private val COLOUR_CODE = Regex("&.")
 
-    private val clock get() = when (clockMode) {
-        0 -> SplitClock.REAL
-        1 -> SplitClock.TICKS
-        else -> SplitClock.BOTH
-    }
-
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
 
     private val splitsHud by HUD("Splits", "The whole run: the clear, then the boss's phases.") { example ->
         if (example) return@HUD draw(this, listOf("§4Blood§r§f: §a31.24s §7(§b31.05s§7)", "§9Boss Entry§r§f: §a1m 12.30s §7(§b1m 12.05s§7)", "§5Maxor§r§f: §a26.10s §7(§b26.10s§7)", "§6Terminals§r§f: §a1m 09.40s §7(§b1m 09.40s§7)"))
-        draw(this, tracker.splits().map { SplitFormat.line(it, now(), clock) })
+        draw(this, tracker.splits().map { SplitFormat.line(it, now(), SplitClock.BOTH) })
     }
 
     /**
@@ -159,19 +152,14 @@ object DungeonSplits : Module(
         // The boss phases have a real breakdown, ported from the team's own module. The clear's
         // splits have none, so those HUDs keep listing whatever the dungeon announced.
         val steps = subs.forSplit(label)
-        if (detailMode == 0 && steps.isNotEmpty()) return steps.map { SplitFormat.line(it, now(), clock) }
+        if (detailMode == 0 && steps.isNotEmpty()) return steps.map { SplitFormat.line(it, now(), SplitClock.BOTH) }
         // Everything: the detail sources first (they know what the moment actually was), then
         // whatever else the dungeon announced during the split.
         val events = if (detailMode == 1 && detail.has(label)) detail.lines(label) else tracker.subSplits(label)
         return events.takeLast(subSplitLines).map { event ->
             val real = SplitFormat.time(event.at.realMs - split.start.realMs, true)
             val ticks = SplitFormat.time((event.at.tick - split.start.tick) * 50L, true)
-            val time = when (clock) {
-                SplitClock.REAL -> "§a$real"
-                SplitClock.TICKS -> "§b$ticks"
-                SplitClock.BOTH -> "§a$real §7(§b$ticks§7)"
-            }
-            "§7+$time §f" + event.label
+            "§7+§a$real §7(§b$ticks§7) §f" + event.label
         }
     }
 

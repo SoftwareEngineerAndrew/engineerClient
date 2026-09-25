@@ -48,7 +48,6 @@ object RandomStuff : Module(
     private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD unless the stat drops below the threshold below. Only has an effect if those HUD elements are already enabled in Odin's Player Display settings.")
     private val healthManaThreshold by NumberSetting("Threshold", 20, 1, 100, 1, desc = "Only show the Health/Mana HUD once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
-    private val hideBossBarOutsideBoss by BooleanSetting("Hide Boss Bar Outside Boss", false, desc = "Hides the boss health bar unless you're actually in a dungeon boss fight.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "In dungeons only: hides every armor stand (except terminals, active or inactive) and removes fishing bobbers' extended line.")
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
@@ -71,37 +70,10 @@ object RandomStuff : Module(
     // Hooked at the two `ItemModel.update` implementations that set a foil type (see ItemFoilMixin)
     // and at worn-equipment rendering (see ArmorFoilMixin).
     private val noGlint by BooleanSetting("No Enchant Glint", true, desc = "Removes the enchantment glint from items, so colours and textures stay readable.")
-    private val glintInInventory by BooleanSetting("Glint: Inventory", true, desc = "Hide the glint on items drawn in a GUI — inventory, chests, the hotbar.").withDependency { noGlint }
-    private val glintInWorld by BooleanSetting("Glint: Held & Dropped", true, desc = "Hide the glint on items held in hand, dropped on the ground, or in item frames.").withDependency { noGlint }
-    private val glintOnArmor by BooleanSetting("Glint: Worn Armor", true, desc = "Hide the glint on armour worn by you and by other players.").withDependency { noGlint }
-    // The solvers keep working without the glint, but they cannot tell *you* which items you have
-    // already clicked — for a human that cue is the glint on the screen. So while a real terminal or
-    // a term sim is open, inventory glint is left alone.
-    private val glintKeepInTerminals by BooleanSetting("Glint: Keep In Terminals", true, desc = "Leave inventory glint alone while a terminal is open — it is how you see which items you have already clicked.").withDependency { noGlint }
 
     // --- Startup and restart -------------------------------------------------------------------
 
     private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
-
-    /**
-     * Closes this instance and has PrismLauncher start it back up.
-     *
-     * The relaunch is a `sleep 3 && prismlauncher -l <instance>` handed to a detached shell, not a
-     * timer in this JVM - PrismLauncher is single-instance and treats an extra invocation as an IPC
-     * message to the launcher process that's already running, and it needs to see this instance's
-     * process actually gone before it'll agree to start a fresh one. Doing the wait inside the
-     * spawned shell means it survives however abruptly Minecraft's own shutdown behaves, instead of
-     * racing a thread in a JVM that's mid-[Module.mc].stop.
-     */
-    private val restartKey by KeybindSetting("Restart Game", InputConstants.KEY_F7, desc = "Closes and relaunches this PrismLauncher instance.").onPress {
-        if (!enabled) return@onPress
-        alert("§cRestarting in 3 seconds...")
-        ProcessBuilder("bash", "-c", "sleep 3 && prismlauncher -l '$INSTANCE_NAME'")
-            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-            .redirectError(ProcessBuilder.Redirect.DISCARD)
-            .start()
-        mc.execute { mc.stop() }
-    }
 
     // --- Scoreboard lines ----------------------------------------------------------------------
     //
@@ -109,12 +81,7 @@ object RandomStuff : Module(
     // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
     // does the matching and the hiding; these settings only say what to hide.
 
-    private val hideScoreboardLines by BooleanSetting("Hide Scoreboard Lines", false, desc = "Drops chosen lines from the sidebar. The sidebar shrinks around what is left rather than leaving a gap.")
-    private val hideSbDateTime by BooleanSetting("Line: Date & Time", true, desc = "The real-world date line and the Skyblock time-of-day line.").withDependency { hideScoreboardLines }
-    private val hideSbSeason by BooleanSetting("Line: Season", true, desc = "The season and day, e.g. \"Late Summer 13th\".").withDependency { hideScoreboardLines }
-    private val hideSbKeys by BooleanSetting("Line: Keys", false, desc = "The dungeon \"Keys:\" counter.").withDependency { hideScoreboardLines }
-    private val hideSbCleared by BooleanSetting("Line: Cleared %", false, desc = "The dungeon \"Cleared: 42%\" counter.").withDependency { hideScoreboardLines }
-    private val hideSbCustom by StringSetting("Line: Also Hide", "", 200, desc = "Your own lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard, copy what you see. Regexes work too.").withDependency { hideScoreboardLines }
+    private val hideSbCustom by StringSetting("Scoreboard: Also Hide", "", 200, desc = "Extra sidebar lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard and copy what you see. Regexes work too.")
 
     /**
      * Prints the sidebar to chat, exactly as the game assembles it, so the patterns above can be
@@ -124,8 +91,6 @@ object RandomStuff : Module(
     private val dumpScoreboard by ActionSetting("Dump Scoreboard", desc = "Prints every current sidebar line to chat, with its colour codes, so the line hider can be pointed at the real text.") {
         ScoreboardLines.dump()
     }
-
-    private const val INSTANCE_NAME = "26.1.2 BRW"
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
 
@@ -166,12 +131,15 @@ object RandomStuff : Module(
      */
     fun hidesGlint(context: ItemDisplayContext): Boolean {
         if (!enabled || !noGlint) return false
-        return if (context == ItemDisplayContext.GUI) glintInInventory && !(glintKeepInTerminals && inTerminal())
-        else glintInWorld
+        // The one exception, and it is not a toggle because turning it off only ever hurts: while a
+        // terminal is open the glint is how you see which items you have already clicked. Odin's
+        // solvers read the glint component rather than the render, so they are unaffected either way
+        // - this is purely so a human can still tell.
+        return !(context == ItemDisplayContext.GUI && inTerminal())
     }
 
     /** Whether the glint should be dropped for a piece of worn equipment. */
-    fun hidesArmorGlint(): Boolean = enabled && noGlint && glintOnArmor
+    fun hidesArmorGlint(): Boolean = enabled && noGlint
 
     /** A live terminal (Odin tracks the open one) or a practice term sim. */
     private fun inTerminal(): Boolean =
@@ -183,20 +151,12 @@ object RandomStuff : Module(
             PlayerDisplay.onlyShowWhenLow = hideHealthManaUnlessLow
             PlayerDisplay.lowThreshold = healthManaThreshold.toFloat() / 100f
             RenderOptimizer.forceHideAllArmorStands = hideArmorStands && DungeonUtils.inDungeons
-            ScoreboardLines.hideLines = enabled && hideScoreboardLines
-            ScoreboardLines.hideDateTime = hideSbDateTime
-            ScoreboardLines.hideSeason = hideSbSeason
-            ScoreboardLines.hideKeys = hideSbKeys
-            ScoreboardLines.hideCleared = hideSbCleared
+            ScoreboardLines.hideLines = enabled
             ScoreboardLines.customPatterns = hideSbCustom
         }
 
         on<RenderItemNameEvent> {
             if (hideItemNames) cancel()
-        }
-
-        on<RenderBossBarEvent> {
-            if (hideBossBarOutsideBoss && !DungeonUtils.inBoss) cancel()
         }
 
         on<MessageEvent.Overlay> {
