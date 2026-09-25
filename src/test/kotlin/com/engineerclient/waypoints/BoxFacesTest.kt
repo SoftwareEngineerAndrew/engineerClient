@@ -2,7 +2,9 @@ package com.engineerclient.waypoints
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The box editor's face selection, on a 1x1x1 box at the origin. */
 class BoxFacesTest {
@@ -21,11 +23,18 @@ class BoxFacesTest {
     }
 
     @Test
-    fun `the top is selected from any angle`() {
-        assertEquals(Face.UP, pick(v(0.5, 5.0, 0.5), v(0.0, -1.0, 0.0)))    // straight down onto it
-        assertEquals(Face.UP, pick(v(-0.5, 3.0, 0.5), v(1.0, -2.0, 0.0)))   // down onto it at an angle
-        assertEquals(Face.UP, pick(v(0.5, -2.0, 0.5), v(0.0, 1.0, 0.0)))    // up through it from below
-        assertEquals(Face.UP, pick(v(0.5, 0.5, 0.5), v(0.3, 1.0, 0.0)))     // up through it from inside
+    fun `looking at the top goes through to a side, or nothing straight on`() {
+        assertEquals(Face.EAST, pick(v(-0.5, 3.0, 0.5), v(1.0, -2.0, 0.0)))   // down onto the top, heading east
+        assertNull(pick(v(0.5, 5.0, 0.5), v(0.0, -1.0, 0.0)))                // straight down
+        assertNull(pick(v(0.5, -2.0, 0.5), v(0.0, 1.0, 0.0)))                // straight up from below
+    }
+
+    @Test
+    fun `the top is selected by standing inside and looking up`() {
+        assertTrue(BoxFaces.editsTop(v(0.5, 0.0, 0.5), -30f, min, max))
+        assertFalse(BoxFaces.editsTop(v(0.5, 0.0, 0.5), -5f, min, max))      // not looking up enough
+        assertFalse(BoxFaces.editsTop(v(0.5, 0.0, 0.5), 40f, min, max))      // looking down
+        assertFalse(BoxFaces.editsTop(v(1.5, 0.0, 0.5), -30f, min, max))     // standing outside
     }
 
     @Test
@@ -38,6 +47,7 @@ class BoxFacesTest {
     fun `from inside, the face you look at is the one you would leave through`() {
         assertEquals(Face.NORTH, pick(v(0.5, 0.5, 0.5), v(0.0, 0.0, -1.0)))
         assertEquals(Face.EAST, pick(v(0.5, 0.5, 0.5), v(1.0, -0.2, 0.1)))
+        assertEquals(Face.NORTH, pick(v(0.5, 0.5, 0.5), v(0.05, 1.0, -0.2)))  // up through the top, leaving north
     }
 
     @Test
