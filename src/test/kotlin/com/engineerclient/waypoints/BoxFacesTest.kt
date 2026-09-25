@@ -48,14 +48,16 @@ class BoxFacesTest {
 
     @Test
     fun `a face moves freely, in past the start block too, but never below a block across`() {
-        val out = IntArray(Face.entries.size)
-        assertEquals(false, BoxFaces.move(out, Face.EAST, -1))       // 1 wide already
-        BoxFaces.move(out, Face.EAST, +3)                             // 4 wide
-        assertEquals(true, BoxFaces.move(out, Face.WEST, -3))         // west pulled in 3, past the start block
-        assertEquals(-3, out[Face.WEST.ordinal])
-        assertEquals(false, BoxFaces.move(out, Face.WEST, -1))        // would be 0 wide
-        assertEquals(false, BoxFaces.move(out, Face.UP, -1))          // the top cannot sink below a block tall
-        BoxFaces.move(out, Face.UP, +2)
-        assertEquals(true, BoxFaces.move(out, Face.UP, -2))
+        val c = intArrayOf(0, 64, 0, 1, 65, 1)                      // the 1x1x1 box on block (0, 64, 0)
+        assertEquals(false, BoxFaces.move(c, Face.EAST, -1))       // 1 wide already
+        BoxFaces.move(c, Face.EAST, +3)                             // 4 wide, x 0..4
+        assertEquals(true, BoxFaces.move(c, Face.WEST, -3))         // west pulled in 3, past the start block
+        assertEquals(3, c[BoxFaces.MIN_X])
+        assertEquals(false, BoxFaces.move(c, Face.WEST, -1))        // would be 0 wide
+        assertEquals(true, BoxFaces.move(c, Face.WEST, +5))         // west pushed out past where it began
+        assertEquals(-2, c[BoxFaces.MIN_X])
+        assertEquals(false, BoxFaces.move(c, Face.UP, -1))          // the top cannot sink below a block tall
+        BoxFaces.move(c, Face.UP, +2)
+        assertEquals(true, BoxFaces.move(c, Face.UP, -2))
     }
 }

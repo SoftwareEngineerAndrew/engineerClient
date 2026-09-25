@@ -38,22 +38,25 @@ object BoxFaces {
         return face
     }
 
+    /** A box as its corners, in blocks: minX, minY, minZ, maxX, maxY, maxZ (the max side exclusive). */
+    const val MIN_X = 0; const val MIN_Y = 1; const val MIN_Z = 2; const val MAX_X = 3; const val MAX_Y = 4; const val MAX_Z = 5
+
     /**
-     * Moves [face] by [by] blocks, out if positive. [out] is how far each face sits outside the
-     * block the box was placed on, negative for inside it. The one rule: the box stays at least a
-     * block across in every direction. Returns false, changing nothing, if the move would break it.
+     * Moves [face] of the box [c] by [by] blocks, outward if positive. The one rule: the box stays
+     * at least a block across in every direction. Returns false, changing nothing, if it would not.
      */
-    fun move(out: IntArray, face: Face, by: Int): Boolean {
-        val opposite = when (face) {
-            Face.EAST -> out[Face.WEST.ordinal]
-            Face.WEST -> out[Face.EAST.ordinal]
-            Face.SOUTH -> out[Face.NORTH.ordinal]
-            Face.NORTH -> out[Face.SOUTH.ordinal]
-            Face.UP -> 0 // the bottom, which never moves
+    fun move(c: IntArray, face: Face, by: Int): Boolean {
+        val (corner, sign, other) = when (face) {
+            Face.EAST -> Triple(MAX_X, 1, MIN_X)
+            Face.WEST -> Triple(MIN_X, -1, MAX_X)
+            Face.SOUTH -> Triple(MAX_Z, 1, MIN_Z)
+            Face.NORTH -> Triple(MIN_Z, -1, MAX_Z)
+            Face.UP -> Triple(MAX_Y, 1, MIN_Y)
         }
-        val next = out[face.ordinal] + by
-        if (1 + next + opposite < 1) return false
-        out[face.ordinal] = next
+        val next = c[corner] + sign * by
+        val size = if (sign > 0) next - c[other] else c[other] - next
+        if (size < 1) return false
+        c[corner] = next
         return true
     }
 
