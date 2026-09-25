@@ -146,19 +146,25 @@ class BloodRunDetail {
     }
 
     /**
-     * One row per room, the five in a fixed order: `Pipes: 0.65s | 8.10s | 0.60s | 0.10s | 9.45s`.
+     * One row per room, the five in a fixed order: `Pipes: 0.65s | 8.10s | 0.60s | 0.10s | 9.45s`,
+     * the separators drawn by the HUD.
      * A row fills in as the room is run; the total waits for the room to end.
      */
     private fun compact(now: Stamp): List<String> {
         val out = mutableListOf<String>()
-        for (r in all()) {
-            val cells = stats(r, now).mapIndexedNotNull { i, s -> s?.let { COLOURS[i] + SplitFormat.seconds(it.first) } }
-            out += name(r) + ": " + cells.joinToString(" §8| ")
-        }
-        averages()?.let { avg ->
-            out += TOTAL + "Total: " + avg.mapIndexedNotNull { i, s -> s?.let { COLOURS[i] + SplitFormat.seconds(it.first) } }.joinToString(" §8| ")
-        }
+        for (r in all()) out += row(name(r) + ": ", stats(r, now))
+        averages()?.let { out += row(TOTAL + "Total: ", it) }
         return out
+    }
+
+    /**
+     * One compact row as tab-separated cells — the name, then the five times, a missing one left
+     * empty so every time stays in its own column. The HUD lays the cells out as a table, which is
+     * what keeps the separators in line from row to row.
+     */
+    private fun row(name: String, stats: List<Pair<Long, Long>?>): String {
+        val cells = stats.mapIndexed { i, s -> s?.let { COLOURS[i] + SplitFormat.seconds(it.first) }.orEmpty() }
+        return (listOf(name) + cells).joinToString("\t").trimEnd('\t')
     }
 
     /** The same five, vertical and labelled, a blank line between rooms, then the averages. */

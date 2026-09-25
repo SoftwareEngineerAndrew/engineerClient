@@ -91,8 +91,8 @@ object DungeonSplits : Module(
         registerSetting(
             HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", false, 0, 0, 1f) { example ->
                 if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
-                    "§5Hallway: §71.52s §8| §80.21s §8| §70.06s §8| §80.52s §8| §62.31s",
-                    "§dDino: §71.52s §8| §80.21s §8| §70.06s §8| §80.52s §8| §62.31s",
+                    "§5Hallway: \t§71.52s\t§80.21s\t§70.06s\t§80.52s\t§62.31s",
+                    "§dDino: \t§711.52s\t§80.21s\t§70.06s\t§810.52s\t§622.31s",
                 ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
                 draw(this, subLines(s))
             }
@@ -285,7 +285,34 @@ object DungeonSplits : Module(
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0
+        if (lines.any { '\t' in it }) return table(gfx, lines)
         lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE, shadow = true) }
         return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
+    }
+
+    /**
+     * Tab-separated rows drawn as a table: the first column left-aligned, the rest right-aligned in
+     * columns as wide as their widest cell, with a dark-grey `|` at the same x on every row. Text
+     * padded with spaces cannot do this — a digit and a space are different widths.
+     */
+    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
+        val rows = lines.map { it.split('\t') }
+        val cols = rows.maxOf { it.size }
+        val widths = IntArray(cols) { c -> rows.maxOf { r -> r.getOrNull(c)?.let(mc.font::width) ?: 0 } }
+        val space = mc.font.width(" ")
+        val bar = mc.font.width("|")
+        // Where each column starts: the name, then each time with a " | " in front of it.
+        val starts = IntArray(cols)
+        for (c in 1 until cols) starts[c] = starts[c - 1] + widths[c - 1] + if (c == 1) 0 else space * 2 + bar
+        rows.forEachIndexed { i, row ->
+            val y = i * LINE_HEIGHT
+            row.forEachIndexed { c, cell ->
+                if (cell.isEmpty()) return@forEachIndexed
+                val x = if (c == 0) 0 else starts[c] + widths[c] - mc.font.width(cell)
+                gfx.text(cell, x, y, Colors.WHITE, shadow = true)
+                if (c >= 2) gfx.text("§8|", starts[c] - space - bar, y, Colors.WHITE, shadow = true)
+            }
+        }
+        return starts[cols - 1] + widths[cols - 1] to lines.size * LINE_HEIGHT
     }
 }
