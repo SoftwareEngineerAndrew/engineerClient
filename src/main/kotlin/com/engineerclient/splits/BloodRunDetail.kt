@@ -39,8 +39,12 @@ class BloodRunDetail(private val detail: SplitDetail) {
     // no time — see [onChat].
     private var keyInHand: Stamp? = null
 
-    // The room name the last tick reported, so a change can be spotted.
+    // The room name the last tick reported, and which cell of the dungeon's 32-block grid the
+    // player was standing in. The cell is what actually decides "we are in the next room now":
+    // a rush runs through rooms that often share a name, so waiting for the name to change misses
+    // most of the entries and with them most of the gaps.
     private var lastRoomName = ""
+    private var lastCell = Int.MIN_VALUE
 
     // Set once the blood door is open: the rush is over and the blood room is not one of its rooms.
     private var done = false
@@ -52,7 +56,7 @@ class BloodRunDetail(private val detail: SplitDetail) {
 
     fun reset() {
         enteredAt = null; keyAt = null; doorAt = null; keyInHand = null
-        lastRoomName = ""; done = false
+        lastRoomName = ""; lastCell = Int.MIN_VALUE; done = false
         doorTimes.clear(); keyTimes.clear(); roomTimes.clear(); gapTimes.clear()
     }
 
@@ -73,11 +77,11 @@ class BloodRunDetail(private val detail: SplitDetail) {
             keyInHand = null
             val who = m.groupValues[1]
             if (key == null) {
-                detail.add(SplitTracker.BLOOD, at, "Door ($who)")
+                detail.add(SplitTracker.BLOOD, at, "Door §7($who)")
             } else {
                 val ms = at.realMs - key.realMs
                 doorTimes += ms
-                detail.add(SplitTracker.BLOOD, at, "Door ${SplitFormat.time(ms, true)} ($who)")
+                detail.add(SplitTracker.BLOOD, at, "Door ${SplitFormat.time(ms, true)} §7($who)")
             }
             return
         }
@@ -94,7 +98,7 @@ class BloodRunDetail(private val detail: SplitDetail) {
             // Hypixel drops the player's name when the key falls to someone out of render distance,
             // so the line is written without an opener rather than with a guessed one.
             val who = m.groupValues.getOrNull(1).orEmpty()
-            val suffix = if (who.isEmpty()) "" else " ($who)"
+            val suffix = if (who.isEmpty()) "" else " §7($who)"
             detail.add(SplitTracker.BLOOD, at, "Key ${SplitFormat.time(ms, true)}$suffix")
             return
         }
@@ -104,20 +108,26 @@ class BloodRunDetail(private val detail: SplitDetail) {
         if (msg == BLOOD_DOOR || msg == SHIVER) closeRoom(at)
     }
 
-    /** Once a tick. currentRoom is DungeonUtils.getCurrentRoomName(), may be blank. */
-    fun onTick(currentRoom: String, at: Stamp) {
-        if (done || currentRoom.isBlank()) return
-        if (currentRoom == lastRoomName) return
-        lastRoomName = currentRoom
+    /**
+     * Once a tick, with the room's name and the player's position. Rooms sit on a 32-block grid,
+     * so the cell the player stands in says which room they are in even when two rooms in a row
+     * are both called "Corridor".
+     */
+    fun onTick(currentRoom: String, x: Double, z: Double, at: Stamp) {
+        if (done) return
+        if (currentRoom.isNotBlank()) lastRoomName = currentRoom
+        val cell = cellOf(x, z)
+        if (cell == lastCell) return
+        lastCell = cell
 
-        // A new name with no door waiting on it is the party walking back through something already
+        // A new room with no door waiting on it is the party walking back through something already
         // open, which is not a room the rush is held up by. Ignored on purpose.
         val door = doorAt ?: return
         if (enteredAt != null) return
         doorAt = null
         enteredAt = at
         keyAt = null
-        detail.add(SplitTracker.BLOOD, at, "Entered $currentRoom")
+        detail.add(SplitTracker.BLOOD, at, "Entered " + lastRoomName.ifBlank { "room" })
         // The walk from the door opening to being inside: the "space before next room", and the part
         // of a slow rush that no amount of clearing faster will fix.
         val ms = at.realMs - door.realMs
@@ -148,6 +158,13 @@ class BloodRunDetail(private val detail: SplitDetail) {
         val ms = at.realMs - start.realMs
         roomTimes += ms
         detail.add(SplitTracker.BLOOD, at, "Room ${SplitFormat.time(ms, true)}")
+    }
+
+    /** Which 32-block room cell a position is in — the same grid the dungeon map is drawn on. */
+    private fun cellOf(x: Double, z: Double): Int {
+        val cx = (Math.floor(x).toInt() + 200) shr 5
+        val cz = (Math.floor(z).toInt() + 200) shr 5
+        return cx * 64 + cz
     }
 
     private companion object {
