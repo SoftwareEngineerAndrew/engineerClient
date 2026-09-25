@@ -5,6 +5,7 @@ import com.google.gson.reflect.TypeToken
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.LevelEvent
@@ -16,6 +17,7 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.Highlight
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
+import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.itemId
@@ -33,6 +35,7 @@ import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.AABB
+import org.lwjgl.glfw.GLFW
 import java.io.File
 
 /**
@@ -47,7 +50,8 @@ import java.io.File
  * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
  * it overlaps most, if several); one in no box goes to the nearest box in its room within 5
  * blocks. Boxes are purple and show only in the room you are in; a box hides once all its mobs
- * are dead (never deleted) unless Keep All Boxes or Edit Mode is on.
+ * are dead or the map shows the room cleared (never deleted), unless Keep All Boxes or Edit Mode
+ * is on.
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  */
@@ -57,7 +61,12 @@ object BrWaypoints2 : Module(
     description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made in game with a wand.",
 ) {
 
-    private val editMode by BooleanSetting("Edit Mode", false, desc = "Edits only happen while this is on. Off, the wand is just an item.")
+    private var editMode by BooleanSetting("Edit Mode", false, desc = "Edits only happen while this is on. Off, the wand is just an item.")
+
+    private val editKey by KeybindSetting("Edit Mode Keybind", GLFW.GLFW_KEY_UNKNOWN, "Toggles Edit Mode.").onPress {
+        editMode = !editMode
+        modMessage("§dBR Waypoints 2 §7edit mode " + if (editMode) "§aon" else "§coff")
+    }
 
     private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
         val held = mc.player?.mainHandItem
@@ -226,15 +235,18 @@ object BrWaypoints2 : Module(
 
     /**
      * The boxes on screen, only ever the room you are in. With Keep All Boxes or Edit Mode on, all
-     * of that room's boxes; otherwise a box hides once every mob it claimed is known dead, and
-     * shows until then — before any of its mobs are in view, too. Hidden is only hidden: the box
-     * stays saved and comes back with its room next run.
+     * of that room's boxes. Otherwise none once the map shows the room cleared, and a box hides
+     * once every mob it claimed is known dead, showing until then — before any of its mobs are in
+     * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
-        val here = DungeonUtils.currentRoom?.name ?: return emptyList()
-        val inRoom = boxes.filter { it.room == here }
+        val room = DungeonUtils.currentRoom ?: return emptyList()
+        val inRoom = boxes.filter { it.room == room.name }
         // Edit Mode shows them all too: a box being drawn has no mobs yet.
         if (keepAll || editMode) return inRoom
+        // Cleared on the map (white check, or green once secrets are done too): every mob is dead,
+        // including the ones killed out of your sight.
+        if (room.checkmark == MapCheckmark.WHITE || room.checkmark == MapCheckmark.GREEN) return emptyList()
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
         for (mob in mobs) {
             val box = claimOf(mob) ?: continue
