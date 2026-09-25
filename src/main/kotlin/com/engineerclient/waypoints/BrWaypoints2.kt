@@ -32,6 +32,7 @@ import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.monster.EnderMan
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.AABB
@@ -291,10 +292,16 @@ object BrWaypoints2 : Module(
         return if (x > 0 && y > 0 && z > 0) x * y * z else 0.0
     }
 
-    // Odin's Highlight rule for what can sit under a starred tag.
+    /**
+     * What can sit under a starred tag: Odin's Highlight rule, except for Fels. A Fel is an
+     * enderman named "Dinnerbone" (drawn upside down) about 3 blocks under its tag, and until it
+     * wakes it is invisible but for its head — Odin skips invisible mobs, which would drop every
+     * dormant Fel, so an enderman counts whether it can be seen or not.
+     */
     private fun isMob(e: Entity): Boolean = when (e) {
         is ArmorStand -> false
         is WitherBoss -> false
+        is EnderMan -> true
         is Player -> e.uuid.version() == 2 && e != mc.player
         else -> !e.isInvisible
     }
