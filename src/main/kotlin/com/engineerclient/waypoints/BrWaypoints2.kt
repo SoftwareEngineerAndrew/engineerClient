@@ -28,7 +28,6 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.player.Player
@@ -46,9 +45,9 @@ import java.io.File
  *    gets thinner than a block, and its bottom never moves.
  *
  * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
- * it overlaps most, if several); one in no box goes to the nearest box in its room. A box
- * shows, in purple, while any of its mobs is alive; with none alive it is hidden (never deleted)
- * unless Keep All Boxes is on.
+ * it overlaps most, if several); one in no box goes to the nearest box in its room within 5
+ * blocks. Boxes are purple and show only in the room you are in; a box hides once all its mobs
+ * are dead (never deleted) unless Keep All Boxes or Edit Mode is on.
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  */
@@ -76,7 +75,7 @@ object BrWaypoints2 : Module(
         modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }
 
-    private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box. Off, a box only shows while one of its starred mobs is alive. Edit Mode always shows every box.")
+    private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
@@ -101,13 +100,19 @@ object BrWaypoints2 : Module(
 
     // --- starred mobs ----------------------------------------------------------------------------
 
-    /** A starred mob, where it was first seen, and whether it has died. */
-    private class Mob(val spawn: AABB, val x: Double, val y: Double, val z: Double, val room: String?, var entity: Entity?) {
+    /**
+     * A starred mob: where it was first seen, the mob and name tag entities while they are in view,
+     * and whether it has died.
+     */
+    private class Mob(val spawn: AABB, val x: Double, val y: Double, val z: Double, val room: String?, var entity: Entity?, var tag: Entity?) {
         var dead = false
+        /** The tick its name tag went, if it has — the same tick as the mob means it died. */
+        var tagGoneAt: Int? = null
     }
 
     private val mobs = mutableListOf<Mob>()
-    private val seen = HashSet<Int>()
+    private val byId = HashMap<Int, Mob>()
+    private var ticks = 0
 
     // Odin's Highlight: which name tags are starred mobs, and how a tag finds its mob.
     private val MOB_NAMES = listOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
@@ -120,16 +125,21 @@ object BrWaypoints2 : Module(
     /** How far away a box can be selected from. */
     private const val REACH = 48.0
 
-    /** A mob that vanishes this close to you died; further away it may just have left your view. */
-    private const val SEEN_DYING = 40.0
+    /** A nearest box further than this from a mob does not claim it. */
+    private const val CLAIM_REACH = 5.0
+
+    // How far off a mob can vanish and still count as killed; see [watchDeaths].
+    private const val DIES_WITH_TAG = 48.0
+    private const val DIES_ALONE = 32.0
 
     init {
         on<LevelEvent.Load> {
-            boxes.clear(); loadedRooms.clear(); mobs.clear(); seen.clear()
+            boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
         }
 
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons) return@on
+            ticks++
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -175,43 +185,68 @@ object BrWaypoints2 : Module(
             val name = tag.name.string
             if (MOB_NAMES.none { it in name } || !STARRED.matches(name)) continue
             val mob = level.getEntities(tag, tag.boundingBox.move(0.0, -1.0, 0.0)) { isMob(it) }.firstOrNull() ?: continue
-            if (!seen.add(mob.id)) continue
-            mobs += Mob(mob.boundingBox, mob.x, mob.y, mob.z, roomAt(mob.x, mob.z)?.name, mob)
+            val known = byId[mob.id]
+            if (known != null) {
+                // Back in view: Hypixel keeps a mob's id when it comes back into range.
+                if (known.entity == null && !known.dead) known.entity = mob
+                if (known.tag !== tag) { known.tag = tag; known.tagGoneAt = null }
+                continue
+            }
+            val m = Mob(mob.boundingBox, mob.x, mob.y, mob.z, roomAt(mob.x, mob.z)?.name, mob, tag)
+            mobs += m
+            byId[mob.id] = m
         }
     }
 
     /**
-     * A mob is dead once the game shows it dying. One that simply disappears only counts as dead if
-     * it was close — further off, it may just have gone out of view, and it stays as it was.
+     * Whether a mob died, from what the recorded runs show (1721 starred mobs across 32 runs).
+     * Hypixel sends no death — no death animation, no health reaching zero, the tag never shows
+     * 0❤ — the mob and its name tag are simply removed, on the same tick. Going out of view removes
+     * them too, but further away, and a name tag also vanishes on its own from about 16 blocks
+     * while the mob stays. So a mob is dead when it is removed within 48 blocks on the same tick as
+     * its tag, or within 32 blocks at all. Removed further off, it is only out of view: it keeps
+     * its state, and is picked up again when it comes back.
      */
     private fun watchDeaths() {
         val player = mc.player ?: return
         for (mob in mobs) {
+            val tag = mob.tag
+            if (tag != null && tag.isRemoved && mob.tagGoneAt == null) mob.tagGoneAt = ticks
+        }
+        for (mob in mobs) {
             val e = mob.entity ?: continue
-            if (e is LivingEntity && e.isDeadOrDying) { mob.dead = true; mob.entity = null; continue }
-            if (e.isRemoved) {
-                if (player.distanceToSqr(e.x, e.y, e.z) < SEEN_DYING * SEEN_DYING) mob.dead = true
-                mob.entity = null
-            }
+            if (!e.isRemoved) continue
+            val d = kotlin.math.hypot(player.x - e.x, player.z - e.z)
+            val withTag = mob.tagGoneAt?.let { ticks - it <= 1 } == true
+            if (d < DIES_WITH_TAG && (withTag || d < DIES_ALONE)) mob.dead = true
+            mob.entity = null
+            mob.tag = null
         }
     }
 
     /**
-     * The boxes on screen: all of them with Keep All Boxes or Edit Mode on, otherwise only those with a claimed
-     * starred mob still alive. A hidden box is only hidden — it stays saved, and comes back with
-     * its room in the next run.
+     * The boxes on screen, only ever the room you are in. With Keep All Boxes or Edit Mode on, all
+     * of that room's boxes; otherwise a box hides once every mob it claimed is known dead, and
+     * shows until then — before any of its mobs are in view, too. Hidden is only hidden: the box
+     * stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
-        // Edit Mode shows them all too: a box being drawn has no mobs yet and would vanish.
-        if (keepAll || editMode) return boxes
-        val live = HashSet<Box>()
-        for (mob in mobs) if (!mob.dead) claimOf(mob)?.let { live += it }
-        return boxes.filter { it in live }
+        val here = DungeonUtils.currentRoom?.name ?: return emptyList()
+        val inRoom = boxes.filter { it.room == here }
+        // Edit Mode shows them all too: a box being drawn has no mobs yet.
+        if (keepAll || editMode) return inRoom
+        val claimed = HashSet<Box>(); val alive = HashSet<Box>()
+        for (mob in mobs) {
+            val box = claimOf(mob) ?: continue
+            claimed += box
+            if (!mob.dead) alive += box
+        }
+        return inRoom.filter { it !in claimed || it in alive }
     }
 
     /**
      * The box a mob belongs to: the one its body overlapped most where it was first seen, or, if it
-     * overlapped none, the nearest box in its room. A room with no boxes claims nothing.
+     * overlapped none, the nearest box in its room within [CLAIM_REACH] blocks. Otherwise, none.
      */
     private fun claimOf(mob: Mob): Box? {
         var best: Box? = null
@@ -221,7 +256,8 @@ object BrWaypoints2 : Module(
             if (o > most) { most = o; best = box }
         }
         if (best != null || mob.room == null) return best
-        return boxes.filter { it.room == mob.room }.minByOrNull { gap(mob.spawn, it.aabb()) }
+        return boxes.filter { it.room == mob.room && gap(mob.spawn, it.aabb()) <= CLAIM_REACH * CLAIM_REACH }
+            .minByOrNull { gap(mob.spawn, it.aabb()) }
     }
 
     /** How far apart two boxes are at their closest; 0 if they touch. */
