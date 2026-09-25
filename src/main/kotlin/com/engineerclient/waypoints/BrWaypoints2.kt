@@ -76,7 +76,7 @@ object BrWaypoints2 : Module(
         modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }
 
-    private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box. Off, a box only shows while one of its starred mobs is alive.")
+    private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box. Off, a box only shows while one of its starred mobs is alive. Edit Mode always shows every box.")
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
@@ -197,12 +197,13 @@ object BrWaypoints2 : Module(
     }
 
     /**
-     * The boxes on screen: all of them with Keep All Boxes on, otherwise only those with a claimed
+     * The boxes on screen: all of them with Keep All Boxes or Edit Mode on, otherwise only those with a claimed
      * starred mob still alive. A hidden box is only hidden — it stays saved, and comes back with
      * its room in the next run.
      */
     private fun shown(): List<Box> {
-        if (keepAll) return boxes
+        // Edit Mode shows them all too: a box being drawn has no mobs yet and would vanish.
+        if (keepAll || editMode) return boxes
         val live = HashSet<Box>()
         for (mob in mobs) if (!mob.dead) claimOf(mob)?.let { live += it }
         return boxes.filter { it in live }
