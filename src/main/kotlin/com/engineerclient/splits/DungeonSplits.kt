@@ -25,7 +25,6 @@ import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
-import kotlin.math.abs
 
 /**
  * The run's splits — a copy of the team's EngineerSplits — and one sub-split HUD per section of the
@@ -161,8 +160,8 @@ object DungeonSplits : Module(
 
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons) return@on
-            if (barriers.size >= DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
-            if (cleared.size >= DOOR_BLOCKS) door(cleared) { at, a, b -> blood.onDoorDown(at, a, b) }
+            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
+            if (cleared.size >= DoorBlocks.DOOR_BLOCKS) door(cleared) { at, a, b -> blood.onDoorDown(at, a, b) }
             barriers.clear(); cleared.clear()
 
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
@@ -233,23 +232,9 @@ object DungeonSplits : Module(
      * A door's blocks, handed to [sink] with the two rooms either side of it. A door sits halfway
      * between two map tiles, which are 32 blocks apart with the grid's first at -185.
      */
+    /** Each door among [blocks] ([DoorBlocks]), handed to [sink] with the rooms either side of it. */
     private fun door(blocks: List<Pair<Int, Int>>, sink: (Stamp, BloodRunDetail.MapRoom?, BloodRunDetail.MapRoom?) -> Unit) {
-        // Two doors can fall on the same tick — at the start, fairy's and the one out of Entrance —
-        // so the blocks are split into doors first. Doors are at least 16 blocks apart.
-        val doors = mutableListOf<MutableList<Pair<Int, Int>>>()
-        for (p in blocks) {
-            val d = doors.firstOrNull { abs(it[0].first - p.first) <= 4 && abs(it[0].second - p.second) <= 4 }
-            if (d != null) d += p else doors += mutableListOf(p)
-        }
-        for (d in doors) {
-            if (d.size < DOOR_BLOCKS) continue
-            val tx = (d.sumOf { it.first }.toDouble() / d.size + 185) / 32
-            val tz = (d.sumOf { it.second }.toDouble() / d.size + 185) / 32
-            if (abs(tx - Math.round(tx)) < 0.1 && abs(tz - Math.round(tz)) < 0.1) continue // not between two tiles
-            val a = room(Math.floor(tx + 0.01).toInt(), Math.floor(tz + 0.01).toInt())
-            val b = room(Math.ceil(tx - 0.01).toInt(), Math.ceil(tz - 0.01).toInt())
-            sink(now(), a, b)
-        }
+        for (d in DoorBlocks.doors(blocks)) sink(now(), room(d.a.first, d.a.second), room(d.b.first, d.b.second))
     }
 
     private fun room(x: Int, z: Int): BloodRunDetail.MapRoom? {
@@ -263,7 +248,6 @@ object DungeonSplits : Module(
         )
     }
 
-    private const val DOOR_BLOCKS = 30
     private const val LINE_HEIGHT = 10
     private val KEY = Regex("""(?:Wither|Blood) Key""")
 
