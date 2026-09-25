@@ -1,5 +1,6 @@
 package com.engineerclient.waypoints
 
+import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
@@ -8,16 +9,19 @@ import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.Highlight
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
+import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.itemId
@@ -30,6 +34,8 @@ import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand
@@ -145,6 +151,11 @@ object BrWaypoints2 : Module(
 
     private val PURPLE = Color(170, 0, 170, 1f)
 
+    private val CONTROL_CODES = Regex("\u00a7.")
+    private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
+    private const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
+    private val WITHER_DOOR = Regex("""^\w+ opened a WITHER door!$""")
+
     /** How far away a box can be selected from. */
     private const val REACH = 48.0
 
@@ -158,11 +169,27 @@ object BrWaypoints2 : Module(
     init {
         on<LevelEvent.Load> {
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
+            rushing = false; rushRoom = null; rushed.clear(); watchDoorUntil = 0; barriers.clear()
+        }
+
+        // Chat straight off the network, before any mod can hide it: the rush starts with the
+        // dungeon, each wither door starts falling on its line, and it ends at the blood door.
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (overlay) return@onReceive
+            val text = content.string.replace(CONTROL_CODES, "")
+            mc.execute { onChat(text) }
+        }
+
+        // The door that just started falling: its blocks turn to barrier on the tick of its line.
+        on<BlockUpdateEvent> {
+            if (ticks <= watchDoorUntil && updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
         }
 
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons) return@on
             ticks++
+            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b))
+            barriers.clear()
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -255,21 +282,69 @@ object BrWaypoints2 : Module(
      * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
-        val room = DungeonUtils.currentRoom ?: return emptyList()
-        val inRoom = boxes.filter { it.room == room.name }
+        // The room you are in, and on blood rush the room whose door is coming down ahead of you.
+        val rooms = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
+            .distinctBy { it.name }
         // Edit Mode shows them all too: a box being drawn has no mobs yet.
-        if (keepAll || editMode) return inRoom
-        // Cleared on the map (white check, or green once secrets are done too): every mob is dead,
-        // including the ones killed out of your sight.
-        if (room.checkmark == MapCheckmark.WHITE || room.checkmark == MapCheckmark.GREEN) return emptyList()
+        if (keepAll || editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
         for (mob in mobs) {
             val box = claimOf(mob) ?: continue
             claimed += box
             if (!mob.dead) alive += box
         }
-        return inRoom.filter { it !in claimed || it in alive }
+        // Cleared on the map (white check, or green once secrets are done too): every mob is dead,
+        // including the ones killed out of your sight.
+        val open = rooms.filter { it.checkmark != MapCheckmark.WHITE && it.checkmark != MapCheckmark.GREEN }.mapTo(HashSet()) { it.name }
+        return boxes.filter { it.room in open && (it !in claimed || it in alive) }
     }
+
+    // --- blood rush ------------------------------------------------------------------------------
+
+    /** Between the dungeon starting and the blood door opening. */
+    private var rushing = false
+    /** The room the rush is heading into: the one behind the door that last started falling. */
+    private var rushRoom: String? = null
+    /** Rooms the rush has already been through, so a door's far side can be told from its near. */
+    private val rushed = HashSet<String>()
+    /** Watch for a door's blocks until this tick; set by the line that says one is falling. */
+    private var watchDoorUntil = 0
+    /** Waiting for the start door: the first rush door, the one out of Entrance. */
+    private var startDoor = false
+    private val barriers = mutableListOf<Pair<Int, Int>>()
+
+    private fun onChat(msg: String) {
+        if (!DungeonUtils.inDungeons) return
+        when {
+            // The dungeon starting is the start door coming down.
+            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); startDoor = true; watchDoorUntil = ticks + 40 }
+            // A wither door means the start door has been and gone, whether its blocks were seen or not.
+            rushing && WITHER_DOOR.matches(msg) -> { startDoor = false; watchDoorUntil = ticks + 10 }
+            msg == BLOOD_DOOR -> { rushing = false; rushRoom = null; watchDoorUntil = 0 }
+        }
+    }
+
+    /**
+     * A door started falling between two rooms. The start door is the one out of Entrance; after
+     * that it is whichever side the rush has not been through yet — past fairy too, which the rush
+     * walks through by fairy's own open door and so never has a wither door into.
+     */
+    private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?) {
+        val sides = listOfNotNull(a, b)
+        if (startDoor) {
+            // At the start other doors come down too (fairy's); the rush's is the one out of Entrance.
+            val entrance = sides.firstOrNull { it.type == RoomType.ENTRANCE } ?: return
+            rushed += entrance.name ?: return
+            startDoor = false
+        }
+        val next = sides.filter { it.name != null && it.name !in rushed }.minByOrNull { if (it.type == RoomType.FAIRY) 1 else 0 } ?: return
+        rushRoom = next.name
+        rushed += next.name!!
+        watchDoorUntil = 0
+    }
+
+    private fun tileRoom(t: Pair<Int, Int>): DungeonRoom? =
+        if (t.first !in 0..5 || t.second !in 0..5) null else DungeonScan.tiles[t.first + t.second * 6].room
 
     /**
      * The box a mob belongs to: the one its body overlapped most where it was first seen, or, if it
