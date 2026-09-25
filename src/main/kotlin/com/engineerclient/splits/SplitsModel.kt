@@ -79,7 +79,6 @@ class SplitTracker {
 
     private var mort: Stamp? = null          // Mort hands you the map: the clear starts
     private var blood: Stamp? = null         // the blood door opens / the Watcher speaks
-    private var dialogEnd: Stamp? = null
     private var proven: Stamp? = null        // the Watcher lets you pass
     private var end: Stamp? = null           // EXTRA STATS: the run is over
     private var floorNo: Int? = null
@@ -94,11 +93,8 @@ class SplitTracker {
      */
     private val subSplits = linkedMapOf<String, MutableList<SubSplit>>()
 
-    /** Master mode, for the splits only master runs have. The module sets it from the floor. */
-    var master: Boolean = false
-
     fun reset() {
-        mort = null; blood = null; dialogEnd = null; proven = null; end = null
+        mort = null; blood = null; proven = null; end = null
         floorNo = null; floorStart = null; bossStarts = emptyArray()
         subSplits.clear()
     }
@@ -123,12 +119,11 @@ class SplitTracker {
             }
         }
 
-        // The clear: the blood door, then the Watcher's dialogue and its blessing. Every one of
-        // these is a "[BOSS] The Watcher:" line, so the first opens blood and the rest fall through.
+        // The clear: the blood door, then the Watcher's blessing. Both are "[BOSS] The Watcher:"
+        // lines, so the first opens blood and the later one falls through to proven.
         if (mort != null && closed == null) {
             when {
                 blood == null && BLOOD_OPEN.matches(msg) -> blood = at
-                blood != null && dialogEnd == null && msg == WATCHER_DIALOG_END -> dialogEnd = at
                 blood != null && proven == null && msg == WATCHER_END -> proven = at
             }
         }
@@ -168,23 +163,17 @@ class SplitTracker {
         if (mort != null) {
             val closed = clearEnd()
             out += Split(BLOOD, true, mort, blood ?: closed)
-            blood?.let {
-                out += Split(WATCHER_DIALOG, true, it, dialogEnd ?: closed)
-                out += Split(WATCHER, true, it, proven ?: closed)
-            }
-            proven?.let { out += Split(PORTAL_ENTER, true, it, closed) }
-            out += Split(BOSS_ENTRY, false, mort, closed)
+            blood?.let { out += Split(WATCHER, true, it, proven ?: closed) }
+            proven?.let { out += Split(PORTAL, true, it, closed) }
         }
         val floorStart = floorStart
         val floor = FLOORS[floorNo]
         if (floorStart != null && floor != null) {
             floor.splits.forEachIndexed { i, split ->
                 val start = (if (i == 0) floorStart else bossStarts[i]) ?: return@forEachIndexed
-                if (split.label == WITHER_KING && !master) return@forEachIndexed
                 val next = (i + 1 until floor.splits.size).firstNotNullOfOrNull { bossStarts[it] }
                 out += Split(split.label, split.long, start, next ?: end)
             }
-            out += Split(BOSS, false, floorStart, end)
         }
         return out
     }
@@ -200,17 +189,12 @@ class SplitTracker {
 
     companion object {
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
-        const val WATCHER_DIALOG_END = "[BOSS] The Watcher: Let's see how you can handle this."
         const val WATCHER_END = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val TERMINALS = "&6Terminals"
         const val GOLDOR = "&8Goldor"
-        const val WITHER_KING = "&0Wither King"
-        const val BLOOD = "&4Blood"
-        const val WATCHER_DIALOG = "&cWatcher Dialog"
+        const val BLOOD = "&4Blood Rush"
         const val WATCHER = "&cWatcher"
-        const val PORTAL_ENTER = "&dPortal Enter"
-        const val BOSS_ENTRY = "&9Boss Entry"
-        const val BOSS = "&4Boss"
+        const val PORTAL = "&dPortal"
         val BLOOD_OPEN = Regex("^(\\[BOSS] The Watcher: .+?|The BLOOD DOOR has been opened!)$")
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
         // Terminals starts on the first one done, or on Goldor's greeting if the team is that fast.
@@ -229,19 +213,17 @@ class SplitTracker {
                 BossSplit(TERMINALS) { TERMINALS_START.matches(it) },
                 BossSplit(GOLDOR) { it == "The Core entrance is opening!" },
                 BossSplit("&4Necron") { it == "[BOSS] Necron: You went further than any human before, congratulations." },
-                BossSplit(WITHER_KING) { it == "[BOSS] Necron: All this, for nothing..." },
             )),
         )
 
         /**
-         * Every label a run can produce: the clear first, then each floor's phases, then the total.
+         * Every label a run can produce: the clear first, then the boss's phases.
          * The module makes one sub-split HUD per entry up front, because a HUD has to exist before
          * the run that would fill it — most of them stay empty on any given floor.
          */
         val ALL_LABELS: List<String> = buildList {
-            add(BLOOD); add(WATCHER_DIALOG); add(WATCHER); add(PORTAL_ENTER); add(BOSS_ENTRY)
+            add(BLOOD); add(WATCHER); add(PORTAL)
             for (floor in FLOORS.values) for (split in floor.splits) add(split.label)
-            add(BOSS)
         }.distinct()
     }
 }

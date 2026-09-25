@@ -90,7 +90,6 @@ object DungeonSplits : Module(
             EngineerClient.mc.execute {
                 EngineerClient.safely("splits chat") {
                     if (!DungeonUtils.inDungeons) return@safely
-                    tracker.master = DungeonUtils.floor?.isMM == true
                     tracker.onChat(text, at)
                 }
             }

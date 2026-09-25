@@ -50,17 +50,15 @@ class SplitsModelTest {
         feed(tracker, f7Run)
         assertEquals(
             listOf(
-                "&4Blood 152-539",
-                "&cWatcher Dialog 539-1027",
+                "&4Blood Rush 152-539",
                 "&cWatcher 539-1941",
-                "&dPortal Enter 1941-2150",
-                "&9Boss Entry 152-2150",
+                "&dPortal 1941-2150",
                 "&5Maxor 2150-2672",
                 "&9Storm 2672-3590",
                 "&6Terminals 3590-5770",
                 "&8Goldor 5770-5976",
-                "&4Necron 5976-6765",
-                "&4Boss 2150-6852",
+                // Necron runs to the end of the run: the Wither King phase has no split of its own.
+                "&4Necron 5976-6852",
             ),
             shape(tracker.splits()),
         )
@@ -71,14 +69,14 @@ class SplitsModelTest {
         val tracker = SplitTracker()
         feed(tracker, f7Run.filter { it.first < 2150 })
         val duringClear = shape(tracker.splits())
-        assertEquals("&4Blood 152-539", duringClear[0])
-        assertEquals("&9Boss Entry 152--", duringClear.last())
+        assertEquals("&4Blood Rush 152-539", duringClear[0])
+        assertEquals("&dPortal 1941--", duringClear.last())
 
         // They used to disappear here. Now they freeze and the boss's phases are appended.
         feed(tracker, f7Run.filter { it.first >= 2150 })
         val after = shape(tracker.splits())
-        assertEquals("&4Blood 152-539", after[0])
-        assertEquals("&9Boss Entry 152-2150", after[4])
+        assertEquals("&4Blood Rush 152-539", after[0])
+        assertEquals("&dPortal 1941-2150", after[2])
         assertTrue(after.any { it.startsWith("&5Maxor") })
     }
 
@@ -88,17 +86,7 @@ class SplitsModelTest {
         feed(tracker, f7Run.filter { it.first <= 2672 })
         val splits = shape(tracker.splits())
         assertEquals("&5Maxor 2150-2672", splits.first { it.startsWith("&5") })
-        assertEquals("&9Storm 2672--", splits.first { it.startsWith("&9Storm") })
-        assertEquals("&4Boss 2150--", splits.last())
-    }
-
-    @Test
-    fun `Wither King is a master-only split`() {
-        val normal = SplitTracker().also { feed(it, f7Run) }
-        assertTrue(normal.splits().none { it.label == "&0Wither King" })
-
-        val master = SplitTracker().also { it.master = true; feed(it, f7Run) }
-        assertEquals("&0Wither King 6765-6852", shape(master.splits()).first { it.startsWith("&0") })
+        assertEquals("&9Storm 2672--", splits.last())
     }
 
     @Test
@@ -111,7 +99,7 @@ class SplitsModelTest {
             300 to "[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.",
         ))
         val splits = shape(tracker.splits())
-        assertEquals(listOf("&4Blood 100--", "&9Boss Entry 100--"), splits)
+        assertEquals(listOf("&4Blood Rush 100--"), splits)
     }
 
     // ---- sub splits ------------------------------------------------------------------------
@@ -131,8 +119,6 @@ class SplitsModelTest {
         val terminals = tracker.subSplits("&6Terminals")
         assertEquals(1, terminals.size)
         assertEquals(3700, terminals[0].at.tick)
-        // Terminals sits inside Boss, so Boss has this event as well as its own earlier ones.
-        assertTrue(tracker.subSplits("&4Boss").any { it.at.tick == 3700 })
         // Storm ended when Terminals began, so nothing later lands in it.
         assertTrue(tracker.subSplits("&9Storm").none { it.at.tick == 3700 })
     }
@@ -158,9 +144,8 @@ class SplitsModelTest {
         if (SplitEvents.label(line) != null) {
             tracker.onChat(line, stamp(600))
             assertTrue(tracker.subSplits("&cWatcher").any { it.at.tick == 600 })
-            assertTrue(tracker.subSplits("&9Boss Entry").any { it.at.tick == 600 }, "the clear's total spans it")
-            // Blood ended when the door opened, so it keeps only what happened before that.
-            assertTrue(tracker.subSplits("&4Blood").none { it.at.tick == 600 })
+            // Blood Rush ended when the door opened, so it keeps only what happened before that.
+            assertTrue(tracker.subSplits("&4Blood Rush").none { it.at.tick == 600 })
         }
     }
 
@@ -170,8 +155,8 @@ class SplitsModelTest {
         feed(tracker, f7Run)
         // The Watcher fight is long over by EXTRA STATS, but its waves are still there to read.
         assertTrue(tracker.subSplits("&cWatcher").isNotEmpty())
-        // And the line that closed a split counts inside it: the blood door ends Blood.
-        assertTrue(tracker.subSplits("&4Blood").any { it.at.tick == 539 })
+        // And the line that closed a split counts inside it: the blood door ends Blood Rush.
+        assertTrue(tracker.subSplits("&4Blood Rush").any { it.at.tick == 539 })
     }
 
     @Test
@@ -188,7 +173,7 @@ class SplitsModelTest {
     fun `every split a run can produce has a label to hang a HUD on`() {
         val labels = SplitTracker.ALL_LABELS
         assertEquals(labels.distinct(), labels, "a duplicate label would mean two HUDs of the same name")
-        val tracker = SplitTracker().also { it.master = true; feed(it, f7Run) }
+        val tracker = SplitTracker().also { feed(it, f7Run) }
         for (split in tracker.splits()) assertTrue(split.label in labels, "no HUD would exist for ${split.label}")
     }
 
