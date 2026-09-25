@@ -50,7 +50,7 @@ class SplitsModelTest {
         feed(tracker, f7Run)
         assertEquals(
             listOf(
-                "&aBlood Rush 152-539",
+                "&aBlood 152-539",
                 "&cWatcher 539-1941",
                 "&dPortal 1941-2150",
                 "&5Maxor 2150-2672",
@@ -69,13 +69,13 @@ class SplitsModelTest {
         val tracker = SplitTracker()
         feed(tracker, f7Run.filter { it.first < 2150 })
         val duringClear = shape(tracker.splits())
-        assertEquals("&aBlood Rush 152-539", duringClear[0])
+        assertEquals("&aBlood 152-539", duringClear[0])
         assertEquals("&dPortal 1941--", duringClear.last())
 
         // They used to disappear here. Now they freeze and the boss's phases are appended.
         feed(tracker, f7Run.filter { it.first >= 2150 })
         val after = shape(tracker.splits())
-        assertEquals("&aBlood Rush 152-539", after[0])
+        assertEquals("&aBlood 152-539", after[0])
         assertEquals("&dPortal 1941-2150", after[2])
         assertTrue(after.any { it.startsWith("&5Maxor") })
     }
@@ -99,7 +99,7 @@ class SplitsModelTest {
             300 to "[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.",
         ))
         val splits = shape(tracker.splits())
-        assertEquals(listOf("&aBlood Rush 100--"), splits)
+        assertEquals(listOf("&aBlood 100--"), splits)
     }
 
     // ---- sub splits ------------------------------------------------------------------------
@@ -145,7 +145,7 @@ class SplitsModelTest {
             tracker.onChat(line, stamp(600))
             assertTrue(tracker.subSplits("&cWatcher").any { it.at.tick == 600 })
             // Blood Rush ended when the door opened, so it keeps only what happened before that.
-            assertTrue(tracker.subSplits("&aBlood Rush").none { it.at.tick == 600 })
+            assertTrue(tracker.subSplits("&aBlood").none { it.at.tick == 600 })
         }
     }
 
@@ -156,7 +156,7 @@ class SplitsModelTest {
         // The Watcher fight is long over by EXTRA STATS, but its waves are still there to read.
         assertTrue(tracker.subSplits("&cWatcher").isNotEmpty())
         // And the line that closed a split counts inside it: the blood door ends Blood Rush.
-        assertTrue(tracker.subSplits("&aBlood Rush").any { it.at.tick == 539 })
+        assertTrue(tracker.subSplits("&aBlood").any { it.at.tick == 539 })
     }
 
     @Test
@@ -200,7 +200,7 @@ class SplitsModelTest {
 
     @Test
     fun `a running split counts up to now`() {
-        val split = Split("&aBlood Rush", true, Stamp(1_000, 20), null)
-        assertEquals("§aBlood Rush §b> §a4.00s §8(§74.00s§8)", SplitFormat.line(split, Stamp(5_000, 100), SplitClock.BOTH))
+        val split = Split("&aBlood", true, Stamp(1_000, 20), null)
+        assertEquals("§aBlood §b> §a4.00s §8(§74.00s§8)", SplitFormat.line(split, Stamp(5_000, 100), SplitClock.BOTH))
     }
 }

@@ -200,7 +200,7 @@ class SplitTracker {
         const val WATCHER_END = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val TERMINALS = "&6Terminals"
         const val GOLDOR = "&eGoldor"
-        const val BLOOD = "&aBlood Rush"
+        const val BLOOD = "&aBlood"
         const val WATCHER = "&cWatcher"
         const val PORTAL = "&dPortal"
 
