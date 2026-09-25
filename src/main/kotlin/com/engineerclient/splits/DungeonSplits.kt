@@ -42,6 +42,7 @@ object DungeonSplits : Module(
 
     private val CONTROL_CODES = Regex("\u00a7.")
     private val tracker = SplitTracker()
+    private val subs = SubSplitTracker()
     private var serverTicks = 0
     private val COLOUR_CODE = Regex("&.")
 
@@ -67,18 +68,18 @@ object DungeonSplits : Module(
         val plain = label.replace(COLOUR_CODE, "")
         registerSetting(
             HUD("$plain Sub Splits", "What happened inside the $plain split, and how far into it.", false, 0, 0, 1f) { example ->
-                if (example) return@HUD draw(this, listOf("§7+§a4.20s §fTerm 1/4 (Bob)", "§7+§a12.05s §fGate destroyed"))
+                if (example) return@HUD draw(this, listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)", "§cDps§r§f: §a11.52s §7(§b11.25s§7)"))
                 draw(this, subLines(label))
             }
         )
     }
 
     init {
-        on<LevelEvent.Load> { tracker.reset(); serverTicks = 0 }
+        on<LevelEvent.Load> { tracker.reset(); subs.reset(); serverTicks = 0 }
 
         // Odin's server tick: the server's own clock, which falls behind the client's 20 a second
         // when it lags. That is the clock a run is judged on.
-        on<TickEvent.Server> { serverTicks++ }
+        on<TickEvent.Server> { serverTicks++; subs.onServerTick() }
 
         // Chat straight off the network, before any mod can hide it: chat cleaners drop exactly the
         // terminal, device and gate lines the sections are timed from. Handed to the client thread,
@@ -91,10 +92,23 @@ object DungeonSplits : Module(
                 EngineerClient.safely("splits chat") {
                     if (!DungeonUtils.inDungeons) return@safely
                     tracker.onChat(text, at)
+                    subs.onChat(text, at)
                 }
             }
         }
 
+        // Goldor's leap ends when the last teammate is inside the core. Only looked for while the
+        // sequence says the team is on its way there, so it costs nothing the rest of the run.
+        on<TickEvent.End> {
+            if (!subs.watchingCore) return@on
+            val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
+            if (alive.isEmpty()) return@on
+            val inCore = alive.count { mate ->
+                val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
+                p != null && p.x >= 39 && p.x < 71 && p.y >= 112 && p.y < 155.5 && p.z >= 54 && p.z < 118
+            }
+            if (inCore >= alive.size) subs.onEveryoneInCore(now())
+        }
     }
 
     private const val LINE_HEIGHT = 10
@@ -105,6 +119,10 @@ object DungeonSplits : Module(
      */
     private fun subLines(label: String): List<String> {
         val split = tracker.splits().firstOrNull { it.label == label } ?: return emptyList()
+        // The boss phases have a real breakdown, ported from the team's own module. The clear's
+        // splits have none, so those HUDs keep listing whatever the dungeon announced.
+        val steps = subs.forSplit(label)
+        if (steps.isNotEmpty()) return steps.map { SplitFormat.line(it, now(), clock) }
         val events = tracker.subSplits(label)
         return events.takeLast(subSplitLines).map { event ->
             val real = SplitFormat.time(event.at.realMs - split.start.realMs, true)
