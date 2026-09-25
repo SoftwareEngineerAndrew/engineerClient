@@ -56,7 +56,7 @@ import java.util.zip.GZIPInputStream
  */
 object BetterPF : Module(
     name = "Better PF",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
 ) {
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Captures each dungeon room once (every block) for the viewer's shared room library, plus the doors/walls between rooms each run. Rooms the library already has are skipped.")

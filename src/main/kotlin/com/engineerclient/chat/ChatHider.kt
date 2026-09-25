@@ -25,7 +25,7 @@ import java.nio.file.Files
  */
 object ChatHider : Module(
     name = "Chat Hider",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "Hides the chat lines marked Block in the Dungeon Chat Hider page. Other mods still see every line.",
     toggled = true,
 ) {

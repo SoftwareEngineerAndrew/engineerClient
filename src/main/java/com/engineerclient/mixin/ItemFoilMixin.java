@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.NoGlint;
+import com.engineerclient.misc.RandomStuff;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.item.CuboidItemModelWrapper;
 import net.minecraft.client.renderer.item.ItemModelResolver;
@@ -14,7 +14,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * Drops the enchantment glint from item rendering for {@link NoGlint}.
+ * Drops the enchantment glint from item rendering for the No Enchant Glint setting in
+ * {@link RandomStuff}.
  *
  * <p>These two {@code ItemModel} implementations are the only things in the game that call
  * {@code LayerRenderState.setFoilType}, and both reach it the same way: {@code stack.hasFoil()}
@@ -24,7 +25,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  *
  * <p>The redirect captures {@code update}'s own parameters, which is where the
  * {@link ItemDisplayContext} comes from — it is what separates an item in a GUI slot from one in
- * a hand or on the ground, and the module lets those be switched independently.
+ * a hand or on the ground, and the glint settings let those be switched independently.
  *
  * <p>Only the drawing changes. {@code hasFoil()} still answers honestly everywhere else, so
  * Odin's terminal solvers — which read the glint component, not the screen — are untouched.
@@ -33,8 +34,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * into {@code GuiItemAtlas}, whose slots are keyed by the model identity {@code update} builds,
  * and the foil type is not part of that key. Without a marker, one cached image would serve both
  * answers — so an item first drawn glint-less would stay glint-less when a terminal opened and
- * {@code keepInTerminals} asked for it back. Appending on the hidden branch alone gives the two
- * states separate slots and leaves the vanilla key untouched when the module is off.
+ * {@code Glint: Keep In Terminals} asked for it back. Appending on the hidden branch alone gives the two
+ * states separate slots and leaves the vanilla key untouched when the setting is off.
  */
 @Mixin({CuboidItemModelWrapper.class, SpecialModelWrapper.class})
 public class ItemFoilMixin {
@@ -56,7 +57,7 @@ public class ItemFoilMixin {
         ItemOwner owner,
         int seed
     ) {
-        if (NoGlint.INSTANCE.hidesGlint(displayContext)) {
+        if (RandomStuff.INSTANCE.hidesGlint(displayContext)) {
             renderState.appendModelIdentityElement(EC_GLINT_HIDDEN);
             return false;
         }

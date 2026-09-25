@@ -40,8 +40,8 @@ import net.minecraft.sounds.SoundEvents
  * run those two lines routinely arrive out of order.
  */
 object P3Rotation : Module(
-    name = "Blood Rush Roles",
-    category = Category.custom("Blood Rush"),
+    name = "Dynamic Term Roles",
+    category = Category.custom("Engineer Client"),
     description = "Tracks the phase-3 terminal rotation and shows the role you are on.",
 ) {
     private val announce by BooleanSetting("Announce In Chat", true, desc = "Prints your next role in chat the moment your current one is done.")

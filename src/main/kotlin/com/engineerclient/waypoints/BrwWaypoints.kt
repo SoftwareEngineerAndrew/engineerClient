@@ -25,7 +25,7 @@ import org.lwjgl.glfw.GLFW
 
 /**
  * EC's own dungeon-waypoint module — a sibling of Odin's DungeonWaypoints,
- * registered into Odin's module system (own ClickGUI panel "Blood Rush", own config,
+ * registered into Odin's module system (own ClickGUI panel "Engineer Client", own config,
  * own pack folder, own edit mode). Odin's module is never touched: both systems
  * store, select, and render waypoints independently and can run side by side.
  *
@@ -38,7 +38,7 @@ import org.lwjgl.glfw.GLFW
  */
 object BrwWaypoints : Module(
     name = "Blood Rush Waypoints",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "EC's profile-driven blood-rush waypoints. Separate from Odin's Dungeon Waypoints."
 ) {
     var allowEdits by BooleanSetting("Allow Edits", false, desc = "Allows you to edit EC waypoints.")

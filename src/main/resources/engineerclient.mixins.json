@@ -17,6 +17,7 @@
     "ItemFoilMixin",
     "LivingEntityAccessor",
     "MinecraftAccessor",
+    "ScoreboardSidebarMixin",
     "SignEnterMixin"
   ],
   "injectors": {

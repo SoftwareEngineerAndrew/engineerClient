@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object LowestBin : Module(
     name = "Lowest BIN",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "Shows an item's lowest auction-house BIN in its tooltip. Silent for anything not auctionable.",
     toggled = true, // existing installs have no saved state for a new module; on by default
 ) {

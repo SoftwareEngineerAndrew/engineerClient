@@ -4,7 +4,10 @@ import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RenderBossBarEvent
 import com.odtheking.odin.events.RenderItemNameEvent
@@ -12,13 +15,21 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
 import com.odtheking.odin.features.impl.render.RenderOptimizer
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
-import com.odtheking.odin.utils.modMessage
+import com.odtheking.odin.utils.alert
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import net.minecraft.world.scores.DisplaySlot
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.minecraft.client.gui.screens.ConnectScreen
+import net.minecraft.client.gui.screens.TitleScreen
+import net.minecraft.client.multiplayer.ServerData
+import net.minecraft.client.multiplayer.resolver.ServerAddress
+import net.minecraft.world.item.ItemDisplayContext
 
 /**
  * Grab bag of small independent toggles that don't warrant their own module.
@@ -27,7 +38,7 @@ import net.minecraft.world.scores.DisplaySlot
  */
 object RandomStuff : Module(
     name = "Random Stuff",
-    category = Category.custom("Blood Rush"),
+    category = Category.custom("Engineer Client"),
     description = "A collection of small unrelated QoL toggles."
 ) {
     /** Read by ChatHider at the chat GUI, so other mods still see every line. */
@@ -43,32 +54,96 @@ object RandomStuff : Module(
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
     private val blackSky by BooleanSetting("Black Sky", false, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
 
-    private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
+    // --- Enchantment glint ---------------------------------------------------------------------
+    //
+    // Every Skyblock weapon, piece of armour and most of the junk in a dungeon inventory carries
+    // enchantments, so the glint is on nearly everything at once — it washes out item colours in
+    // the hotbar and turns a full inventory into a moving surface, which is exactly the wrong thing
+    // to be reading a chest through at speed. On by default; it was its own always-on module before
+    // it moved in here.
+    //
+    // Purely a render-side change: nothing here touches the stack, its components, or
+    // [net.minecraft.world.item.ItemStack.hasFoil] itself. That matters, because Odin's terminal
+    // solvers decide what has been clicked from the `ENCHANTMENT_GLINT_OVERRIDE` *component*
+    // (`ItemUtils.hasGlint`), not from what is drawn — so Select All and Starts With keep solving
+    // correctly no matter what is hidden here.
+    //
+    // Hooked at the two `ItemModel.update` implementations that set a foil type (see ItemFoilMixin)
+    // and at worn-equipment rendering (see ArmorFoilMixin).
+    private val noGlint by BooleanSetting("No Enchant Glint", true, desc = "Removes the enchantment glint from items, so colours and textures stay readable.")
+    private val glintInInventory by BooleanSetting("Glint: Inventory", true, desc = "Hide the glint on items drawn in a GUI — inventory, chests, the hotbar.").withDependency { noGlint }
+    private val glintInWorld by BooleanSetting("Glint: Held & Dropped", true, desc = "Hide the glint on items held in hand, dropped on the ground, or in item frames.").withDependency { noGlint }
+    private val glintOnArmor by BooleanSetting("Glint: Worn Armor", true, desc = "Hide the glint on armour worn by you and by other players.").withDependency { noGlint }
+    // The solvers keep working without the glint, but they cannot tell *you* which items you have
+    // already clicked — for a human that cue is the glint on the screen. So while a real terminal or
+    // a term sim is open, inventory glint is left alone.
+    private val glintKeepInTerminals by BooleanSetting("Glint: Keep In Terminals", true, desc = "Leave inventory glint alone while a terminal is open — it is how you see which items you have already clicked.").withDependency { noGlint }
+
+    // --- Startup and restart -------------------------------------------------------------------
+
+    private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
 
     /**
-     * Step 1 of the scoreboard line hider (time/season/keys/%cleared): Odin has
-     * no scoreboard-line infrastructure at all to build on, and Hypixel's sidebar text lives in
-     * each line's team prefix+suffix (same trick LocationUtils already reads off
-     * ClientboundSetPlayerTeamPacket for area detection), not anywhere guessable from outside the
-     * game. This prints exactly what's really there so the actual hider can match real text
-     * instead of a guess.
+     * Closes this instance and has PrismLauncher start it back up.
+     *
+     * The relaunch is a `sleep 3 && prismlauncher -l <instance>` handed to a detached shell, not a
+     * timer in this JVM - PrismLauncher is single-instance and treats an extra invocation as an IPC
+     * message to the launcher process that's already running, and it needs to see this instance's
+     * process actually gone before it'll agree to start a fresh one. Doing the wait inside the
+     * spawned shell means it survives however abruptly Minecraft's own shutdown behaves, instead of
+     * racing a thread in a JVM that's mid-[Module.mc].stop.
      */
-    private val dumpScoreboard by ActionSetting("Dump Scoreboard", desc = "Prints every current sidebar line to chat, so the scoreboard line hider below can be built off the real text.") {
-        val scoreboard = mc.level?.scoreboard
-        val objective = scoreboard?.getDisplayObjective(DisplaySlot.SIDEBAR)
-        if (scoreboard == null || objective == null) {
-            modMessage("§cNo sidebar is showing right now — open one first.")
-            return@ActionSetting
-        }
-        val entries = scoreboard.listPlayerScores(objective).sortedByDescending { it.value() }
-        modMessage("§a--- Scoreboard dump (${entries.size} lines) ---")
-        entries.forEachIndexed { i, entry ->
-            val team = scoreboard.getPlayerTeam(entry.owner())
-            val prefix = team?.playerPrefix?.string ?: ""
-            val suffix = team?.playerSuffix?.string ?: ""
-            modMessage("§7$i: §f$prefix§8|§f$suffix")
-        }
+    private val restartKey by KeybindSetting("Restart Game", InputConstants.KEY_F7, desc = "Closes and relaunches this PrismLauncher instance.").onPress {
+        if (!enabled) return@onPress
+        alert("§cRestarting in 3 seconds...")
+        ProcessBuilder("bash", "-c", "sleep 3 && prismlauncher -l '$INSTANCE_NAME'")
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        mc.execute { mc.stop() }
     }
+
+    // --- Scoreboard lines ----------------------------------------------------------------------
+    //
+    // Hypixel's sidebar carries a few lines nobody reads mid-run - the real-world date, the
+    // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
+    // does the matching and the hiding; these settings only say what to hide.
+
+    private val hideScoreboardLines by BooleanSetting("Hide Scoreboard Lines", false, desc = "Drops chosen lines from the sidebar. The sidebar shrinks around what is left rather than leaving a gap.")
+    private val hideSbDateTime by BooleanSetting("Line: Date & Time", true, desc = "The real-world date line and the Skyblock time-of-day line.").withDependency { hideScoreboardLines }
+    private val hideSbSeason by BooleanSetting("Line: Season", true, desc = "The season and day, e.g. \"Late Summer 13th\".").withDependency { hideScoreboardLines }
+    private val hideSbKeys by BooleanSetting("Line: Keys", false, desc = "The dungeon \"Keys:\" counter.").withDependency { hideScoreboardLines }
+    private val hideSbCleared by BooleanSetting("Line: Cleared %", false, desc = "The dungeon \"Cleared: 42%\" counter.").withDependency { hideScoreboardLines }
+    private val hideSbCustom by StringSetting("Line: Also Hide", "", 200, desc = "Your own lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard, copy what you see. Regexes work too.").withDependency { hideScoreboardLines }
+
+    /**
+     * Prints the sidebar to chat, exactly as the game assembles it, so the patterns above can be
+     * built from real text. The built-in ones are guesses written off the top of someone's head -
+     * this is how they get corrected.
+     */
+    private val dumpScoreboard by ActionSetting("Dump Scoreboard", desc = "Prints every current sidebar line to chat, with its colour codes, so the line hider can be pointed at the real text.") {
+        ScoreboardLines.dump()
+    }
+
+    private const val INSTANCE_NAME = "26.1.2 BRW"
+
+    private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
+
+    // Auto join state. All in-memory, never saved - "only the first time" is just "once per game
+    // launch", no config plumbing needed to enforce it.
+    private var hasConnectedToHypixel = false
+    private var pendingSkyblockJoin = false
+    private var ticksUntilSkyblock = -1
+    private var attempts = 0
+
+    private const val HYPIXEL_ADDRESS = "hypixel.net"
+    private const val FIRST_TRY_TICKS = 10  // 0.5s after the lobby loads
+    private const val RETRY_TICKS = 40      // then every 2s until we are on Skyblock
+    private const val TRANSFER_TICKS = 60   // a world load mid-way means a transfer is happening: give it 3s
+    private const val MAX_ATTEMPTS = 6
+
+    /** Read by FogColorMixin every frame. */
+    fun blackSkyActive(): Boolean = enabled && blackSky
 
     /**
      * Whether [key] should finish the open sign edit screen. Read by SignEnterMixin.
@@ -78,12 +153,29 @@ object RandomStuff : Module(
      * writing four lines on. Off the island the vanilla behaviour is left alone, and even with
      * this on the arrow keys still move between lines.
      */
-    /** Read by FogColorMixin every frame. */
-    fun blackSkyActive(): Boolean = enabled && blackSky
-
     fun signEnterFinishes(key: Int): Boolean =
         enabled && signEnterConfirms && LocationUtils.isInSkyblock &&
             (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)
+
+    /**
+     * Whether the glint should be dropped for an item about to be drawn in [context].
+     *
+     * Called once per item layer whenever a model is resolved — every frame for items in the
+     * world, and on every miss of the GUI item atlas — so it stays a handful of field reads: no
+     * allocation, no screen walk beyond the identity check Odin's terminal state already gives us.
+     */
+    fun hidesGlint(context: ItemDisplayContext): Boolean {
+        if (!enabled || !noGlint) return false
+        return if (context == ItemDisplayContext.GUI) glintInInventory && !(glintKeepInTerminals && inTerminal())
+        else glintInWorld
+    }
+
+    /** Whether the glint should be dropped for a piece of worn equipment. */
+    fun hidesArmorGlint(): Boolean = enabled && noGlint && glintOnArmor
+
+    /** A live terminal (Odin tracks the open one) or a practice term sim. */
+    private fun inTerminal(): Boolean =
+        TerminalUtils.currentTerm != null || mc.screen is TermSimGUI
 
     init {
         on<TickEvent.End> {
@@ -91,6 +183,12 @@ object RandomStuff : Module(
             PlayerDisplay.onlyShowWhenLow = hideHealthManaUnlessLow
             PlayerDisplay.lowThreshold = healthManaThreshold.toFloat() / 100f
             RenderOptimizer.forceHideAllArmorStands = hideArmorStands && DungeonUtils.inDungeons
+            ScoreboardLines.hideLines = enabled && hideScoreboardLines
+            ScoreboardLines.hideDateTime = hideSbDateTime
+            ScoreboardLines.hideSeason = hideSbSeason
+            ScoreboardLines.hideKeys = hideSbKeys
+            ScoreboardLines.hideCleared = hideSbCleared
+            ScoreboardLines.customPatterns = hideSbCustom
         }
 
         on<RenderItemNameEvent> {
@@ -107,6 +205,50 @@ object RandomStuff : Module(
 
         on<MessageEvent.Chat> {
             if (blessOnLeave && partyLeaveRegex.matches(message)) sendCommand("pc bless")
+        }
+
+        // Auto join Hypixel. Hooked directly to raw Fabric events rather than Odin's own
+        // TickEvent.End: that event is wired to ClientTickEvents.END_LEVEL_TICK, which only fires
+        // once a world is loaded - it never fires at the title screen, so a countdown built on it
+        // would sit at its starting value forever and never reach zero. ScreenEvents.AFTER_INIT
+        // (fires once the title screen has actually finished initializing, unlike Odin's
+        // BEFORE_INIT-based ScreenEvent.Open) makes a connect-delay unnecessary entirely.
+        ScreenEvents.AFTER_INIT.register { client, screen, _, _ ->
+            if (!enabled || !autoJoinHypixel || hasConnectedToHypixel || screen !is TitleScreen) return@register
+            hasConnectedToHypixel = true
+            pendingSkyblockJoin = true
+            ConnectScreen.startConnecting(
+                screen,
+                client,
+                ServerAddress.parseString(HYPIXEL_ADDRESS),
+                ServerData("Hypixel", HYPIXEL_ADDRESS, ServerData.Type.OTHER),
+                false,
+                // null, not an empty TransferState: ConnectScreen$1.run() checks this for null to
+                // decide whether to tell the server "this is a transfer" (initiateServerboundPlay-
+                // Connection's transferConnection flag). A non-null value here - even an "empty"
+                // one - declares an illegitimate transfer with nothing having actually transferred
+                // us, which is exactly the "you cannot transfer to this server" rejection.
+                null,
+            )
+        }
+
+        // The lobby we land in ignores a command sent before it is ready, so /skyblock goes out
+        // shortly after the world loads and then every couple of seconds until Odin sees the
+        // Skyblock scoreboard.
+        on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
+
+        on<LevelEvent.Load> {
+            if (!enabled || !autoJoinHypixel || !pendingSkyblockJoin) return@on
+            ticksUntilSkyblock = if (attempts == 0) FIRST_TRY_TICKS else TRANSFER_TICKS
+        }
+
+        ClientTickEvents.END_CLIENT_TICK.register { client ->
+            if (!pendingSkyblockJoin || ticksUntilSkyblock < 0) return@register
+            if (LocationUtils.isInSkyblock || attempts >= MAX_ATTEMPTS) { pendingSkyblockJoin = false; ticksUntilSkyblock = -1; return@register }
+            if (client.player == null || ticksUntilSkyblock-- > 0) return@register
+            attempts++
+            sendCommand("skyblock")
+            ticksUntilSkyblock = RETRY_TICKS
         }
     }
 }
