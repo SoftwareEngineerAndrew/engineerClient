@@ -57,9 +57,13 @@ object SplitFormat {
     }
 
     /**
-     * One HUD line: "§cBlood §f> §c59s §7(59s)". The name and the real time share a colour so the
-     * eye runs down one column of them, the arrow is white, and the server's tick time trails in
-     * grey — the shape the team already reads its splits in.
+     * One HUD line, exactly as the team's ChatTriggers module wrote it (see
+     * tools/reference/chattriggers/EngineerClient_features_EngineerSplits.js):
+     *
+     *     ${colour}${name} &b> ${colour}${time}s &8(&7${serverTime}s&8)
+     *
+     * The name and the real time share the split's colour, the arrow is aqua, and the server's
+     * tick time sits in dark-grey brackets with grey digits.
      */
     fun line(split: Split, now: Stamp, clock: SplitClock): String {
         val stop = split.stop ?: now
@@ -68,9 +72,9 @@ object SplitFormat {
         val real = time(stop.realMs - split.start.realMs, split.long)
         val ticks = time((stop.tick - split.start.tick) * 50L, split.long)
         return when (clock) {
-            SplitClock.REAL -> "$colour$name §f> $colour$real"
-            SplitClock.TICKS -> "$colour$name §f> §7$ticks"
-            SplitClock.BOTH -> "$colour$name §f> $colour$real §7($ticks)"
+            SplitClock.REAL -> "$colour$name §b> $colour$real"
+            SplitClock.TICKS -> "$colour$name §b> §7$ticks"
+            SplitClock.BOTH -> "$colour$name §b> $colour$real §8(§7$ticks§8)"
         }
     }
 }
@@ -196,8 +200,8 @@ class SplitTracker {
         const val WATCHER_END = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val TERMINALS = "&6Terminals"
         const val GOLDOR = "&eGoldor"
-        const val BLOOD = "&cBlood Rush"
-        const val WATCHER = "&aWatcher"
+        const val BLOOD = "&aBlood Rush"
+        const val WATCHER = "&cWatcher"
         const val PORTAL = "&dPortal"
 
         val BLOOD_OPEN = Regex("^(\\[BOSS] The Watcher: .+?|The BLOOD DOOR has been opened!)$")
