@@ -1,6 +1,7 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.EntityEvent
@@ -80,24 +81,33 @@ object DungeonSplits : Module(
         draw(this, tracker.lines(now()))
     }
 
-    private val levels = SECTIONS.associateWith { s ->
-        registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows."))
+    /**
+     * Each section's settings together, in the order they show in the ClickGUI: its detail level,
+     * then (blood rush only) the Total row toggle, then its HUD with its own on/off toggle. The
+     * HUDs are made up front because a HUD has to exist before the run that fills it.
+     */
+    private val levels = HashMap<Section, SelectorSetting>()
+    private lateinit var totalRow: BooleanSetting
+
+    init {
+        for (s in SECTIONS) {
+            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows."))
+            if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
+                BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
+            )
+            registerSetting(
+                HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 0, 0, 1f) { example ->
+                    if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
+                        "§5Hallway: \t§71.52s\t§80.21s\t§70.06s\t§80.52s\t§62.31s",
+                        "§dDino: \t§711.52s\t§80.21s\t§70.06s\t§810.52s\t§622.31s",
+                    ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
+                    draw(this, subLines(s))
+                }
+            )
+        }
     }
 
     private fun level(s: Section) = BloodRunDetail.Level.entries[levels[s]?.value ?: 1]
-
-    /** Made up front: a HUD has to exist before the run that fills it. */
-    private val subHuds = SECTIONS.associateWith { s ->
-        registerSetting(
-            HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", false, 0, 0, 1f) { example ->
-                if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
-                    "§5Hallway: \t§71.52s\t§80.21s\t§70.06s\t§80.52s\t§62.31s",
-                    "§dDino: \t§711.52s\t§80.21s\t§70.06s\t§810.52s\t§622.31s",
-                ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
-                draw(this, subLines(s))
-            }
-        )
-    }
 
     // What the world shows, watched only while it can matter.
     private val barriers = mutableListOf<Pair<Int, Int>>()
@@ -254,7 +264,7 @@ object DungeonSplits : Module(
         val level = level(s)
         if (level == BloodRunDetail.Level.OFF) return emptyList()
         val now = now()
-        if (s.window == SplitTracker.OPEN) return blood.lines(level, now)
+        if (s.window == SplitTracker.OPEN) return blood.lines(level, now, totalRow.enabled)
 
         val split = tracker.split(s.window) ?: return emptyList()
         val since = { at: Stamp -> Row("", at, at.realMs - split.start.realMs, (at.tick - split.start.tick).toLong()) }
