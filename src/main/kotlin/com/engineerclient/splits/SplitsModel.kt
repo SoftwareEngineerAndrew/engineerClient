@@ -215,32 +215,14 @@ class SplitTracker {
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
         // Terminals starts on the first one done, or on Goldor's greeting if the team is that fast.
         val TERMINALS_START = Regex("^(?:\\w+ (?:activated|completed) a (?:terminal|lever|device)! \\(\\d/\\d\\)|\\[BOSS] Goldor: Who dares trespass into my domain\\?)$")
-        /** Each floor: the line its boss starts on, then its phases (the first starts with the boss). */
+        /**
+         * The floor, the line its boss starts on, and its phases (the first starts with the boss).
+         *
+         * F7 only, which is M7 as well — this team runs nothing else, all 32 recorded runs are F7,
+         * and the floors 1-6 that used to sit here were lines nobody could check against real chat.
+         * Another floor goes back in when there is a recording of it to write it from.
+         */
         private val FLOORS: Map<Int, FloorSplits> = mapOf(
-            1 to FloorSplits("[BOSS] Bonzo: Gratz for making it this far, but I'm basically unbeatable.", listOf(
-                BossSplit("&cFirst Phase"),
-                BossSplit("&cSecond Phase") { it == "[BOSS] Bonzo: Oh I'm dead!" },
-            )),
-            2 to FloorSplits("[BOSS] Scarf: This is where the journey ends for you, Adventurers.", listOf(
-                BossSplit("&7Undeads"),
-                BossSplit("&8Scarf") { it == "[BOSS] Scarf: Those toys are not strong enough I see." },
-            )),
-            3 to FloorSplits("[BOSS] The Professor: I was burdened with terrible news recently...", listOf(
-                BossSplit("&3Guardians"),
-                BossSplit("&eHuman :(") { it == "[BOSS] The Professor: Oh? You found my Guardians' one weakness?" },
-                BossSplit("&dGuardian :)") { it == "[BOSS] The Professor: I see. You have forced me to use my ultimate technique." },
-            )),
-            4 to FloorSplits("[BOSS] Thorn: Welcome Adventurers! I am Thorn, the Spirit! And host of the Vegan Trials!", listOf(
-                BossSplit("&aThorn"),
-            )),
-            5 to FloorSplits("[BOSS] Livid: Welcome, you've arrived right on time. I am Livid, the Master of Shadows.", listOf(
-                BossSplit("&fLivid"),
-            )),
-            6 to FloorSplits("[BOSS] Sadan: So you made it all the way here... Now you wish to defy me? Sadan?!", listOf(
-                BossSplit("&cTerracottas"),
-                BossSplit("&5Giants") { it == "[BOSS] Sadan: ENOUGH!" },
-                BossSplit("&6Sadan") { it == "[BOSS] Sadan: You did it. I understand now, you have earned my respect." },
-            )),
             7 to FloorSplits("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", listOf(
                 BossSplit("&5Maxor"),
                 BossSplit("&9Storm", long = true) { it == "[BOSS] Storm: Pathetic Maxor, just like expected." },

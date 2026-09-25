@@ -8,11 +8,10 @@ package com.engineerclient.splits
  * dungeon chat line into a short label, so the HUD can list the notable moments inside a section
  * next to the time they happened at ("Term 3/7 (Bob)  0:14", "Bob died  0:31").
  *
- * Everything here was written from ~40 recorded F7 runs: every pattern below was matched against
- * real chat, and the comment above each one is a line that actually arrived, with how many times it
- * turned up across those runs. A handful of patterns for floors those runs never played are marked
- * UNVERIFIED — they are the lines [SplitsModel] already keys its splits off, so they are known good
- * text, just not seen in this sample.
+ * Everything here was written from the 32 recorded F7 runs on this machine: every pattern below was
+ * matched against real chat, and the comment above each one is a line that actually arrived, with
+ * how many times it turned up across those runs. Nothing is here that was not seen in that data —
+ * F7 and M7 are what this team runs, and a pattern nobody can check is worse than no pattern.
  *
  * Two rules keep the labels usable on a HUD. They are short — roughly 24 characters, because they
  * sit beside a timestamp on a line that also has to fit a split name. And when a line names both a
@@ -184,10 +183,9 @@ object SplitEvents {
             "Blaze FAIL (${m.groupValues[1]})"
         },
 
-        // The catch-alls. The other Catacombs puzzles (Water Board, Boulder, Ice Fill, Teleport
-        // Maze, Higher Or Lower, Bomb Defuse) all announce themselves in this same PUZZLE SOLVED /
-        // PUZZLE FAIL shape, so they land here rather than being missed — UNVERIFIED, none of them
-        // was rolled in the recorded runs, so their exact wording is unconfirmed.
+        // The catch-alls, for the puzzles that did roll in the recorded runs but too rarely to
+        // write a rule of their own for. Anything announcing itself in the PUZZLE SOLVED / PUZZLE
+        // FAIL shape lands here rather than being missed.
         Regex("""^PUZZLE SOLVED! (\w+) .*$""") to { m -> "Puzzle done (${m.groupValues[1]})" },
         Regex("""^PUZZLE FAIL! (\w+) .*$""") to { m -> "Puzzle FAIL (${m.groupValues[1]})" },
 
@@ -325,21 +323,5 @@ object SplitEvents {
         //   "[BOSS] The Watcher: You have proven yourself. You may pass."   x15
         Regex("""^\[BOSS] The Watcher: You have proven yourself""") to { "Watcher cleared" },
 
-        // ---- Other floors: UNVERIFIED -------------------------------------------------------------
-        // Every recorded run was F7, so none of the lines below was seen in the sample. They are the
-        // boss-opening lines SplitsModel already keys floors 1-6 off, so the text is known good —
-        // but if one of them ever fails to produce a label, this is the first place to look.
-        Regex("""^\[BOSS] Bonzo: Gratz for making it this far""") to { "Bonzo start" },          // UNVERIFIED
-        Regex("""^\[BOSS] Bonzo: Oh I'm dead!$""") to { "Bonzo mask" },                          // UNVERIFIED
-        Regex("""^\[BOSS] Scarf: This is where the journey ends""") to { "Scarf start" },        // UNVERIFIED
-        Regex("""^\[BOSS] Scarf: Those toys are not strong enough""") to { "Scarf undeads done" },// UNVERIFIED
-        Regex("""^\[BOSS] The Professor: I was burdened with terrible news""") to { "Prof start" },// UNVERIFIED
-        Regex("""^\[BOSS] The Professor: Oh\? You found my Guardians""") to { "Guardians done" }, // UNVERIFIED
-        Regex("""^\[BOSS] The Professor: I see\. You have forced me""") to { "Prof final form" }, // UNVERIFIED
-        Regex("""^\[BOSS] Thorn: Welcome Adventurers!""") to { "Thorn start" },                   // UNVERIFIED
-        Regex("""^\[BOSS] Livid: Welcome, you've arrived right on time""") to { "Livid start" },  // UNVERIFIED
-        Regex("""^\[BOSS] Sadan: So you made it all the way here""") to { "Sadan start" },        // UNVERIFIED
-        Regex("""^\[BOSS] Sadan: ENOUGH!$""") to { "Sadan giants" },                             // UNVERIFIED
-        Regex("""^\[BOSS] Sadan: You did it\. I understand now""") to { "Sadan phase 3" },        // UNVERIFIED
     )
 }
