@@ -74,8 +74,12 @@ object DungeonSplits : Module(
         val plain = label.replace(COLOUR_CODE, "")
         registerSetting(
             HUD("$plain Sub Splits", "What happened inside the $plain split, and how far into it.", false, 0, 0, 1f) { example ->
-                if (example) return@HUD draw(this, listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)", "§cDps§r§f: §a11.52s §7(§b11.25s§7)"))
-                draw(this, subLines(label))
+                if (example) return@HUD if (label == SplitTracker.BLOOD) drawColumns(this, listOf(
+                    listOf("§fEntrance", "§f0.75s §7(§b0.75s§7)§f door fell", "§f7.20s §7(§b7.20s§7)§f key picked up §7(Bob)"),
+                    listOf("§fWater Board", "§f0.80s §7(§b0.80s§7)§f door fell", "§f6.40s §7(§b6.40s§7)§f key picked up §7(Sue)"),
+                )) else draw(this, listOf("§6Move§r§f: §a8.12s §7(§b8.00s§7)", "§5Stun§r§f: §a2.28s §7(§b2.25s§7)", "§cDps§r§f: §a11.52s §7(§b11.25s§7)"))
+                if (label == SplitTracker.BLOOD && detailMode == 1) drawColumns(this, bloodColumns())
+                else draw(this, subLines(label))
             }
         )
     }
@@ -165,6 +169,7 @@ object DungeonSplits : Module(
         ?.label
 
     private const val LINE_HEIGHT = 10
+    private const val COLUMN_GAP = 12
 
     /** A wither or blood door takes about this long to finish falling. */
     private const val DOOR_FALL_TICKS = 60
@@ -185,7 +190,7 @@ object DungeonSplits : Module(
 
         // Everything: the phase's own steps and everything reported inside it, in the order it
         // happened and never cut short - the whole point is to see the lot.
-        if (label == SplitTracker.BLOOD) return detail.lines(label).map { it.label }
+        if (label == SplitTracker.BLOOD) return detail.lines(label).map { it.label }.filter { it.isNotBlank() }
         val stepLines = steps.map { it.start to SplitFormat.line(it, now, SplitClock.BOTH) }
         val detailLines = detail.lines(label).map { event ->
             if (event.raw) return@map event.at to event.label
@@ -194,6 +199,35 @@ object DungeonSplits : Module(
             event.at to "§a$real §7(§b$ticks§7) §f" + event.label
         }
         return (stepLines + detailLines).sortedBy { it.first.realMs }.map { it.second }
+    }
+
+    /**
+     * The blood rush a column per room, in the order they were run, with the averages as the last
+     * column. The blank line each room's block ends with is what separates them.
+     */
+    private fun bloodColumns(): List<List<String>> {
+        val columns = mutableListOf<MutableList<String>>()
+        var current = mutableListOf<String>()
+        for (entry in detail.lines(SplitTracker.BLOOD)) {
+            if (entry.label.isBlank()) {
+                if (current.isNotEmpty()) { columns += current; current = mutableListOf() }
+            } else current += entry.label
+        }
+        if (current.isNotEmpty()) columns += current
+        return columns
+    }
+
+    /** Columns side by side, each as wide as its widest line. */
+    private fun drawColumns(gfx: GuiGraphicsExtractor, columns: List<List<String>>): Pair<Int, Int> {
+        if (columns.isEmpty()) return 0 to 0
+        var x = 0
+        var height = 0
+        for (column in columns) {
+            column.forEachIndexed { i, line -> gfx.text(line, x, i * LINE_HEIGHT, Colors.WHITE) }
+            x += (column.maxOfOrNull { mc.font.width(it) } ?: 0) + COLUMN_GAP
+            height = maxOf(height, column.size * LINE_HEIGHT)
+        }
+        return (x - COLUMN_GAP) to height
     }
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
