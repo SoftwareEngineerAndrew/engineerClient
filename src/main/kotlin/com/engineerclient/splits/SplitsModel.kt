@@ -56,18 +56,22 @@ object SplitFormat {
         }
     }
 
-    /** One HUD line: the section's name, then how long it took (or has taken so far). */
+    /**
+     * One HUD line: "§cBlood §f> §c59s §7(59s)". The name and the real time share a colour so the
+     * eye runs down one column of them, the arrow is white, and the server's tick time trails in
+     * grey — the shape the team already reads its splits in.
+     */
     fun line(split: Split, now: Stamp, clock: SplitClock): String {
         val stop = split.stop ?: now
-        val label = split.label.replace('&', '§')
+        val colour = split.label.take(2).replace('&', '§')
+        val name = split.label.drop(2)
         val real = time(stop.realMs - split.start.realMs, split.long)
         val ticks = time((stop.tick - split.start.tick) * 50L, split.long)
-        val time = when (clock) {
-            SplitClock.REAL -> "§a$real"
-            SplitClock.TICKS -> "§b$ticks"
-            SplitClock.BOTH -> "§a$real §7(§b$ticks§7)"
+        return when (clock) {
+            SplitClock.REAL -> "$colour$name §f> $colour$real"
+            SplitClock.TICKS -> "$colour$name §f> §7$ticks"
+            SplitClock.BOTH -> "$colour$name §f> $colour$real §7($ticks)"
         }
-        return "$label§r§f: $time"
     }
 }
 
@@ -191,9 +195,9 @@ class SplitTracker {
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         const val WATCHER_END = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val TERMINALS = "&6Terminals"
-        const val GOLDOR = "&8Goldor"
-        const val BLOOD = "&4Blood Rush"
-        const val WATCHER = "&cWatcher"
+        const val GOLDOR = "&eGoldor"
+        const val BLOOD = "&cBlood Rush"
+        const val WATCHER = "&aWatcher"
         const val PORTAL = "&dPortal"
 
         val BLOOD_OPEN = Regex("^(\\[BOSS] The Watcher: .+?|The BLOOD DOOR has been opened!)$")
@@ -210,10 +214,10 @@ class SplitTracker {
         private val FLOORS: Map<Int, FloorSplits> = mapOf(
             7 to FloorSplits("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", listOf(
                 BossSplit("&5Maxor"),
-                BossSplit("&9Storm", long = true) { it == "[BOSS] Storm: Pathetic Maxor, just like expected." },
+                BossSplit("&bStorm", long = true) { it == "[BOSS] Storm: Pathetic Maxor, just like expected." },
                 BossSplit(TERMINALS) { TERMINALS_START.matches(it) },
                 BossSplit(GOLDOR) { it == "The Core entrance is opening!" },
-                BossSplit("&4Necron") { it == "[BOSS] Necron: You went further than any human before, congratulations." },
+                BossSplit("&cNecron") { it == "[BOSS] Necron: You went further than any human before, congratulations." },
             )),
         )
 

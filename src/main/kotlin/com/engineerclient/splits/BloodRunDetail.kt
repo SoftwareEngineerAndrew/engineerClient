@@ -50,10 +50,14 @@ class BloodRunDetail {
         if (name.isNotBlank()) roomName = name
     }
 
-    /** The door's blocks finished turning to air. */
+    /**
+     * The door's blocks finished turning to air. That is the door the room just opened coming
+     * down, so it is filed against the room that opened it rather than the one now being run.
+     */
     fun onDoorFell(at: Stamp) {
-        val r = room ?: return
-        if (r.doorFell == null && at.realMs >= r.start.realMs) r.doorFell = at
+        val r = rooms.lastOrNull() ?: return
+        val opened = r.doorOpened ?: return
+        if (r.doorFell == null && at.realMs >= opened.realMs) r.doorFell = at
     }
 
     /** A wither or blood key has appeared on the ground: the mob holding it just died. */
@@ -100,62 +104,105 @@ class BloodRunDetail {
         }
     }
 
+    /** How much of a room is shown. */
+    enum class Level { OFF, COMPACT, DETAILED, EXTREME }
+
+    /** Every room so far, the one being run included. */
+    fun rooms(): List<String> = (rooms + listOfNotNull(room)).map { it.name }
+
     /**
-     * A column per room, the one being run included, and the averages once the rush is over. [now]
-     * is what an unfinished line counts up to.
+     * The rush, at the asked-for level of detail. [now] is what an unfinished line counts up to —
+     * except the room total, which only appears once the room is actually over.
      */
-    fun columns(now: Stamp): List<List<String>> {
+    fun lines(level: Level, now: Stamp): List<String> = when (level) {
+        Level.OFF -> emptyList()
+        Level.COMPACT -> compact()
+        Level.DETAILED -> detailed()
+        Level.EXTREME -> extreme(now)
+    }
+
+    /** One row per room: the five times in a fixed order, so a column means the same thing every run. */
+    private fun compact(): List<String> {
         val all = rooms + listOfNotNull(room)
         if (all.isEmpty()) return emptyList()
-        val out = all.map { column(it, now) }.toMutableList()
-        if (done) averages()?.let { out += it }
+        val out = mutableListOf(HEADER + "Blood Rush")
+        for (r in all) {
+            val cells = stats(r).mapIndexed { i, ms -> COLOURS[i] + (ms?.let { SplitFormat.time(it, true) } ?: "-") }
+            out += NAME + r.name + "§f: " + cells.joinToString(" §8| ")
+        }
+        averageStats()?.let { avg ->
+            out += TOTAL + "Total§f: " + avg.mapIndexed { i, ms ->
+                COLOURS[i] + (ms?.let { SplitFormat.time(it, true) } ?: "-")
+            }.joinToString(" §8| ")
+        }
         return out
     }
 
-    /** One room, every time measured from that room's own start. */
-    private fun column(r: Room, now: Stamp): List<String> {
-        val lines = mutableListOf(NAME_COLOUR + r.name)
-        r.doorFell?.let { lines += row(r.start, it, DOOR_FELL_COLOUR, "door fell") }
-        r.mobKilled?.let { lines += row(r.start, it, DOOR_FELL_COLOUR, "last mob killed") }
-        val key = r.keyPicked
-        if (key != null) {
-            lines += row(r.start, key, KEY_COLOUR, "key picked up" + by(r.keyBy))
-            r.mobKilled?.let { lines += gap(key, it, KEY_COLOUR, "key delta") }
+    /** The same five, one per line and labelled, with a blank line between rooms. */
+    private fun detailed(): List<String> {
+        val all = rooms + listOfNotNull(room)
+        if (all.isEmpty()) return emptyList()
+        val out = mutableListOf(HEADER + "Blood Rush")
+        for (r in all) {
+            out += NAME + r.name + ":"
+            stats(r).forEachIndexed { i, ms ->
+                if (ms != null) out += COLOURS[i] + LABELS[i] + " §f> §a" + SplitFormat.time(ms, true)
+            }
+            out += " "
         }
+        averageStats()?.let { avg ->
+            avg.forEachIndexed { i, ms ->
+                if (ms != null) out += TOTAL + "total " + LABELS[i] + " avg §f> §a" + SplitFormat.time(ms, true)
+            }
+        }
+        return out
+    }
+
+    /** Everything known, on both clocks, with who did what. */
+    private fun extreme(now: Stamp): List<String> {
+        val all = rooms + listOfNotNull(room)
+        if (all.isEmpty()) return emptyList()
+        val out = mutableListOf(HEADER + "Blood Rush")
+        for (r in all) {
+            out += NAME + r.name + ":"
+            r.mobKilled?.let { out += row(r.start, it, COLOURS[0], LABELS[0]) }
+            val key = r.keyPicked
+            if (key != null) {
+                r.mobKilled?.let { out += gap(key, it, COLOURS[1], LABELS[1] + by(r.keyBy)) }
+            }
+            val end = r.doorOpened
+            if (end != null) {
+                key?.let { out += gap(end, it, COLOURS[2], LABELS[2] + by(r.doorBy)) }
+                r.doorFell?.let { out += gap(it, end, COLOURS[3], LABELS[3]) }
+                out += row(r.start, end, COLOURS[4], LABELS[4])
+            }
+            out += " "
+        }
+        return out
+    }
+
+    /** The five numbers of a room, in the fixed order, null where the moment never happened. */
+    private fun stats(r: Room): List<Long?> {
         val end = r.doorOpened
-        if (end != null) {
-            lines += row(r.start, end, DOOR_COLOUR, "door opened" + by(r.doorBy))
-            key?.let { lines += gap(end, it, DOOR_COLOUR, "door delta") }
-        }
-        // The room's total runs to the door out of it, or up to now while it is still being run.
-        lines += row(r.start, end ?: now, TOTAL_COLOUR, "total room time")
-        return lines
-    }
-
-    /** The whole rush averaged: gold text, green times, like every other line. */
-    private fun averages(): List<String>? {
-        val fromStart = { pick: (Room) -> Stamp? -> rooms.mapNotNull { r -> span(pick(r), r.start) } }
-        val rows = listOf(
-            fromStart { it.doorFell } to "average door fell",
-            fromStart { it.mobKilled } to "average last mob killed",
-            fromStart { it.keyPicked } to "average key picked up",
-            rooms.mapNotNull { span(it.keyPicked, it.mobKilled) } to "average key delta",
-            fromStart { it.doorOpened } to "average door opened",
-            rooms.mapNotNull { span(it.doorOpened, it.keyPicked) } to "average door delta",
-            fromStart { it.doorOpened } to "average total room time",
+        return listOf(
+            r.mobKilled?.let { it.realMs - r.start.realMs },
+            ms(r.keyPicked, r.mobKilled),
+            ms(end, r.keyPicked),
+            ms(r.doorFell, end),
+            // The total is the one line that is not live: a room's time means nothing until it ends.
+            end?.let { it.realMs - r.start.realMs },
         )
-        val out = rows.mapNotNull { (spans, what) ->
-            if (spans.isEmpty()) null
-            else times(spans.sumOf { it.first } / spans.size, spans.sumOf { it.second } / spans.size) +
-                " " + AVERAGE_COLOUR + what
-        }
-        return out.ifEmpty { null }
     }
 
-    /** How long between two moments, on both clocks, or null if either never happened. */
-    private fun span(later: Stamp?, earlier: Stamp?): Pair<Long, Long>? =
-        if (later == null || earlier == null) null
-        else (later.realMs - earlier.realMs) to (later.tick - earlier.tick).toLong()
+    private fun averageStats(): List<Long?>? {
+        if (rooms.isEmpty()) return null
+        val cols = (0..4).map { i -> rooms.mapNotNull { stats(it)[i] } }
+        if (cols.all { it.isEmpty() }) return null
+        return cols.map { if (it.isEmpty()) null else it.sum() / it.size }
+    }
+
+    private fun ms(later: Stamp?, earlier: Stamp?): Long? =
+        if (later == null || earlier == null) null else later.realMs - earlier.realMs
 
     private fun by(who: String) = if (who.isEmpty()) "" else " §7($who)"
 
@@ -174,12 +221,13 @@ class BloodRunDetail {
         "§a" + SplitFormat.time(ms, true) + " §7(§b" + SplitFormat.time(ticks * 50L, true) + "§7)"
 
     private companion object {
-        const val NAME_COLOUR = "§f"
-        const val DOOR_FELL_COLOUR = "§7"
-        const val KEY_COLOUR = "§8"
-        const val DOOR_COLOUR = "§c"
-        const val TOTAL_COLOUR = "§6"
-        const val AVERAGE_COLOUR = "§6"
+        const val HEADER = "§a"
+        const val NAME = "§d"
+        const val TOTAL = "§6"
+
+        /** The five, in the order they happen, and the colour each is read in. */
+        val LABELS = listOf("droped", "pickup", "opened", "lowered", "room total")
+        val COLOURS = listOf("§f", "§7", "§c", "§4", "§6")
 
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
