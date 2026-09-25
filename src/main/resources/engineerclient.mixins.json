@@ -19,7 +19,9 @@
     "LocalPlayerDropMixin",
     "MinecraftAccessor",
     "ScoreboardSidebarMixin",
-    "SignEnterMixin"
+    "SignEnterMixin",
+    "WandInputMixin",
+    "WandScrollMixin"
   ],
   "injectors": {
     "defaultRequire": 1
