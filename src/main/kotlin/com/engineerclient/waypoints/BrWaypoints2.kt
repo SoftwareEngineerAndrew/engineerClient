@@ -9,7 +9,6 @@ import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderEvent
-import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -47,9 +46,8 @@ import java.io.File
  *    gets thinner than a block, and its bottom never moves.
  *
  * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
- * it overlaps most, if several). A box is green while any of its mobs is alive and red once they
- * are all dead. Walking into a room with starred mobs no box claims says how many in chat, and
- * turns their spawn markers red.
+ * it overlaps most, if several); one in no box goes to the nearest box in its room. A box is green
+ * while any of its mobs is alive and red once they are all dead.
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  */
@@ -77,7 +75,7 @@ object BrWaypoints2 : Module(
         modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }
 
-    private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour, red if no box claims it.")
+    private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
     /** Which item is the wand, saved with the config so it survives a restart. */
     private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.").hide()
@@ -107,8 +105,6 @@ object BrWaypoints2 : Module(
 
     private val mobs = mutableListOf<Mob>()
     private val seen = HashSet<Int>()
-    /** Rooms walked into this run: their unclaimed mobs' markers show red. */
-    private val entered = HashSet<String>()
 
     // Odin's Highlight: which name tags are starred mobs, and how a tag finds its mob.
     private val MOB_NAMES = listOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
@@ -128,7 +124,7 @@ object BrWaypoints2 : Module(
 
     init {
         on<LevelEvent.Load> {
-            boxes.clear(); loadedRooms.clear(); mobs.clear(); seen.clear(); entered.clear()
+            boxes.clear(); loadedRooms.clear(); mobs.clear(); seen.clear()
         }
 
         on<TickEvent.End> {
@@ -138,13 +134,6 @@ object BrWaypoints2 : Module(
             watchDeaths()
             // Right click repeats every few ticks while held; a pull is one per press.
             if (!mc.options.keyUse.isDown) useHeld = false
-        }
-
-        on<RoomEnterEvent> {
-            val name = room?.name ?: return@on
-            entered += name
-            val loose = mobs.count { it.room == name && claimOf(it) == null }
-            if (loose > 0) modMessage("§c$loose starred mob${if (loose == 1) "" else "s"} in §f$name §cnot in a box.")
         }
 
         on<RenderEvent.Extract> {
@@ -173,10 +162,9 @@ object BrWaypoints2 : Module(
                 val colour = (Highlight.settings["Highlight color"] as? ColorSetting)?.value ?: Colors.WHITE
                 val style = (Highlight.settings["Render Style"] as? SelectorSetting)?.value ?: 1
                 for (mob in mobs) {
-                    val loose = mob.room != null && mob.room in entered && claimOf(mob) == null
                     // Flat on the floor, lifted a hair so it does not flicker into the block.
                     val y = mob.y + 0.02
-                    drawStyledBox(AABB(mob.x - 0.5, y, mob.z - 0.5, mob.x + 0.5, y, mob.z + 0.5), if (loose) RED else colour, style, true)
+                    drawStyledBox(AABB(mob.x - 0.5, y, mob.z - 0.5, mob.x + 0.5, y, mob.z + 0.5), colour, style, true)
                 }
             }
         }
@@ -214,7 +202,10 @@ object BrWaypoints2 : Module(
         }
     }
 
-    /** The box a mob belongs to: the one its body overlapped most where it was first seen. */
+    /**
+     * The box a mob belongs to: the one its body overlapped most where it was first seen, or, if it
+     * overlapped none, the nearest box in its room. A room with no boxes claims nothing.
+     */
     private fun claimOf(mob: Mob): Box? {
         var best: Box? = null
         var most = 0.0
@@ -222,7 +213,16 @@ object BrWaypoints2 : Module(
             val o = overlap(mob.spawn, box.aabb())
             if (o > most) { most = o; best = box }
         }
-        return best
+        if (best != null || mob.room == null) return best
+        return boxes.filter { it.room == mob.room }.minByOrNull { gap(mob.spawn, it.aabb()) }
+    }
+
+    /** How far apart two boxes are at their closest; 0 if they touch. */
+    private fun gap(a: AABB, b: AABB): Double {
+        val x = maxOf(0.0, maxOf(a.minX, b.minX) - minOf(a.maxX, b.maxX))
+        val y = maxOf(0.0, maxOf(a.minY, b.minY) - minOf(a.maxY, b.maxY))
+        val z = maxOf(0.0, maxOf(a.minZ, b.minZ) - minOf(a.maxZ, b.maxZ))
+        return x * x + y * y + z * z
     }
 
     private fun overlap(a: AABB, b: AABB): Double {
