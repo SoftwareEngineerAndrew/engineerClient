@@ -9,7 +9,8 @@ package com.engineerclient.splits
  *    get picked up ("X picked up an Energy Crystal!"), and reappear placed on the lower ones
  *    (y 224). Chat's "1/2 Energy Crystals are now active!" says 1/2 for both, so the placed
  *    crystal appearing is what counts, and whoever stands nearest it placed it.
- *  - Goldor dies on "[BOSS] Goldor: ...."; "Necron, forgive me." 81-83 ticks later ends his death animation.
+ *  - Goldor dies on "[BOSS] Goldor: ....". "Necron, forgive me.", 81-83 ticks later, ends his
+ *    death animation.
  *  - Simon Says presses are its buttons turning powered; the nearest player pressed them.
  *
  * Not possible: who hit Goldor or Necron (hits arrive with no attacker), and Storm's crushers
