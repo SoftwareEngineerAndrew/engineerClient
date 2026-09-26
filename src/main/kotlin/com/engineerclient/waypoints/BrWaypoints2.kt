@@ -70,9 +70,10 @@ import java.io.File
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  *
- * Roles ([BrRoles]): once the party has said who kills what ("!4br 2" in party chat), a room the
+ * Roles ([BrRoles]): once the party has said who kills what ("!3br 2" in party chat), a room the
  * rush comes into through a door the site has a plan for shows your boxes purple, numbered in the
- * order you kill them, the stack gold, and everyone else's boxes grey.
+ * order you kill them, your stack gold, and everyone else's boxes grey. The door runner ("!br d",
+ * or whoever gets to the doors first) sees no boxes while rushing.
  */
 object BrWaypoints2 : Module(
     name = "BR Waypoints 2",
@@ -104,6 +105,8 @@ object BrWaypoints2 : Module(
     }
 
     private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
+
+    private val hideOnDoor by BooleanSetting("Hide Boxes On Door", true, desc = "While you are the door runner (\"!br d\", or first to the doors), no boxes during the rush: you kill nothing.")
 
     private val othersBoxes by BooleanSetting("Show Others' Boxes", true, desc = "With roles synced, shows the boxes other roles kill, in grey. Off, only yours and the stack.")
 
@@ -177,6 +180,7 @@ object BrWaypoints2 : Module(
         on<LevelEvent.Load> {
             pull()
             BrRoles.pull()
+            BrRoles.newRun()
             entryDoors.clear()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
             rushing = false; rushRoom = null; rushed.clear(); watchDoorUntil = 0; barriers.clear()
@@ -201,6 +205,7 @@ object BrWaypoints2 : Module(
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
             loadRooms()
+            if (rushing) BrRoles.track(ticks)
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
             // Right click repeats every few ticks while held; a pull is one per press.
@@ -210,14 +215,16 @@ object BrWaypoints2 : Module(
         on<RenderEvent.Extract> {
             if (!DungeonUtils.inDungeons) return@on
 
+            val doorRunner = rushing && hideOnDoor && !editMode && BrRoles.onDoor
             for (box in shown()) {
+                if (doorRunner) break
                 val bb = box.aabb()
                 // With roles: yours purple numbered in the order you kill them, the stack gold,
                 // others' grey. Without, every box purple with its number.
                 val (colour, label) = when (val look = lookOf(box)) {
                     is BrRoles.Look.Mine -> PURPLE to "§d" + look.order
                     is BrRoles.Look.Stack -> GOLD to "§6stack"
-                    is BrRoles.Look.Theirs -> if (othersBoxes && !editMode) GREY to "§7" + look.role else continue
+                    is BrRoles.Look.Theirs -> if (othersBoxes && !editMode) GREY to (if (look.role > 0) "§7" + look.role else "") else continue
                     null -> PURPLE to "§d" + number(box)
                 }
                 // Seen through walls; the faces faint enough to walk through without noticing.
@@ -244,11 +251,13 @@ object BrWaypoints2 : Module(
     }
 
     init {
-        // /brrole 4 2: take role 2 with 4 killing (says "!4br 2" in party chat). /brrole: who has what.
+        // /brrole 3 2: take role 2 with 3 killing (says "!3br 2" in party chat). /brrole door: on the
+        // door ("!br d"). /brrole: who has what.
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(literal("brrole")
                 .executes { BrRoles.status(); 1 }
-                .then(argument("killing", IntegerArgumentType.integer(1, 5)).then(argument("role", IntegerArgumentType.integer(1, 5)).executes { ctx ->
+                .then(literal("door").executes { BrRoles.claimDoor(); 1 })
+                .then(argument("killing", IntegerArgumentType.integer(1, BrRoles.MAX_KILLING)).then(argument("role", IntegerArgumentType.integer(1, BrRoles.MAX_KILLING)).executes { ctx ->
                     BrRoles.claim(IntegerArgumentType.getInteger(ctx, "killing"), IntegerArgumentType.getInteger(ctx, "role"))
                     1
                 })))
@@ -361,6 +370,8 @@ object BrWaypoints2 : Module(
      */
     private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?, door: DoorBlocks.Door) {
         val sides = listOfNotNull(a, b)
+        // Who got to it first is the door runner - not the start door, which everyone starts at.
+        if (!startDoor) BrRoles.doorFell(ticks, -185.0 + 16 * (door.a.first + door.b.first) + 0.5, -185.0 + 16 * (door.a.second + door.b.second) + 0.5)
         if (startDoor) {
             // At the start other doors come down too (fairy's); the rush's is the one out of Entrance.
             val entrance = sides.firstOrNull { it.type == RoomType.ENTRANCE } ?: return
