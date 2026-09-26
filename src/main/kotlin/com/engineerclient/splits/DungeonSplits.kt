@@ -350,9 +350,13 @@ object DungeonSplits : Module(
         return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
     }
 
-    /** The scorecard: its first column (the splits) right-aligned, a light-grey bar before every other. */
+    /**
+     * The scorecard: its first column (the splits) right-aligned, a light-grey bar before every
+     * other — and after the first on every row, sub splits or not.
+     */
     private fun scorecard(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> =
-        if (lines.isEmpty()) 0 to 0 else table(gfx, lines, rightFirst = true, barsFrom = 1, bar = "§7|")
+        if (lines.isEmpty()) 0 to 0
+        else table(gfx, lines.map { if ('\t' in it) it else it + "\t" }, rightFirst = true, barsFrom = 1, bar = "§7|", firstBarAlways = true)
 
     /**
      * Tab-separated rows drawn as a table: every column as wide as its widest cell and left-aligned
@@ -360,7 +364,7 @@ object DungeonSplits : Module(
      * each column from [barsFrom] on. Text padded with spaces cannot do this — a digit and a space
      * are different widths.
      */
-    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>, rightFirst: Boolean = false, barsFrom: Int = 2, bar: String = "§8|"): Pair<Int, Int> {
+    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>, rightFirst: Boolean = false, barsFrom: Int = 2, bar: String = "§8|", firstBarAlways: Boolean = false): Pair<Int, Int> {
         val rows = lines.map { it.split('\t') }
         val cols = rows.maxOf { it.size }
         val widths = IntArray(cols) { c -> rows.maxOf { r -> r.getOrNull(c)?.let(mc.font::width) ?: 0 } }
@@ -371,13 +375,14 @@ object DungeonSplits : Module(
         for (c in 1 until cols) starts[c] = starts[c - 1] + widths[c - 1] + if (c < barsFrom) 0 else space * 2 + barW
         rows.forEachIndexed { i, row ->
             val y = i * LINE_HEIGHT
+            if (firstBarAlways && cols > barsFrom) gfx.text(bar, starts[barsFrom] - space - barW, y, Colors.WHITE, shadow = true)
             row.forEachIndexed { c, cell ->
                 if (cell.isEmpty()) return@forEachIndexed
                 val x = if (c == 0 && rightFirst) widths[0] - mc.font.width(cell) else starts[c]
                 gfx.text(cell, x, y, Colors.WHITE, shadow = true)
-                if (c >= barsFrom) gfx.text(bar, starts[c] - space - barW, y, Colors.WHITE, shadow = true)
+                if (c >= barsFrom && !(firstBarAlways && c == barsFrom)) gfx.text(bar, starts[c] - space - barW, y, Colors.WHITE, shadow = true)
             }
         }
-        return starts[cols - 1] + widths[cols - 1] to lines.size * LINE_HEIGHT
+        return maxOf(starts[cols - 1] + widths[cols - 1], if (firstBarAlways && cols > barsFrom) starts[barsFrom] else 0) to lines.size * LINE_HEIGHT
     }
 }
