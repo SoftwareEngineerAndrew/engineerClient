@@ -4,6 +4,7 @@ import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
@@ -33,6 +34,9 @@ import com.odtheking.odin.utils.render.drawStyledBox
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -65,6 +69,10 @@ import java.io.File
  * is on.
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
+ *
+ * Roles ([BrRoles]): once the party has said who kills what ("!4br 2" in party chat), a room the
+ * rush comes into through a door the site has a plan for shows your boxes purple, numbered in the
+ * order you kill them, the stack gold, and everyone else's boxes grey.
  */
 object BrWaypoints2 : Module(
     name = "BR Waypoints 2",
@@ -96,6 +104,8 @@ object BrWaypoints2 : Module(
     }
 
     private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
+
+    private val othersBoxes by BooleanSetting("Show Others' Boxes", true, desc = "With roles synced, shows the boxes other roles kill, in grey. Off, only yours and the stack.")
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
@@ -145,6 +155,8 @@ object BrWaypoints2 : Module(
     private var useHeld = false
 
     private val PURPLE = Color(170, 0, 170, 1f)
+    private val GOLD = Color(255, 170, 0, 1f)
+    private val GREY = Color(150, 150, 150, 0.6f)
 
     private val CONTROL_CODES = Regex("\u00a7.")
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
@@ -164,6 +176,8 @@ object BrWaypoints2 : Module(
     init {
         on<LevelEvent.Load> {
             pull()
+            BrRoles.pull()
+            entryDoors.clear()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
             rushing = false; rushRoom = null; rushed.clear(); watchDoorUntil = 0; barriers.clear()
         }
@@ -173,7 +187,7 @@ object BrWaypoints2 : Module(
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
-            mc.execute { onChat(text) }
+            mc.execute { if (!BrRoles.onChat(text)) onChat(text) }
         }
 
         // The door that just started falling: its blocks turn to barrier on the tick of its line.
@@ -184,7 +198,7 @@ object BrWaypoints2 : Module(
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons) return@on
             ticks++
-            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b))
+            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
@@ -198,10 +212,18 @@ object BrWaypoints2 : Module(
 
             for (box in shown()) {
                 val bb = box.aabb()
+                // With roles: yours purple numbered in the order you kill them, the stack gold,
+                // others' grey. Without, every box purple with its number.
+                val (colour, label) = when (val look = lookOf(box)) {
+                    is BrRoles.Look.Mine -> PURPLE to "§d" + look.order
+                    is BrRoles.Look.Stack -> GOLD to "§6stack"
+                    is BrRoles.Look.Theirs -> if (othersBoxes && !editMode) GREY to "§7" + look.role else continue
+                    null -> PURPLE to "§d" + number(box)
+                }
                 // Seen through walls; the faces faint enough to walk through without noticing.
-                drawFilledBox(bb, PURPLE.withAlpha(0.08f), depth = false)
-                drawWireFrameBox(bb, PURPLE, depth = false)
-                drawText("§d" + number(box), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+                if (colour != GREY) drawFilledBox(bb, colour.withAlpha(0.08f), depth = false)
+                drawWireFrameBox(bb, colour, depth = false)
+                drawText(label, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
             }
 
             // The selected face, only with the wand in hand, when it can actually be edited.
@@ -218,6 +240,18 @@ object BrWaypoints2 : Module(
                     drawStyledBox(AABB(mob.x - 0.5, y, mob.z - 0.5, mob.x + 0.5, y, mob.z + 0.5), colour, style, true)
                 }
             }
+        }
+    }
+
+    init {
+        // /brrole 4 2: take role 2 with 4 killing (says "!4br 2" in party chat). /brrole: who has what.
+        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            dispatcher.register(literal("brrole")
+                .executes { BrRoles.status(); 1 }
+                .then(argument("killing", IntegerArgumentType.integer(1, 5)).then(argument("role", IntegerArgumentType.integer(1, 5)).executes { ctx ->
+                    BrRoles.claim(IntegerArgumentType.getInteger(ctx, "killing"), IntegerArgumentType.getInteger(ctx, "role"))
+                    1
+                })))
         }
     }
 
@@ -325,7 +359,7 @@ object BrWaypoints2 : Module(
      * that it is whichever side the rush has not been through yet — past fairy too, which the rush
      * walks through by fairy's own open door and so never has a wither door into.
      */
-    private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?) {
+    private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?, door: DoorBlocks.Door) {
         val sides = listOfNotNull(a, b)
         if (startDoor) {
             // At the start other doors come down too (fairy's); the rush's is the one out of Entrance.
@@ -336,7 +370,27 @@ object BrWaypoints2 : Module(
         val next = sides.filter { it.name != null && it.name !in rushed }.minByOrNull { if (it.type == RoomType.FAIRY) 1 else 0 } ?: return
         rushRoom = next.name
         rushed += next.name!!
+        // The door sits halfway between its two tiles (tiles 32 blocks apart, the first centred at -185).
+        entryDoors[next.name!!] = (-185 + 16 * (door.a.first + door.b.first)) to (-185 + 16 * (door.a.second + door.b.second))
         watchDoorUntil = 0
+    }
+
+    /** Each room the rush came into, and the door it came in through (world x, z). */
+    private val entryDoors = HashMap<String, Pair<Int, Int>>()
+
+    /**
+     * What a box is to you under the party's roles: the plan for its room is the one for the door
+     * the rush came in through and the number killing. Null when there is no plan (edit mode, too,
+     * shows boxes plain).
+     */
+    private fun lookOf(box: Box): BrRoles.Look? {
+        if (editMode || BrRoles.count == 0) return null
+        val name = box.room ?: return null
+        val door = entryDoors[name] ?: return null
+        val room = placed(name) ?: return null
+        val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
+        val plan = BrRoles.planFor(name, rel.x to rel.z) ?: return null
+        return BrRoles.look(plan, number(box))
     }
 
     private fun tileRoom(t: Pair<Int, Int>): DungeonRoom? =

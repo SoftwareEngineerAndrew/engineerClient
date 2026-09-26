@@ -28,6 +28,18 @@ object BoxSync {
         }
     }
 
+    private const val ROLES_URL = "https://${BetterPF.SITE}/betterpf/api/brroles"
+
+    /** Fetches the site's roles (who kills which boxes; see [BrRoles]); [done] gets its JSON, off the game thread. */
+    fun pullRoles(done: (String) -> Unit) {
+        Thread.ofVirtual().name("brroles-pull").start {
+            runCatching {
+                val res = http.send(HttpRequest.newBuilder(URI.create(ROLES_URL)).timeout(Duration.ofSeconds(20)).GET().build(), HttpResponse.BodyHandlers.ofString())
+                if (res.statusCode() == 200) done(res.body())
+            }.onFailure { EngineerClient.logger.warn("[ec] brroles pull failed: ${it.message}") }
+        }
+    }
+
     /** Sends [json] as the site's copy; [done] gets the site's new updatedAt. False if there is no key. */
     fun push(json: String, done: (Long) -> Unit): Boolean {
         val key = BetterPF.siteKey
