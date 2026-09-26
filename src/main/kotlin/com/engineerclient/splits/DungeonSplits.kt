@@ -18,6 +18,7 @@ import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.network.protocol.game.ClientboundBossEventPacket
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -132,6 +133,7 @@ object DungeonSplits : Module(
     init {
         on<LevelEvent.Load> {
             tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
+            goldorAt = null; necronAt = null; goldorBar = null
             barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
             serverTicks = 0
         }
@@ -190,8 +192,11 @@ object DungeonSplits : Module(
 
             // Goldor's leap ends when the last teammate is inside the core.
             if ((subs.watchingCore || open(SplitTracker.GOLDOR)) && everyoneInCore(level)) {
-                subs.onEveryoneInCore(now()); card.onEveryoneInCore(now())
+                subs.onEveryoneInCore(now()); card.onEveryoneInCore(now(), "players in the core box")
             }
+            // ...or, seen from anywhere, Goldor starting to move: he waits until everyone is in.
+            if (open(SplitTracker.GOLDOR) && card.waitingForCore) watchGoldor(level) else goldorAt = null
+            if (open(SplitTracker.NECRON) && card.necronWatch) watchNecron(level) else necronAt = null
 
             // Storm pinned by a crush: the DPS window is over when he moves off it.
             if (open(SplitTracker.STORM) && card.stormPinned) watchStorm(level) else pinnedStorm = null
@@ -214,6 +219,7 @@ object DungeonSplits : Module(
             }
         }
         on<EntityEvent.Remove> {
+            if (entity is WitherBoss && open(SplitTracker.MAXOR)) card.onMaxorGone(now())
             val (name, spawned) = watchedMobs.remove(entity.id) ?: return@on
             val at = now()
             boss.onMobGone(at, name, at.realMs - spawned.realMs)
@@ -228,6 +234,26 @@ object DungeonSplits : Module(
                 if (open(SplitTracker.GOLDOR)) { boss.onBossHit(SplitTracker.GOLDOR, at); card.onGoldorHit(at, "damage packet") }
                 else if (open(SplitTracker.NECRON) && e.isAlive) boss.onBossHit(SplitTracker.NECRON, at)
             }
+        }
+
+        // Goldor's boss bar: the first time it drops after the core opens is his first hit.
+        onReceive<ClientboundBossEventPacket> {
+            dispatch(object : ClientboundBossEventPacket.Handler {
+                override fun add(id: java.util.UUID, name: net.minecraft.network.chat.Component, progress: Float, color: net.minecraft.world.BossEvent.BossBarColor,
+                                 overlay: net.minecraft.world.BossEvent.BossBarOverlay, darken: Boolean, music: Boolean, fog: Boolean) {
+                    if (name.string.contains("Goldor")) goldorBar = id to progress
+                }
+                override fun updateName(id: java.util.UUID, name: net.minecraft.network.chat.Component) {
+                    if (name.string.contains("Goldor") && goldorBar?.first != id) goldorBar = id to 1f
+                }
+                override fun updateProgress(id: java.util.UUID, progress: Float) {
+                    val bar = goldorBar ?: return
+                    if (bar.first != id) return
+                    val dropped = progress < bar.second - 0.0005f
+                    goldorBar = id to progress
+                    if (dropped) EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) card.onGoldorHit(now(), "boss bar") }
+                }
+            })
         }
 
         // A wither's hurt sound while Goldor is up: the other way his first hit can show.
@@ -252,6 +278,9 @@ object DungeonSplits : Module(
         }
     }
 
+    /** Goldor's boss bar and its last progress. */
+    @Volatile private var goldorBar: Pair<java.util.UUID, Float>? = null
+
     /** Storm's wither and where the crush pinned him. */
     private var pinnedStorm: Pair<Int, net.minecraft.world.phys.Vec3>? = null
 
@@ -262,16 +291,57 @@ object DungeonSplits : Module(
     private fun watchStorm(level: net.minecraft.client.multiplayer.ClientLevel) {
         val pinned = pinnedStorm
         if (pinned == null) {
-            val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>()
-            val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains("Storm") == true }
-            val anchor = tag ?: mc.player ?: return
-            val storm = withers.minByOrNull { it.distanceToSqr(anchor) } ?: return
+            val storm = bossWither(level, "Storm") ?: return
             pinnedStorm = storm.id to storm.position()
             return
         }
         val e = level.getEntity(pinned.first) ?: return
         val dx = e.x - pinned.second.x; val dz = e.z - pinned.second.z
-        if (dx * dx + dz * dz > 1.5 * 1.5) { card.onStormMoved(now()); pinnedStorm = null }
+        val dy = e.y - pinned.second.y
+        // He does not move at all while he is being DPSed; any movement is the window over.
+        if (dx * dx + dy * dy + dz * dz > 0.1 * 0.1) { card.onStormMoved(now()); pinnedStorm = null }
+    }
+
+    /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
+    private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
+        val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>()
+        val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
+        val anchor = tag ?: mc.player ?: return null
+        return withers.minByOrNull { it.distanceToSqr(anchor) }
+    }
+
+    /** Goldor and where he waits once the core opens. */
+    private var goldorAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
+
+    /**
+     * Everyone in the core, read off Goldor: once the core opens he holds still until the last
+     * player is in, then starts for the core — within 0-5 ticks of it in every recorded run, and
+     * he can be seen when the players can't. A jump of blocks at once is him coming into view,
+     * not moving, and starts the watch again.
+     */
+    private fun watchGoldor(level: net.minecraft.client.multiplayer.ClientLevel) {
+        val at = goldorAt
+        if (at == null) { bossWither(level, "Goldor")?.let { goldorAt = it.id to it.position() }; return }
+        val e = level.getEntity(at.first) ?: run { goldorAt = null; return }
+        val d = e.position().distanceTo(at.second)
+        if (d > 8) goldorAt = e.id to e.position()
+        else if (d > 0.1) { card.onEveryoneInCore(now(), "Goldor moved"); goldorAt = null }
+    }
+
+    /** Necron and mid, where he starts his fight. */
+    private var necronAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
+
+    /**
+     * Necron off mid and back: he stays on mid through his opening animation, leaves it when the
+     * fight starts (148-223 ticks in, recorded), and the first DPS ends when he is back on it.
+     */
+    private fun watchNecron(level: net.minecraft.client.multiplayer.ClientLevel) {
+        val at = necronAt
+        if (at == null) { bossWither(level, "Necron")?.let { necronAt = it.id to it.position() }; return }
+        val e = level.getEntity(at.first) ?: return
+        val d = e.position().distanceTo(at.second)
+        if (!card.necronOff && d > 0.5) card.onNecronOffMid(now())
+        else if (card.necronOff && d < 0.2) card.onNecronBackAtMid(now())
     }
 
     private fun open(label: String) = tracker.split(label)?.stop == null && tracker.split(label) != null

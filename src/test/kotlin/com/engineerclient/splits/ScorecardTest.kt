@@ -37,9 +37,11 @@ class ScorecardTest {
             2600 to "[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!",
             2690 to "1/2 Energy Crystals are now active!", 2700 to "1/2 Energy Crystals are now active!",
         )) card.onChat(line, stamp(t))
+        card.onMaxorGone(stamp(2928))
         val rows = card.rows(listOf(split(SplitTracker.MAXOR, 2390, 2950, lagMs = 900)), stamp(2950), emptyList(), true, emptyList())
-        // 28.0 on ticks even with 0.9 s of lag; both crystals at 2560, stun 2 s later, second pair 5 s after.
-        assertEquals(listOf("§528.0\t§38.5\t§62.0\t§35.0"), rows)
+        // 28.0 on ticks even with 0.9 s of lag; both crystals at 2560, stun 2 s later, second pair 5 s
+        // after; Maxor dead 26.9 s after he started.
+        assertEquals(listOf("§528.0\t§38.5\t§62.0\t§35.0\t§c26.9"), rows)
     }
 
     @Test
@@ -71,9 +73,9 @@ class ScorecardTest {
     fun `terms are real time sections, goldor ticks`() {
         val card = Scorecard()
         val terms = listOf(split("&6S1", 3868, 4100, 300), split("&6S2", 4100, 4300), split("&6S3", 4300, 4500), split("&6S4", 4500, 4700))
-        card.onEveryoneInCore(stamp(4720))
+        card.onEveryoneInCore(stamp(4720), "test")
         card.onGoldorHit(stamp(4760), "test")
-        card.onChat("[BOSS] Goldor: Necron, forgive me.", stamp(4880))
+        card.onChat("[BOSS] Goldor: ....", stamp(4880))
         val rows = card.rows(listOf(split(SplitTracker.TERMS, 3868, 4700), split(SplitTracker.GOLDOR, 4700, 4880)), stamp(4880), emptyList(), true, terms)
         assertEquals("§641.6\t§811.9\t§810.0\t§810.0\t§810.0", rows[0])
         assertEquals("§e9.0\t§51.0\t§32.0\t§c6.0", rows[1])
@@ -86,5 +88,15 @@ class ScorecardTest {
         card.onStormMoved(stamp(3700))
         val row = card.rows(listOf(split(SplitTracker.STORM, 2950, null)), stamp(3710), emptyList(), true, emptyList())[0]
         assertEquals(listOf("§b38.0", "", "§c2.5"), row.split('\t'))
+    }
+
+    @Test
+    fun `necron is from leaving mid to first back on it`() {
+        val card = Scorecard()
+        card.onNecronOffMid(stamp(5390))
+        card.onNecronBackAtMid(stamp(5430))
+        card.onNecronBackAtMid(stamp(5600)) // only the first return counts
+        val rows = card.rows(listOf(split(SplitTracker.NECRON, 5229, 5835)), stamp(5835), emptyList(), true, emptyList())
+        assertEquals(listOf("§c30.3\t§a2.0"), rows)
     }
 }
