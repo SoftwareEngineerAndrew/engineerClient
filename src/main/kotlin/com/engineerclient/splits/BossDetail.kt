@@ -9,7 +9,7 @@ package com.engineerclient.splits
  *    get picked up ("X picked up an Energy Crystal!"), and reappear placed on the lower ones
  *    (y 224). Chat's "1/2 Energy Crystals are now active!" says 1/2 for both, so the placed
  *    crystal appearing is what counts, and whoever stands nearest it placed it.
- *  - Goldor dies on "[BOSS] Goldor: Necron, forgive me."
+ *  - Goldor dies on "[BOSS] Goldor: ...."; "Necron, forgive me." 81-83 ticks later ends his death animation.
  *  - Simon Says presses are its buttons turning powered; the nearest player pressed them.
  *
  * Not possible: who hit Goldor or Necron (hits arrive with no attacker), and Storm's crushers
@@ -76,7 +76,7 @@ class BossDetail(private val detail: SplitDetail) {
         const val WATCHER_HANDLE = "[BOSS] The Watcher: Let's see how you can handle this."
         const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
-        const val GOLDOR_DEAD = "[BOSS] Goldor: Necron, forgive me."
+        const val GOLDOR_DEAD = "[BOSS] Goldor: ...."
 
         val LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
 
