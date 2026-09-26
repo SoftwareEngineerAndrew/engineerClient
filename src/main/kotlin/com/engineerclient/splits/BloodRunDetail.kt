@@ -136,6 +136,12 @@ class BloodRunDetail {
     /** The room names so far, the one being run included. */
     fun rooms(): List<String> = all().map { it.name }
 
+    /** Each finished room's total on the server's clock, in ticks, oldest first. */
+    fun roomTicks(): List<Long> = rooms.mapNotNull { r -> r.doorOpened?.let { (it.tick - r.start.tick).toLong() } }
+
+    /** The blood door is open. */
+    val over: Boolean get() = done
+
     private fun all() = rooms + listOfNotNull(room)
 
     fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> = when (level) {

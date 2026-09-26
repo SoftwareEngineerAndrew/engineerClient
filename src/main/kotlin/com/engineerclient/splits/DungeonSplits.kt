@@ -15,9 +15,11 @@ import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
+import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal
 import net.minecraft.world.entity.boss.wither.WitherBoss
@@ -80,6 +82,18 @@ object DungeonSplits : Module(
         draw(this, tracker.lines(now()))
     }
 
+    private val scorecardHud by HUD("Scorecard Splits", "The whole run as a table: each split's total, then its sub splits.", true, 10, 150, 1f) { example ->
+        if (example) return@HUD scorecard(this, listOf(
+            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§c62.0", "§d3.1\t§53.0\t§60.0",
+            "§525.2\t§32.2\t§62.0\t§36.5", "§b45.9\t§60.4\t§c0.1\t§63.5\t§c0.2", "§620.9\t§811.9\t§85.2\t§83.9\t§84.1",
+            "§e7.7\t§51.2\t§32.5\t§c2.9", "§c30.7\t§a9.8",
+        ))
+        scorecard(this, card.rows(tracker.splits(), now(), blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)))
+    }
+
+    private val cardDebug by BooleanSetting("Scorecard Debug", false, desc = "Says in chat each moment the scorecard picks up, and what it read it from — for checking the new ones (portal, leaps, Goldor's first hit, Storm breaking free).")
+    private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) modMessage("§8[scorecard] §7$what") } }
+
     /**
      * Each section's settings together, in the order they show in the ClickGUI: its detail level,
      * then (blood rush only) the Total row toggle, then its HUD with its own on/off toggle. The
@@ -117,7 +131,7 @@ object DungeonSplits : Module(
 
     init {
         on<LevelEvent.Load> {
-            tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset()
+            tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
             barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
             serverTicks = 0
         }
@@ -135,6 +149,7 @@ object DungeonSplits : Module(
                 EngineerClient.safely("splits chat") {
                     if (!DungeonUtils.inDungeons) return@safely
                     tracker.onChat(text, at)
+                    card.onChat(text, at)
                     subs.onChat(text, at)
                     boss.onChat(text, at)
                     blood.onChat(text, at)
@@ -145,6 +160,8 @@ object DungeonSplits : Module(
         // A door falling: its 36 blocks turn to barrier as it starts, and those barriers to air
         // when it is down. Nothing else in the rush does either 36 at a time.
         on<BlockUpdateEvent> {
+            // The portal out of the blood room opening, a few seconds after the Watcher lets you go.
+            if (open(SplitTracker.PORTAL) && updated.block == Blocks.NETHER_PORTAL) card.onPortal(now())
             if (blood.active) {
                 if (updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
                 else if (old.block == Blocks.BARRIER && updated.isAir) cleared += pos.x to pos.z
@@ -172,16 +189,12 @@ object DungeonSplits : Module(
             }
 
             // Goldor's leap ends when the last teammate is inside the core.
-            if (subs.watchingCore) {
-                val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
-                if (alive.isNotEmpty()) {
-                    val inCore = alive.count { mate ->
-                        val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
-                        p != null && p.x >= 39 && p.x < 71 && p.y >= 112 && p.y < 155.5 && p.z >= 54 && p.z < 118
-                    }
-                    if (inCore >= alive.size) subs.onEveryoneInCore(now())
-                }
+            if ((subs.watchingCore || open(SplitTracker.GOLDOR)) && everyoneInCore(level)) {
+                subs.onEveryoneInCore(now()); card.onEveryoneInCore(now())
             }
+
+            // Storm pinned by a crush: the DPS window is over when he moves off it.
+            if (open(SplitTracker.STORM) && card.stormPinned) watchStorm(level) else pinnedStorm = null
         }
 
         on<EntityEvent.Add> {
@@ -212,10 +225,53 @@ object DungeonSplits : Module(
             EngineerClient.mc.execute {
                 val e = EngineerClient.mc.level?.getEntity(id) as? WitherBoss ?: return@execute
                 val at = now()
-                if (open(SplitTracker.GOLDOR)) boss.onBossHit(SplitTracker.GOLDOR, at)
+                if (open(SplitTracker.GOLDOR)) { boss.onBossHit(SplitTracker.GOLDOR, at); card.onGoldorHit(at, "damage packet") }
                 else if (open(SplitTracker.NECRON) && e.isAlive) boss.onBossHit(SplitTracker.NECRON, at)
             }
         }
+
+        // A wither's hurt sound while Goldor is up: the other way his first hit can show.
+        onReceive<ClientboundSoundPacket> {
+            val id = sound.value().location().path
+            if (id != "entity.wither.hurt") return@onReceive
+            EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) card.onGoldorHit(now(), "hurt sound") }
+        }
+    }
+
+    /**
+     * Every living teammate inside the core. Your original box stopped at y 112, but the fight goes
+     * down to the core's floor (players stood at y 64-90 in the recorded runs), so it now reaches
+     * all the way down. A teammate out of render distance counts as not in.
+     */
+    private fun everyoneInCore(level: net.minecraft.client.multiplayer.ClientLevel): Boolean {
+        val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
+        if (alive.isEmpty()) return false
+        return alive.all { mate ->
+            val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
+            p != null && p.x >= 39 && p.x < 71 && p.y < 155.5 && p.z >= 54 && p.z < 118
+        }
+    }
+
+    /** Storm's wither and where the crush pinned him. */
+    private var pinnedStorm: Pair<Int, net.minecraft.world.phys.Vec3>? = null
+
+    /**
+     * Storm after a crush: the wither nearest his name tag (or you, if the tag is out of sight),
+     * and the moment he is a block and a half from where the crush caught him.
+     */
+    private fun watchStorm(level: net.minecraft.client.multiplayer.ClientLevel) {
+        val pinned = pinnedStorm
+        if (pinned == null) {
+            val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>()
+            val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains("Storm") == true }
+            val anchor = tag ?: mc.player ?: return
+            val storm = withers.minByOrNull { it.distanceToSqr(anchor) } ?: return
+            pinnedStorm = storm.id to storm.position()
+            return
+        }
+        val e = level.getEntity(pinned.first) ?: return
+        val dx = e.x - pinned.second.x; val dz = e.z - pinned.second.z
+        if (dx * dx + dz * dz > 1.5 * 1.5) { card.onStormMoved(now()); pinnedStorm = null }
     }
 
     private fun open(label: String) = tracker.split(label)?.stop == null && tracker.split(label) != null
@@ -294,27 +350,32 @@ object DungeonSplits : Module(
         return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
     }
 
+    /** The scorecard: its first column (the splits) right-aligned, a light-grey bar before every other. */
+    private fun scorecard(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> =
+        if (lines.isEmpty()) 0 to 0 else table(gfx, lines, rightFirst = true, barsFrom = 1, bar = "§7|")
+
     /**
-     * Tab-separated rows drawn as a table: every column left-aligned and as wide as its widest
-     * cell, with a dark-grey `|` at the same x on every row. Text padded with spaces cannot do
-     * this — a digit and a space are different widths.
+     * Tab-separated rows drawn as a table: every column as wide as its widest cell and left-aligned
+     * (the first right-aligned if [rightFirst]), with a `|` at the same x on every row in front of
+     * each column from [barsFrom] on. Text padded with spaces cannot do this — a digit and a space
+     * are different widths.
      */
-    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
+    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>, rightFirst: Boolean = false, barsFrom: Int = 2, bar: String = "§8|"): Pair<Int, Int> {
         val rows = lines.map { it.split('\t') }
         val cols = rows.maxOf { it.size }
         val widths = IntArray(cols) { c -> rows.maxOf { r -> r.getOrNull(c)?.let(mc.font::width) ?: 0 } }
         val space = mc.font.width(" ")
-        val bar = mc.font.width("|")
-        // Where each column starts: the name, then each time with a " | " in front of it.
+        val barW = mc.font.width("|")
+        // Where each column starts, with " | " in front of the ones that have a bar.
         val starts = IntArray(cols)
-        for (c in 1 until cols) starts[c] = starts[c - 1] + widths[c - 1] + if (c == 1) 0 else space * 2 + bar
+        for (c in 1 until cols) starts[c] = starts[c - 1] + widths[c - 1] + if (c < barsFrom) 0 else space * 2 + barW
         rows.forEachIndexed { i, row ->
             val y = i * LINE_HEIGHT
             row.forEachIndexed { c, cell ->
                 if (cell.isEmpty()) return@forEachIndexed
-                val x = starts[c]
+                val x = if (c == 0 && rightFirst) widths[0] - mc.font.width(cell) else starts[c]
                 gfx.text(cell, x, y, Colors.WHITE, shadow = true)
-                if (c >= 2) gfx.text("§8|", starts[c] - space - bar, y, Colors.WHITE, shadow = true)
+                if (c >= barsFrom) gfx.text(bar, starts[c] - space - barW, y, Colors.WHITE, shadow = true)
             }
         }
         return starts[cols - 1] + widths[cols - 1] to lines.size * LINE_HEIGHT
