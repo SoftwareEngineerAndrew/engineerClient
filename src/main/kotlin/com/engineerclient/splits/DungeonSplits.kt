@@ -133,7 +133,7 @@ object DungeonSplits : Module(
     init {
         on<LevelEvent.Load> {
             tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
-            goldorAt = null; necronAt = null; goldorBar = null
+            goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
             barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
             serverTicks = 0
         }
@@ -191,11 +191,11 @@ object DungeonSplits : Module(
             }
 
             // Goldor's leap ends when the last teammate is inside the core.
-            if ((subs.watchingCore || open(SplitTracker.GOLDOR)) && everyoneInCore(level)) {
-                subs.onEveryoneInCore(now()); card.onEveryoneInCore(now(), "players in the core box")
-            }
-            // ...or, seen from anywhere, Goldor starting to move: he waits until everyone is in.
-            if (open(SplitTracker.GOLDOR) && card.waitingForCore) watchGoldor(level) else goldorAt = null
+            val inCore = if (subs.watchingCore || open(SplitTracker.GOLDOR)) everyoneInCore(level) else false
+            if (inCore == true) { subs.onEveryoneInCore(now()); card.onEveryoneInCore(now(), "players in the core box") }
+            // The backup, only when the box can't tell (someone out of render distance): Goldor
+            // starting to move, which he does once everyone is in.
+            if (open(SplitTracker.GOLDOR) && card.waitingForCore) watchGoldor(level, trusted = inCore == null) else goldorAt = null
             if (open(SplitTracker.NECRON) && card.necronWatch) watchNecron(level) else necronAt = null
 
             // Storm pinned by a crush: the DPS window is over when he moves off it.
@@ -265,17 +265,23 @@ object DungeonSplits : Module(
     }
 
     /**
-     * Every living teammate inside the core. Your original box stopped at y 112, but the fight goes
-     * down to the core's floor (players stood at y 64-90 in the recorded runs), so it now reaches
-     * all the way down. A teammate out of render distance counts as not in.
+     * Every living teammate inside the core — the main way everyone-in is found: true, false (a
+     * teammate you can see is outside), or null when someone is out of render distance and
+     * everyone you can see is in, which the box can't decide. Your original box stopped at y 112,
+     * but the fight goes down to the core's floor (players stood at y 64-90 in the recorded runs),
+     * so it now reaches all the way down.
      */
-    private fun everyoneInCore(level: net.minecraft.client.multiplayer.ClientLevel): Boolean {
+    private fun everyoneInCore(level: net.minecraft.client.multiplayer.ClientLevel): Boolean? {
         val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
         if (alive.isEmpty()) return false
-        return alive.all { mate ->
+        var unseen = false
+        for (mate in alive) {
             val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
-            p != null && p.x >= 39 && p.x < 71 && p.y < 155.5 && p.z >= 54 && p.z < 118
+            if (p == null) { unseen = true; continue }
+            if (!(p.x >= 39 && p.x < 71 && p.y < 155.5 && p.z >= 54 && p.z < 118)) return false
         }
+        // Everyone you can see is in, but not everyone can be seen: the box can't say.
+        return if (unseen) null else true
     }
 
     /** Goldor's boss bar and its last progress. */
@@ -312,20 +318,23 @@ object DungeonSplits : Module(
 
     /** Goldor and where he waits once the core opens. */
     private var goldorAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
+    private var goldorMoved = false
 
     /**
-     * Everyone in the core, read off Goldor: once the core opens he holds still until the last
-     * player is in, then starts for the core — within 0-5 ticks of it in every recorded run, and
-     * he can be seen when the players can't. A jump of blocks at once is him coming into view,
+     * Everyone in the core, read off Goldor — the backup to the player box, used only when [trusted]
+     * (someone is out of render distance, so the box can't tell). Once the core opens he holds still
+     * until the last player is in, then starts for the core: within 0-5 ticks of it in every
+     * recorded run. Only his first move counts. A jump of blocks at once is him coming into view,
      * not moving, and starts the watch again.
      */
-    private fun watchGoldor(level: net.minecraft.client.multiplayer.ClientLevel) {
+    private fun watchGoldor(level: net.minecraft.client.multiplayer.ClientLevel, trusted: Boolean) {
+        if (goldorMoved) return
         val at = goldorAt
         if (at == null) { bossWither(level, "Goldor")?.let { goldorAt = it.id to it.position() }; return }
         val e = level.getEntity(at.first) ?: run { goldorAt = null; return }
         val d = e.position().distanceTo(at.second)
         if (d > 8) goldorAt = e.id to e.position()
-        else if (d > 0.1) { card.onEveryoneInCore(now(), "Goldor moved"); goldorAt = null }
+        else if (d > 0.1) { if (trusted) card.onEveryoneInCore(now(), "Goldor moved, someone out of sight"); goldorMoved = true }
     }
 
     /** Necron and mid, where he starts his fight. */
