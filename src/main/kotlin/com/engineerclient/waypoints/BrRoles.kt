@@ -4,6 +4,8 @@ import com.google.gson.JsonParser
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.sendCommand
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
@@ -12,7 +14,7 @@ import kotlin.math.abs
 /**
  * Blood rush roles: who kills which of a room's BR Waypoints 2 boxes, set on the site
  * (undonecoffee.com/brroles) for each room, each door the rush can come in through, and each number
- * of players killing (1-4). Each role has its boxes, in the order they are killed, and its stack:
+ * of players killing (2-4; one alone kills every box), with a separate set for M7. Each role has its boxes, in the order they are killed, and its stack:
  * boxes it helps with once its own are done. There is always a door runner besides, who only rushes
  * the doors and kills nothing.
  *
@@ -41,8 +43,9 @@ object BrRoles {
 
     const val MAX_KILLING = 4
 
-    /** room -> entry door (room x, z) -> players killing -> plan. */
+    /** room -> entry door (room x, z) -> players killing -> plan; and the same for M7. */
     @Volatile private var plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
+    @Volatile private var m7Plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
 
     /** The number killing in the party's current sync, 0 before any. */
     var count = 0
@@ -186,7 +189,12 @@ object BrRoles {
     fun pull() = BoxSync.pullRoles { body -> mc.execute { adopt(body) } }
 
     private fun adopt(body: String) {
-        val rooms = runCatching { JsonParser.parseString(body).asJsonObject["rooms"].asJsonObject }.getOrNull() ?: return
+        val doc = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
+        plans = read(doc["rooms"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return)
+        m7Plans = doc["m7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { read(it) } ?: emptyMap()
+    }
+
+    private fun read(rooms: com.google.gson.JsonObject): Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> {
         val out = HashMap<String, Map<Pair<Int, Int>, Map<Int, Plan>>>()
         for ((room, doors) in rooms.entrySet()) {
             val byDoor = HashMap<Pair<Int, Int>, Map<Int, Plan>>()
@@ -204,7 +212,7 @@ object BrRoles {
             }
             out[room] = byDoor
         }
-        plans = out
+        return out
     }
 
     /**
@@ -214,7 +222,13 @@ object BrRoles {
      */
     fun planFor(room: String, door: Pair<Int, Int>): Plan? {
         if (count == 0) return null
-        val doors = plans[room] ?: return null
+        // In M7 its own roles, else (none set for this room yet) the other floors'.
+        if (DungeonUtils.floor == Floor.M7) planIn(m7Plans, room, door)?.let { return it }
+        return planIn(plans, room, door)
+    }
+
+    private fun planIn(table: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>>, room: String, door: Pair<Int, Int>): Plan? {
+        val doors = table[room] ?: return null
         val near = doors.keys.minByOrNull { abs(it.first - door.first) + abs(it.second - door.second) } ?: return null
         if (abs(near.first - door.first) + abs(near.second - door.second) > 3) return null
         return doors[near]?.get(count)

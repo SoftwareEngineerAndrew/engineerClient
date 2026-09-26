@@ -396,6 +396,8 @@ object BrWaypoints2 : Module(
      */
     private fun lookOf(box: Box): BrRoles.Look? {
         if (editMode || BrRoles.count == 0) return null
+        // One killing kills everything: every box is theirs, in number order.
+        if (BrRoles.count == 1 && BrRoles.mine == 1) return BrRoles.Look.Mine(number(box))
         val name = box.room ?: return null
         val door = entryDoors[name] ?: return null
         val room = placed(name) ?: return null
