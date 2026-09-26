@@ -99,19 +99,13 @@ object BrWaypoints2 : Module(
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
-    /** The highest box number ever given, kept with the config so a deleted box's number stays retired. */
-    private var lastId by StringSetting("Last Box Number", "0", 16, desc = "The highest box number given.").hide()
-
     /** Which item is the wand, saved with the config so it survives a restart. */
     private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.").hide()
 
     // --- boxes -----------------------------------------------------------------------------------
 
-    /**
-     * A box in the world: its corners ([BoxFaces.MIN_X]..), the room it belongs to, and its number —
-     * given once, kept for good and never reused, so data can be tied to a box across runs.
-     */
-    class Box(val c: IntArray, val room: String?, val id: Int) {
+    /** A box in the world: its corners ([BoxFaces.MIN_X]..) and the room it belongs to. */
+    class Box(val c: IntArray, val room: String?) {
         /** Written to the file. A box placed before Odin has worked out its room waits to be. */
         var saved = false
 
@@ -207,7 +201,7 @@ object BrWaypoints2 : Module(
                 // Seen through walls; the faces faint enough to walk through without noticing.
                 drawFilledBox(bb, PURPLE.withAlpha(0.08f), depth = false)
                 drawWireFrameBox(bb, PURPLE, depth = false)
-                drawText("§d" + box.id, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+                drawText("§d" + number(box), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
             }
 
             // The selected face, only with the wand in hand, when it can actually be edited.
@@ -408,7 +402,7 @@ object BrWaypoints2 : Module(
         val feet = BlockPos.containing(player.x, player.y, player.z)
         val c = intArrayOf(feet.x, feet.y, feet.z, feet.x + 1, feet.y + 1, feet.z + 1)
         if (boxes.any { it.c.contentEquals(c) }) return true
-        val box = Box(c, roomAt(player.x, player.z)?.name, newId())
+        val box = Box(c, roomAt(player.x, player.z)?.name)
         boxes += box
         if (!save(box.room)) modMessage("§eOdin has not worked out this room yet; the box saves once it has.")
         return true
@@ -525,13 +519,13 @@ object BrWaypoints2 : Module(
             val t = transform(room)
             if (loadedRooms[name] == t) continue
             boxes.removeAll { it.room == name && it.saved }
-            for (r in saved[name].orEmpty()) {
+            for (r in saved[name].orEmpty().sortedBy { it.getOrElse(6) { 0 } }) {
                 val a = room.getRealCoords(BlockPos(r[0], r[1], r[2]))
                 val b = room.getRealCoords(BlockPos(r[3], r[4], r[5]))
                 boxes += Box(intArrayOf(
                     minOf(a.x, b.x), minOf(a.y, b.y), minOf(a.z, b.z),
                     maxOf(a.x, b.x) + 1, maxOf(a.y, b.y) + 1, maxOf(a.z, b.z) + 1,
-                ), name, r[6]).also { it.saved = true }
+                ), name).also { it.saved = true }
             }
             loadedRooms[name] = t
             if (boxes.any { it.room == name && !it.saved }) save(name)
@@ -545,10 +539,10 @@ object BrWaypoints2 : Module(
         // Not yet put back by this room's current placement: [loadRooms] saves it once it has.
         if (loadedRooms[name] != transform(room)) return false
         val mine = boxes.filter { it.room == name }
-        val list = mine.map { box ->
+        val list = mine.mapIndexed { i, box ->
             val a = room.getRelativeCoords(BlockPos(box.c[0], box.c[1], box.c[2]))
             val b = room.getRelativeCoords(BlockPos(box.c[3] - 1, box.c[4] - 1, box.c[5] - 1))
-            intArrayOf(a.x, a.y, a.z, b.x, b.y, b.z, box.id)
+            intArrayOf(a.x, a.y, a.z, b.x, b.y, b.z, i + 1)
         }
         mine.forEach { it.saved = true }
         if (list.isEmpty()) saved.remove(name) else saved[name] = list.toMutableList()
@@ -559,33 +553,17 @@ object BrWaypoints2 : Module(
     private val file get() = File(mc.gameDirectory, "config/engineerclient/brwaypoints2.json")
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
-    /** The next box number: one past the highest ever given, so a deleted box's number is not reused. */
-    private var nextId = 1
-
-    private fun newId(): Int {
-        saved.size // numbers are only known once the file has been read
-        val id = maxOf(nextId, (lastId.toIntOrNull() ?: 0) + 1)
-        nextId = id + 1
-        lastId = id.toString()
-        return id
-    }
-
     /**
-     * The saved boxes: per room, each as x1 y1 z1 x2 y2 z2 and its number. Boxes saved before they
-     * had numbers get one here, once, and the file is rewritten with them.
+     * A box's number: its place among its room's boxes, in the order they were made — 1, 2, 3...
+     * in every room, with no gaps (deleting one moves the ones after it down).
      */
-    private fun read(): MutableMap<String, MutableList<IntArray>> {
-        val map = runCatching {
-            val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
-            gson.fromJson<MutableMap<String, MutableList<IntArray>>>(file.readText(), type)
-        }.getOrNull() ?: return mutableMapOf()
-        var top = map.values.flatten().filter { it.size >= 7 }.maxOfOrNull { it[6] } ?: 0
-        var numbered = false
-        for (list in map.values) list.replaceAll { r -> if (r.size >= 7) r else { numbered = true; r.copyOf(7).also { it[6] = ++top } } }
-        nextId = top + 1
-        if (numbered) runCatching { file.writeText(gson.toJson(map)) }
-        return map
-    }
+    private fun number(box: Box) = boxes.filter { it.room == box.room }.indexOf(box) + 1
+
+    /** The saved boxes: per room, each as x1 y1 z1 x2 y2 z2 and its number (its place in the room). */
+    private fun read(): MutableMap<String, MutableList<IntArray>> = runCatching {
+        val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
+        gson.fromJson<MutableMap<String, MutableList<IntArray>>>(file.readText(), type)
+    }.getOrNull() ?: mutableMapOf()
 
     private fun write() {
         runCatching {
@@ -601,7 +579,7 @@ object BrWaypoints2 : Module(
     private var siteVersion = 0L
 
     private fun push() {
-        val json = gson.toJson(mapOf("rooms" to saved, "lastId" to maxOf(nextId - 1, lastId.toIntOrNull() ?: 0)))
+        val json = gson.toJson(mapOf("rooms" to saved))
         BoxSync.push(json) { at -> mc.execute { siteVersion = maxOf(siteVersion, at) } }
     }
 
@@ -621,9 +599,6 @@ object BrWaypoints2 : Module(
         val rooms = runCatching { gson.fromJson<MutableMap<String, MutableList<IntArray>>>(site["rooms"], type) }.getOrNull() ?: return
         siteVersion = at
         saved.clear(); saved.putAll(rooms)
-        val top = rooms.values.flatten().maxOfOrNull { it[6] } ?: 0
-        nextId = maxOf(nextId, top + 1)
-        if (top > (lastId.toIntOrNull() ?: 0)) lastId = top.toString()
         runCatching { file.parentFile.mkdirs(); file.writeText(gson.toJson(saved)); file.setLastModified(at) }
         // Put the boxes back from the new copy; ones placed here and not saved yet stay.
         boxes.removeAll { it.saved }
