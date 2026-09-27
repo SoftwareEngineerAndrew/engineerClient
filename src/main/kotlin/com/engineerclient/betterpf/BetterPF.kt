@@ -272,6 +272,8 @@ object BetterPF : Module(
         }
     }
 
+    private const val RUN_START = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
+    private val RUN_END = Regex("""^\s*☠ Defeated """)
     private val KIND = Regex("""^\{"k":"([a-z]+)"""")
     private val TICK = Regex(""""t":(\d+)""")
 
@@ -280,6 +282,8 @@ object BetterPF : Module(
         val summary = JsonObject()
         val rooms = ArrayList<Pair<String, String>>()
         var ticks = 0
+        var startTick: Int? = null
+        var endTick: Int? = null
         BufferedReader(InputStreamReader(GZIPInputStream(Files.newInputStream(file)), Charsets.UTF_8), 1 shl 16).useLines { lines ->
             for (line in lines) {
                 val kind = KIND.find(line)?.groupValues?.get(1) ?: continue
@@ -289,12 +293,26 @@ object BetterPF : Module(
                     "floor" -> summary.add("floor", JsonParser.parseString(line).asJsonObject["floor"])
                     "party" -> summary.add("party", JsonParser.parseString(line).asJsonObject["m"])
                     "lib" -> JsonParser.parseString(line).asJsonObject["key"]?.asString?.let { rooms += it to line }
+                    "chat" -> {
+                        val l = JsonParser.parseString(line).asJsonObject
+                        val m = l["m"]?.asString ?: continue
+                        val t = l["t"]?.asInt ?: 0
+                        if (startTick == null && m.startsWith(RUN_START)) startTick = t
+                        else if (RUN_END.containsMatchIn(m)) endTick = t
+                    }
                 }
             }
         }
         if (!summary.has("floor")) summary.addProperty("floor", "")
         if (!summary.has("party")) summary.add("party", JsonArray())
         summary.addProperty("ticks", ticks)
+        // Whether it is a whole run (Mort's map to "☠ Defeated") and how long it took — worked out
+        // here so the server doesn't have to unpack the recording, which a big run can't afford on
+        // its CPU budget (Cloudflare error 1102). The same rule the server used.
+        val start = startTick; val end = endTick
+        val cleared = start != null && end != null && end > start
+        summary.addProperty("cleared", if (cleared) 1 else 0)
+        if (cleared) summary.addProperty("timeMs", (end!! - start!!) * 50L)
         return summary to rooms
     }
 
