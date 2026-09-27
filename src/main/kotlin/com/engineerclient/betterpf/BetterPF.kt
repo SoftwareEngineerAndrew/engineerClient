@@ -62,6 +62,8 @@ object BetterPF : Module(
 ) {
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Captures each dungeon room once (every block) for the viewer's shared room library, plus the doors/walls between rooms each run. Rooms the library already has are skipped.")
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf). Needs the upload key.")
+    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them.")
+    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, and friends coming online out of recordings, so they are never saved or uploaded. Party chat stays in.")
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
 
@@ -149,6 +151,7 @@ object BetterPF : Module(
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
             val colored = legacyText(content)
+            if (hidePrivateChats && PRIVATE_CHAT.containsMatchIn(text)) return@onReceive
             EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored) } }
         }
         // Chests opening and closing (the lid's block event: how many players have it open), so the
@@ -246,7 +249,7 @@ object BetterPF : Module(
         Thread.ofVirtual().name("betterpf-upload").start {
             try {
                 val id = send(file, key)
-                EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded - §f$SITE/betterpf/$id")
+                EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
             } catch (t: Throwable) {
                 if (t !is Refused) EngineerClient.logger.error("[ec] betterpf upload failed", t)
                 EngineerClient.chat("§8[§6EC§8]§c Better PF: upload ${if (t is Refused) "refused (${t.message})" else "failed (${t.javaClass.simpleName})"}. The run is still saved locally.")
@@ -282,8 +285,9 @@ object BetterPF : Module(
 
     /**
      * Uploads every finished run in the runs folder the site doesn't have. A run is on the site if a
-     * run there has the same recorder and start time. The one being recorded is still a .part file,
-     * so it is never picked up. Runs even with Upload Runs off - pressing the button is the ask.
+     * run there has the same recorder and start time — private ones included, asked for by name.
+     * The one being recorded is still a .part file, so it is never picked up. Runs even with Upload
+     * Runs off - pressing the button is the ask.
      */
     private fun uploadMissing() {
         val key = uploadKey.trim()
@@ -292,13 +296,15 @@ object BetterPF : Module(
         catchingUp = true
         Thread.ofVirtual().name("betterpf-catch-up").start {
             try {
-                val list = http.send(HttpRequest.newBuilder(URI.create(RUNS_URL)).timeout(Duration.ofSeconds(30)).GET().build(), HttpResponse.BodyHandlers.ofString())
-                if (list.statusCode() != 200) throw Refused("run list ${list.statusCode()}")
-                val onSite = JsonParser.parseString(list.body()).asJsonArray.mapTo(HashSet()) { r ->
-                    r.asJsonObject.let { it["self"]?.asString + "|" + it["startMs"]?.asLong }
-                }
+                // Asks by name rather than reading the run list, which leaves private runs off.
                 val local = Files.list(runsDir).use { s -> s.filter { it.fileName.toString().endsWith(".jsonl.gz") }.sorted().toList() }
-                val missing = local.filter { f -> runKey(f)?.let { it !in onSite } ?: false }
+                val keys = local.associateWith { runKey(it) }
+                val ask = JsonArray().also { arr -> keys.values.filterNotNull().forEach { arr.add(it) } }
+                val have = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/have")).header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(ask.toString())).build(), HttpResponse.BodyHandlers.ofString())
+                if (have.statusCode() != 200) throw Refused("run check ${have.statusCode()}")
+                val onSite = JsonParser.parseString(have.body()).asJsonArray.mapTo(HashSet()) { it.asString }
+                val missing = local.filter { f -> keys[f]?.let { it !in onSite } ?: false }
                 if (missing.isEmpty()) return@start EngineerClient.chat("§8[§6EC§8]§7 Better PF: all ${local.size} runs here are already on the viewer.")
                 EngineerClient.chat("§8[§6EC§8]§7 Better PF: ${missing.size} of ${local.size} runs aren't on the viewer - uploading them.")
                 var done = 0
@@ -329,6 +335,13 @@ object BetterPF : Module(
             meta["self"].asString + "|" + meta["startMs"].asLong
         }
     }.getOrNull()
+
+    /**
+     * Chat that is nobody else's business: private messages both ways, guild, officer and co-op
+     * chat, and friends coming online. Hypixel writes them "From [RANK] name: ...", "To name: ...",
+     * "Guild > ...", "Officer > ...", "Co-op > ...", "Friend > ...".
+     */
+    private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > )""")
 
     private const val RUN_START = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private val RUN_END = Regex("""^\s*☠ Defeated """)
@@ -370,6 +383,7 @@ object BetterPF : Module(
         val start = startTick; val end = endTick
         val cleared = start != null && end != null && end > start
         summary.addProperty("cleared", if (cleared) 1 else 0)
+        if (privateRuns) summary.addProperty("private", 1)
         if (cleared) summary.addProperty("timeMs", (end!! - start!!) * 50L)
         return summary to rooms
     }
