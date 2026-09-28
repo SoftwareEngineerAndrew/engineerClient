@@ -159,7 +159,7 @@ class BloodRunDetail {
     private fun compact(now: Stamp, totalRow: Boolean): List<String> {
         val out = mutableListOf<String>()
         for (r in all()) out += row(name(r) + ": ", stats(r, now))
-        if (totalRow) averages()?.let { out += row(TOTAL + "Total: ", it) }
+        if (totalRow) averages()?.let { out += row(TOTAL + "Avg: ", it) }
         return out
     }
 
