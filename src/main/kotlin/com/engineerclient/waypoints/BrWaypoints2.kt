@@ -190,7 +190,7 @@ object BrWaypoints2 : Module(
             BrRoles.pull()
             BrRoles.newRun(dungeonOver = wasInDungeon)
             wasInDungeon = false
-            entryDoors.clear(); noPlanSaid.clear()
+            entryDoors.clear(); noPlanSaid.clear(); walkedIn.clear(); myTile = null
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
             rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); witherSides.clear(); path = emptyMap(); entrances = emptyMap(); lastRoom = null
         }
@@ -218,6 +218,7 @@ object BrWaypoints2 : Module(
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
             if (ticks % 10 == 0) mapPath()
+            trackMyDoor()
             if (debug && (rushing || allRooms)) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
@@ -477,6 +478,7 @@ object BrWaypoints2 : Module(
     private fun debugRoom(name: String) {
         val door = entryOf(name) ?: return modMessage("§dBR debug §f$name §8— " + if (onRush(name)) "on the rush, door not known yet" else "not on the rush path")
         val how = when {
+            walkedIn[name] != null -> "you walked in"
             path[name] != null -> "rush path"
             entryDoors[name] != null -> "wither door seen falling"
             else -> "off the rush, Entrance side"
@@ -508,10 +510,32 @@ object BrWaypoints2 : Module(
     private val entryDoors = HashMap<String, Pair<Int, Int>>()
 
     /**
-     * The door a room is entered by, for its roles: on the rush, the path's (else the wither door
-     * seen falling into it); off it (shown with All Rooms), its door on the Entrance side.
+     * The door a room is entered by, for its roles: the one you last walked in through. Before you
+     * have (the next room while its door comes down), or if you leapt in, the rush path's door, the
+     * wither door seen falling into it, or else its door on the Entrance side of the layout.
      */
-    private fun entryOf(name: String) = path[name] ?: entryDoors[name] ?: entrances[name]
+    private fun entryOf(name: String) = walkedIn[name] ?: path[name] ?: entryDoors[name] ?: entrances[name]
+
+    /** Each room you walked into, and the doorway you last came in through (world x, z). */
+    private val walkedIn = HashMap<String, Pair<Int, Int>>()
+    private var myTile: Pair<Int, Int>? = null
+
+    /**
+     * Your own steps between rooms: from one room's tile into the next tile over, belonging to
+     * another room, is through the doorway between them — the only one two tiles can share, halfway
+     * between their centres. A jump of more than one tile (a leap, a pearl) is no door.
+     */
+    private fun trackMyDoor() {
+        val p = mc.player ?: return
+        val t = Math.floorDiv(p.blockX + 201, 32) to Math.floorDiv(p.blockZ + 201, 32)
+        val was = myTile
+        if (was == t) return
+        val room = tileRoom(t)?.name ?: return
+        myTile = t
+        val from = was?.let { tileRoom(it)?.name } ?: return
+        if (from == room || kotlin.math.abs(was.first - t.first) + kotlin.math.abs(was.second - t.second) != 1) return
+        walkedIn[room] = (-185 + 16 * (was.first + t.first)) to (-185 + 16 * (was.second + t.second))
+    }
 
     /** A box as drawn: its colour, the label over it, and whether it is the next of yours to kill. */
     private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean)
@@ -561,7 +585,7 @@ object BrWaypoints2 : Module(
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
         val plan = BrRoles.planFor(name, rel.x to rel.z)
-        if (plan == null && noPlanSaid.add(name)) modMessage("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
+        if (plan == null && noPlanSaid.add("$name $door")) modMessage("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
         return plan
     }
 
