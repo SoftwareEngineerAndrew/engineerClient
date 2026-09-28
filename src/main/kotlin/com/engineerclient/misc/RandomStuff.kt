@@ -53,6 +53,20 @@ object RandomStuff : Module(
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
     private val blackSky by BooleanSetting("Black Sky", false, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
 
+    // --- Blur in GUI ---------------------------------------------------------------------------
+    //
+    // Vanilla blurs the world behind its own menus (pause, options, Odin's click GUI) but never
+    // behind an in-world UI — and on Skyblock the in-world UIs are the ones that matter: a chest,
+    // the Bazaar, the Auction House, your own inventory. This turns the same blur on for all of
+    // them, and moves the cut so only the world is blurred: the HUD stays sharp behind the GUI,
+    // which is the point, because the sidebar and Odin's map are still worth reading with a chest
+    // open.
+    //
+    // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
+    // — six full-screen passes — and only for the frames a screen is actually open.
+    private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
+    private val blurStrength by NumberSetting("Blur Strength", 5, 1, 10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
+
     // --- Enchantment glint ---------------------------------------------------------------------
     //
     // Every Skyblock weapon, piece of armour and most of the junk in a dungeon inventory carries
@@ -140,6 +154,19 @@ object RandomStuff : Module(
 
     /** Whether the glint should be dropped for a piece of worn equipment. */
     fun hidesArmorGlint(): Boolean = enabled && noGlint
+
+    /**
+     * Whether the world behind the open screen should be blurred this frame.
+     *
+     * Read by GuiBlurMixin (marks the blur), ScreenBlurMixin (drops vanilla's own marker) and
+     * BlurRadiusMixin (radius). All three run in the same frame's extract pass on the render
+     * thread, so they cannot disagree — which matters, because the game throws outright if one
+     * frame is told to blur twice.
+     */
+    fun blursGui(): Boolean = enabled && blurInGui && mc.screen != null && mc.level != null
+
+    /** Radius for [blursGui], on the same 1..10 scale as vanilla's Menu Background Blur slider. */
+    fun blurRadius(): Int = blurStrength.toInt()
 
     /** A live terminal (Odin tracks the open one) or a practice term sim. */
     private fun inTerminal(): Boolean =
