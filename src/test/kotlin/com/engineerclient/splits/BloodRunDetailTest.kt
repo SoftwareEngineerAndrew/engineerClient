@@ -16,7 +16,7 @@ class BloodRunDetailTest {
     private fun plain(line: String) = line.replace(Regex("§."), "")
 
     /** A compact row read back the way it looks on screen. */
-    private fun row(line: String) = plain(line).split('\t').let { it[0] + it[1] + it.drop(2).joinToString(" | ") }
+    private fun row(line: String) = plain(line).replace('\t', ' ').replace(Regex(" +"), " ").trim()
 
     private val entrance = MapRoom("e", "Entrance", fairy = false, entrance = true)
     private val fairy = MapRoom("f", "Fairy", fairy = true, entrance = false)
@@ -67,37 +67,37 @@ class BloodRunDetailTest {
         val lines = raw.map(::row)
         // Pipes starts when the start door starts falling (133), not on Mort's line; the key counts
         // from the door being down (144) to the pickup (304). Its door took 0.10s: not shown.
-        assertEquals("8.65s Pipes: 8.00s", lines[0])
+        assertEquals("8.00s Pipes: 8.65s", lines[0])
         // A pickup of 0.60s (key seen at 292): dark red.
-        assertTrue(raw[0].split('\t')[2].startsWith("§4"), raw[0])
+        assertTrue(raw[0].split('\t')[1].startsWith("§4"), raw[0])
         // Duncan: a 0.30s pickup is light red, and its door took 0.40s, so it shows, light grey.
-        assertEquals("2.10s Duncan: 1.05s | 0.40s", lines[1])
-        assertTrue(raw[1].split('\t')[2].startsWith("§c") && raw[1].split('\t')[3].startsWith("§7"), raw[1])
+        assertEquals("0.40s | 1.05s Duncan: 2.10s", lines[1])
+        assertTrue(raw[1].split('\t')[1].startsWith("§c") && raw[1].split('\t')[0].startsWith("§7"), raw[1])
         // The key never seen on the ground: from the door down to the pickup all the same.
-        assertEquals("5.75s Deathmite: 5.00s", lines[2])
+        assertEquals("5.00s Deathmite: 5.75s", lines[2])
         assertTrue(lines.last().contains(" Avg: "), lines.last())
     }
 
     @Test
     fun `the room that leads into fairy is pink`() {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700))
-        assertTrue(lines[3].split('\t')[1].startsWith("§dLocked Away: "), lines[3])
-        assertTrue(lines[0].split('\t')[1].startsWith("§5Pipes: "), lines[0])
+        assertTrue(lines[3].split('\t')[2].startsWith("§dLocked Away: "), lines[3])
+        assertTrue(lines[0].split('\t')[2].startsWith("§5Pipes: "), lines[0])
     }
 
     @Test
     fun `the room being run counts up live, all but its total`() {
         val lines = rush(until = 300).lines(BloodRunDetail.Level.COMPACT, stamp(300)).map(::row)
         // Waiting on the pickup: 156 ticks since the door was down, the key on the ground 8 of them.
-        assertEquals(listOf("Pipes: 7.80s"), lines)
+        assertEquals(listOf("7.80s Pipes:"), lines)
     }
 
     @Test
     fun `the key only counts once the door is down`() {
         val falling = rush(until = 140).lines(BloodRunDetail.Level.COMPACT, stamp(140)).map(::row)
-        assertEquals(listOf("...: "), falling) // named once the door is down
+        assertEquals(listOf("...:"), falling) // named once the door is down
         val down = rush(until = 150).lines(BloodRunDetail.Level.COMPACT, stamp(150)).map(::row)
-        assertEquals(listOf("Pipes: 0.30s"), down)
+        assertEquals(listOf("0.30s Pipes:"), down)
     }
 
     @Test

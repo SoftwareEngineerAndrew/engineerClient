@@ -152,8 +152,8 @@ class BloodRunDetail {
     }
 
     /**
-     * One row per room, its total first, left of the name, then the key and the door:
-     * `9.45s Pipes: 8.70s | 0.40s`, the separators drawn by the HUD.
+     * One row per room, right to left: the name, the key just left of it, the door left of that,
+     * and the total right of the name: `0.40s | 8.70s Pipes: 9.45s`.
      *
      *  - key: from the door into the room being all the way down to the key being picked up (the
      *    last mob and the pickup together). Light red, or dark red when the pickup itself - key on
@@ -186,18 +186,18 @@ class BloodRunDetail {
     private fun doorSpan(r: Room, live: Stamp?) = span(r.keyPicked, r.doorOpened ?: live)
 
     /**
-     * One compact row as tab-separated cells — the total (with a space after it, as nothing else
-     * separates it from the name), the name, the key, the door; a missing one left empty so every
-     * time stays in its own column. The HUD lays the cells out as a table, the total right-aligned,
-     * which is what keeps everything in line from row to row.
+     * One compact row as tab-separated cells — the door (with its bar), the key, the name, the
+     * total; a missing one left empty so every time stays in its own column. Each cell carries the
+     * space after it. The HUD lays the cells out as a table, the times right-aligned, which is what
+     * keeps everything in line from row to row.
      */
     private fun row(name: String, key: Pair<Long, Long>?, pickup: Pair<Long, Long>?, door: Pair<Long, Long>?, total: Pair<Long, Long>?): String {
         val keyColour = if (pickup != null && pickup.first > SLOW_PICKUP_MS) SLOW_KEY else KEY
         val cells = listOf(
-            total?.let { TOTAL + SplitFormat.seconds(it.first) + " " }.orEmpty(),
+            door?.takeIf { it.first > SLOW_DOOR_MS }?.let { DOOR + SplitFormat.seconds(it.first) + " §8| " }.orEmpty(),
+            key?.let { keyColour + SplitFormat.seconds(it.first) + " " }.orEmpty(),
             name,
-            key?.let { keyColour + SplitFormat.seconds(it.first) }.orEmpty(),
-            door?.takeIf { it.first > SLOW_DOOR_MS }?.let { DOOR + SplitFormat.seconds(it.first) }.orEmpty(),
+            total?.let { TOTAL + SplitFormat.seconds(it.first) }.orEmpty(),
         )
         return cells.joinToString("\t").trimEnd('\t')
     }
