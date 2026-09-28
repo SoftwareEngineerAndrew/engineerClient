@@ -1,7 +1,9 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.HUDSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.EntityEvent
@@ -35,7 +37,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  *
  *  - Compact: one row, the section's times left to right, `Name: 1.52s | 0.21s | ...`.
  *  - Detailed: the same, vertical and labelled, `Move > 8.12s (8.00s)`.
- *  - Extreme: Detailed plus every extra moment known about the section.
+ *  - Debug: Detailed plus every extra moment known about the section.
  *
  * [SplitTracker] times the splits, [SubSplitTracker] the 25 boss steps, [BloodRunDetail] the rush
  * room by room and [BossDetail] everything else; this module feeds them chat, the two clocks and
@@ -72,7 +74,7 @@ object DungeonSplits : Module(
         Section("Necron", SplitTracker.NECRON, "§c"),
     )
 
-    private val LEVELS = listOf("Off", "Compact", "Detailed", "Extreme")
+    private val LEVELS = listOf("Compact", "Detailed", "Debug")
 
     // The run's splits themselves are Odin's Splits now, in the Engineer Splits look
     // (OdinSplitsLook); [tracker] still times the phases the sub splits and scorecard hang off.
@@ -95,15 +97,20 @@ object DungeonSplits : Module(
      * HUDs are made up front because a HUD has to exist before the run that fills it.
      */
     private val levels = HashMap<Section, SelectorSetting>()
+    private val huds = HashMap<Section, HUDSetting>()
     private lateinit var totalRow: BooleanSetting
+
+    /** A section's HUD is on: its detail settings only show then. */
+    private fun hudOn(s: Section) = huds[s]?.value?.enabled == true
 
     init {
         for (s in SECTIONS) {
-            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows."))
+            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
+                .withDependency { hudOn(s) }
             if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
                 BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
-            )
-            registerSetting(
+            ).withDependency { hudOn(s) && level(s) == BloodRunDetail.Level.COMPACT }
+            huds[s] = registerSetting(
                 HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 0, 0, 1f) { example ->
                     if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
                         "§70.52s §8| \t§c1.73s \t§5Hallway: \t§62.31s",
@@ -115,7 +122,7 @@ object DungeonSplits : Module(
         }
     }
 
-    private fun level(s: Section) = BloodRunDetail.Level.entries[levels[s]?.value ?: 1]
+    private fun level(s: Section) = BloodRunDetail.Level.entries[levels[s]?.value ?: 0]
 
     // What the world shows, watched only while it can matter.
     private val barriers = mutableListOf<Pair<Int, Int>>()
@@ -385,7 +392,6 @@ object DungeonSplits : Module(
 
     private fun subLines(s: Section): List<String> {
         val level = level(s)
-        if (level == BloodRunDetail.Level.OFF) return emptyList()
         val now = now()
         if (s.window == SplitTracker.OPEN) return blood.lines(level, now, totalRow.enabled)
 
@@ -395,9 +401,13 @@ object DungeonSplits : Module(
         // The boss's own steps each run until the next; the Watcher's and Portal's are moments,
         // timed from the start of the split.
         val boss = subs.forSplit(s.window)
+        // Maxor's are each the time since Maxor started, at the end of that step (so far, for the
+        // one running): where in the fight each stun and DPS landed, rather than how long each took.
+        val fromStart = s.window == SplitTracker.MAXOR
         val steps = boss.map { st ->
             val stop = st.stop ?: now
-            Row(st.label, st.start, stop.realMs - st.start.realMs, (stop.tick - st.start.tick).toLong())
+            val from = if (fromStart) split.start else st.start
+            Row(st.label, st.start, stop.realMs - from.realMs, (stop.tick - from.tick).toLong())
         } + detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks) } }
 
         if (level == BloodRunDetail.Level.COMPACT) {
@@ -408,7 +418,7 @@ object DungeonSplits : Module(
         }
 
         var rows = steps
-        if (level == BloodRunDetail.Level.EXTREME) {
+        if (level == BloodRunDetail.Level.DEBUG) {
             rows = rows + detail.lines(s.window).filter { !it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, e.who) } }
         }
         return rows.sortedBy { it.at.realMs }.map { r ->

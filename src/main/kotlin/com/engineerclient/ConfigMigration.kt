@@ -18,6 +18,7 @@ object ConfigMigration {
      *  - what used to live in a modified Odin and ships with engineerClient now - Leap Menu's Click
      *    Delay and Leap Outline (Leap Extras), Player Display's Health/Mana Bar HUDs (Random Stuff) -
      *    is copied out of Odin's own config, where that Odin saved it;
+     *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
      *  - engineerClient's own Splits HUD is Odin's Splits in the Engineer Splits look now, so if it
      *    was on, Odin's Splits gets that look (written into Odin's config, read once the look's
      *    settings exist - see OdinSplitsLook.install).
@@ -44,6 +45,22 @@ object ConfigMigration {
             }
             modules.remove(old)
             changed = true
+        }
+
+        // Sub Splits' detail levels lost "Off" and renamed "Extreme" to "Debug". Off was a way of
+        // hiding the HUD, so it becomes the HUD switched off (the level itself back to Compact).
+        module(modules, "Sub Splits")?.let(::settings)?.let { sub ->
+            for ((key, value) in sub.entrySet().toList()) {
+                if (!key.endsWith(" Detail") || !value.isJsonPrimitive) continue
+                when (value.asString) {
+                    "Extreme" -> { sub.addProperty(key, "Debug"); changed = true }
+                    "Off" -> {
+                        sub.addProperty(key, "Compact")
+                        sub[key.removeSuffix(" Detail") + " Sub Splits"]?.takeIf { it.isJsonObject }?.asJsonObject?.addProperty("enabled", false)
+                        changed = true
+                    }
+                }
+            }
         }
 
         val odinFile = odinDir.resolve("odin-config.json")

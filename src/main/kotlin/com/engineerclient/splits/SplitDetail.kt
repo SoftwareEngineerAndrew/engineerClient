@@ -4,7 +4,7 @@ package com.engineerclient.splits
  * The moments inside a split, filed under the split's label ([SplitTracker]'s constants).
  *
  * A [step] is one of the split's own milestones — the Watcher's lines, the portal opening — and
- * shows at every level. Everything else is extra detail that only Extreme shows.
+ * shows at every level. Everything else is extra detail that only Debug shows.
  */
 class SplitDetail {
 

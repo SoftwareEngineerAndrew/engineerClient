@@ -94,6 +94,18 @@ class ConfigMigrationTest {
     }
 
     @Test
+    fun `detail levels - Extreme is Debug, Off is the HUD off`() {
+        val d = dir("""[{"name":"Sub Splits","enabled":true,"settings":{"Maxor Detail":"Extreme","Storm Detail":"Off","Storm Sub Splits":{"x":1,"y":2,"scale":1,"enabled":true},"Goldor Detail":"Detailed"}}]""")
+        assertTrue(ConfigMigration.run(d))
+        val sub = modules(d).named("Sub Splits")!!
+        assertEquals("Debug", sub.s("Maxor Detail").asString)
+        assertEquals("Compact", sub.s("Storm Detail").asString)
+        assertFalse(sub.s("Storm Sub Splits").asJsonObject["enabled"].asBoolean)
+        assertEquals("Detailed", sub.s("Goldor Detail").asString)
+        assertFalse(ConfigMigration.run(d))
+    }
+
+    @Test
     fun `no config yet is left alone`() {
         val d = Files.createTempDirectory("ecmig")
         assertFalse(ConfigMigration.run(d))

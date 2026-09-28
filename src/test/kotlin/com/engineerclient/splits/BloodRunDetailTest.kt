@@ -110,8 +110,8 @@ class BloodRunDetailTest {
     }
 
     @Test
-    fun `extreme has all seven lines with who did it`() {
-        val lines = rush().lines(BloodRunDetail.Level.EXTREME, stamp(700)).map(::plain)
+    fun `debug has all seven lines with who did it`() {
+        val lines = rush().lines(BloodRunDetail.Level.DEBUG, stamp(700)).map(::plain)
         assertEquals("key picked up > 8.55s (8.55s) johnswizzlechang", lines[3])
         assertEquals("door opened > 8.65s (8.65s) TheBadOne", lines[5])
         assertTrue(lines.any { it.startsWith("average total room time > ") })
