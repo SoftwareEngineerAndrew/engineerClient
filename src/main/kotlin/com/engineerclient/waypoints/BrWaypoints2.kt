@@ -79,7 +79,7 @@ import java.io.File
  * or whoever gets to the doors first) sees no boxes while rushing.
  */
 object BrWaypoints2 : Module(
-    name = "BR Waypoints 2",
+    name = "BR Roles",
     category = Category.custom("Engineer Client"),
     description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made in game with a wand.",
 ) {
@@ -88,7 +88,7 @@ object BrWaypoints2 : Module(
 
     private val editKey by KeybindSetting("Edit Mode Keybind", GLFW.GLFW_KEY_UNKNOWN, "Toggles Edit Mode.").onPress {
         editMode = !editMode
-        modMessage("§dBR Waypoints 2 §7edit mode " + if (editMode) "§aon" else "§coff")
+        modMessage("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
     }
 
     private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
@@ -848,7 +848,7 @@ object BrWaypoints2 : Module(
         runCatching {
             file.parentFile.mkdirs()
             file.writeText(gson.toJson(saved))
-        }.onFailure { modMessage("§cCould not save BR Waypoints 2 boxes: ${it.message}") }
+        }.onFailure { modMessage("§cCould not save BR Roles boxes: ${it.message}") }
         push()
     }
 

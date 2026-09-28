@@ -13,6 +13,7 @@ import com.odtheking.odin.events.core.EventPriority
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.engineerclient.leap.LeapExtras
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.equalsOneOf
@@ -141,8 +142,8 @@ object PovPreviews : Module(
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
             // Runs before Odin draws its boxes (see the priority note above), so this frame picks it up.
             val active = wants()
-            LeapMenu.overlayScale = if (active) leapBoxScale else 1f
-            LeapMenu.overlayAlpha = if (active) leapBoxOpacity else 1f
+            LeapExtras.overlayScale = if (active) leapBoxScale else 1f
+            LeapExtras.overlayAlpha = if (active) leapBoxOpacity else 1f
             EngineerClient.safely("pov gui") { PovCapture.onScreenExtract(guiGraphics) }
         }
 
@@ -161,8 +162,8 @@ object PovPreviews : Module(
     }
 
     override fun onDisable() {
-        LeapMenu.overlayScale = 1f
-        LeapMenu.overlayAlpha = 1f
+        LeapExtras.overlayScale = 1f
+        LeapExtras.overlayAlpha = 1f
         PovPose.reset()
         // The feeds are GPU targets; they are freed on the render thread, next time the capture
         // path runs, not here — a module toggle can come from a keybind at any point in the frame.

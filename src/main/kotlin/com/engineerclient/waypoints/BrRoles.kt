@@ -12,13 +12,13 @@ import net.minecraft.network.chat.HoverEvent
 import kotlin.math.abs
 
 /**
- * Blood rush roles: who kills which of a room's BR Waypoints 2 boxes, set on the site
+ * Blood rush roles: who kills which of a room's BR Roles boxes, set on the site
  * (undonecoffee.com/brroles) for each room, each door the rush can come in through, and each number
  * of players killing (2-4), with a separate set for M7. Each role has its boxes, in the order
  * they are killed, and its stack: boxes it helps with once its own are done. There is always a door runner besides, who only rushes
  * the doors and kills nothing.
  *
- * Each player sets how many kill (duo 2, trio 3, quad 4) and their own role in BR Waypoints 2's
+ * Each player sets how many kill (duo 2, trio 3, quad 4) and their own role in BR Roles's
  * settings, for a team that runs together. Party chat overrides that for a run, for pickup groups:
  * "!3br 2" is "3 of us are killing, I am role 2", "!br 2" the same at the team size already set,
  * "!br d" (or "!3br d") is "I am on the door". A claim lasts until the dungeon ends. Everyone

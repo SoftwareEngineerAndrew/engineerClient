@@ -10,26 +10,39 @@ import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RenderBossBarEvent
-import com.odtheking.odin.events.RenderItemNameEvent
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.HUDSetting
+import com.odtheking.odin.clickgui.settings.impl.HudElement
+import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
-import com.odtheking.odin.features.impl.render.RenderOptimizer
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
+import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.Color.Companion.withAlpha
+import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.alert
+import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.sendCommand
+import com.odtheking.odin.utils.skyblock.ActionBarListener
 import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.ConnectScreen
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.client.multiplayer.ServerData
 import net.minecraft.client.multiplayer.resolver.ServerAddress
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntityType
+import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.item.ItemDisplayContext
+import net.minecraft.world.phys.Vec3
 
 /**
  * Grab bag of small independent toggles that don't warrant their own module.
@@ -45,8 +58,43 @@ object RandomStuff : Module(
     val hideChat by BooleanSetting("Hide Chat", false, desc = "Hides all chat messages from the screen. Other mods still see them.")
     private val hideDamage by BooleanSetting("Hide Damage Indicators", false, desc = "Suppresses the red hurt-flash overlay when you take damage.")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
-    private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD unless the stat drops below the threshold below. Only has an effect if those HUD elements are already enabled in Odin's Player Display settings.")
-    private val healthManaThreshold by NumberSetting("Threshold", 20, 1, 100, 1, desc = "Only show the Health/Mana HUD once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
+    private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
+    private val healthManaThreshold by NumberSetting("Threshold", 20, 1, 100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
+
+    // --- Health and mana bars ------------------------------------------------------------------
+    //
+    // Bar versions of Odin's Health HUD and Mana HUD, in the colours set in Odin's Player Display.
+    // Each is its own HUD so it can be placed and toggled on its own; unlike the text, a bar stays
+    // up at 0 as an empty bar.
+    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.") { example ->
+        val (current, max) = when {
+            example -> 3000 to 4000
+            !LocationUtils.isInSkyblock || ActionBarListener.maxHealth == 0 -> return@HUD 0 to 0
+            aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth) -> return@HUD 0 to 0
+            else -> ActionBarListener.currentHealth to ActionBarListener.maxHealth
+        }
+        statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth, healthBarHeight)
+    }
+    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20, 200, 5, desc = "Width of the health bar.")
+    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2, 30, 1, desc = "Height of the health bar.")
+
+    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.") { example ->
+        val (current, max) = when {
+            example -> 2000 to 20000
+            !LocationUtils.isInSkyblock || ActionBarListener.maxMana == 0 -> return@HUD 0 to 0
+            aboveThreshold(ActionBarListener.currentMana, ActionBarListener.maxMana) -> return@HUD 0 to 0
+            else -> ActionBarListener.currentMana to ActionBarListener.maxMana
+        }
+        statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth, manaBarHeight)
+    }
+    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20, 200, 5, desc = "Width of the mana bar.")
+    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2, 30, 1, desc = "Height of the mana bar.")
+
+    // --- Lowest BIN ----------------------------------------------------------------------------
+    //
+    // An item's lowest auction-house BIN as an extra tooltip line; the pricing is LowestBin's.
+    val lowestBin by BooleanSetting("Lowest BIN", true, desc = "Shows an item's lowest auction-house BIN in its tooltip. Silent for anything not auctionable.")
+    val lowestBinStack by BooleanSetting("Lowest BIN Stack Total", false, desc = "On a stack, also show the whole stack's worth at that price.").withDependency { lowestBin }
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "In dungeons only: hides every armor stand (except terminals, active or inactive) and removes fishing bobbers' extended line.")
@@ -168,6 +216,82 @@ object RandomStuff : Module(
     /** Radius for [blursGui], on the same 1..10 scale as vanilla's Menu Background Blur slider. */
     fun blurRadius(): Int = blurStrength.toInt()
 
+    /** Hide Item Names: read by GuiItemNameMixin. */
+    fun hidesItemNames(): Boolean = enabled && hideItemNames
+
+    /**
+     * Whether Odin's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
+     * % is on and the stat is above the threshold. Read by HudElementMixin for every Odin HUD
+     * element; only those two are ever skipped.
+     */
+    fun hidesOdinHud(hud: HudElement): Boolean {
+        if (!enabled || !hideHealthManaUnlessLow) return false
+        return when {
+            hud === (PlayerDisplay.settings["Health HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth)
+            hud === (PlayerDisplay.settings["Mana HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentMana, ActionBarListener.maxMana)
+            else -> false
+        }
+    }
+
+    private fun aboveThreshold(current: Int, max: Int): Boolean =
+        hideHealthManaUnlessLow && max > 0 && current.toFloat() / max >= healthManaThreshold / 100f
+
+    private fun playerDisplayColor(name: String, fallback: Color): Color =
+        (PlayerDisplay.settings[name] as? ColorSetting)?.value ?: fallback
+
+    /** A bar filled to [current]/[max] over a dark background. */
+    private fun GuiGraphicsExtractor.statBar(current: Int, max: Int, color: Color, width: Int, height: Int): Pair<Int, Int> {
+        val pct = if (max <= 0) 0f else (current.toFloat() / max).coerceIn(0f, 1f)
+        fill(0, 0, width, height, Colors.BLACK.withAlpha(0.6f).rgba)
+        val filled = (width * pct).toInt().let { if (pct > 0f) it.coerceAtLeast(1) else it }
+        fill(0, 0, filled, height, color.rgba)
+        return width to height
+    }
+
+    // --- Hide Armor Stands ----------------------------------------------------------------------
+
+    private val STARRED_TAG = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
+
+    /** Stands spawned but not judged yet: their name and equipment may still be on the way. */
+    private val pendingArmorStands = mutableSetOf<ArmorStand>()
+
+    /**
+     * Where the "Wither Key"/"Blood Key" stands are. The key you see spinning is a second, unnamed
+     * stand in the same place, so it can only be kept by where it is.
+     */
+    private val keyPositions = mutableListOf<Vec3>()
+    private const val KEY_RADIUS = 1.5
+
+    /** Each tick: every queued stand is kept, removed, or (under half a second old) left to wait. */
+    private fun resolveArmorStands() {
+        if (pendingArmorStands.isEmpty()) return
+        pendingArmorStands.removeIf { stand ->
+            when {
+                !stand.isAlive -> true
+                isKeptArmorStand(stand) -> true
+                // A key's model stand can come through a tick or two after its named one.
+                stand.tickCount < 10 -> false
+                else -> { stand.remove(Entity.RemovalReason.DISCARDED); true }
+            }
+        }
+    }
+
+    /**
+     * The stands that are never hidden: all of them in P3 (Goldor's terminals, active or not), a
+     * starred mob's name tag, a Wither/Blood Key's named stand, and anything sitting on a key -
+     * the key's visible model.
+     */
+    private fun isKeptArmorStand(stand: ArmorStand): Boolean {
+        if (DungeonUtils.getF7Phase() == M7Phases.P3) return true
+        val name = stand.name.string
+        if (STARRED_TAG.matches(name)) return true
+        if (name.equalsOneOf("Wither Key", "Blood Key")) {
+            keyPositions.add(stand.position())
+            return true
+        }
+        return keyPositions.any { stand.position().distanceTo(it) <= KEY_RADIUS }
+    }
+
     /** A live terminal (Odin tracks the open one) or a practice term sim. */
     private fun inTerminal(): Boolean =
         TerminalUtils.currentTerm != null || mc.screen is TermSimGUI
@@ -175,16 +299,26 @@ object RandomStuff : Module(
     init {
         on<TickEvent.End> {
             if (hideDamage) mc.player?.hurtTime = 0
-            PlayerDisplay.onlyShowWhenLow = hideHealthManaUnlessLow
-            PlayerDisplay.lowThreshold = healthManaThreshold.toFloat() / 100f
-            RenderOptimizer.forceHideAllArmorStands = hideArmorStands && DungeonUtils.inDungeons
+            resolveArmorStands()
             ScoreboardLines.hideLines = enabled
             ScoreboardLines.customPatterns = hideSbCustom
         }
 
-        on<RenderItemNameEvent> {
-            if (hideItemNames) cancel()
+        // Hide Armor Stands: a stand's name and equipment (what tells a key or a starred mob's tag
+        // apart from decoration) arrive in packets a tick or two after the stand itself, so it is
+        // queued here and judged in [resolveArmorStands], not removed on sight.
+        on<EntityEvent.Add> {
+            if (!hideArmorStands || !DungeonUtils.inDungeons) return@on
+            when (entity.type) {
+                EntityType.ARMOR_STAND -> pendingArmorStands.add(entity as ArmorStand)
+                // The cheapest way to kill a fishing line stretched across the room: no bobber left
+                // to draw it to. On the same toggle rather than a setting of its own.
+                EntityType.FISHING_BOBBER -> entity.remove(Entity.RemovalReason.DISCARDED)
+                else -> {}
+            }
         }
+
+        on<LevelEvent.Load> { pendingArmorStands.clear(); keyPositions.clear() }
 
         on<MessageEvent.Overlay> {
             if (hideActionBar) cancel()

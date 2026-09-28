@@ -9,7 +9,7 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * BR Waypoints 2's boxes on the site (undonecoffee.com/brroles), where they can be looked at and
+ * BR Roles's boxes on the site (undonecoffee.com/brroles), where they can be looked at and
  * edited too. One shared document, { rooms, lastId, updatedAt }, read and written whole; the newer
  * copy wins. Writing needs Better PF's upload key; without it nothing is sent.
  */

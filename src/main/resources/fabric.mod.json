@@ -7,7 +7,7 @@
   "authors": ["Andrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
-  "mixins": ["engineerclient.mixins.json"],
+  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json"],
   "entrypoints": {
     "client": [
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" }
