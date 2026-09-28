@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.mojang.brigadier.arguments.IntegerArgumentType
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
@@ -93,7 +94,7 @@ object BrWaypoints2 : Module(
         if (held == null || held.isEmpty) return@ActionSetting modMessage("§cHold the item you want as the wand first.")
         wand = identity(held)
         modMessage("§aWand set: §f${held.hoverName.string}")
-    }
+    }.withDependency { editMode }
 
     private val clearRoom by ActionSetting("Clear Room", desc = "Deletes every box in the room you are standing in, saved ones included.") {
         val room = DungeonUtils.currentRoom?.name ?: return@ActionSetting modMessage("§cYou are not in a dungeon room.")
@@ -102,13 +103,9 @@ object BrWaypoints2 : Module(
         saved.remove(room)
         write()
         modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
-    }
+    }.withDependency { editMode }
 
     private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
-
-    private val hideOnDoor by BooleanSetting("Hide Boxes On Door", true, desc = "While you are the door runner (\"!br d\", or first to the doors), no boxes during the rush: you kill nothing.")
-
-    private val othersBoxes by BooleanSetting("Show Others' Boxes", true, desc = "With roles synced, shows the boxes other roles kill, in grey. Off, only yours and the stack.")
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
@@ -159,7 +156,6 @@ object BrWaypoints2 : Module(
 
     private val PURPLE = Color(170, 0, 170, 1f)
     private val GOLD = Color(255, 170, 0, 1f)
-    private val GREY = Color(150, 150, 150, 0.6f)
 
     private val CONTROL_CODES = Regex("\u00a7.")
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
@@ -215,20 +211,18 @@ object BrWaypoints2 : Module(
         on<RenderEvent.Extract> {
             if (!DungeonUtils.inDungeons) return@on
 
-            val doorRunner = rushing && hideOnDoor && !editMode && BrRoles.onDoor
             for (box in shown()) {
-                if (doorRunner) break
                 val bb = box.aabb()
                 // With roles: yours purple numbered in the order you kill them, the stack gold,
-                // others' grey. Without, every box purple with its number.
+                // others' not drawn. Without, every box purple with its number.
                 val (colour, label) = when (val look = lookOf(box)) {
                     is BrRoles.Look.Mine -> PURPLE to "§d" + look.order
                     is BrRoles.Look.Stack -> GOLD to "§6stack"
-                    is BrRoles.Look.Theirs -> if (othersBoxes && !editMode) GREY to (if (look.role > 0) "§7" + look.role else "") else continue
+                    is BrRoles.Look.Theirs -> continue
                     null -> PURPLE to "§d" + number(box)
                 }
                 // Seen through walls; the faces faint enough to walk through without noticing.
-                if (colour != GREY) drawFilledBox(bb, colour.withAlpha(0.08f), depth = false)
+                drawFilledBox(bb, colour.withAlpha(0.08f), depth = false)
                 drawWireFrameBox(bb, colour, depth = false)
                 drawText(label, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
             }
