@@ -106,8 +106,8 @@ object DungeonSplits : Module(
             registerSetting(
                 HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 0, 0, 1f) { example ->
                     if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
-                        "§62.31s \t§5Hallway: \t§c1.73s\t§70.52s",
-                        "§622.31s \t§dDino: \t§411.73s",
+                        "§70.52s §8| \t§c1.73s \t§5Hallway: \t§62.31s",
+                        "\t§411.73s \t§dDino: \t§622.31s",
                     ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
                     draw(this, subLines(s))
                 }
@@ -418,9 +418,9 @@ object DungeonSplits : Module(
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0
-        // The compact blood rush: the room total first, right-aligned, then the name, then the
-        // times with a bar between each.
-        if (lines.any { '\t' in it }) return table(gfx, lines, rightFirst = true, barsFrom = 3)
+        // The compact blood rush: door | key, name, total - the times right-aligned so they line
+        // up, the name left-aligned; the cells carry their own spacing and the door its bar.
+        if (lines.any { '\t' in it }) return table(gfx, lines, right = setOf(0, 1, 3), barsFrom = Int.MAX_VALUE)
         lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE, shadow = true) }
         return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
     }
@@ -439,7 +439,7 @@ object DungeonSplits : Module(
      * each column from [barsFrom] on. Text padded with spaces cannot do this — a digit and a space
      * are different widths.
      */
-    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>, rightFirst: Boolean = false, barsFrom: Int = 2, bar: String = "§8|", firstBarAlways: Boolean = false): Pair<Int, Int> {
+    private fun table(gfx: GuiGraphicsExtractor, lines: List<String>, rightFirst: Boolean = false, barsFrom: Int = 2, bar: String = "§8|", firstBarAlways: Boolean = false, right: Set<Int> = emptySet()): Pair<Int, Int> {
         val rows = lines.map { it.split('\t') }
         val cols = rows.maxOf { it.size }
         val widths = IntArray(cols) { c -> rows.maxOf { r -> r.getOrNull(c)?.let(mc.font::width) ?: 0 } }
@@ -453,7 +453,7 @@ object DungeonSplits : Module(
             if (firstBarAlways && cols > barsFrom) gfx.text(bar, starts[barsFrom] - space - barW, y, Colors.WHITE, shadow = true)
             row.forEachIndexed { c, cell ->
                 if (cell.isEmpty()) return@forEachIndexed
-                val x = if (c == 0 && rightFirst) widths[0] - mc.font.width(cell) else starts[c]
+                val x = if ((c == 0 && rightFirst) || c in right) starts[c] + widths[c] - mc.font.width(cell) else starts[c]
                 gfx.text(cell, x, y, Colors.WHITE, shadow = true)
                 if (c >= barsFrom && !(firstBarAlways && c == barsFrom)) gfx.text(bar, starts[c] - space - barW, y, Colors.WHITE, shadow = true)
             }
