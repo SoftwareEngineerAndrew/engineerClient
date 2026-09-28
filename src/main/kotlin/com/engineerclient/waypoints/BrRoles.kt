@@ -44,6 +44,10 @@ object BrRoles {
     /** room -> entry door (room x, z) -> players killing -> plan; and the same for M7. */
     @Volatile private var plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
     @Volatile private var m7Plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
+    /** Miniboss rooms (one mob): every role kills every box there, from any door. */
+    @Volatile private var mini: Set<String> = emptySet()
+
+    fun isMini(room: String) = room in mini
 
     /** From the settings: how many kill, and your role — null for All Boxes (roles off), 0 the door. */
     @Volatile var settingKilling = 2
@@ -185,6 +189,7 @@ object BrRoles {
         val doc = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
         plans = read(doc["rooms"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return)
         m7Plans = doc["m7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { read(it) } ?: emptyMap()
+        mini = doc["mini"]?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.filter { it.value.isJsonPrimitive && it.value.asBoolean }?.map { it.key }?.toSet() ?: emptySet()
     }
 
     private fun read(rooms: com.google.gson.JsonObject): Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> {
