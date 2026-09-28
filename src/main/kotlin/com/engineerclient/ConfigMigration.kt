@@ -17,7 +17,10 @@ object ConfigMigration {
      *  - Lowest BIN is two settings in Random Stuff;
      *  - what used to live in a modified Odin and ships with engineerClient now - Leap Menu's Click
      *    Delay and Leap Outline (Leap Extras), Player Display's Health/Mana Bar HUDs (Random Stuff) -
-     *    is copied out of Odin's own config, where that Odin saved it.
+     *    is copied out of Odin's own config, where that Odin saved it;
+     *  - engineerClient's own Splits HUD is Odin's Splits in the Engineer Splits look now, so if it
+     *    was on, Odin's Splits gets that look (written into Odin's config, read once the look's
+     *    settings exist - see OdinSplitsLook.install).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -56,6 +59,15 @@ object ConfigMigration {
             }
             copy("Leap Menu", "Leap Extras", listOf("Click Delay", "Leap Outline"))
             copy("Player Display", "Random Stuff", listOf("Health Bar HUD", "Health Bar Width", "Health Bar Height", "Mana Bar HUD", "Mana Bar Width", "Mana Bar Height"))
+
+            val oldSplitsHud = module(modules, "Sub Splits")?.let(::settings)?.get("Splits")
+            val used = oldSplitsHud?.takeIf { it.isJsonObject }?.asJsonObject?.get("enabled")?.asBoolean == true
+            val odinSplits = module(odin, "Splits")?.let(::settings)
+            if (used && odinSplits != null && !odinSplits.has("Look")) {
+                odinSplits.addProperty("Look", "Engineer Splits")
+                Files.writeString(odinFile, GsonBuilder().setPrettyPrinting().create().toJson(odin))
+                changed = true
+            }
         }
 
         if (changed) Files.writeString(file, GsonBuilder().setPrettyPrinting().create().toJson(modules))

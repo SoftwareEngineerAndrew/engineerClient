@@ -73,6 +73,27 @@ class ConfigMigrationTest {
     }
 
     @Test
+    fun `the old Engineer Splits HUD being on picks the Engineer look for Odin's Splits, once`() {
+        val ec = """[{"name":"Sub Splits","enabled":true,"settings":{"Splits":{"x":530,"y":255,"scale":2,"enabled":true}}}]"""
+        val odin = """[{"name":"Splits","enabled":true,"settings":{"Fixed Width":true}}]"""
+        val d = dir(ec, odin)
+        assertTrue(ConfigMigration.run(d))
+        val splits = JsonParser.parseString(Files.readString(d.resolve("odin-config.json"))).asJsonArray.named("Splits")!!
+        assertEquals("Engineer Splits", splits.s("Look").asString)
+        assertTrue(splits.s("Fixed Width").asBoolean)
+        // Picked Odin's look back since: left alone.
+        Files.writeString(d.resolve("odin-config.json"), """[{"name":"Splits","enabled":true,"settings":{"Look":"Odin Splits"}}]""")
+        ConfigMigration.run(d)
+        assertEquals("Odin Splits", JsonParser.parseString(Files.readString(d.resolve("odin-config.json"))).asJsonArray.named("Splits")!!.s("Look").asString)
+    }
+
+    @Test
+    fun `the old HUD off leaves Odin's look`() {
+        val d = dir("""[{"name":"Sub Splits","enabled":true,"settings":{"Splits":{"x":1,"y":1,"scale":2,"enabled":false}}}]""", """[{"name":"Splits","enabled":true,"settings":{}}]""")
+        assertFalse(ConfigMigration.run(d))
+    }
+
+    @Test
     fun `no config yet is left alone`() {
         val d = Files.createTempDirectory("ecmig")
         assertFalse(ConfigMigration.run(d))

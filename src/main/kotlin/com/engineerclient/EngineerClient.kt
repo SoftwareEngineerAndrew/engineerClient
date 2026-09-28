@@ -18,6 +18,7 @@ import com.engineerclient.rotation.RotationEngine
 import com.engineerclient.rotation.RotationSpec
 import com.engineerclient.rotation.SetupCheck
 import com.engineerclient.splits.DungeonSplits
+import com.engineerclient.splits.OdinSplitsLook
 import com.engineerclient.waypoints.BrWaypoints2
 import com.engineerclient.waypoints.BrwWaypoints
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -57,6 +58,10 @@ object EngineerClient : ClientModInitializer {
         // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
         ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, RandomStuff, ChatHider, LeapExtras, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor)
+
+        // The Engineer Splits look, added to Odin's own Splits module - before anything saves the
+        // configs, which would drop saved values for settings that don't exist yet.
+        safely("splits look") { OdinSplitsLook.install() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn the module on once.
