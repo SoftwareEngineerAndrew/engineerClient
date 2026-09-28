@@ -23,6 +23,7 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.Highlight
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.features.impl.dungeon.map.tile.DoorType
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
@@ -106,7 +107,6 @@ object BrWaypoints2 : Module(
         modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }.withDependency { editMode }
 
-    private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
 
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
 
@@ -192,7 +192,7 @@ object BrWaypoints2 : Module(
             wasInDungeon = false
             entryDoors.clear(); noPlanSaid.clear()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
-            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); lastTile.clear()
+            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); witherSides.clear(); path = emptyMap(); lastRoom = null
         }
 
         // Chat straight off the network, before any mod can hide it: the rush starts with the
@@ -217,7 +217,8 @@ object BrWaypoints2 : Module(
             ticks++
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
-            if (rushing) walkIns()
+            if (ticks % 10 == 0) mapPath()
+            if (debug && rushing) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -320,8 +321,7 @@ object BrWaypoints2 : Module(
 
     /**
      * The boxes on screen, only ever the room you are in (or the next on the rush), and without All
-     * Rooms only if the blood rush went through it. With Keep All Boxes or Edit Mode on, all
-     * of that room's boxes. Otherwise none once the map shows the room cleared, and a box hides
+     * Rooms only if it is on the blood rush's path. With Edit Mode on, all of that room's boxes. Otherwise none once the map shows the room cleared, and a box hides
      * once every mob it claimed is known dead, showing until then — before any of its mobs are in
      * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
      */
@@ -330,9 +330,9 @@ object BrWaypoints2 : Module(
         // Without All Rooms, only rooms on the blood rush's path.
         val rooms = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
             .distinctBy { it.name }
-            .filter { allRooms || editMode || it.name in rushed }
+            .filter { allRooms || editMode || onRush(it.name) }
         // Edit Mode shows them all too: a box being drawn has no mobs yet.
-        if (keepAll || editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
+        if (editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
         for (mob in mobs) {
             val box = claimOf(mob) ?: continue
@@ -361,7 +361,7 @@ object BrWaypoints2 : Module(
         if (!DungeonUtils.inDungeons) return
         when {
             // The dungeon starting is the start door coming down.
-            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); lastTile.clear(); startDoor = true }
+            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); startDoor = true }
             // A wither door means the start door has been and gone, whether its blocks were seen or not.
             rushing && WITHER_DOOR.matches(msg) -> startDoor = false
             msg == BLOOD_DOOR -> { rushing = false; rushRoom = null }
@@ -386,40 +386,93 @@ object BrWaypoints2 : Module(
         rushed += next.name!!
         // The door sits halfway between its two tiles (tiles 32 blocks apart, the first centred at -185).
         entryDoors[next.name!!] = (-185 + 16 * (door.a.first + door.b.first)) to (-185 + 16 * (door.a.second + door.b.second))
-        if (debug) debugRoom(next.name!!, "wither door")
     }
 
-    /** Each player's map tile last tick. */
-    private val lastTile = HashMap<String, Pair<Int, Int>>()
+    /** Rooms either side of a wither or blood door the map has shown this run; open, they turn normal on it. */
+    private val witherSides = HashSet<DungeonRoom>()
+
+    /** Rooms on the rush's path by the map, and the door each is entered by (world x, z; none for Entrance). */
+    private var path: Map<String, Pair<Int, Int>?> = emptyMap()
+
+    /** For Debug: the room you were last told about. */
+    private var lastRoom: String? = null
+
+    /** Whether a room is on the blood rush: on the map's path, or behind a wither door seen falling. */
+    private fun onRush(name: String?) = name != null && (name in path || name in rushed)
 
     /**
-     * Rooms walked into on the rush. Most of the rush goes through open doorways, not wither doors:
-     * the first time anyone steps from one room's tile into the next tile over, belonging to a room
-     * nobody has been in, that room was entered through the doorway between the two — the only one
-     * two tiles can share, halfway between their centres. A jump of more than one tile (a leap, a
-     * pearl) says nothing about doors. The room everyone starts in counts as already been in.
+     * The blood rush's path. A dungeon's rooms join up as a tree — one way between any two — and
+     * every wither door and the blood door is on the way from Entrance to Blood. So the rush's rooms
+     * are the ones on the way from Entrance to each of those doors (and to Blood), and each is
+     * entered by the door on its Entrance side. Other rooms, cleared by whoever isn't rushing, are
+     * not on it however early they are walked into. The doors come from the world ([worldDoors]),
+     * which has the whole dungeon from the start as far as it is loaded, and from Odin's map.
      */
-    private fun walkIns() {
+    private fun mapPath() {
+        val links = HashMap<DungeonRoom, MutableList<Pair<DungeonRoom, Pair<Int, Int>>>>()
+        worldDoors(links)
+        for (door in DungeonScan.doors.values) {
+            val a = DungeonScan.tiles.getOrNull(door.originTileIndex)?.room ?: continue
+            val b = DungeonScan.tiles.getOrNull(door.destinationTileIndex)?.room ?: continue
+            if (a === b) continue
+            if (door.type == DoorType.Wither || door.type == DoorType.Blood) { witherSides += a; witherSides += b }
+            val at = (-185 + 16 * (2 * door.position.x + door.rotation.offset.x)) to (-185 + 16 * (2 * door.position.z + door.rotation.offset.z))
+            links.getOrPut(a) { mutableListOf() } += b to at
+            links.getOrPut(b) { mutableListOf() } += a to at
+        }
+        val entrance = DungeonScan.rooms.firstOrNull { it.type == RoomType.ENTRANCE } ?: return
+        // Out from Entrance: each room's way back, and the door it is entered by.
+        val back = HashMap<DungeonRoom, Pair<DungeonRoom, Pair<Int, Int>>>()
+        val queue = ArrayDeque(listOf(entrance))
+        while (queue.isNotEmpty()) {
+            val r = queue.removeFirst()
+            for ((next, at) in links[r].orEmpty()) if (next !== entrance && next !in back) { back[next] = r to at; queue += next }
+        }
+        val out = HashMap<String, Pair<Int, Int>?>()
+        entrance.name?.let { out[it] = null }
+        val ends = witherSides + DungeonScan.rooms.filter { it.type == RoomType.BLOOD || it.name in rushed }
+        for (end in ends) {
+            var r = end
+            while (r !== entrance) {
+                val (prev, at) = back[r] ?: break
+                r.name?.let { out[it] = at }
+                r = prev
+            }
+        }
+        path = out
+    }
+
+    /**
+     * The doorways between neighbouring rooms, read from the world: where two tiles of different
+     * rooms meet, the doorway is halfway between their centres, and it is there if the two rows
+     * either side of the gap are open at head height (air, or a wither or blood door's blocks) —
+     * the same test the site's door map uses. Coal or red terracotta there is a wither or blood door.
+     * Tiles in chunks not loaded are left to the map.
+     */
+    private fun worldDoors(links: HashMap<DungeonRoom, MutableList<Pair<DungeonRoom, Pair<Int, Int>>>>) {
         val level = mc.level ?: return
-        for (p in level.players()) {
-            if (p.uuid.version() != 4) continue // Hypixel's NPCs are players too
-            val t = Math.floorDiv(p.blockX + 201, 32) to Math.floorDiv(p.blockZ + 201, 32)
-            val room = tileRoom(t)?.name ?: continue
-            val name = p.gameProfile.name()
-            val was = lastTile.put(name, t)
-            if (was == null) { rushed += room; continue }
-            if (was == t || room in rushed) continue
-            val from = tileRoom(was)?.name ?: continue
-            if (from == room || kotlin.math.abs(was.first - t.first) + kotlin.math.abs(was.second - t.second) != 1) continue
-            rushed += room
-            entryDoors[room] = (-185 + 16 * (was.first + t.first)) to (-185 + 16 * (was.second + t.second))
-            if (debug) debugRoom(room, "walked in by $name")
+        for (tz in 0..5) for (tx in 0..5) for ((dx, dz) in listOf(1 to 0, 0 to 1)) {
+            if (tx + dx > 5 || tz + dz > 5) continue
+            val a = DungeonScan.tiles[tx + tz * 6].room ?: continue
+            val b = DungeonScan.tiles[tx + dx + (tz + dz) * 6].room ?: continue
+            if (a === b) continue
+            val gx = -185 + 16 * (2 * tx + dx)
+            val gz = -185 + 16 * (2 * tz + dz)
+            val cells = listOf(-2, -1, 1, 2).flatMap { d -> listOf(70, 71).map { y -> BlockPos(gx + d * dx, y, gz + d * dz) } }
+            if (!cells.all { level.isLoaded(it) }) continue
+            val states = cells.map { level.getBlockState(it) }
+            if (!states.all { it.isAir || it.block == Blocks.BARRIER || it.block == Blocks.COAL_BLOCK || it.block == Blocks.RED_TERRACOTTA }) continue
+            val wither = states.any { it.block == Blocks.COAL_BLOCK || it.block == Blocks.RED_TERRACOTTA }
+            if (wither) { witherSides += a; witherSides += b }
+            links.getOrPut(a) { mutableListOf() } += b to (gx to gz)
+            links.getOrPut(b) { mutableListOf() } += a to (gx to gz)
         }
     }
 
-    /** For Debug: the room the rush is coming into, the door, your role, and what it shows you. */
-    private fun debugRoom(name: String, how: String) {
-        val door = entryDoors[name] ?: return
+    /** For Debug: the room you walked into on the rush, its door, your role, and what it shows you. */
+    private fun debugRoom(name: String) {
+        val door = entryOf(name) ?: return modMessage("§dBR debug §f$name §8— " + if (onRush(name)) "on the rush, door not known yet" else "not on the rush path")
+        val how = if (path[name] != null) "map path" else "wither door seen falling"
         val room = placed(name)
         val rel = room?.getRelativeCoords(BlockPos(door.first, 0, door.second))
         val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)") + " §8· $how"
@@ -443,8 +496,11 @@ object BrWaypoints2 : Module(
         modMessage("§dBR debug §7$at\n  $role\n  $shows")
     }
 
-    /** Each room the rush came into, and the door it came in through (world x, z). */
+    /** Each room behind a wither door seen falling, and that door (world x, z). */
     private val entryDoors = HashMap<String, Pair<Int, Int>>()
+
+    /** The door a rush room is entered by: the map path's, else the wither door seen falling into it. */
+    private fun entryOf(name: String) = path[name] ?: entryDoors[name]
 
     /** A box as drawn: its colour, the label over it, and whether it is the next of yours to kill. */
     private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean)
@@ -490,7 +546,7 @@ object BrWaypoints2 : Module(
             val all = boxes.filter { it.room == name }.map { number(it) }
             return BrRoles.Plan(List(maxOf(1, BrRoles.count)) { all }, List(maxOf(1, BrRoles.count)) { emptyList() })
         }
-        val door = entryDoors[name] ?: return null
+        val door = entryOf(name) ?: return null
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
         val plan = BrRoles.planFor(name, rel.x to rel.z)
