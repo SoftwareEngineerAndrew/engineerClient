@@ -1,0 +1,192 @@
+package com.engineerclient.splits
+
+import com.engineerclient.EngineerClient
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
+import com.odtheking.odin.clickgui.settings.impl.HUDSetting
+import com.odtheking.odin.clickgui.settings.impl.HudElement
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.odtheking.odin.features.ModuleManager
+import com.odtheking.odin.features.impl.skyblock.Splits
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.modMessage
+import com.odtheking.odin.utils.render.text
+import com.odtheking.odin.utils.skyblock.Island
+import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.odtheking.odin.utils.skyblock.SplitsManager
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.Floor
+import com.odtheking.odin.utils.skyblock.floor7SplitGroup
+import net.minecraft.client.gui.GuiGraphicsExtractor
+
+/**
+ * A "Look" for Odin's own Splits module: Odin's look, or Engineer Splits ([EngineerLook]) - with a
+ * Pace line on top, the projected finish from a target time per split.
+ *
+ * It lives in Odin's Splits settings, not in an engineerClient module, because it is a way of
+ * drawing Odin's splits: the settings are registered into Odin's module ([install]), Odin saves and
+ * loads them with its own, and its two HUDs keep their place, scale and toggles - only what is drawn
+ * inside them changes, through `HudElementMixin` asking [render]. Everything that decides the
+ * splits stays Odin's.
+ */
+object OdinSplitsLook {
+
+    private val look = SelectorSetting("Look", "Odin Splits", listOf("Odin Splits", "Engineer Splits"),
+        desc = "Odin Splits, or Engineer Splits: EngineerSplits' lines (Name > time (ticks)) with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
+
+    /** The Engineer look is picked. */
+    val engineer: Boolean get() = look.value == 1
+
+    private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }
+
+    private val paceFloor = SelectorSetting("Pace Targets", "F7", listOf("F7", "M7"),
+        desc = "Which floor's targets the boxes below are for. Pace uses the ones for the floor you are on; other floors and Kuudra have no targets, so there Pace is the time so far.")
+        .withDependency { engineer && pace.value }
+
+    private fun boxes(floor: String, master: Boolean, index: Int) = EngineerLook.targetLabels(master).map { name ->
+        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank counts as 0.")
+            .withDependency { engineer && pace.value && paceFloor.value == index }
+    }
+
+    private val f7 = boxes("F7", false, 0)
+    private val m7 = boxes("M7", true, 1)
+
+    private val fillFromPbs = ActionSetting("Fill From PBs", desc = "Fills the targets shown (F7 or M7) from Odin's personal best for each split. Each is that split's best ever, so together they add up to faster than any run you have done.") {
+        fillFromPbs()
+    }.withDependency { engineer && pace.value }
+
+    /**
+     * Adds the settings to Odin's Splits. Odin read its config before any of them existed, so it is
+     * read again now to pick up what was saved for them; reading is idempotent (a module is only
+     * toggled if its saved state differs), so nothing else changes.
+     */
+    fun install() {
+        for (s in listOf(look, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        ModuleManager.loadConfigurations()
+    }
+
+    private fun fillFromPbs() {
+        val master = paceFloor.value == 1
+        val pbs = Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal]
+        // Odin keys a PB by the split's name as it has it, colour codes included.
+        val names = listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name }
+        val boxes = if (master) m7 else f7
+        var filled = 0
+        names.forEachIndexed { i, n ->
+            val pb = pbs.get(n) ?: return@forEachIndexed
+            boxes.getOrNull(i)?.value = EngineerLook.formatSeconds(pb.toDouble())
+            filled++
+        }
+        ModuleManager.saveConfigurations()
+        modMessage(if (filled == 0) "§7No ${if (master) "M7" else "F7"} PBs yet - finish a run first." else "§aFilled §f$filled §atargets from your ${if (master) "M7" else "F7"} PBs.")
+    }
+
+    // --- drawing -----------------------------------------------------------------------------
+
+    private var failed = false
+
+    /**
+     * What Odin's [hud] draws instead, if it is one of Splits' two and the Engineer look is on: its
+     * size, as Odin's own drawing returns it. Null lets Odin draw it - any other HUD, the Odin look,
+     * or (once, logged) an error here.
+     */
+    @JvmStatic
+    fun render(hud: HudElement, g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
+        if (!engineer || failed) return null
+        val display = (Splits.settings["Splits Display HUD"] as? HUDSetting)?.value
+        val current = (Splits.settings["Current Split HUD"] as? HUDSetting)?.value
+        if (hud !== display && hud !== current) return null
+        return try {
+            if (hud === display) drawDisplay(g, example) else drawCurrent(g, example)
+        } catch (t: Throwable) {
+            failed = true
+            EngineerClient.logger.error("[ec] Engineer Splits look failed - back to Odin's look for this session", t)
+            null
+        }
+    }
+
+    private fun bool(name: String, fallback: Boolean) = (Splits.settings[name] as? BooleanSetting)?.value ?: fallback
+
+    private fun options() = EngineerLook.Options(
+        bossEntry = bool("Boss Entry Split", true),
+        show0 = bool("Show 0 splits", false),
+        showTicks = Splits.showTickTime,
+    )
+
+    /** Where the rows are from, and whether it is master mode. */
+    private fun place(): Pair<EngineerLook.Place, Boolean> {
+        if (LocationUtils.currentArea != Island.Dungeon) return EngineerLook.Place.OTHER to false
+        val floor = DungeonUtils.floor ?: return EngineerLook.Place.DUNGEON to false
+        val master = floor.name.startsWith("M")
+        return (if (floor.floorNumber == 7) EngineerLook.Place.FLOOR7 else EngineerLook.Place.DUNGEON) to master
+    }
+
+    /** The targets for the floor, as seconds; null off floor 7. */
+    private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? =
+        if (place != EngineerLook.Place.FLOOR7) null else (if (master) m7 else f7).map { EngineerLook.parseSeconds(it.value) }
+
+    private fun rows(): List<EngineerLook.Row> =
+        SplitsManager.currentRows().map { EngineerLook.Row(it.name, it.time, it.tickTime, it.isCurrent) }
+
+    /** A floor 7 run part way through Goldor, for the HUD editor. */
+    private fun exampleRows(): List<EngineerLook.Row> {
+        val names = listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name } + "§1Total"
+        val secs = listOf(59.0, 30.1, 4.2, 25.5, 45.9, 35.0, 3.1, 0.0, 0.0, 0.0)
+        return names.mapIndexed { i, n -> EngineerLook.Row(n, (secs[i] * 1000).toLong(), (secs[i] * 20).toLong() - (if (secs[i] > 0) 1 else 0), i == 6) }
+    }
+
+    private const val LINE = 9
+
+    private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.value == 1) else place()
+        val rows = if (example) exampleRows() else rows()
+        val opts = options()
+        val lines = EngineerLook.lines(rows, opts, place, master, targets(if (example) EngineerLook.Place.FLOOR7 else place, master))
+        if (lines.isEmpty()) return 0 to 0
+        val font = EngineerClient.mc.font
+
+        if (!bool("Fixed Width", true)) {
+            var width = 0
+            lines.forEachIndexed { i, l ->
+                val s = EngineerLook.text(l)
+                g.text(s, 0, i * LINE, Colors.WHITE)
+                width = maxOf(width, font.width(s))
+            }
+            return width to lines.size * LINE
+        }
+
+        // Fixed Width: a column each for the names, the times (right-aligned) and the tick times
+        // (right-aligned), each as wide as the widest it can get, so the HUD never changes width
+        // mid-run - what Odin's Fixed Width does for its own look.
+        val nameW = EngineerLook.allLabels(rows, opts, place, master).maxOf { font.width(it) }
+        val arrow = " §b> "
+        val arrowW = font.width(arrow)
+        val timeW = maxOf(font.width("999.99s"), font.width("59m 59.9s"), lines.maxOf { font.width(it.time) })
+        val tickW = if (opts.showTicks) maxOf(font.width(" (999.99s)"), font.width(" (59m 59.9s)"), lines.maxOf { font.width(" (${it.ticks})") }) else 0
+        lines.forEachIndexed { i, l ->
+            val y = i * LINE
+            g.text(l.label, 0, y, Colors.WHITE)
+            g.text(arrow, nameW, y, Colors.WHITE)
+            val time = l.colour + l.time
+            g.text(time, nameW + arrowW + timeW - font.width(time), y, Colors.WHITE)
+            l.ticks?.let {
+                val ticks = " §8(§7$it§8)"
+                g.text(ticks, nameW + arrowW + timeW + tickW - font.width(ticks), y, Colors.WHITE)
+            }
+        }
+        return nameW + arrowW + timeW + tickW to lines.size * LINE
+    }
+
+    /** Odin's Current Split HUD: the running split, centred on the HUD's position as Odin centres its own. */
+    private fun drawCurrent(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to false else place()
+        val line = EngineerLook.currentLine(if (example) exampleRows() else rows(), options(), place, master) ?: return 0 to 0
+        val s = EngineerLook.text(line)
+        val w = EngineerClient.mc.font.width(s) + 2
+        g.text(s, -w / 2, 0, Colors.WHITE)
+        return w to LINE
+    }
+}

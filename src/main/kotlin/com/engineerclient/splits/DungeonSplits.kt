@@ -30,8 +30,8 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 
 /**
- * The run's splits — a copy of the team's EngineerSplits — and one sub-split HUD per section of the
- * run, each with a dropdown for how much it shows:
+ * One sub-split HUD per section of the run (the splits themselves are Odin's Splits, in the Engineer
+ * Splits look - see [OdinSplitsLook]), each with a dropdown for how much it shows:
  *
  *  - Compact: one row, the section's times left to right, `Name: 1.52s | 0.21s | ...`.
  *  - Detailed: the same, vertical and labelled, `Move > 8.12s (8.00s)`.
@@ -44,7 +44,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("Engineer Client"),
-    description = "EngineerSplits, and a sub-split HUD per section of the run on the real and server-tick clocks.",
+    description = "A sub-split HUD per section of the run, and the Scorecard, on the real and server-tick clocks. The splits themselves are Odin's Splits (Look: Engineer Splits).",
 ) {
 
     private val CONTROL_CODES = Regex("§.")
@@ -74,14 +74,8 @@ object DungeonSplits : Module(
 
     private val LEVELS = listOf("Off", "Compact", "Detailed", "Extreme")
 
-    private val splitsHud by HUD("Splits", "EngineerSplits: the run, phase by phase.") { example ->
-        if (example) return@HUD draw(this, listOf(
-            "§3Pace §b> §33m 8.2s §8(§73m 8.2s§8)", "§aOpen §b> §a59.00s §8(§759.00s§8)",
-            "§cBlood §b> §c30.10s §8(§730.00s§8)", "§dPortal §b> §d4.20s §8(§74.20s§8)",
-            "§9Enter §b> §91m 33.3s §8(§71m 33.2s§8)", "§5Maxor §b> §525.50s §8(§725.50s§8)",
-        ))
-        draw(this, tracker.lines(now()))
-    }
+    // The run's splits themselves are Odin's Splits now, in the Engineer Splits look
+    // (OdinSplitsLook); [tracker] still times the phases the sub splits and scorecard hang off.
 
     private val scorecardHud by HUD("Scorecard Splits", "The whole run as a table: each split's total, then its sub splits.", true, 10, 150, 1f) { example ->
         if (example) return@HUD scorecard(this, listOf(
