@@ -111,6 +111,8 @@ object BrWaypoints2 : Module(
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
 
     private val fadeDone by BooleanSetting("Fade Done Boxes", false, desc = "A box whose mobs are all dead, or in a room the map shows cleared, stays up very faint instead of disappearing.")
+    private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing. Wins over Fade Done Boxes.")
+    private val doneColor by ColorSetting("Done Color", Color(85, 85, 85, 1f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
 
     private val opacity by NumberSetting("Fill Opacity", 0.08f, 0f, 1f, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
 
@@ -234,6 +236,13 @@ object BrWaypoints2 : Module(
 
             for ((box, colour, label, next, done) in drawn()) {
                 val bb = box.aabb()
+                // Done (Recolor Done Boxes): a whole box in Done Color, number greyed, never "next".
+                if (done && recolorDone) {
+                    drawFilledBox(bb, doneColor.withAlpha(opacity), depth = false)
+                    drawWireFrameBox(bb, doneColor, depth = false)
+                    drawText("§7" + label.replace(Regex("§."), ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+                    continue
+                }
                 // Done (Fade Done Boxes): just a ghost of the outline, and no label.
                 if (done) {
                     drawWireFrameBox(bb, colour.withAlpha(0.15f), depth = false)
@@ -568,8 +577,8 @@ object BrWaypoints2 : Module(
     private fun drawn(): List<Drawn> {
         val out = ArrayList<Drawn>()
         val live = shown()
-        // With Fade Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
-        val all = if (fadeDone && !editMode) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
+        // With Fade or Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
+        val all = if ((fadeDone || recolorDone) && !editMode) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
         val liveSet = live.toHashSet()
         for ((room, list) in all.groupBy { it.room }) {
             val plan = if (editMode || !BrRoles.active) null else planOf(room)
