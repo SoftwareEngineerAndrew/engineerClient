@@ -131,7 +131,7 @@ class BloodRunDetail {
         }
     }
 
-    enum class Level { OFF, COMPACT, DETAILED, EXTREME }
+    enum class Level { COMPACT, DETAILED, DEBUG }
 
     /** The room names so far, the one being run included. */
     fun rooms(): List<String> = all().map { it.name }
@@ -145,10 +145,9 @@ class BloodRunDetail {
     private fun all() = rooms + listOfNotNull(room)
 
     fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> = when (level) {
-        Level.OFF -> emptyList()
         Level.COMPACT -> compact(now, totalRow)
         Level.DETAILED -> detailed(now)
-        Level.EXTREME -> extreme(now)
+        Level.DEBUG -> debug(now)
     }
 
     /**
@@ -222,7 +221,7 @@ class BloodRunDetail {
      *     door fell, last mob killed, key picked up {player}, key delta,
      *     door opened {player}, door delta, total room time
      */
-    private fun extreme(now: Stamp): List<String> {
+    private fun debug(now: Stamp): List<String> {
         val out = mutableListOf<String>()
         for (r in all()) {
             out += name(r)
@@ -309,7 +308,7 @@ class BloodRunDetail {
         val LABELS = listOf("door fell", "last mob", "pickup", "opened", "room total")
         val COLOURS = listOf("§8", "§7", "§c", "§4", "§6")
 
-        /** Extreme's seven lines, coloured to match the column each one feeds. */
+        /** Debug's seven lines, coloured to match the column each one feeds. */
         val FULL_LABELS = listOf("door fell", "last mob killed", "key picked up", "key delta", "door opened", "door delta", "total room time")
         val FULL_COLOURS = listOf("§8", "§7", "§c", "§c", "§4", "§4", "§6")
 
