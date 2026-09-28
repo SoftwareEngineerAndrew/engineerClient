@@ -485,6 +485,11 @@ object BrWaypoints2 : Module(
      */
     private fun planOf(name: String?): BrRoles.Plan? {
         name ?: return null
+        // A miniboss room (one mob, marked on the site): everyone kills its box, from any door.
+        if (BrRoles.isMini(name)) {
+            val all = boxes.filter { it.room == name }.map { number(it) }
+            return BrRoles.Plan(List(maxOf(1, BrRoles.count)) { all }, List(maxOf(1, BrRoles.count)) { emptyList() })
+        }
         val door = entryDoors[name] ?: return null
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
