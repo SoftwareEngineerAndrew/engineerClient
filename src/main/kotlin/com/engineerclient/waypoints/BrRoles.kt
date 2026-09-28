@@ -14,13 +14,15 @@ import kotlin.math.abs
 /**
  * Blood rush roles: who kills which of a room's BR Waypoints 2 boxes, set on the site
  * (undonecoffee.com/brroles) for each room, each door the rush can come in through, and each number
- * of players killing (2-4; one alone kills every box), with a separate set for M7. Each role has its boxes, in the order they are killed, and its stack:
- * boxes it helps with once its own are done. There is always a door runner besides, who only rushes
+ * of players killing (2-4), with a separate set for M7. Each role has its boxes, in the order
+ * they are killed, and its stack: boxes it helps with once its own are done. There is always a door runner besides, who only rushes
  * the doors and kills nothing.
  *
- * The party agrees on roles in party chat: "!3br 2" is "3 of us are killing, I am role 2"; "!br d"
- * (or "!3br d") is "I am on the door". Everyone with the mod keeps track of who has what, and anyone
- * without a role yet is offered the free ones as clickable buttons (they run /brrole).
+ * Each player sets how many kill (duo 2, trio 3, quad 4) and their own role in BR Waypoints 2's
+ * settings, for a team that runs together. Party chat overrides that for a run, for pickup groups:
+ * "!3br 2" is "3 of us are killing, I am role 2", "!br 2" the same at the team size already set,
+ * "!br d" (or "!3br d") is "I am on the door". A claim lasts until the dungeon ends. Everyone
+ * with the mod keeps track of who has what, and anyone without a role yet is offered the free ones as clickable buttons (they run /brrole).
  *
  * The door runner is also found without being told: at each wither or blood door, whoever got to it
  * first ([doorFell]). Several people can be at a door when it opens; the one there first is the one
@@ -47,12 +49,36 @@ object BrRoles {
     @Volatile private var plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
     @Volatile private var m7Plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
 
-    /** The number killing in the party's current sync, 0 before any. */
-    var count = 0
-        private set
-    /** Your role (1...) in it, if you have taken one. */
-    var mine: Int? = null
-        private set
+    /** From the settings: how many kill, and your role — null for All Boxes (roles off), 0 the door. */
+    @Volatile var settingKilling = 2
+    @Volatile var settingRole: Int? = null
+
+    /** What party chat said this run, over the settings. */
+    private var chatCount: Int? = null
+    private var chatMine: Int? = null
+
+    /**
+     * How many kill: party chat's if it has said, else the setting — 0 (roles off) when your
+     * setting is All Boxes, or a role the team size doesn't have.
+     */
+    val count: Int
+        get() = chatCount ?: settingRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
+
+    /** Whether you are on the door: you said so in chat, or it is your setting and chat hasn't given you a role. */
+    val youOnDoor: Boolean
+        get() = doorClaim?.equals(me, ignoreCase = true) ?: (settingRole == 0 && chatMine == null)
+
+    /** Whether roles decide what you see: there is a team size and you have a role or the door. */
+    val active: Boolean
+        get() = count > 0 && (youOnDoor || mine != null)
+
+    /** Your role (1...), if you have one: claimed in chat this run, else your setting. None on the door. */
+    val mine: Int?
+        get() {
+            if (youOnDoor) return null
+            chatMine?.let { return it }
+            return settingRole?.takeIf { it in 1..count }
+        }
     /** Who has which role, in the order they said so. */
     private val taken = LinkedHashMap<String, Int>()
     /** Who said they are on the door. */
@@ -62,16 +88,13 @@ object BrRoles {
     private var announcedRunner: String? = null
 
     // "Party > [MVP+] name: !3br 2", "!br d", "!3br d" — the rank bracket is absent for players without one.
-    private val CLAIM = Regex("""^Party > (?:\[[^]]*] )?(\w{1,16}): !([1-4])?br ([1-4]|d)$""")
+    private val CLAIM = Regex("""^Party > (?:\[[^]]*] )?(\w{1,16}): !([2-4])?br ([1-4]|d)$""")
 
     private val me get() = mc.player?.gameProfile?.name()
 
-    /** The door runner: who said so, else who has been first to the most doors this run. */
+    /** The door runner: who said so (in chat, or you by your setting), else who has been first to the most doors this run. */
     val doorRunner: String?
-        get() = doorClaim ?: firstAt.maxByOrNull { it.value }?.key
-
-    /** Whether you are the door runner. */
-    val onDoor get() = doorRunner?.equals(me, ignoreCase = true) == true
+        get() = doorClaim ?: me.takeIf { youOnDoor } ?: firstAt.maxByOrNull { it.value }?.key
 
     /** A chat line: a role claim is taken note of. True if it was one. */
     fun onChat(line: String): Boolean {
@@ -81,21 +104,24 @@ object BrRoles {
         val what = m.groupValues[3]
         val you = name.equals(me, ignoreCase = true)
         // A different count is a new sync: everyone picks again.
-        if (n != null && n != count) { count = n; taken.clear(); mine = null }
+        if (n != null && n != count) { taken.clear(); chatMine = null }
+        if (n != null) chatCount = n
         if (what == "d") {
             doorClaim = name
             taken.remove(name)
-            if (you) mine = null
+            if (you) chatMine = null
             modMessage(Component.literal(if (you) "§dBR §7you are on the §6door" else "§dBR §f$name §7is on the §6door").also { offer(it, you) })
             return true
         }
-        if (n == null) return true // "!br 2": a role needs the number killing
+        // "!br 2": at the team size already set, in chat or in the settings.
+        val killing = n ?: chatCount ?: settingKilling
         val role = what.toInt()
-        if (role > n) return true
+        if (role > killing) return true
+        chatCount = killing
         taken.remove(name)
         taken[name] = role
         if (doorClaim.equals(name, ignoreCase = true)) doorClaim = null
-        if (you) mine = role
+        if (you) chatMine = role
         val clash = taken.filter { it.value == role && it.key != name }.keys
         val line = Component.literal(if (you) "§dBR §7you are role §f$role §7of §f$count" else "§dBR §f$name §7is role §f$role §7of §f$count")
         if (clash.isNotEmpty()) line.append(Component.literal(" §c(so is ${clash.joinToString()})"))
@@ -106,7 +132,7 @@ object BrRoles {
 
     /** The free roles (and the door) as buttons, for anyone who hasn't taken one. */
     private fun offer(line: Component, you: Boolean) {
-        if (you || mine != null || doorClaim.equals(me, ignoreCase = true) || count == 0) return
+        if (you || mine != null || youOnDoor || count == 0) return
         val parts = line as? net.minecraft.network.chat.MutableComponent ?: return
         parts.append(Component.literal(" §7— yours:"))
         for (r in 1..count) {
@@ -123,7 +149,7 @@ object BrRoles {
 
     /** Takes role [role] of [n] for the party: says so in party chat, which everyone (you too) reads back. */
     fun claim(n: Int, role: Int) {
-        if (n !in 1..MAX_KILLING || role !in 1..n) return modMessage("§cUp to $MAX_KILLING kill (the door runner is extra): /brrole 3 2")
+        if (n !in 2..MAX_KILLING || role !in 1..n) return modMessage("§c2 to $MAX_KILLING kill (the door runner is extra): /brrole 3 2")
         sendCommand("pc !${n}br $role")
     }
 
@@ -134,7 +160,8 @@ object BrRoles {
         if (count == 0 && doorRunner == null) return modMessage("§dBR §7no roles yet. §f/brrole <killing> <role>§7 or §f/brrole door§7, or §f!3br 2§7 / §f!br d§7 in party chat.")
         val who = (1..count).joinToString("§7, ") { r -> "§f$r §7${taken.entries.firstOrNull { it.value == r }?.key ?: "§8free"}" }
         val door = doorRunner?.let { "§6door §7$it" + if (doorClaim == null) " §8(first to ${firstAt[it]} door${if (firstAt[it] == 1) "" else "s"})" else "" } ?: "§6door §8unknown"
-        modMessage("§dBR §7$count killing: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
+        val from = if (chatCount != null) "§8(party chat)" else "§8(settings)"
+        modMessage("§dBR §7$count killing $from§7: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
     }
 
     // --- the door runner, from who gets to the doors first ---------------------------------------
@@ -179,9 +206,14 @@ object BrRoles {
         }
     }
 
-    /** A new run (or world): who got to doors first starts again; the party's roles stay. */
-    fun newRun() {
+    /**
+     * A new world: who got to doors first starts again. Roles claimed in party chat last until the
+     * dungeon they were for is over ([dungeonOver]), then everyone is back on their settings — a
+     * claim made before warping in still counts once you are in.
+     */
+    fun newRun(dungeonOver: Boolean) {
         firstAt.clear(); trail.clear(); lastDoorTick = 0; announcedRunner = null
+        if (dungeonOver) { taken.clear(); chatCount = null; chatMine = null; doorClaim = null }
     }
 
     // --- the plans (the site's brroles.json) -----------------------------------------------------
