@@ -158,26 +158,22 @@ object OdinSplitsLook {
             return width to lines.size * LINE
         }
 
-        // Fixed Width: a column each for the names, the times (right-aligned) and the tick times
-        // (right-aligned), each as wide as the widest it can get, so the HUD never changes width
-        // mid-run - what Odin's Fixed Width does for its own look.
+        // Fixed Width: the arrows in one column - each name pushed right up against its arrow, each
+        // time (and its tick time) straight after it. The name column is as wide as the widest name
+        // the run can have and the rest as wide as the longest time can get, so the HUD never
+        // changes width mid-run - what Odin's Fixed Width does for its own look.
         val nameW = EngineerLook.allLabels(rows, opts, place, master).maxOf { font.width(it) }
         val arrow = " §b> "
         val arrowW = font.width(arrow)
-        val timeW = maxOf(font.width("999.99s"), font.width("59m 59.9s"), lines.maxOf { font.width(it.time) })
-        val tickW = if (opts.showTicks) maxOf(font.width(" (999.99s)"), font.width(" (59m 59.9s)"), lines.maxOf { font.width(" (${it.ticks})") }) else 0
+        val widest = if (opts.showTicks) "59m 59.9s §8(§759m 59.9s§8)" else "59m 59.9s"
+        val restW = maxOf(font.width(widest), lines.maxOf { font.width(it.colour + it.time + (it.ticks?.let { t -> " §8(§7$t§8)" } ?: "")) })
         lines.forEachIndexed { i, l ->
             val y = i * LINE
-            g.text(l.label, 0, y, Colors.WHITE)
+            g.text(l.label, nameW - font.width(l.label), y, Colors.WHITE)
             g.text(arrow, nameW, y, Colors.WHITE)
-            val time = l.colour + l.time
-            g.text(time, nameW + arrowW + timeW - font.width(time), y, Colors.WHITE)
-            l.ticks?.let {
-                val ticks = " §8(§7$it§8)"
-                g.text(ticks, nameW + arrowW + timeW + tickW - font.width(ticks), y, Colors.WHITE)
-            }
+            g.text(l.colour + l.time + (l.ticks?.let { " §8(§7$it§8)" } ?: ""), nameW + arrowW, y, Colors.WHITE)
         }
-        return nameW + arrowW + timeW + tickW to lines.size * LINE
+        return nameW + arrowW + restW to lines.size * LINE
     }
 
     /** Odin's Current Split HUD: the running split, centred on the HUD's position as Odin centres its own. */
