@@ -157,6 +157,17 @@ object BrRoles {
         modMessage("§dBR §7$count killing $from§7: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
     }
 
+    /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". */
+    fun describe(): String {
+        val from = if (chatCount != null || doorClaim != null) "party chat" else "settings"
+        return when {
+            count == 0 -> "roles off"
+            youOnDoor -> "door, $count killing ($from)"
+            mine != null -> "role $mine of $count ($from)"
+            else -> "no role, $count killing ($from)"
+        }
+    }
+
     /**
      * A new world. Roles claimed in party chat last until the dungeon they were for is over
      * ([dungeonOver]), then everyone is back on their settings — a claim made before warping in

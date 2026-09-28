@@ -10,6 +10,7 @@ import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockUpdateEvent
@@ -109,6 +110,10 @@ object BrWaypoints2 : Module(
 
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
 
+    private val opacity by NumberSetting("Fill Opacity", 0.08f, 0f, 1f, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
+
+    private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
+
     private val killers by SelectorSetting("Killers", "Duo", arrayListOf("Duo", "Trio", "Quad"), desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
 
     private val myRole by SelectorSetting("My Role", "All Boxes", arrayListOf("All Boxes", "Door", "Role 1", "Role 2", "Role 3", "Role 4"), desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
@@ -162,6 +167,7 @@ object BrWaypoints2 : Module(
 
     private val PURPLE = Color(170, 0, 170, 1f)
     private val GOLD = Color(255, 170, 0, 1f)
+    private val GREEN = Color(85, 255, 85, 1f)
 
     private val CONTROL_CODES = Regex("\u00a7.")
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
@@ -224,7 +230,7 @@ object BrWaypoints2 : Module(
                 val bb = box.aabb()
                 // Seen through walls; the faces faint enough to walk through without noticing, the
                 // next one of yours to kill filled in more.
-                drawFilledBox(bb, colour.withAlpha(if (next) 0.25f else 0.08f), depth = false)
+                drawFilledBox(bb, colour.withAlpha(if (next) (opacity * 3).coerceIn(opacity + 0.15f, 1f) else opacity), depth = false)
                 drawWireFrameBox(bb, colour, depth = false)
                 drawText(label, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
             }
@@ -381,6 +387,33 @@ object BrWaypoints2 : Module(
         // The door sits halfway between its two tiles (tiles 32 blocks apart, the first centred at -185).
         entryDoors[next.name!!] = (-185 + 16 * (door.a.first + door.b.first)) to (-185 + 16 * (door.a.second + door.b.second))
         watchDoorUntil = 0
+        if (debug) debugRoom(next.name!!)
+    }
+
+    /** For Debug: the room the rush is coming into, the door, your role, and what it shows you. */
+    private fun debugRoom(name: String) {
+        val door = entryDoors[name] ?: return
+        val room = placed(name)
+        val rel = room?.getRelativeCoords(BlockPos(door.first, 0, door.second))
+        val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)")
+        val role = "§7you: §f" + BrRoles.describe()
+        val inRoom = boxes.filter { it.room == name }
+        val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z)
+        val shows = when {
+            inRoom.isEmpty() -> "§8no boxes in this room"
+            !BrRoles.active -> "§7showing §fall ${inRoom.size}"
+            plan == null -> "§7no plan §8— showing §fall ${inRoom.size}"
+            BrRoles.youOnDoor -> "§7on the door §8— showing §fnone"
+            else -> {
+                val looks = inRoom.map { number(it) to BrRoles.look(plan, number(it)) }
+                val mine = looks.mapNotNull { (n, l) -> (l as? BrRoles.Look.Mine)?.let { n to it.order } }.sortedBy { it.second }.map { it.first }
+                val stack = looks.filter { it.second is BrRoles.Look.Stack }.map { it.first }
+                val loose = looks.filter { it.second == null }.map { it.first }
+                "§7kill §a" + mine.joinToString(" → ").ifEmpty { "none" } + " §7stack §6" + stack.joinToString().ifEmpty { "none" } +
+                    (if (loose.isEmpty()) "" else " §7unassigned §d" + loose.joinToString())
+            }
+        }
+        modMessage("§dBR debug §7$at\n  $role\n  $shows")
     }
 
     /** Each room the rush came into, and the door it came in through (world x, z). */
@@ -395,8 +428,8 @@ object BrWaypoints2 : Module(
     private var wasInDungeon = false
 
     /**
-     * The boxes to draw. With roles, in a room the site has a plan for: yours purple, numbered in the
-     * order you kill them, the next one filled in; your stack gold once yours are all dead; others'
+     * The boxes to draw. With roles, in a room the site has a plan for: yours green, numbered in the
+     * order you kill them, the next one filled in; your stack gold; others'
      * not drawn, and the door runner sees none. Boxes the plan leaves to nobody show plain. Without
      * roles, or with no plan for the door the rush came in by, every box purple with its number.
      */
@@ -411,8 +444,8 @@ object BrWaypoints2 : Module(
             if (BrRoles.youOnDoor) continue
             val looks = list.map { it to BrRoles.look(plan, number(it)) }
             val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
-            mine.forEachIndexed { i, (b, order) -> out += Drawn(b, PURPLE, "§d$order", i == 0) }
-            if (mine.isEmpty() || keepAll) for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false)
+            mine.forEachIndexed { i, (b, order) -> out += Drawn(b, GREEN, "§a$order", i == 0) }
+            for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false)
             for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false)
         }
         return out
