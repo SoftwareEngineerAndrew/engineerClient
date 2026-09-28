@@ -17,7 +17,14 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.render.TextureSetup
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.state.gui.BlitRenderState
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
+import net.minecraft.core.BlockPos
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntityType
+import net.minecraft.world.entity.Marker
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.level.Level
 import org.joml.Matrix3x2f
 
 /**
@@ -128,6 +135,8 @@ object PovCapture {
 
     fun onWorldChange() {
         freeRequested = true
+        standIn = null
+        groundCache.clear()
     }
 
     /** Called from the client tick, outside any frame, when the previews are not wanted. */
@@ -334,10 +343,16 @@ object PovCapture {
         val feed = feeds[index] ?: return
         val slot = DungeonUtils.leapTeammates.getOrNull(index) ?: return
 
-        val target: Player? = slot.entity ?: findByName(slot.name)
-        if (target == null || target === mc.player || !target.isAlive) {
-            // Dead, out of entity range, or not on this client at all: a flat dark quadrant, which
-            // reads as "no feed" where a stale image — or a view of your own surroundings — lies.
+        // Loaded: their own eyes. Out of entity range: where the dungeon map puts them, the way the
+        // Better PF viewer does ([mapStandIn]). Dead, or nowhere at all: a flat dark quadrant, which
+        // reads as "no feed" where a stale image — or a view of your own surroundings — lies.
+        val loaded: Player? = (slot.entity ?: findByName(slot.name))?.takeIf { !it.isRemoved }
+        val target: Entity? = when {
+            loaded == null -> mapStandIn(slot)
+            loaded === mc.player || !loaded.isAlive -> null
+            else -> loaded
+        }
+        if (target == null) {
             if (!outOfRange[index]) {
                 outOfRange[index] = true
                 feed.colorTexture?.let { RenderSystem.getDevice().createCommandEncoder().clearColorTexture(it, OUT_OF_RANGE_ARGB) }
@@ -368,7 +383,9 @@ object PovCapture {
 
         try {
             val worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false)
-            pose = PovPose.begin(target, PovPreviews.mode, PovPreviews.smoothingTicks, worldPartialTicks)
+            // The stand-in is already exactly where it should be; only a real player is smoothed.
+            if (target is Player) pose = PovPose.begin(target, PovPreviews.mode, PovPreviews.smoothingTicks, worldPartialTicks)
+            val eyeHeight = if (target is Player) target.eyeHeight else STANDING_EYE
 
             mc.setCameraEntity(target)
             options.cameraType = CameraType.FIRST_PERSON
@@ -378,8 +395,8 @@ object PovCapture {
             // Camera.tick() is the only thing that maintains the eye height, and ticking the
             // shared camera from another player's position would also rewrite its environment
             // probe and so the real view's fog and cloud colour.
-            cameraAccess.`ec$setEyeHeight`(target.eyeHeight)
-            cameraAccess.`ec$setEyeHeightOld`(target.eyeHeight)
+            cameraAccess.`ec$setEyeHeight`(eyeHeight)
+            cameraAccess.`ec$setEyeHeightOld`(eyeHeight)
             (mc as MinecraftAccessor).`ec$setMainRenderTarget`(feed)
 
             camera.update(deltaTracker)
@@ -457,6 +474,70 @@ object PovCapture {
         feedWidth = 0
         feedHeight = 0
         nextFeed = 0
+    }
+
+    // --------------------------------------------------------------- off the map
+
+    /** A standing player's eye height; the map says nothing about sneaking. */
+    private const val STANDING_EYE = 1.62f
+
+    /**
+     * What the camera follows for a teammate the game isn't sending: an entity of our own, never
+     * added to the world, so nothing else sees or ticks it. A marker, the plainest entity there is -
+     * the camera only reads its position and rotation.
+     */
+    private var standIn: Marker? = null
+
+    /** Each quadrant's last map column and the ground found there, so it is looked up once per move. */
+    private val groundCache = HashMap<String, Triple<Int, Int, Int>>()
+
+    /**
+     * A teammate out of entity range, placed where the dungeon map shows them - as the Better PF
+     * viewer places them: Odin's decoded map marker turned into world x/z the way the recorder does
+     * it, standing on the ground nearest y=69 in that column, facing the way the marker's arrow
+     * points (the map has 16 steps of it), looking level. Only in the clear, where the map is the
+     * dungeon; null in boss, for the dead, and before the map has placed them.
+     */
+    private fun mapStandIn(p: DungeonPlayer): Entity? {
+        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss || p.isDead) return null
+        if (p.mapPos.x == 0 && p.mapPos.z == 0) return null
+        val level = EngineerClient.mc.level ?: return null
+        val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
+        val z = ((p.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
+        val bx = Math.floor(x).toInt()
+        val bz = Math.floor(z).toInt()
+        val cached = groundCache[p.name]
+        val y = if (cached != null && cached.first == bx && cached.second == bz) cached.third
+            else groundY(level, bx, bz).also { groundCache[p.name] = Triple(bx, bz, it) }
+
+        val e = standIn?.takeIf { it.level() === level } ?: Marker(EntityType.MARKER, level).also { standIn = it }
+        e.setPos(x, y.toDouble(), z)
+        e.xo = x; e.yo = y.toDouble(); e.zo = z
+        e.setYRot(p.yaw); e.yRotO = p.yaw
+        e.setXRot(0f); e.xRotO = 0f
+        return e
+    }
+
+    /**
+     * Where someone standing in column ([x], [z]) would be: the height nearest y=69 with a block to
+     * stand on and room for feet and head - the viewer's `groundY`. Full blocks are in the way;
+     * slabs, stairs and carpets aren't. Nothing within 40 blocks (or the column not loaded): 69.
+     */
+    private fun groundY(level: Level, x: Int, z: Int): Int {
+        if (!level.isLoaded(BlockPos(x, 69, z))) return 69
+        fun blocks(y: Int): Boolean {
+            val pos = BlockPos(x, y, z)
+            val s = level.getBlockState(pos)
+            return !s.isAir && s.isCollisionShapeFullBlock(level, pos)
+        }
+        fun standOn(y: Int): Boolean {
+            val s = level.getBlockState(BlockPos(x, y, z))
+            return !s.isAir && s.fluidState.isEmpty
+        }
+        for (d in 0..40) for (y in if (d == 0) intArrayOf(69) else intArrayOf(69 + d, 69 - d)) {
+            if (standOn(y - 1) && !blocks(y) && !blocks(y + 1)) return y
+        }
+        return 69
     }
 
     // --------------------------------------------------------------- misc
