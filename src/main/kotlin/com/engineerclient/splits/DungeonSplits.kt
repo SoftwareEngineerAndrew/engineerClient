@@ -135,6 +135,7 @@ object DungeonSplits : Module(
         on<LevelEvent.Load> {
             tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
             goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
+            portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false
             barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
             serverTicks = 0
         }
@@ -164,7 +165,13 @@ object DungeonSplits : Module(
         // when it is down. Nothing else in the rush does either 36 at a time.
         on<BlockUpdateEvent> {
             // The portal out of the blood room opening, a few seconds after the Watcher lets you go.
-            if (open(SplitTracker.PORTAL) && updated.block == Blocks.NETHER_PORTAL) card.onPortal(now())
+            if (open(SplitTracker.PORTAL) && updated.block == Blocks.NETHER_PORTAL) {
+                card.onPortal(now())
+                if (!portalSeen) {
+                    portalSeen = true
+                    boss.extra(SplitTracker.PORTAL, now(), "§dportal appeared", "its blocks seen - out of render distance this is missing")
+                }
+            }
             if (blood.active) {
                 if (updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
                 else if (old.block == Blocks.BARRIER && updated.isAir) cleared += pos.x to pos.z
@@ -188,12 +195,19 @@ object DungeonSplits : Module(
             if (blood.active) for (e in level.entitiesForRendering()) {
                 if (e !is ArmorStand || e.id in keysSeen) continue
                 val name = e.customName?.string ?: continue
-                if (KEY.containsMatchIn(name)) { keysSeen += e.id; blood.onKeySpawned(now()) }
+                if (KEY.containsMatchIn(name)) { keysSeen += e.id; blood.onKeySpawned(now(), distanceTo(e)) }
             }
 
             // Goldor's leap ends when the last teammate is inside the core.
             val inCore = if (subs.watchingCore || open(SplitTracker.GOLDOR)) everyoneInCore(level) else false
-            if (inCore == true) { subs.onEveryoneInCore(now()); card.onEveryoneInCore(now(), "players in the core box") }
+            if (inCore == true) {
+                if (subs.watchingCore || card.waitingForCore) boss.extra(SplitTracker.GOLDOR, now(), "§5everyone in", "every teammate seen inside the core")
+                subs.onEveryoneInCore(now(), "every teammate seen inside the core")
+                card.onEveryoneInCore(now(), "players in the core box")
+            } else if (inCore == null && !coreUnseenNoted && (subs.watchingCore || card.waitingForCore)) {
+                coreUnseenNoted = true
+                boss.extra(SplitTracker.GOLDOR, now(), "§8can't see everyone", "out of render distance: " + unseenTeammates(level).joinToString() + " - waiting on Goldor moving instead")
+            }
             // The backup, only when the box can't tell (someone out of render distance): Goldor
             // starting to move, which he does once everyone is in.
             if (open(SplitTracker.GOLDOR) && card.waitingForCore) watchGoldor(level, trusted = inCore == null) else goldorAt = null
@@ -215,15 +229,20 @@ object DungeonSplits : Module(
                 e is Player && open(SplitTracker.BLOOD) && e.name.string !in teamNames() -> {
                     val name = e.name.string.trim()
                     val at = now()
-                    if (watchedMobs.put(e.id, name to at) == null) boss.onMobSpawn(at, name)
+                    if (watchedMobs.put(e.id, name to at) == null) boss.onMobSpawn(at, name, distanceTo(e))
                 }
             }
         }
         on<EntityEvent.Remove> {
-            if (entity is WitherBoss && open(SplitTracker.MAXOR)) card.onMaxorGone(now())
+            if (entity is WitherBoss && open(SplitTracker.MAXOR)) {
+                card.onMaxorGone(now())
+                val d = distanceTo(entity)
+                boss.extra(SplitTracker.MAXOR, now(), "§5wither gone", BossDetail.blocks(d) + " away" +
+                    if (d > 48) " - probably out of view, not his death" else " - his death, 1-2 s before Storm speaks")
+            }
             val (name, spawned) = watchedMobs.remove(entity.id) ?: return@on
             val at = now()
-            boss.onMobGone(at, name, at.realMs - spawned.realMs)
+            boss.onMobGone(at, name, at.realMs - spawned.realMs, distanceTo(entity))
         }
 
         // A wither hurt: Goldor's hits and Necron's first. Hits carry no attacker, so uncredited.
@@ -232,7 +251,7 @@ object DungeonSplits : Module(
             EngineerClient.mc.execute {
                 val e = EngineerClient.mc.level?.getEntity(id) as? WitherBoss ?: return@execute
                 val at = now()
-                if (open(SplitTracker.GOLDOR)) { boss.onBossHit(SplitTracker.GOLDOR, at); card.onGoldorHit(at, "damage packet") }
+                if (open(SplitTracker.GOLDOR)) { boss.onBossHit(SplitTracker.GOLDOR, at); goldorHit(at, "damage packet (he was in view)") }
                 else if (open(SplitTracker.NECRON) && e.isAlive) boss.onBossHit(SplitTracker.NECRON, at)
             }
         }
@@ -252,7 +271,7 @@ object DungeonSplits : Module(
                     if (bar.first != id) return
                     val dropped = progress < bar.second - 0.0005f
                     goldorBar = id to progress
-                    if (dropped) EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) card.onGoldorHit(now(), "boss bar") }
+                    if (dropped) EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) goldorHit(now(), "his boss bar dropping") }
                 }
             })
         }
@@ -261,7 +280,7 @@ object DungeonSplits : Module(
         onReceive<ClientboundSoundPacket> {
             val id = sound.value().location().path
             if (id != "entity.wither.hurt") return@onReceive
-            EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) card.onGoldorHit(now(), "hurt sound") }
+            EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) goldorHit(now(), "a wither hurt sound") }
         }
     }
 
@@ -306,7 +325,10 @@ object DungeonSplits : Module(
         val dx = e.x - pinned.second.x; val dz = e.z - pinned.second.z
         val dy = e.y - pinned.second.y
         // He does not move at all while he is being DPSed; any movement is the window over.
-        if (dx * dx + dy * dy + dz * dz > 0.1 * 0.1) { card.onStormMoved(now()); pinnedStorm = null }
+        if (dx * dx + dy * dy + dz * dz > 0.1 * 0.1) {
+            card.onStormMoved(now()); pinnedStorm = null
+            boss.extra(SplitTracker.STORM, now(), "§bmoved off the crush", "his wither seen moving " + BossDetail.blocks(distanceTo(e)) + " away")
+        }
     }
 
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
@@ -335,7 +357,14 @@ object DungeonSplits : Module(
         val e = level.getEntity(at.first) ?: run { goldorAt = null; return }
         val d = e.position().distanceTo(at.second)
         if (d > 8) goldorAt = e.id to e.position()
-        else if (d > 0.1) { if (trusted) card.onEveryoneInCore(now(), "Goldor moved, someone out of sight"); goldorMoved = true }
+        else if (d > 0.1) {
+            if (trusted) {
+                card.onEveryoneInCore(now(), "Goldor moved, someone out of sight")
+                subs.onEveryoneInCore(now(), "Goldor starting to move - someone was out of render distance, so the core box couldn't tell")
+                boss.extra(SplitTracker.GOLDOR, now(), "§5everyone in", "Goldor started moving (0-5 ticks after the last one in, in the recordings)")
+            }
+            goldorMoved = true
+        }
     }
 
     /** Necron and mid, where he starts his fight. */
@@ -350,8 +379,13 @@ object DungeonSplits : Module(
         if (at == null) { bossWither(level, "Necron")?.let { necronAt = it.id to it.position() }; return }
         val e = level.getEntity(at.first) ?: return
         val d = e.position().distanceTo(at.second)
-        if (!card.necronOff && d > 0.5) card.onNecronOffMid(now())
-        else if (card.necronOff && d < 0.2) card.onNecronBackAtMid(now())
+        if (!card.necronOff && d > 0.5) {
+            card.onNecronOffMid(now())
+            boss.extra(SplitTracker.NECRON, now(), "§cleft mid", "his wither seen moving " + BossDetail.blocks(distanceTo(e)) + " away")
+        } else if (card.necronOff && card.necronWatch && d < 0.2) {
+            card.onNecronBackAtMid(now())
+            boss.extra(SplitTracker.NECRON, now(), "§cback at mid", "his wither seen back where he started")
+        }
     }
 
     private fun open(label: String) = tracker.split(label)?.stop == null && tracker.split(label) != null
@@ -388,7 +422,24 @@ object DungeonSplits : Module(
     private val KEY = Regex("""(?:Wither|Blood) Key""")
 
     /** One timed thing in a section: its label, when it started, and how long it has run. */
-    private class Row(val label: String, val at: Stamp, val ms: Long, val ticks: Long, val who: String = "")
+    private class Row(val label: String, val at: Stamp, val ms: Long, val ticks: Long, val who: String = "", val note: String = "")
+
+    // Debug's one-time notes.
+    private var portalSeen = false
+    private var goldorHitNoted = false
+    private var coreUnseenNoted = false
+
+    /** Goldor's first hit, however it showed: the scorecard's, and Debug's note of how. */
+    private fun goldorHit(at: Stamp, how: String) {
+        card.onGoldorHit(at, how)
+        if (!goldorHitNoted) { goldorHitNoted = true; boss.extra(SplitTracker.GOLDOR, at, "§efirst hit", how) }
+    }
+
+    private fun distanceTo(e: net.minecraft.world.entity.Entity): Double = mc.player?.distanceTo(e)?.toDouble() ?: 0.0
+
+    /** Living teammates the game isn't showing you. */
+    private fun unseenTeammates(level: net.minecraft.client.multiplayer.ClientLevel): List<String> =
+        DungeonUtils.dungeonTeammates.filter { !it.isDead && (it.entity ?: level.players().firstOrNull { p -> p.name.string == it.name }) == null }.map { it.name }
 
     private fun subLines(s: Section): List<String> {
         val level = level(s)
@@ -401,14 +452,16 @@ object DungeonSplits : Module(
         // The boss's own steps each run until the next; the Watcher's and Portal's are moments,
         // timed from the start of the split.
         val boss = subs.forSplit(s.window)
+        // In Debug each boss step says how it ended: the line, timed wait or check that started the next.
+        val ends = subs.endSources(s.window)
         // Maxor's are each the time since Maxor started, at the end of that step (so far, for the
         // one running): where in the fight each stun and DPS landed, rather than how long each took.
         val fromStart = s.window == SplitTracker.MAXOR
-        val steps = boss.map { st ->
+        val steps = boss.mapIndexed { i, st ->
             val stop = st.stop ?: now
             val from = if (fromStart) split.start else st.start
-            Row(st.label, st.start, stop.realMs - from.realMs, (stop.tick - from.tick).toLong())
-        } + detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks) } }
+            Row(st.label, st.start, stop.realMs - from.realMs, (stop.tick - from.tick).toLong(), note = "ended by " + ends.getOrElse(i) { "?" })
+        } + detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, note = e.note) } }
 
         if (level == BloodRunDetail.Level.COMPACT) {
             if (steps.isEmpty()) return emptyList()
@@ -417,14 +470,52 @@ object DungeonSplits : Module(
             })
         }
 
+        val debug = level == BloodRunDetail.Level.DEBUG
         var rows = steps
-        if (level == BloodRunDetail.Level.DEBUG) {
-            rows = rows + detail.lines(s.window).filter { !it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, e.who) } }
+        if (debug) {
+            rows = rows + detail.lines(s.window).filter { !it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, e.who, e.note) } }
         }
-        return rows.sortedBy { it.at.realMs }.map { r ->
-            SplitFormat.line(r.label, r.ms, r.ticks) + if (r.who.isEmpty()) "" else " §7" + r.who
-        }
+        val out = rows.sortedBy { it.at.realMs }.map { r ->
+            SplitFormat.line(r.label, r.ms, r.ticks) + (if (r.who.isEmpty()) "" else " §7" + r.who) +
+                (if (debug && r.note.isNotEmpty()) " §8· " + r.note else "")
+        }.toMutableList()
+        if (debug) out += debugFooter(s, split, now)
+        return out
     }
+
+    /**
+     * Debug's closing lines for a section: the chat lines the split itself runs between, and how
+     * far the server's clock fell behind real time over it - the one thing that moves every time in
+     * it at once.
+     */
+    private fun debugFooter(s: Section, split: Split, now: Stamp): List<String> {
+        val out = mutableListOf("§8· split: from ${SPLIT_STARTS[s.window]} to " +
+            (if (split.stop == null) "now (running)" else SPLIT_STARTS[NEXT_SPLIT[s.window]] ?: "the next split"))
+        val end = split.stop ?: now
+        val lag = (end.realMs - split.start.realMs) - (end.tick - split.start.tick) * 50L
+        out += if (kotlin.math.abs(lag) < 100) "§8· lag: none to speak of" else
+            "§8· lag: server " + SplitFormat.seconds(kotlin.math.abs(lag)) + (if (lag > 0) " behind" else " ahead of") + " real time - the (bracketed) times are the server's"
+        if (s.window in BOSS_SPLITS && subs.forSplit(s.window).isEmpty()) out += "§8· no steps: the boss's first line wasn't seen"
+        return out
+    }
+
+    /** The chat line each split starts on (and so the one before it ends on). */
+    private val SPLIT_STARTS = mapOf(
+        SplitTracker.BLOOD to "the Watcher's first line",
+        SplitTracker.PORTAL to "\"You have proven yourself\"",
+        SplitTracker.MAXOR to "Maxor's first line",
+        SplitTracker.STORM to "Storm's first line",
+        SplitTracker.TERMS to "Goldor's first line",
+        SplitTracker.GOLDOR to "\"The Core entrance is opening!\"",
+        SplitTracker.NECRON to "Necron's first line",
+        SplitTracker.ANIMATION to "\"All this, for nothing...\"",
+    )
+    private val NEXT_SPLIT = mapOf(
+        SplitTracker.BLOOD to SplitTracker.PORTAL, SplitTracker.PORTAL to SplitTracker.MAXOR, SplitTracker.MAXOR to SplitTracker.STORM,
+        SplitTracker.STORM to SplitTracker.TERMS, SplitTracker.TERMS to SplitTracker.GOLDOR, SplitTracker.GOLDOR to SplitTracker.NECRON,
+        SplitTracker.NECRON to SplitTracker.ANIMATION,
+    )
+    private val BOSS_SPLITS = setOf(SplitTracker.MAXOR, SplitTracker.STORM, SplitTracker.TERMS, SplitTracker.GOLDOR, SplitTracker.NECRON)
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0

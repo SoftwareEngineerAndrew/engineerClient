@@ -30,6 +30,10 @@ class SubSplitTracker {
 
     private val steps = SEQUENCE
     private val starts = arrayOfNulls<Stamp>(SEQUENCE.size)
+    /** How each step's start was found, for Debug: a chat line, a timed wait, the core box. */
+    private val sources = arrayOfNulls<String>(SEQUENCE.size)
+    /** The line that armed the running timed wait. */
+    private var armedBy = ""
 
     /** 0 before the boss starts, otherwise the 1-based step being timed. */
     private var current = 0
@@ -52,6 +56,8 @@ class SubSplitTracker {
 
     fun reset() {
         java.util.Arrays.fill(starts, null)
+        java.util.Arrays.fill(sources, null)
+        armedBy = ""
         current = 0; last = null; ticks = 0; watchFrom = null
         stormCrushes = 0; laserWaitDone = false
         gateBlown = false; gateWaiting = false; watchingCore = false
@@ -69,6 +75,29 @@ class SubSplitTracker {
         return out
     }
 
+    /**
+     * For Debug: how each of [split]'s steps (in [forSplit]'s order) came to an end - how the next
+     * step's start was found - or "running". A step can end on a later split's first line when the
+     * moments between were never seen; that shows here too.
+     */
+    fun endSources(split: String): List<String> {
+        val out = mutableListOf<String>()
+        steps.forEachIndexed { i, step ->
+            if (step.split != split || starts[i] == null) return@forEachIndexed
+            val next = (i + 1 until starts.size).firstOrNull { starts[it] != null }
+            out += when {
+                next == null -> "running"
+                next != i + 1 -> (sources[next] ?: "?") + " - the steps between were never seen"
+                else -> sources[next] ?: "?"
+            }
+        }
+        return out
+    }
+
+    /** How [split]'s first step started, for Debug. */
+    fun startSource(split: String): String? =
+        steps.indices.firstOrNull { steps[it].split == split && starts[it] != null }?.let { sources[it] }
+
     /** Whether any split has steps yet — the HUDs fall back to chat events until it does. */
     fun started(): Boolean = current > 0
 
@@ -82,42 +111,42 @@ class SubSplitTracker {
         val after = { n: Int -> Stamp(from.realMs + n * 50L, from.tick + n) }
         if (ticks >= MAXOR_SHIELD_TICKS && !laserWaitDone) {
             laserWaitDone = true; watchFrom = null
-            advance(after(MAXOR_SHIELD_TICKS))
+            advance(after(MAXOR_SHIELD_TICKS), "$MAXOR_SHIELD_TICKS server ticks after $armedBy - never announced, so counted")
         } else if (ticks >= STORM_LIGHTNING_TICKS && stormCrushes == 0) {
             watchFrom = null
-            advance(after(STORM_LIGHTNING_TICKS))
+            advance(after(STORM_LIGHTNING_TICKS), "$STORM_LIGHTNING_TICKS server ticks after $armedBy - never announced, so counted")
         }
     }
 
-    /** The party is all inside the core: the leap is over and Goldor's kill begins. */
-    fun onEveryoneInCore(at: Stamp) {
+    /** The party is all inside the core ([how] it was told): the leap is over and Goldor's kill begins. */
+    fun onEveryoneInCore(at: Stamp, how: String) {
         if (!watchingCore) return
         watchingCore = false
-        advance(at)
+        advance(at, how)
     }
 
     fun onChat(msg: String, at: Stamp) {
         when {
-            msg == MAXOR_START -> { reset(); jumpTo(1, at) }
+            msg == MAXOR_START -> { reset(); jumpTo(1, at, said(msg)) }
             current == 0 -> return
 
             // A jump rather than a step, so a missed line earlier cannot leave the rest misaligned.
-            msg == STORM_START -> jumpTo(7, at)
-            msg == GOLDOR_START -> jumpTo(13, at)
-            msg in NECRON_START -> { watchingCore = false; jumpTo(19, at) }
+            msg == STORM_START -> jumpTo(7, at, said(msg))
+            msg == GOLDOR_START -> jumpTo(13, at, said(msg))
+            msg in NECRON_START -> { watchingCore = false; jumpTo(19, at, said(msg)) }
 
             // The lines that arm a timed wait: Maxor's intro ends, Storm calls its lightning.
-            msg in ARMS_WAIT -> { watchFrom = at; ticks = 0 }
+            msg in ARMS_WAIT -> { watchFrom = at; ticks = 0; armedBy = said(msg) }
 
             // Storm takes a crush. Four of them and it is dead, so the fifth is not a new step.
             msg in STORM_CRUSHED -> {
                 ticks = 0
-                if (stormCrushes <= 3) { stormCrushes++; advance(at) }
+                if (stormCrushes <= 3) { stormCrushes++; advance(at, said(msg)) }
             }
 
-            msg in ADVANCES -> advance(at)
+            msg in ADVANCES -> advance(at, said(msg))
 
-            msg == GATE_DESTROYED -> if (gateWaiting) advance(at) else gateBlown = true
+            msg == GATE_DESTROYED -> if (gateWaiting) advance(at, "the gate destroyed, after the last device") else gateBlown = true
 
             else -> {
                 val m = SECTION_DONE.find(msg) ?: return
@@ -125,16 +154,19 @@ class SubSplitTracker {
                 if (m.groupValues[2] != m.groupValues[3]) return
                 when (current) {
                     15 -> watchingCore = true   // S3 done: the team starts moving to the core
-                    16 -> { advance(at); return }
+                    16 -> { advance(at, "the last device (${m.groupValues[3]}/${m.groupValues[3]}) - no gate after S4"); return }
                 }
-                if (gateBlown) advance(at) else gateWaiting = true
+                if (gateBlown) advance(at, "the last device (${m.groupValues[3]}/${m.groupValues[3]}), after the gate") else gateWaiting = true
             }
         }
     }
 
-    private fun advance(at: Stamp) = jumpTo(current + 1, at)
+    private fun advance(at: Stamp, source: String) = jumpTo(current + 1, at, source)
 
-    private fun jumpTo(step: Int, at: Stamp) {
+    /** A chat line as a source: `"YOU TRICKED ME!"`, the speaker left off. */
+    private fun said(msg: String) = "\"" + msg.substringAfter(": ").let { if (it.length > 32) it.take(30) + "..." else it } + "\""
+
+    private fun jumpTo(step: Int, at: Stamp, source: String) {
         if (step > steps.size) return
         ticks = 0
         watchFrom = null
@@ -143,6 +175,7 @@ class SubSplitTracker {
         current = step
         last = at
         starts[step - 1] = at
+        sources[step - 1] = source
     }
 
     private companion object {
