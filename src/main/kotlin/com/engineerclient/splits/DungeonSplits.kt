@@ -112,8 +112,8 @@ object DungeonSplits : Module(
             registerSetting(
                 HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 0, 0, 1f) { example ->
                     if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
-                        "§5Hallway: \t§81.52s\t§70.21s\t§c0.06s\t§40.52s\t§62.31s",
-                        "§dDino: \t§811.52s\t§70.21s\t§c0.06s\t§410.52s\t§622.31s",
+                        "§62.31s \t§5Hallway: \t§81.52s\t§70.21s\t§c0.06s\t§40.52s",
+                        "§622.31s \t§dDino: \t§811.52s\t§70.21s\t§c0.06s\t§410.52s",
                     ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
                     draw(this, subLines(s))
                 }
@@ -424,7 +424,9 @@ object DungeonSplits : Module(
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         if (lines.isEmpty()) return 0 to 0
-        if (lines.any { '\t' in it }) return table(gfx, lines)
+        // The compact blood rush: the room total first, right-aligned, then the name, then the
+        // times with a bar between each.
+        if (lines.any { '\t' in it }) return table(gfx, lines, rightFirst = true, barsFrom = 3)
         lines.forEachIndexed { i, line -> gfx.text(line, 0, i * LINE_HEIGHT, Colors.WHITE, shadow = true) }
         return lines.maxOf { mc.font.width(it) } to lines.size * LINE_HEIGHT
     }

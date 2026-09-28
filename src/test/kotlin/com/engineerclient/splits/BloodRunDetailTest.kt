@@ -16,7 +16,7 @@ class BloodRunDetailTest {
     private fun plain(line: String) = line.replace(Regex("§."), "")
 
     /** A compact row read back the way it looks on screen. */
-    private fun row(line: String) = plain(line).split('\t').let { it[0] + it.drop(1).joinToString(" | ") }
+    private fun row(line: String) = plain(line).split('\t').let { it[0] + it[1] + it.drop(2).joinToString(" | ") }
 
     private val entrance = MapRoom("e", "Entrance", fairy = false, entrance = true)
     private val fairy = MapRoom("f", "Fairy", fairy = true, entrance = false)
@@ -66,17 +66,17 @@ class BloodRunDetailTest {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700)).map(::row)
         // Pipes starts when the start door starts falling (133), not on Mort's line.
         // Last mob counts from the door being down (144), not from it starting to fall.
-        assertEquals("Pipes: 0.55s | 7.40s | 0.60s | 0.10s | 8.65s", lines[0])
+        assertEquals("8.65s Pipes: 0.55s | 7.40s | 0.60s | 0.10s", lines[0])
         // The key was never seen on the ground here, so last mob falls back to the pickup.
-        assertEquals("Deathmite: 0.65s | 5.00s | 0.00s | 0.10s | 5.75s", lines[2])
-        assertTrue(lines.last().startsWith("Total: "))
+        assertEquals("5.75s Deathmite: 0.65s | 5.00s | 0.00s | 0.10s", lines[2])
+        assertTrue(lines.last().contains(" Total: "), lines.last())
     }
 
     @Test
     fun `the room that leads into fairy is pink`() {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700))
-        assertTrue(lines[3].startsWith("§dLocked Away: "), lines[3])
-        assertTrue(lines[0].startsWith("§5Pipes: "), lines[0])
+        assertTrue(lines[3].split('\t')[1].startsWith("§dLocked Away: "), lines[3])
+        assertTrue(lines[0].split('\t')[1].startsWith("§5Pipes: "), lines[0])
     }
 
     @Test
@@ -115,6 +115,6 @@ class BloodRunDetailTest {
     fun `the total row can be turned off`() {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700), totalRow = false).map(::row)
         assertEquals(6, lines.size)
-        assertTrue(lines.none { it.startsWith("Total: ") })
+        assertTrue(lines.none { it.contains("Total: ") })
     }
 }
