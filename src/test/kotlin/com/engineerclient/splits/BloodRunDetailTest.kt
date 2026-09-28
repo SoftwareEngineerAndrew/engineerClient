@@ -65,9 +65,10 @@ class BloodRunDetailTest {
     fun `compact is door fell, last mob, key pickup delta, door opened delta, total`() {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700)).map(::row)
         // Pipes starts when the start door starts falling (133), not on Mort's line.
-        assertEquals("Pipes: 0.55s | 7.95s | 0.60s | 0.10s | 8.65s", lines[0])
+        // Last mob counts from the door being down (144), not from it starting to fall.
+        assertEquals("Pipes: 0.55s | 7.40s | 0.60s | 0.10s | 8.65s", lines[0])
         // The key was never seen on the ground here, so last mob falls back to the pickup.
-        assertEquals("Deathmite: 0.65s | 5.65s | 0.00s | 0.10s | 5.75s", lines[2])
+        assertEquals("Deathmite: 0.65s | 5.00s | 0.00s | 0.10s | 5.75s", lines[2])
         assertTrue(lines.last().startsWith("Total: "))
     }
 
@@ -82,13 +83,21 @@ class BloodRunDetailTest {
     fun `the room being run counts up live, all but its total`() {
         val lines = rush(until = 300).lines(BloodRunDetail.Level.COMPACT, stamp(300)).map(::row)
         // Key pickup is next: 8 ticks since the key appeared at 292.
-        assertEquals(listOf("Pipes: 0.55s | 7.95s | 0.40s"), lines)
+        assertEquals(listOf("Pipes: 0.55s | 7.40s | 0.40s"), lines)
+    }
+
+    @Test
+    fun `last mob only counts once the door is down`() {
+        val falling = rush(until = 140).lines(BloodRunDetail.Level.COMPACT, stamp(140)).map(::row)
+        assertEquals(listOf("...: 0.35s"), falling) // named once the door is down
+        val down = rush(until = 150).lines(BloodRunDetail.Level.COMPACT, stamp(150)).map(::row)
+        assertEquals(listOf("Pipes: 0.55s | 0.30s"), down)
     }
 
     @Test
     fun `detailed is the same five, labelled, with averages at the end`() {
         val lines = rush().lines(BloodRunDetail.Level.DETAILED, stamp(700)).map(::plain)
-        assertEquals(listOf("Pipes", "door fell > 0.55s (0.55s)", "last mob > 7.95s (7.95s)",
+        assertEquals(listOf("Pipes", "door fell > 0.55s (0.55s)", "last mob > 7.40s (7.40s)",
             "pickup > 0.60s (0.60s)", "opened > 0.10s (0.10s)", "room total > 8.65s (8.65s)", ""), lines.take(7))
         assertTrue(lines.any { it.startsWith("room total avg > ") })
         assertTrue(lines.none { it.contains("total room") || it.contains(":") })

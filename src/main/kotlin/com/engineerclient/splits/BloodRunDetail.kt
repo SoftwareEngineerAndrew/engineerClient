@@ -216,13 +216,16 @@ class BloodRunDetail {
     /**
      * door fell, last mob killed, key pickup delta, door opened delta, total — in that order. In
      * the room being run, the next thing still to happen counts up to [now]; the total is the one
-     * line that is not live, since a room's time means nothing until it is over.
+     * line that is not live, since a room's time means nothing until it is over. Last mob is timed
+     * from the door being all the way down, and only starts counting then; a door never seen down
+     * falls back to the room's start once the mob is dead.
      */
     private fun stats(r: Room, now: Stamp): List<Pair<Long, Long>?> {
         val live = if (r === room) now else null
+        val killFrom = r.doorFell ?: r.start.takeIf { r.mobKilled != null }
         return listOf(
             span(r.start, r.doorFell ?: live),
-            span(r.start, r.mobKilled ?: live),
+            span(killFrom, r.mobKilled ?: live)?.let { maxOf(it.first, 0L) to maxOf(it.second, 0L) },
             span(r.mobKilled, r.keyPicked ?: live),
             span(r.keyPicked, r.doorOpened ?: live),
             span(r.start, r.doorOpened),
