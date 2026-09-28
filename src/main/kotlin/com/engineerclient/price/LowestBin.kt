@@ -1,9 +1,7 @@
 package com.engineerclient.price
 
+import com.engineerclient.misc.RandomStuff
 import com.odtheking.odin.OdinMod
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.network.WebUtils
 import kotlinx.coroutines.launch
@@ -35,13 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * thousands of NBT decodes per refresh; that cost lands on the client as GC churn whatever thread
  * it runs on, so it is not worth it for one line of text.
  */
-object LowestBin : Module(
-    name = "Lowest BIN",
-    category = Category.custom("Engineer Client"),
-    description = "Shows an item's lowest auction-house BIN in its tooltip. Silent for anything not auctionable.",
-    toggled = true, // existing installs have no saved state for a new module; on by default
-) {
-    private val showStack by BooleanSetting("Stack Total", false, desc = "On a stack, also show the whole stack's worth at that price.")
+object LowestBin {
+    /** Switched in Random Stuff ("Lowest BIN", "Lowest BIN Stack Total"). */
+    private val enabled get() = RandomStuff.enabled && RandomStuff.lowestBin
+    private val showStack get() = RandomStuff.lowestBinStack
 
     private const val API = "https://sky.coflnet.com/api/item/price/"
 

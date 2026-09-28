@@ -15,6 +15,7 @@
     "GameModeRecordMixin",
     "GameRendererInvoker",
     "GameRendererMixin",
+    "GuiItemNameMixin",
     "GuiBlurMixin",
     "ItemFoilMixin",
     "LivingEntityAccessor",

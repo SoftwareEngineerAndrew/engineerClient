@@ -1,0 +1,15 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.engineerclient.mixin.odin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "HudElementMixin",
+    "LeapMenuClickMixin",
+    "LeapMenuReleaseMixin",
+    "LeapMenuRenderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

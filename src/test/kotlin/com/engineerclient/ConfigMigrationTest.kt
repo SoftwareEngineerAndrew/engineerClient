@@ -1,0 +1,80 @@
+package com.engineerclient
+
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class ConfigMigrationTest {
+
+    private fun dir(ec: String, odin: String? = null): Path {
+        val d = Files.createTempDirectory("ecmig")
+        Files.createDirectories(d.resolve("addons"))
+        Files.writeString(d.resolve("addons/engineerclient.json"), ec)
+        if (odin != null) Files.writeString(d.resolve("odin-config.json"), odin)
+        return d
+    }
+
+    private fun modules(d: Path): JsonArray = JsonParser.parseString(Files.readString(d.resolve("addons/engineerclient.json"))).asJsonArray
+    private fun JsonArray.named(name: String): JsonObject? = firstOrNull { it.asJsonObject["name"].asString == name }?.asJsonObject
+    private fun JsonObject.s(key: String) = getAsJsonObject("settings")[key]
+
+    private val EC = """[
+        {"name":"Lowest BIN","enabled":false,"settings":{"Stack Total":true,"Keybind":"key.keyboard.unknown"}},
+        {"name":"Random Stuff","enabled":true,"settings":{"Hide Chat":false}},
+        {"name":"BR Waypoints 2","enabled":true,"settings":{"Killers":"Duo","My Role":"Role 2"}}
+    ]"""
+
+    private val ODIN = """[
+        {"name":"Leap Menu","enabled":true,"settings":{"Click Delay":3,"Map Leap":false,"Leap Outline":true}},
+        {"name":"Player Display","enabled":true,"settings":{"Health Bar HUD":{"x":868,"y":1001,"scale":3.2,"enabled":true},"Health Bar Width":60,"Health Bar Height":8,"Mana Bar HUD":{"x":868,"y":959,"scale":3.2,"enabled":true},"Mana Bar Width":70,"Mana Bar Height":9}}
+    ]"""
+
+    @Test
+    fun `renames, folds and copies everything, keeping values`() {
+        val d = dir(EC, ODIN)
+        assertTrue(ConfigMigration.run(d))
+        val m = modules(d)
+        assertNull(m.named("BR Waypoints 2"))
+        assertEquals("Role 2", m.named("BR Roles")!!.s("My Role").asString)
+        assertNull(m.named("Lowest BIN"))
+        val rs = m.named("Random Stuff")!!
+        assertFalse(rs.s("Lowest BIN").asBoolean) // it was off
+        assertTrue(rs.s("Lowest BIN Stack Total").asBoolean)
+        assertFalse(rs.s("Hide Chat").asBoolean) // untouched
+        assertEquals(868, rs.s("Health Bar HUD").asJsonObject["x"].asInt)
+        assertEquals(70, rs.s("Mana Bar Width").asInt)
+        val leap = m.named("Leap Extras")!!
+        assertTrue(leap["enabled"].asBoolean)
+        assertEquals(3, leap.s("Click Delay").asInt)
+        assertTrue(leap.s("Leap Outline").asBoolean)
+    }
+
+    @Test
+    fun `runs once`() {
+        val d = dir(EC, ODIN)
+        ConfigMigration.run(d)
+        val after = Files.readString(d.resolve("addons/engineerclient.json"))
+        assertFalse(ConfigMigration.run(d))
+        assertEquals(after, Files.readString(d.resolve("addons/engineerclient.json")))
+    }
+
+    @Test
+    fun `a stock Odin config copies nothing`() {
+        val d = dir("""[{"name":"Random Stuff","enabled":true,"settings":{}}]""", """[{"name":"Leap Menu","enabled":true,"settings":{"Render Scale":1.0}}]""")
+        assertFalse(ConfigMigration.run(d))
+        assertNull(modules(d).named("Leap Extras"))
+    }
+
+    @Test
+    fun `no config yet is left alone`() {
+        val d = Files.createTempDirectory("ecmig")
+        assertFalse(ConfigMigration.run(d))
+    }
+}

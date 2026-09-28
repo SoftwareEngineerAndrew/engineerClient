@@ -67,7 +67,7 @@ object BetterPF : Module(
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
 
-    /** The upload key, for other features that write to the site (BR Waypoints 2's boxes). */
+    /** The upload key, for other features that write to the site (BR Roles's boxes). */
     val siteKey: String get() = uploadKey.trim()
 
     const val SITE = "undonecoffee.com"
