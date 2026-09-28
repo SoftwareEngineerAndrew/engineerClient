@@ -40,6 +40,9 @@ object OdinSplitsLook {
     /** The Engineer look is picked. */
     val engineer: Boolean get() = look.value == 1
 
+    private val enterAfterEntry = BooleanSetting("Enter After Entry", false, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
+        .withDependency { engineer && bool("Boss Entry Split", true) }
+
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }
 
     private val paceFloor = SelectorSetting("Pace Targets", "F7", listOf("F7", "M7"),
@@ -47,7 +50,7 @@ object OdinSplitsLook {
         .withDependency { engineer && pace.value }
 
     private fun boxes(floor: String, master: Boolean, index: Int) = EngineerLook.targetLabels(master).map { name ->
-        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank counts as 0.")
+        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your Odin PB for it (0 without one).")
             .withDependency { engineer && pace.value && paceFloor.value == index }
     }
 
@@ -64,18 +67,16 @@ object OdinSplitsLook {
      * toggled if its saved state differs), so nothing else changes.
      */
     fun install() {
-        for (s in listOf(look, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        for (s in listOf(look, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
         ModuleManager.loadConfigurations()
     }
 
     private fun fillFromPbs() {
         val master = paceFloor.value == 1
         val pbs = Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal]
-        // Odin keys a PB by the split's name as it has it, colour codes included.
-        val names = listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name }
         val boxes = if (master) m7 else f7
         var filled = 0
-        names.forEachIndexed { i, n ->
+        PB_NAMES.forEachIndexed { i, n ->
             val pb = pbs.get(n) ?: return@forEachIndexed
             boxes.getOrNull(i)?.value = EngineerLook.formatSeconds(pb.toDouble())
             filled++
@@ -114,6 +115,7 @@ object OdinSplitsLook {
         bossEntry = bool("Boss Entry Split", true),
         show0 = bool("Show 0 splits", false),
         showTicks = Splits.showTickTime,
+        enterAfterEntry = enterAfterEntry.value,
     )
 
     /** Where the rows are from, and whether it is master mode. */
@@ -124,9 +126,20 @@ object OdinSplitsLook {
         return (if (floor.floorNumber == 7) EngineerLook.Place.FLOOR7 else EngineerLook.Place.DUNGEON) to master
     }
 
-    /** The targets for the floor, as seconds; null off floor 7. */
-    private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? =
-        if (place != EngineerLook.Place.FLOOR7) null else (if (master) m7 else f7).map { EngineerLook.parseSeconds(it.value) }
+    /**
+     * The targets for the floor, as seconds; null off floor 7. A blank box (or one that isn't a
+     * time) follows your Odin PB for that split, live, so it keeps up as the PB improves.
+     */
+    private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? {
+        if (place != EngineerLook.Place.FLOOR7) return null
+        val pbs = Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal]
+        return (if (master) m7 else f7).mapIndexed { i, box ->
+            EngineerLook.parseSeconds(box.value) ?: PB_NAMES.getOrNull(i)?.let { pbs.get(it)?.toDouble() }
+        }
+    }
+
+    /** Odin keys a PB by the split's name as it has it, colour codes included. */
+    private val PB_NAMES by lazy { listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name } }
 
     private fun rows(): List<EngineerLook.Row> =
         SplitsManager.currentRows().map { EngineerLook.Row(it.name, it.time, it.tickTime, it.isCurrent) }

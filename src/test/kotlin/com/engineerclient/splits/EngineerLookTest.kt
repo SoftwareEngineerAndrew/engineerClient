@@ -63,9 +63,18 @@ class EngineerLookTest {
     }
 
     @Test
-    fun `blank targets count as nothing`() {
+    fun `no target at all counts as nothing`() {
         val r = rows(F7, listOf(20.0), current = 0, total = 20.0)
         assertEquals("Pace > 0m 20.0s (0m 20.0s)", text(EngineerLook.lines(r, ALL, Place.FLOOR7, false, List(9) { null }))[0])
+    }
+
+    @Test
+    fun `Enter After Entry - no Enter line until the boss is entered`() {
+        val opts = ALL.copy(enterAfterEntry = true)
+        val clear = text(EngineerLook.lines(rows(F7, listOf(20.0, 30.0), current = 1, total = 50.0), opts, Place.FLOOR7, false, TARGETS))
+        assertTrue(clear.none { it.startsWith("Enter") }, clear.toString())
+        val inBoss = text(EngineerLook.lines(rows(F7, listOf(20.0, 60.0, 4.0, 5.0), current = 3, total = 89.0), opts, Place.FLOOR7, false, TARGETS))
+        assertEquals("Enter > 1m 24.0s (1m 24.0s)", inBoss[4])
     }
 
     @Test
