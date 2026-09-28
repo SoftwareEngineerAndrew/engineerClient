@@ -209,7 +209,6 @@ object BrWaypoints2 : Module(
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
             loadRooms()
-            if (rushing) BrRoles.track(ticks)
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
             // Right click repeats every few ticks while held; a pull is one per press.
@@ -365,8 +364,6 @@ object BrWaypoints2 : Module(
      */
     private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?, door: DoorBlocks.Door) {
         val sides = listOfNotNull(a, b)
-        // Who got to it first is the door runner - not the start door, which everyone starts at.
-        if (!startDoor) BrRoles.doorFell(ticks, -185.0 + 16 * (door.a.first + door.b.first) + 0.5, -185.0 + 16 * (door.a.second + door.b.second) + 0.5)
         if (startDoor) {
             // At the start other doors come down too (fairy's); the rush's is the one out of Entrance.
             val entrance = sides.firstOrNull { it.type == RoomType.ENTRANCE } ?: return

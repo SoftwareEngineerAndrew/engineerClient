@@ -23,10 +23,6 @@ import kotlin.math.abs
  * "!3br 2" is "3 of us are killing, I am role 2", "!br 2" the same at the team size already set,
  * "!br d" (or "!3br d") is "I am on the door". A claim lasts until the dungeon ends. Everyone
  * with the mod keeps track of who has what, and anyone without a role yet is offered the free ones as clickable buttons (they run /brrole).
- *
- * The door runner is also found without being told: at each wither or blood door, whoever got to it
- * first ([doorFell]). Several people can be at a door when it opens; the one there first is the one
- * rushing it.
  */
 object BrRoles {
 
@@ -83,18 +79,15 @@ object BrRoles {
     private val taken = LinkedHashMap<String, Int>()
     /** Who said they are on the door. */
     private var doorClaim: String? = null
-    /** How many doors each player has been first to this run; the most is the door runner. */
-    private val firstAt = HashMap<String, Int>()
-    private var announcedRunner: String? = null
 
     // "Party > [MVP+] name: !3br 2", "!br d", "!3br d" — the rank bracket is absent for players without one.
     private val CLAIM = Regex("""^Party > (?:\[[^]]*] )?(\w{1,16}): !([2-4])?br ([1-4]|d)$""")
 
     private val me get() = mc.player?.gameProfile?.name()
 
-    /** The door runner: who said so (in chat, or you by your setting), else who has been first to the most doors this run. */
+    /** The door runner: who said so in chat, or you by your setting. */
     val doorRunner: String?
-        get() = doorClaim ?: me.takeIf { youOnDoor } ?: firstAt.maxByOrNull { it.value }?.key
+        get() = doorClaim ?: me.takeIf { youOnDoor }
 
     /** A chat line: a role claim is taken note of. True if it was one. */
     fun onChat(line: String): Boolean {
@@ -159,60 +152,17 @@ object BrRoles {
     fun status() {
         if (count == 0 && doorRunner == null) return modMessage("§dBR §7no roles yet. §f/brrole <killing> <role>§7 or §f/brrole door§7, or §f!3br 2§7 / §f!br d§7 in party chat.")
         val who = (1..count).joinToString("§7, ") { r -> "§f$r §7${taken.entries.firstOrNull { it.value == r }?.key ?: "§8free"}" }
-        val door = doorRunner?.let { "§6door §7$it" + if (doorClaim == null) " §8(first to ${firstAt[it]} door${if (firstAt[it] == 1) "" else "s"})" else "" } ?: "§6door §8unknown"
+        val door = doorRunner?.let { "§6door §7$it" } ?: "§6door §8unknown"
         val from = if (chatCount != null) "§8(party chat)" else "§8(settings)"
         modMessage("§dBR §7$count killing $from§7: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
     }
 
-    // --- the door runner, from who gets to the doors first ---------------------------------------
-
-    /** Where each player was over the last while: name -> (tick, x, z), oldest first. */
-    private val trail = HashMap<String, ArrayDeque<Triple<Int, Double, Double>>>()
-    private const val TRAIL_TICKS = 600
-    /** Close enough to a door to be "at" it: the door is 3 wide, and you stand in front of it. */
-    private const val AT_DOOR = 3.5
-    private var lastDoorTick = 0
-
-    /** Every tick of the rush: where everyone is. */
-    fun track(tick: Int) {
-        val level = mc.level ?: return
-        for (p in level.players()) {
-            if (p.uuid.version() == 2) continue // Hypixel's NPCs are players too
-            val t = trail.getOrPut(p.gameProfile.name()) { ArrayDeque() }
-            t.addLast(Triple(tick, p.x, p.z))
-            while (t.isNotEmpty() && t.first().first < tick - TRAIL_TICKS) t.removeFirst()
-        }
-    }
-
     /**
-     * A wither or blood door started falling at world ([x], [z]): whoever reached it first since the
-     * last door fell gets the point. Nobody within reach of it (it opened out of everyone's sight)
-     * gives no one anything.
-     */
-    fun doorFell(tick: Int, x: Double, z: Double) {
-        var first: String? = null
-        var firstTick = Int.MAX_VALUE
-        for ((name, t) in trail) {
-            val arrived = t.firstOrNull { it.first > lastDoorTick && abs(it.second - x) <= AT_DOOR && abs(it.third - z) <= AT_DOOR }?.first ?: continue
-            if (arrived < firstTick) { firstTick = arrived; first = name }
-        }
-        lastDoorTick = tick
-        first ?: return
-        firstAt[first] = (firstAt[first] ?: 0) + 1
-        val runner = doorRunner
-        if (doorClaim == null && runner != null && runner != announcedRunner) {
-            announcedRunner = runner
-            modMessage("§dBR §7door runner: §f$runner §8(first to the door)")
-        }
-    }
-
-    /**
-     * A new world: who got to doors first starts again. Roles claimed in party chat last until the
-     * dungeon they were for is over ([dungeonOver]), then everyone is back on their settings — a
-     * claim made before warping in still counts once you are in.
+     * A new world. Roles claimed in party chat last until the dungeon they were for is over
+     * ([dungeonOver]), then everyone is back on their settings — a claim made before warping in
+     * still counts once you are in.
      */
     fun newRun(dungeonOver: Boolean) {
-        firstAt.clear(); trail.clear(); lastDoorTick = 0; announcedRunner = null
         if (dungeonOver) { taken.clear(); chatCount = null; chatMine = null; doorClaim = null }
     }
 
