@@ -26,7 +26,14 @@ class BoxFacesTest {
     fun `looking at the top goes through to a side, or nothing straight on`() {
         assertEquals(Face.EAST, pick(v(-0.5, 3.0, 0.5), v(1.0, -2.0, 0.0)))   // down onto the top, heading east
         assertNull(pick(v(0.5, 5.0, 0.5), v(0.0, -1.0, 0.0)))                // straight down
-        assertNull(pick(v(0.5, -2.0, 0.5), v(0.0, 1.0, 0.0)))                // straight up from below
+    }
+
+    @Test
+    fun `looking up at the underside of the top selects the top`() {
+        assertEquals(Face.UP, pick(v(0.5, -2.0, 0.5), v(0.0, 1.0, 0.0)))     // straight up from below
+        assertEquals(Face.UP, pick(v(0.5, 0.5, 0.5), v(0.05, 1.0, -0.2)))    // up from inside
+        assertEquals(Face.UP, pick(v(-0.5, 0.0, 0.5), v(1.0, 1.2, 0.0)))     // up through the west side and out the top
+        assertEquals(Face.EAST, pick(v(-1.0, 0.5, 0.5), v(1.0, 0.1, 0.0)))   // barely up: still the side behind
     }
 
     @Test
@@ -47,7 +54,6 @@ class BoxFacesTest {
     fun `from inside, the face you look at is the one you would leave through`() {
         assertEquals(Face.NORTH, pick(v(0.5, 0.5, 0.5), v(0.0, 0.0, -1.0)))
         assertEquals(Face.EAST, pick(v(0.5, 0.5, 0.5), v(1.0, -0.2, 0.1)))
-        assertEquals(Face.NORTH, pick(v(0.5, 0.5, 0.5), v(0.05, 1.0, -0.2)))  // up through the top, leaving north
     }
 
     @Test

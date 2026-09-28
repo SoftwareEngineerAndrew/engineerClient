@@ -1,6 +1,7 @@
 package com.engineerclient.waypoints
 
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 /** The faces of a box that can be moved. The bottom is not one of them. */
 enum class Face { EAST, WEST, SOUTH, NORTH, UP }
@@ -11,9 +12,11 @@ enum class Face { EAST, WEST, SOUTH, NORTH, UP }
  * A side is selected by looking through the box: the one the view leaves by, not the one it comes
  * in by, so a box seen head on selects its far side. It is where the view leaves *horizontally*
  * that counts, so looking down through a side or through the top still picks the side behind —
- * never the top or the floor. Looking straight up or down picks nothing.
+ * never the floor. Looking straight down picks nothing.
  *
- * The top is edited another way: stand inside the box and look up ([editsTop]).
+ * The top is selected by looking up at its underside: the view, going up (past [TOP_PITCH]),
+ * leaves the box through its top — from inside the box, or from below it. Standing inside and
+ * looking up does too ([editsTop]).
  */
 object BoxFaces {
 
@@ -23,6 +26,9 @@ object BoxFaces {
 
     fun select(eye: DoubleArray, dir: DoubleArray, min: DoubleArray, max: DoubleArray): Face? {
         val hit = cross(eye, dir, min, max) ?: return null
+        // Looking up at the underside of the top: the top.
+        val len = sqrt(dir[X] * dir[X] + dir[Y] * dir[Y] + dir[Z] * dir[Z])
+        if (hit.exitAxis == Y && hit.exitHigh && len > 0 && dir[Y] / len > UP) return Face.UP
 
         var exit = Double.POSITIVE_INFINITY
         var face: Face? = null
@@ -40,6 +46,8 @@ object BoxFaces {
 
     /** Looking up past this pitch (Minecraft's: negative is up) from inside a box selects its top. */
     const val TOP_PITCH = -10f
+    /** How far up the view points (its y, as a share of its length) at [TOP_PITCH]: sin 10°. */
+    private const val UP = 0.17364817766693033
 
     /** Whether standing at [feet] and looking at [pitch] selects the top: inside the box, looking up. */
     fun editsTop(feet: DoubleArray, pitch: Float, min: DoubleArray, max: DoubleArray): Boolean =
