@@ -107,6 +107,10 @@ object BrWaypoints2 : Module(
 
     private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
 
+    private val killers by SelectorSetting("Killers", "Duo", arrayListOf("Duo", "Trio", "Quad"), desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
+
+    private val myRole by SelectorSetting("My Role", "All Boxes", arrayListOf("All Boxes", "Door", "Role 1", "Role 2", "Role 3", "Role 4"), desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
+
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
     /** Which item is the wand, saved with the config so it survives a restart. */
@@ -176,8 +180,9 @@ object BrWaypoints2 : Module(
         on<LevelEvent.Load> {
             pull()
             BrRoles.pull()
-            BrRoles.newRun()
-            entryDoors.clear()
+            BrRoles.newRun(dungeonOver = wasInDungeon)
+            wasInDungeon = false
+            entryDoors.clear(); noPlanSaid.clear()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
             rushing = false; rushRoom = null; rushed.clear(); watchDoorUntil = 0; barriers.clear()
         }
@@ -196,7 +201,10 @@ object BrWaypoints2 : Module(
         }
 
         on<TickEvent.End> {
+            BrRoles.settingKilling = killers + 2
+            BrRoles.settingRole = when (myRole) { 0 -> null; 1 -> 0; else -> myRole - 1 }
             if (!DungeonUtils.inDungeons) return@on
+            wasInDungeon = true
             ticks++
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
@@ -211,18 +219,11 @@ object BrWaypoints2 : Module(
         on<RenderEvent.Extract> {
             if (!DungeonUtils.inDungeons) return@on
 
-            for (box in shown()) {
+            for ((box, colour, label, next) in drawn()) {
                 val bb = box.aabb()
-                // With roles: yours purple numbered in the order you kill them, the stack gold,
-                // others' not drawn. Without, every box purple with its number.
-                val (colour, label) = when (val look = lookOf(box)) {
-                    is BrRoles.Look.Mine -> PURPLE to "§d" + look.order
-                    is BrRoles.Look.Stack -> GOLD to "§6stack"
-                    is BrRoles.Look.Theirs -> continue
-                    null -> PURPLE to "§d" + number(box)
-                }
-                // Seen through walls; the faces faint enough to walk through without noticing.
-                drawFilledBox(bb, colour.withAlpha(0.08f), depth = false)
+                // Seen through walls; the faces faint enough to walk through without noticing, the
+                // next one of yours to kill filled in more.
+                drawFilledBox(bb, colour.withAlpha(if (next) 0.25f else 0.08f), depth = false)
                 drawWireFrameBox(bb, colour, depth = false)
                 drawText(label, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
             }
@@ -251,7 +252,7 @@ object BrWaypoints2 : Module(
             dispatcher.register(literal("brrole")
                 .executes { BrRoles.status(); 1 }
                 .then(literal("door").executes { BrRoles.claimDoor(); 1 })
-                .then(argument("killing", IntegerArgumentType.integer(1, BrRoles.MAX_KILLING)).then(argument("role", IntegerArgumentType.integer(1, BrRoles.MAX_KILLING)).executes { ctx ->
+                .then(argument("killing", IntegerArgumentType.integer(2, BrRoles.MAX_KILLING)).then(argument("role", IntegerArgumentType.integer(1, BrRoles.MAX_KILLING)).executes { ctx ->
                     BrRoles.claim(IntegerArgumentType.getInteger(ctx, "killing"), IntegerArgumentType.getInteger(ctx, "role"))
                     1
                 })))
@@ -383,21 +384,51 @@ object BrWaypoints2 : Module(
     /** Each room the rush came into, and the door it came in through (world x, z). */
     private val entryDoors = HashMap<String, Pair<Int, Int>>()
 
+    /** A box as drawn: its colour, the label over it, and whether it is the next of yours to kill. */
+    private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean)
+
+    /** Rooms already told they have no roles for this door and team size, once each per run. */
+    private val noPlanSaid = HashSet<String>()
+    /** Whether the world being left was a dungeon, so its party chat roles are done with. */
+    private var wasInDungeon = false
+
     /**
-     * What a box is to you under the party's roles: the plan for its room is the one for the door
-     * the rush came in through and the number killing. Null when there is no plan (edit mode, too,
-     * shows boxes plain).
+     * The boxes to draw. With roles, in a room the site has a plan for: yours purple, numbered in the
+     * order you kill them, the next one filled in; your stack gold once yours are all dead; others'
+     * not drawn, and the door runner sees none. Boxes the plan leaves to nobody show plain. Without
+     * roles, or with no plan for the door the rush came in by, every box purple with its number.
      */
-    private fun lookOf(box: Box): BrRoles.Look? {
-        if (editMode || BrRoles.count == 0) return null
-        // One killing kills everything: every box is theirs, in number order.
-        if (BrRoles.count == 1 && BrRoles.mine == 1) return BrRoles.Look.Mine(number(box))
-        val name = box.room ?: return null
+    private fun drawn(): List<Drawn> {
+        val out = ArrayList<Drawn>()
+        for ((room, list) in shown().groupBy { it.room }) {
+            val plan = if (editMode || !BrRoles.active) null else planOf(room)
+            if (plan == null) {
+                list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false) }
+                continue
+            }
+            if (BrRoles.youOnDoor) continue
+            val looks = list.map { it to BrRoles.look(plan, number(it)) }
+            val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
+            mine.forEachIndexed { i, (b, order) -> out += Drawn(b, PURPLE, "§d$order", i == 0) }
+            if (mine.isEmpty() || keepAll) for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false)
+            for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false)
+        }
+        return out
+    }
+
+    /**
+     * The site's plan for a room: the one for the door the rush came in through and the number
+     * killing. None for a room the rush didn't come through; one it did but has no plan for says so
+     * once in chat, as its boxes all show.
+     */
+    private fun planOf(name: String?): BrRoles.Plan? {
+        name ?: return null
         val door = entryDoors[name] ?: return null
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
-        val plan = BrRoles.planFor(name, rel.x to rel.z) ?: return null
-        return BrRoles.look(plan, number(box))
+        val plan = BrRoles.planFor(name, rel.x to rel.z)
+        if (plan == null && noPlanSaid.add(name)) modMessage("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
+        return plan
     }
 
     private fun tileRoom(t: Pair<Int, Int>): DungeonRoom? =
