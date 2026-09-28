@@ -192,7 +192,7 @@ object BrWaypoints2 : Module(
             wasInDungeon = false
             entryDoors.clear(); noPlanSaid.clear()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
-            rushing = false; rushRoom = null; rushed.clear(); watchDoorUntil = 0; barriers.clear()
+            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); lastTile.clear()
         }
 
         // Chat straight off the network, before any mod can hide it: the rush starts with the
@@ -203,9 +203,10 @@ object BrWaypoints2 : Module(
             mc.execute { if (!BrRoles.onChat(text)) onChat(text) }
         }
 
-        // The door that just started falling: its blocks turn to barrier on the tick of its line.
+        // A door starting to fall: its blocks all turn to barrier on one tick — sometimes before its
+        // chat line, so every burst on the rush counts, not only those just after a line.
         on<BlockUpdateEvent> {
-            if (ticks <= watchDoorUntil && updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
+            if (rushing && updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
         }
 
         on<TickEvent.End> {
@@ -216,6 +217,7 @@ object BrWaypoints2 : Module(
             ticks++
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
+            if (rushing) walkIns()
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -351,8 +353,6 @@ object BrWaypoints2 : Module(
     private var rushRoom: String? = null
     /** Rooms the rush has already been through, so a door's far side can be told from its near. */
     private val rushed = HashSet<String>()
-    /** Watch for a door's blocks until this tick; set by the line that says one is falling. */
-    private var watchDoorUntil = 0
     /** Waiting for the start door: the first rush door, the one out of Entrance. */
     private var startDoor = false
     private val barriers = mutableListOf<Pair<Int, Int>>()
@@ -361,10 +361,10 @@ object BrWaypoints2 : Module(
         if (!DungeonUtils.inDungeons) return
         when {
             // The dungeon starting is the start door coming down.
-            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); startDoor = true; watchDoorUntil = ticks + 40 }
+            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); lastTile.clear(); startDoor = true }
             // A wither door means the start door has been and gone, whether its blocks were seen or not.
-            rushing && WITHER_DOOR.matches(msg) -> { startDoor = false; watchDoorUntil = ticks + 10 }
-            msg == BLOOD_DOOR -> { rushing = false; rushRoom = null; watchDoorUntil = 0 }
+            rushing && WITHER_DOOR.matches(msg) -> startDoor = false
+            msg == BLOOD_DOOR -> { rushing = false; rushRoom = null }
         }
     }
 
@@ -386,16 +386,43 @@ object BrWaypoints2 : Module(
         rushed += next.name!!
         // The door sits halfway between its two tiles (tiles 32 blocks apart, the first centred at -185).
         entryDoors[next.name!!] = (-185 + 16 * (door.a.first + door.b.first)) to (-185 + 16 * (door.a.second + door.b.second))
-        watchDoorUntil = 0
-        if (debug) debugRoom(next.name!!)
+        if (debug) debugRoom(next.name!!, "wither door")
+    }
+
+    /** Each player's map tile last tick. */
+    private val lastTile = HashMap<String, Pair<Int, Int>>()
+
+    /**
+     * Rooms walked into on the rush. Most of the rush goes through open doorways, not wither doors:
+     * the first time anyone steps from one room's tile into the next tile over, belonging to a room
+     * nobody has been in, that room was entered through the doorway between the two — the only one
+     * two tiles can share, halfway between their centres. A jump of more than one tile (a leap, a
+     * pearl) says nothing about doors. The room everyone starts in counts as already been in.
+     */
+    private fun walkIns() {
+        val level = mc.level ?: return
+        for (p in level.players()) {
+            if (p.uuid.version() != 4) continue // Hypixel's NPCs are players too
+            val t = Math.floorDiv(p.blockX + 201, 32) to Math.floorDiv(p.blockZ + 201, 32)
+            val room = tileRoom(t)?.name ?: continue
+            val name = p.gameProfile.name()
+            val was = lastTile.put(name, t)
+            if (was == null) { rushed += room; continue }
+            if (was == t || room in rushed) continue
+            val from = tileRoom(was)?.name ?: continue
+            if (from == room || kotlin.math.abs(was.first - t.first) + kotlin.math.abs(was.second - t.second) != 1) continue
+            rushed += room
+            entryDoors[room] = (-185 + 16 * (was.first + t.first)) to (-185 + 16 * (was.second + t.second))
+            if (debug) debugRoom(room, "walked in by $name")
+        }
     }
 
     /** For Debug: the room the rush is coming into, the door, your role, and what it shows you. */
-    private fun debugRoom(name: String) {
+    private fun debugRoom(name: String, how: String) {
         val door = entryDoors[name] ?: return
         val room = placed(name)
         val rel = room?.getRelativeCoords(BlockPos(door.first, 0, door.second))
-        val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)")
+        val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)") + " §8· $how"
         val role = "§7you: §f" + BrRoles.describe()
         val inRoom = boxes.filter { it.room == name }
         val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z)
