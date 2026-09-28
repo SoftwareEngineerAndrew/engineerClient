@@ -110,6 +110,8 @@ object BrWaypoints2 : Module(
 
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
 
+    private val fadeDone by BooleanSetting("Fade Done Boxes", false, desc = "A box whose mobs are all dead, or in a room the map shows cleared, stays up very faint instead of disappearing.")
+
     private val opacity by NumberSetting("Fill Opacity", 0.08f, 0f, 1f, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
 
     private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
@@ -230,8 +232,13 @@ object BrWaypoints2 : Module(
         on<RenderEvent.Extract> {
             if (!DungeonUtils.inDungeons) return@on
 
-            for ((box, colour, label, next) in drawn()) {
+            for ((box, colour, label, next, done) in drawn()) {
                 val bb = box.aabb()
+                // Done (Fade Done Boxes): just a ghost of the outline, and no label.
+                if (done) {
+                    drawWireFrameBox(bb, colour.withAlpha(0.15f), depth = false)
+                    continue
+                }
                 // Seen through walls; the faces faint enough to walk through without noticing, the
                 // next one of yours to kill filled in more.
                 drawFilledBox(bb, colour.withAlpha(if (next) (opacity * 3).coerceIn(opacity + 0.15f, 1f) else opacity), depth = false)
@@ -327,11 +334,7 @@ object BrWaypoints2 : Module(
      * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
-        // The room you are in, and on blood rush the room whose door is coming down ahead of you.
-        // Without All Rooms, only rooms on the blood rush's path.
-        val rooms = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
-            .distinctBy { it.name }
-            .filter { allRooms || editMode || onRush(it.name) }
+        val rooms = shownRooms()
         // Edit Mode shows them all too: a box being drawn has no mobs yet.
         if (editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
@@ -345,6 +348,14 @@ object BrWaypoints2 : Module(
         val open = rooms.filter { it.checkmark != MapCheckmark.WHITE && it.checkmark != MapCheckmark.GREEN }.mapTo(HashSet()) { it.name }
         return boxes.filter { it.room in open && (it !in claimed || it in alive) }
     }
+
+    /**
+     * The rooms whose boxes can show: the one you are in, and on blood rush the one whose door is
+     * coming down ahead of you. Without All Rooms, only rooms on the blood rush's path.
+     */
+    private fun shownRooms() = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
+        .distinctBy { it.name }
+        .filter { allRooms || editMode || onRush(it.name) }
 
     // --- blood rush ------------------------------------------------------------------------------
 
@@ -537,8 +548,11 @@ object BrWaypoints2 : Module(
         walkedIn[room] = (-185 + 16 * (was.first + t.first)) to (-185 + 16 * (was.second + t.second))
     }
 
-    /** A box as drawn: its colour, the label over it, and whether it is the next of yours to kill. */
-    private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean)
+    /**
+     * A box as drawn: its colour, the label over it, whether it is the next of yours to kill, and
+     * whether it is done (its mobs dead or its room cleared), drawn faint with Fade Done Boxes.
+     */
+    private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean, val done: Boolean = false)
 
     /** Rooms already told they have no roles for this door and team size, once each per run. */
     private val noPlanSaid = HashSet<String>()
@@ -553,18 +567,24 @@ object BrWaypoints2 : Module(
      */
     private fun drawn(): List<Drawn> {
         val out = ArrayList<Drawn>()
-        for ((room, list) in shown().groupBy { it.room }) {
+        val live = shown()
+        // With Fade Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
+        val all = if (fadeDone && !editMode) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
+        val liveSet = live.toHashSet()
+        for ((room, list) in all.groupBy { it.room }) {
             val plan = if (editMode || !BrRoles.active) null else planOf(room)
             if (plan == null) {
-                list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false) }
+                list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false, it !in liveSet) }
                 continue
             }
             if (BrRoles.youOnDoor) continue
             val looks = list.map { it to BrRoles.look(plan, number(it)) }
             val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
-            mine.forEachIndexed { i, (b, order) -> out += Drawn(b, GREEN, "§a$order", i == 0) }
-            for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false)
-            for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false)
+            // The next to kill: your first box still alive.
+            val next = mine.firstOrNull { it.first in liveSet }?.first
+            for ((b, order) in mine) out += Drawn(b, GREEN, "§a$order", b === next, b !in liveSet)
+            for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false, b !in liveSet)
+            for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false, b !in liveSet)
         }
         return out
     }
