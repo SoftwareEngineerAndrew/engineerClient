@@ -69,7 +69,7 @@ class BloodRunDetailTest {
         assertEquals("8.65s Pipes: 0.55s | 7.40s | 0.60s | 0.10s", lines[0])
         // The key was never seen on the ground here, so last mob falls back to the pickup.
         assertEquals("5.75s Deathmite: 0.65s | 5.00s | 0.00s | 0.10s", lines[2])
-        assertTrue(lines.last().contains(" Total: "), lines.last())
+        assertTrue(lines.last().contains(" Avg: "), lines.last())
     }
 
     @Test
@@ -115,6 +115,6 @@ class BloodRunDetailTest {
     fun `the total row can be turned off`() {
         val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700), totalRow = false).map(::row)
         assertEquals(6, lines.size)
-        assertTrue(lines.none { it.contains("Total: ") })
+        assertTrue(lines.none { it.contains("Avg: ") })
     }
 }
