@@ -92,8 +92,8 @@ object DungeonSplits : Module(
     private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) modMessage("§8[scorecard] §7$what") } }
 
     /**
-     * Each section's settings together, in the order they show in the ClickGUI: its detail level,
-     * then (blood rush only) the Total row toggle, then its HUD with its own on/off toggle. The
+     * Each section's settings together, in the order they show in the ClickGUI: its HUD with its own
+     * on/off toggle, then under it its detail level and (blood rush only) the Total row toggle. The
      * HUDs are made up front because a HUD has to exist before the run that fills it.
      */
     private val levels = HashMap<Section, SelectorSetting>()
@@ -105,11 +105,7 @@ object DungeonSplits : Module(
 
     init {
         for (s in SECTIONS) {
-            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
-                .withDependency { hudOn(s) }
-            if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
-                BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
-            ).withDependency { hudOn(s) && level(s) == BloodRunDetail.Level.COMPACT }
+            // The HUD toggle first, its detail settings under it.
             huds[s] = registerSetting(
                 HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 0, 0, 1f) { example ->
                     if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
@@ -119,6 +115,11 @@ object DungeonSplits : Module(
                     draw(this, subLines(s))
                 }
             )
+            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
+                .withDependency { hudOn(s) }
+            if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
+                BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
+            ).withDependency { hudOn(s) && level(s) == BloodRunDetail.Level.COMPACT }
         }
     }
 
