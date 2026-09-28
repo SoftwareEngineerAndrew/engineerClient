@@ -107,6 +107,8 @@ object BrWaypoints2 : Module(
 
     private val keepAll by BooleanSetting("Keep All Boxes", false, desc = "Shows every box in your room. Off, a box hides once all its starred mobs are dead. Edit Mode always shows them all.")
 
+    private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
+
     private val killers by SelectorSetting("Killers", "Duo", arrayListOf("Duo", "Trio", "Quad"), desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
 
     private val myRole by SelectorSetting("My Role", "All Boxes", arrayListOf("All Boxes", "Door", "Role 1", "Role 2", "Role 3", "Role 4"), desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
@@ -309,15 +311,18 @@ object BrWaypoints2 : Module(
     }
 
     /**
-     * The boxes on screen, only ever the room you are in. With Keep All Boxes or Edit Mode on, all
+     * The boxes on screen, only ever the room you are in (or the next on the rush), and without All
+     * Rooms only if the blood rush went through it. With Keep All Boxes or Edit Mode on, all
      * of that room's boxes. Otherwise none once the map shows the room cleared, and a box hides
      * once every mob it claimed is known dead, showing until then — before any of its mobs are in
      * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
         // The room you are in, and on blood rush the room whose door is coming down ahead of you.
+        // Without All Rooms, only rooms on the blood rush's path.
         val rooms = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
             .distinctBy { it.name }
+            .filter { allRooms || editMode || it.name in rushed }
         // Edit Mode shows them all too: a box being drawn has no mobs yet.
         if (keepAll || editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
