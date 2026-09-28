@@ -143,7 +143,8 @@ object RandomStuff : Module(
     // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
     // does the matching and the hiding; these settings only say what to hide.
 
-    private val hideSbCustom by StringSetting("Scoreboard: Also Hide", "", 200, desc = "Extra sidebar lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard and copy what you see. Regexes work too.")
+    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", true, desc = "Hides the sidebar lines nobody reads mid-run: the date and server, the Skyblock clock and season, the dungeon Keys and Cleared lines, blank spacers, plus anything in Also Hide. Off, the sidebar is left alone.")
+    private val hideSbCustom by StringSetting("Scoreboard: Also Hide", "", 200, desc = "Extra sidebar lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard and copy what you see. Regexes work too.").withDependency { hideSbLines }
 
     /**
      * Prints the sidebar to chat, exactly as the game assembles it, so the patterns above can be
@@ -300,7 +301,7 @@ object RandomStuff : Module(
         on<TickEvent.End> {
             if (hideDamage) mc.player?.hurtTime = 0
             resolveArmorStands()
-            ScoreboardLines.hideLines = enabled
+            ScoreboardLines.hideLines = enabled && hideSbLines
             ScoreboardLines.customPatterns = hideSbCustom
         }
 
