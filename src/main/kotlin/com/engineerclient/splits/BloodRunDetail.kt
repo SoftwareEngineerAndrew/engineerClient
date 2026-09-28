@@ -152,8 +152,8 @@ class BloodRunDetail {
     }
 
     /**
-     * One row per room, the five in a fixed order: `Pipes: 0.65s | 8.10s | 0.60s | 0.10s | 9.45s`,
-     * the separators drawn by the HUD.
+     * One row per room, its total first, left of the name, then the other four in a fixed order:
+     * `9.45s Pipes: 0.65s | 8.10s | 0.60s | 0.10s`, the separators drawn by the HUD.
      * A row fills in as the room is run; the total waits for the room to end.
      */
     private fun compact(now: Stamp, totalRow: Boolean): List<String> {
@@ -164,13 +164,15 @@ class BloodRunDetail {
     }
 
     /**
-     * One compact row as tab-separated cells — the name, then the five times, a missing one left
-     * empty so every time stays in its own column. The HUD lays the cells out as a table, which is
-     * what keeps the separators in line from row to row.
+     * One compact row as tab-separated cells — the total (with a space after it, as nothing else
+     * separates it from the name), the name, then the other four times, a missing one left empty so
+     * every time stays in its own column. The HUD lays the cells out as a table, the total
+     * right-aligned, which is what keeps everything in line from row to row.
      */
     private fun row(name: String, stats: List<Pair<Long, Long>?>): String {
         val cells = stats.mapIndexed { i, s -> s?.let { COLOURS[i] + SplitFormat.seconds(it.first) }.orEmpty() }
-        return (listOf(name) + cells).joinToString("\t").trimEnd('\t')
+        val total = cells[4].let { if (it.isEmpty()) it else "$it " }
+        return (listOf(total, name) + cells.take(4)).joinToString("\t").trimEnd('\t')
     }
 
     /** The same five, vertical and labelled, a blank line between rooms, then the averages. */
