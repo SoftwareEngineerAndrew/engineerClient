@@ -152,27 +152,54 @@ class BloodRunDetail {
     }
 
     /**
-     * One row per room, its total first, left of the name, then the other four in a fixed order:
-     * `9.45s Pipes: 0.65s | 8.10s | 0.60s | 0.10s`, the separators drawn by the HUD.
-     * A row fills in as the room is run; the total waits for the room to end.
+     * One row per room, its total first, left of the name, then the key and the door:
+     * `9.45s Pipes: 8.70s | 0.40s`, the separators drawn by the HUD.
+     *
+     *  - key: from the door into the room being all the way down to the key being picked up (the
+     *    last mob and the pickup together). Light red, or dark red when the pickup itself - key on
+     *    the ground to key in hand - took over [SLOW_PICKUP_MS].
+     *  - door: key picked up to the door opened, light grey, and only when it took over
+     *    [SLOW_DOOR_MS]; quicker than that it is just the door being clicked.
+     *
+     * A row fills in as the room is run, both counting up live; the total waits for the room to end.
      */
     private fun compact(now: Stamp, totalRow: Boolean): List<String> {
         val out = mutableListOf<String>()
-        for (r in all()) out += row(name(r) + ": ", stats(r, now))
-        if (totalRow) averages()?.let { out += row(TOTAL + "Avg: ", it) }
+        for (r in all()) {
+            val live = if (r === room) now else null
+            out += row(name(r) + ": ", keySpan(r, live), pickupSpan(r, live), doorSpan(r, live), span(r.start, r.doorOpened))
+        }
+        if (totalRow && done && rooms.isNotEmpty()) {
+            fun avg(f: (Room) -> Pair<Long, Long>?) = rooms.mapNotNull(f).takeIf { it.isNotEmpty() }?.let(::mean)
+            out += row(TOTAL + "Avg: ", avg { keySpan(it, null) }, avg { pickupSpan(it, null) }, avg { doorSpan(it, null) }, avg { span(it.start, it.doorOpened) })
+        }
         return out
     }
 
+    /** The door into the room all the way down, to the key picked up; from the room's start if the door was never seen down. */
+    private fun keySpan(r: Room, live: Stamp?): Pair<Long, Long>? {
+        val from = r.doorFell ?: r.start.takeIf { r.keyPicked != null }
+        return span(from, r.keyPicked ?: live)?.let { maxOf(it.first, 0L) to maxOf(it.second, 0L) }
+    }
+
+    private fun pickupSpan(r: Room, live: Stamp?) = span(r.mobKilled, r.keyPicked ?: live)
+    private fun doorSpan(r: Room, live: Stamp?) = span(r.keyPicked, r.doorOpened ?: live)
+
     /**
      * One compact row as tab-separated cells — the total (with a space after it, as nothing else
-     * separates it from the name), the name, then the other four times, a missing one left empty so
-     * every time stays in its own column. The HUD lays the cells out as a table, the total
-     * right-aligned, which is what keeps everything in line from row to row.
+     * separates it from the name), the name, the key, the door; a missing one left empty so every
+     * time stays in its own column. The HUD lays the cells out as a table, the total right-aligned,
+     * which is what keeps everything in line from row to row.
      */
-    private fun row(name: String, stats: List<Pair<Long, Long>?>): String {
-        val cells = stats.mapIndexed { i, s -> s?.let { COLOURS[i] + SplitFormat.seconds(it.first) }.orEmpty() }
-        val total = cells[4].let { if (it.isEmpty()) it else "$it " }
-        return (listOf(total, name) + cells.take(4)).joinToString("\t").trimEnd('\t')
+    private fun row(name: String, key: Pair<Long, Long>?, pickup: Pair<Long, Long>?, door: Pair<Long, Long>?, total: Pair<Long, Long>?): String {
+        val keyColour = if (pickup != null && pickup.first > SLOW_PICKUP_MS) SLOW_KEY else KEY
+        val cells = listOf(
+            total?.let { TOTAL + SplitFormat.seconds(it.first) + " " }.orEmpty(),
+            name,
+            key?.let { keyColour + SplitFormat.seconds(it.first) }.orEmpty(),
+            door?.takeIf { it.first > SLOW_DOOR_MS }?.let { DOOR + SplitFormat.seconds(it.first) }.orEmpty(),
+        )
+        return cells.joinToString("\t").trimEnd('\t')
     }
 
     /** The same five, vertical and labelled, a blank line between rooms, then the averages. */
@@ -270,6 +297,13 @@ class BloodRunDetail {
         const val NAME = "§5"
         const val FAIRY = "§d"
         const val TOTAL = "§6"
+
+        // Compact: the key light red, dark red after a slow pickup; the door light grey, only when slow.
+        const val KEY = "§c"
+        const val SLOW_KEY = "§4"
+        const val DOOR = "§7"
+        const val SLOW_PICKUP_MS = 350L
+        const val SLOW_DOOR_MS = 250L
 
         /** The five columns, in order, and their colours: door fell dark grey, last mob light grey, then the screenshot's. */
         val LABELS = listOf("door fell", "last mob", "pickup", "opened", "room total")

@@ -62,13 +62,19 @@ class BloodRunDetailTest {
     }
 
     @Test
-    fun `compact is door fell, last mob, key pickup delta, door opened delta, total`() {
-        val lines = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700)).map(::row)
-        // Pipes starts when the start door starts falling (133), not on Mort's line.
-        // Last mob counts from the door being down (144), not from it starting to fall.
-        assertEquals("8.65s Pipes: 0.55s | 7.40s | 0.60s | 0.10s", lines[0])
-        // The key was never seen on the ground here, so last mob falls back to the pickup.
-        assertEquals("5.75s Deathmite: 0.65s | 5.00s | 0.00s | 0.10s", lines[2])
+    fun `compact is total, name, door down to key picked up, and the door only when slow`() {
+        val raw = rush().lines(BloodRunDetail.Level.COMPACT, stamp(700))
+        val lines = raw.map(::row)
+        // Pipes starts when the start door starts falling (133), not on Mort's line; the key counts
+        // from the door being down (144) to the pickup (304). Its door took 0.10s: not shown.
+        assertEquals("8.65s Pipes: 8.00s", lines[0])
+        // A pickup of 0.60s (key seen at 292): dark red.
+        assertTrue(raw[0].split('\t')[2].startsWith("§4"), raw[0])
+        // Duncan: a 0.30s pickup is light red, and its door took 0.40s, so it shows, light grey.
+        assertEquals("2.10s Duncan: 1.05s | 0.40s", lines[1])
+        assertTrue(raw[1].split('\t')[2].startsWith("§c") && raw[1].split('\t')[3].startsWith("§7"), raw[1])
+        // The key never seen on the ground: from the door down to the pickup all the same.
+        assertEquals("5.75s Deathmite: 5.00s", lines[2])
         assertTrue(lines.last().contains(" Avg: "), lines.last())
     }
 
@@ -82,16 +88,16 @@ class BloodRunDetailTest {
     @Test
     fun `the room being run counts up live, all but its total`() {
         val lines = rush(until = 300).lines(BloodRunDetail.Level.COMPACT, stamp(300)).map(::row)
-        // Key pickup is next: 8 ticks since the key appeared at 292.
-        assertEquals(listOf("Pipes: 0.55s | 7.40s | 0.40s"), lines)
+        // Waiting on the pickup: 156 ticks since the door was down, the key on the ground 8 of them.
+        assertEquals(listOf("Pipes: 7.80s"), lines)
     }
 
     @Test
-    fun `last mob only counts once the door is down`() {
+    fun `the key only counts once the door is down`() {
         val falling = rush(until = 140).lines(BloodRunDetail.Level.COMPACT, stamp(140)).map(::row)
-        assertEquals(listOf("...: 0.35s"), falling) // named once the door is down
+        assertEquals(listOf("...: "), falling) // named once the door is down
         val down = rush(until = 150).lines(BloodRunDetail.Level.COMPACT, stamp(150)).map(::row)
-        assertEquals(listOf("Pipes: 0.55s | 0.30s"), down)
+        assertEquals(listOf("Pipes: 0.30s"), down)
     }
 
     @Test
