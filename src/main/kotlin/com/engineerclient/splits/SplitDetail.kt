@@ -8,14 +8,15 @@ package com.engineerclient.splits
  */
 class SplitDetail {
 
-    data class Entry(val label: String, val at: Stamp, val who: String = "", val step: Boolean = false)
+    /** [note] says how it was found (Debug shows it), e.g. "chat" or "seen 12 blocks away". */
+    data class Entry(val label: String, val at: Stamp, val who: String = "", val step: Boolean = false, val note: String = "")
 
     private val entries = linkedMapOf<String, MutableList<Entry>>()
 
     fun reset() = entries.clear()
 
-    fun add(split: String, at: Stamp, label: String, who: String = "", step: Boolean = false) {
-        entries.getOrPut(split) { mutableListOf() } += Entry(label, at, who, step)
+    fun add(split: String, at: Stamp, label: String, who: String = "", step: Boolean = false, note: String = "") {
+        entries.getOrPut(split) { mutableListOf() } += Entry(label, at, who, step, note)
     }
 
     fun lines(split: String): List<Entry> = entries[split].orEmpty()

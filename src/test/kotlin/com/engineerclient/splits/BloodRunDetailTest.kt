@@ -30,26 +30,26 @@ class BloodRunDetailTest {
             133 to { t -> b.onDoorStart(stamp(t), entrance, room("Pipes")) },
             142 to { t -> b.onDoorDown(stamp(t), room("Locked Away"), fairy) },
             144 to { t -> b.onDoorDown(stamp(t), entrance, room("Pipes")) },
-            292 to { t -> b.onKeySpawned(stamp(t)) },
+            292 to { t -> b.onKeySpawned(stamp(t), 12.0) },
             304 to { t -> b.onChat("[MVP+] johnswizzlechang has obtained Wither Key!", stamp(t)) },
             306 to { t -> b.onChat("TheBadOne opened a WITHER door!", stamp(t)) },
             319 to { t -> b.onDoorDown(stamp(t), room("Pipes"), room("Duncan")) },
-            334 to { t -> b.onKeySpawned(stamp(t)) },
+            334 to { t -> b.onKeySpawned(stamp(t), 12.0) },
             340 to { t -> b.onChat("[MVP+] Teletappi has obtained Wither Key!", stamp(t)) },
             348 to { t -> b.onChat("TheBadOne opened a WITHER door!", stamp(t)) },
             361 to { t -> b.onDoorDown(stamp(t), room("Duncan"), room("Deathmite")) },
             461 to { t -> b.onChat("[MVP+] johnswizzlechang has obtained Wither Key!", stamp(t)) },
             463 to { t -> b.onChat("TheBadOne opened a WITHER door!", stamp(t)) },
             477 to { t -> b.onDoorDown(stamp(t), room("Deathmite"), room("Locked Away")) },
-            518 to { t -> b.onKeySpawned(stamp(t)) },
+            518 to { t -> b.onKeySpawned(stamp(t), 12.0) },
             528 to { t -> b.onChat("[MVP+] Teletappi has obtained Wither Key!", stamp(t)) },
             529 to { t -> b.onChat("TheBadOne opened a WITHER door!", stamp(t)) },
             543 to { t -> b.onDoorDown(stamp(t), fairy, room("Pirate")) },
-            622 to { t -> b.onKeySpawned(stamp(t)) },
+            622 to { t -> b.onKeySpawned(stamp(t), 12.0) },
             640 to { t -> b.onChat("[MVP+] RockyField21 has obtained Wither Key!", stamp(t)) },
             641 to { t -> b.onChat("TheBadOne opened a WITHER door!", stamp(t)) },
             655 to { t -> b.onDoorDown(stamp(t), room("Arrow Trap"), room("Pirate")) },
-            673 to { t -> b.onKeySpawned(stamp(t)) },
+            673 to { t -> b.onKeySpawned(stamp(t), 12.0) },
             680 to { t -> b.onChat("The BLOOD DOOR has been opened!", stamp(t)) },
         )
         for ((t, f) in events) if (t <= until) f(t)
@@ -115,6 +115,19 @@ class BloodRunDetailTest {
         assertEquals("key picked up > 8.55s (8.55s) johnswizzlechang", lines[3])
         assertEquals("door opened > 8.65s (8.65s) TheBadOne", lines[5])
         assertTrue(lines.any { it.startsWith("average total room time > ") })
+    }
+
+    @Test
+    fun `debug says how each room's times were found`() {
+        val lines = rush().lines(BloodRunDetail.Level.DEBUG, stamp(700)).map(::plain)
+        val pipes = lines.dropWhile { it != "Pipes" }.takeWhile { it.isNotEmpty() }
+        assertTrue("· start: the start door seen falling" in pipes, pipes.toString())
+        assertTrue("· door down: seen (its blocks)" in pipes, pipes.toString())
+        assertTrue("· key dropped: seen 12 blocks away" in pipes, pipes.toString())
+        // Deathmite's key was never on the ground in view: said so, and what was used instead.
+        val deathmite = lines.dropWhile { it != "Deathmite" }.takeWhile { it.isNotEmpty() }
+        assertTrue("· key dropped: not seen (out of render distance) - put at the pickup line" in deathmite, deathmite.toString())
+        assertTrue(deathmite.any { it == "· start: the door line" }, deathmite.toString())
     }
 
     @Test

@@ -44,6 +44,16 @@ class SubSplitsTest {
         s.onChat("[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.", stamp(10))
         repeat(166) { s.onServerTick() }
         assertEquals(listOf("&6Move 0-176", "&5Stun 176--"), shape(s.forSplit(SplitTracker.MAXOR)))
+        // Debug says Move ended on a count, not on anything Hypixel said.
+        assertEquals(listOf("166 server ticks after \"DON'T DISAPPOINT ME, I HAVEN'T...\" - never announced, so counted", "running"), s.endSources(SplitTracker.MAXOR))
+    }
+
+    @Test
+    fun `a step ended by a later split's line says the moments between were missed`() {
+        val s = SubSplitTracker()
+        s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
+        s.onChat("[BOSS] Storm: Pathetic Maxor, just like expected.", stamp(900))
+        assertEquals(listOf("\"Pathetic Maxor, just like expe...\" - the steps between were never seen"), s.endSources(SplitTracker.MAXOR))
     }
 
     @Test
@@ -56,8 +66,10 @@ class SubSplitsTest {
             s.onChat("The gate has been destroyed!", stamp(1110 + i * 100))
         }
         s.onChat("bob activated a terminal! (7/7)", stamp(1500))  // S4 done -> Leaps
-        s.onEveryoneInCore(stamp(1600))
+        s.onEveryoneInCore(stamp(1600), "every teammate seen inside the core")
         assertEquals(listOf("&5Leaps 1500-1600", "&cKill 1600--"), shape(s.forSplit(SplitTracker.GOLDOR)))
+        assertEquals(listOf("every teammate seen inside the core", "running"), s.endSources(SplitTracker.GOLDOR))
+        assertEquals("the gate destroyed, after the last device", s.endSources(SplitTracker.TERMS).first())
     }
 
     private fun shape(splits: List<Split>) = splits.map { "${it.label} ${it.start.tick}-${it.stop?.tick ?: "-"}" }

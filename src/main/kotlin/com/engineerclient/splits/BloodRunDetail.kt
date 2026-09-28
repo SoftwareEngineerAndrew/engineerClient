@@ -40,6 +40,13 @@ class BloodRunDetail {
         var keyBy = ""
         var doorOpened: Stamp? = null
         var doorBy = ""
+
+        // How each moment was found, for Debug.
+        var startFrom = "the door line"
+        /** How far from you the key appeared, if it was seen at all. */
+        var keySeenAt: Double? = null
+        /** The pickup line had no name ("A Wither Key was picked up!"). */
+        var pickupAnonymous = false
     }
 
     private val rooms = mutableListOf<Room>()
@@ -61,7 +68,10 @@ class BloodRunDetail {
      */
     fun onDoorStart(at: Stamp, a: MapRoom?, b: MapRoom?) {
         val r = room ?: return
-        if (rooms.isEmpty() && r.doorFell == null && (a?.entrance == true || b?.entrance == true)) r.start = at
+        if (rooms.isEmpty() && r.doorFell == null && (a?.entrance == true || b?.entrance == true)) {
+            r.start = at
+            r.startFrom = "the start door seen falling"
+        }
     }
 
     /** A door's barriers turned to air: it is down. [a] and [b] are the rooms either side of it. */
@@ -91,16 +101,16 @@ class BloodRunDetail {
         if (fairy != null && previous != null && previous.mapId != fairy.id) previous.toFairy = true
     }
 
-    /** A "Wither Key" or "Blood Key" armor stand appeared: the mob holding it just died. */
-    fun onKeySpawned(at: Stamp) {
+    /** A "Wither Key" or "Blood Key" armor stand appeared, [distance] blocks from you: the mob holding it just died. */
+    fun onKeySpawned(at: Stamp, distance: Double) {
         val r = room ?: return
-        if (r.mobKilled == null) r.mobKilled = at
+        if (r.mobKilled == null) { r.mobKilled = at; r.keySeenAt = distance }
     }
 
     fun onChat(msg: String, at: Stamp) {
         if (done) return
         if (!started) {
-            if (msg == MORT) { started = true; room = Room(at) }
+            if (msg == MORT) { started = true; room = Room(at).also { it.startFrom = "Mort's line (start door not seen falling)" } }
             return
         }
         val r = room ?: return
@@ -109,6 +119,7 @@ class BloodRunDetail {
             if (r.keyPicked == null) {
                 r.keyPicked = at
                 r.keyBy = key.groupValues[1]
+                r.pickupAnonymous = r.keyBy.isEmpty()
                 // The key never seen on the ground (out of render distance): the best we know.
                 if (r.mobKilled == null) r.mobKilled = at
             }
@@ -226,6 +237,7 @@ class BloodRunDetail {
         for (r in all()) {
             out += name(r)
             full(r, now).forEach { (i, s, who) -> if (s != null) out += labelled(FULL_COLOURS[i], FULL_LABELS[i], s) + by(who) }
+            out += how(r)
             out += ""
         }
         if (done && rooms.isNotEmpty()) {
@@ -233,6 +245,38 @@ class BloodRunDetail {
                 val vals = rooms.mapNotNull { full(it, now)[i].second }
                 if (vals.isNotEmpty()) out += labelled(FULL_COLOURS[i], "average " + FULL_LABELS[i], mean(vals))
             }
+        }
+        return out
+    }
+
+    /**
+     * How each of a room's times was found, and what could make one wrong - Debug's second half.
+     *
+     *  - start: the line saying the door into it was opened (it starts falling that tick), or for
+     *    the first room the start door seen falling (else Mort's line).
+     *  - door down: its 36 blocks turning to air, only seen within render distance; not seen, the
+     *    key time counts from the room's start instead, falling included.
+     *  - key dropped: the key's armor stand appearing - where the last mob died - only seen within
+     *    render distance. Not seen, the last mob can only be put at the pickup line.
+     *  - picked up and opened: chat, so always there, whoever did them and however far away.
+     *  - the room's name: the door's two map rooms, so a door not seen leaves it unnamed.
+     *  - lag: the server's clock falling behind real time over the room.
+     */
+    private fun how(r: Room): List<String> {
+        val out = mutableListOf<String>()
+        out += "§8· start: ${r.startFrom}"
+        out += if (r.doorFell != null) "§8· door down: seen (its blocks)" else "§8· door down: not seen - too far away; key time counts from the start"
+        out += when {
+            r.keySeenAt != null -> "§8· key dropped: seen " + BossDetail.blocks(r.keySeenAt!!) + " away"
+            r.keyPicked != null -> "§8· key dropped: not seen (out of render distance) - put at the pickup line"
+            else -> "§8· key dropped: not yet"
+        }
+        if (r.keyPicked != null) out += if (r.pickupAnonymous) "§8· picked up: chat, with no name" else "§8· picked up: chat"
+        if (r.doorOpened != null) out += "§8· opened: chat"
+        if (r.name == UNNAMED) out += "§8· name: unknown - its door was never seen"
+        span(r.start, r.doorOpened)?.let { (ms, ticks) ->
+            val lag = ms - ticks * 50
+            if (kotlin.math.abs(lag) >= 100) out += "§8· lag: server " + SplitFormat.seconds(kotlin.math.abs(lag)) + (if (lag > 0) " behind" else " ahead") + " real time"
         }
         return out
     }
