@@ -29,7 +29,8 @@ object EngineerLook {
     /** Where the rows are from: floor 7 (F7 or M7), another dungeon floor, or elsewhere (Kuudra). */
     enum class Place { FLOOR7, DUNGEON, OTHER }
 
-    data class Options(val bossEntry: Boolean, val show0: Boolean, val showTicks: Boolean)
+    /** [enterAfterEntry]: the Enter line only once the boss has been entered (the first three splits over). */
+    data class Options(val bossEntry: Boolean, val show0: Boolean, val showTicks: Boolean, val enterAfterEntry: Boolean = false)
 
     /** A line: its label (colour codes included), the colour its time is drawn in, the time, and the tick time if shown. */
     data class Line(val label: String, val colour: String, val time: String, val ticks: String?)
@@ -96,8 +97,10 @@ object EngineerLook {
 
         segments.forEachIndexed { i, s ->
             if (s.ms != 0L || opts.show0) out += line(label(s.name, place, master), s.ms, s.ticks, opts, SplitFormat::seconds)
-            // Odin's Boss Entry: after the third split, the first three together.
-            if (opts.bossEntry && i == 2 && rows.size > 3) {
+            // Odin's Boss Entry: after the third split, the first three together - with Enter
+            // After Entry, only once they are all over.
+            val entered = current > 2 || (current == -1 && started)
+            if (opts.bossEntry && i == 2 && rows.size > 3 && (entered || !opts.enterAfterEntry)) {
                 val ms = segments.take(3).sumOf { it.ms }
                 val ticks = segments.take(3).sumOf { it.ticks }
                 if (ms != 0L || opts.show0) out += line(label(BOSS_ENTRY, place, master), ms, ticks, opts, SplitFormat::minutes)
