@@ -192,7 +192,7 @@ object BrWaypoints2 : Module(
             wasInDungeon = false
             entryDoors.clear(); noPlanSaid.clear()
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
-            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); witherSides.clear(); path = emptyMap(); lastRoom = null
+            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); witherSides.clear(); path = emptyMap(); entrances = emptyMap(); lastRoom = null
         }
 
         // Chat straight off the network, before any mod can hide it: the rush starts with the
@@ -218,7 +218,7 @@ object BrWaypoints2 : Module(
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
             barriers.clear()
             if (ticks % 10 == 0) mapPath()
-            if (debug && rushing) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
+            if (debug && (rushing || allRooms)) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -394,6 +394,9 @@ object BrWaypoints2 : Module(
     /** Rooms on the rush's path by the map, and the door each is entered by (world x, z; none for Entrance). */
     private var path: Map<String, Pair<Int, Int>?> = emptyMap()
 
+    /** Every room the layout reaches, and its door on the Entrance side: what its roles go by off the rush too. */
+    private var entrances: Map<String, Pair<Int, Int>> = emptyMap()
+
     /** For Debug: the room you were last told about. */
     private var lastRoom: String? = null
 
@@ -440,6 +443,7 @@ object BrWaypoints2 : Module(
             }
         }
         path = out
+        entrances = back.entries.mapNotNull { (r, b) -> r.name?.let { it to b.second } }.toMap()
     }
 
     /**
@@ -472,7 +476,11 @@ object BrWaypoints2 : Module(
     /** For Debug: the room you walked into on the rush, its door, your role, and what it shows you. */
     private fun debugRoom(name: String) {
         val door = entryOf(name) ?: return modMessage("§dBR debug §f$name §8— " + if (onRush(name)) "on the rush, door not known yet" else "not on the rush path")
-        val how = if (path[name] != null) "map path" else "wither door seen falling"
+        val how = when {
+            path[name] != null -> "rush path"
+            entryDoors[name] != null -> "wither door seen falling"
+            else -> "off the rush, Entrance side"
+        }
         val room = placed(name)
         val rel = room?.getRelativeCoords(BlockPos(door.first, 0, door.second))
         val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)") + " §8· $how"
@@ -499,8 +507,11 @@ object BrWaypoints2 : Module(
     /** Each room behind a wither door seen falling, and that door (world x, z). */
     private val entryDoors = HashMap<String, Pair<Int, Int>>()
 
-    /** The door a rush room is entered by: the map path's, else the wither door seen falling into it. */
-    private fun entryOf(name: String) = path[name] ?: entryDoors[name]
+    /**
+     * The door a room is entered by, for its roles: on the rush, the path's (else the wither door
+     * seen falling into it); off it (shown with All Rooms), its door on the Entrance side.
+     */
+    private fun entryOf(name: String) = path[name] ?: entryDoors[name] ?: entrances[name]
 
     /** A box as drawn: its colour, the label over it, and whether it is the next of yours to kill. */
     private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean)
