@@ -674,6 +674,41 @@ def sec_fastest(T):
         loss['split - 509'].append(x['split'] - 509)
     for k, v in loss.items():
         print('   %-28s median %4.0f  mean %5.1f  runs > 5: %3d  total %5d' % (k, statistics.median(v), statistics.mean(v), sum(a > 5 for a in v), sum(a for a in v if a > 0)))
+    # why the kill came late: the second hit late (and why), or a slow kill after it
+    why = collections.Counter()
+    slow = []
+    late = []
+    for r in T:
+        if r.size != 5:
+            continue
+        s = r.summary()
+        hits = r.hits()
+        if not s['bedrock'] or not hits or not s['storm']:
+            continue
+        h1 = hits[0][0]
+        if s['bedrock'] - h1 - 201 <= 5:
+            why['kill on time (<= 5 ticks late)'] += 1
+            continue
+        h2 = [L for h, L in hits[1:] if L <= s['bedrock'] + 1]
+        if not h2:
+            why['second hit silent (in an ability)'] += 1
+            continue
+        if h2[0] - (h1 + 200) > 5:
+            ab = [t for t, k in s['taunts'] if h1 < t < h2[0]]
+            chg = [c for c in s['chg'] if h1 < c <= h2[0] + 1]
+            if ab:
+                w = 'second hit late: an ability'
+            elif chg and chg[-1] > h1 + 195:
+                w = 'second hit late: laser not charged by hit 1 + 200'
+            else:
+                w = 'second hit late: Maxor not in the beam area'
+            why[w] += 1
+            late.append(h2[0] - (h1 + 200))
+        else:
+            why['second hit on time, slow kill'] += 1
+            slow.append(s['bedrock'] - h2[0])
+    print('why the kill was late (5-player):', dict(why))
+    print('   second hit late by:', S(late, 0), '| slow kills took:', S(slow, 0))
     rows.sort(key=lambda x: x['split'])
     print('fastest by ticks:')
     for x in rows[:14]:
