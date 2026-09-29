@@ -142,9 +142,12 @@ class RunRecorder(
     // ------------------------------------------------------------------ server ticks
     // The server's own tick count (Odin's per-tick ping), written when it moved: split and tick
     // timers count these, and they fall behind the client's ticks when the server lags.
-    private var serverTicks = 0
+    @Volatile private var serverTicks = 0
     private var lastServerTicks = 0
     fun onServerTick() { serverTicks++ }
+
+    /** The server tick count right now: read on the network thread, where the pings are counted. */
+    val serverTickCount: Int get() = serverTicks
 
     // ------------------------------------------------------------------ what you do
     /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
@@ -184,9 +187,10 @@ class RunRecorder(
         emit("""{"k":"ether","t":$tick,$entry}""")
     }
 
-    fun onChat(message: String, colored: String? = null) {
+    fun onChat(message: String, colored: String? = null, n: Int? = null) {
         val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
-        emit("""{"k":"chat","t":$tick,"m":${str(message)}$c}""")
+        val st = if (n != null) ",\"n\":$n" else ""
+        emit("""{"k":"chat","t":$tick$st,"m":${str(message)}$c}""")
     }
 
     /** A chest (or ender chest) lid event: [openCount] players now have it open (0 = it closes). */
@@ -658,6 +662,7 @@ class RunRecorder(
     private fun m(v: Double): String { val r = Math.round(v * 100); return if (r % 100 == 0L) (r / 100).toString() else (r / 100.0).toString() }
     private fun deg(v: Float) = Math.round(v).toFloat()
     private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
+    /** Boss packet positions: exact to the protocol's 1/4096 of a block. */
     private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
 
     private fun str(s: String): String {

@@ -60,7 +60,7 @@ happened, so a reader can play the file start to finish.
 | `dslots` | `t, d: [[x, z, what, top], ...]` | door spots read that tick (each once, as its chunk loads): the middle of a gap between tiles. `what` from y 69: `-` no door (y 73 air), `n` open doorway, `w` wither, `b` blood, `e` entrance, `f` falling; `top`: the y 73 block (the frame's style) or `""`. The viewer builds the doorway from its database. |
 | `door` | `t, x0, y0, z0, w, h, d, pal, rle` | (runs before 2026-09-28) a box where a door can be (middle of a tile edge; 7 along the wall, 2 blocks into each room, y 67-76 - older runs: 3x3, y 69-72), air included: the door, the opening, or the wall filling it |
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
-| `chat` | `t, m, c?` | chat line: `m` with formatting stripped; `c` the same line with `§` codes (`§0`-`§f` colours, `§#rrggbb` for other colours, `§k§l§m§n§o`, `§r` reset between styled parts), only when it has formatting |
+| `chat` | `t, n?, m, c?` | chat line: `m` with formatting stripped; `c` the same line with `§` codes (`§0`-`§f` colours, `§#rrggbb` for other colours, `§k§l§m§n§o`, `§r` reset between styled parts), only when it has formatting; `n` (newer runs) the server tick count when it arrived |
 | `room` | `t, name` | you entered a room |
 | `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...], secretsFound, secretsTotal, libraryKey?], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes; `libraryKey` once the room's rotation is really known (1x1 rooms: Odin found its blue clay) and, for 1x1 rooms with several variants, which one (`Name\|ROTATION\|core`) |
 | `end` | `t, ms` | last line |
@@ -92,3 +92,9 @@ Format 1 had no `lib`/`vol`/`pgone`, wrote every player every tick and sent `chu
 - Your own inputs (keys, clicks).
 - Entity health beyond what's in their nametag.
 - Anything before you load into the instance (party finder, queueing).
+
+`chat` lines also carry `n` (newer runs): the server tick count when the line arrived, instead of
+the one at the start of the client tick.
+
+The boss fights packet by packet are recorded by a separate module, Boss Recorder
+(`docs/boss-recorder.md`).
