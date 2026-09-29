@@ -25,6 +25,7 @@ python3 extract.py DATA_DIR OUT_DIR [--jobs N]   # 1. each recording's Maxor/Sto
 python3 tracks.py OUT_DIR                       # 2. one timeline per run (siblings merged) -> OUT_DIR/tracks/
 python3 analyze.py OUT_DIR [data maxor storm fastest]   # 3. the report's numbers
 python3 fit.py OUT_DIR [storm|maxor|all]        # 4. movement model fits -> OUT_DIR/fit_results.json
+python3 transfer.py OUT_DIR                      # 5. Storm's flight between pillars, and crush 2 on t 779
 ```
 
 `extract.py` skips recordings whose extract is newer than the recording, so re-running after
@@ -38,11 +39,14 @@ on 4 cores; the other steps take 1-2 minutes each.
   alignment on shared chat lines), boss identification, **de-interpolation** (recovering the
   positions the server sent from the client's 3-step lerp), crusher heights, pillar zones,
   player/ghost helpers.
-- `extract.py`, `tracks.py`, `analyze.py`, `fit.py` - the steps above.
+- `extract.py`, `tracks.py`, `analyze.py`, `fit.py`, `transfer.py` - the steps above.
 - `dynamics.py` - the movement models (pursuit, inertia, vanilla 1.8 wither) and the
   multi-step prediction fitter.
 
 ## Caveats
+
+- Four recordings were made on Hypixel's alpha server (Storm leaves ~40 ticks early after his
+  lightning there). `recording.ALPHA_RUNS` lists them and `bosslib.load_extracts` leaves them out.
 
 - Positions in the recordings are the client's interpolated ones. `bosslib.delerp` undoes the
   lerp; it assumes a modern client's 3-step `InterpolationHandler`, which checks out: Maxor's

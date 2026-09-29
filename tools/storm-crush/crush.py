@@ -21,6 +21,9 @@ HEAD = 2.975                      # a wither's eye height
 # Each crusher's 7x7 square, by its -x/-z corner. Red never moved in the recorded runs.
 PILLARS = {'Purple': (97, 62), 'Yellow': (43, 62), 'Green': (43, 38), 'Red': (97, 38)}
 SOLID = ('minecraft:polished_diorite', 'minecraft:moving_piston', 'minecraft:piston')
+# Recorded on Hypixel's alpha server (Storm leaves ~40 ticks early after his lightning): not the
+# live game, so left out of the analysis.
+ALPHA_RUNS = {'20260927-170801-b120f4c1', '20260928-214732-33c77ab5', '20260929-024353-1f5e9ba7', '20260929-025227-24f19367'}
 
 
 # ------------------------------------------------------------------ fetch
@@ -33,7 +36,7 @@ def fetch(data):
     os.makedirs(os.path.join(data, 'runs'), exist_ok=True)
     runs = json.loads(curl(SITE + '/runs'))
     json.dump(runs, open(os.path.join(data, 'runs.json'), 'w'))
-    want = [r['id'] for r in runs if r['floor'] in ('F7', 'M7') and (r['ticks'] or 0) >= 3000]
+    want = [r['id'] for r in runs if r['floor'] in ('F7', 'M7') and (r['ticks'] or 0) >= 3000 and r['id'] not in ALPHA_RUNS]
     todo = [i for i in want if not os.path.exists(os.path.join(data, 'runs', i + '.gz'))]
     print(len(want), 'runs reach the boss,', len(todo), 'to download')
     with Pool(4) as p:   # the site limits requests per address
@@ -77,7 +80,7 @@ def safe_extract(path):
 def load(data):
     cache = os.path.join(data, 'storm.pkl')
     if os.path.exists(cache): return pickle.load(open(cache, 'rb'))
-    paths = sorted(os.path.join(data, 'runs', f) for f in os.listdir(os.path.join(data, 'runs')) if f.endswith('.gz'))
+    paths = sorted(os.path.join(data, 'runs', f) for f in os.listdir(os.path.join(data, 'runs')) if f.endswith('.gz') and f[:-3] not in ALPHA_RUNS)
     with Pool(3) as p: res = {i: r for i, r in p.map(safe_extract, paths) if r}
     pickle.dump(res, open(cache, 'wb'))
     return res
@@ -118,7 +121,7 @@ def inset(p, x, z):
     return min(x - px, px + 6 - x, z - pz, pz + 6 - z)
 
 def analyze(data):
-    R = load(data)
+    R = {k: v for k, v in load(data).items() if k not in ALPHA_RUNS}
     runs = {r['id']: r for r in json.load(open(os.path.join(data, 'runs.json')))}
     print(len(R), 'recordings reach Storm')
 

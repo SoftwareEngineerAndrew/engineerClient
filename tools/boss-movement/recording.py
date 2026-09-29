@@ -22,6 +22,13 @@ STORM_FREE = "[BOSS] Storm: Slowing me down will be your greatest accomplishment
 STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
 GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
 
+# Recorded on Hypixel's alpha server, where Storm leaves his spot ~40 ticks early after the
+# lightning (+98-113 instead of +139). Not the live game: left out of everything.
+ALPHA_RUNS = {
+    '20260927-170801-b120f4c1', '20260928-214732-33c77ab5',
+    '20260929-024353-1f5e9ba7', '20260929-025227-24f19367',
+}
+
 
 def read_lines(path):
     raw = open(path, 'rb').read()

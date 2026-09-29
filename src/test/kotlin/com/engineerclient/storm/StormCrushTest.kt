@@ -35,14 +35,14 @@ class StormCrushTest {
 
     @Test
     fun `recorded checks that did not crush are outside`() {
-        // Beyond the zone's +z edge (still over the Green pillar's own blocks).
-        val z = StormCrush.judge(pillar("Green"), 44.559, 171.499, 44.251, 170)
-        assertFalse(z.inside); assertEquals(-0.251, z.inset, 1e-9)
+        // Just past the Yellow zone's -x edge.
+        val x = StormCrush.judge(pillar("Yellow"), 42.94, 173.473, 65.335, 176)
+        assertFalse(x.inside); assertEquals(-0.06, x.inset, 1e-9)
         // A block off the Yellow zone's -x edge.
         assertFalse(StormCrush.judge(pillar("Yellow"), 42.016, 173.176, 65.023, 175).inside)
-        // Under the pillar, but his head an eighth of a block short of its bottom.
-        val low = StormCrush.judge(pillar("Yellow"), 47.756, 172.896, 64.405, 176)
-        assertTrue(low.inset > 0); assertFalse(low.inside); assertEquals(-0.129, low.head!!, 1e-9)
+        // Under the pillar, but his head just short of its bottom.
+        val low = StormCrush.judge(pillar("Yellow"), 43.878, 172.585, 64.801, 176)
+        assertTrue(low.inset > 0); assertFalse(low.inside); assertEquals(-0.44, low.head!!, 1e-9)
     }
 
     @Test
