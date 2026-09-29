@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.utils.modMessage
+import com.engineerclient.EngineerClient
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
 import net.minecraft.network.chat.Component
@@ -159,16 +159,16 @@ object ScoreboardLines {
         val scoreboard = mc.level?.scoreboard
         val objective = scoreboard?.getDisplayObjective(DisplaySlot.SIDEBAR)
         if (scoreboard == null || objective == null) {
-            modMessage("§cNo sidebar is showing right now — open one first.")
+            EngineerClient.msg("§cNo sidebar is showing right now — open one first.")
             return
         }
         val entries = sidebarEntries(scoreboard, objective)
-        modMessage("§a--- Scoreboard dump: §f${objective.displayName.string}§a (${entries.size} lines) ---")
-        modMessage("§8(§ shown as &; the second column is what the hider matches)")
+        EngineerClient.msg("§a--- Scoreboard dump: §f${objective.displayName.string}§a (${entries.size} lines) ---")
+        EngineerClient.msg("§8(§ shown as &; the second column is what the hider matches)")
         entries.forEachIndexed { i, entry ->
             val component = lineText(scoreboard, entry)
             val coded = toLegacy(component).replace('§', '&')
-            modMessage("§7$i: §f$coded §8| §7${plain(component)}")
+            EngineerClient.msg("§7$i: §f$coded §8| §7${plain(component)}")
         }
     }
 

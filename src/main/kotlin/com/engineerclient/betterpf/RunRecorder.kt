@@ -282,7 +282,7 @@ class RunRecorder(
                 val target = temp.resolveSibling(finalName)
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
                 val mb = Files.size(target) / 1_000_000.0
-                if (BetterPF.savedMessage) EngineerClient.chat("§8[§6EC§8]§7 Better PF: saved run §f$finalName §7(${String.format(Locale.ROOT, "%.1f", mb)} MB, $lines lines, ${tick / 20}s)")
+                if (BetterPF.savedMessage) EngineerClient.msg("§7Better PF: saved run §f$finalName §7(${String.format(Locale.ROOT, "%.1f", mb)} MB, $lines lines, ${tick / 20}s)")
                 onSaved(target)
             } catch (t: Throwable) {
                 EngineerClient.logger.error("[ec] betterpf: failed to finish run file", t)
@@ -305,7 +305,7 @@ class RunRecorder(
         writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry}""")
         backlog.forEach(::writeNow)
         backlog.clear()
-        if (BetterPF.recordingMessage) EngineerClient.chat("§8[§6EC§8]§7 Better PF: recording this run")
+        if (BetterPF.recordingMessage) EngineerClient.msg("§7Better PF: recording this run")
     }
 
     private fun abandon() {

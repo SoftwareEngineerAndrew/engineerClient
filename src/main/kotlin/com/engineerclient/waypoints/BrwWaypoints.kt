@@ -70,10 +70,10 @@ object BrwWaypoints : Module(
         .onPress {
             if (!allowEdits) return@onPress
             when (waypointType) {
-                0 -> { color = presetNormal; EngineerClient.chat("§8[§6EC§8]§a waypoint type changed to §cNormal§a."); waypointType++ }
-                1 -> { color = presetSecret; EngineerClient.chat("§8[§6EC§8]§a waypoint type changed to §cSecret§a."); waypointType++ }
-                2 -> { color = presetEtherwarp; EngineerClient.chat("§8[§6EC§8]§a waypoint type changed to §cEtherwarp§a."); waypointType++ }
-                3 -> { color = presetNone; EngineerClient.chat("§8[§6EC§8]§a waypoint type changed to §cNone§a."); waypointType = 0 }
+                0 -> { color = presetNormal; EngineerClient.msg("§awaypoint type changed to §cNormal§a."); waypointType++ }
+                1 -> { color = presetSecret; EngineerClient.msg("§awaypoint type changed to §cSecret§a."); waypointType++ }
+                2 -> { color = presetEtherwarp; EngineerClient.msg("§awaypoint type changed to §cEtherwarp§a."); waypointType++ }
+                3 -> { color = presetNone; EngineerClient.msg("§awaypoint type changed to §cNone§a."); waypointType = 0 }
             }
         }
 
@@ -91,13 +91,13 @@ object BrwWaypoints : Module(
     var roomWaypoints: MutableSet<DungeonWaypoint> = mutableSetOf()
 
     private val resetButton by ActionSetting("Reset Current Room", desc = "Resets the EC waypoints for the current room.") {
-        val room = DungeonUtils.currentRoom ?: return@ActionSetting EngineerClient.chat("§8[§6EC§8]§c room not found!")
+        val room = DungeonUtils.currentRoom ?: return@ActionSetting EngineerClient.msg("§croom not found!")
         val waypoints = getEditableWaypoints(room)
-        if (waypoints.isEmpty()) return@ActionSetting EngineerClient.chat("§8[§6EC§8]§c current room has no editable EC waypoints!")
+        if (waypoints.isEmpty()) return@ActionSetting EngineerClient.msg("§ccurrent room has no editable EC waypoints!")
         waypoints.clear()
         syncRoomToActive(room)
         scope.launch { saveWaypoints() }
-        EngineerClient.chat("§8[§6EC§8]§a reset current room.")
+        EngineerClient.msg("§areset current room.")
     }
 
     var lastEtherPos: BlockPos? = null
@@ -134,6 +134,6 @@ object BrwWaypoints : Module(
 
     override fun onKeybind() {
         allowEdits = !allowEdits
-        EngineerClient.chat("§8[§6EC§8]§r waypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
+        EngineerClient.msg("§rwaypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
     }
 }

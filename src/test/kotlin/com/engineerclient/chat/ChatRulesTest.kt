@@ -18,7 +18,7 @@ class ChatRulesTest {
 
     @Test
     fun `placeholders match what other players will see`() {
-        // no rank, digit-leading name, any blessing and tier — none of these are in Andrew's logs verbatim
+        // no rank, digit-leading name, any blessing and tier — none of these are in engineerandrew's logs verbatim
         val blessing = "DUNGEON BUFF! 85nd found a Blessing of Wisdom IV!"
         val profile = "You are playing on profile: Papaya (Co-op)"
         val uuid = "Profile ID: 0123abcd-4567-89ef-0123-456789abcdef"

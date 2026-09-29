@@ -112,6 +112,8 @@ object P3Rotation : Module(
      */
     val teamRoles = LinkedHashMap<String, String>()
     private var wasInBoss = false
+    /** The setup problems line: once a session, not every boss. */
+    private var setupWarned = false
 
     /** Which of the four sections is live, 1-based. Display only — the rotation itself is section-agnostic. */
     var section = 1
@@ -151,8 +153,9 @@ object P3Rotation : Module(
                 announceMyRole()
                 val check = SetupCheck.run()
                 check.forEach { EcLog.log("SETUP", (if (it.ok) "ok   " else "FAIL ") + it.what + (if (!it.ok) " — ${it.fix}" else "")) }
-                check.filter { !it.ok }.takeIf { it.isNotEmpty() }?.let { bad ->
-                    EngineerClient.chat("§8[§6EC§8]§c ${bad.size} setup problem${if (bad.size == 1) "" else "s"} — §7/brw setup")
+                check.filter { !it.ok }.takeIf { it.isNotEmpty() && !setupWarned }?.let { bad ->
+                    setupWarned = true
+                    EngineerClient.msg("§c${bad.size} setup problem${if (bad.size == 1) "" else "s"} — §7/brw setup")
                 }
             }
             wasInBoss = inBoss
@@ -236,7 +239,6 @@ object P3Rotation : Module(
 
             P3ChatParser.isPhaseEnd(raw) -> {
                 EcLog.log("SECTION", "phase 3 over (core opening)")
-                if (RotationEngine.running) EngineerClient.chat("§8[§6EC§8]§7 phase 3 done.")
                 RotationEngine.reset()
                 section = 1
                 sectionComplete = false
@@ -303,13 +305,13 @@ object P3Rotation : Module(
         EcLog.log("SECTION", "phase 3 start — team: " + teamRoles.entries.joinToString { "${it.value}=${RotationSpec.graph.name(it.key)}" })
         val me = EngineerClient.mc.player?.name?.string
         if (EcConfig.data.myStartingRole == null) {
-            EngineerClient.chat("§8[§6EC§8]§c You have no starting role — §7set it with §f/brw role <role>§7.")
+            EngineerClient.msg("§cYou have no starting role — §7set it with §f/brw role <role>§7.")
         }
         RotationEngine.begin(teamRoles)
         val missing = RotationSpec.graph.startingRoles.filter { it.id !in teamRoles }.map { it.name }
-        if (missing.isNotEmpty()) EngineerClient.chat("§8[§6EC§8]§c nobody announced: §f${missing.joinToString(", ")}")
+        if (missing.isNotEmpty()) EngineerClient.msg("§cnobody announced: §f${missing.joinToString(", ")}")
         val mine = me?.let { RotationEngine.roleOf(it) }
-        EngineerClient.chat("§8[§6EC§8]§7 phase 3 — you are §a${mine?.name ?: "§cunassigned"}§7.")
+        EngineerClient.msg("§7phase 3 — you are §a${mine?.name ?: "§cunassigned"}§7.")
     }
 
     /** Say which section-1 role I run, in the form every client parses. Only where it means anything: F7/M7. */
@@ -347,7 +349,7 @@ object P3Rotation : Module(
         // Core's identity: slot 5, played twice so it reads as "core" rather than a hand-off.
         if (roleVignette) RoleVignette.flash(slotColor(5), quadrant = leapQuadrant())
         if (leapSound) { playSlot(5); playSlot(5) }
-        if (announce) EngineerClient.chat("§8[§6EC§8]§7 next: §a§lcore§r §7— rush in; the first one there is who you leap to.")
+        if (announce) EngineerClient.msg("§7next: §a§lcore§r §7— rush in; the first one there is who you leap to.")
     }
 
     private fun signalRole(next: RotationSpec.Role) {
@@ -357,12 +359,12 @@ object P3Rotation : Module(
         if (leapSound) playSlot(slot)
         if (announce) {
             val tail = if (next.early) " §7(early enter — the team leaps to you)" else ""
-            EngineerClient.chat("§8[§6EC§8]§7 next: §a§l${next.name}§r$tail")
+            EngineerClient.msg("§7next: §a§l${next.name}§r$tail")
             LeapSignal.current()?.let { leap ->
-                EngineerClient.chat("§8[§6EC§8]§7 leap to §b${leap.ign}§7 once they are in section ${leap.section}." +
+                EngineerClient.msg("§7leap to §b${leap.ign}§7 once they are in section ${leap.section}." +
                     if (leap.note.isNotBlank()) " §8${leap.note}" else "")
             }
-            if (next.leapNote.isNotBlank() && LeapSignal.current() == null) EngineerClient.chat("§8[§6EC§8]§8 ${next.leapNote}")
+            if (next.leapNote.isNotBlank() && LeapSignal.current() == null) EngineerClient.msg("§8${next.leapNote}")
         }
     }
 
@@ -370,7 +372,7 @@ object P3Rotation : Module(
         val role = RotationSpec.graph.startingRoles.firstOrNull { it.name.equals(roleName, ignoreCase = true) }
         if (role == null) {
             EcLog.log("WARN", "$ign announced unknown starting role '$roleName'")
-            EngineerClient.chat("§8[§6EC§8]§c $ign announced unknown role '$roleName'")
+            EngineerClient.msg("§c$ign announced unknown role '$roleName'")
             return
         }
         EcLog.log("ROLE", "$ign runs ${role.name}")

@@ -7,7 +7,7 @@ import java.util.Locale
  * and settings and puts the result on screen). Pure: rows and options in, lines out, so every case
  * tests without the game.
  *
- * The look is the team's original EngineerSplits (tools/reference/chattriggers):
+ * The look is the team's original EngineerSplits (their old ChatTriggers module):
  *
  *     Pace   > 3m 48.2s (3m 47.9s)     the projected finish, from the targets
  *     Open   > 14.00s (14.00s)

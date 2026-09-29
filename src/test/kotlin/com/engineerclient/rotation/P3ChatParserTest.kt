@@ -109,7 +109,7 @@ class P3ChatParserTest {
         assertNull(P3ChatParser.leapedTo("ee3"))
         assertEquals("Skyyqt", P3ChatParser.teleportedTo("You have teleported to Skyyqt!"))
 
-        // Andrew's own leap, as it reaches every client — long numeric IGN, MVP+ rank.
+        // engineerandrew's own leap, as it reaches every client — long numeric IGN, MVP+ rank.
         val mine = assertNotNull(P3ChatParser.partyLine("§9Party §8> §b[MVP§4+§b] p3wr§f: Leaped to Shadow100119171!"))
         assertEquals("p3wr", mine.ign)
         assertEquals("Shadow100119171", P3ChatParser.leapedTo(mine.message))

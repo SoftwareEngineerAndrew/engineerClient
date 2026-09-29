@@ -1,5 +1,6 @@
 package com.engineerclient.rotation
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.EcConfig
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.dungeon.PositionalMessages
@@ -107,7 +108,7 @@ object SetupCheck {
     fun lines(): List<String> {
         val items = run()
         val bad = items.count { !it.ok }
-        val head = if (bad == 0) "§8[§6EC§8]§a setup complete" else "§8[§6EC§8]§c $bad setup problem${if (bad == 1) "" else "s"}"
+        val head = if (bad == 0) "${EngineerClient.PREFIX}§asetup complete" else "${EngineerClient.PREFIX}§c$bad setup problem${if (bad == 1) "" else "s"}"
         return listOf(head) + items.map { it ->
             (if (it.ok) "§a ✔ §7" else "§c ✘ §f") + it.what + (if (!it.ok && it.fix.isNotBlank()) " §8— ${it.fix}" else "")
         }

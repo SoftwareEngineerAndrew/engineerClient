@@ -17,7 +17,6 @@ import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.texture
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -90,7 +89,7 @@ object DungeonSplits : Module(
     }
 
     private val cardDebug by BooleanSetting("Scorecard Debug", false, desc = "Says in chat each moment the scorecard picks up, and what it read it from — for checking the new ones (portal, leaps, Goldor's first hit, Storm breaking free).")
-    private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) modMessage("§8[scorecard] §7$what") } }
+    private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) EngineerClient.msg("§8[scorecard] §7$what") } }
 
     /**
      * Each section's settings together, in the order they show in the ClickGUI: its HUD with its own

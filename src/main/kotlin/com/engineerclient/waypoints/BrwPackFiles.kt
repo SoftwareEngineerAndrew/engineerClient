@@ -79,7 +79,7 @@ object BrwPackFiles {
     suspend fun createPack(packName: String): Boolean = withContext(Dispatchers.IO) {
         when {
             !isValidPackName(packName) -> {
-                EngineerClient.chat("§8[§6EC§8]§c invalid pack name '$packName' — letters, numbers, spaces, hyphens, underscores only")
+                EngineerClient.msg("§cinvalid pack name '$packName' — letters, numbers, spaces, hyphens, underscores only")
                 false
             }
             packFile(packName).exists() -> false

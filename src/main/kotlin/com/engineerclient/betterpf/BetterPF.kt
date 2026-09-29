@@ -268,10 +268,17 @@ object BetterPF : Module(
         Thread.ofVirtual().name("betterpf-upload").start {
             try {
                 val id = send(file, key)
-                if (uploadedMessage) EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
+                uploadFailSaid = false
+                if (uploadedMessage) EngineerClient.msg("§7Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
             } catch (t: Throwable) {
                 if (t !is Refused) EngineerClient.logger.error("[ec] betterpf upload failed", t)
-                EngineerClient.chat("§8[§6EC§8]§c Better PF: upload ${if (t is Refused) "refused (${t.message})" else "failed (${t.javaClass.simpleName})"}. The run is still saved locally.")
+                else EngineerClient.logger.warn("[ec] betterpf upload refused: ${t.message}")
+                // Said once, not after every run while the site can't be reached; said again after
+                // an upload has gone through. Upload Missing Runs sends them later.
+                if (!uploadFailSaid) {
+                    uploadFailSaid = true
+                    EngineerClient.msg("§cBetter PF: upload ${if (t is Refused) "refused (${t.message})" else "failed - the site can't be reached"}. Runs are still saved here; §fUpload Missing Runs§c sends them later.")
+                }
             }
         }
     }
@@ -328,7 +335,7 @@ object BetterPF : Module(
                 EngineerClient.logger.warn("[ec] betterpf: claiming older runs failed", t)
             }
             val url = "https://$SITE/betterpf/?mine=$token"
-            EngineerClient.chat(Component.literal("§8[§6EC§8]§7 Better PF: ").append(
+            EngineerClient.msg(Component.literal("§7Better PF: ").append(
                 Component.literal("§b§nyour runs").withStyle { s ->
                     s.withClickEvent(net.minecraft.network.chat.ClickEvent.OpenUrl(URI.create(url)))
                         .withHoverEvent(net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("§7$url")))
@@ -337,10 +344,12 @@ object BetterPF : Module(
         }
     }
 
+    @Volatile private var uploadFailSaid = false
+
     private fun uploadMissing() {
         val key = uploadKey.trim()
-        if (key.isEmpty()) return EngineerClient.chat("§8[§6EC§8]§c Better PF: set the Upload Key first.")
-        if (catchingUp) return EngineerClient.chat("§8[§6EC§8]§7 Better PF: already uploading missing runs.")
+        if (key.isEmpty()) return EngineerClient.msg("§cBetter PF: set the Upload Key first.")
+        if (catchingUp) return EngineerClient.msg("§7Better PF: already uploading missing runs.")
         catchingUp = true
         Thread.ofVirtual().name("betterpf-catch-up").start {
             try {
@@ -353,22 +362,22 @@ object BetterPF : Module(
                 if (have.statusCode() != 200) throw Refused("run check ${have.statusCode()}")
                 val onSite = JsonParser.parseString(have.body()).asJsonArray.mapTo(HashSet()) { it.asString }
                 val missing = local.filter { f -> keys[f]?.let { it !in onSite } ?: false }
-                if (missing.isEmpty()) return@start EngineerClient.chat("§8[§6EC§8]§7 Better PF: all ${local.size} runs here are already on the viewer.")
-                EngineerClient.chat("§8[§6EC§8]§7 Better PF: ${missing.size} of ${local.size} runs aren't on the viewer - uploading them.")
+                if (missing.isEmpty()) return@start EngineerClient.msg("§7Better PF: all ${local.size} runs here are already on the viewer.")
+                EngineerClient.msg("§7Better PF: ${missing.size} of ${local.size} runs aren't on the viewer - uploading them.")
                 var done = 0
                 missing.forEachIndexed { i, f ->
                     try {
                         send(f, key)
                         done++
-                        EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded ${i + 1}/${missing.size} §8(${f.fileName})")
+                        EngineerClient.msg("§7Better PF: uploaded ${i + 1}/${missing.size} §8(${f.fileName})")
                     } catch (t: Throwable) {
-                        EngineerClient.chat("§8[§6EC§8]§c Better PF: ${f.fileName} ${if (t is Refused) "refused (${t.message})" else "failed (${t.javaClass.simpleName})"}")
+                        EngineerClient.msg("§cBetter PF: ${f.fileName} ${if (t is Refused) "refused (${t.message})" else "failed (${t.javaClass.simpleName})"}")
                     }
                 }
-                EngineerClient.chat("§8[§6EC§8]§a Better PF: done - $done of ${missing.size} uploaded.")
+                EngineerClient.msg("§aBetter PF: done - $done of ${missing.size} uploaded.")
             } catch (t: Throwable) {
                 EngineerClient.logger.error("[ec] betterpf catch-up failed", t)
-                EngineerClient.chat("§8[§6EC§8]§c Better PF: couldn't check which runs are missing (${t.message ?: t.javaClass.simpleName}).")
+                EngineerClient.msg("§cBetter PF: couldn't check which runs are missing (${t.message ?: t.javaClass.simpleName}).")
             } finally {
                 catchingUp = false
             }

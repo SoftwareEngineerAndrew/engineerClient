@@ -1,5 +1,6 @@
 package com.engineerclient
 
+import com.engineerclient.waypoints.BrwWaypoints
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
@@ -55,8 +56,8 @@ object ClassDetect {
                 "[ec] floor $floorName entered with NO tab class detection " +
                     "(miss #$fallbackFloors) — using ${stash ?: "nothing (no stash either)"}"
             )
-            if (stash != null) EngineerClient.chat("§8[§6EC§8]§e tab class detection missed — using last known: §a$stash")
-            else EngineerClient.chat("§8[§6EC§8]§c no class detected and no stash — pick one in /brw")
+            // Only Blood Rush Waypoints needs the class; the fallback itself is just logged (above).
+            if (stash == null && BrwWaypoints.enabled) EngineerClient.msg("§cBlood Rush Waypoints: couldn't tell your class - pick it in §f/ec")
         }
         RushProfiles.applySelection("entered $floorName")
     }

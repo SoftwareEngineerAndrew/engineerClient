@@ -550,6 +550,6 @@ object PovCapture {
         freeRequested = true
         EngineerClient.logger.error("[ec] pov preview failed — disabled for this session", t)
         EcLog.log("WARN", "pov preview failed: ${t.javaClass.simpleName}: ${t.message}")
-        EngineerClient.chat("§8[§6EC§8]§c POV previews hit an error and are off for this session §7(see the log).")
+        EngineerClient.msg("§cPOV previews hit an error and are off for this session §7(see the log).")
     }
 }
