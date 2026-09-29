@@ -22,6 +22,11 @@ dependencies {
     implementation("net.fabricmc:fabric-language-kotlin:${property("fabric_kotlin_version")}")
     implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")
 
+    // xz (LZMA2) for Better PF recordings: about half the size of gzip. Pure Java, shipped inside
+    // the mod jar.
+    implementation("org.tukaani:xz:1.10")
+    include("org.tukaani:xz:1.10")
+
     // Odin is a required runtime mod (declared in fabric.mod.json); compile against its release jar.
     compileOnly(files("libs/Odin-0.3.4-26.1.jar"))
 
