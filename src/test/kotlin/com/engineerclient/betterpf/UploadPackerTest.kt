@@ -63,4 +63,29 @@ class UploadPackerTest {
         assertTrue(lines.any { it.startsWith("""{"k":"p"""") })         // players always kept
         assertTrue(lines.any { it.startsWith("""{"k":"meta"""") })
     }
+
+    @Test
+    fun `the world's lines and the whole layout come first, the rest in order`() {
+        val run = listOf(
+            """{"k":"meta","self":"a"}""",
+            """{"k":"rooms","t":5,"r":[["Entrance"]]}""",
+            """{"k":"p","t":6,"d":[]}""",
+            """{"k":"door","t":7,"x":1}""",
+            """{"k":"rooms","t":8,"r":[["Entrance"],["Admin"]]}""",
+            """{"k":"pal","i":0,"s":"minecraft:stone"}""",
+            """{"k":"chat","t":9,"m":"hi"}""",
+        )
+        val file = Files.createTempFile("run", ".jsonl.gz").also { Files.write(it, gz(run)) }
+        val (out, _) = UploadPacker.pack(file, null)
+        assertEquals(listOf(
+            """{"k":"meta","self":"a"}""",
+            """{"k":"roomsAll","t":8,"r":[["Entrance"],["Admin"]]}""",
+            """{"k":"door","t":7,"x":1}""",
+            """{"k":"pal","i":0,"s":"minecraft:stone"}""",
+            """{"k":"rooms","t":5,"r":[["Entrance"]]}""",
+            """{"k":"p","t":6,"d":[]}""",
+            """{"k":"rooms","t":8,"r":[["Entrance"],["Admin"]]}""",
+            """{"k":"chat","t":9,"m":"hi"}""",
+        ), unxz(out))
+    }
 }
