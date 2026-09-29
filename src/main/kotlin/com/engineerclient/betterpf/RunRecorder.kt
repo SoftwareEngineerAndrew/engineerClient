@@ -114,9 +114,10 @@ class RunRecorder(
     private var lastFrameNs = 0L
 
     fun onFrame(partialTick: Float, yaw: Float, pitch: Float) {
-        // At most 60 a second, whatever the game's frame rate.
+        // At most Camera FPS a second (Better PF's setting, 20-160), whatever the game's frame rate;
+        // a little under the interval, so uneven frame times at that rate still keep every frame.
         val now = System.nanoTime()
-        if (now - lastFrameNs < FRAME_NS) return
+        if (now - lastFrameNs < 960_000_000L / BetterPF.cameraFps.coerceIn(20, 160)) return
         lastFrameNs = now
         val entry = "[${f2(partialTick)},${f2(yaw)},${f2(pitch)}]"
         if (yaw == lastFrameYaw && pitch == lastFramePitch) { heldFrame = entry; return }
@@ -302,7 +303,7 @@ class RunRecorder(
         val self = EngineerClient.mc.player?.name?.string ?: "?"
         val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient")
             .map { it.metadata.version.friendlyString }.orElse("?")
-        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry}""")
+        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF}""")
         backlog.forEach(::writeNow)
         backlog.clear()
         if (BetterPF.recordingMessage) EngineerClient.msg("§7Better PF: recording this run")
@@ -466,10 +467,33 @@ class RunRecorder(
         if (count > 0) emit("""{"k":"mp","t":$tick,"d":[$sb]}""")
     }
 
+    /**
+     * Name tags riding their mob: a stand spawned just after a mob (Hypixel's name tag, 1 or 3 ids
+     * on), straight above it, is written once as following it ("tag": which mob, how far above)
+     * and its moves are left out while it keeps that place - the viewer puts it there from the
+     * mob's. If it ever leaves that place, a "tag" line with "of":null and its moves again.
+     */
+    private class Tag(val mob: Int, val dx: Double, val dy: Double, val dz: Double)
+    private val tags = HashMap<Int, Tag>()
+
+    private fun tagOf(level: ClientLevel, stand: ArmorStand): Tag? {
+        for (back in intArrayOf(1, 3)) {
+            val mob = level.getEntity(stand.id - back) as? LivingEntity ?: continue
+            if (mob is ArmorStand || mob is Player) continue
+            val dx = q(stand.x - mob.x); val dy = q(stand.y - mob.y); val dz = q(stand.z - mob.z)
+            if (kotlin.math.abs(dx) <= 0.05 && kotlin.math.abs(dz) <= 0.05 && dy in 0.0..4.0) return Tag(mob.id, dx, dy, dz)
+        }
+        return null
+    }
+
     private fun recordEntities(level: ClientLevel) {
         val seen = HashSet<Int>(tracked.size + 16)
         val moved = StringBuilder()
         var movedCount = 0
+        val me = EngineerClient.mc.player
+        // Mobs more than FAR_HALF blocks from you move on every other tick only (the viewer fills in
+        // the one between): far off, 10 a second is plenty, and they are most of the moves.
+        val oddTick = tick % 2 == 1
         for (e in level.entitiesForRendering()) {
             if (e is Player) continue
             // An entity the game hasn't placed yet (NaN position) would make an unreadable line.
@@ -490,7 +514,10 @@ class RunRecorder(
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
                 val item = (e as? ItemEntity)?.item?.let { ",\"item\":" + str(it.hoverName.string.replace(FORMAT_CODES, "")) + ",\"itemId\":" + str(vanillaId(it)) } ?: ""
                 emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item}""")
-                if (e is ArmorStand) recordStand(e)
+                if (e is ArmorStand) {
+                    recordStand(e)
+                    tagOf(level, e)?.let { tg -> tags[id] = tg; emit("""{"k":"tag","t":$tick,"id":$id,"of":${tg.mob},"dx":${tg.dx},"dy":${tg.dy},"dz":${tg.dz}}""") }
+                }
                 if (e is ItemFrame) recordFrame(e)
                 continue
             }
@@ -504,6 +531,15 @@ class RunRecorder(
             // Mobs at 1/100 of a block and whole degrees (finer is invisible), and only when that
             // changes: a mob twitching less than that is not a move.
             val qx = q(e.x); val qy = q(e.y); val qz = q(e.z); val qYaw = deg(e.yRot); val qHead = deg(headYaw)
+            // A name tag still in its place over its mob: nothing to write (the viewer follows the mob).
+            val tag = tags[id]
+            if (tag != null) {
+                val mob = level.getEntity(tag.mob)
+                if (mob != null && kotlin.math.abs(mob.x + tag.dx - e.x) < 0.006 && kotlin.math.abs(mob.y + tag.dy - e.y) < 0.006 && kotlin.math.abs(mob.z + tag.dz - e.z) < 0.006) { t.x = qx; t.y = qy; t.z = qz; continue }
+                tags.remove(id)
+                emit("""{"k":"tag","t":$tick,"id":$id,"of":null}""")
+            }
+            if (oddTick && me != null && e.distanceToSqr(me) > FAR_HALF * FAR_HALF) continue
             if (qx != t.x || qy != t.y || qz != t.z || qYaw != t.yaw || qHead != t.headYaw) {
                 t.x = qx; t.y = qy; t.z = qz; t.yaw = qYaw; t.headYaw = qHead
                 if (movedCount++ > 0) moved.append(',')
@@ -517,6 +553,7 @@ class RunRecorder(
         val gone = tracked.keys.filter { it !in seen }
         for (id in gone) {
             tracked.remove(id)
+            tags.remove(id)
             lastEquipment.remove("#$id")
             lastStand.remove(id)
             lastFrame.remove(id)
@@ -640,6 +677,8 @@ class RunRecorder(
         private val FORMAT_CODES = Regex("\u00a7.")
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
+        /** Mobs further than this (blocks) from you are written every other tick. */
+        const val FAR_HALF = 32
         const val NO_EQUIPMENT = """["","","","",""]"""
         /** A dye colour on an item id ("#rrggbb"), left out when comparing equipment. */
         private val DYE = Regex("#[0-9a-f]{6}")

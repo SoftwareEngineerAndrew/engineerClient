@@ -3,6 +3,7 @@ package com.engineerclient.betterpf
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
@@ -82,6 +83,10 @@ object BetterPF : Module(
         }
         return ownerToken
     }
+
+    private val cameraFpsSetting by NumberSetting("Camera FPS", 60, 20, 160, 10, desc = "How many times a second your view is saved (at most - never more than the game draws). Higher makes your POV in the viewer smoother on a high refresh rate screen; each 60 more adds about 3% to a run.")
+    /** For the recorder: Camera FPS. */
+    val cameraFps: Int get() = cameraFpsSetting.toInt()
 
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Optional, for the team: also shares room captures with the viewer's room library and lifts the hourly upload limit. Runs upload without it.")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
