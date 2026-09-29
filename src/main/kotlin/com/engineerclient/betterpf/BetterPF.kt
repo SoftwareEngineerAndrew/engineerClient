@@ -62,12 +62,27 @@ object BetterPF : Module(
 ) {
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Captures each dungeon room once (every block) for the viewer's shared room library, plus the doors/walls between rooms each run. Rooms the library already has are skipped.")
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf). Needs the upload key.")
-    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them.")
+    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them. /betterpf gives you a link to all your runs, private ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, and friends coming online out of recordings, so they are never saved or uploaded. Party chat stays in.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
+    /**
+     * A secret this install sends with every upload, so the site can list this player's runs -
+     * private ones included - for whoever has it: the link /betterpf gives. Made on first use.
+     */
+    private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /betterpf's link.").hide()
+
+    private fun token(): String {
+        if (ownerToken.length < 32) {
+            val r = java.security.SecureRandom()
+            ownerToken = (1..32).joinToString("") { "0123456789abcdef"[r.nextInt(16)].toString() }
+            com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        }
+        return ownerToken
+    }
+
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
 
@@ -276,6 +291,7 @@ object BetterPF : Module(
         val req = HttpRequest.newBuilder(URI.create(RUNS_URL))
             .header("X-Upload-Key", key)
             .header("X-Run-Summary", summary.toString())
+            .header("X-Run-Owner", token())
             .header("Content-Type", "application/octet-stream")
             .timeout(Duration.ofMinutes(5))
             .POST(HttpRequest.BodyPublishers.ofFile(file))
@@ -293,6 +309,34 @@ object BetterPF : Module(
      * The one being recorded is still a .part file, so it is never picked up. Runs even with Upload
      * Runs off - pressing the button is the ask.
      */
+    /**
+     * /betterpf: the link to every run you have uploaded, private ones included. Runs uploaded
+     * before uploads carried your token are claimed first - named by recorder and start time, which
+     * only this computer knows - so the list has them too.
+     */
+    fun myRunsLink() {
+        val token = token()
+        val key = uploadKey.trim()
+        Thread.ofVirtual().name("betterpf-mine").start {
+            if (key.isNotEmpty()) try {
+                val local = Files.list(runsDir).use { s -> s.filter { it.fileName.toString().endsWith(".jsonl.gz") }.toList() }
+                val runs = JsonArray().also { arr -> local.mapNotNull { runKey(it) }.forEach { arr.add(it) } }
+                val body = JsonObject().apply { addProperty("owner", token); add("runs", runs) }
+                http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/claim")).header("X-Upload-Key", key).header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString())
+            } catch (t: Throwable) {
+                EngineerClient.logger.warn("[ec] betterpf: claiming older runs failed", t)
+            }
+            val url = "https://$SITE/betterpf/?mine=$token"
+            EngineerClient.chat(Component.literal("§8[§6EC§8]§7 Better PF: ").append(
+                Component.literal("§b§nyour runs").withStyle { s ->
+                    s.withClickEvent(net.minecraft.network.chat.ClickEvent.OpenUrl(URI.create(url)))
+                        .withHoverEvent(net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("§7$url")))
+                }
+            ).append(Component.literal(" §8(private ones too - keep this link to yourself)")))
+        }
+    }
+
     private fun uploadMissing() {
         val key = uploadKey.trim()
         if (key.isEmpty()) return EngineerClient.chat("§8[§6EC§8]§c Better PF: set the Upload Key first.")

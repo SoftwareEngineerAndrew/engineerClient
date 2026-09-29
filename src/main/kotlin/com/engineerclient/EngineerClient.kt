@@ -164,6 +164,10 @@ object EngineerClient : ClientModInitializer {
         mc.schedule { mc.gui.chat.addClientSystemMessage(Component.literal(msg)) }
     }
 
+    fun chat(msg: Component) {
+        mc.schedule { mc.gui.chat.addClientSystemMessage(msg) }
+    }
+
     private fun statusLines(): List<String> {
         val d = EcConfig.data
         return listOf(
@@ -202,6 +206,8 @@ object EngineerClient : ClientModInitializer {
 
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            // /betterpf: the link to all your uploaded runs, private ones included.
+            for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 })
             // Same tree registered under the formal name (both casings, since Brigadier
             // literals are case-sensitive) and the short alias. Built fresh per name —
             // a bare redirect would not run the root executes on the alias itself.
