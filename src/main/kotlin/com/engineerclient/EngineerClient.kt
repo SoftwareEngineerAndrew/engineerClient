@@ -76,6 +76,9 @@ object EngineerClient : ClientModInitializer {
             ModuleManager.saveConfigurations()
         }
 
+        // On by default, existing installs included (once: turning it off sticks).
+        safely("boss recorder default") { BossRecorder.enableByDefault() }
+
         // Odin's event bus: floor entry drives profile application, world load resets detection.
         on<FloorEnterEvent> { safely("floorEnter") { ClassDetect.onFloorEnter(floor.name) } }
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
