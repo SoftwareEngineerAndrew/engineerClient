@@ -36,11 +36,16 @@ object UploadPacker {
     private val ENTITY_KINDS = setOf("spawn", "gone", "name", "stand", "frame")
     private val KIND = Regex(""""k":"(\w+)"""")
 
-    /** The run as an xz temp file to send, and how many mobs were left out as already uploaded. */
-    fun pack(file: Path, sibling: ByteArray?): Pair<Path, Int> {
+    /**
+     * The run as a temp file to send - xz, or gzip when [xz] is off (the site can only check a
+     * recording sent without the key if it is gzip) - and how many mobs were left out as already
+     * uploaded.
+     */
+    fun pack(file: Path, sibling: ByteArray?, xz: Boolean = true): Pair<Path, Int> {
         val drop = sibling?.let { dropped(file, it) } ?: emptySet()
-        val out = Files.createTempFile("betterpf-upload-", ".jsonl.xz")
-        BufferedWriter(OutputStreamWriter(XZOutputStream(Files.newOutputStream(out), LZMA2Options(6)), Charsets.UTF_8), 1 shl 16).use { w ->
+        val out = Files.createTempFile("betterpf-upload-", if (xz) ".jsonl.xz" else ".jsonl.gz")
+        val stream = if (xz) XZOutputStream(Files.newOutputStream(out), LZMA2Options(6)) else java.util.zip.GZIPOutputStream(Files.newOutputStream(out), 1 shl 16)
+        BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             lines(Files.newInputStream(file)).use { r ->
                 for (line in r.lineSequence()) {
                     val kept = if (drop.isEmpty()) line else keep(line, drop) ?: continue

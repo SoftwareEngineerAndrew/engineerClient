@@ -302,12 +302,12 @@ object BetterPF : Module(
 
     /**
      * Another party member's recording of this run already on the site (the earliest), to leave out
-     * what it has: its bytes, or null. Only with the key (it is what the site checks recordings by).
+     * what it has: its bytes, or null.
      */
     private fun siblingOf(summary: JsonObject, key: String): ByteArray? {
-        if (key.isEmpty()) return null
+        // (Without the key the site only offers public runs.)
         return runCatching {
-            val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).header("X-Upload-Key", key).header("Content-Type", "application/json")
+            val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).apply { if (key.isNotEmpty()) header("X-Upload-Key", key) }.header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofString())
             val id = JsonParser.parseString(res.body()).asJsonObject["id"]?.takeIf { !it.isJsonNull }?.asString ?: return null
             val got = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/$id")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofByteArray())
@@ -326,11 +326,10 @@ object BetterPF : Module(
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) EngineerClient.logger.warn("[ec] betterpf: room $roomKey refused (${res.statusCode()})")
         }
-        // Without the key the site checks the recording on its way in, which it can only do for
-        // gzip: sent as saved. With it: xz, and without the mobs a party member's recording
-        // already on the site has (UploadPacker).
-        if (key.isEmpty()) return sendPacked(file, summary, key)
-        val (packed, left) = UploadPacker.pack(file, siblingOf(summary, key))
+        // Without the mobs a party member's recording already on the site has (UploadPacker); xz
+        // with the key, gzip without (the site checks a keyless recording on its way in, which it
+        // can only read as gzip).
+        val (packed, left) = UploadPacker.pack(file, siblingOf(summary, key), xz = key.isNotEmpty())
         if (left > 0) EngineerClient.logger.info("[ec] betterpf: $left mobs left out, already uploaded by a party member")
         try {
             return sendPacked(packed, summary, key)
