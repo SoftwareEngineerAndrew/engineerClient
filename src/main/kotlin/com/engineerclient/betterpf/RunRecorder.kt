@@ -82,7 +82,9 @@ class RunRecorder(
     fun onTick(level: ClientLevel) {
         flushFrames()
         flushMouse()
+        flushNet()
         tick++
+        updateFocus()
         if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
             // Area is known a second or two after load; anything that is known and not a dungeon is dropped
@@ -149,23 +151,42 @@ class RunRecorder(
     /** The server tick count right now: read on the network thread, where the pings are counted. */
     val serverTickCount: Int get() = serverTicks
 
-    // ------------------------------------------------------------------ boss packets
-    // Every move, teleport and head turn the server sends for a boss wither (Maxor, Storm, Goldor,
-    // Necron), with the server tick it arrived on: the `e` lines are the client's 3-tick lerp of
-    // these, a tick late and blurred, which is too coarse to see a boss skip a single move.
+    // ------------------------------------------------------------------ boss log
+    // The server's own packets about the boss fights, stamped with the server tick they arrived on
+    // (BossLog), batched into one `net` line per client tick.
 
     /** Boss withers in view: filled on the game thread, read on the network thread. */
     val bossIds: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
-    /** A boss's position (null: a rotation-only packet) and body yaw as the server sent them. */
-    fun onBossMove(n: Int, id: Int, x: Double?, y: Double?, z: Double?, yaw: Float?, via: String) {
-        val pos = if (x != null && y != null && z != null) ",\"x\":${b(x)},\"y\":${b(y)},\"z\":${b(z)}" else ""
-        val rot = if (yaw != null) ",\"yaw\":${a(yaw)}" else ""
-        emit("""{"k":"bm","t":$tick,"n":$n,"id":$id,"via":"$via"$pos$rot}""")
+    /**
+     * Whether the boss log keeps every entity's packets, not only the boss withers': in the boss,
+     * and from the blood door opening until the Watcher is done (the camp starts before anyone is
+     * in the Blood room).
+     */
+    @Volatile var focus = false
+        private set
+    private var bloodOpen = false
+    private var watcherDone = false
+
+    private val netLog = StringBuilder()
+
+    /** One boss-log entry: [n] the server tick it arrived on, [entry] the rest of the tuple. */
+    fun net(n: Int, entry: String) {
+        if (netLog.isNotEmpty()) netLog.append(',')
+        netLog.append('[').append(n).append(',').append(entry).append(']')
     }
 
-    /** A boss's head yaw as the server sent it (the direction he is looking: his target while he chases). */
-    fun onBossHead(n: Int, id: Int, headYaw: Float) = emit("""{"k":"bh","t":$tick,"n":$n,"id":$id,"h":${a(headYaw)}}""")
+    fun netBlock(n: Int, pos: BlockPos, state: BlockState) = net(n, "\"b\",${pos.x},${pos.y},${pos.z},${paletteIndex(state)}")
+
+    private fun flushNet() {
+        if (netLog.isEmpty()) return
+        emit("""{"k":"net","t":$tick,"d":[$netLog]}""")
+        netLog.setLength(0)
+    }
+
+    private fun updateFocus() {
+        focus = DungeonUtils.inBoss || DungeonUtils.currentRoomName == "Blood" || (bloodOpen && !watcherDone)
+    }
 
     // ------------------------------------------------------------------ what you do
     /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
@@ -205,9 +226,12 @@ class RunRecorder(
         emit("""{"k":"ether","t":$tick,$entry}""")
     }
 
-    fun onChat(message: String, colored: String? = null) {
+    fun onChat(message: String, colored: String? = null, n: Int? = null) {
         val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
-        emit("""{"k":"chat","t":$tick,"m":${str(message)}$c}""")
+        val st = if (n != null) ",\"n\":$n" else ""
+        emit("""{"k":"chat","t":$tick$st,"m":${str(message)}$c}""")
+        if (message.startsWith("The BLOOD DOOR has been opened!")) bloodOpen = true
+        if (message.startsWith("[BOSS] The Watcher: You have proven yourself")) watcherDone = true
     }
 
     /** A chest (or ender chest) lid event: [openCount] players now have it open (0 = it closes). */
@@ -294,6 +318,7 @@ class RunRecorder(
     /** Ends the session: closes the file (on the writer thread) and gives it its final name. */
     fun finish() {
         if (!confirmed) { abandon(); return }
+        flushNet()
         emit("""{"k":"end","t":$tick,"ms":${System.currentTimeMillis()}}""")
         val temp = tempFile ?: return
         val finalName = "${startedAt.format(STAMP)}_${(floorName ?: "unknown").replace(Regex("[^A-Za-z0-9]+"), "")}.jsonl.gz"
@@ -682,7 +707,6 @@ class RunRecorder(
     private fun deg(v: Float) = Math.round(v).toFloat()
     private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
     /** Boss packet positions: exact to the protocol's 1/4096 of a block. */
-    private fun b(v: Double) = String.format(Locale.ROOT, "%.5f", v)
     private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
 
     private fun str(s: String): String {
