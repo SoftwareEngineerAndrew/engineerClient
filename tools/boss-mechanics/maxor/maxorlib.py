@@ -33,6 +33,15 @@ ACTIVE = ('1/2 Energy Crystals are now active!', '2/2 Energy Crystals are now ac
           '3/2 Energy Crystals are now active!')
 CHARGING = 'The Energy Laser is charging up!'
 PICKED = ' picked up an Energy Crystal!'
+# Maxor's ability announcements. A: the first ability, 161 ticks after the laser phase starts or
+# after he breaks free; B: the wither-skull ones that come later.
+TAUNT_A = ("[BOSS] Maxor: YOUR WEAPONS CAN'T PIERCE THROUGH MY SHIELD!",
+           "[BOSS] Maxor: YOUR MOBILITY TRICKS DON'T WORK IN MY DOMAIN!",
+           "[BOSS] Maxor: I HOPE YOU LIKE EXPLOSIONS TOO!",
+           "[BOSS] Maxor: MY MINIONS WILL HAVE TO WIPE THE FLOOR AFTER I'M DONE WITH YOU ALL!")
+TAUNT_B = ("[BOSS] Maxor: How about you taste some rapid fire Wither Skulls!",
+           "[BOSS] Maxor: Eat Wither Skulls, scum!",
+           "[BOSS] Maxor: Time for me to blast you away for good!")
 
 TOP = {'W': (64.5, 238.375, 50.5), 'E': (82.5, 238.375, 50.5)}       # where crystals spawn
 PYLON = {'W': (52.5, 224.375, 41.5), 'E': (94.5, 224.375, 41.5)}     # where placed crystals sit
@@ -120,7 +129,7 @@ class Run:
         self._pkn = None
 
     def N(self, rec, t):
-        return self.clock[rec].n(t) + self.dn[rec]
+        return int(round(self.clock[rec].n(t) + self.dn[rec]))
 
     def ms_t(self, rec, t):
         """Wall-clock time (ms, the recorder's clock) of client tick t of recording rec, from
@@ -141,7 +150,7 @@ class Run:
         arrives before the stall and the tick's work after it)."""
         rec = rec or self.ref()
         c = self.clock[rec]
-        t = c.t_of_n(n + 1 - self.dn[rec])
+        t = c.t_of_n(int(round(n + 1 - self.dn[rec])))
         if t is None:
             return None
         return self.ms_t(rec, t - 1)
@@ -171,8 +180,8 @@ class Run:
 
     # ---------------------------------------------------------------- Maxor's movement
     def pkt(self):
-        """De-lerped move packets [(n, x, y, z, kind)], one recording's view where they overlap
-        (the recording with most packets), siblings fill its gaps."""
+        """De-lerped move packets [(n, x, y, z, kind, rec)], one recording's view where they
+        overlap (the recording with most packets), siblings fill its gaps."""
         if self._pk is None:
             by = {}
             for p in self.pkt_raw:
@@ -234,6 +243,154 @@ class Run:
     def ref(self):
         """The recording with the most arena block lines (all recordings see the same blocks)."""
         return max(self.recs, key=lambda r: len(self.X[r]['blocks']))
+
+
+    # ---------------------------------------------------------------- the phase's events
+    def summary(self):
+        """Key events (server ticks n) up to Storm's first line: stuns, enrages, charging lines,
+        placements ('X/2 ... active'), pickups, the death line, Maxor's wither despawning."""
+        if getattr(self, '_sum', None) is not None:
+            return self._sum
+        d = {}
+        storm = self.first(STORM)
+        end = storm if storm else 10 ** 9
+        d['storm'] = storm
+        d['stuns'] = [n for n in self.lines(STUN) if n < end]
+        d['enr'] = [n for n in self.lines(ENRAGED) if n < end]
+        d['dead'] = self.first(DEAD)
+        d['acts'] = [n for n in self.lines(ACTIVE) if n < end]
+        d['chg'] = [n for n in self.lines(CHARGING) if n < end]
+        d['picks'] = [(c[0], c[1][:-len(PICKED)]) for c in self.chat if c[1].endswith(PICKED) and c[0] < end]
+        d['taunts'] = [(c[0], 'A' if c[1] in TAUNT_A else 'B') for c in self.chat
+                       if c[1] in TAUNT_A + TAUNT_B and c[0] < end]
+        gone = None
+        for rec in self.recs:
+            e = self.X[rec]['ents'].get(self.maxor_id)
+            if e:
+                for ev in e['ev']:
+                    if ev[1] == 'g':
+                        n = self.N(rec, ev[0])
+                        if storm and storm - 60 < n <= storm + 5:
+                            gone = n if gone is None else min(gone, n)
+        d['gone'] = gone
+        col = self.column()
+        d['P'] = next((n for n, y, nm in col if y == 221 and nm == 'air' and self.rel(n) > 0), None)
+        d['beacon'] = next((n for n, y, nm in col if y == 221 and nm == 'beacon'), None)
+        d['bedrock'] = next((n for n, y, nm in col if y == 221 and nm == 'bedrock' and self.rel(n) > 0), None)
+        d['black'] = [n for n, y, nm in col if y == 223 and nm == 'black_stained_glass']
+        d['yellow'] = [n for n, y, nm in col if y == 223 and nm == 'yellow_stained_glass']
+        d['red'] = [n for n, y, nm in col if y == 223 and nm == 'red_stained_glass']
+        self._sum = d
+        return d
+
+    def column(self):
+        """Block changes at the laser column (73, 219-227, 73): [(n, y, block name)]."""
+        rec = self.ref()
+        return [(n, y, st.split('[')[0].split(':')[-1]) for n, x, y, z, st in self.blocks(rec)
+                if x == 73 and z == 73 and 219 <= y <= 227]
+
+    def grid(self):
+        """Residue (mod 10) of this run's 10-tick checks: the modal residue of the laser column's
+        glass changes (all made on the checks)."""
+        if getattr(self, '_grid', None) is None:
+            ns = [n for n, y, nm in self.column() if 222 <= y <= 224 and 'glass' in nm and 0 < self.rel(n) < 1500]
+            if len(ns) < 3:
+                self._grid = -1
+            else:
+                c = {}
+                for n in ns:
+                    c[n % 10] = c.get(n % 10, 0) + 1
+                self._grid = max(c, key=c.get)
+        return None if self._grid == -1 else self._grid
+
+    def gdev(self, n):
+        """n relative to the nearest 10-tick check (-5..+4)."""
+        g = self.grid()
+        return None if g is None else ((n - g + 5) % 10) - 5
+
+    def crystals(self):
+        """End crystals seen by the reference recording: [(kind, side, n_spawn, n_gone)],
+        kind 'top' (the spawn platforms, y 238.4) or 'pylon' (placed, y 224.4)."""
+        rec = self.ref()
+        out = []
+        for k, e in self.X[rec]['ents'].items():
+            if e['type'] != 'minecraft:end_crystal':
+                continue
+            sp = [ev for ev in e['ev'] if ev[1] == 's']
+            gn = [ev for ev in e['ev'] if ev[1] == 'g']
+            if not sp:
+                continue
+            y = sp[0][3]
+            kind = 'top' if y > 235 else ('pylon' if 223 < y < 226 else None)
+            if kind:
+                out.append((kind, 'W' if sp[0][2] < 73 else 'E', self.N(rec, sp[0][0]),
+                            self.N(rec, gn[0][0]) if gn else None))
+        return sorted(out, key=lambda c: c[2])
+
+    def hits(self):
+        """Laser hits: [(hit n, stun line n)]. The hit is taken from its discharge signature
+        (the column turns black 70 ticks after a hit) when there is one: a stun line announced
+        at the end of one of his abilities comes later than the hit itself. A signature belongs
+        to the first stun line at or after it."""
+        s = self.summary()
+        sig = [x - 70 for x in s['black']]
+        out = []
+        for i, L in enumerate(s['stuns']):
+            prevL = s['stuns'][i - 1] if i else -10 ** 9
+            cand = [h for h in sig if prevL + 2 < h <= L + 2 and L - h <= 150]
+            out.append((cand[-1] if cand else L, L))
+        return out
+
+    def pos_interp(self, n, maxgap=4):
+        """Maxor at server tick n, interpolated between the move packets around it (or the last
+        packet while he stands still in view)."""
+        pk = self.pkt()
+        if self._pkn is None:
+            self._pkn = [p[0] for p in pk]
+        i = bisect.bisect_right(self._pkn, n) - 1
+        if i < 0:
+            return None
+        a = pk[i]
+        if a[0] == n:
+            return a[1:4]
+        if i + 1 < len(pk):
+            b = pk[i + 1]
+            if b[0] - a[0] <= maxgap:
+                f = (n - a[0]) / (b[0] - a[0])
+                return tuple(a[k] + (b[k] - a[k]) * f for k in (1, 2, 3))
+        if any(rr == a[5] and s0 <= a[0] and n <= s1 for s0, s1, rr in self.spans):
+            if i + 1 >= len(pk) or math.dist(pk[i + 1][1:4], a[1:4]) < 0.3:
+                return a[1:4]
+        return None
+
+    def free_spans(self):
+        """[(a, b)] server ticks when Maxor can move: his first move .. a stun line, an enrage
+        line .. the next stun line, ..., up to his despawn."""
+        s = self.summary()
+        i3 = self.first(INTRO_END)
+        if i3 is None:
+            return []
+        a = i3 + 44
+        end = s['gone'] or s['storm'] or self.s0 + 3000
+        spans = []
+        for st in s['stuns']:
+            if st > a:
+                spans.append((a, st))
+            e = [x for x in s['enr'] if x > st]
+            a = e[0] if e else end
+        if a < end:
+            spans.append((a, end))
+        return spans
+
+    def closest(self, n, pos):
+        """[(3D distance, name, row)] of living players, closest first."""
+        out = []
+        for name in self.party:
+            q = self.player(name, n)
+            if q is None or not self.alive(name, n):
+                continue
+            out.append((math.dist(q[1:4], pos), name, q))
+        return sorted(out)
 
 
 def load(maxor_out, move_out, server_only=False):
