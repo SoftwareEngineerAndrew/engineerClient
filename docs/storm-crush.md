@@ -4,7 +4,8 @@ What decides whether a pillar crushes Storm (F7 phase 2), measured from the Bett
 and what the **Storm Phase** module draws because of it. The rule itself is `StormCrush.kt`; the
 measurement is `tools/storm-crush/crush.py` (re-run it when there is more data - see the end).
 How Storm moves, and the fastest split the rule allows, are in
-[`maxor-storm-movement.md`](maxor-storm-movement.md).
+[`maxor-storm-movement.md`](maxor-storm-movement.md); the pads, the pillars' whole life cycle and
+the rest of the fight are in [`mechanics/storm.md`](mechanics/storm.md).
 
 ## Data
 
@@ -14,6 +15,12 @@ Every F7 run on the site long enough to reach the boss (278 recordings, 2026-09-
 out). 244 reach Storm. 239 recordings from 195 runs have crush lines, 296 of them with server
 ticks, and 209 crushes have Storm in view when he was pinned (with the several recordings of one
 run counted once). Most crushes are on Yellow (127) and Purple (79); only 3 are on Green.
+
+A crush line can be missing. 21 runs died with only one crush line; in all of them a pillar
+reset (which marks a crush 20 ticks earlier, below) came 35 ticks before to 20 after the death
+line, and where Storm was in view the rule held at a check just before. So a second crush near
+his death can be silent, without its "Oof"/"Ouch" line (`mechanics/storm.md` §7). Crush lines
+undercount crushes there.
 
 Two things about the recordings matter here:
 
@@ -29,17 +36,32 @@ Two things about the recordings matter here:
 ## The four pillars
 
 Each crusher is a rounded 7x7 pillar of polished diorite (37 blocks a layer, rows of
-3-5-7-7-7-5-3) hanging from y 205, colour-coded by the terracotta floor under it. Pistons step
+3-5-7-7-7-5-3) hanging from y 205, colour-coded by the terracotta floor under it. Purple, Yellow
+and Green start with their bottom at y 175 (their first step always reads 174). Pistons step
 the whole pillar down one block every 4 ticks. A step shows as the piston column
-(the square's middle) turning to moving pistons. Resetting, the extended layers turn back to
-air.
+(the square's middle) turning to moving pistons.
+
+- **Pads.** Each pillar is lowered from its pad, a 7x7 square of glass and terracotta in its
+  colour (Purple x 111-117, z 91-97; Yellow 29-35, 91-97; Green 29-35, 9-15). A pad is read only
+  on the crush checks: someone standing on the square at a check steps its pillar down exactly 5
+  blocks, one every 4 ticks (the check, +4, +8, +12, +16); still there at the next check, 5 more.
+  Between checks the pad does nothing.
+- **Red is inert.** Its pad (x 111-117, z 9-15) does nothing: with a recorder on it at 13
+  checks, the Red pillar never moved in any run.
+- **Reset after a crush.** 20 ticks after a crush (the next check; 19-21 in 208 resets), every
+  extended layer of the crushing pillar turns back to air at once. The pillar is then spent: in
+  0 of 208 resets did it come down again, even with Storm alive another 850 ticks. So one pillar
+  never crushes him twice.
+
+The floor cycle (a pillar that reaches the floor is drawn back up and re-armed at 186) and the
+rest are in `mechanics/storm.md` §2.
 
 | pillar | 7x7 square (x, z) | crushes recorded |
 |---|---|---|
 | Purple | 97-103, 62-68 | 79 |
 | Yellow | 43-49, 62-68 | 127 |
 | Green | 43-49, 38-44 | 3 |
-| Red | 97-103, 38-44 | never moved in F7 |
+| Red | 97-103, 38-44 | never moved in F7 (its pad does nothing) |
 
 ## When: every 20 server ticks from the phase start
 
@@ -53,7 +75,8 @@ air.
 So the phase's clock starts with his wither, a tick before the first line, and the crush
 checks are its 20th, 40th, 60th... ticks. The module counts that way: the first line reads 1, and
 with **Modulo 20** on, every check is a rollover to 0. **Tick Offset** moves the count, and the
-ticks it treats as checks, if testing in game disagrees.
+ticks it treats as checks, if testing in game disagrees. The pads are read on the same checks: a
+pillar only starts coming down on one.
 
 The lightning ("ENERGY HEED MY CALL!" / "THUNDER LET ME BE YOUR CATALYST!") comes 546-552 server
 ticks after the first line, and not on the grid (6-12 mod 20).
@@ -90,6 +113,7 @@ On a check, a pillar crushes Storm when all three of these hold:
    - Crushes came 3-4, 23-24 and 43-44 ticks after a pillar's last step, and once at 60.
    - A check with Storm holding still inside, head in the pillar, 63 ticks after its last step
      did not crush him, and neither did five later ones.
+   - The pillar that crushed him no longer counts: it resets on the next check and is spent.
 
 Checks with Storm holding still, inside a zone with his head in the pillar, each run counted once
 (from `crush.py`):
@@ -134,11 +158,13 @@ a tick stale.
   show whether a step in progress blocks the crush.
 - The +z edge. No check had Storm near it with a lowered pillar. It is assumed to match +x
   (6, not 7).
-- Green and Red. There are 3 Green crushes and no Red ones, so both are assumed to work like
-  the other two.
-- Sub-tick timing. With Odin's tick count written as each line arrives (instead of once per
-  client tick), and Storm's server positions instead of the client's, the ±1 tick and
-  ±0.5 block uncertainty above would go away.
+- Green. There are 3 Green crushes, so its zone is assumed to work like the other two. Red is
+  inert (its pad does nothing), so its zone never comes into play.
+- Sub-tick timing. With the server tick each packet arrives on, and Storm's server positions
+  instead of the client's, the ±1 tick and ±0.5 block uncertainty above would go away. The
+  **Boss Recorder** module ([`boss-recorder.md`](boss-recorder.md)) now records exactly that:
+  Storm's moves (`m`) on the check ticks, the pillars' block changes (`b`) to the tick, and chat
+  on its server tick. Its files would settle the unexplained miss and the +z edge too.
 
 ## Re-running
 
