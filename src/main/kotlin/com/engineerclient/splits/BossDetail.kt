@@ -52,7 +52,7 @@ class BossDetail(private val detail: SplitDetail) {
 
     /** An end crystal appeared during Maxor: [placed] on a lower platform, otherwise a fresh spawn. */
     fun onCrystal(at: Stamp, placed: Boolean, placer: String?) {
-        if (!placed) return detail.add(SplitTracker.MAXOR, at, "§dcrystal spawned", note = "seen appear on an upper platform")
+        if (!placed) return
         val who = placer.orEmpty()
         detail.add(SplitTracker.MAXOR, at, "§dcrystal placed", who, note = "seen appear on a lower platform; placer = nearest player, a guess")
         val picked = pickedAt.remove(who) ?: return

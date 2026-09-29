@@ -2,6 +2,7 @@ package com.engineerclient.splits
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The 25-step boss breakdown, ported from the team's ChatTriggers module. */
 class SubSplitsTest {
@@ -38,14 +39,27 @@ class SubSplitsTest {
     }
 
     @Test
-    fun `Maxor's shield drop is timed by server ticks, since nothing announces it`() {
+    fun `Move ends when Maxor is seen starting to move`() {
         val s = SubSplitTracker()
         s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
-        s.onChat("[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.", stamp(10))
-        repeat(166) { s.onServerTick() }
-        assertEquals(listOf("&6Move 0-176", "&5Stun 176--"), shape(s.forSplit(SplitTracker.MAXOR)))
-        // Debug says Move ended on a count, not on anything Hypixel said.
-        assertEquals(listOf("166 server ticks after \"DON'T DISAPPOINT ME, I HAVEN'T...\" - never announced, so counted", "running"), s.endSources(SplitTracker.MAXOR))
+        assertTrue(!s.waitingForMaxorMove) // not before his intro is over
+        s.onChat("[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.", stamp(125))
+        repeat(47) { s.onServerTick() }
+        s.onMaxorMoved(stamp(172))
+        assertEquals(listOf("&6Move 0-172", "&5Stun 172--"), shape(s.forSplit(SplitTracker.MAXOR)))
+        assertEquals(listOf("his wither seen starting to move", "running"), s.endSources(SplitTracker.MAXOR))
+        repeat(40) { s.onServerTick() } // the count does not fire as well
+        assertEquals(2, s.forSplit(SplitTracker.MAXOR).size)
+    }
+
+    @Test
+    fun `not seen moving, Move is counted 46 ticks after his intro`() {
+        val s = SubSplitTracker()
+        s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
+        s.onChat("[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.", stamp(125))
+        repeat(60) { s.onServerTick() }
+        assertEquals(listOf("&6Move 0-171", "&5Stun 171--"), shape(s.forSplit(SplitTracker.MAXOR)))
+        assertEquals(listOf("46 server ticks after \"DON'T DISAPPOINT ME, I HAVEN'T...\" - he wasn't seen moving, so counted", "running"), s.endSources(SplitTracker.MAXOR))
     }
 
     @Test

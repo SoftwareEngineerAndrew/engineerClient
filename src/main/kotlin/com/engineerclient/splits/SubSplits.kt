@@ -17,11 +17,11 @@ package com.engineerclient.splits
  *  - the terminal/gate interplay, where a section ends on whichever of "last device done" and
  *    "gate destroyed" arrives second — they can come in either order,
  *  - and two waits on the server's own tick count, for the moments Hypixel never announces: Maxor
- *    dropping his shield, and Storm's first lightning.
+ *    starting to move (when he can't be seen doing it), and Storm's first lightning.
  *
- * Nothing here touches Minecraft. The one thing it cannot work out for itself is when the party has
- * finished leaping into the core, which needs player positions; the module feeds that in through
- * [onEveryoneInCore].
+ * Nothing here touches Minecraft. What it cannot work out for itself needs the world: Maxor's
+ * wither starting to move ([onMaxorMoved]) and the party all being in the core
+ * ([onEveryoneInCore]); the module feeds those in.
  */
 class SubSplitTracker {
 
@@ -104,18 +104,28 @@ class SubSplitTracker {
     /** Odin's server tick. The two waits below are the only reason this class counts them. */
     fun onServerTick() {
         ticks++
-        // Maxor's shield drops on its own about eight seconds after his intro, and Storm's first
-        // lightning lands about thirty-four seconds in. Hypixel says nothing either time, so the
-        // only way to split there is to count.
+        // Maxor starts moving 46 ticks after "DON'T DISAPPOINT ME" (seen, when he is in view - this
+        // is the fallback), and Storm's first lightning lands about thirty-four seconds in. Hypixel
+        // says nothing either time, so without seeing it the only way to split there is to count.
         val from = watchFrom ?: return
         val after = { n: Int -> Stamp(from.realMs + n * 50L, from.tick + n) }
-        if (ticks >= MAXOR_SHIELD_TICKS && !laserWaitDone) {
+        if (ticks >= MAXOR_MOVE_GIVE_UP && !laserWaitDone) {
             laserWaitDone = true; watchFrom = null
-            advance(after(MAXOR_SHIELD_TICKS), "$MAXOR_SHIELD_TICKS server ticks after $armedBy - never announced, so counted")
+            advance(after(MAXOR_MOVE_TICKS), "$MAXOR_MOVE_TICKS server ticks after $armedBy - he wasn't seen moving, so counted")
         } else if (ticks >= STORM_LIGHTNING_TICKS && stormCrushes == 0) {
             watchFrom = null
             advance(after(STORM_LIGHTNING_TICKS), "$STORM_LIGHTNING_TICKS server ticks after $armedBy - never announced, so counted")
         }
+    }
+
+    /** Maxor's intro is over and he is about to start moving: the module watches his wither for it. */
+    val waitingForMaxorMove: Boolean get() = current == 1 && !laserWaitDone && watchFrom != null
+
+    /** Maxor's wither seen starting to move: Move is over. */
+    fun onMaxorMoved(at: Stamp) {
+        if (!waitingForMaxorMove) return
+        laserWaitDone = true; watchFrom = null
+        advance(at, "his wither seen starting to move")
     }
 
     /** The party is all inside the core ([how] it was told): the leap is over and Goldor's kill begins. */
@@ -185,8 +195,13 @@ class SubSplitTracker {
         const val GATE_DESTROYED = "The gate has been destroyed!"
         val SECTION_DONE = Regex("""^(\w+) (?:activated|completed) a (?:terminal|device|lever)! \((\d+)/(\d+)\)$""")
 
-        /** About 8.3s: Maxor's shield is down and the laser stun is up. */
-        const val MAXOR_SHIELD_TICKS = 166
+        /**
+         * Maxor starts moving 46 server ticks (2.3 s) after "DON'T DISAPPOINT ME" - 45 to 51 in
+         * every recorded run he was in view for. His wither moving is what ends Move; this count is
+         * only for when he can't be seen, given up on after [MAXOR_MOVE_GIVE_UP].
+         */
+        const val MAXOR_MOVE_TICKS = 46
+        const val MAXOR_MOVE_GIVE_UP = 60
 
         /** About 34.4s: Storm's first lightning, the end of its opening animation. */
         const val STORM_LIGHTNING_TICKS = 688
