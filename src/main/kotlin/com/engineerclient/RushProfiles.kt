@@ -68,7 +68,6 @@ object RushProfiles {
         if (!BrwWaypoints.enabled && !warnedModuleOff) {
             warnedModuleOff = true
             EngineerClient.logger.warn("[ec] the Blood Rush Waypoints module is disabled — profiles are applied but nothing will render until it is enabled")
-            EngineerClient.chat("§8[§6EC§8]§e the §fBlood Rush Waypoints§e module is OFF — enable it in Odin's ClickGUI (Blood Rush panel) or nothing will render")
         }
         val pack = activePackName() ?: run {
             EngineerClient.logger.info("[ec] no class known yet ($reason) — leaving pack selection alone")
@@ -84,7 +83,7 @@ object RushProfiles {
                 BrwWaypoints.editPackId = pack
                 BrwWaypoints.loadWaypoints() // normalizes + persists selection via the module config
                 EngineerClient.logger.info("[ec] switched to '$pack' + ${desired.size - 1} custom ($reason)")
-                EngineerClient.chat("§8[§6EC§8]§7 waypoints: §a$pack§7 ($reason)")
+                if (BrwWaypoints.enabled) EngineerClient.msg("§7Blood Rush Waypoints: §a$pack")
             } catch (t: Throwable) {
                 EngineerClient.logger.error("[ec] failed to apply pack selection '$pack' ($reason)", t)
             }

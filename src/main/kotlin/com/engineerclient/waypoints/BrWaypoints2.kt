@@ -1,5 +1,6 @@
 package com.engineerclient.waypoints
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
@@ -31,7 +32,6 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.itemUUID
-import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.render.drawFilledBox
 import com.odtheking.odin.utils.render.drawStyledBox
 import com.odtheking.odin.utils.render.drawText
@@ -88,23 +88,23 @@ object BrWaypoints2 : Module(
 
     private val editKey by KeybindSetting("Edit Mode Keybind", GLFW.GLFW_KEY_UNKNOWN, "Toggles Edit Mode.").onPress {
         editMode = !editMode
-        modMessage("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
+        EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
     }
 
     private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
         val held = mc.player?.mainHandItem
-        if (held == null || held.isEmpty) return@ActionSetting modMessage("§cHold the item you want as the wand first.")
+        if (held == null || held.isEmpty) return@ActionSetting EngineerClient.msg("§cHold the item you want as the wand first.")
         wand = identity(held)
-        modMessage("§aWand set: §f${held.hoverName.string}")
+        EngineerClient.msg("§aWand set: §f${held.hoverName.string}")
     }.withDependency { editMode }
 
     private val clearRoom by ActionSetting("Clear Room", desc = "Deletes every box in the room you are standing in, saved ones included.") {
-        val room = DungeonUtils.currentRoom?.name ?: return@ActionSetting modMessage("§cYou are not in a dungeon room.")
+        val room = DungeonUtils.currentRoom?.name ?: return@ActionSetting EngineerClient.msg("§cYou are not in a dungeon room.")
         val gone = boxes.count { it.room == room }
         boxes.removeAll { it.room == room }
         saved.remove(room)
         write()
-        modMessage("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
+        EngineerClient.msg("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }.withDependency { editMode }
 
 
@@ -496,7 +496,7 @@ object BrWaypoints2 : Module(
 
     /** For Debug: the room you walked into on the rush, its door, your role, and what it shows you. */
     private fun debugRoom(name: String) {
-        val door = entryOf(name) ?: return modMessage("§dBR debug §f$name §8— " + if (onRush(name)) "on the rush, door not known yet" else "not on the rush path")
+        val door = entryOf(name) ?: return EngineerClient.msg("§dBR debug §f$name §8— " + if (onRush(name)) "on the rush, door not known yet" else "not on the rush path")
         val how = when {
             walkedIn[name] != null -> "you walked in"
             path[name] != null -> "rush path"
@@ -523,7 +523,7 @@ object BrWaypoints2 : Module(
                     (if (loose.isEmpty()) "" else " §7unassigned §d" + loose.joinToString())
             }
         }
-        modMessage("§dBR debug §7$at\n  $role\n  $shows")
+        EngineerClient.msg("§dBR debug §7$at\n  $role\n  $shows")
     }
 
     /** Each room behind a wither door seen falling, and that door (world x, z). */
@@ -614,7 +614,7 @@ object BrWaypoints2 : Module(
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
         val plan = BrRoles.planFor(name, rel.x to rel.z)
-        if (plan == null && noPlanSaid.add("$name $door")) modMessage("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
+        if (plan == null && debug && noPlanSaid.add("$name $door")) EngineerClient.msg("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
         return plan
     }
 
@@ -683,7 +683,7 @@ object BrWaypoints2 : Module(
         if (boxes.any { it.c.contentEquals(c) }) return true
         val box = Box(c, roomAt(player.x, player.z)?.name)
         boxes += box
-        if (!save(box.room)) modMessage("§eOdin has not worked out this room yet; the box saves once it has.")
+        if (!save(box.room)) EngineerClient.msg("§eOdin has not worked out this room yet; the box saves once it has.")
         return true
     }
 
@@ -848,7 +848,7 @@ object BrWaypoints2 : Module(
         runCatching {
             file.parentFile.mkdirs()
             file.writeText(gson.toJson(saved))
-        }.onFailure { modMessage("§cCould not save BR Roles boxes: ${it.message}") }
+        }.onFailure { EngineerClient.msg("§cCould not save BR Roles boxes: ${it.message}") }
         push()
     }
 

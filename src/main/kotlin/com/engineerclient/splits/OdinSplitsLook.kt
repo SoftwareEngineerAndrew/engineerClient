@@ -12,7 +12,6 @@ import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.skyblock.Splits
 import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.Island
 import com.odtheking.odin.utils.skyblock.LocationUtils
@@ -82,7 +81,7 @@ object OdinSplitsLook {
             filled++
         }
         ModuleManager.saveConfigurations()
-        modMessage(if (filled == 0) "§7No ${if (master) "M7" else "F7"} PBs yet - finish a run first." else "§aFilled §f$filled §atargets from your ${if (master) "M7" else "F7"} PBs.")
+        EngineerClient.msg(if (filled == 0) "§7No ${if (master) "M7" else "F7"} PBs yet - finish a run first." else "§aFilled §f$filled §atargets from your ${if (master) "M7" else "F7"} PBs.")
     }
 
     // --- drawing -----------------------------------------------------------------------------

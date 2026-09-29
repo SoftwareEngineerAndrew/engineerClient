@@ -1,8 +1,8 @@
 package com.engineerclient.waypoints
 
+import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.Floor
@@ -107,7 +107,7 @@ object BrRoles {
             doorClaim = name
             taken.remove(name)
             if (you) chatMine = null
-            modMessage(Component.literal(if (you) "§dBR §7you are on the §6door" else "§dBR §f$name §7is on the §6door").also { offer(it, you) })
+            EngineerClient.msg(Component.literal(if (you) "§dBR §7you are on the §6door" else "§dBR §f$name §7is on the §6door").also { offer(it, you) })
             return true
         }
         // "!br 2": at the team size already set, in chat or in the settings.
@@ -123,7 +123,7 @@ object BrRoles {
         val line = Component.literal(if (you) "§dBR §7you are role §f$role §7of §f$count" else "§dBR §f$name §7is role §f$role §7of §f$count")
         if (clash.isNotEmpty()) line.append(Component.literal(" §c(so is ${clash.joinToString()})"))
         offer(line, you)
-        modMessage(line)
+        EngineerClient.msg(line)
         return true
     }
 
@@ -146,7 +146,7 @@ object BrRoles {
 
     /** Takes role [role] of [n] for the party: says so in party chat, which everyone (you too) reads back. */
     fun claim(n: Int, role: Int) {
-        if (n !in 2..MAX_KILLING || role !in 1..n) return modMessage("§c2 to $MAX_KILLING kill (the door runner is extra): /brrole 3 2")
+        if (n !in 2..MAX_KILLING || role !in 1..n) return EngineerClient.msg("§c2 to $MAX_KILLING kill (the door runner is extra): /brrole 3 2")
         sendCommand("pc !${n}br $role")
     }
 
@@ -154,11 +154,11 @@ object BrRoles {
 
     /** The roles as they stand, for /brrole with nothing after it. */
     fun status() {
-        if (count == 0 && doorRunner == null) return modMessage("§dBR §7no roles yet. §f/brrole <killing> <role>§7 or §f/brrole door§7, or §f!3br 2§7 / §f!br d§7 in party chat.")
+        if (count == 0 && doorRunner == null) return EngineerClient.msg("§dBR §7no roles yet. §f/brrole <killing> <role>§7 or §f/brrole door§7, or §f!3br 2§7 / §f!br d§7 in party chat.")
         val who = (1..count).joinToString("§7, ") { r -> "§f$r §7${taken.entries.firstOrNull { it.value == r }?.key ?: "§8free"}" }
         val door = doorRunner?.let { "§6door §7$it" } ?: "§6door §8unknown"
         val from = if (chatCount != null) "§8(party chat)" else "§8(settings)"
-        modMessage("§dBR §7$count killing $from§7: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
+        EngineerClient.msg("§dBR §7$count killing $from§7: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
     }
 
     /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". */
@@ -183,10 +183,22 @@ object BrRoles {
 
     // --- the plans (the site's brroles.json) -----------------------------------------------------
 
-    fun pull() = BoxSync.pullRoles { body -> mc.execute { adopt(body) } }
+    /** The roles have been fetched this launch. */
+    @Volatile private var fetched = false
+
+    /**
+     * Fetches the site's roles - once a launch: they change rarely, so a new set is picked up the
+     * next time the game starts. Until a fetch works (offline, the site down) each world load tries
+     * again.
+     */
+    fun pull() {
+        if (fetched) return
+        BoxSync.pullRoles { body -> mc.execute { adopt(body) } }
+    }
 
     private fun adopt(body: String) {
         val doc = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
+        fetched = true
         plans = read(doc["rooms"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return)
         m7Plans = doc["m7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { read(it) } ?: emptyMap()
         mini = doc["mini"]?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.filter { it.value.isJsonPrimitive && it.value.asBoolean }?.map { it.key }?.toSet() ?: emptySet()

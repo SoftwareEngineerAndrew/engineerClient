@@ -54,7 +54,7 @@ object LeapHighlight {
         if (!LeapMenu.enabled) {
             if (!warnedNoMenu) {
                 warnedNoMenu = true
-                EngineerClient.chat("§8[§6EC§8]§7 leap highlight needs Odin's §fLeap Menu§7 module switched on.")
+                EngineerClient.msg("§7leap highlight needs Odin's §fLeap Menu§7 module switched on.")
             }
             return
         }

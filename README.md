@@ -1,6 +1,6 @@
 # Engineer Client
 
-Andrew's [Odin](https://github.com/odtheking/Odin) addon for Hypixel Catacombs speedrunning.
+engineerandrew's [Odin](https://github.com/odtheking/Odin) addon for Hypixel Catacombs speedrunning.
 Fabric, MC 26.1.2, client-only, Kotlin. Built for one team whose clients are all set up the
 same way; `/ec setup` reads the live Odin config and says what is wrong.
 
@@ -63,11 +63,18 @@ waypoint packs, and Odin addon settings are moved on first launch).
 
 ## Build / deploy
 
-- `./gradlew build` — needs a JDK 26 at `/usr/lib/jvm/java-26-openjdk` (see `gradle.properties`);
-  bytecode targets Java 25 to match Odin.
-- `./deploy.sh` — builds and atomically installs into the `26.1.2 Blood Rush` Prism instance
-  (override with `EC_MODS_DIR`).
-- Compiles against `libs/Odin-0.3.1.jar` (BSD-3-Clause). The waypoint module is a vendored copy of
+These are for working on the mod; players just install the jar.
+
+- `./gradlew build` — needs a JDK 25 or newer; bytecode targets Java 25 to match Odin.
+  `gradle.properties` points `org.gradle.java.home` at `/usr/lib/jvm/java-26-openjdk`, the team's
+  usual install. Elsewhere, pass your own: `./gradlew build -Dorg.gradle.java.home=/path/to/jdk`
+  (don't commit a change to that line).
+- `./deploy.sh` — a developer shortcut: builds and atomically installs the jar into a Prism
+  instance's mods folder, by default `~/.local/share/PrismLauncher/instances/26.1.2 BRW`. Point it
+  elsewhere with `EC_MODS_DIR=/path/to/mods`. If the JDK path in `gradle.properties` doesn't exist
+  it falls back to the `java` on your PATH.
+- Compiles against the official Odin release in `libs/` (Odin 0.3.4 for 26.1, BSD-3-Clause), so
+  it runs on anyone's Odin. The waypoint module is a vendored copy of
   Odin's DungeonWaypoints — see `src/main/kotlin/com/engineerclient/waypoints/VENDORED.md` for
   the upstream pin, the deliberate divergences, and the re-vendoring procedure.
 

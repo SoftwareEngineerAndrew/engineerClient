@@ -68,7 +68,7 @@ internal fun BrwWaypoints.handleBrwEditorInput(event: InputEvent) {
     if (odinEditorActive()) {
         if (!warnedDualEditors) {
             warnedDualEditors = true
-            EngineerClient.chat("§8[§6EC§8]§e both EC and Odin waypoint editors are on — EC is standing down. Disable one edit mode.")
+            EngineerClient.msg("§eOdin's waypoint editor is on too - turn one off to edit.")
         }
         return
     }
@@ -79,7 +79,7 @@ internal fun BrwWaypoints.handleBrwEditorInput(event: InputEvent) {
     val editableWaypoints = getEditableWaypoints(room)
     val editableWaypoint = editableWaypoints.firstOrNull { it.blockPos == blockPos }
     if (visibleWaypoint != null && editableWaypoint == null) {
-        EngineerClient.chat("§8[§6EC§8]§e that waypoint belongs to another active pack. Switch edit packs to change it.")
+        EngineerClient.msg("§ethat waypoint belongs to another active pack. Switch edit packs to change it.")
         return
     }
     if (allowTextEdit && mc.player?.isCrouching == true) {

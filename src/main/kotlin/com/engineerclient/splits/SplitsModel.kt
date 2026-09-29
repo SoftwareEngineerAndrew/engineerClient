@@ -4,7 +4,7 @@ import java.util.Locale
 
 /**
  * The run's splits, copied from the team's own ChatTriggers module
- * (tools/reference/chattriggers/EngineerClient_features_EngineerSplits.js): the same eleven lines,
+ * (its EngineerSplits.js): the same eleven lines,
  * names, colours, order and format.
  *
  *     Pace       &3   everything so far

@@ -168,10 +168,18 @@ object EngineerClient : ClientModInitializer {
         mc.schedule { mc.gui.chat.addClientSystemMessage(msg) }
     }
 
+    /** What every line the mod says in chat starts with. */
+    const val PREFIX = "§8[§6EC§8] "
+
+    /** A line from the mod, with its [PREFIX]. Anything the mod says goes through here. */
+    fun msg(text: String) = chat(PREFIX + text)
+
+    fun msg(text: Component) = chat(Component.literal(PREFIX).append(text))
+
     private fun statusLines(): List<String> {
         val d = EcConfig.data
         return listOf(
-            "§8[§6EC§8]§7 enabled: ${if (d.enabled) "§ayes" else "§cno"}",
+            "${EngineerClient.PREFIX}§7enabled: ${if (d.enabled) "§ayes" else "§cno"}",
             "§7 class: §a${RushProfiles.effectiveClass() ?: "§cunknown"}§7 " +
                 "(override=${d.classOverride ?: "auto"}, live=${ClassDetect.detected?.name ?: "none"}, stash=${d.lastKnownClass ?: "none"})",
             "§7 players on rush: §a${d.playersOnRush}§7, dedicated door: §a${d.dedicatedDoor}",
@@ -183,7 +191,7 @@ object EngineerClient : ClientModInitializer {
     private fun roleLines(): List<String> {
         val me = mc.player?.name?.string
         val mineId = EcConfig.data.myStartingRole
-        val lines = mutableListOf("§8[§6EC§8]§7 phase-3 starting roles §8(/brw role <role> sets yours; the rest are heard from party chat)")
+        val lines = mutableListOf("${EngineerClient.PREFIX}§7phase-3 starting roles §8(/brw role <role> sets yours; the rest are heard from party chat)")
         RotationSpec.graph.startingRoles.forEach { role ->
             val ign = P3Rotation.teamRoles[role.id] ?: if (role.id == mineId) me else null
             val mine = if (role.id == mineId) " §8(you)" else ""
@@ -239,16 +247,16 @@ object EngineerClient : ClientModInitializer {
                     }))
                     .then(literal("log")
                         .executes { ctx ->
-                            ctx.source.sendFeedback(Component.literal("§8[§6EC§8]§7 log: §f${EcLog.path ?: "not open"}"))
+                            ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7log: §f${EcLog.path ?: "not open"}"))
                             ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/brw log mark <note>§7 stamps a note into it"))
                             1
                         }
                         .then(literal("mark")
-                            .executes { ctx -> mark(""); ctx.source.sendFeedback(Component.literal("§8[§6EC§8]§7 marked.")); 1 }
+                            .executes { ctx -> mark(""); ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7marked.")); 1 }
                             .then(argument("note", StringArgumentType.greedyString()).executes { ctx ->
                                 val note = StringArgumentType.getString(ctx, "note")
                                 mark(note)
-                                ctx.source.sendFeedback(Component.literal("§8[§6EC§8]§7 marked: §f$note"))
+                                ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7marked: §f$note"))
                                 1
                             })))
                     .then(literal("debug").executes { ctx ->
@@ -267,7 +275,7 @@ object EngineerClient : ClientModInitializer {
                         .then(literal("clear").executes { ctx ->
                             EcConfig.data.myStartingRole = null
                             EcConfig.save()
-                            ctx.source.sendFeedback(Component.literal("§8[§6EC§8]§7 your starting role is cleared."))
+                            ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7your starting role is cleared."))
                             1
                         })
                         .then(argument("role", StringArgumentType.word()).executes { ctx ->
@@ -280,7 +288,7 @@ object EngineerClient : ClientModInitializer {
                             }
                             EcConfig.data.myStartingRole = role.id
                             EcConfig.save()
-                            ctx.source.sendFeedback(Component.literal("§8[§6EC§8]§7 you run §a${role.name}§7 — announced to the party when you enter the boss room."))
+                            ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7you run §a${role.name}§7 — announced to the party when you enter the boss room."))
                             P3Rotation.announceMyRole()
                             1
                         }))

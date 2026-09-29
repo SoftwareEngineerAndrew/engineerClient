@@ -51,7 +51,7 @@ object ChatHider : Module(
         }
         rules = set
         EngineerClient.logger.info("[ec] chat hider: ${set.size} rules from $from" + if (set.invalid.isNotEmpty()) ", ${set.invalid.size} invalid" else "")
-        if (announce) EngineerClient.chat("§8[§6EC§8]§7 chat hider: §f${set.size}§7 rules from §f$from" + if (set.invalid.isNotEmpty()) " §c(${set.invalid.size} invalid regex)" else "")
+        if (announce) EngineerClient.msg("§7chat hider: §f${set.size}§7 rules from §f$from" + if (set.invalid.isNotEmpty()) " §c(${set.invalid.size} invalid regex)" else "")
     }
 
     /** Called from the chat GUI's single add-message funnel. True = do not display. */

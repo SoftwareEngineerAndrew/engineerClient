@@ -3,7 +3,7 @@
 Build the Clear Sim Viewport page from the simulator's own replay dump.
 
 WHY THIS IS A SCRIPT AND NOT A MANUAL STEP
-  Andrew, 2026-08-20: the viewer "should be simply a viewer for your simulations, updating
+  engineerandrew, 2026-08-20: the viewer "should be simply a viewer for your simulations, updating
   automatically". A published Artifact cannot reach this machine — the runtime capabilities a
   page can hold are self-publishing, file downloads, and the viewer's own claude.ai connectors,
   none of which read a local file. So the page cannot pull new runs.
