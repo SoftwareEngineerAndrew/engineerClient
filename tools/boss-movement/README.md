@@ -47,9 +47,10 @@ on 4 cores; the other steps take 1-2 minutes each.
 - Positions in the recordings are the client's interpolated ones. `bosslib.delerp` undoes the
   lerp; it assumes a modern client's 3-step `InterpolationHandler`, which checks out: Maxor's
   recovered positions land on the 1/32-block grid of the 1.8 protocol.
-- Recorders older than mod 0.6.13 (late) wrote no `st` (server tick) lines; their runs are on
-  client ticks, which run ahead of the server while it lags. Timing statistics use only runs
-  whose every recording has server ticks.
+- 85 recordings (0.6.11: 47, 0.6.12: 29, early 0.6.13: 9; nothing after 2026-09-24 22:35 is
+  affected) have no `st` (server tick) lines. Their runs are on client ticks, which run ahead
+  of the server while it lags. Timing statistics use only runs whose every recording has server
+  ticks.
 - The crush rule itself (checks every 20 ticks, the 6x6 zone, head height, "stepped down within
   60 ticks") comes from `docs/storm-crush.md` / `tools/storm-crush/`; these scripts use it but do
   not re-derive it.
