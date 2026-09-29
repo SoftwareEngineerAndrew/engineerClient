@@ -176,7 +176,8 @@ object BetterPF : Module(
             val text = content.string.replace(CONTROL_CODES, "")
             val colored = legacyText(content)
             if (hidePrivateChats && PRIVATE_CHAT.containsMatchIn(text)) return@onReceive
-            EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored) } }
+            val n = session?.serverTickCount
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored, n) } }
         }
         // Chests opening and closing (the lid's block event: how many players have it open), so the
         // viewer can open the chests people looted.
