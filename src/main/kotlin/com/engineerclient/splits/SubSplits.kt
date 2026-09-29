@@ -118,6 +118,16 @@ class SubSplitTracker {
         }
     }
 
+    /**
+     * Maxor's wither gone during his last DPS: he is dead. He says "I'M TOO YOUNG TO DIE AGAIN!" as
+     * he dies in some runs only (11 of 27 recorded) - it is the moment when said, his wither going
+     * 3-13 ticks later - so without it the wither going is what ends the DPS and starts his
+     * animation. Before that step, a wither going is just him leaving view.
+     */
+    fun onMaxorDead(at: Stamp) {
+        if (current == 5) advance(at, "his wither going - the death line wasn't said, so a few ticks after the kill")
+    }
+
     /** Maxor's intro is over and he is about to start moving: the module watches his wither for it. */
     val waitingForMaxorMove: Boolean get() = current == 1 && !laserWaitDone && watchFrom != null
 
@@ -225,7 +235,7 @@ class SubSplitTracker {
             "[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!",
             "⚠ Maxor is enraged! ⚠",
             "[BOSS] Maxor: I'M TOO YOUNG TO DIE AGAIN!",
-            "[BOSS] Maxor: I'LL MAKE YOU REMEMBER MY DEATH!!",
+
             "[BOSS] Storm: I should have known that I stood no chance.",
             "[BOSS] Storm: THAT WAS ONLY IN MY WAY!",
             "[BOSS] Storm: Slowing me down will be your greatest accomplishment!",

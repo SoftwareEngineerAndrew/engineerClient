@@ -53,6 +53,36 @@ class SubSplitsTest {
     }
 
     @Test
+    fun `Maxor's fight - move, laser, enrage, laser, death, animation`() {
+        val s = SubSplitTracker()
+        s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
+        s.onChat("[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.", stamp(125))
+        s.onMaxorMoved(stamp(172))
+        s.onChat("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", stamp(469))
+        s.onChat("⚠ Maxor is enraged! ⚠", stamp(492))
+        s.onChat("[BOSS] Maxor: YOU TRICKED ME!", stamp(1119))
+        s.onMaxorDead(stamp(1214)) // no death line: his wither going
+        s.onChat("[BOSS] Maxor: I'LL MAKE YOU REMEMBER MY DEATH!!", stamp(1220)) // said after he dies - no step
+        s.onChat("[BOSS] Storm: Pathetic Maxor, just like expected.", stamp(1236))
+        assertEquals(listOf("&6Move 0-172", "&5Stun 172-469", "&cDps 469-492", "&5Stun 492-1119", "&cDps 1119-1214", "&dAnimation 1214-1236"),
+            shape(s.forSplit(SplitTracker.MAXOR)))
+    }
+
+    @Test
+    fun `the death line ends the last DPS when he says it`() {
+        val s = SubSplitTracker()
+        s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
+        s.onChat("[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.", stamp(125))
+        s.onMaxorMoved(stamp(172))
+        s.onChat("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", stamp(469))
+        s.onChat("⚠ Maxor is enraged! ⚠", stamp(492))
+        s.onChat("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", stamp(1119))
+        s.onChat("[BOSS] Maxor: I'M TOO YOUNG TO DIE AGAIN!", stamp(1201))
+        s.onMaxorDead(stamp(1214)) // already dead: nothing more
+        assertEquals("&dAnimation 1201--", shape(s.forSplit(SplitTracker.MAXOR)).last())
+    }
+
+    @Test
     fun `not seen moving, Move is counted 46 ticks after his intro`() {
         val s = SubSplitTracker()
         s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
