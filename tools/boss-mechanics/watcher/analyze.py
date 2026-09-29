@@ -5,6 +5,7 @@
 Everything is in server ticks relative to the blood door opening ("The BLOOD DOOR has been
 opened!", D). Timing sections use only runs whose every recording has `st` lines.
 """
+import bisect
 import collections
 import math
 import os
@@ -144,6 +145,38 @@ def sec_mobs(out_dir, R):
     print('mob first seen - skull removed (ticks):', sorted(dsn.items()))
     print('mob y - skull y at arrival:', L.median(dy))
     print('skull destination: distance from the middle block', L.summary(dxz, 2), '| y', L.summary(ys, 2))
+    # are landing points aimed at players? nearest player (in the room) at launch, single-recording runs
+    near = []
+    for r, m in timed(R):
+        if len(r['recs']) != 1 or len(m['fl']) < 10:
+            continue
+        x = L.load_extract(out_dir, r['recs'][0]['id'])
+        clk = L.Clock(x['st']); cx, cz = L.center(x)
+        series = {nm: ([clk.n(t) for t, *_ in tr], tr) for nm, tr in x['players'].items() if len(tr) >= 50}
+        for f in m['fl']:
+            best = []
+            for ns, tr in series.values():
+                i = bisect.bisect_right(ns, f['launch']) - 1
+                if i >= 0 and abs(tr[i][1] - cx) < 16 and abs(tr[i][3] - cz) < 16:
+                    best.append(math.hypot(tr[i][1] - cx - f['dest'][0], tr[i][3] - cz - f['dest'][2]))
+            if best:
+                near.append(min(best))
+    print('landing point -> nearest player in the room at launch (blocks):', L.summary(near, 1))
+    # health and modifier from the name tags (only some recordings have them)
+    hp = collections.defaultdict(list); mods = collections.Counter()
+    for rid in L.extract_ids(out_dir):
+        x = L.load_extract(out_dir, rid)
+        if 'skip' in x:
+            continue
+        for e in x['ents'].values():
+            mm = re.search(r'(Healthy|Speedy|Stealth|Golden|Boomer|Stormy) (.+?) ([\d.,]+)([kM]?)❤', e['name']) if e['type'] == 'minecraft:armor_stand' else None
+            if mm and mm.group(2) in L.REGULAR | L.BOSSES:
+                mods[mm.group(1)] += 1
+                v = float(mm.group(3).replace(',', '')) * {'k': 1e3, 'M': 1e6, '': 1}[mm.group(4)]
+                hp['Ooze' if mm.group(2) == 'Ooze' else 'regular' if mm.group(2) in L.REGULAR else mm.group(2)].append(v)
+    print('name-tag modifiers:', dict(mods))
+    for k, v in sorted(hp.items()):
+        print('  spawn health %-12s %s' % (k, L.summary(v)))
     # most alive at once
     mx = []
     for r in R:
@@ -191,6 +224,9 @@ def sec_watcher(R):
                 prev.append((back, l['v']))
     print('first move off the middle (D+):', sorted(first.items()))
     print('dialogue-phase departures, (dep - D) mod 30:', sorted(pre30.items()))
+    ret = [round(l['dep'] - m['D']) for r, m in timed(R) for l in m['legs']
+           if m['H'] and l['npk'] >= 3 and l['dep'] < m['H'] - 5 and abs(l['to'][0]) < 3 and abs(l['to'][2]) < 3]
+    print('dialogue phase: departure back to the middle (D+):', sorted(collections.Counter(ret).items()))
     print('dialogue-phase speed to a skull:', L.summary([v for b, v in prev if not b and v], 3), '| back to the middle:', L.summary([v for b, v in prev if b and v], 3))
     # the move after "handle this"
     mv = []
@@ -331,6 +367,11 @@ def sec_fastest(R):
     for k in ('H', 'move', 'alive_ticks_after_move'):
         cc = [r for r in c if r[k] is not None]
         print('corr(%s, split) = %.2f (n=%d)' % (k, corr([r[k] for r in cc], [r['split'] for r in cc]), len(cc)))
+    c.sort(key=lambda r: r['split'])
+    for name, sel in (('fastest 10', c[:10]), ('the rest', c[10:])):
+        print('%-10s n=%2d medians: split %s, handle this D+%s, move D+%s, last spawn - move %s, ticks with a mob alive after the move %s'
+              % (name, len(sel), L.median([r['split'] for r in sel]), L.median([r['H'] for r in sel]), L.median([r['move'] for r in sel]),
+                 L.median([r['last_spawn'] - r['move'] for r in sel]), L.median([r['alive_ticks_after_move'] for r in sel])))
     v = sorted(r['last_spawn'] - r['move'] for r in c if r['alive_ticks_after_move'] < 130)
     print('last spawn - move, 5-player runs that killed fast (<130 ticks with a mob alive):', L.summary(v))
     print('"proven" - last spawn, same runs:', L.summary([r['P'] - r['last_spawn'] for r in c if r['alive_ticks_after_move'] < 130]))
