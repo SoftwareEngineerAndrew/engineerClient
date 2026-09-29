@@ -1,0 +1,206 @@
+<title>Scoreboard Lines</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f4f3ee; --panel:#ffffff; --ink:#1d1c19; --muted:#6f6c64; --line:#e1ded5; --line2:#cfcbc0;
+  --sb:#1b1c20; --sb-edge:#0e0f12;
+  --hide:#c2401b; --hide-soft:#fbe9e2; --show:#2a7f52; --show-soft:#e3f2e9; --amber:#9a6a0e; --amber-soft:#f8ecd2;
+  --focus:#3b6fd1; --hl:#fff3c4;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#141517; --panel:#1c1d21; --ink:#e9e7e1; --muted:#9a978f; --line:#2b2d33; --line2:#3a3d45;
+  --sb:#0d0e10; --sb-edge:#000;
+  --hide:#ec6a42; --hide-soft:#3a1f16; --show:#4fbf82; --show-soft:#173125; --amber:#e0a63a; --amber-soft:#3a2c12;
+  --focus:#7ea3ec; --hl:#3a3420;
+}}
+:root[data-theme="dark"]{
+  --bg:#141517; --panel:#1c1d21; --ink:#e9e7e1; --muted:#9a978f; --line:#2b2d33; --line2:#3a3d45;
+  --sb:#0d0e10; --sb-edge:#000;
+  --hide:#ec6a42; --hide-soft:#3a1f16; --show:#4fbf82; --show-soft:#173125; --amber:#e0a63a; --amber-soft:#3a2c12;
+  --focus:#7ea3ec; --hl:#3a3420;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 32px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:12px;font-weight:600;margin:18px 0 8px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+button{font:inherit;color:inherit;background:none;border:1px solid var(--line2);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--ink)}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.top .sub{color:var(--muted);font-size:13px;max-width:72ch}
+.status{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.top .right{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;margin-top:6px}
+@media (max-width:860px){.wrap{grid-template-columns:1fr}.side{position:static !important}}
+.row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;transition:background .12s}
+.row.hide{border-color:color-mix(in srgb,var(--hide) 40%,var(--line))}
+.row.lit{background:var(--hl)}
+.row .name{font-weight:500}
+.row .meta{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.row .note{grid-column:1/-1;font-size:12.5px;color:var(--muted);max-width:70ch}
+.row .ex{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.row .ex span{background:var(--sb);color:#e4e4e2;border-radius:4px;padding:2px 7px;font-size:12px;white-space:pre}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500}
+.pill.now{background:var(--amber-soft);color:var(--amber)}
+.pill.changed{background:var(--line);color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:4px 12px;font-size:12px;font-weight:500;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button.show.on{background:var(--show-soft);color:var(--show)}
+.seg button.hide.on{background:var(--hide-soft);color:var(--hide)}
+.side{position:sticky;top:78px;align-self:start;display:grid;gap:12px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{font-size:12px;padding:3px 9px}
+.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.board{background:var(--sb);border:1px solid var(--sb-edge);border-radius:4px;padding:6px 0 8px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;line-height:1.55;color:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2)}
+.board .t{text-align:center;padding:0 10px 4px}
+.board .l{padding:0 10px;white-space:pre;cursor:pointer;min-height:1.55em}
+.board .l:hover,.board .l.lit{background:rgba(255,255,255,.08)}
+.board .l.gone{opacity:.28;text-decoration:line-through;text-decoration-color:rgba(255,120,90,.8)}
+.board .l.gone.drop{display:none}
+.side .opts{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.side .count{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+</style>
+
+<div class="top">
+  <div>
+    <h1>Scoreboard Lines</h1>
+    <div class="sub" id="sub">Every kind of sidebar line from your recordings. Choose Show or Hide for each; the sidebars on the right follow along.</div>
+  </div>
+  <div class="right">
+    <span class="status" id="tally"></span>
+    <button id="reset">Back to what it hides today</button>
+    <span class="status" id="saveState">…</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <main id="list"></main>
+  <aside class="side">
+    <div class="tabs" id="tabs"></div>
+    <div class="board" id="board"></div>
+    <div class="opts"><input type="checkbox" id="ghost" checked><label for="ghost">Show hidden lines struck through (in game they are simply gone)</label></div>
+    <div class="count" id="bcount"></div>
+  </aside>
+</div>
+
+<script src="types.js"></script>
+<script>
+(() => {
+  const D = window.SB || {types:[], previews:[]};
+  const T = D.types;
+  const byId = Object.fromEntries(T.map(t => [t.id, t]));
+  const defaults = Object.fromEntries(T.map(t => [t.id, t.hiddenNow ? "hide" : "show"]));
+  let decisions = Object.assign({}, defaults);
+  let tab = Math.min(1, D.previews.length - 1);
+  let lit = null;
+  let doc = null, saveTimer = null, applyingRemote = false;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const fmt = n => n.toLocaleString();
+  const GROUPS = [["dungeon","In dungeons"],["outside","Outside dungeons"],["everywhere","Everywhere"]];
+  // Hypixel's location icon is a private-use glyph no browser font has; show the ⏣ it stands for.
+  const glyph = s => s.replace(//g, "⏣");
+
+  // Minecraft legacy codes -> spans. Hypixel salts every line with § + a letter outside the
+  // legacy set so no two lines are equal; those are skipped, as the game skips them.
+  const MC = {"0":"#000","1":"#0000aa","2":"#00aa00","3":"#00aaaa","4":"#aa0000","5":"#aa00aa","6":"#ffaa00","7":"#aaaaaa","8":"#555555","9":"#5555ff","a":"#55ff55","b":"#55ffff","c":"#ff5555","d":"#ff55ff","e":"#ffff55","f":"#ffffff"};
+  function mcHtml(raw){
+    let out = "", colour = "#ffffff", bold = false, buf = "";
+    const flush = () => { if (buf) { out += `<span style="color:${colour}${bold?";font-weight:600":""}">${esc(buf)}</span>`; buf = ""; } };
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i];
+      if (c === "&" && i + 1 < raw.length) {
+        const k = raw[i+1].toLowerCase();
+        if (MC[k]) { flush(); colour = MC[k]; bold = false; i++; continue; }
+        if (k === "l") { flush(); bold = true; i++; continue; }
+        if (k === "r") { flush(); colour = "#ffffff"; bold = false; i++; continue; }
+        if (/[a-z0-9!]/i.test(raw[i+1]) || /[^\w\s]/.test(raw[i+1])) { i++; continue; }
+      }
+      buf += c;
+    }
+    flush();
+    return out || "&nbsp;";
+  }
+
+  function renderList(){
+    const hidden = T.filter(t => decisions[t.id] === "hide");
+    const lines = hidden.reduce((a,t) => a + t.count, 0), all = T.reduce((a,t) => a + t.count, 0);
+    $("#tally").textContent = `${hidden.length} of ${T.length} kinds hidden · ${fmt(lines)} of ${fmt(all)} recorded lines`;
+    $("#list").innerHTML = GROUPS.map(([g, title]) => {
+      const rows = T.filter(t => t.where === g);
+      if (!rows.length) return "";
+      return `<h2>${title}</h2>` + rows.map(t => {
+        const d = decisions[t.id], changed = d !== defaults[t.id];
+        return `<div class="row ${d==="hide"?"hide":""} ${lit===t.id?"lit":""}" data-id="${t.id}">
+          <span class="name">${esc(t.label)}</span>
+          <div class="seg" role="group" aria-label="${esc(t.label)}"><button class="show ${d==="show"?"on":""}" data-a="show">Show</button><button class="hide ${d==="hide"?"on":""}" data-a="hide">Hide</button></div>
+          <div class="meta"><span>${fmt(t.count)} recorded</span>${t.hiddenNow?'<span class="pill now">hidden today</span>':""}${changed?'<span class="pill changed">changed</span>':""}</div>
+          ${t.examples.length?`<div class="ex">${t.examples.map(e=>`<span class="mono">${esc(glyph(e)) || "&nbsp;&nbsp;"}</span>`).join("")}</div>`:""}
+          ${t.note?`<div class="note">${esc(t.note)}</div>`:""}
+        </div>`;
+      }).join("");
+    }).join("");
+    $("#list").querySelectorAll(".row").forEach(r => {
+      r.querySelectorAll(".seg button").forEach(b => b.onclick = () => { decisions[r.dataset.id] = b.dataset.a; changed(); });
+      r.onmouseenter = () => { lit = r.dataset.id; renderBoard(); r.classList.add("lit"); };
+      r.onmouseleave = () => { lit = null; renderBoard(); r.classList.remove("lit"); };
+    });
+  }
+
+  function renderBoard(){
+    $("#tabs").innerHTML = D.previews.map((p,i) => `<button class="${i===tab?"on":""}" data-i="${i}">${esc(p.name)}</button>`).join("");
+    $("#tabs").querySelectorAll("button").forEach(b => b.onclick = () => { tab = +b.dataset.i; renderBoard(); });
+    const p = D.previews[tab]; if (!p) { $("#board").innerHTML = ""; return; }
+    const ghost = $("#ghost").checked;
+    const titleGone = decisions.title === "hide";
+    let gone = 0;
+    const lines = p.rows.map(r => {
+      const h = decisions[r.type] === "hide"; if (h) gone++;
+      return `<div class="l ${h?"gone":""} ${h&&!ghost?"drop":""} ${lit===r.type?"lit":""}" data-type="${r.type}" title="${esc(byId[r.type]?.label||"")}">${mcHtml(r.raw)}</div>`;
+    }).join("");
+    $("#board").innerHTML = `<div class="l t ${titleGone?"gone":""} ${titleGone&&!ghost?"drop":""} ${lit==="title"?"lit":""}" data-type="title">${mcHtml(p.title)}</div>` + lines;
+    $("#bcount").textContent = `${p.rows.length - gone} of ${p.rows.length} lines left on this sidebar${titleGone ? ", title hidden" : ""}.`;
+    $("#board").querySelectorAll(".l").forEach(l => l.onclick = () => {
+      const row = document.querySelector(`.row[data-id="${l.dataset.type}"]`);
+      if (row) { row.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center"}); lit = l.dataset.type; renderList(); renderBoard(); }
+    });
+  }
+
+  function render(){ renderList(); renderBoard(); }
+  function changed(){
+    render();
+    if (applyingRemote) return;
+    $("#saveState").textContent = "saving…";
+    clearTimeout(saveTimer); saveTimer = setTimeout(save, 500);
+  }
+  async function save(){
+    if (!doc){ $("#saveState").textContent = "not signed in — choices stay on this page"; return; }
+    try {
+      await doc.set({decisions, hide: T.filter(t => decisions[t.id]==="hide").map(t => ({id:t.id, label:t.label, regex:t.regex})), updatedAt: Date.now()});
+      $("#saveState").textContent = "saved";
+    } catch(e){ $("#saveState").textContent = "could not save: " + (e && e.code || e); }
+  }
+  $("#reset").onclick = () => { decisions = Object.assign({}, defaults); changed(); };
+  $("#ghost").onchange = renderBoard;
+  $("#sub").textContent = `${T.length} kinds of sidebar line, sorted out of ${fmt(T.reduce((a,t)=>a+t.count,0))} lines recorded on ${D.logs.length} sessions. Pick Show or Hide for each — the real sidebars on the right follow along. Hover a kind to find its lines; click a line to find its kind.`;
+  render();
+
+  (async () => {
+    try {
+      const db = await window.claude?.use?.("db");
+      if (!db){ $("#saveState").textContent = "not signed in — choices stay on this page"; return; }
+      doc = db.doc("scoreboard/choices");
+      doc.onSnapshot(snap => {
+        const d = snap && snap.exists ? snap.data() : null;
+        applyingRemote = true;
+        decisions = Object.assign({}, defaults, d && d.decisions ? d.decisions : {});
+        render();
+        applyingRemote = false;
+        $("#saveState").textContent = d ? "saved" : "nothing chosen yet — showing what it hides today";
+      });
+    } catch(e){ $("#saveState").textContent = "storage unavailable"; }
+  })();
+})();
+</script>
