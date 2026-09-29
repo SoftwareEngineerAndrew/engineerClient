@@ -78,6 +78,8 @@ object EngineerClient : ClientModInitializer {
         on<FloorEnterEvent> { safely("floorEnter") { ClassDetect.onFloorEnter(floor.name) } }
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
         EventBus.subscribe(this)
+        // TEMPORARY: scoreboard recorder for the hider bug — delete with debug/ScoreboardRecorder.kt.
+        safely("scoreboard recorder") { com.engineerclient.debug.ScoreboardRecorder.register() }
 
         // Own-class poll: once a second is plenty; Odin keeps the teammate list fresh from packets.
         ClientTickEvents.END_CLIENT_TICK.register {
