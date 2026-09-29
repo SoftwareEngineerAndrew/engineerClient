@@ -21,6 +21,8 @@
     "LivingEntityAccessor",
     "LocalPlayerDropMixin",
     "MinecraftAccessor",
+    "MoveEntityPacketAccessor",
+    "RotateHeadPacketAccessor",
     "ScoreboardSidebarMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",

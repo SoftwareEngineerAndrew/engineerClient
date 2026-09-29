@@ -24,6 +24,8 @@ happened, so a reader can play the file start to finish.
 | `meta` | `format, mod, mc, self, startMs, confirmedAtTick, geometry` | first line; `startMs` is wall-clock time at tick 0 |
 | `time` | `t, ms` | wall-clock sync every 20 ticks |
 | `st` | `t, n` | server ticks since the world loaded (Odin's per-tick ping), when it moved; falls behind `t` when the server lags |
+| `bm` | `t, n, id, via, x?, y?, z?, yaw?` | a boss wither's own movement packet (bosses only: every `WitherBoss`), with `n` the server tick count when the packet arrived (read on the network thread, so exact to the tick). `x, y, z` is where the server put him (5 decimals, not the client's 3-tick slide toward it); `yaw` his body yaw. `via`: `m` relative move (no `x,y,z` when it only turned), `t` teleport, `s` position sync |
+| `bh` | `t, n, id, h` | a boss wither's head yaw packet, `n` as for `bm`: the wither faces its target, so this is who he is chasing |
 | `ether` | `t, merge, tuners` | your held item's etherwarp: `merge` 1 if Etherwarp is merged into it, `tuners` Transmission Tuners applied (+1 block each), when it changes |
 | `floor` | `t, floor` | floor once known (e.g. `F7`, `M7`) |
 | `party` | `t, m: [[name, class], ...]` | party and classes, rewritten whenever they change |

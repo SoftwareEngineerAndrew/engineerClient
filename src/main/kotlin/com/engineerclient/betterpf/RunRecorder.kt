@@ -142,9 +142,30 @@ class RunRecorder(
     // ------------------------------------------------------------------ server ticks
     // The server's own tick count (Odin's per-tick ping), written when it moved: split and tick
     // timers count these, and they fall behind the client's ticks when the server lags.
-    private var serverTicks = 0
+    @Volatile private var serverTicks = 0
     private var lastServerTicks = 0
     fun onServerTick() { serverTicks++ }
+
+    /** The server tick count right now: read on the network thread, where the pings are counted. */
+    val serverTickCount: Int get() = serverTicks
+
+    // ------------------------------------------------------------------ boss packets
+    // Every move, teleport and head turn the server sends for a boss wither (Maxor, Storm, Goldor,
+    // Necron), with the server tick it arrived on: the `e` lines are the client's 3-tick lerp of
+    // these, a tick late and blurred, which is too coarse to see a boss skip a single move.
+
+    /** Boss withers in view: filled on the game thread, read on the network thread. */
+    val bossIds: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** A boss's position (null: a rotation-only packet) and body yaw as the server sent them. */
+    fun onBossMove(n: Int, id: Int, x: Double?, y: Double?, z: Double?, yaw: Float?, via: String) {
+        val pos = if (x != null && y != null && z != null) ",\"x\":${b(x)},\"y\":${b(y)},\"z\":${b(z)}" else ""
+        val rot = if (yaw != null) ",\"yaw\":${a(yaw)}" else ""
+        emit("""{"k":"bm","t":$tick,"n":$n,"id":$id,"via":"$via"$pos$rot}""")
+    }
+
+    /** A boss's head yaw as the server sent it (the direction he is looking: his target while he chases). */
+    fun onBossHead(n: Int, id: Int, headYaw: Float) = emit("""{"k":"bh","t":$tick,"n":$n,"id":$id,"h":${a(headYaw)}}""")
 
     // ------------------------------------------------------------------ what you do
     /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
@@ -509,6 +530,7 @@ class RunRecorder(
             val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
             if (t == null) {
                 tracked[id] = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw))
+                if (e is net.minecraft.world.entity.boss.wither.WitherBoss) bossIds += id
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
@@ -553,6 +575,7 @@ class RunRecorder(
         val gone = tracked.keys.filter { it !in seen }
         for (id in gone) {
             tracked.remove(id)
+            bossIds.remove(id)
             tags.remove(id)
             lastEquipment.remove("#$id")
             lastStand.remove(id)
@@ -658,6 +681,8 @@ class RunRecorder(
     private fun m(v: Double): String { val r = Math.round(v * 100); return if (r % 100 == 0L) (r / 100).toString() else (r / 100.0).toString() }
     private fun deg(v: Float) = Math.round(v).toFloat()
     private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
+    /** Boss packet positions: exact to the protocol's 1/4096 of a block. */
+    private fun b(v: Double) = String.format(Locale.ROOT, "%.5f", v)
     private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
 
     private fun str(s: String): String {
