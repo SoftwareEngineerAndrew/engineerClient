@@ -354,9 +354,11 @@ out of the recorder's rounding.
   about `min(0.7157, 0.36 + 0.0134·d)` with d the horizontal distance to the point (±0.03).
   It depends on the distance to the point, not to any player. From x 72 to the zone's edge at
   x 49 that takes 37.6 ticks at best, 40.6 at p10, 43.4 median.
-- **The last ~5 blocks are a chase.** From about x 51 (5 blocks from the point) he heads for
-  the 3D-closest player instead (heading error at x 44-50: 17° to the player, 60° to the point).
-  So where the bait stands sets the last blocks. From x 53 to 49 it takes a median 9.1 ticks
+- **The last blocks.** His head, which points straight at whoever he chases (1.8° median
+  error in chases), stays locked along the flight line until he reaches the point (0.4-8
+  blocks from it, median ~2.5). In 79 of 110 runs he doesn't chase anyone between crush 1 and
+  crush 2 at all. What looked like "the last ~5 blocks are a chase" was the bait standing on his
+  flight line. The bait still matters for the last blocks: it is where he ends up. From x 53 to 49 it takes a median 9.1 ticks
   (best 6.6) with the bait at x 30-37 west of Yellow. It takes 10.7 with the bait at x 37-43,
   and 19.4 with them standing on Yellow (x 43-50).
 - **Skipped moves (real, cause not found).** On some ticks he makes no move at all; his step
@@ -388,6 +390,21 @@ out of the recorder's rounding.
   What causes them is the one open part of how he moves, and it is what decides §4.4. It would
   take a recorder that logs each of Storm's move packets with the server tick it arrived on,
   plus every player's abilities, to settle it.
+
+### Targeting (from his head yaw, 134 runs)
+
+- **Who:** the 3D-nearest living player, measured to the feet. Where 3D and horizontal-only
+  disagree, 3D is right 98% of the time (605 samples). It isn't sticky: he just takes the
+  nearest.
+- **Re-picked:** every few ticks. His head is on the new nearest player within about 8 ticks at
+  most, including the client's lerp. Every tick, every 5 ticks and every 10 ticks fit equally
+  well; a 3+ block "stickiness" buffer is ruled out.
+- **Range:** none seen. He has chased a player 72 blocks away, down in P3.
+- **Pinned** (crush line → enrage + 2) **and during the flight to the next pillar:** no target.
+  His head resets when pinned and is held along the flight line during the flight.
+- **Skips and the target:** in chases at full speed he skips about 0.1% of ticks (889 ticks),
+  whatever his target's height does. The ~6% skips belong to the flight to the next pillar,
+  where he has no target, so they can't come from the target.
 
 ### 3.6 Later chase
 
