@@ -1,6 +1,6 @@
 # Boss Recorder
 
-A module (Engineer Client category) that records the dungeon boss fights packet by packet, for
+A module (Engineer Client category, on by default) that records the dungeon boss fights packet by packet, for
 working out their mechanics: what [`docs/mechanics/`](mechanics/README.md) could not measure from
 Better PF's recordings. Better PF records the client's view once a client tick: mobs slid over 3
 ticks toward where the server put them, chat and blocks a tick late, other players only as they
