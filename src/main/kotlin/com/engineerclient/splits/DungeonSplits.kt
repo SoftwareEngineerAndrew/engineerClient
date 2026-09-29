@@ -100,6 +100,7 @@ object DungeonSplits : Module(
     private val levels = HashMap<Section, SelectorSetting>()
     private val huds = HashMap<Section, HUDSetting>()
     private lateinit var totalRow: BooleanSetting
+    private lateinit var bloodHideInBoss: BooleanSetting
 
     /** A section's HUD is on: its detail settings only show then. */
     private fun hudOn(s: Section) = huds[s]?.value?.enabled == true
@@ -121,6 +122,9 @@ object DungeonSplits : Module(
             if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
                 BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
             ).withDependency { hudOn(s) && level(s) == BloodRunDetail.Level.COMPACT }
+            if (s.window == SplitTracker.OPEN) bloodHideInBoss = registerSetting(
+                BooleanSetting("Blood Rush Hide In Boss", false, desc = "Hides the blood rush sub splits once you are in the boss.")
+            ).withDependency { hudOn(s) }
         }
     }
 
@@ -531,7 +535,10 @@ object DungeonSplits : Module(
     private fun subLines(s: Section): List<String> {
         val level = level(s)
         val now = now()
-        if (s.window == SplitTracker.OPEN) return blood.lines(level, now, totalRow.enabled)
+        if (s.window == SplitTracker.OPEN) {
+            if (bloodHideInBoss.enabled && DungeonUtils.inBoss) return emptyList()
+            return blood.lines(level, now, totalRow.enabled)
+        }
 
         val split = tracker.split(s.window) ?: return emptyList()
         val since = { at: Stamp -> Row("", at, at.realMs - split.start.realMs, (at.tick - split.start.tick).toLong()) }
