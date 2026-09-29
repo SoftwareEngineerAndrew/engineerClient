@@ -6,6 +6,9 @@ Measured from the Better PF recordings (2026-09-23 to 09-29). The scripts are in
 the last 60 ticks") was measured separately and is in [`docs/storm-crush.md`](storm-crush.md) /
 `StormCrush.kt`. It is used here, not re-derived.
 
+Newer, fuller reports: [`docs/mechanics/maxor.md`](mechanics/maxor.md) and
+[`docs/mechanics/storm.md`](mechanics/storm.md). This document has been brought in line with them.
+
 > **Alpha-server runs are disregarded.** Four recordings (`b120f4c1`, `33c77ab5`, `1f5e9ba7`,
 > `24f19367`, all 1-3-player runs) were made on Hypixel's alpha server, where Storm leaves his
 > spot about 40 ticks early after the lightning. They are not the live game, so no conclusion
@@ -24,10 +27,12 @@ otherwise. "p10-p90" is the middle 80% of runs.
   horizontally-closest players differ, the heading matches the 3D one to a median of 2-3° and
   misses the horizontal one by 110-135°. Speed grows with the distance to that player, about
   `0.2 + 0.021·d` blocks/tick, capped at 0.9.
-- **Maxor** has inertia (his velocity eases toward that pursuit velocity, about 22% a tick).
-  He hovers about 0.9 above the player's feet and stops about 2.7 blocks short horizontally.
-  A laser stun freezes him in place until "⚠ Maxor is enraged! ⚠"; he moves again 0-6 ticks
-  after that line. He is not vanilla 1.8 wither AI: vanilla constants predict 45% worse.
+- **Maxor** has no inertia: the first move packet already carries ~0.70 a tick. Each tick he
+  moves `min(0.90, 0.24 + 0.020·d)` straight at the target's feet + ~1 block
+  ([`mechanics/maxor.md`](mechanics/maxor.md) §7). He hovers about 1 above the player's feet and
+  stops about 2.7 blocks short horizontally. A laser stun freezes him in place until "⚠ Maxor is
+  enraged! ⚠" (at most 240 ticks); he moves again 0-6 ticks after that line. He is not vanilla
+  1.8 wither AI: vanilla constants predict 45% worse.
 - **Storm** follows a fixed script until his lightning, identical in every run:
   - He spawns at (103, 188, 53) one tick before his first line.
   - He flies a diamond through the waypoints (73,183,83) → (43,183,53) → (73,183,23) →
@@ -38,11 +43,14 @@ otherwise. "p10-p90" is the middle 80% of runs.
 - **After the lightning** Storm chases the 3D-closest player at up to 0.90 blocks/tick. He
   aims about 3 blocks above their feet.
 - **Crushes.** A crush pins him until "⚠ Storm is enraged! ⚠"; he moves 1-4 ticks after that
-  line. The pin lasts 0-183 ticks (median 10). 2-3 ticks after the enrage line he flies to the
-  next pillar whatever the players do: Purple → a point over Yellow (46, ~172.8, 65), Yellow →
-  Green, Green → Yellow. Red is never used. That flight is one 0.7157-block move a server tick,
-  slowing inside ~26 blocks of the point. About 4.6% of ticks are skipped for no reason found
-  (§3.5). For the last ~5 blocks he chases the closest player again.
+  line. The pin lasts 0-183 ticks (median 10); the Mage's beam ends it ("Storm is enraged!" 0-1
+  ticks after the Mage's first on-target beam in 35 of 47 pins, [`mechanics/storm.md`](mechanics/storm.md)
+  §5). After a Purple crush he flies to a point over Yellow (46, ~172.8, 65) 2-3 ticks after the
+  enrage line, whatever the players do. That is the only scripted flight: after a Yellow or Green
+  crush he chases the closest player instead. Red is never used. The flight is one 0.7157-block
+  move a server tick, slowing inside ~26 blocks of the point. About 4.6% of ticks are skipped for
+  no reason found (§3.5). About 2.4 blocks from the point he chases the closest player again.
+  After crush 2 he never moves again.
 - **Fastest Storm split ≈ 900 server ticks (45.0 s): crush 1 at 699, crush 2 at 799, dead at
   799-800, Goldor's line 101-102 ticks later.**
   - Everything else is fixed dialogue or fixed movement. The best recorded run is 901; ten
@@ -62,8 +70,8 @@ otherwise. "p10-p90" is the middle 80% of runs.
     every recording has them.
   - Other players' positions are the recorder's view: interpolated, and stale when out of
     range.
-  - Whatever ends Storm's pin and kills him (damage, presumably) is not in the recordings: no
-    health is recorded.
+  - No health is recorded. The Mage's beam ends Storm's pin (storm.md §5), but the damage
+    threshold behind it, and what kills him, can't be measured from these recordings.
 
 ## 1. Data
 
@@ -148,20 +156,27 @@ tick.
 | first move | 46 after that line: 46 in 60 runs, 45 in 21, 47 in 19, 48 in 3. `SubSplits.MAXOR_MOVE_TICKS = 46` confirmed. Four runs (three of them 1-3-player practice runs) showed him moving at -1..+1, cause unknown |
 | first laser stun line ("THAT BEAM! IT HURTS!" / "YOU TRICKED ME!") | 212 / 240 median, earliest 204-205 (p10 205) |
 | "⚠ Maxor is enraged! ⚠" (end of the stun) | 346 (216-444) |
-| second stun line | 406-416 (p10 405) |
-| "I'M TOO YOUNG TO DIE AGAIN!" (said in 79 of 146) | 489 (487-822) |
-| Storm's first line | 518 (510-732) |
+| second stun line | 406-416 (p10 405): the laser's 10.0-10.15 s wall-clock cooldown from the first hit, plus the check it lands on; with the server lagging, 110-191 ticks after the first |
+| kill: the beacon at (73, 221, 73) turns to bedrock | 416 (408-570); his wither despawns 80 ticks later |
+| "I'M TOO YOUNG TO DIE AGAIN!" (said in 79 of 146) | 489 (487-822): a timer, second stun line + 82 (80-84), said only if he is still there. It is not the death |
+| Storm's first line | 518 (510-732) = kill + 102 |
 
 ### Stuns
 
-- **Where he is stunned.** Always at the lasers' meeting point: 168 of 175 stuns caught his feet
-  within x 71-75, z 71-76, y 224-227, most at (73-74, 226, 72-75). He gets there 204-206 ticks
-  in at the earliest (about 35 ticks of flight from his spawn, 20.5 blocks).
+- **Where he is stunned.** Anywhere within ~3.5 blocks horizontally of the beam's centre
+  (73.5, 73.5) with his feet at y 225 or more (maxor.md §4.4). The area is wider than the beam:
+  hits reached z 70.1 on the north side, x 71.2 west, x 74.9 east, so he is often stunned 1-3
+  blocks before the beam as he flies in from the north. 168 of 175 stuns caught his feet within
+  x 71-75, z 71-76, y 224-227, most at (73-74, 226, 72-75). He gets there 204-206 ticks in at
+  the earliest (about 35 ticks of flight from his spawn, 20.5 blocks); the beacon goes in on the
+  s0 + 206 check, the earliest possible stun.
 - **He freezes on the stun line and stays put.** He moves again 0-6 ticks after "⚠ Maxor is
   enraged! ⚠" (median 3, n=90).
 - **Stun length (stun line → enrage line).** Median 126 ticks, p10 9, p90 170, range 4-239. It
-  is bimodal: 9-16 ticks in some parties, 110-190 in most. That looks like a damage threshold
-  with a timeout, but the recordings have no health to prove it.
+  is bimodal: 9-16 ticks in some parties, 110-190 in most. The timeout is 240 ticks: no stun
+  lasted longer (maxor.md §5.2). The fast group (6-12 ticks in maxor.md) is presumably burst
+  damage; the recordings have no health to prove it. It matters less than it looks: the second
+  hit is timed from the first, not from the enrage.
 
 ### Targeting
 
@@ -186,11 +201,18 @@ Speed per server tick against the 3D distance to that player (one recording per 
 |---|---|---|---|---|---|---|---|---|---|---|
 | median speed | 0.22 | 0.32 | 0.43 | 0.52 | 0.61 | 0.67 | 0.73 | 0.82 | 0.86 | 0.90 |
 
-- **Speed.** About `min(0.9, 0.19 + 0.021·d)`, the same profile as Storm's chase (§3.3). It is
-  not constant, and not capped per axis: the direction is the straight 3D line (errors above).
+- **Speed.** Each tick `min(0.90, 0.24 + 0.020·d)` straight at the target's feet + ~1 block, d
+  the 3D distance to that point (maxor.md §7: 2,173 packet pairs with the target's own
+  recording, rms 0.043). Nearly the same profile as Storm's chase (§3.3). It is not constant,
+  and not capped per axis: the direction is the straight 3D line (errors above).
+  - **Cap 0.90**: beyond ~33 blocks the step is 0.88-0.91, at 40 and at 95 blocks alike.
+  - **No inertia**: the first move packet (s0 + 170) already carries 1.41 blocks (median,
+    n=111), about 0.70 a tick at the ~24 blocks to the lure; the next packets slow as he closes
+    in, never accelerating.
 - **Height.** Vertical speed against (player y - Maxor y): -12 → -0.45, -6 → -0.20,
   -3 → -0.06, 0 → 0.00, +3 → +0.15, +6 → +0.25, +12 → +0.36. When he stands still next to his
-  target, he is 0.9 (0.2-1.8) above their feet.
+  target, he is 0.9 (0.2-1.8) above their feet; 1.0 with targets whose own recording is in the
+  run (maxor.md §7). He aims ~1 block above the feet.
 - **Stopping.** He stops 2.7 blocks horizontally from them (p10 2.0, p90 15.5; n=43; the high
   end is a stale position of a player out of view). The 3-block horizontal stop matches
   vanilla's `d² > 9` rule, but the rest does not.
@@ -206,27 +228,30 @@ server sent 4/8/12/16 ticks later. 2,015 starts, 9,764 comparisons, rms error in
 | constant velocity (baseline) | 0.82 | 1.58 | 2.60 | 3.70 |
 | constant speed 0.475 + stop 4.6, aim +0.9 | 0.85 | 1.42 | 1.94 | 2.36 |
 | speed = min(0.645, 0.10 + 0.031·d), aim +0.9 | 0.75 | 1.23 | 1.67 | 2.00 |
-| **inertia (below)** | **0.66** | **1.07** | **1.52** | **1.90** |
+| inertia (a fit artefact, see below) | **0.66** | **1.07** | **1.52** | **1.90** |
 | vanilla 1.8 `EntityWither` with vanilla constants (pull 0.5, lerp 0.6, friction 0.91, stop 3, gravity) | 0.91 | 1.62 | 2.29 | 2.76 |
 | vanilla structure, constants fitted (pull 0.59, lerp 0.25, stop 6.6, hover 0.75) | 0.75 | 1.27 | 1.85 | 2.35 |
 
 The noise floor is about 0.5-0.7 blocks: arrival jitter of ±1 tick at 0.5-0.9 blocks/tick.
 
+The inertia model (velocity easing ~22% a tick toward the pursuit velocity; fitted a = 0.225,
+c = 0.19, k = 0.021, vmax = 1.05, aim +0.875) scores best here, but the easing is not real: he
+moves at full speed from his first tick (maxor.md §7). It presumably absorbed stale target
+positions and packet timing. The law below replaces it.
+
 ```
-// Maxor, one server tick. pos, vel: Vec3. Starts at (73, 226, 53), vel 0, on "WELL! WELL! WELL!".
-if (stunned) return                                   // stun line .. "Maxor is enraged!" (+0..6 ticks)
+// Maxor, one server tick. pos: Vec3. Starts at (73, 226, 53) on "WELL! WELL! WELL!".
+if (stunned) return                                   // stun line .. "Maxor is enraged!" (+0..6 ticks); at most 240 ticks
 if (tick < intro_end_line + 46) return                // holds still through his intro
 target = 3D-closest living player (feet)
-aim    = target + (0, 0.9, 0)
+aim    = target + (0, 1, 0)
 d      = |aim - pos|
-want   = if (horizontalDistance(aim, pos) < 2.7) 0 else min(1.05, 0.19 + 0.021 * d)
-vel   += (unit(aim - pos) * want - vel) * 0.225
-pos   += vel
+if (d < 3) return                                     // stops ~2.8-2.9 in 3D (2.7 horizontally, 1.0 above the feet)
+pos   += unit(aim - pos) * min(0.90, 0.24 + 0.020 * d)  // no inertia: full speed from the first tick
 ```
 
-Fitted constants (grid then coordinate descent): a = 0.225, c = 0.19, k = 0.021, vmax = 1.05,
-aim +0.875. The 2.7 stop is from the standstill measurements. No runs had Maxor far enough away
-to pin the cap down; above 36 blocks the medians sit at 0.88-0.90.
+The step law and the 0.90 cap are from maxor.md §7 (cap seen at 40 and at 95 blocks); the stop
+is from the standstill measurements. About 9% of ticks carry no move (tentative, maxor.md §7).
 
 ## 3. Storm
 
@@ -242,7 +267,7 @@ to pin the cap down; above 36 blocks the medians sit at 0.88-0.90.
 | leaves the parking spot | **687 (686-688)** = lightning + **139 (138-140)**, n=110 (the 98-113 seen in 4 runs was the alpha server) |
 | crush 1 ("Oof" / "Ouch, that hurt!") | 700 (698-839); 95% of 5-player runs within 5 ticks of 699 |
 | "⚠ Storm is enraged! ⚠" | crush 1 + 10 (1-29, 0-183) |
-| crush 2 | 800 (798-860) |
+| crush 2 | 800 (798-860); he never moves again. Its line can be missing (a silent crush near death, storm.md §7) |
 | "I should have known that I stood no chance." | 823 (802-927) |
 | "At least my son died by your hands." | death + 62 |
 | Goldor's "Who dares trespass into my domain?" | death + 102 (101-103) |
@@ -303,7 +328,9 @@ spawn (103, 188, 53)  at t = -1
   (y + 2.975) at or above the pillar's lowest block; pillar stepped down in the last 60 ticks.
 - **Not crushed again while pinned.** In 7 runs he was still pinned in Purple's zone at the next
   check (t 719), head in the pillar, Purple stepped 41-45 ticks before. The rule says crush; he
-  wasn't crushed. So a pinned Storm is immune, or the pillar that crushed him is spent.
+  wasn't crushed. That is because Purple resets on that very check: 20 ticks after a crush
+  (19-21 in 208 resets) every extended layer of the crushing pillar turns to air, and the pillar
+  is spent. It never came down again in any run (storm.md §2).
 - **A pillar stepping onto him pushes him down.** He does not collide with pillars: he flies
   into them (`storm-crush.md` saw crushes with his head up to 13 blocks inside).
   - But when a pillar *steps down* while his hitbox (y to y + 3.5) reaches into the new layer,
@@ -316,25 +343,33 @@ spawn (103, 188, 53)  at t = -1
 - **Break free.** He moves again **1-4 ticks after "⚠ Storm is enraged! ⚠"** (median 2,
   n=107).
 - **Pin length (crush 1 → enrage).** Median 10, p10 1, p90 29, max 183.
-- **What ends the pin is not in the data.** Recordings carry no health. It does not correlate
-  with the same party's Maxor stun length (Spearman 0.03, n=130), and only weakly with how long
-  they take to kill him after crush 2 (0.31, n=117).
+- **The Mage's beam ends the pin** (storm.md §5). In runs recorded by the party's Mage, "Storm
+  is enraged!" came 0-1 ticks after the Mage's first on-target beam after the crush in 35 of 47
+  pins. Pins are strongly party-dependent (by the Mage). Recordings carry no health, so the
+  threshold itself is unmeasured. The pin does not correlate with the same party's Maxor stun
+  length (Spearman 0.03, n=130), and only weakly with how long they take to kill him after
+  crush 2 (0.31, n=117).
 - **Taunt lines are not events.** "Slowing me down will be your greatest accomplishment!",
   "BEGONE PILLAR!", "THAT WAS ONLY IN MY WAY!", "This factory is too small for me!" and six
   others come from a random taunt pool.
-  - The first taunt comes 197 ticks (p10 61, p90 201) after crush 1, the next ones 60-63 ticks
-    apart. Storm is usually not in a crush zone then and no pillar is moving.
+  - The first taunt comes at a fixed t 882-999 (median 899) after his first line, whatever
+    happened before (storm.md §6); relative to crush 1 that reads 197 (p10 61, p90 201). The
+    next ones come 60-63 ticks apart. Storm is usually not in a crush zone then and no pillar is
+    moving. "BEGONE PILLAR!" does nothing to a pillar.
   - So `BossDetail.STORM_FREE` ("Slowing me down..." = broke free) is not a break-free signal:
     the enrage line is.
 
-### 3.5 After a crush: the flight to the next pillar, move by move
+### 3.5 After a Purple crush: the flight to Yellow, move by move
 
 Redone on the 141 live Purple crush-1 flights on server ticks (`transfer.py`), from the positions
 the server sent (de-lerped), after dropping the 0.02-block fake moves that undoing the lerp makes
 out of the recorder's rounding.
 
-- **Which pillar.** Purple → Yellow in every live run with a Purple crush 1. (Yellow → Green and
-  Green → Yellow were seen 5 and 2 times.) Red never moves in F7.
+- **Which pillar.** Purple → Yellow in every live run with a Purple crush 1. This is the only
+  scripted flight. What looked like "Yellow → Green" and "Green → Yellow" flights are chases:
+  after a Yellow or Green crush (4 Yellow, 1 Green) his head follows the 3D-closest living
+  player (3.3° median), up to 119° off Green's point, and parties just walk him to Green
+  (storm.md §4). Red never moves in F7.
 - **When he sets off: 2-3 ticks after "⚠ Storm is enraged! ⚠"** (86 of 141; p10-p90 2-7). The
   enrage line itself is what the players control (the pin, crush line → enrage line: min 0,
   p10 1, median 10). Before it he holds still where the check caught him.
@@ -355,10 +390,11 @@ out of the recorder's rounding.
   It depends on the distance to the point, not to any player. From x 72 to the zone's edge at
   x 49 that takes 37.6 ticks at best, 40.6 at p10, 43.4 median.
 - **The last blocks.** His head, which points straight at whoever he chases (1.8° median
-  error in chases), stays locked along the flight line until he reaches the point (0.4-8
-  blocks from it, median ~2.5). In 79 of 110 runs he doesn't chase anyone between crush 1 and
-  crush 2 at all. What looked like "the last ~5 blocks are a chase" was the bait standing on his
-  flight line. The bait still matters for the last blocks: it is where he ends up. From x 53 to 49 it takes a median 9.1 ticks
+  error in chases), stays locked along the flight line until he is **2.4 blocks** (median; p10
+  1.0, p90 4.2, n 69) horizontally from the point, allowing 3 ticks for the head's lag
+  (storm.md §4). From then he chases. In 79 of 110 runs he doesn't chase anyone between crush 1
+  and crush 2 at all, but only because crush 2 usually comes within 10 ticks of his arrival.
+  What looked like "the last ~5 blocks are a chase" was the bait standing on his flight line. The bait still matters for the last blocks: it is where he ends up. From x 53 to 49 it takes a median 9.1 ticks
   (best 6.6) with the bait at x 30-37 west of Yellow. It takes 10.7 with the bait at x 37-43,
   and 19.4 with them standing on Yellow (x 43-50).
 - **Skipped moves (real, cause not found).** On some ticks he makes no move at all; his step
@@ -368,7 +404,7 @@ out of the recorder's rounding.
     ticks per flight (24 runs, never more than 1 apart), raw client positions give the same rate
     as the de-lerped ones, and neither recorder precision, client stalls nor the server's tick
     rate tracks it. True rate about 6% of ticks on the straight, placeable only to ±1 tick.
-  - **Only the flight between pillars skips much.** Scripted opening route 0.16% (nothing),
+  - **Only the flight to Yellow skips much.** Scripted opening route 0.16% (nothing),
     first chase at 0.9 a tick 2.5%, the flight 5.5%, on runs with real server ticks.
   - **It depends on how far into the flight he is, not on the run.** About 2% of ticks at x
     94-82 (the first ~20 ticks after he sets off), 6-8% at x 82-70 (enrage + 30-45). A run's
@@ -387,9 +423,10 @@ out of the recorder's rounding.
     visible trigger either; skulls and pistons carry on at their usual rate inside them. A slow
     applied to Storm by a player ability is the untested candidate.
 
-  What causes them is the one open part of how he moves, and it is what decides §4.4. It would
-  take a recorder that logs each of Storm's move packets with the server tick it arrived on,
-  plus every player's abilities, to settle it.
+  What causes them is the one open part of how he moves, and it is what decides §4.4. It takes
+  a recorder that logs each of Storm's move packets with the server tick it arrived on, plus
+  every player's abilities, to settle it: the Boss Recorder module ([`boss-recorder.md`](boss-recorder.md))
+  now does (`m`/`sy` per server tick, `time` and `pg` for lag).
 
 ### Targeting (from his head yaw, 134 runs)
 
@@ -400,22 +437,31 @@ out of the recorder's rounding.
   most, including the client's lerp. Every tick, every 5 ticks and every 10 ticks fit equally
   well; a 3+ block "stickiness" buffer is ruled out.
 - **Range:** none seen. He has chased a player 72 blocks away, down in P3.
-- **Pinned** (crush line → enrage + 2) **and during the flight to the next pillar:** no target.
+- **Pinned** (crush line → enrage + 2) **and during the flight to Yellow:** no target.
   His head resets when pinned and is held along the flight line during the flight.
 - **Skips and the target:** in chases at full speed he skips about 0.1% of ticks (889 ticks),
-  whatever his target's height does. The ~6% skips belong to the flight to the next pillar,
+  whatever his target's height does. The ~6% skips belong to the flight to Yellow,
   where he has no target, so they can't come from the target.
 
 ### 3.6 Later chase
 
-- **Target: the 3D-closest player again.** Where it and Yellow are >20° apart: 15° vs 68°.
-  Overall 7.8° median.
-- **Slower than the first chase:** 0.37-0.45 blocks/tick at 4-16 blocks, 0.60-0.65 at 20-28.
-  Most samples are close to players.
+From the end of the flight to Yellow (~2.4 blocks from its point, §3.5), and after any crush
+on Yellow or Green, until the next crush. The law is from storm.md §4:
+
+- **Target: the 3D-closest living player again.** Head within 3.4° median of them (72% within
+  10°). Where it and Yellow are >20° apart: 15° vs 68°.
+- **Height:** ~3.1-3.5 blocks above their feet.
+- **Speed:** horizontal speed ≈ **0.145 + 0.0205·d**, d the horizontal distance to them (fitted
+  at 3-25 blocks): 0.28 at 5 blocks, 0.37 at 12. The first chase fits 0.21 + 0.021·d over the
+  same distances: the same slope, about 0.065 slower. Within ~3 blocks he circles the player
+  rather than closing in.
 - **Pushed by pillars.** A pillar stepped down onto him pushes him down (§3.4), all the way to
   the floor at y 169 if it keeps going.
-- **Second lightning.** If he lives long enough, the lightning line repeats 877-979 ticks after
-  the first, and a third 561-612 after that (5 slow runs).
+- **After crush 2 he never moves again** (at most 0.49 blocks between crush 2 + 5 and death,
+  n 84).
+- **Second lightning.** If he lives long enough (4 runs), the lightning line repeats 889, 940 and
+  979 ticks after the first (only the 940 on server ticks); its strikes come at line +36 and +46.
+  One run had the two strikes with no line at all. No third lightning was seen in live runs.
 
 ### 3.7 Model and residuals
 
@@ -432,14 +478,16 @@ the best model; rms error in blocks at h4 / h8 / h12 / h16:
   own speed forward, and that speed varies between runs (0.47-0.73 in the transfer).
 - **Chase and later errors are high.** The target is another player whose position is the
   recorder's (often stale) view. The lure usually stands 35-45 blocks from the recorder.
+- **The later chase** is modelled below by the law of storm.md §4 (§3.6), not by this fit. That
+  its lower speed is his velocity easing up from the flight's ~0.4 is conjecture.
 - **Vanilla wither steering does worse in every phase,** fitted or not (transfer h16 2.81
   fitted, 3.69 vanilla).
 
 ```
 // Storm, one server tick. t = ticks since "Pathetic Maxor, just like expected."
-ROUTE = [(73,183,83), (43,183,53), (73,183,23), (103,183,53)]
-PARK  = (102.375, 183.0, 52.375)
-NEXT  = { Purple -> (46, 173, 65) /*Yellow*/, Yellow -> (46, 173, 41) /*Green, assumed*/, Green -> (46, 173, 65) }
+ROUTE  = [(73,183,83), (43,183,53), (73,183,23), (103,183,53)]
+PARK   = (102.375, 183.0, 52.375)
+YELLOW = (46, 172.8, 65)                                           // the only scripted flight: Purple -> Yellow
 
 when (state) {
   OPENING  -> { // from t = -1 at (103, 188, 53)
@@ -448,15 +496,21 @@ when (state) {
   PARKED   -> if (t >= lightningLine + 139) state = CHASE         // ≈ t 687
   CHASE    -> { aim = closest3D(livingPlayers) + (0, 3, 0)
                 pos += unit(aim - pos) * min(0.90, 0.20 + 0.023 * |aim - pos|) }
-  PINNED   -> if (t >= enrageLine + 2) state = TRANSFER           // 2-3 ticks after the line
-  TRANSFER -> { aim = NEXT[lastCrushPillar]                        // (46, 172.8, 65) for Yellow
-                d = horizontal(aim - pos)
-                if (d < 5) { state = CHASE; return }                // the last ~5 blocks chase the bait
+  PINNED   -> { if (crushes >= 2) return                           // after crush 2 he never moves again
+                if (t >= enrageLine + 2)                           // 2-3 ticks after the line
+                  state = if (lastCrushPillar == Purple) TRANSFER else LATER }  // Yellow/Green: no flight
+  TRANSFER -> { d = horizontal(YELLOW - pos)
+                if (d < 2.4) { state = LATER; return }              // median 2.4 (p10 1.0, p90 4.2)
                 if (skipped()) return                              // ~4.6% of ticks, cause unknown (§3.5)
-                pos += unit(aim - pos) * min(0.7157, 0.36 + 0.0134 * d) }
+                pos += unit(YELLOW - pos) * min(0.7157, 0.36 + 0.0134 * d) }
+  LATER    -> { aim = closest3D(livingPlayers) + (0, 3, 0)          // ~3.1-3.5 above their feet (§3.6)
+                dh  = horizontal(aim - pos)
+                pos += horizontalUnit(aim - pos) * (0.145 + 0.0205 * dh)  // fitted at 3-25 blocks; circles within ~3
+                pos.y moves toward aim.y }                         // vertical rate not fitted
 }
 // On t % 20 == 19 (checks from his wither's spawn): StormCrush.judge(...) for each pillar;
-// crushed -> state = PINNED at pos, lastCrushPillar = that pillar.
+// crushed -> state = PINNED at pos, crushes++, lastCrushPillar = that pillar.
+// The crushing pillar resets 20 ticks later and is spent: it never comes down again.
 // Dead: after enough damage (0-30 ticks after crush 2 in the recordings, median 6).
 ```
 
@@ -469,7 +523,7 @@ when (state) {
 | dialogue to the lightning line | 548 | 546-552; no run lost >5 | fixed |
 | lightning → Storm leaves the parking spot | 139 | 138-140 (p10-p90); every 5-player run 138-143 | fixed |
 | leaving → crush 1 | 12 → the t **699** check | 95% of runs within 5 ticks of 699 | lure position + Purple timing |
-| pin (crush 1 → enrage) | 0-183 | median 10 | not in the data (damage?) |
+| pin (crush 1 → enrage) | 0-183 | median 10 | the party's Mage: "Storm is enraged!" 0-1 ticks after his first on-target beam in 35 of 47 pins (storm.md §5) |
 | flight Purple → Yellow zone (from his first move) | 87 | 83-92, min 76 | his movement (speed varies between runs, cause unknown) |
 | crush 2 | **crush 1 + 100** at best | within 5 ticks of +100 in 49% of runs | pin ≤ ~12 + Yellow timing |
 | crush 2 → death | 0-30 | median 6, p10 3 | damage |
@@ -485,9 +539,10 @@ when (state) {
     No run made +80.
   - Crush position hardly matters: travel = 1.65 ticks per block of crush x (rms 4.6), and crush
     x varies only 99-103.
-- **Crush 2 on Purple again is impossible.** He leaves Purple for Yellow by himself, and a
-  pinned Storm is not crushed again: 7 runs had him still pinned in Purple's zone at the next
-  check with the rule satisfied, uncrushed.
+- **Crush 2 on Purple again is impossible.** He leaves Purple for Yellow by himself, and Purple
+  resets 20 ticks after crushing him and is spent: it never comes down again (storm.md §2). The
+  7 runs with him still pinned in Purple's zone at the next check, rule satisfied, were
+  uncrushed because Purple reset on that check.
 
 ### Best-case timeline (server ticks after Storm's first line)
 
@@ -496,13 +551,13 @@ when (state) {
 | -1 | Storm's wither spawns at (103, 188, 53) |
 | 424 | parks at (102.375, 183, 52.375) |
 | 548 | lightning line |
-| ~636-656 | Purple pad held for 5 steps (186 → 181, 4 ticks a step). The last step must be ≥ 639 (60 ticks before the check) and the bottom ≤ his head at the check (~181.5-183) |
+| 639 | someone on the Purple pad (x 111-117, z 91-97) at this check: Purple steps 186 → 181 at 639, 643, 647, 651, 655 (one check on the pad = exactly 5 steps). The last step must be ≥ 639 (60 ticks before the check) and the bottom ≤ his head at the check (~181.5-183) |
 | 687 | Storm leaves toward the lure |
 | ~698 | enters Purple's zone |
 | **699** | crush 1 |
 | 699-702 | "Storm is enraged!" at once (pin ≤ ~3) |
 | ~701-704 | starts the flight to Yellow |
-| ~755-776 | Yellow pad held for 5 steps (181 → 176). The last step must be ≥ 739 and the bottom ≤ 176 |
+| 739 or 759 | someone on the Yellow pad (x 29-35, z 91-97) at this check: Yellow steps 181 → 176, the last step at 755 or 775. The last step must be ≥ 739 and the bottom ≤ 176 |
 | ~783-795 | Storm enters Yellow's zone at y ≈ 173.3 |
 | **799** | crush 2 |
 | 799-800 | dead |
@@ -563,12 +618,15 @@ Common pattern:
   at (93-95, 164-165, 90-94) or on Purple's pad (113, 170, 94). The straight line from
   (102.4, 52.4) to them crosses Purple's zone, so the 0.9-block/tick chase lands Storm in it
   11 ticks after he leaves.
-- **Pads.** Located from the recorders' own positions while a pillar stepped down: Purple
-  ≈ (113, 170, 94), Yellow ≈ (32, 170, 94), Green ≈ (33, 170, 13).
+- **Pads.** Each is a 7x7 square of stained glass and terracotta, top at y 169 (players stand
+  at y 170), ringed by stone-brick stairs that don't count (storm.md §1-§2): Purple x 111-117,
+  z 91-97; Yellow x 29-35, z 91-97; Green x 29-35, z 9-15. Red's (x 111-117, z 9-15) does
+  nothing. A pad is read only on a crush check: someone on the square at a check steps its
+  pillar down exactly 5 blocks, one every 4 ticks (the check, +4, +8, +12, +16).
   - In all 61 runs that made 699/+100, Purple starts stepping at 640 (p10 638) and stops at
-    181, its last step at 656 (655-676).
-  - Yellow steps 740 (718-760) → 775 (755-776) to 176 in those runs. In the others its last
-    step is later (median 815) and lower (median 171).
+    181, its last step at 656 (655-676): the t 639 check's 5 steps (a few on 659's).
+  - Yellow steps 740 (718-760) → 775 (755-776) to 176 in those runs (the 739 and 759 checks).
+    In the others its last step is later (median 815) and lower (median 171).
 - **Bait at Yellow.** Someone at (33-37, 170, 65-67) west of it, or on it at (46, 170, 66).
   It doesn't speed up the flight (the slowdown is fixed), but it keeps Storm's later chase
   there and gives the DPS a spot.
@@ -582,23 +640,30 @@ Measured; each step protects a tick that is otherwise lost:
    (x 97-103, z 62-68): (93-96, 164-166, 90-94) as in the fastest runs. Be the 3D-closest
    player from t 687 to 699, and don't let anyone become closer to him in that window (e.g. by
    leaping toward him). He targets 3D distance, so the P3 players at y 120 do not steal him.
-2. **Purple pad** (113, 170, 94). Hold it until the bottom is at 181 (5 steps from 186) or
-   lower, **with the last step between t 639 and his arrival (~t 695)**. In practice start at
-   ~t 636.
+2. **Purple pad** (x 111-117, z 91-97). **Be on the square at the t 639 check**: that one check
+   steps Purple exactly 5, 186 → 181, at 639-655. A press counts only on a crush check, and the
+   server sees a player's position a ping late, so arrive a few ticks early (the 15 checks where
+   a player on a pad did not start a descent were nearly all players who stepped on 0-4 ticks
+   before it).
    - Every one of the 61 runs that made 699 and +100 stopped at 181.
-   - Finishing before 639 disarms the pillar by 699 (the 60-tick rule).
+   - The 619 check is too early: its last step (635) is 64 ticks before 699 and the pillar is
+     disarmed (the 60-tick rule). The 659 check also works (last step 675).
    - A bottom above ~181.5-183 is above his head at the check.
    - A step onto him pushes him down.
 3. **The pin must be short.** Crush 2 at +100 needs Storm moving by ~crush 1 + 12: pins of 0-15
-   made it, and 31 of 43 runs with a pin ≤ 3 did. Presumably this means bursting him the moment
-   he is pinned at ~(100, 179, 63.5) (not proven, see §5).
-4. **Yellow pad** (32, 170, 94). Hold it for 5 steps, 181 → 176, **finishing after t 739 and
-   before Storm arrives (~t 780)**, e.g. 756-776.
-   - Finishing before 739 disarms the pillar by 799 (the 60-tick rule).
-   - Stepping it onto him pushes him down out of reach.
-   - His head clears 176 by only 0.2-0.9 blocks. One more step (to 175, finished by ~780) adds a
-     block of margin; 2 of 2 runs that did this were crushed, too few to be sure.
-   - (Inference) Once he is back to chasing, ~5 blocks from Yellow's middle, he aims ~3 above
+   made it, and 31 of 43 runs with a pin ≤ 3 did. The Mage's beam ends it (storm.md §5): the
+   Mage should beam him the moment he is pinned at ~(100, 179, 63.5). With a strong Mage one
+   beam does it (`p3wr`'s 47 pins, median 3); weaker parties need several.
+4. **Yellow pad** (x 29-35, z 91-97). **Be on the square at the t 739 or the t 759 check**: one
+   check steps Yellow 181 → 176, finishing at 755 or 775, before Storm arrives (~t 783).
+   - The 719 check is too early: its last step (735) disarms the pillar by 799 (the 60-tick
+     rule).
+   - The 779 check is too late: its steps (779-795) come down onto him and push him out of
+     reach.
+   - His head clears 176 by only 0.2-0.9 blocks. Staying for both checks takes it 10 steps, to
+     171 by 775, a margin of several blocks; 2 of 2 runs with a bottom ≤ 175 were crushed, too
+     few to be sure.
+   - (Inference) Once he is back to chasing, ~2.4 blocks from Yellow's point, he aims ~3 above
      the closest player. So a bait standing lower than the arena floor could pull his head
      below 176 before the check.
 5. **Kill at crush 2.** The fastest runs die 0-3 ticks after the crush-2 line; the median run
@@ -607,9 +672,8 @@ Measured; each step protects a tick that is otherwise lost:
 **Conjecture, not shown by the data:**
 
 - ~~A shorter lightning phase~~: those runs were on the alpha server (see the note at the top).
-- **Damage ends the pin.** Suggested by the enrage line ending both Maxor's stun and Storm's
-  pin, and by the pin's wide spread. Not proven: there is no health data, and pins do not
-  correlate with Maxor stun lengths.
+- **The pin ends at a damage threshold.** The Mage's beam ends it (measured, storm.md §5); that
+  a damage threshold is behind it is not proven: there is no health data.
 - **Crush 2 on the +80 check (t 779), −1.0 s:** worked out in §4.4. Possible, but about 1 in 15
   even with everything else perfect.
 
@@ -625,7 +689,7 @@ path there is fixed once crush 1 happens:
 | step | best case | what sets it |
 |---|---|---|
 | crush 1 | t 699 | the lure, as now |
-| pin (crush line → enrage line) | 0 | the players (probably damage; 0 happened in several live runs) |
+| pin (crush line → enrage line) | 0 | the players (the Mage's beam, storm.md §5; 0 happened in several live runs) |
 | sets off | enrage + 2-3 | fixed |
 | pinned at x → x 95 | (x − 95) / 0.712 ticks | where the 699 check catches him on Purple |
 | x 95 → x 72 | 32.3 ticks | one 0.7157 move a tick, minus skips |
@@ -642,46 +706,56 @@ path there is fixed once crush 1 happens:
   late for 779 and in time for 799. Each skipped move costs a tick, and there are 3-4 slack ticks
   at most.
 - **Head height is not the problem.** He arrives at y ~173.4-173.6, head 176.4-176.6, so Yellow at
-  176 (one 5-step batch from its 181) works; 175 gives a block of margin. Its last step must be
-  after t 719 and before he is under it (about t 772+).
+  176 (one check on its pad from 181) works; a second check (to 171) gives more margin. Its last
+  step must be after t 719 and before he is under it (about t 772+): the pad on the 719 or the
+  739 check (the 759 check's steps run to 775).
 - **No live run has done it.** The closest reached x 49 at crush + 80.0 exactly
   (`92f33058`: pinned at x 99.97, pin 2).
 
 So a party that pins him at x ≤ 98 with a 0-tick pin, keeps the Yellow bait at x 30-37 on the
 floor and never slows him would make the 779 check about 5-8% of the time and fall back to 799
-otherwise, losing nothing. Finding what makes Storm skip moves is the only thing that could make
-it reliable.
+otherwise, losing nothi## 5. Open questions, and what data would settle them
 
-## 5. Open questions, and what data would settle them
+[`docs/mechanics/storm.md`](mechanics/storm.md) and [`docs/mechanics/maxor.md`](mechanics/maxor.md)
+have since answered some of these (marked below). Most of what remains needs the server's own
+packets: the **Boss Recorder** module ([`docs/boss-recorder.md`](boss-recorder.md)) records them,
+each stamped with the server tick it arrived on.
 
-- **Storm's pin and his kill time.** Recording the boss bar (health) or the wither's health
-  metadata, even every 5 ticks, would show whether the pin ends at a health threshold, and how
-  much damage crush 2 needs.
-- **Storm's skipped moves** (§3.5): ~5% of ticks in the flight between pillars, cause unknown.
+- **Storm's pin and his kill time.** Answered in part: the Mage's beam ends the pin (storm.md
+  §5). Whether that is a health threshold, and how much damage crush 2 needs, is open: the Boss
+  Recorder's boss bar (`bb`), synced health (`d`) and damage (`dmg`) would show it.
+- **Storm's skipped moves** (§3.5): ~5% of ticks in the flight to Yellow, cause unknown.
   They are what stands between the fastest split and one a second faster (§4.4).
 - **Skipped moves (~6% of ticks in the transfer, ~2% in the opening, uncorrelated with server
-  lag).** Odin's ping count written on every line, rather than once per client tick, would
-  tell a server hiccup from a real pause.
+  lag).** Telling a server hiccup from a real pause needs each move packet on its server tick:
+  the Boss Recorder's `m`/`sy` per server tick, with `time` (the server's clock) and `pg` (each
+  ping) for lag.
 - **Other players' positions** are the recorder's view: lerped, and stale when out of range. The
   lure is usually 35-45 blocks from the recorder, which limits the chase model (h16 error 4 blocks).
-  Every party member recording (or recording the server's packets for players too) would fix
-  it.
+  The Boss Recorder keeps the server's packets for every entity in the boss, players included.
 - **How fast they retarget.** Only 13 (Storm) and 16 (Maxor) clean switches of the closest
   player by >60° exist.
   - Where the heading followed, it did so within 0-2 ticks in most cases (Maxor 8 of 10, Storm
     3 of 6).
   - The rest never followed within 25 ticks, most likely because the "switch" was a stale
     position of a player out of the recorder's view.
-  - Whether they re-pick the target every tick or on a timer is open. Recordings by every party
-    member would settle it.
-- **Green and the Yellow → Green flight** (5 runs): the target point (46, 173, 41) is assumed by
-  symmetry. Red's pad and behaviour: never used in F7.
-- **Maxor beyond ~36 blocks and while armoured:** too few samples to pin his top speed or check
-  for vanilla's armoured/unarmoured hover change.
+  - Whether they re-pick the target every tick or on a timer is open. The Boss Recorder's head
+    yaw (`h`) against every player's server positions would settle it.
+- **Green and the Yellow → Green flight.** Answered: there is no such flight. After a Yellow or
+  Green crush he chases the closest player (storm.md §4); the assumed point (46, 173, 41) is
+  dropped. Red's pad does nothing (storm.md §1). Green's crush zone and point are still open.
+- **Maxor beyond ~36 blocks and while armoured.** His top speed is answered: 0.90 a tick, seen at
+  40 and at 95 blocks (maxor.md §6-§7). Vanilla's armoured/unarmoured hover change is unchecked.
 - **For maintainers** (not changed here):
   - `BossDetail.STORM_FREE` treats "Slowing me down..." as Storm breaking free; it is a random
     taunt (§3.4). "⚠ Storm is enraged! ⚠" is the break-free moment.
   - `SubSplits.STORM_LIGHTNING_TICKS = 688` is armed by the *lightning* line, but Storm leaves
+    his spot 139 ticks after that line. 688 matches his *first* line (687).
+  - Maxor's: see maxor.md §9 (`BossDetail.kt`'s "1/2 for both", the kill as the beacon turning
+    to bedrock with "Animation" a fixed 102 ticks, `SubSplits.MAXOR_MOVE_TICKS = 46` confirmed).
+    "I'M TOO YOUNG TO DIE AGAIN!" is a timer (second stun line + 82), not his death.
+
+orm leaves
     his spot 139 ticks after that line. 688 matches his *first* line (687).
 
 ## 6. Reproducing
