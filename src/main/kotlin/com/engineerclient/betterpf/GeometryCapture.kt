@@ -5,6 +5,9 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.InfestedBlock
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.level.chunk.status.ChunkStatus
@@ -12,9 +15,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
 /**
  * Captures dungeon geometry once instead of streaming it: every block of each ROOM goes to the
  * server's room library (keyed "Name|ROTATION", identical in every run). The 1-block gaps between
- * rooms aren't captured - the viewer leaves them as air - except the door boxes, which differ per run
- * (wither/blood doors, openings walled up where no room connects) and go in the run as "door"
- * volumes. The boss arena goes to the library too, one 16x16 chunk column at a time (keyed
+ * rooms aren't captured - the viewer leaves them as air. What differs per run around the doorways
+ * is two blocks per door spot ("dslots", [readDoors]): the viewer builds the rest of each doorway
+ * from its database. The boss arena goes to the library too, one 16x16 chunk column at a time (keyed
  * "Boss|FLOOR|cx,cz"), as its chunks load. After that, the run only records changes (block updates).
  *
  * Geometry comes out as volume lines: palette + run-length encoded block indices in y, z, x order
@@ -45,16 +48,40 @@ class GeometryCapture(private val emit: (String) -> Unit, private val libraryKey
     }
     private val doorsDone = HashSet<Int>()
 
-    private fun queueDoors(level: ClientLevel) {
+    /**
+     * Each door spot, once, as soon as its chunk is here (before anyone opens anything): two blocks
+     * in the middle of the gap. y 73 is the door frame's top - only there with a door, and its
+     * block is the door's style (stone bricks, cobblestone, planks; red wool for blood). y 69 is the
+     * door itself: coal a wither door, red terracotta blood, infested stone the entrance, barrier
+     * one falling, air an open doorway. One line of the spots read that tick:
+     * {"k":"dslots","t":t,"d":[[x, z, what, top], ...]} - what: "-" none, "n" open, "w" wither,
+     * "b" blood, "e" entrance, "f" falling. (Checked against 4,285 recorded doors, 2026-09-28.)
+     */
+    private fun readDoors(level: ClientLevel, t: Int) {
+        val read = ArrayList<String>()
         for ((i, spot) in doorSpots.withIndex()) {
-            if (i in doorsDone || !loaded(level, spot[0], spot[1], spot[2], spot[3])) continue
+            if (i in doorsDone) continue
+            val x = spot[0] + spot[2] / 2; val z = spot[1] + spot[3] / 2
+            if (!loaded(level, x, z, 1, 1)) continue
             doorsDone += i
-            jobs.addFirst(VolumeJob("door", null, spot[0], DOOR_Y, spot[1], spot[2], DOOR_H, spot[3], null))
+            val top = level.getBlockState(BlockPos(x, 73, z))
+            val door = level.getBlockState(BlockPos(x, 69, z)).block
+            val what = when {
+                top.isAir -> "-"
+                door == Blocks.COAL_BLOCK -> "w"
+                door == Blocks.RED_TERRACOTTA -> "b"
+                door is InfestedBlock -> "e"
+                door == Blocks.BARRIER -> "f"
+                else -> "n"
+            }
+            val topName = if (top.isAir) "" else BuiltInRegistries.BLOCK.getKey(top.block).toString()
+            read += "[$x,$z,\"$what\",${jsonString(topName)}]"
         }
+        if (read.isNotEmpty()) emit("""{"k":"dslots","t":$t,"d":[${read.joinToString(",")}]}""")
     }
 
     fun tick(level: ClientLevel, t: Int) {
-        if (t % 10 == 0) { queueDoors(level); queueRooms(level); queueBoss(level) }
+        if (t % 10 == 0) { readDoors(level, t); queueRooms(level); queueBoss(level) }
         var budget = BLOCKS_PER_TICK
         while (budget > 0) {
             val job = active ?: jobs.removeFirstOrNull() ?: return
