@@ -17,6 +17,10 @@ import java.util.Locale
  */
 class Scorecard {
 
+    // Blood: the Watcher moving off the spot he starts on, once his first spawns are out - 240-243
+    // server ticks after his first line in every recorded run where he was in view.
+    private var watcherMoved: Stamp? = null
+
     // Portal: the nether portal appearing in the blood room, 3-6 s after the Watcher lets you go.
     private var portalOpen: Stamp? = null
 
@@ -48,6 +52,7 @@ class Scorecard {
     var onEvent: (String) -> Unit = {}
 
     fun reset() {
+        watcherMoved = null
         portalOpen = null; crystals.clear(); maxorStuns.clear(); maxorGone = null
         stormMoving = null; crushes.clear(); freed.clear(); stormDead = null
         allIn = null; goldorHit = null; goldorDead = null
@@ -67,6 +72,11 @@ class Scorecard {
     }
 
     /** The first nether portal block of the run: the portal out of the blood room has opened. */
+    fun onWatcherMoved(at: Stamp, how: String) { if (watcherMoved == null) { watcherMoved = at; note("watcher moved ($how)") } }
+
+    /** The Watcher's move is still to come. */
+    val waitingForWatcher: Boolean get() = watcherMoved == null
+
     fun onPortal(at: Stamp) { if (portalOpen == null) { portalOpen = at; note("portal open") } }
 
     /** Storm moved away from where a crush pinned him: that DPS window is over. */
@@ -122,7 +132,13 @@ class Scorecard {
                     for (t in bloodRooms) cells += "§c" + fmt(t * 50)
                     if (rushOver && bloodRooms.isNotEmpty()) cells += "§6" + fmt(bloodRooms.sum() * 50 / bloodRooms.size)
                 }
-                SplitTracker.BLOOD -> cells += colour(s.label) + real(s.start, end)
+                SplitTracker.BLOOD -> {
+                    cells += colour(s.label) + real(s.start, end)
+                    // Until the Watcher moves, then from his move to "You have proven yourself" - the camp.
+                    val moved = watcherMoved?.takeIf { it.realMs >= s.start.realMs }
+                    cells += "§5" + real(s.start, moved)
+                    if (s.stop != null) cells += "§c" + real(moved, s.stop)
+                }
                 SplitTracker.PORTAL -> {
                     cells += colour(s.label) + real(s.start, end)
                     val open = portalOpen?.takeIf { it.realMs >= s.start.realMs }
