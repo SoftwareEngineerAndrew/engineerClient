@@ -249,6 +249,7 @@ object DungeonSplits : Module(
             if (entity is WitherBoss && open(SplitTracker.MAXOR)) {
                 card.onMaxorGone(now())
                 val d = distanceTo(entity)
+                if (d <= 48) subs.onMaxorDead(now())
                 boss.extra(SplitTracker.MAXOR, now(), "§5wither gone", BossDetail.blocks(d) + " away" +
                     if (d > 48) " - probably out of view, not his death" else " - his death, 1-2 s before Storm speaks")
             }
