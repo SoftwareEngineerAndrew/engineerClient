@@ -1,4 +1,4 @@
-package com.engineerclient.betterpf
+package com.engineerclient.bossrecorder
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.mixin.EntityEventPacketAccessor
@@ -43,19 +43,18 @@ import java.util.Optional
 import java.util.UUID
 
 /**
- * Better PF's boss log: the server's own packets about the boss fights, each stamped with the
- * server tick it arrived on, written as `net` lines (tools/betterpf-viewer/FORMAT.md).
+ * The Boss Recorder's packet log: the server's own packets about the boss fights, each stamped with
+ * the server tick it arrived on, as `net` entries (format: docs/boss-recorder.md).
  *
- * The rest of the recording is the client's view, sampled once a client tick: mobs slid over 3 ticks
- * toward where the server put them, chat and blocks a tick late, other players only as they are
- * drawn. That was enough to find the fights' scripts but not to answer what the analyses in
- * docs/mechanics/ left open - bosses' health and who hit them, a boss skipping one move, who he
- * targets and how soon he switches, projectiles' aim, exact spawn and death ticks. Those need the
- * packets themselves, which this keeps:
+ * Better PF records the client's view once a client tick: mobs slid over 3 ticks toward where the
+ * server put them, chat and blocks a tick late, other players only as they are drawn. That found
+ * the fights' scripts but not what docs/mechanics/ left open - bosses' health and who hit them, a
+ * boss skipping one move, who he targets and how soon he switches, projectiles' aim, exact spawn
+ * and death ticks. Those need the packets themselves, which this keeps:
  *
  *  - always: every boss wither's movement, head, spawn, removal, health data and damage, the boss
  *    bar, and the server's clock (`time`, its game time every second);
- *  - in focus (in the boss, or from the blood door opening until the Watcher is done): every
+ *  - in focus (in the boss, and from the blood door opening until the Watcher is done): every
  *    entity's movement, spawns with their velocity and owner, removals, deaths, damage, hurt and
  *    swing animations, synced data (health, names, flags), passengers; explosions, sounds, block
  *    changes, your own health, and each ping the server tick count comes from.
@@ -68,23 +67,26 @@ import java.util.UUID
 object BossLog {
 
     /** Called by ConnectionTapMixin with every packet the server sends, on the network thread. */
-    fun tap(packet: Packet<*>, current: () -> RunRecorder?) {
-        val s = current() ?: return
-        val tasks = ArrayList<(RunRecorder) -> Unit>(1)
-        collect(packet, s.serverTickCount, s, tasks)
+    fun tap(packet: Packet<*>, s: BossRecording) {
+        val tasks = ArrayList<(BossRecording) -> Unit>(1)
+        collect(packet, s, tasks)
         if (tasks.isEmpty()) return
         EngineerClient.mc.execute {
-            EngineerClient.safely("betterpf boss log") { if (current() === s) tasks.forEach { it(s) } }
+            EngineerClient.safely("boss recorder") { if (BossRecorder.current === s) tasks.forEach { it(s) } }
         }
     }
 
-    private fun collect(p: Packet<*>, n: Int, s: RunRecorder, out: MutableList<(RunRecorder) -> Unit>) {
+    private fun collect(p: Packet<*>, s: BossRecording, out: MutableList<(BossRecording) -> Unit>) {
+        // Server ticks are counted here, as Odin counts them (one a ping with a non-zero id), so a
+        // packet's tick is exactly the pings that came before it on the wire.
+        if (p is ClientboundPingPacket && p.id != 0) s.serverTicks++
+        val n = s.serverTicks
         val focus = s.focus
         fun watched(id: Int) = focus || id in s.bossIds
         fun add(entry: String) { out += { it.net(n, entry) } }
 
         when (p) {
-            is ClientboundBundlePacket -> p.subPackets().forEach { collect(it, n, s, out) }
+            is ClientboundBundlePacket -> p.subPackets().forEach { collect(it, s, out) }
 
             is ClientboundSetTimePacket -> add("\"time\",${p.gameTime()}")
             is ClientboundPingPacket -> if (focus) add("\"pg\",${p.id}")
@@ -124,13 +126,21 @@ object BossLog {
             }
             is ClientboundSetEntityMotionPacket -> if (watched(p.id())) add("\"v\",${p.id()},${v(p.movement().x)},${v(p.movement().y)},${v(p.movement().z)}")
 
-            is ClientboundAddEntityPacket -> if (focus || p.type == EntityType.WITHER) {
+            is ClientboundAddEntityPacket -> {
+                if (p.type == EntityType.WITHER) s.bossIds += p.id
+                if (!(focus || p.type == EntityType.WITHER)) return
                 val m = p.movement
-                add("\"a\",${p.id},${js(BuiltInRegistries.ENTITY_TYPE.getKey(p.type).toString())},${b(p.x)},${b(p.y)},${b(p.z)}," +
-                    "${v(m.x)},${v(m.y)},${v(m.z)},${a(p.yRot)},${a(p.xRot)},${a(p.yHeadRot)},${p.data}")
+                val entry = "\"a\",${p.id},${js(BuiltInRegistries.ENTITY_TYPE.getKey(p.type).toString())},${b(p.x)},${b(p.y)},${b(p.z)}," +
+                    "${v(m.x)},${v(m.y)},${v(m.z)},${a(p.yRot)},${a(p.xRot)},${a(p.yHeadRot)},${p.data}"
+                if (p.type != EntityType.PLAYER) { add(entry); return }
+                // Players (and Hypixel's player-shaped NPCs): their name, from the tab list the server
+                // fills before it adds them.
+                val uuid = p.uuid
+                out += { r -> r.net(n, entry + "," + js(EngineerClient.mc.connection?.getPlayerInfo(uuid)?.profile?.name ?: "")) }
             }
             is ClientboundRemoveEntitiesPacket -> {
                 val ids = p.entityIds.filter { watched(it) }
+                p.entityIds.forEach { s.bossIds.remove(it) }
                 if (ids.isNotEmpty()) add("\"r\",[${ids.joinToString(",")}]")
             }
             is ClientboundEntityEventPacket -> {
@@ -162,17 +172,17 @@ object BossLog {
                 val kb = p.playerKnockback().map { ",${v(it.x)},${v(it.y)},${v(it.z)}" }.orElse("")
                 add("\"ex\",${b(c.x)},${b(c.y)},${b(c.z)},${f(p.radius())},${p.blockCount()}$kb")
             }
-            is ClientboundSoundPacket -> if (focus)
+            is ClientboundSoundPacket -> if (focus && BossRecorder.sounds)
                 add("\"snd\",${js(sound(p.sound))},${js(p.source.getName())},${b(p.x)},${b(p.y)},${b(p.z)},${f(p.volume)},${f(p.pitch)}")
-            is ClientboundSoundEntityPacket -> if (focus)
+            is ClientboundSoundEntityPacket -> if (focus && BossRecorder.sounds)
                 add("\"sde\",${js(sound(p.sound))},${p.id},${f(p.volume)},${f(p.pitch)}")
             is ClientboundSetHealthPacket -> if (focus) add("\"hp\",${f(p.health)},${p.food},${f(p.saturation)}")
 
-            is ClientboundBlockUpdatePacket -> if (focus) {
+            is ClientboundBlockUpdatePacket -> if (focus && BossRecorder.blocks) {
                 val pos = p.pos; val state = p.blockState
                 out += { it.netBlock(n, pos, state) }
             }
-            is ClientboundSectionBlocksUpdatePacket -> if (focus) {
+            is ClientboundSectionBlocksUpdatePacket -> if (focus && BossRecorder.blocks) {
                 val changes = ArrayList<Pair<BlockPos, BlockState>>()
                 p.runUpdates { pos, state -> changes += pos.immutable() to state }
                 out += { r -> changes.forEach { (pos, state) -> r.netBlock(n, pos, state) } }

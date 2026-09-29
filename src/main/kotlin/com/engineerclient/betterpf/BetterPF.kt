@@ -103,7 +103,7 @@ object BetterPF : Module(
     private val CONTROL_CODES = Regex("\u00a7.")
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
-    @Volatile private var session: RunRecorder? = null
+    private var session: RunRecorder? = null
     private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("betterpf").resolve("runs")
 
     init {
@@ -222,12 +222,6 @@ object BetterPF : Module(
      * §#rrggbb for any other), then bold/italic/underline/strikethrough/obfuscated, written again
      * wherever the style changes. § codes already inside the text are kept as they are.
      */
-    /** Every inbound packet, on the network thread, ahead of any mod that could cancel it (ConnectionTapMixin). */
-    fun tap(packet: net.minecraft.network.protocol.Packet<*>) {
-        if (!enabled || session == null) return
-        EngineerClient.safely("betterpf boss log tap") { BossLog.tap(packet) { session } }
-    }
-
     internal fun legacyText(message: Component): String {
         val sb = StringBuilder()
         var last = ""

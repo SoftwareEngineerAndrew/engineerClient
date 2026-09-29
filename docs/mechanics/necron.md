@@ -297,7 +297,7 @@ and Necron in mm:ss", same tick) arrive at +86 (81-92). There is no further boss
     40 ticks after the volley's first shot, not 98.
   - The three late "Let's make some space!" lines.
   - Whether damage is also needed during the 141-tick wait.
-  - Recorder builds from 2026-09-29 on keep the boss log (`net` lines, FORMAT.md): every packet in the boss by server tick.
+  - The Boss Recorder module (docs/boss-recorder.md) records every packet in the boss by server tick.
     Recordings made with them would pin B, L and the head targeting to the tick.
 
 ## 11. Caveats

@@ -16,10 +16,10 @@ report says what is measured and what is conjecture; the scripts that print ever
 
 Everything above was measured from the client's view: mobs slid over 3 ticks toward where the
 server put them, chat and blocks stamped a tick late, other players only as the recorder saw them,
-and no health or damage at all. The recorder now keeps a **boss log** (`net` lines,
-[FORMAT.md](../../tools/betterpf-viewer/FORMAT.md#boss-log-net-lines)): the server's own packets,
-each stamped with the server tick it arrived on. In the boss and the Watcher camp that is every
-entity; elsewhere the boss withers. `tools/boss-mechanics/netlog.py` reads it.
+and no health or damage at all. The **Boss Recorder** module ([boss-recorder.md](../boss-recorder.md))
+now records the fights from the server's own packets, each stamped with the server tick it arrived
+on: in the boss and the Watcher camp every entity, elsewhere the boss withers.
+`tools/boss-mechanics/netlog.py` reads its files.
 
 | open question | answered by |
 |---|---|
@@ -33,4 +33,5 @@ entity; elsewhere the boss withers. `tools/boss-mechanics/netlog.py` reads it.
 | **Watcher:** exact mob spawn and death ticks, mini-boss choice, the move's timing | `a` (every head and mob, to the tick, wherever the recorder stands), `ev` 3 / `r` deaths, the Watcher's own `m` |
 | **Death ticks (P3), Nuclear Frenzy (P4):** exact hit ticks | `hp` (your own health), `dmg` on players, `ex` |
 
-Recordings from builds before 2026-09-30 have no `net` lines; `netlog.py RECORDING` says so.
+The answers need Boss Recorder files: turn the module on and play F7 (every party member recording
+it gives every player's own view too).
