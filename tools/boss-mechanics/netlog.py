@@ -1,7 +1,7 @@
-"""The boss log (`net` lines, tools/betterpf-viewer/FORMAT.md) of a Better PF recording, as tables.
+"""A Boss Recorder file (`net` lines, docs/boss-recorder.md), as tables.
 
-    python3 netlog.py RECORDING.gz            # what the recording's boss log holds, by kind
-    python3 netlog.py RECORDING.gz ENTITY_ID  # one entity's packets, tick by tick
+    python3 netlog.py FILE.jsonl.gz            # what the file holds, by kind
+    python3 netlog.py FILE.jsonl.gz ENTITY_ID  # one entity's packets, tick by tick
 
 As a module:
     log = NetLog(recording.read_lines(path))
@@ -13,7 +13,7 @@ As a module:
     log.missing_ticks(id, a, b)   # server ticks in [a, b] with no position packet for the entity
     log.lag()                     # [(n, gameTime)]: gameTime - n drifting shows the server skipping ticks
 
-Standard library only; recordings without `net` lines give empty tables.
+Standard library only; files without `net` lines (Better PF recordings) give empty tables.
 """
 import collections
 import os
@@ -73,7 +73,7 @@ def main():
     log = NetLog(R.read_lines(sys.argv[1]))
     if len(sys.argv) == 2:
         if not log.entries:
-            print('no boss log in this recording (made before the recorder kept one)')
+            print('no net lines: not a Boss Recorder file')
             return
         for kind, rows in sorted(log.by_kind.items(), key=lambda kv: -len(kv[1])):
             print('%-5s %7d   n %d-%d' % (kind, len(rows), rows[0][0], rows[-1][0]))

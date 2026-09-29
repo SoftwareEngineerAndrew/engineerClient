@@ -82,9 +82,7 @@ class RunRecorder(
     fun onTick(level: ClientLevel) {
         flushFrames()
         flushMouse()
-        flushNet()
         tick++
-        updateFocus()
         if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
             // Area is known a second or two after load; anything that is known and not a dungeon is dropped
@@ -151,43 +149,6 @@ class RunRecorder(
     /** The server tick count right now: read on the network thread, where the pings are counted. */
     val serverTickCount: Int get() = serverTicks
 
-    // ------------------------------------------------------------------ boss log
-    // The server's own packets about the boss fights, stamped with the server tick they arrived on
-    // (BossLog), batched into one `net` line per client tick.
-
-    /** Boss withers in view: filled on the game thread, read on the network thread. */
-    val bossIds: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
-
-    /**
-     * Whether the boss log keeps every entity's packets, not only the boss withers': in the boss,
-     * and from the blood door opening until the Watcher is done (the camp starts before anyone is
-     * in the Blood room).
-     */
-    @Volatile var focus = false
-        private set
-    private var bloodOpen = false
-    private var watcherDone = false
-
-    private val netLog = StringBuilder()
-
-    /** One boss-log entry: [n] the server tick it arrived on, [entry] the rest of the tuple. */
-    fun net(n: Int, entry: String) {
-        if (netLog.isNotEmpty()) netLog.append(',')
-        netLog.append('[').append(n).append(',').append(entry).append(']')
-    }
-
-    fun netBlock(n: Int, pos: BlockPos, state: BlockState) = net(n, "\"b\",${pos.x},${pos.y},${pos.z},${paletteIndex(state)}")
-
-    private fun flushNet() {
-        if (netLog.isEmpty()) return
-        emit("""{"k":"net","t":$tick,"d":[$netLog]}""")
-        netLog.setLength(0)
-    }
-
-    private fun updateFocus() {
-        focus = DungeonUtils.inBoss || DungeonUtils.currentRoomName == "Blood" || (bloodOpen && !watcherDone)
-    }
-
     // ------------------------------------------------------------------ what you do
     /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
     fun onSlotClick(slot: Int, button: Int, type: String) =
@@ -230,8 +191,6 @@ class RunRecorder(
         val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
         val st = if (n != null) ",\"n\":$n" else ""
         emit("""{"k":"chat","t":$tick$st,"m":${str(message)}$c}""")
-        if (message.startsWith("The BLOOD DOOR has been opened!")) bloodOpen = true
-        if (message.startsWith("[BOSS] The Watcher: You have proven yourself")) watcherDone = true
     }
 
     /** A chest (or ender chest) lid event: [openCount] players now have it open (0 = it closes). */
@@ -318,7 +277,6 @@ class RunRecorder(
     /** Ends the session: closes the file (on the writer thread) and gives it its final name. */
     fun finish() {
         if (!confirmed) { abandon(); return }
-        flushNet()
         emit("""{"k":"end","t":$tick,"ms":${System.currentTimeMillis()}}""")
         val temp = tempFile ?: return
         val finalName = "${startedAt.format(STAMP)}_${(floorName ?: "unknown").replace(Regex("[^A-Za-z0-9]+"), "")}.jsonl.gz"
@@ -555,7 +513,6 @@ class RunRecorder(
             val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
             if (t == null) {
                 tracked[id] = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw))
-                if (e is net.minecraft.world.entity.boss.wither.WitherBoss) bossIds += id
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
@@ -600,7 +557,6 @@ class RunRecorder(
         val gone = tracked.keys.filter { it !in seen }
         for (id in gone) {
             tracked.remove(id)
-            bossIds.remove(id)
             tags.remove(id)
             lastEquipment.remove("#$id")
             lastStand.remove(id)
