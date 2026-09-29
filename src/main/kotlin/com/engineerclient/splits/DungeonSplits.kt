@@ -138,6 +138,7 @@ object DungeonSplits : Module(
             tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
             goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
             portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null
+            maxorAt = null; maxorCheck = null
             barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
             serverTicks = 0
         }
@@ -154,6 +155,8 @@ object DungeonSplits : Module(
             EngineerClient.mc.execute {
                 EngineerClient.safely("splits chat") {
                     if (!DungeonUtils.inDungeons) return@safely
+                    if (text in MAXOR_LASER) { maxorCheck = at.tick + 20 to false; maxorCheckLine = at.tick }
+                    else if (text == MAXOR_ENRAGED) { maxorCheck = at.tick + 20 to true; maxorCheckLine = at.tick }
                     tracker.onChat(text, at)
                     card.onChat(text, at)
                     subs.onChat(text, at)
@@ -214,6 +217,10 @@ object DungeonSplits : Module(
             // starting to move, which he does once everyone is in.
             if (open(SplitTracker.GOLDOR) && card.waitingForCore) watchGoldor(level, trusted = inCore == null) else goldorAt = null
             if (open(SplitTracker.NECRON) && card.necronWatch) watchNecron(level) else necronAt = null
+
+            // Maxor: his wither starting to move ends Move; after a laser or enrage line, Debug
+            // notes when he was seen freezing or moving again.
+            if (open(SplitTracker.MAXOR)) watchMaxor(level) else maxorAt = null
 
             // The Watcher moving off his starting spot, once his first spawns are out.
             if (open(SplitTracker.BLOOD) && card.waitingForWatcher) watchWatcher(level)
@@ -429,6 +436,36 @@ object DungeonSplits : Module(
     /** One timed thing in a section: its label, when it started, and how long it has run. */
     private class Row(val label: String, val at: Stamp, val ms: Long, val ticks: Long, val who: String = "", val note: String = "")
 
+    /** Maxor's wither: its id, where it was last tick, and whether it was moving. */
+    private var maxorAt: Triple<Int, net.minecraft.world.phys.Vec3, Boolean>? = null
+    /** After a laser (freeze) or enrage (move) line: until when, and what to look for. */
+    private var maxorCheck: Pair<Int, Boolean>? = null
+    private var maxorCheckLine = 0
+
+    /**
+     * Maxor's wither, every tick of his split. He stands still through his intro and starts moving
+     * 46 ticks after "DON'T DISAPPOINT ME" - that ends Move. A laser line freezes him 4 ticks later
+     * and the enrage line gets him moving again 1-3 ticks later (every recorded run); the chat lines
+     * are the moments themselves, so these only confirm them, in Debug.
+     */
+    private fun watchMaxor(level: net.minecraft.client.multiplayer.ClientLevel) {
+        val prev = maxorAt
+        val e = (prev?.let { level.getEntity(it.first) } ?: bossWither(level, "Maxor")) ?: run { maxorAt = null; return }
+        val moving = prev != null && prev.first == e.id && e.position().distanceTo(prev.second) > 0.03
+        maxorAt = Triple(e.id, e.position(), moving)
+        if (prev == null || prev.first != e.id) return
+        if (moving && subs.waitingForMaxorMove) subs.onMaxorMoved(now())
+        val check = maxorCheck ?: return
+        if (serverTicks > check.first) {
+            boss.extra(SplitTracker.MAXOR, now(), "§8not seen " + (if (check.second) "moving" else "freezing"), "his wither out of view, or it didn't happen")
+            maxorCheck = null
+        } else if (moving == check.second && moving != prev.third) {
+            boss.extra(SplitTracker.MAXOR, now(), if (moving) "§5moving again" else "§5froze",
+                "his wither seen, " + (serverTicks - maxorCheckLine) + " ticks after the line")
+            maxorCheck = null
+        }
+    }
+
     /** The Watcher and where he started. */
     private var watcherAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
 
@@ -457,6 +494,9 @@ object DungeonSplits : Module(
             boss.extra(SplitTracker.BLOOD, now(), "§5watcher moved", "seen leaving his spot " + BossDetail.blocks(distanceTo(e)) + " away")
         }
     }
+
+    private val MAXOR_LASER = setOf("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", "[BOSS] Maxor: YOU TRICKED ME!")
+    private const val MAXOR_ENRAGED = "⚠ Maxor is enraged! ⚠"
 
     private val WATCHER_SKINS = listOf("5662b6fb4b8b", "2739d7f4e66a", "bf6e1e7ed365", "4cec40008e1c", "b37dd18b5983", "f5f0d78fe38d", "51967db5e319", "9fd61e8055f6", "e5c1dc47a04c")
 
