@@ -8,6 +8,7 @@ Writes OUT_DIR/extract/<id>.json for every recording with Maxor's first line, fr
 ticks before it to 100 after Storm's first line (or the end of the recording):
 
   st       [[t, n]] server tick count (Odin's ping) when it changed, plus the last one before
+  time     [[t, ms]] wall-clock time (the recorder's `time` lines, every 20 client ticks)
   chat     [[t, m]] every chat line
   players  {name: [[t, x, y, z, yaw, pitch, heldItemId]]} party members (last entry holds)
   pgone    [[t, name]]; tp [[t, x, y, z]] the recorder's own teleports; use [[t, x, y, z]]
@@ -76,7 +77,7 @@ def extract(args):
     if t1 is None:
         t1 = max(l.get('t', 0) for l in L)
     pal, party, classes = {}, [], []
-    st, chat, players, pgone, tp, use, ents, dmg, blocks = [], [], {}, [], [], [], {}, [], []
+    st, chat, players, pgone, tp, use, ents, dmg, blocks, wall = [], [], {}, [], [], [], {}, [], [], []
     last_st = None
     for l in L:
         k = l['k']
@@ -95,6 +96,8 @@ def extract(args):
             elif t <= t1:
                 st.append([t, l['n']])
             continue
+        if k == 'time' and t0 - 40 <= t <= t1 + 40:
+            wall.append([t, l['ms']])
         if t < t0 or t > t1:
             continue
         if k == 'chat':
@@ -140,7 +143,7 @@ def extract(args):
         st.insert(0, last_st)
     out = {'id': rid, 'self': meta.get('self'), 'mod': meta.get('mod'),
            'group': (row or {}).get('group', rid), 'party': party, 'classes': classes,
-           'window': [t0, t1], 'st': st, 'chat': chat, 'players': players, 'pgone': pgone,
+           'window': [t0, t1], 'st': st, 'time': wall, 'chat': chat, 'players': players, 'pgone': pgone,
            'tp': tp, 'use': use, 'ents': ents, 'dmg': dmg, 'blocks': blocks}
     tmp = dst + '.tmp'
     json.dump(out, open(tmp, 'w'), separators=(',', ':'))
