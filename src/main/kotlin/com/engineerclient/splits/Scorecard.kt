@@ -17,8 +17,12 @@ import java.util.Locale
  */
 class Scorecard {
 
-    // Blood: the Watcher moving off the spot he starts on, once his first spawns are out - 240-243
-    // server ticks after his first line in every recorded run where he was in view.
+    // Blood, the way Devonian splits it: the dialog (his first line to "Let's see how you can handle
+    // this."), the move (that line to the Watcher's first move at least 45 server ticks after it -
+    // 55-148 ticks in the recorded runs, depending on the camp), then the clear.
+    /** "Let's see how you can handle this." */
+    var watcherHandle: Stamp? = null
+        private set
     private var watcherMoved: Stamp? = null
 
     // Portal: the nether portal appearing in the blood room, 3-6 s after the Watcher lets you go.
@@ -52,7 +56,7 @@ class Scorecard {
     var onEvent: (String) -> Unit = {}
 
     fun reset() {
-        watcherMoved = null
+        watcherHandle = null; watcherMoved = null
         portalOpen = null; crystals.clear(); maxorStuns.clear(); maxorGone = null
         stormMoving = null; crushes.clear(); freed.clear(); stormDead = null
         allIn = null; goldorHit = null; goldorDead = null
@@ -61,6 +65,7 @@ class Scorecard {
 
     fun onChat(msg: String, at: Stamp) {
         when {
+            msg == WATCHER_HANDLE && watcherHandle == null -> { watcherHandle = at; note("watcher dialog over") }
             CRYSTAL_ACTIVE.matches(msg) -> { crystals += at; note("crystal active ${crystals.size}") }
             msg in MAXOR_STUNNED && crystals.size >= 2 -> { maxorStuns += at; note("Maxor stunned ${maxorStuns.size}") }
             msg in LIGHTNING && stormMoving == null -> { stormMoving = at; note("Storm moving (lightning)") }
@@ -71,11 +76,13 @@ class Scorecard {
         }
     }
 
-    /** The first nether portal block of the run: the portal out of the blood room has opened. */
-    fun onWatcherMoved(at: Stamp, how: String) { if (watcherMoved == null) { watcherMoved = at; note("watcher moved ($how)") } }
+    /** The Watcher's move: his first, at least 45 server ticks after the dialog ends. */
+    fun onWatcherMoved(at: Stamp, how: String) { if (watcherHandle != null && watcherMoved == null) { watcherMoved = at; note("watcher moved ($how)") } }
 
-    /** The Watcher's move is still to come. */
-    val waitingForWatcher: Boolean get() = watcherMoved == null
+    /** The dialog is over and the Watcher's move is still to come. */
+    val waitingForWatcher: Boolean get() = watcherHandle != null && watcherMoved == null
+
+    /** The first nether portal block of the run: the portal out of the blood room has opened. */
 
     fun onPortal(at: Stamp) { if (portalOpen == null) { portalOpen = at; note("portal open") } }
 
@@ -134,9 +141,11 @@ class Scorecard {
                 }
                 SplitTracker.BLOOD -> {
                     cells += colour(s.label) + real(s.start, end)
-                    // Until the Watcher moves, then from his move to "You have proven yourself" - the camp.
-                    val moved = watcherMoved?.takeIf { it.realMs >= s.start.realMs }
-                    cells += "§5" + real(s.start, moved)
+                    // Devonian's three: the dialog, the move, the clear.
+                    val handle = watcherHandle?.takeIf { it.realMs >= s.start.realMs }
+                    val moved = watcherMoved?.takeIf { handle != null && it.realMs >= handle.realMs }
+                    cells += "§7" + real(s.start, handle)
+                    cells += "§5" + real(handle, moved)
                     if (s.stop != null) cells += "§c" + real(moved, s.stop)
                 }
                 SplitTracker.PORTAL -> {
@@ -208,6 +217,7 @@ class Scorecard {
     private fun fmt(ms: Long) = String.format(Locale.ROOT, "%.1f", ms.coerceAtLeast(0) / 1000.0)
 
     private companion object {
+        const val WATCHER_HANDLE = "[BOSS] The Watcher: Let's see how you can handle this."
         val CRYSTAL_ACTIVE = Regex("""^\d+/\d+ Energy Crystals are now active!$""")
         val MAXOR_STUNNED = setOf("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", "[BOSS] Maxor: YOU TRICKED ME!")
         val LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
