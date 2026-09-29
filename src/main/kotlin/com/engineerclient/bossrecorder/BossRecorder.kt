@@ -40,6 +40,21 @@ object BossRecorder : Module(
         }
     }
 
+    /** Whether the module has had its one-time switch-on (it is on by default, on existing installs too). */
+    private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
+
+    /**
+     * On by default: modules start off and only a saved config turns them on, so this turns it on
+     * once - on a fresh install and on one that had never seen it - and never again, so switching
+     * it off sticks. Call after the configs have loaded.
+     */
+    fun enableByDefault() {
+        if (switchedOn) return
+        switchedOn = true
+        if (!enabled) toggle()
+        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+    }
+
     private val dir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("bossrecorder")
 
     /** The recording for the current world; read on the network thread. */
