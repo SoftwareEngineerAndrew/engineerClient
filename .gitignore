@@ -5,3 +5,4 @@ run/
 *.iml
 logs/
 .kotlin/
+__pycache__/
