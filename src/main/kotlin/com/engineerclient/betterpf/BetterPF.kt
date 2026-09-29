@@ -61,7 +61,7 @@ object BetterPF : Module(
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
 ) {
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Captures each dungeon room once (every block) for the viewer's shared room library, plus the doors/walls between rooms each run. Rooms the library already has are skipped.")
-    private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf). Needs the upload key.")
+    private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed. Turn on Private Runs to keep them off the public list.")
     private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them. /betterpf gives you a link to all your runs, private ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, and friends coming online out of recordings, so they are never saved or uploaded. Party chat stays in.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
@@ -83,7 +83,7 @@ object BetterPF : Module(
         return ownerToken
     }
 
-    private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
+    private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Optional, for the team: also shares room captures with the viewer's room library and lifts the hourly upload limit. Runs upload without it.")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
 
     /** The upload key, for other features that write to the site (BR Roles's boxes). */
@@ -264,7 +264,7 @@ object BetterPF : Module(
      */
     private fun upload(file: Path) {
         val key = uploadKey.trim()
-        if (!uploadRuns || key.isEmpty()) return
+        if (!uploadRuns) return
         Thread.ofVirtual().name("betterpf-upload").start {
             try {
                 val id = send(file, key)
@@ -288,15 +288,17 @@ object BetterPF : Module(
     /** Sends one run, on the calling thread: its new room captures, then the run. Its id on the site. */
     private fun send(file: Path, key: String): String {
         val (summary, rooms) = readForUpload(file)
-        for ((roomKey, line) in rooms) {
+        // Room captures go into the library everyone's replays are drawn from, so only with the key.
+        if (key.isNotEmpty()) for ((roomKey, line) in rooms) {
             val req = HttpRequest.newBuilder(URI.create(ROOMS_URL))
                 .header("X-Upload-Key", key).header("X-Room-Key", roomKey).header("Content-Type", "application/json")
                 .timeout(Duration.ofMinutes(2)).POST(HttpRequest.BodyPublishers.ofString(line)).build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) EngineerClient.logger.warn("[ec] betterpf: room $roomKey refused (${res.statusCode()})")
         }
+        // Without the key the site still takes it: checked, and a limited number an hour.
         val req = HttpRequest.newBuilder(URI.create(RUNS_URL))
-            .header("X-Upload-Key", key)
+            .apply { if (key.isNotEmpty()) header("X-Upload-Key", key) }
             .header("X-Run-Summary", summary.toString())
             .header("X-Run-Owner", token())
             .header("Content-Type", "application/octet-stream")
@@ -348,7 +350,7 @@ object BetterPF : Module(
 
     private fun uploadMissing() {
         val key = uploadKey.trim()
-        if (key.isEmpty()) return EngineerClient.msg("§cBetter PF: set the Upload Key first.")
+
         if (catchingUp) return EngineerClient.msg("§7Better PF: already uploading missing runs.")
         catchingUp = true
         Thread.ofVirtual().name("betterpf-catch-up").start {
@@ -365,12 +367,17 @@ object BetterPF : Module(
                 if (missing.isEmpty()) return@start EngineerClient.msg("§7Better PF: all ${local.size} runs here are already on the viewer.")
                 EngineerClient.msg("§7Better PF: ${missing.size} of ${local.size} runs aren't on the viewer - uploading them.")
                 var done = 0
-                missing.forEachIndexed { i, f ->
+                for ((i, f) in missing.withIndex()) {
                     try {
                         send(f, key)
                         done++
                         EngineerClient.msg("§7Better PF: uploaded ${i + 1}/${missing.size} §8(${f.fileName})")
                     } catch (t: Throwable) {
+                        // Without the key the site takes a limited number an hour: the rest another time.
+                        if (t is Refused && t.message?.startsWith("429") == true) {
+                            EngineerClient.msg("§eBetter PF: $done uploaded - that's the hourly limit. Use Upload Missing Runs again later for the other ${missing.size - done}.")
+                            return@start
+                        }
                         EngineerClient.msg("§cBetter PF: ${f.fileName} ${if (t is Refused) "refused (${t.message})" else "failed (${t.javaClass.simpleName})"}")
                     }
                 }
