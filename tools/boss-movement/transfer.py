@@ -35,7 +35,9 @@ def load_flights(out_dir):
         d = json.load(open(path))
         if any(r in R.ALPHA_RUNS for r in d['recs']) or 'storm' not in d['bosses']:
             continue
-        if any(v['server_ticks'] == 0 for v in d['lag'].values()):
+        # Server ticks only: a recording without `st` lines is timed on client ticks in its track
+        # (which run ahead while the server lags), so its extract is checked instead.
+        if not all(json.load(open(os.path.join(out_dir, 'extract', r + '.json'))).get('st') for r in d['recs']):
             continue
         ev = d['events']
         if R.STORM_START not in ev:
