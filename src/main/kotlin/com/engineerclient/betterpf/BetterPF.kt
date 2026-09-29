@@ -267,6 +267,9 @@ object BetterPF : Module(
         if (!uploadRuns) return
         Thread.ofVirtual().name("betterpf-upload").start {
             try {
+                // Party members recording the same run take turns, a little apart, so the first one's
+                // recording is on the site when the next ones look for it (see [send]).
+                staggerForParty(file)
                 val id = send(file, key)
                 uploadFailSaid = false
                 if (uploadedMessage) EngineerClient.msg("§7Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
@@ -285,6 +288,33 @@ object BetterPF : Module(
 
     private class Refused(message: String) : Exception(message)
 
+    /**
+     * Waits 20 s for each party member whose name sorts before yours: whoever sorts first uploads
+     * straight away, and the others find their recording there to leave out what it already has.
+     */
+    private fun staggerForParty(file: Path) {
+        val (summary, _) = runCatching { readForUpload(file) }.getOrNull() ?: return
+        val self = summary["self"]?.asString ?: return
+        val names = summary["party"]?.asJsonArray?.mapNotNull { runCatching { it.asJsonArray[0].asString }.getOrNull() }?.sortedBy { it.lowercase() } ?: return
+        val rank = names.indexOfFirst { it.equals(self, ignoreCase = true) }
+        if (rank > 0) Thread.sleep(rank * 20_000L)
+    }
+
+    /**
+     * Another party member's recording of this run already on the site (the earliest), to leave out
+     * what it has: its bytes, or null. Only with the key (it is what the site checks recordings by).
+     */
+    private fun siblingOf(summary: JsonObject, key: String): ByteArray? {
+        if (key.isEmpty()) return null
+        return runCatching {
+            val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).header("X-Upload-Key", key).header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofString())
+            val id = JsonParser.parseString(res.body()).asJsonObject["id"]?.takeIf { !it.isJsonNull }?.asString ?: return null
+            val got = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/$id")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofByteArray())
+            got.body().takeIf { got.statusCode() == 200 }
+        }.onFailure { EngineerClient.logger.warn("[ec] betterpf: sibling lookup failed", it) }.getOrNull()
+    }
+
     /** Sends one run, on the calling thread: its new room captures, then the run. Its id on the site. */
     private fun send(file: Path, key: String): String {
         val (summary, rooms) = readForUpload(file)
@@ -296,6 +326,20 @@ object BetterPF : Module(
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) EngineerClient.logger.warn("[ec] betterpf: room $roomKey refused (${res.statusCode()})")
         }
+        // Without the key the site checks the recording on its way in, which it can only do for
+        // gzip: sent as saved. With it: xz, and without the mobs a party member's recording
+        // already on the site has (UploadPacker).
+        if (key.isEmpty()) return sendPacked(file, summary, key)
+        val (packed, left) = UploadPacker.pack(file, siblingOf(summary, key))
+        if (left > 0) EngineerClient.logger.info("[ec] betterpf: $left mobs left out, already uploaded by a party member")
+        try {
+            return sendPacked(packed, summary, key)
+        } finally {
+            Files.deleteIfExists(packed)
+        }
+    }
+
+    private fun sendPacked(file: Path, summary: JsonObject, key: String): String {
         // Without the key the site still takes it: checked, and a limited number an hour.
         val req = HttpRequest.newBuilder(URI.create(RUNS_URL))
             .apply { if (key.isNotEmpty()) header("X-Upload-Key", key) }

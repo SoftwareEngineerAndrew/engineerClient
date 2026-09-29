@@ -404,13 +404,17 @@ class RunRecorder(
         var changed = 0
         val seen = HashSet<String>()
         for (p in level.players()) {
-            val name = p.name.string
+            // Hypixel's player-shaped mobs (uuid version 2) share names - sixteen "Crypt Souleater"s -
+            // so each is keyed by its entity id too ("Crypt Souleater#1234"): otherwise they
+            // overwrote each other here, every one looked changed every tick, and the viewer drew
+            // them as one mob jumping about. Real players keep their names.
+            val name = if (p.uuid.version() == 2) "${p.name.string}#${p.id}" else p.name.string
             seen += name
             val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { vanillaId(it) } }
             if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
             recordEquipment(p, "\"name\":${str(name)}", name)
             // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one; [9] 1 while crouching.
-            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
+            val entry = "[${str(name)},${m(p.x)},${m(p.y)},${m(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
             recordHeldHead(p, name)
             if (lastPlayer.put(name, entry) == entry) continue
             if (changed++ > 0) sb.append(',')
@@ -480,7 +484,7 @@ class RunRecorder(
             // Mobs turn their heads apart from their bodies (the way they look at you).
             val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
             if (t == null) {
-                tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored, headYaw)
+                tracked[id] = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw))
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
@@ -497,12 +501,15 @@ class RunRecorder(
                 t.name = colored
                 emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}$c}""")
             }
-            if (e.x != t.x || e.y != t.y || e.z != t.z || e.yRot != t.yaw || headYaw != t.headYaw) {
-                t.x = e.x; t.y = e.y; t.z = e.z; t.yaw = e.yRot; t.headYaw = headYaw
+            // Mobs at 1/100 of a block and whole degrees (finer is invisible), and only when that
+            // changes: a mob twitching less than that is not a move.
+            val qx = q(e.x); val qy = q(e.y); val qz = q(e.z); val qYaw = deg(e.yRot); val qHead = deg(headYaw)
+            if (qx != t.x || qy != t.y || qz != t.z || qYaw != t.yaw || qHead != t.headYaw) {
+                t.x = qx; t.y = qy; t.z = qz; t.yaw = qYaw; t.headYaw = qHead
                 if (movedCount++ > 0) moved.append(',')
-                moved.append('[').append(id).append(',').append(n(e.x)).append(',').append(n(e.y)).append(',')
-                    .append(n(e.z)).append(',').append(a(e.yRot))
-                if (e is LivingEntity) moved.append(',').append(a(headYaw))
+                moved.append('[').append(id).append(',').append(m(e.x)).append(',').append(m(e.y)).append(',')
+                    .append(m(e.z)).append(',').append(qYaw.toInt())
+                if (e is LivingEntity) moved.append(',').append(qHead.toInt())
                 moved.append(']')
             }
         }
@@ -572,8 +579,11 @@ class RunRecorder(
         val items = listOf(e.mainHandItem, head, e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val headTex = head.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
         val body = items.joinToString(",", "[", "]") { str(vanillaId(it)) } + (headTex?.let { ",\"headTex\":${str(it)}" } ?: "")
-        val previous = lastEquipment.put(key, body)
-        if (previous == body || (previous == null && body == NO_EQUIPMENT)) return
+        // Rainbow armour changes its dye every tick or two: 99% of these lines were that alone, each
+        // with the head's texture again. Only a change of item counts; the first colour stays.
+        val same = body.replace(DYE, "")
+        val previous = lastEquipment.put(key, same)
+        if (previous == same || (previous == null && body == NO_EQUIPMENT)) return
         emit("""{"k":"eq","t":$tick,$who,"eq":$body}""")
     }
 
@@ -606,6 +616,10 @@ class RunRecorder(
     private fun typeOf(e: Entity): String = BuiltInRegistries.ENTITY_TYPE.getKey(e.type).toString()
 
     private fun n(v: Double) = String.format(Locale.ROOT, "%.3f", v)
+    /** A position to 1/100 of a block, and as written ("12.5", not "12.500"). */
+    private fun q(v: Double) = Math.round(v * 100) / 100.0
+    private fun m(v: Double): String { val r = Math.round(v * 100); return if (r % 100 == 0L) (r / 100).toString() else (r / 100.0).toString() }
+    private fun deg(v: Float) = Math.round(v).toFloat()
     private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
     private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
 
@@ -627,6 +641,8 @@ class RunRecorder(
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
         const val NO_EQUIPMENT = """["","","","",""]"""
+        /** A dye colour on an item id ("#rrggbb"), left out when comparing equipment. */
+        private val DYE = Regex("#[0-9a-f]{6}")
         // How far around you (in chunks) placed player heads are looked for, every second.
         const val SKULL_CHUNKS = 12
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
