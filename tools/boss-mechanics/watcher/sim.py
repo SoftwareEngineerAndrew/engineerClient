@@ -11,7 +11,9 @@ Model (measured, see docs/mechanics/watcher.md; the double-launch rule is a fit,
     of the target niche and 1 block above the skull, launches it 9 ticks after arriving, and
     leaves for the next target on the first D+40k tick after he arrived.
   - A next target in the same or the neighbouring niche (<= 4.1 blocks away sideways) is launched
-    from the same stop 8 ticks later with probability pdouble (measured ~half of such pairs).
+    from the same stop 8 ticks later with probability pdouble. pdouble 0 (one skull per 40-tick
+    step) reproduces the recorded fast-kill runs (last spawn - move: sim p10/median/p90 670/740/819,
+    recorded 682/738/810); larger values are there to show what doubling up would be worth.
   - A skull flies 0.3 blocks/tick to a random point within 3 blocks of the middle; the mob appears
     when it lands.
 Prints the last mob's spawn, relative to the door (D), as percentiles.
@@ -59,7 +61,7 @@ def last_spawn(move, pdouble, rng):
 def main():
     n = int(sys.argv[sys.argv.index('--runs') + 1]) if '--runs' in sys.argv else 20000
     move = int(sys.argv[sys.argv.index('--move') + 1]) if '--move' in sys.argv else 480
-    pds = [float(sys.argv[sys.argv.index('--pdouble') + 1])] if '--pdouble' in sys.argv else [0.0, 0.5, 1.0]
+    pds = [float(sys.argv[sys.argv.index('--pdouble') + 1])] if '--pdouble' in sys.argv else [0.0, 0.5]
     rng = random.Random(1)
     for pd in pds:
         v = sorted(last_spawn(move, pd, rng) for _ in range(n))
