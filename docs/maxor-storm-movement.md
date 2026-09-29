@@ -359,16 +359,35 @@ out of the recorder's rounding.
   So where the bait stands sets the last blocks. From x 53 to 49 it takes a median 9.1 ticks
   (best 6.6) with the bait at x 30-37 west of Yellow. It takes 10.7 with the bait at x 37-43,
   and 19.4 with them standing on Yellow (x 43-50).
-- **Skipped moves (not explained).** Besides the whole ticks lost above, 26 of 152 flights have
-  a stretch of 5-57 ticks at exactly half speed: one 0.716 move every other tick, like a slow
-  effect. The single skips look random, about 4.6% of ticks. They are not tied to:
-  - players nearby: nobody was within 8 blocks of him on the straight in any flight, the nearest
-    ~42;
-  - arrows fired: the skip rate is 5.1% with none in the last 8 ticks;
-  - the 20-tick check grid: flat over all 20 phases;
-  - the server running slow: no correlation with real milliseconds per server tick (r = 0.17).
+- **Skipped moves (real, cause not found).** On some ticks he makes no move at all; his step
+  never changes size (0.713-0.722 all along the straight until x ~72). Four parallel
+  investigations (scripts in the session scratchpad, summarised here) found:
+  - **They are real server behaviour.** Two recorders of the same run lose the same number of
+    ticks per flight (24 runs, never more than 1 apart), raw client positions give the same rate
+    as the de-lerped ones, and neither recorder precision, client stalls nor the server's tick
+    rate tracks it. True rate about 6% of ticks on the straight, placeable only to ±1 tick.
+  - **Only the flight between pillars skips much.** Scripted opening route 0.16% (nothing),
+    first chase at 0.9 a tick 2.5%, the flight 5.5%, on runs with real server ticks.
+  - **It depends on how far into the flight he is, not on the run.** About 2% of ticks at x
+    94-82 (the first ~20 ticks after he sets off), 6-8% at x 82-70 (enrage + 30-45). A run's
+    rate doesn't track its opening or chase rate, the two halves of one flight don't track each
+    other, and "a quarter of flights never skip" is mostly chance on a 28-tick window. Nothing
+    at run level correlates (day, time, mod, party, recorder, lag, pin length, earlier timings).
+  - **Not player positions.** At the same point in the flight, skip rate is flat against the
+    nearest player's distance, players within 32/40/64 blocks, near-ties or changes of the
+    closest player, players on or past Yellow, in P3, airborne, below the floor, and who was in
+    the party. The earlier position effects came from 9 flights that were not on the straight at
+    all (steps not whole moves, heading 11-57° off); in 5 of those 9 a living player was within
+    20 blocks, which may put him in a different movement mode.
+  - **Not his own actions.** His wither skulls come in pairs every 5 ticks straight through
+    skips; head turns, other withers, piston and other block updates, chat, mob spawns: no link.
+  - **Half-speed stretches** (a move every other tick for 8+ ticks, in ~25 flights) have no
+    visible trigger either; skulls and pistons carry on at their usual rate inside them. A slow
+    applied to Storm by a player ability is the untested candidate.
 
-  What causes them is the one open part of how he moves. It is what decides §4.4.
+  What causes them is the one open part of how he moves, and it is what decides §4.4. It would
+  take a recorder that logs each of Storm's move packets with the server tick it arrived on,
+  plus every player's abilities, to settle it.
 
 ### 3.6 Later chase
 
