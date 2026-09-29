@@ -30,7 +30,7 @@ def load_extracts(out_dir):
         if not f.endswith('.json'):
             continue
         x = json.load(open(os.path.join(d, f)))
-        if 'skip' in x:
+        if 'skip' in x or x['id'] in R.ALPHA_RUNS:
             continue
         X[x['id']] = x
     return X

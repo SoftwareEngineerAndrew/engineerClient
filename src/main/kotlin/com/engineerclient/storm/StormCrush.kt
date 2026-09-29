@@ -28,7 +28,7 @@ object StormCrush {
 
     /**
      * How far above Storm's feet the check's head point sits: a wither's eye height (3.5 x 0.85).
-     * The recordings put it between 2.947 (crushed) and 3.10 (not crushed).
+     * The recordings put it between 2.947 (crushed) and 3.41 (not crushed).
      */
     const val HEAD = 2.975
 
