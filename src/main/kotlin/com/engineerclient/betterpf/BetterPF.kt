@@ -17,6 +17,8 @@ import com.odtheking.odin.features.Module
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
 import com.engineerclient.mixin.ContainerScreenAccessor
+import com.engineerclient.mixin.MoveEntityPacketAccessor
+import com.engineerclient.mixin.RotateHeadPacketAccessor
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.ChatFormatting
@@ -25,6 +27,10 @@ import net.minecraft.network.chat.FormattedText
 import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
+import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket
+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket
+import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket
+import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
@@ -156,6 +162,56 @@ object BetterPF : Module(
             val abs = if (player != null) PositionMoveRotation.calculateAbsolute(PositionMoveRotation.of(player), change(), relatives()) else change()
             val rel = relatives().map { it.name }
             EngineerClient.mc.execute { EngineerClient.safely("betterpf tp") { session?.onTeleport(abs.position().x, abs.position().y, abs.position().z, abs.yRot(), abs.xRot(), if (player == null) rel else emptyList()) } }
+        }
+        // Boss withers' own movement packets, stamped with the server tick they arrived on (read here,
+        // on the network thread, so a packet queued behind a tick isn't counted a tick late). The
+        // position is where the server had him, not the client's 3-tick slide toward it. A relative
+        // move is decoded against the entity's last server position: this task runs before vanilla's
+        // handler for the same packet, so that is still the previous one.
+        onReceive<ClientboundMoveEntityPacket> {
+            val s = session ?: return@onReceive
+            val id = (this as MoveEntityPacketAccessor).ec_getEntityId()
+            if (id !in s.bossIds) return@onReceive
+            val n = s.serverTickCount
+            val pos = hasPosition(); val dx = getXa().toLong(); val dy = getYa().toLong(); val dz = getZa().toLong()
+            val yaw = if (hasRotation()) getYRot() else null
+            EngineerClient.mc.execute {
+                EngineerClient.safely("betterpf boss move") {
+                    val e = EngineerClient.mc.level?.getEntity(id) ?: return@safely
+                    val v = if (pos) e.positionCodec.decode(dx, dy, dz) else null
+                    session?.onBossMove(n, id, v?.x, v?.y, v?.z, yaw, "m")
+                }
+            }
+        }
+        onReceive<ClientboundTeleportEntityPacket> {
+            val s = session ?: return@onReceive
+            val id = id()
+            if (id !in s.bossIds) return@onReceive
+            val n = s.serverTickCount
+            val change = change(); val rel = relatives()
+            EngineerClient.mc.execute {
+                EngineerClient.safely("betterpf boss teleport") {
+                    val e = EngineerClient.mc.level?.getEntity(id) ?: return@safely
+                    val abs = PositionMoveRotation.calculateAbsolute(PositionMoveRotation.of(e), change, rel)
+                    session?.onBossMove(n, id, abs.position().x, abs.position().y, abs.position().z, abs.yRot(), "t")
+                }
+            }
+        }
+        onReceive<ClientboundEntityPositionSyncPacket> {
+            val s = session ?: return@onReceive
+            val id = id()
+            if (id !in s.bossIds) return@onReceive
+            val n = s.serverTickCount
+            val v = values()
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf boss sync") { session?.onBossMove(n, id, v.position().x, v.position().y, v.position().z, v.yRot(), "s") } }
+        }
+        onReceive<ClientboundRotateHeadPacket> {
+            val s = session ?: return@onReceive
+            val id = (this as RotateHeadPacketAccessor).ec_getEntityId()
+            if (id !in s.bossIds) return@onReceive
+            val n = s.serverTickCount
+            val h = getYHeadRot()
+            EngineerClient.mc.execute { EngineerClient.safely("betterpf boss head") { session?.onBossHead(n, id, h) } }
         }
         // Bats hit or killed (secret bats: their squeak is quieter than any other bat's).
         onReceive<ClientboundSoundPacket> {
