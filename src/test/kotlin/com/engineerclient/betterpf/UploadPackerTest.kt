@@ -43,6 +43,14 @@ class UploadPackerTest {
     }
 
     @Test
+    fun `without the key it stays gzip`() {
+        val file = Files.createTempFile("run", ".jsonl.gz").also { Files.write(it, gz(mine)) }
+        val (out, _) = UploadPacker.pack(file, gz(sibling), xz = false)
+        val lines = java.util.zip.GZIPInputStream(Files.newInputStream(out)).readBytes().toString(Charsets.UTF_8).trim().lines()
+        assertEquals(mine.size - 2, lines.size) // mob 1's spawn and gone left out; its move dropped from the "e" line
+    }
+
+    @Test
     fun `mobs the sibling has as much of are left out, everything else kept`() {
         val file = Files.createTempFile("run", ".jsonl.gz").also { Files.write(it, gz(mine)) }
         val (out, dropped) = UploadPacker.pack(file, gz(sibling))
