@@ -3,13 +3,13 @@
 
 usage: splits.py OUT_DIR
 
-Section ends come from Hypixel's "(n/n)" completion line when the recording has it, else from
-Goldor's section-complete line: one of three, said in the same tick as the last completion of
-S1-S3 (checked here against the recordings that have both). S4 ends at "The Core entrance is
-opening!". Goldor's death is his "...." when he is killed on the way in, else Necron's first
+A section ends when its door opens (sections.py: the door's barriers turning to air, in every
+recording) - the later of its last completion and its gate being destroyed. S4 ends at "The Core
+entrance is opening!", in the tick of its last completion. Goldor's death is his "...." when he is killed on the way in, else Necron's first
 line - 82 (the gap measured when "...." is the death line). Prints distributions and the fastest
 runs; writes OUT_DIR/splits.json.
 """
+import collections
 import json
 import os
 import sys
@@ -17,23 +17,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import glib as G  # noqa: E402
 
-SECTION_LINES = ("[BOSS] Goldor: I will replace that gate with a stronger one!",
-                 "[BOSS] Goldor: YOUR END IS NEAR!!",
-                 "[BOSS] Goldor: The little ants have a brain it seems.")
-
-
 def run_splits(x, sec):
-    c = G.Clock(x['st'])
-    g = x['goldor']
-    n0 = c.n(g)
-    said = [c.n(t) - n0 for t, m in x['chat'] if t >= g and m in SECTION_LINES]
     ends, check = {}, []
     for k in (1, 2, 3):
-        d = sec['done'].get(str(k))
-        s = said[k - 1] if len(said) >= k else None
-        if d is not None and s is not None:
-            check.append(s - d)
-        ends[k] = d if d is not None else s
+        d, c_ = sec['door'].get(str(k)), sec['done'].get(str(k))
+        if d is not None and c_ is not None:
+            check.append(d - c_)
+        ends[k] = d
     ends[4] = sec['core']
     e = sec['ends']
     if e['dots'] is not None and (e['doneit'] is None or e['dots'] < e['doneit']):
@@ -44,7 +34,7 @@ def run_splits(x, sec):
         death, how = None, None
     return {'ends': ends, 'gates': {int(k): v for k, v in sec['gate'].items()}, 'death': death,
             'death_how': how, 'necron': e['necron'], 'check': check,
-            'doneit': e['doneit'], 'n_said': len(said)}
+            'doneit': e['doneit']}
 
 
 def main():
@@ -63,8 +53,7 @@ def main():
     json.dump(runs, open(os.path.join(out_dir, 'splits.json'), 'w'))
 
     chk = [d for r in per.values() for d in r['check']]
-    print('section-complete Goldor line minus the (n/n) completion line, server ticks:',
-          sorted(set(chk)), 'n=%d' % len(chk))
+    print('door open minus the (n/n) line, server ticks:', sorted(collections.Counter(chk).items()))
     rows = [r for r in runs.values() if all(r['ends'][k] is not None for k in (1, 2, 3, 4))]
     print('runs with all four section ends: %d (of %d runs with server ticks)' % (len(rows), len(runs)))
     for k in (1, 2, 3, 4):
