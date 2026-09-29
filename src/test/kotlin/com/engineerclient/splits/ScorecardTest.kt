@@ -13,6 +13,19 @@ class ScorecardTest {
     private fun split(label: String, from: Int, to: Int?, lagMs: Long = 0) = Split(label, stamp(from), to?.let { stamp(it, lagMs) })
 
     @Test
+    fun `blood is Devonian's dialog, move and clear`() {
+        // The recorded run 2026-09-28_18-51-20: his first line 843, "handle this" 1310, his first
+        // move 45+ ticks after it 1404, "You have proven yourself" 2339.
+        val card = Scorecard()
+        card.onWatcherMoved(stamp(1083), "seen") // during the dialog: not the move
+        card.onChat("[BOSS] The Watcher: Let's see how you can handle this.", stamp(1310))
+        card.onWatcherMoved(stamp(1404), "seen")
+        card.onWatcherMoved(stamp(1500), "seen") // only the first counts
+        val row = card.rows(listOf(split(SplitTracker.BLOOD, 843, 2339)), stamp(2339), emptyList(), true, emptyList())
+        assertEquals(listOf("§c74.8\t§723.4\t§54.7\t§c46.8"), row)
+    }
+
+    @Test
     fun `blood rush is real time, its rooms ticks, and their average once the rush is over`() {
         val card = Scorecard()
         val splits = listOf(split(SplitTracker.OPEN, 0, 400, lagMs = 500))

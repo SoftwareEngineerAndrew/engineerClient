@@ -82,7 +82,7 @@ object DungeonSplits : Module(
 
     private val scorecardHud by HUD("Scorecard Splits", "The whole run as a table: each split's total, then its sub splits.", true, 10, 150, 1f) { example ->
         if (example) return@HUD scorecard(this, listOf(
-            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§c62.0\t§512.0\t§c50.0", "§d3.1\t§53.0\t§60.0",
+            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§c62.0\t§723.4\t§54.8\t§c33.8", "§d3.1\t§53.0\t§60.0",
             "§525.2\t§32.2\t§62.0\t§36.5", "§b45.9\t§60.4\t§c0.1\t§63.5\t§c0.2", "§620.9\t§811.9\t§85.2\t§83.9\t§84.1",
             "§e7.7\t§51.2\t§32.5\t§c2.9", "§c30.7\t§a9.8",
         ))
@@ -137,7 +137,7 @@ object DungeonSplits : Module(
         on<LevelEvent.Load> {
             tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
             goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
-            portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null
+            portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
             maxorAt = null; maxorCheck = null
             barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
             serverTicks = 0
@@ -467,37 +467,37 @@ object DungeonSplits : Module(
         }
     }
 
-    /** The Watcher and where he started. */
+    /** The Watcher: his id and where he was last tick. */
     private var watcherAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
+    private var watcherNotSeenNoted = false
 
     /**
-     * The Watcher moving: a zombie wearing one of his skins (the ones Odin's Blood Camp knows him
-     * by), first seen moving after his first line. In every recorded run where he was in view it
-     * was 240-243 server ticks after that line, so if he is never in view by 250 the move is counted
-     * as 240 - and Debug says it was counted.
+     * The Watcher's move, the way Devonian times it: once his dialog is over ("Let's see how you
+     * can handle this."), the first tick he moves at least 45 server ticks after that line - the
+     * wait skips his settling right as he says it. 55-148 ticks after the line in the recorded runs,
+     * depending on the camp, so there is nothing to count it from: without him in view it stays
+     * blank, and Debug says so. He is the zombie in one of his skins (Odin's Blood Camp list).
      */
     private fun watchWatcher(level: net.minecraft.client.multiplayer.ClientLevel) {
-        val split = tracker.split(SplitTracker.BLOOD) ?: return
-        val at = watcherAt
-        if (at == null) {
-            val w = level.entitiesForRendering().firstOrNull { it is net.minecraft.world.entity.monster.zombie.Zombie && isWatcherHead(it) }
-            if (w != null) { watcherAt = w.id to w.position(); return }
-            if (serverTicks - split.start.tick >= 250) {
-                val moved = Stamp(split.start.realMs + 240 * 50L, split.start.tick + 240)
-                card.onWatcherMoved(moved, "counted")
-                boss.extra(SplitTracker.BLOOD, moved, "§5watcher moved", "counted: 240 ticks after his first line - he wasn't in view")
+        val handle = card.watcherHandle ?: return
+        val prev = watcherAt
+        val e = (prev?.let { level.getEntity(it.first) }
+            ?: level.entitiesForRendering().firstOrNull { it is net.minecraft.world.entity.monster.zombie.Zombie && isWatcherHead(it) })
+        if (e == null) {
+            watcherAt = null
+            if (!watcherNotSeenNoted && serverTicks - handle.tick >= 200) {
+                watcherNotSeenNoted = true
+                boss.extra(SplitTracker.BLOOD, now(), "§8watcher not in view", "his move can't be seen, so it stays blank")
             }
             return
         }
-        val e = level.getEntity(at.first) ?: run { watcherAt = null; return }
-        if (e.position().distanceTo(at.second) > 0.05) {
+        watcherAt = e.id to e.position()
+        if (prev == null || prev.first != e.id || serverTicks - handle.tick < 45) return
+        if (e.position().distanceTo(prev.second) > 0.001) {
             card.onWatcherMoved(now(), "seen")
-            boss.extra(SplitTracker.BLOOD, now(), "§5watcher moved", "seen leaving his spot " + BossDetail.blocks(distanceTo(e)) + " away")
+            boss.extra(SplitTracker.BLOOD, now(), "§5watcher moved", "seen, " + (serverTicks - handle.tick) + " ticks after \"handle this\" - " + BossDetail.blocks(distanceTo(e)) + " away")
         }
     }
-
-    private val MAXOR_LASER = setOf("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", "[BOSS] Maxor: YOU TRICKED ME!")
-    private const val MAXOR_ENRAGED = "⚠ Maxor is enraged! ⚠"
 
     private val WATCHER_SKINS = listOf("5662b6fb4b8b", "2739d7f4e66a", "bf6e1e7ed365", "4cec40008e1c", "b37dd18b5983", "f5f0d78fe38d", "51967db5e319", "9fd61e8055f6", "e5c1dc47a04c")
 
@@ -507,6 +507,9 @@ object DungeonSplits : Module(
         val decoded = runCatching { String(java.util.Base64.getDecoder().decode(tex)) }.getOrNull() ?: return false
         return WATCHER_SKINS.any { it in decoded }
     }
+
+    private val MAXOR_LASER = setOf("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", "[BOSS] Maxor: YOU TRICKED ME!")
+    private const val MAXOR_ENRAGED = "⚠ Maxor is enraged! ⚠"
 
     // Debug's one-time notes.
     private var portalSeen = false
