@@ -64,6 +64,10 @@ object BetterPF : Module(
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf). Needs the upload key.")
     private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, and friends coming online out of recordings, so they are never saved or uploaded. Party chat stays in.")
+    // The chat lines each run brings. Errors (a failed upload or save) always show.
+    val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
+    val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
+    private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
     private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Key for uploading runs to the viewer. Ask undonecoffee for it.")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
 
@@ -249,7 +253,7 @@ object BetterPF : Module(
         Thread.ofVirtual().name("betterpf-upload").start {
             try {
                 val id = send(file, key)
-                EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
+                if (uploadedMessage) EngineerClient.chat("§8[§6EC§8]§7 Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
             } catch (t: Throwable) {
                 if (t !is Refused) EngineerClient.logger.error("[ec] betterpf upload failed", t)
                 EngineerClient.chat("§8[§6EC§8]§c Better PF: upload ${if (t is Refused) "refused (${t.message})" else "failed (${t.javaClass.simpleName})"}. The run is still saved locally.")
