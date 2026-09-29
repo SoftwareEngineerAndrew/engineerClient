@@ -143,7 +143,10 @@ object RandomStuff : Module(
     // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
     // does the matching and the hiding; these settings only say what to hide.
 
-    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", true, desc = "Hides the sidebar lines nobody reads mid-run: the date and server, the Skyblock clock and season, the dungeon Keys and Cleared lines, blank spacers, plus anything in Also Hide. Off, the sidebar is left alone.")
+    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", true, desc = "Hides the sidebar lines chosen on the Scoreboard Lines page: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below and anything in Also Hide. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
+    private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", false, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
+    private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", true, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
+    private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", true, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
     private val hideSbCustom by StringSetting("Scoreboard: Also Hide", "", 200, desc = "Extra sidebar lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard and copy what you see. Regexes work too.").withDependency { hideSbLines }
 
     /**
@@ -303,6 +306,9 @@ object RandomStuff : Module(
             resolveArmorStands()
             ScoreboardLines.hideLines = enabled && hideSbLines
             ScoreboardLines.customPatterns = hideSbCustom
+            ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
+            ScoreboardLines.hideTimeElapsed = hideSbElapsed
+            ScoreboardLines.hideCleared = hideSbCleared
         }
 
         // Hide Armor Stands: a stand's name and equipment (what tells a key or a starred mob's tag

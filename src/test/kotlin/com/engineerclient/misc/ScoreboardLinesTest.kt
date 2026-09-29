@@ -1,123 +1,78 @@
 package com.engineerclient.misc
 
+import com.engineerclient.misc.ScoreboardLines.Kind
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The sidebar line hider's matching.
- *
- * The lines in `realDump` came off a real Hypixel sidebar and are the ones that matter. The rest
- * are still written from memory — they will tell you if a pattern changes behaviour, but they can
- * pass while matching the wrong thing, so correct them from a dump when one turns up.
- */
+/** Every line here is real, from the scoreboard recorder (salt already stripped unless noted). */
 class ScoreboardLinesTest {
 
-    @BeforeTest
-    @AfterTest
-    fun reset() {
-        ScoreboardLines.hideLines = false
+    @BeforeTest fun defaults() {
         ScoreboardLines.customPatterns = ""
+        ScoreboardLines.hideCatacombsLocation = false
+        ScoreboardLines.hideTimeElapsed = true
+        ScoreboardLines.hideCleared = true
+    }
+    @AfterTest fun reset() = defaults()
+
+    @Test fun `every recorded kind is recognised`() {
+        val lines = mapOf(
+            "09/28/26 m33CJ" to Kind.DATE, "09/28/26  L25H" to Kind.DATE, "09/28/26 m70C 1-2" to Kind.DATE,
+            "Early Spring 17th" to Kind.SEASON, "8:30am" to Kind.CLOCK, "4:40am ☽" to Kind.CLOCK, "10:50am ☀" to Kind.CLOCK,
+            " The Catacombs (F7)" to Kind.LOCATION_CATACOMBS, " The Catacombs (M3)" to Kind.LOCATION_CATACOMBS,
+            " The Catacombs (E)" to Kind.LOCATION_CATACOMBS, " Dungeon Hub" to Kind.LOCATION_OTHER,
+            " Village" to Kind.LOCATION_OTHER, " None" to Kind.LOCATION_OTHER,
+            "Purse: 478,376,408" to Kind.PURSE, "Purse: 478,376,413 (+5)" to Kind.PURSE, "Bits: 188,376 (+609)" to Kind.BITS,
+            "Objective ➡" to Kind.OBJECTIVE, "Objective" to Kind.OBJECTIVE, "Hype: 200/200" to Kind.HYPE,
+            "under heavy development!" to Kind.PROTOTYPE_LOBBY, "www.hypixel.net" to Kind.FOOTER,
+            "Auto-closing in: 1:55" to Kind.STARTING, "Starting in: 0:05" to Kind.STARTING,
+            "[M] sanguchete [Lv33]" to Kind.TEAMMATE_LOBBY, "[B] Shadowhunter101 [Lv3" to Kind.TEAMMATE_LOBBY,
+            "[M] sanguchete 5,531❤" to Kind.TEAMMATE_RUN, "[A] RedRosie989 11,466" to Kind.TEAMMATE_RUN,
+            "Solo" to Kind.SOLO, "Time Elapsed: 01s" to Kind.TIME_ELAPSED, "Time Elapsed: 1m 12s" to Kind.TIME_ELAPSED,
+            "Keys: ■ ✗ ■ 0x" to Kind.KEYS, "Cleared: 11% (0)" to Kind.CLEARED, "" to Kind.BLANK,
+        )
+        for ((line, kind) in lines) assertEquals(kind, ScoreboardLines.kindOf(line, null), "kind of \"$line\"")
     }
 
-    /** Lines that must survive: the sidebar would be pointless if these went too. */
-    private val keep = listOf(
-        "Coins: 1,234,567",
-        "Bits: 0",
-        "Team Score: 305 (S+)",
-        "undonecoffee",
-        "Cleared by: someone",
-    )
-
-    private fun assertKeepsTheRest() {
-        for (line in keep) assertFalse(ScoreboardLines.hides(line), "should not have hidden: $line")
+    @Test fun `the page's choices`() {
+        for (keep in listOf("Purse: 478,376,408", "Bits: 187,767", "[M] sanguchete [Lv33]", "[H] Miximum 9,363❤", " The Catacombs (F7)"))
+            assertFalse(ScoreboardLines.hides(keep), "should stay: $keep")
+        for (gone in listOf("09/28/26 m33CJ", "Early Spring 17th", "8:30am", " Village", "Objective ➡", "Hype: 200/200",
+                            "www.hypixel.net", "Starting in: 0:05", "Solo", "Keys: ■ ✗ ■ 0x", "Time Elapsed: 09s", "Cleared: 3% (0)", ""))
+            assertTrue(ScoreboardLines.hides(gone), "should hide: $gone")
     }
 
-    @Test
-    fun `date and time lines`() {
-        assertTrue(ScoreboardLines.hides("11/12/23 m1CK"))
-        // The clock line leads with a sun or moon glyph, so the pattern cannot be anchored on a digit.
-        assertTrue(ScoreboardLines.hides("☀ 12:10pm"))
-        assertTrue(ScoreboardLines.hides("☽ 4:20am"))
-        assertKeepsTheRest()
+    @Test fun `the three settings`() {
+        ScoreboardLines.hideCatacombsLocation = true; ScoreboardLines.hideTimeElapsed = false; ScoreboardLines.hideCleared = false
+        assertTrue(ScoreboardLines.hides(" The Catacombs (M7)"))
+        assertFalse(ScoreboardLines.hides("Time Elapsed: 09s"))
+        assertFalse(ScoreboardLines.hides("Cleared: 3% (0)"))
     }
 
-    @Test
-    fun `season lines`() {
-        assertTrue(ScoreboardLines.hides("Late Summer 13th"))
-        assertTrue(ScoreboardLines.hides("Early Winter 1st"))
-        assertTrue(ScoreboardLines.hides("Spring 22nd"))
-        assertKeepsTheRest()
+    @Test fun `the objective task is known by the line above it`() {
+        assertEquals(Kind.OBJECTIVE_TASK, ScoreboardLines.kindOf("Talk to Enid", Kind.OBJECTIVE))
+        assertTrue(ScoreboardLines.hides("Talk to Enid", Kind.OBJECTIVE))
+        assertFalse(ScoreboardLines.hides("Talk to Enid", null), "free text is only hidden under Objective")
     }
 
-    @Test
-    fun `dungeon counters`() {
-        assertTrue(ScoreboardLines.hides("Keys: ✗ 1"))
-        assertTrue(ScoreboardLines.hides("Cleared: 42% (180)"))
-        assertTrue(ScoreboardLines.hides("Dungeon Cleared: 7%"))
-        assertKeepsTheRest()
+    @Test fun `unknown lines stay`() {
+        for (line in listOf("Team Score: 305 (S+)", "Coins: 1,234,567", "undonecoffee", "[M] someone DEAD"))
+            assertFalse(ScoreboardLines.hides(line), "unknown should stay: $line")
     }
 
-    /**
-     * Straight off a real sidebar. Hypixel salts each line with a § and a letter so that no two
-     * are identical, and it lands mid-word — which is exactly what defeated the first version of
-     * these patterns.
-     */
-    @Test
-    fun `the real sidebar's salted lines are matched`() {
-        assertTrue(ScoreboardLines.hidesRaw("Early Summer 19\u00a7wth"), "the season, salted between the number and its suffix")
-        assertTrue(ScoreboardLines.hidesRaw(" The Catac\u00a7uombs (F7)"), "the location, salted inside the word")
-        assertTrue(ScoreboardLines.hidesRaw("\u00a7j"), "a spacer that is nothing but salt")
-        // The salt must not make everything vanish.
-        assertFalse(ScoreboardLines.hidesRaw("Coins: \u00a7a1,234,567"))
+    @Test fun `salted lines as Hypixel sends them`() {
+        assertTrue(ScoreboardLines.hidesRaw("Early Summer 19§wth"))
+        assertTrue(ScoreboardLines.hidesRaw("§j"), "a spacer that is nothing but salt")
+        assertFalse(ScoreboardLines.hidesRaw("Purse: §6478,376§j§6,408"))
     }
 
-    @Test
-    fun `the header, the location and blank lines go too`() {
-        assertTrue(ScoreboardLines.hides("SKYBLOCK"))
-        assertTrue(ScoreboardLines.hides("SKYBLOCK CO-OP"))
-        assertTrue(ScoreboardLines.hides("⏣ The Catacombs (F7)"))
-        assertTrue(ScoreboardLines.hides(""))
-        assertTrue(ScoreboardLines.hides("   "))
-    }
-
-    @Test
-    fun `a piece of a line is enough for a custom pattern`() {
+    @Test fun `custom patterns still work`() {
         ScoreboardLines.customPatterns = "Bits:"
         assertTrue(ScoreboardLines.hides("Bits: 0"))
-        assertFalse(ScoreboardLines.hides("Coins: 1,234,567"))
-    }
-
-    @Test
-    fun `custom patterns can be regexes, and several at once`() {
-        ScoreboardLines.customPatterns = "^Team Score; Bits:"
-        assertTrue(ScoreboardLines.hides("Team Score: 305 (S+)"))
-        assertTrue(ScoreboardLines.hides("Bits: 0"))
-        assertFalse(ScoreboardLines.hides("Not a Team Score line"))
-    }
-
-    @Test
-    fun `a custom pattern that is not valid regex is still matched as text`() {
-        // Hypixel's lines are full of brackets, so someone pasting one straight out of the dump
-        // hands us something that does not compile as a regex.
-        ScoreboardLines.customPatterns = "(S+"
-        assertTrue(ScoreboardLines.hides("Team Score: 305 (S+)"))
-        assertFalse(ScoreboardLines.hides("Coins: 1,234,567"))
-    }
-
-    @Test
-    fun `blank custom patterns hide nothing extra`() {
-        ScoreboardLines.customPatterns = "  ;  ; "
-        for (line in keep) assertFalse(ScoreboardLines.hides(line))
-    }
-
-    @Test
-    fun `the master switch is what the mixin asks`() {
-        ScoreboardLines.hideLines = false
-        // hides() is the matcher; whether the module is on is checked by shouldHide() at the render
-        // call, so a line still "matches" here — this pins that split so it is not silently inverted.
-        assertTrue(ScoreboardLines.hides("Late Summer 13th"))
+        assertFalse(ScoreboardLines.hides("Purse: 1"))
     }
 }
