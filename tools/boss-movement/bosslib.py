@@ -381,11 +381,9 @@ DEATH_YOU = __import__('re').compile(r"^ ☠ You (?:were killed by .*|were crush
 REVIVED = __import__('re').compile(r"^ ❣ (\w+) was revived by \w+!$|^ ☠ (\w+) reconnected\.$")
 
 
-def ghost_spans(tr, members_self):
-    """{name: [(n_from, n_to or None)]} when each player was a ghost (dead/disconnected), from the
-    death and revive lines of the reference timeline. members_self maps recording id -> its
-    player (for 'You ...' lines)."""
-    # tr['chat_all'] is not kept; the tracks keep phase events only, so build from 'deaths'
+def ghost_spans(tr, _unused=None):
+    """{name: [[n_from, n_to or None]]} when each player was a ghost (dead or disconnected), from
+    the death / revive / reconnect lines tracks.py collected into tr['deaths']."""
     out = {}
     for n, who, what in tr.get('deaths', []):
         s = out.setdefault(who, [])

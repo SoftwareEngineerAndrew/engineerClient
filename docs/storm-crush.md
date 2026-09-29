@@ -3,6 +3,8 @@
 What decides whether a pillar crushes Storm (F7 phase 2), measured from the Better PF recordings,
 and what the **Storm Phase** module draws because of it. The rule itself is `StormCrush.kt`; the
 measurement is `tools/storm-crush/crush.py` (re-run it when there is more data - see the end).
+How Storm moves, and the fastest split the rule allows, are in
+[`maxor-storm-movement.md`](maxor-storm-movement.md).
 
 ## Data
 
