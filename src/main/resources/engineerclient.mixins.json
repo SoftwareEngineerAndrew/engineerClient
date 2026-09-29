@@ -11,6 +11,7 @@
     "ChatComponentMixin",
     "ConnectionTapMixin",
     "ContainerTooltipMixin",
+    "EntityEventPacketAccessor",
     "FogColorMixin",
     "GameModeRecordMixin",
     "GameRendererInvoker",

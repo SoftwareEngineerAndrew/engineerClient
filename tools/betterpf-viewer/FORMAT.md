@@ -24,8 +24,7 @@ happened, so a reader can play the file start to finish.
 | `meta` | `format, mod, mc, self, startMs, confirmedAtTick, geometry` | first line; `startMs` is wall-clock time at tick 0 |
 | `time` | `t, ms` | wall-clock sync every 20 ticks |
 | `st` | `t, n` | server ticks since the world loaded (Odin's per-tick ping), when it moved; falls behind `t` when the server lags |
-| `bm` | `t, n, id, via, x?, y?, z?, yaw?` | a boss wither's own movement packet (bosses only: every `WitherBoss`), with `n` the server tick count when the packet arrived (read on the network thread, so exact to the tick). `x, y, z` is where the server put him (5 decimals, not the client's 3-tick slide toward it); `yaw` his body yaw. `via`: `m` relative move (no `x,y,z` when it only turned), `t` teleport, `s` position sync |
-| `bh` | `t, n, id, h` | a boss wither's head yaw packet, `n` as for `bm`: the wither faces its target, so this is who he is chasing |
+| `net` | `t, d: [[n, kind, ...], ...]` | the boss log: the server's own packets about the boss fights, each with `n`, the server tick count when it arrived (read on the network thread, so exact to the tick). One line per client tick; the kinds are under **Boss log** below |
 | `ether` | `t, merge, tuners` | your held item's etherwarp: `merge` 1 if Etherwarp is merged into it, `tuners` Transmission Tuners applied (+1 block each), when it changes |
 | `floor` | `t, floor` | floor once known (e.g. `F7`, `M7`) |
 | `party` | `t, m: [[name, class], ...]` | party and classes, rewritten whenever they change |
@@ -62,7 +61,7 @@ happened, so a reader can play the file start to finish.
 | `dslots` | `t, d: [[x, z, what, top], ...]` | door spots read that tick (each once, as its chunk loads): the middle of a gap between tiles. `what` from y 69: `-` no door (y 73 air), `n` open doorway, `w` wither, `b` blood, `e` entrance, `f` falling; `top`: the y 73 block (the frame's style) or `""`. The viewer builds the doorway from its database. |
 | `door` | `t, x0, y0, z0, w, h, d, pal, rle` | (runs before 2026-09-28) a box where a door can be (middle of a tile edge; 7 along the wall, 2 blocks into each room, y 67-76 - older runs: 3x3, y 69-72), air included: the door, the opening, or the wall filling it |
 | `block` | `t, x, y, z, s` | a block changed (doors, levers, secrets...); `s` is a palette index |
-| `chat` | `t, m, c?` | chat line: `m` with formatting stripped; `c` the same line with `§` codes (`§0`-`§f` colours, `§#rrggbb` for other colours, `§k§l§m§n§o`, `§r` reset between styled parts), only when it has formatting |
+| `chat` | `t, n?, m, c?` | chat line: `m` with formatting stripped; `c` the same line with `§` codes (`§0`-`§f` colours, `§#rrggbb` for other colours, `§k§l§m§n§o`, `§r` reset between styled parts), only when it has formatting; `n` (newer runs) the server tick count when it arrived |
 | `room` | `t, name` | you entered a room |
 | `rooms` | `t, r: [[name, type, shape, rotation, checkmark, [[tx, tz], ...], secretsFound, secretsTotal, libraryKey?], ...]` | Odin's classification of every room it knows (map grid tiles), rewritten when anything changes; `libraryKey` once the room's rotation is really known (1x1 rooms: Odin found its blue clay) and, for 1x1 rooms with several variants, which one (`Name\|ROTATION\|core`) |
 | `end` | `t, ms` | last line |
@@ -94,3 +93,44 @@ Format 1 had no `lib`/`vol`/`pgone`, wrote every player every tick and sent `chu
 - Your own inputs (keys, clicks).
 - Entity health beyond what's in their nametag.
 - Anything before you load into the instance (party finder, queueing).
+
+## Boss log (`net` lines)
+
+Every entry is `[n, kind, ...]`. What the rest of the recording shows is the client's view once a
+client tick (mobs slid over 3 ticks toward where the server put them, other players as drawn);
+these are the packets themselves, so a boss's health, a single skipped move, who he is facing and
+a projectile's aim are all there to the tick. Positions are absolute (5 decimals), angles in
+degrees, velocities in blocks a tick.
+
+Always kept: boss withers' packets (every `minecraft:wither`: Maxor, Storm, Goldor, Necron), boss
+bars and `time`. **In focus** (in the boss, and from "The BLOOD DOOR has been opened!" until the
+Watcher's "You have proven yourself") every entity's packets are kept, and the rest of the kinds
+below too.
+
+| kind | fields | packet |
+|---|---|---|
+| `time` | `gameTime` | the server's world clock (every second): its own tick count, to tell server lag from a skipped move |
+| `pg` | `id` | a ping, the packet Odin counts server ticks by; `n` is the count before this one |
+| `m` | `id, x, y, z, yaw, pitch, onGround` | a relative move; `x, y, z` null when it only turned, `yaw, pitch` null when it only moved |
+| `md` | `id, dx, dy, dz, yaw, pitch, onGround` | a relative move for an entity not in the world yet: the raw delta in 1/4096 blocks |
+| `tp` | `id, x, y, z, yaw, pitch, onGround, unresolved?` | an entity teleport; `unresolved` 1 if parts of it were relative to an entity not in the world |
+| `sy` | `id, x, y, z, yaw, pitch, onGround` | a position sync (the absolute position the server re-sends every so often) |
+| `h` | `id, headYaw` | head turn: a wither faces its target |
+| `v` | `id, vx, vy, vz` | velocity |
+| `a` | `id, type, x, y, z, vx, vy, vz, yaw, pitch, headYaw, data` | entity added, straight from the server: exact spawn tick and velocity; `data` is the type's spawn data: for projectiles (fireballs, wither skulls, arrows) their owner's entity id, for falling blocks the block state id |
+| `r` | `[id, ...]` | entities removed |
+| `ev` | `id, event` | entity event, as in vanilla `EntityEvent` (3 = death) |
+| `dmg` | `id, damageType, causeId, directId, x?, y?, z?` | the entity took damage: type (`minecraft:player_attack`, `minecraft:explosion`...), who caused it and what hit it (entity ids, -1 none) |
+| `hurt` | `id, yaw` | hurt animation |
+| `an` | `id, action` | animation: 0 swing, 3 swing off hand, 4 crit, 5 magic crit (someone's hit landing) |
+| `d` | `id, [[index, value], ...]` | synced entity data: only numbers, flags and names (a living entity's health is one of its floats; the custom name, e.g. Hypixel's health tags, is index 2) |
+| `pas` | `vehicle, [id, ...]` | passengers (name tags riding their mob) |
+| `bb` | `op, uuid, name?, progress?, colour?` | boss bar: `add` (name, progress 0-1, colour), `progress`, `name`, `remove` |
+| `ex` | `x, y, z, radius, blocks, kx?, ky?, kz?` | explosion; `k` the knockback it gave you |
+| `snd` | `sound, source, x, y, z, volume, pitch` | a sound at a position |
+| `sde` | `sound, id, volume, pitch` | a sound from an entity |
+| `hp` | `health, food, saturation` | your own health (death ticks, Nuclear Frenzy) |
+| `b` | `x, y, z, palette` | a block change (`pal` index), exact to the tick: pillars, doors, platforms, the Maxor beacon |
+
+`chat` lines also carry `n` (newer runs): the server tick count when the line arrived, instead of
+the one at the start of the client tick.
