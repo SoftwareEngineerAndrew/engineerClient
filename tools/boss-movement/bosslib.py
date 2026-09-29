@@ -40,6 +40,8 @@ class Clock:
     """n(t) for one recording: the server tick count at the end of client tick t."""
 
     def __init__(self, st):
+        # Older recorders wrote no `st` lines (or only a stray few): client ticks stand in then.
+        st = st if len(st) > 10 else []
         self.ts = [a for a, _ in st]
         self.ns = [b for _, b in st]
 
