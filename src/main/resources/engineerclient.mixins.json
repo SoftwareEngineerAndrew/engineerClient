@@ -30,6 +30,7 @@
     "SignEnterMixin",
     "SoundChannelMixin",
     "SoundVolumeMixin",
+    "SsPracticeInputMixin",
     "WandInputMixin",
     "WandScrollMixin"
   ],
