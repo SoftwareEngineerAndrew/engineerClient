@@ -350,8 +350,18 @@ object SimonSaysPractice : Module(
             val name = if (vsTop && i == 0) "skip" else "r${presses.size}"
             val c = if (!vsTop) "§f" else if (rounds[i] <= TOP_ROUNDS[i]) "§a" else if (rounds[i] <= TOP_ROUNDS[i] + 0.3) "§e" else "§c"
             val top = if (vsTop) "§8/${fmt(TOP_ROUNDS[i])}" else ""
-            EngineerClient.msg("§8 ${name.padEnd(4)} $c${fmt(rounds[i])}$top §8| §7" + presses.joinToString(" §8› §7") { fmt(it) })
+            EngineerClient.msg("§8 ${name.padEnd(4)} $c${fmt(rounds[i])}$top §8| " + presses.withIndex().joinToString(" §8› ") { (j, t) -> pressColour(name == "skip", j, t) + fmt(t) })
         }
+    }
+
+    /**
+     * A press's colour: the first of a round (from its button coming up) by reaction, the rest by
+     * the move between buttons. The skip round's stay grey: when its buttons come up is too random.
+     */
+    private fun pressColour(skip: Boolean, index: Int, t: Double) = when {
+        skip -> "§7"
+        index == 0 -> if (t <= 0.10) "§2" else if (t <= 0.20) "§e" else "§c"
+        else -> if (t <= 0.25) "§a" else if (t <= 0.35) "§e" else "§c"
     }
 
     private fun fmt(v: Double) = String.format(Locale.ROOT, "%.2f", v)
