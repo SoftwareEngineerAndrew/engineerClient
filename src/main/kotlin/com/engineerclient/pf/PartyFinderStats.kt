@@ -97,7 +97,7 @@ object PartyFinderStats : Module(
     private val dungeonLine = Regex("^Dungeon: (.+)$")
     private val formatting = Regex("§.")
 
-    private val romanFloors = mapOf(
+    internal val romanFloors = mapOf(
         "Entrance" to "0", "Floor I" to "1", "Floor II" to "2", "Floor III" to "3",
         "Floor IV" to "4", "Floor V" to "5", "Floor VI" to "6", "Floor VII" to "7",
     )
@@ -291,6 +291,30 @@ object PartyFinderStats : Module(
     }
 
     private fun clean(s: String) = formatting.replace(s, "")
+
+    /**
+     * For Better PF Menu (the website's copy of the menu): [name]'s numbers as a JSON object - Cata
+     * level, secrets, S+ PB on the listing's floor - or null until they're known. Fetches them like a
+     * tooltip would, but only a few at a time: a whole menu's players at once would hammer the API.
+     */
+    fun webStats(name: String, floor: String?, master: Boolean): com.google.gson.JsonObject? {
+        if (loaded.compareAndSet(false, true)) load()
+        val key = name.lowercase()
+        val entry = cache[key]
+        val now = System.currentTimeMillis()
+        if (entry == null || (entry is Failed && now - entry.at > RETRY_FAILED_MS)) {
+            if (cache.values.count { it is Loading } < WEB_FETCHES) { cache[key] = Loading; fetch(name, key) }
+            return null
+        }
+        val stats = (entry as? Ready)?.stats ?: return null
+        return com.google.gson.JsonObject().apply {
+            addProperty("cata", Math.round(calculateDungeonLevel(stats.cataXp) * 10) / 10.0)
+            addProperty("secrets", stats.secrets)
+            floor?.let { f -> stats.sPlus[if (master) "m" else "f"]?.get(f)?.takeIf { it > 0 }?.let { addProperty("pb", it.toLong()) } }
+        }
+    }
+
+    private const val WEB_FETCHES = 4
 
     /** For the debug HUD / a command: how many players are known. */
     fun cached(): Int = cache.count { it.value is Ready }

@@ -130,17 +130,21 @@ object BetterPFMenu : Module(
             val lines = JsonArray()
             val members = JsonArray()
             var inMembers = false
+            var floor: String? = null
+            var master = false
             for (line in lore) {
                 lines.add(BetterPF.legacyText(line))
                 val text = clean(line.string).trim()
                 when {
-                    text.startsWith("Dungeon: ") -> party.addProperty("dungeon", text.removePrefix("Dungeon: "))
-                    text.startsWith("Floor: ") -> party.addProperty("floor", text.removePrefix("Floor: "))
+                    text.startsWith("Dungeon: ") -> text.removePrefix("Dungeon: ").let { party.addProperty("dungeon", it); master = it.contains("Master", ignoreCase = true) }
+                    text.startsWith("Floor: ") -> text.removePrefix("Floor: ").let { party.addProperty("floor", it); floor = PartyFinderStats.romanFloors[it.trim()] }
                     text.startsWith("Note: ") -> party.addProperty("note", text.removePrefix("Note: "))
                     text.startsWith("Members:") -> inMembers = true
                     inMembers -> memberLine.find(text)?.let { m ->
                         members.add(JsonObject().apply {
                             addProperty("name", m.groupValues[1]); addProperty("cls", m.groupValues[2]); addProperty("level", m.groupValues[3].toInt())
+                            // Party Finder Stats' numbers, when it has them (they fill in on later reads).
+                            PartyFinderStats.webStats(m.groupValues[1], floor, master)?.let { add("stats", it) }
                         })
                     }
                 }
