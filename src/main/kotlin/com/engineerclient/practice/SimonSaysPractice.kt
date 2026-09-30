@@ -254,14 +254,14 @@ object SimonSaysPractice : Module(
     private fun pressStart() {
         val p = placed ?: return
         when (phase) {
-            Phase.IDLE, Phase.DONE -> {
+            // Mid-run it's a restart: the lights and buttons go and it starts over, as from idle.
+            Phase.IDLE, Phase.DONE, Phase.RUNNING -> {
                 reset()
                 phase = Phase.STARTING
                 startPresses = 1; firstLight = 0L; rounds.clear(); fails = 0
                 after(6) { begin() }
             }
             Phase.STARTING -> startPresses++
-            Phase.RUNNING -> {}
         }
         // After the reset above, so it doesn't cancel the button coming back up.
         click(p.at(START))
