@@ -244,7 +244,7 @@ object BrWaypoints2 : Module(
                 if (done && recolorDone) {
                     drawFilledBox(bb, doneColor.withAlpha(opacity), depth = false)
                     drawWireFrameBox(bb, doneColor, depth = false)
-                    drawText("§7" + label.replace(Regex("§."), ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+                    drawText("§7" + label.replace(CONTROL_CODES, ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
                     continue
                 }
                 // Done (Fade Done Boxes): just a ghost of the outline, and no label.
