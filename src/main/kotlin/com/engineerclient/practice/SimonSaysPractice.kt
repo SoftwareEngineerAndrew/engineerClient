@@ -364,8 +364,8 @@ object SimonSaysPractice : Module(
      */
     private fun pressColour(skip: Boolean, index: Int, t: Double) = when {
         skip -> "§7"
-        index == 0 -> if (t <= 0.10) "§2" else if (t <= 0.20) "§e" else "§c"
-        else -> if (t <= 0.25) "§a" else if (t <= 0.35) "§e" else "§c"
+        index == 0 -> if (t <= 0.10) "§a" else if (t <= 0.20) "§e" else "§c"
+        else -> if (t <= 0.25) "§2" else if (t <= 0.35) "§e" else "§c"
     }
 
     private fun fmt(v: Double) = String.format(Locale.ROOT, "%.2f", v)
