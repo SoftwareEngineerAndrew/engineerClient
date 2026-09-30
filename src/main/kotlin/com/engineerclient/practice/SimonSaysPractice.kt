@@ -351,11 +351,13 @@ object SimonSaysPractice : Module(
     fun onUse(): Boolean {
         val pos = target() ?: return false
         val p = placed ?: return false
+        val button = mc.level?.getBlockState(pos)?.block is ButtonBlock
         EngineerClient.safely("ss practice use") {
             if (pos == p.at(START)) pressStart()
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
         }
-        mc.player?.swing(InteractionHand.MAIN_HAND, false) // your arm moves; nothing is sent
+        // Your arm moves for a button, as in the game; not for the obsidian or wool. Nothing is sent.
+        if (button) mc.player?.swing(InteractionHand.MAIN_HAND, false)
         (mc as MinecraftAccessor).`ec$setRightClickDelay`(4) // holding right click repeats like the game's own
         return true
     }
