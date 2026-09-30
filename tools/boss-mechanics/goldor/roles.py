@@ -256,7 +256,7 @@ def sensitivity(plan, P, draws, base):
             if 'S3 Arrow Align' in mine:
                 d2.arrow = d.arrow * 1.5
             r = RP.simulate(plan, P, d2)
-            tot += r['core'] + r['allin']
+            tot += (r['core'] + r['allin']) if r else 3000
         out[nm] = tot / len(draws) - base
     return out
 
@@ -296,7 +296,12 @@ def main():
         print('  chain %d: score %.1f' % (i, s))
     best = RP.prune(res[0][1], P, draws)
     big = RP.make_draws(P, 400, seed + 1)
+    json.dump({'names': best.names, 'jobs': best.jobs, 'enter': best.enter},
+              open(os.path.join(out_dir, 'roles_plan.json'), 'w'))
     _, res = RP.score(best, P, big)
+    broken = sum(1 for r in res if r is None)
+    res = [r for r in res if r is not None]
+    print('  draws in which the plan breaks: %d of %d' % (broken, len(big)))
     med = RP.simulate(best, P, big[0], detail=True)
     tot = sorted(r['core'] + r['allin'] for r in res)
     core = sorted(r['core'] for r in res)
@@ -317,6 +322,7 @@ def main():
         print('  %s items: %s; share of draws needing > 3: %.3f' % (nm, dict(sorted(collections.Counter(v).items())), over[p]))
     # calibration: the rotation-shaped seed plan against the recorded fast runs
     _, sres = RP.score(seed_plan(), P, big)
+    sres = [r for r in sres if r is not None]
     ssec = [[r['doors'][1], r['doors'][2] - r['doors'][1], r['doors'][3] - r['doors'][2],
              r['core'] - r['doors'][3]] for r in sres]
     rec = list(meas['sections'].values())
@@ -336,7 +342,8 @@ def main():
     cp = critical(med, best)
     for s, v in cp.items():
         print('  S%d last jobs (median draw): %s' % (s, v))
-    sens = sensitivity(best, P, big[:100], sum(tot[:0]) + sum(r['core'] + r['allin'] for r in res[:100]) / 100)
+    base = sum((r['core'] + r['allin']) if r else 3000 for r in [RP.simulate(best, P, d) for d in big[:100]]) / 100
+    sens = sensitivity(best, P, big[:100], base)
     print('  one player slower (+20 per terminal, devices x1.5): %s' % {k: round(v, 1) for k, v in sens.items()})
     last = collections.Counter()
     for r in res:

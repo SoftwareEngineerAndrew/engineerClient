@@ -449,10 +449,11 @@ def score(plan, P, draws, budget=3, planned=2):
     `planned` for any player in the median draw, and 20000 x the share of draws in which a player
     would need more than `budget`."""
     res = [simulate(plan, P, d) for d in draws]
-    if any(r is None for r in res):
-        return 10 ** 9, None
-    obj = sum(r['core'] + r['allin'] for r in res) / len(res)
-    over = sum(1 for r in res if max(r['items']) > budget) / len(res)
+    if res[0] is None:
+        return 10 ** 9, res
+    # a draw in which the plan breaks (a leap target not there) counts as a 3000-tick run
+    obj = sum((r['core'] + r['allin']) if r else 3000 for r in res) / len(res)
+    over = sum(1 for r in res if r is None or max(r['items']) > budget) / len(res)
     med = res[0]   # draws[0] is the median draw
     pen = 400 * sum(max(0, i - planned) for i in med["items"]) + 20000 * over
     return obj + pen, res
