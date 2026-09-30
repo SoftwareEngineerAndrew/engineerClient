@@ -11,6 +11,11 @@ import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.equalsOneOf
+import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.features.impl.boss.termsim.NumbersSim
+import com.odtheking.odin.features.impl.boss.termsim.StartGUI
+import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
+import net.minecraft.client.gui.screens.Screen
 import com.odtheking.odin.utils.render.roundedFill
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -31,14 +36,44 @@ import net.minecraft.resources.Identifier
 object LeapExtras : Module(
     name = "Leap Extras",
     category = Category.custom("Engineer Client"),
-    description = "Adds to Odin's Leap Menu: a click delay when it opens, and an outline of where each person will be.",
+    description = "Adds to Odin's Leap Menu: a click delay when it opens, and an outline of where each person will be. Also: crouch + left click with Infinileap for the numbers termsim.",
     toggled = true,
 ) {
     private val clickDelay by NumberSetting("Click Delay", 1, 0, 10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
 
     private val leapOutline by BooleanSetting("Leap Outline", false, desc = "Draws a very faint rectangle where each person in the leap menu would be, so your mouse can already be on the right one when it opens.")
 
+    private val leapTermsim by BooleanSetting("Crouch Click Termsim", false, desc = "Crouch + left click with Infinileap in your hand opens Odin's numbers terminal simulator (click in order). Finishing it puts you back in the game, not in the termsim menu.")
+
     private val OUTLINE_GREY = Color(128, 128, 128, 0.12f)
+
+    /** The simulator on screen was opened by [onAttack]: finishing it closes it instead of going to Odin's termsim menu. */
+    private var simFromLeap = false
+
+    /** Left click (from the mixin). True: it opened the simulator, and the click goes no further (no swing sent). */
+    @JvmStatic
+    fun onAttack(): Boolean {
+        if (!enabled || !leapTermsim) return false
+        val player = EngineerClient.mc.player ?: return false
+        if (!player.isShiftKeyDown || EngineerClient.mc.screen != null) return false
+        if (player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
+        simFromLeap = true
+        NumbersSim.open(0L)
+        return true
+    }
+
+    /**
+     * Every screen the game is told to open (from the mixin), for what it should open instead:
+     * Odin's termsim menu, which a finished simulator opens, becomes no screen at all when that
+     * simulator came from [onAttack]. Anything but a simulator ends that.
+     */
+    @JvmStatic
+    fun replaceScreen(screen: Screen?): Screen? {
+        if (!simFromLeap) return screen
+        if (screen === StartGUI) { simFromLeap = false; return null }
+        if (screen !is TermSimGUI) simFromLeap = false
+        return screen
+    }
 
     /**
      * Set by POV Previews while its previews are up: Odin's leap boxes shrink toward the middle by
