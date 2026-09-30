@@ -3,12 +3,16 @@ package com.engineerclient.practice
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.mixin.MinecraftAccessor
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.createSoundSettings
+import com.odtheking.odin.utils.playSoundSettings
 import com.odtheking.odin.utils.render.drawStyledBox
 import net.minecraft.world.phys.AABB
 import com.odtheking.odin.events.TickEvent
@@ -63,6 +67,10 @@ object SimonSaysPractice : Module(
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again.").onPress { summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
+    private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one.")
+    private val soundsDropdown by DropdownSetting("Click Sounds Dropdown").withDependency { clickSounds }
+    private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
+    private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, how long each round's clicking took, next to the fastest healers' medians from Better PF runs.")
 
     // ------------------------------------------------------------------ the real device
@@ -257,6 +265,7 @@ object SimonSaysPractice : Module(
         }
         // After the reset above, so it doesn't cancel the button coming back up.
         click(p.at(START))
+        if (clickSounds) playSoundSettings(correctSound())
         p.set(START, BUTTON.setValue(ButtonBlock.POWERED, true))
         after(2) { placed?.set(START, BUTTON) }
     }
@@ -270,6 +279,7 @@ object SimonSaysPractice : Module(
         after(3) { if (buttonUp[cell]) setButton(cell, true) }
         if (!accepting) return
         if (cell == expected[next]) {
+            if (clickSounds) playSoundSettings(correctSound())
             next++
             if (next < expected.size) return
             accepting = false
@@ -278,6 +288,7 @@ object SimonSaysPractice : Module(
             if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
         } else {
+            if (clickSounds) playSoundSettings(wrongSound())
             accepting = false
             fails++
             revealed.clear()
