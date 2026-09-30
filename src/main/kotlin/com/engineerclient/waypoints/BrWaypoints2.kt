@@ -157,6 +157,10 @@ object BrWaypoints2 : Module(
         var dead = false
         /** The tick its name tag went, if it has — the same tick as the mob means it died. */
         var tagGoneAt: Int? = null
+        /** Its box ([claimOf]), and the [boxesSig] it was worked out under. */
+        var claim: Box? = null
+        var claimSig = 0L
+        var claimed = false
     }
 
     private val mobs = mutableListOf<Mob>()
@@ -240,7 +244,7 @@ object BrWaypoints2 : Module(
                 if (done && recolorDone) {
                     drawFilledBox(bb, doneColor.withAlpha(opacity), depth = false)
                     drawWireFrameBox(bb, doneColor, depth = false)
-                    drawText("§7" + label.replace(Regex("§."), ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+                    drawText("§7" + label.replace(CONTROL_CODES, ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
                     continue
                 }
                 // Done (Fade Done Boxes): just a ghost of the outline, and no label.
@@ -346,9 +350,10 @@ object BrWaypoints2 : Module(
         val rooms = shownRooms()
         // Edit Mode shows them all too: a box being drawn has no mobs yet.
         if (editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
+        val sig = boxesSig()
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
         for (mob in mobs) {
-            val box = claimOf(mob) ?: continue
+            val box = cachedClaim(mob, sig) ?: continue
             claimed += box
             if (!mob.dead) alive += box
         }
@@ -620,6 +625,22 @@ object BrWaypoints2 : Module(
 
     private fun tileRoom(t: Pair<Int, Int>): DungeonRoom? =
         if (t.first !in 0..5 || t.second !in 0..5) null else DungeonScan.tiles[t.first + t.second * 6].room
+
+    /**
+     * The boxes as they are: their count, which ones, and their corners. A mob's box depends only on
+     * where it spawned and on these, so it's worked out again only when they change (each frame for
+     * every mob against every box took about 8% of the render thread in a dungeon).
+     */
+    private fun boxesSig(): Long {
+        var h = boxes.size.toLong()
+        for (b in boxes) h = h * 31 + System.identityHashCode(b) * 17L + b.c.contentHashCode()
+        return h
+    }
+
+    private fun cachedClaim(mob: Mob, sig: Long): Box? {
+        if (!mob.claimed || mob.claimSig != sig) { mob.claim = claimOf(mob); mob.claimSig = sig; mob.claimed = true }
+        return mob.claim
+    }
 
     /**
      * The box a mob belongs to: the one its body overlapped most where it was first seen, or, if it
