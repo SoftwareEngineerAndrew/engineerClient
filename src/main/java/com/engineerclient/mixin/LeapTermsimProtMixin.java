@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Crouch Click Termsim: no first click protection on the numbers simulator it opens, so the
+ * No first click protection on the numbers simulator it opens, so the
  * next terminal can be clicked the moment it's up. Real terminals keep Odin's protection.
  */
 @Mixin(value = TerminalHandler.class, remap = false)

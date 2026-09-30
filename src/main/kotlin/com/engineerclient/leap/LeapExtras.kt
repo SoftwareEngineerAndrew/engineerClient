@@ -43,23 +43,23 @@ object LeapExtras : Module(
 
     private val leapOutline by BooleanSetting("Leap Outline", false, desc = "Draws a very faint rectangle where each person in the leap menu would be, so your mouse can already be on the right one when it opens.")
 
-    private val leapTermsim by BooleanSetting("Crouch Click Termsim", false, desc = "Crouch + left click with Infinileap in your hand opens Odin's numbers terminal simulator (click in order). Finishing one starts another half a second later, in the same menu; Escape to stop.")
 
     private val OUTLINE_GREY = Color(128, 128, 128, 0.12f)
 
-    /** The simulator on screen was opened by [onAttack]: finishing it starts the next one instead of Odin's termsim menu. */
+    /** The simulator on screen was opened by [openNumbersSim]: finishing it starts the next one instead of Odin's termsim menu. */
     private var simFromLeap = false
     /** Bumped by every finish and every stop, so a pending restart knows whether it's still wanted. */
     private var simRound = 0
     private const val NEXT_SIM_MS = 500L
 
-    /** Left click (from the mixin). True: it opened the simulator, and the click goes no further (no swing sent). */
+    /**
+     * SS Practice's keybind with Infinileap in your hand: Odin's numbers terminal simulator. Finishing
+     * one starts another half a second later, in the same menu; Escape to stop. False: not holding it.
+     */
     @JvmStatic
-    fun onAttack(): Boolean {
-        if (!enabled || !leapTermsim) return false
+    fun openNumbersSim(): Boolean {
         val player = EngineerClient.mc.player ?: return false
-        if (!player.isShiftKeyDown || EngineerClient.mc.screen != null) return false
-        if (player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
+        if (EngineerClient.mc.screen != null || player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
         simFromLeap = true
         NumbersSim.open(0L)
         return true
@@ -67,12 +67,12 @@ object LeapExtras : Module(
 
     /**
      * Every screen the game is told to open (from the mixin). True: don't. Odin's termsim menu,
-     * which a finished simulator opens, is kept off when that simulator came from [onAttack]: the
+     * which a finished simulator opens, is kept off when that simulator came from [openNumbersSim]: the
      * finished one stays up and a new one replaces it [NEXT_SIM_MS] later, opened again rather than
      * refilled so Odin starts a new terminal (its solver and its finish) as it would for any.
      * Anything but a simulator (Escape, say) ends it.
      */
-    /** A simulator from [onAttack] is on screen (no first click protection on it). */
+    /** A simulator from [openNumbersSim] is on screen (no first click protection on it). */
     @JvmStatic
     fun simActive(): Boolean = simFromLeap && EngineerClient.mc.screen is TermSimGUI
 
