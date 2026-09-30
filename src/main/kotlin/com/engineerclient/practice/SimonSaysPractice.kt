@@ -191,6 +191,8 @@ object SimonSaysPractice : Module(
     private val splits = ArrayList<List<Double>>()
     private val roundClicks = ArrayList<Double>()
     private var lastClickMs = 0L
+    /** The tick the 4-button round's last press went in (0: not yet this run). */
+    private var r4Done = 0L
     /** The solver's list: this round's cells, each added as its light goes out (a stray light never). */
     private val revealed = ArrayList<Int>()
     private var fails = 0
@@ -275,7 +277,7 @@ object SimonSaysPractice : Module(
         if (placed == null) return
         reset()
         phase = Phase.STARTING
-        startPresses = lastStartPresses; firstLight = 0L; rounds.clear(); splits.clear(); fails = 0
+        startPresses = lastStartPresses; firstLight = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
         if (clickSounds) playSoundSettings(correctSound())
         after(6) { begin() }
     }
@@ -287,7 +289,7 @@ object SimonSaysPractice : Module(
             Phase.IDLE, Phase.DONE, Phase.RUNNING -> {
                 reset()
                 phase = Phase.STARTING
-                startPresses = 1; firstLight = 0L; rounds.clear(); splits.clear(); fails = 0
+                startPresses = 1; firstLight = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
                 after(6) { begin() }
             }
             Phase.STARTING -> startPresses++
@@ -316,6 +318,7 @@ object SimonSaysPractice : Module(
             accepting = false
             rounds += (tick + 6 - roundUp) / 20.0
             splits += roundClicks.toList()
+            if (expected.size == 4) r4Done = tick
             val n = expected.size
             if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
@@ -329,7 +332,7 @@ object SimonSaysPractice : Module(
                 newSequence()
                 val s = sequence
                 show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
-                rounds.clear(); splits.clear()
+                rounds.clear(); splits.clear(); r4Done = 0L
             }
         }
     }
@@ -339,8 +342,9 @@ object SimonSaysPractice : Module(
         val total = (tick - firstLight) / 20.0
         // Green: the goal. Yellow: still before the death tick. Red: after it.
         val colour = if (total <= GOAL) "§a" else if (total < DEATH_TICK) "§e" else "§c"
-        EngineerClient.msg("§7SS Practice: done in $colour${fmt(total)}s§7 (first light to done)" +
-            (if (fails > 0) " §8· §c$fails wrong" else "") + " §8· §7goal ${fmt(GOAL)}s. Start again to go again.")
+        // In brackets, first light to r4's last press.
+        val r4 = if (r4Done != 0L) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
+        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (fails > 0) " §c$fails wrong" else ""))
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
