@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Static terminal roles for F7 phase 3: the measurements and the schedule search.
 
-usage: roles.py OUT_DIR [--iters N] [--restarts N] [--seed N]
+usage: roles.py OUT_DIR [--iters N] [--restarts N] [--seed N] [--plan PLAN.json]
 
 Needs OUT_DIR/extract/ and OUT_DIR/sections.json (extract.py, doors.py, sections.py). Prints the
 measurements (terminal numbering, solve / open / lever / gate / leap / device times, walking
 between job points, the core rush) from the fastest runs, then searches static five-player plans
 with the schedule model (roleplan.py) and prints the best plan, its predicted timeline against the
-fastest recorded runs, the item use per role and the sensitivity. Writes OUT_DIR/roles.json.
+fastest recorded runs, the item use per role and the sensitivity. Writes OUT_DIR/roles.json and
+the plan to OUT_DIR/roles_plan.json; --plan evaluates a saved plan instead of searching.
 
 "Fast" = the fastest 25% of runs by P3 (start -> "The Core entrance is opening!"); per-action
 measurements that are thin there also use the fastest 50% (both are printed).
@@ -277,7 +278,8 @@ def main():
         print(__doc__)
         sys.exit(1)
     out_dir = sys.argv[1]
-    iters, restarts, seed = arg('--iters', 12000), arg('--restarts', 4), arg('--seed', 1)
+    iters, restarts, seed = arg('--iters', 12000), arg('--restarts', 8), arg('--seed', 1)
+    plan_file = arg('--plan', '')
     t0 = time.time()
     recs = RD.load(out_dir)
     meas, pairs = measure(recs)
@@ -286,15 +288,23 @@ def main():
     print('  core route, S2 wall -> strip: %.0f ticks (S2 terminal -> core door walks minus the walk to '
           'the wall)' % P.hole_to_strip)
 
-    print('\n== 5. schedule search (%d chains x %d steps, 40 draws)' % (restarts, iters))
-    draws = RP.make_draws(P, 40, seed)
-    work = [(i, seed, iters, P, draws) for i in range(restarts)]
-    with Pool(min(restarts, os.cpu_count() or 2)) as pool:
-        res = pool.map(_chain, work)
-    res.sort(key=lambda a: a[0])
-    for i, (s, _) in enumerate(res):
-        print('  chain %d: score %.1f' % (i, s))
-    best = RP.prune(res[0][1], P, draws)
+    print('\n== 5. schedule search (%d chains x %d steps, 80 draws)' % (restarts, iters))
+    draws = RP.make_draws(P, 80, seed)
+    if plan_file:
+        d = json.load(open(plan_file))
+        best = RP.Plan(d['names'], [[tuple(x) for x in j] for j in d['jobs']],
+                       [{int(k): v for k, v in e.items()} for e in d['enter']])
+        print('  plan read from %s (no search)' % plan_file)
+    else:
+        work = [(i, seed, iters, P, draws) for i in range(restarts)]
+        with Pool(min(restarts, os.cpu_count() or 2)) as pool:
+            res = pool.map(_chain, work)
+        res.sort(key=lambda a: a[0])
+        for i, (s, _) in enumerate(res):
+            print('  chain %d: score %.1f' % (i, s))
+        best = RP.prune(res[0][1], P, draws)
+        best = RP.safer(best, P, draws)
+    print('  score (80 draws) %.1f' % RP.score(best, P, draws)[0])
     big = RP.make_draws(P, 400, seed + 1)
     json.dump({'names': best.names, 'jobs': best.jobs, 'enter': best.enter},
               open(os.path.join(out_dir, 'roles_plan.json'), 'w'))
