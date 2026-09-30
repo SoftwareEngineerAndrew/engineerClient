@@ -84,8 +84,13 @@ object SimonSaysPractice : Module(
     private fun buttonAt(cell: Int) = BlockPos(110, 123 - cell / 4, 92 + cell % 4)
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
 
-    /** Fastest healers' medians in Better PF runs (Inplse, Joeher47, 12heart): first light to done, then each round's clicking. */
-    private const val TOP_TOTAL = 11.65
+    /**
+     * The goal, first light to done: a good legit time, under the death tick at 12 s (some of the
+     * fastest runs on Better PF weren't legit). Then each round's clicking: the fastest healers'
+     * medians there, which with the fixed 7.4 s and a 0.3 s start add up to the goal.
+     */
+    private const val GOAL = 11.90
+    private const val DEATH_TICK = 12.0
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05, 1.25)
 
     // Odin's Simon Says colours.
@@ -332,9 +337,10 @@ object SimonSaysPractice : Module(
     private fun done() {
         phase = Phase.DONE
         val total = (tick - firstLight) / 20.0
-        val colour = if (total <= TOP_TOTAL) "§a" else if (total <= TOP_TOTAL + 1) "§e" else "§c"
+        // Green: the goal. Yellow: still before the death tick. Red: after it.
+        val colour = if (total <= GOAL) "§a" else if (total < DEATH_TICK) "§e" else "§c"
         EngineerClient.msg("§7SS Practice: done in $colour${fmt(total)}s§7 (first light to done)" +
-            (if (fails > 0) " §8· §c$fails wrong" else "") + " §8· §7top healers ~${fmt(TOP_TOTAL)}s. Start again to go again.")
+            (if (fails > 0) " §8· §c$fails wrong" else "") + " §8· §7goal ${fmt(GOAL)}s. Start again to go again.")
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
