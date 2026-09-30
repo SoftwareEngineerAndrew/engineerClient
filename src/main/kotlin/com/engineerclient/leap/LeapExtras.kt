@@ -43,12 +43,15 @@ object LeapExtras : Module(
 
     private val leapOutline by BooleanSetting("Leap Outline", false, desc = "Draws a very faint rectangle where each person in the leap menu would be, so your mouse can already be on the right one when it opens.")
 
-    private val leapTermsim by BooleanSetting("Crouch Click Termsim", false, desc = "Crouch + left click with Infinileap in your hand opens Odin's numbers terminal simulator (click in order). Finishing it puts you back in the game, not in the termsim menu.")
+    private val leapTermsim by BooleanSetting("Crouch Click Termsim", false, desc = "Crouch + left click with Infinileap in your hand opens Odin's numbers terminal simulator (click in order). Finishing one starts another half a second later, in the same menu; Escape to stop.")
 
     private val OUTLINE_GREY = Color(128, 128, 128, 0.12f)
 
-    /** The simulator on screen was opened by [onAttack]: finishing it closes it instead of going to Odin's termsim menu. */
+    /** The simulator on screen was opened by [onAttack]: finishing it starts the next one instead of Odin's termsim menu. */
     private var simFromLeap = false
+    /** Bumped by every finish and every stop, so a pending restart knows whether it's still wanted. */
+    private var simRound = 0
+    private const val NEXT_SIM_MS = 500L
 
     /** Left click (from the mixin). True: it opened the simulator, and the click goes no further (no swing sent). */
     @JvmStatic
@@ -63,16 +66,27 @@ object LeapExtras : Module(
     }
 
     /**
-     * Every screen the game is told to open (from the mixin), for what it should open instead:
-     * Odin's termsim menu, which a finished simulator opens, becomes no screen at all when that
-     * simulator came from [onAttack]. Anything but a simulator ends that.
+     * Every screen the game is told to open (from the mixin). True: don't. Odin's termsim menu,
+     * which a finished simulator opens, is kept off when that simulator came from [onAttack]: the
+     * finished one stays up and a new one replaces it [NEXT_SIM_MS] later, opened again rather than
+     * refilled so Odin starts a new terminal (its solver and its finish) as it would for any.
+     * Anything but a simulator (Escape, say) ends it.
      */
     @JvmStatic
-    fun replaceScreen(screen: Screen?): Screen? {
-        if (!simFromLeap) return screen
-        if (screen === StartGUI) { simFromLeap = false; return null }
-        if (screen !is TermSimGUI) simFromLeap = false
-        return screen
+    fun cancelScreen(screen: Screen?): Boolean {
+        if (!simFromLeap) return false
+        if (screen === StartGUI && EngineerClient.mc.screen === NumbersSim) {
+            val round = ++simRound
+            Thread.ofVirtual().start {
+                Thread.sleep(NEXT_SIM_MS)
+                EngineerClient.mc.execute {
+                    if (simFromLeap && round == simRound && EngineerClient.mc.screen === NumbersSim) NumbersSim.open(0L)
+                }
+            }
+            return true
+        }
+        if (screen !is TermSimGUI) { simFromLeap = false; simRound++ }
+        return false
     }
 
     /**
