@@ -2,6 +2,7 @@ package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
+import com.engineerclient.leap.LeapExtras
 import com.engineerclient.mixin.MinecraftAccessor
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
@@ -66,7 +67,7 @@ object SimonSaysPractice : Module(
     category = Category.custom("Engineer Client"),
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
 ) {
-    private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again.").onPress { summonOrRemove() }
+    private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: Odin's numbers terminal simulator instead, one after another.").onPress { if (!LeapExtras.openNumbersSim()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
     private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 5.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.")
     private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one.")
