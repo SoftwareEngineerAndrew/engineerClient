@@ -21,6 +21,7 @@
     "GuiBlurMixin",
     "ItemFoilMixin",
     "LeapTermsimMixin",
+    "LeapTermsimProtMixin",
     "LivingEntityAccessor",
     "LocalPlayerDropMixin",
     "MinecraftAccessor",
