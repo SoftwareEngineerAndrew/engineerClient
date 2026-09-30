@@ -557,3 +557,31 @@ def prune(plan, P, draws):
                 if s2 <= base + 0.01:
                     plan, base = q, s2
     return plan
+
+
+def safer(plan, P, draws, slack=1.0):
+    """Move each planned entry to a later free window (60k+1) when that costs at most `slack` ticks
+    of mean score and lowers the player's mean item use: the same plan with fewer items at risk."""
+    base, res = score(plan, P, draws)
+
+    def mean_items(res, p):
+        rr = [r for r in res if r]
+        return sum(r['items'][p] for r in rr) / max(1, len(rr))
+    for p in range(len(plan.jobs)):
+        for sct in sorted(plan.enter[p]):
+            cur = plan.enter[p][sct]
+            best = None
+            for v in ENTRY_TICKS[1:]:
+                if v <= cur:
+                    continue
+                q = plan.copy()
+                q.enter[p][sct] = v
+                if not q.valid():
+                    continue
+                s2, r2 = score(q, P, draws)
+                if s2 <= base + slack and mean_items(r2, p) < mean_items(res, p) - 0.05:
+                    if best is None or s2 < best[0]:
+                        best = (s2, q, r2)
+            if best:
+                base, plan, res = best
+    return plan

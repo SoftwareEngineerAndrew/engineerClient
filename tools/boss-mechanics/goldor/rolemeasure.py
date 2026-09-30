@@ -450,47 +450,6 @@ def lever_times(recs, fast):
     return {'arrive': stats(arrive), 'at_door': stats(at_door)}
 
 
-def device_times(recs, fast):
-    """Devices: completion tick (from the chat "completed a device" line whose station is known),
-    the recorder's time on the device (arrival within 3 blocks of where it is done -> completion)
-    when the recorder did it, and when players started (arrival)."""
-    done = collections.defaultdict(dict)
-    onspot = collections.defaultdict(list)
-    for r in recs:
-        if r.group not in fast:
-            continue
-        for c in r.comps:
-            if c['kind'] != 'device':
-                continue
-            key = c['key']
-            if key is None:
-                # the station of an unattributed device line: the one its actor stands at
-                continue
-            done[key].setdefault(r.group, c['n'])
-            if c['actor'] == r.self:
-                pos = RD.DEVICE_SPOT[key]
-                a = None
-                for row in reversed([row for row in r.me.rows if c['n'] - 600 <= row[0] <= c['n']]):
-                    if G.dist(row[1:4], pos) > 5:
-                        break
-                    a = row[0]
-                if a is not None:
-                    onspot[key].append((a, c['n']))
-    return done, onspot
-
-
-def ss_done(recs, fast):
-    """S1's Simon Says: its completion (the S1 door when SS was last) per fast run."""
-    out = {}
-    for r in recs:
-        if r.group not in fast:
-            continue
-        c = [x for x in r.comps if x['key'] == 'S1 Simon Says']
-        if c:
-            out[r.group] = c[0]['n']
-    return out
-
-
 def gate_times(recs, fast):
     """"The gate has been destroyed!" relative to the recorder reaching the gate (within 8 blocks)
     when the recorder was the one standing nearest when it went; and the gate tick relative to its
