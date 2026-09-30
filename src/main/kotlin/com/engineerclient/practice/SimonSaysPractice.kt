@@ -6,6 +6,11 @@ import com.engineerclient.mixin.MinecraftAccessor
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.utils.Color.Companion.withAlpha
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.render.drawStyledBox
+import net.minecraft.world.phys.AABB
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -34,10 +39,10 @@ import java.util.Locale
  * own copy of the world only, and clicks on them are handled here and cancelled before the game
  * would send anything (no use, no swing, no mining packets).
  *
- * The blocks are the real device, taken from Better PF's capture of the F7 arena (x 106-112,
- * y 117-126, z 86-100), placed so that you stand where healers stand to do it (108, 120, 94 in
- * the arena, facing +x) and turned to face whichever way you look. Blocks below your feet are
- * only placed over ground that is already solid, so nothing new appears to stand on.
+ * The device is its 4x4 obsidian grid in a wall of black wool, with the start button on the wool
+ * left of the grid, placed where it is from the spot healers stand on to do it (108, 120, 94 in the
+ * arena, facing +x) and turned to face whichever way you look. [solver] is Odin's Simon Says
+ * solution drawn on it: Odin's own only works on the real one.
  *
  * How it plays, as measured in 208 Better PF recordings of P3 (see docs/mechanics/simon-says.md):
  *  - The start button is left of the grid. Presses in the 6 ticks after the first decide the
@@ -57,6 +62,7 @@ object SimonSaysPractice : Module(
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again.").onPress { summonOrRemove() }
+    private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, how long each round's clicking took, next to the fastest healers' medians from Better PF runs.")
 
     // ------------------------------------------------------------------ the real device
@@ -72,96 +78,10 @@ object SimonSaysPractice : Module(
     private const val TOP_TOTAL = 11.65
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05, 1.25)
 
-    private val PALETTE = arrayOf(
-        "cracked_stone_bricks",
-        "stone_bricks",
-        "mossy_stone_bricks",
-        "stone",
-        "cobblestone_wall[east=tall,north=none,south=tall,up=true,waterlogged=false,west=none]",
-        "cobblestone_wall[east=none,north=none,south=tall,up=true,waterlogged=false,west=tall]",
-        "piston[extended=false,facing=east]",
-        "cobblestone_wall[east=tall,north=tall,south=none,up=true,waterlogged=false,west=none]",
-        "cobblestone_wall[east=none,north=tall,south=none,up=true,waterlogged=false,west=tall]",
-        "gray_wool",
-        "cyan_terracotta",
-        "lime_stained_glass_pane[east=true,north=true,south=true,waterlogged=false,west=false]",
-        "quartz_stairs[facing=east,half=top,shape=straight,waterlogged=false]",
-        "quartz_stairs[facing=west,half=top,shape=straight,waterlogged=false]",
-        "chiseled_quartz_block",
-        "quartz_stairs[facing=south,half=top,shape=straight,waterlogged=false]",
-        "quartz_stairs[facing=north,half=top,shape=straight,waterlogged=false]",
-        "quartz_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]",
-        "quartz_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]",
-        "quartz_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]",
-        "quartz_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]",
-        "wall_torch[facing=south]",
-        "polished_andesite",
-        "iron_trapdoor[facing=west,half=bottom,open=true,powered=false,waterlogged=false]",
-        "sea_lantern",
-        "iron_block",
-        "emerald_block",
-        "obsidian",
-        "stone_button[face=wall,facing=west,powered=false]",
-        "oak_button[face=wall,facing=west,powered=false]",
-        "redstone_wall_torch[facing=west,lit=true]",
-        "stone_brick_stairs[facing=north,half=top,shape=straight,waterlogged=false]",
-        "redstone_lamp[lit=false]",
-    )
-
-    /** "dx,dy,dz,palette;" from where you stand (dx toward the device, dz to your right). */
-    private const val CELLS =
-        "0,-3,-8,0;1,-3,-8,1;2,-3,-8,2;3,-3,-8,1;4,-3,-8,1;0,-3,-7,1;1,-3,-7,1;2,-3,-7,2;3,-3,-7,2;" +
-        "4,-3,-7,3;-2,-3,-6,4;-1,-3,-6,5;3,-3,-6,6;4,-3,-6,1;-2,-3,-5,7;-1,-3,-5,8;3,-3,-5,6;4,-3,-5,1;" +
-        "3,-3,-4,9;4,-3,-4,1;3,-3,-3,10;4,-3,-3,1;3,-3,-2,11;4,-3,-2,1;3,-3,-1,9;4,-3,-1,1;3,-3,0,10;" +
-        "4,-3,0,1;3,-3,1,6;4,-3,1,1;3,-3,2,6;-1,-3,3,4;0,-3,3,5;3,-3,3,10;-1,-3,4,7;0,-3,4,8;3,-3,4,10;" +
-        "3,-3,5,6;3,-3,6,9;-2,-2,-8,12;-1,-2,-8,13;0,-2,-8,3;1,-2,-8,1;2,-2,-8,0;3,-2,-8,1;4,-2,-8,1;" +
-        "-2,-2,-7,12;-1,-2,-7,13;0,-2,-7,1;1,-2,-7,0;2,-2,-7,1;3,-2,-7,0;4,-2,-7,1;-2,-2,-6,14;" +
-        "-1,-2,-6,14;0,-2,-6,15;1,-2,-6,15;2,-2,-6,15;3,-2,-6,6;4,-2,-6,0;-2,-2,-5,14;-1,-2,-5,14;" +
-        "0,-2,-5,16;1,-2,-5,16;2,-2,-5,16;3,-2,-5,6;4,-2,-5,1;3,-2,-4,9;4,-2,-4,2;3,-2,-3,10;4,-2,-3,1;" +
-        "3,-2,-2,11;4,-2,-2,1;-1,-2,-1,14;0,-2,-1,14;1,-2,-1,14;2,-2,-1,14;3,-2,-1,9;4,-2,-1,0;-1,-2,0,14;" +
-        "0,-2,0,14;1,-2,0,14;2,-2,0,14;3,-2,0,6;4,-2,0,1;-1,-2,1,12;0,-2,1,13;3,-2,1,6;4,-2,1,3;" +
-        "-1,-2,2,12;0,-2,2,13;3,-2,2,6;-2,-2,3,15;-1,-2,3,14;0,-2,3,14;3,-2,3,10;-2,-2,4,16;-1,-2,4,14;" +
-        "0,-2,4,14;3,-2,4,6;3,-2,5,6;3,-2,6,9;-2,-1,-8,17;-1,-1,-8,18;0,-1,-8,1;1,-1,-8,0;2,-1,-8,1;" +
-        "3,-1,-8,1;4,-1,-8,1;-2,-1,-7,17;-1,-1,-7,18;0,-1,-7,1;1,-1,-7,1;2,-1,-7,1;3,-1,-7,1;4,-1,-7,2;" +
-        "-2,-1,-6,14;-1,-1,-6,14;0,-1,-6,19;1,-1,-6,19;2,-1,-6,19;3,-1,-6,6;4,-1,-6,3;-2,-1,-5,14;" +
-        "-1,-1,-5,14;0,-1,-5,20;1,-1,-5,20;2,-1,-5,20;3,-1,-5,10;4,-1,-5,0;-2,-1,-4,21;3,-1,-4,22;" +
-        "4,-1,-4,1;2,-1,-3,23;3,-1,-3,24;4,-1,-3,10;3,-1,-2,25;4,-1,-2,1;-1,-1,-1,14;0,-1,-1,14;" +
-        "1,-1,-1,14;2,-1,-1,14;3,-1,-1,26;4,-1,-1,1;-1,-1,0,14;0,-1,0,14;1,-1,0,14;2,-1,0,14;3,-1,0,26;" +
-        "4,-1,0,22;-1,-1,1,17;0,-1,1,18;3,-1,1,25;4,-1,1,0;-1,-1,2,17;0,-1,2,18;2,-1,2,23;3,-1,2,24;" +
-        "-2,-1,3,19;-1,-1,3,14;0,-1,3,14;3,-1,3,22;-2,-1,4,20;-1,-1,4,14;0,-1,4,14;3,-1,4,6;3,-1,5,6;" +
-        "3,-1,6,10;0,0,-8,1;1,0,-8,1;2,0,-8,1;3,0,-8,3;4,0,-8,2;0,0,-7,1;1,0,-7,0;2,0,-7,1;3,0,-7,1;" +
-        "4,0,-7,1;3,0,-6,6;4,0,-6,1;3,0,-5,10;4,0,-5,1;3,0,-4,22;4,0,-4,2;3,0,-3,25;4,0,-3,1;3,0,-2,27;" +
-        "4,0,-2,1;3,0,-1,27;4,0,-1,1;3,0,0,27;4,0,0,1;3,0,1,27;4,0,1,1;3,0,2,25;3,0,3,22;3,0,4,6;3,0,5,6;" +
-        "3,0,6,9;0,1,-8,1;1,1,-8,1;2,1,-8,1;3,1,-8,1;4,1,-8,1;0,1,-7,1;1,1,-7,2;2,1,-7,3;3,1,-7,2;" +
-        "4,1,-7,0;3,1,-6,6;4,1,-6,1;3,1,-5,10;4,1,-5,1;3,1,-4,22;4,1,-4,1;2,1,-3,28;3,1,-3,26;4,1,-3,3;" +
-        "3,1,-2,27;4,1,-2,1;3,1,-1,27;4,1,-1,1;3,1,0,27;4,1,0,1;3,1,1,27;4,1,1,1;3,1,2,26;3,1,3,22;" +
-        "3,1,4,6;3,1,5,6;3,1,6,9;0,2,-8,1;1,2,-8,1;2,2,-8,0;3,2,-8,1;4,2,-8,1;0,2,-7,1;1,2,-7,1;2,2,-7,1;" +
-        "3,2,-7,0;4,2,-7,1;3,2,-6,10;4,2,-6,1;3,2,-5,10;4,2,-5,1;3,2,-4,22;4,2,-4,9;3,2,-3,26;4,2,-3,3;" +
-        "3,2,-2,27;4,2,-2,2;3,2,-1,27;4,2,-1,1;3,2,0,27;4,2,0,1;3,2,1,27;4,2,1,1;3,2,2,26;3,2,3,22;" +
-        "3,2,4,6;3,2,5,6;3,2,6,12;0,3,-8,1;1,3,-8,1;2,3,-8,1;3,3,-8,1;4,3,-8,1;0,3,-7,1;1,3,-7,1;2,3,-7,1;" +
-        "3,3,-7,1;4,3,-7,0;3,3,-6,10;4,3,-6,2;3,3,-5,10;4,3,-5,2;3,3,-4,22;4,3,-4,9;3,3,-3,25;4,3,-3,1;" +
-        "3,3,-2,27;4,3,-2,1;3,3,-1,27;4,3,-1,1;3,3,0,27;4,3,0,1;3,3,1,27;4,3,1,1;3,3,2,25;3,3,3,22;" +
-        "3,3,4,6;3,3,5,6;2,3,6,29;3,3,6,22;0,4,-8,2;1,4,-8,1;2,4,-8,1;3,4,-8,1;4,4,-8,1;0,4,-7,2;1,4,-7,1;" +
-        "2,4,-7,0;3,4,-7,1;4,4,-7,1;3,4,-6,6;4,4,-6,1;3,4,-5,10;4,4,-5,1;3,4,-4,22;4,4,-4,0;2,4,-3,23;" +
-        "3,4,-3,24;4,4,-3,1;3,4,-2,25;4,4,-2,1;3,4,-1,26;4,4,-1,0;3,4,0,26;4,4,0,1;3,4,1,25;4,4,1,1;" +
-        "2,4,2,23;3,4,2,24;3,4,3,22;3,4,4,11;3,4,5,11;2,4,6,30;3,4,6,22;0,5,-8,1;1,5,-8,1;2,5,-8,1;" +
-        "3,5,-8,2;4,5,-8,1;0,5,-7,1;1,5,-7,2;2,5,-7,1;3,5,-7,1;4,5,-7,1;3,5,-6,10;4,5,-6,1;3,5,-5,10;" +
-        "4,5,-5,2;3,5,-4,22;4,5,-4,2;3,5,-3,22;4,5,-3,1;3,5,-2,22;4,5,-2,1;3,5,-1,22;4,5,-1,2;3,5,0,22;" +
-        "4,5,0,3;3,5,1,22;4,5,1,1;3,5,2,22;3,5,3,22;3,5,4,10;3,5,5,10;2,5,6,30;3,5,6,22;-1,6,-8,22;" +
-        "0,6,-8,1;1,6,-8,1;2,6,-8,1;3,6,-8,1;4,6,-8,3;-1,6,-7,31;0,6,-7,2;1,6,-7,1;2,6,-7,1;3,6,-7,1;" +
-        "4,6,-7,1;3,6,-6,6;4,6,-6,2;3,6,-5,10;4,6,-5,1;3,6,-4,10;4,6,-4,1;3,6,-3,11;4,6,-3,32;3,6,-2,10;" +
-        "4,6,-2,32;3,6,-1,10;4,6,-1,32;3,6,0,11;4,6,0,32;3,6,1,10;4,6,1,1;3,6,2,10;3,6,3,10;3,6,4,10;" +
-        "3,6,5,10;3,6,6,17;"
-
-    private class Block3(val dx: Int, val dy: Int, val dz: Int, val state: BlockState)
-
-    private val structure: List<Block3> by lazy {
-        val states = PALETTE.map { BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, "minecraft:$it", false).blockState() }
-        CELLS.split(';').filter { it.isNotEmpty() }.map { e ->
-            val (dx, dy, dz, i) = e.split(',').map(String::toInt)
-            Block3(dx, dy, dz, states[i])
-        }
-    }
+    // Odin's Simon Says colours.
+    private val FIRST = Colors.MINECRAFT_GREEN.withAlpha(0.5f)
+    private val SECOND = Colors.MINECRAFT_GOLD.withAlpha(0.5f)
+    private val THIRD = Colors.MINECRAFT_RED.withAlpha(0.5f)
 
     private val BUTTON: BlockState by lazy { BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, "minecraft:stone_button[face=wall,facing=west,powered=false]", false).blockState() }
 
@@ -190,6 +110,13 @@ object SimonSaysPractice : Module(
             level.setBlock(pos, state.rotate(rotation), FLAGS)
         }
         fun set(real: BlockPos, state: BlockState) = setWorld(at(real), state)
+        /** A box given in the real device's frame, turned into the world like the blocks are. */
+        fun box(x0: Double, y0: Double, z0: Double, x1: Double, y1: Double, z1: Double): AABB {
+            fun wx(x: Double, z: Double) = origin.x + 0.5 + forward.stepX * (x - AX - 0.5) + right.stepX * (z - AZ - 0.5)
+            fun wz(x: Double, z: Double) = origin.z + 0.5 + forward.stepZ * (x - AX - 0.5) + right.stepZ * (z - AZ - 0.5)
+            val y = origin.y - AY
+            return AABB(wx(x0, z0), y0 + y, wz(x0, z0), wx(x1, z1), y1 + y, wz(x1, z1))
+        }
     }
 
     private var placed: Placement? = null
@@ -202,12 +129,12 @@ object SimonSaysPractice : Module(
         EngineerClient.safely("ss practice summon") {
             // Clear the space between you and the buttons first, so nothing blocks a click.
             for (dx in 0..2) for (dy in 0..3) for (dz in -4..3) p.setWorld(p.at(dx, dy, dz), Blocks.AIR.defaultBlockState())
-            for (b in structure) {
-                val pos = p.at(b.dx, b.dy, b.dz)
-                // Below your feet only over ground that is already there: nothing new to stand on.
-                if (b.dy < 0 && level.getBlockState(pos).canBeReplaced()) continue
-                p.setWorld(pos, b.state)
+            // The wall: the grid (x 111, y 120-123, z 92-95) in a ring of black wool, start button on its left.
+            for (y in 119..124) for (z in 91..96) {
+                val grid = y in 120..123 && z in 92..95
+                p.set(BlockPos(111, y, z), if (grid) Blocks.OBSIDIAN.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
             }
+            p.set(START, BUTTON)
         }
         placed = p
         reset()
@@ -245,6 +172,8 @@ object SimonSaysPractice : Module(
     private var firstLight = 0L
     private var roundUp = 0L
     private val rounds = ArrayList<Double>()
+    /** The solver's list: this round's cells, each added as its light goes out (a stray light never). */
+    private val revealed = ArrayList<Int>()
     private var fails = 0
 
     /** Everything back to a dark, buttonless device, waiting for the start button. */
@@ -253,6 +182,7 @@ object SimonSaysPractice : Module(
         jobs.clear()
         phase = Phase.IDLE
         accepting = false
+        revealed.clear()
         placed?.let { p -> for (c in 0 until 16) { p.set(lampAt(c), Blocks.OBSIDIAN.defaultBlockState()); setButton(c, false) } }
     }
 
@@ -282,13 +212,15 @@ object SimonSaysPractice : Module(
         accepting = false
         for (c in 0 until 16) setButton(c, false)
         expected = expect; next = 0
+        revealed.clear()
         val n = cells.size
+        val out = { i: Int -> light(cells[i], false); if (!(stray && i == 0)) revealed += cells[i] }
         for (i in 0 until n) after(8 * i) {
-            if (i > 0) light(cells[i - 1], false)
+            if (i > 0) out(i - 1)
             light(cells[i], true)
             if (firstLight == 0L) firstLight = tick
         }
-        after(8 * n) { light(cells.last(), false) }
+        after(8 * n) { out(n - 1) }
         val open = {
             accepting = true; roundUp = tick
         }
@@ -343,11 +275,12 @@ object SimonSaysPractice : Module(
             accepting = false
             rounds += (tick + 6 - roundUp) / 20.0
             val n = expected.size
-            if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); done() }
+            if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
         } else {
             accepting = false
             fails++
+            revealed.clear()
             after(3) { for (c in 0 until 16) setButton(c, false) }
             after(25) {
                 newSequence()
@@ -423,6 +356,16 @@ object SimonSaysPractice : Module(
             val due = jobs.filter { it.at <= tick }
             jobs.removeAll(due.toSet())
             for (j in due) if (j.gen == gen) EngineerClient.safely("ss practice") { j.run() }
+        }
+        on<RenderEvent.Extract> {
+            val p = placed ?: return@on
+            if (!solver || p.level !== mc.level) return@on
+            for (i in next until revealed.size) {
+                val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
+                // Odin's box: on the grid's face where the button sits, in the real device's frame.
+                val lamp = lampAt(revealed[i])
+                drawStyledBox(p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7), colour, 2, true)
+            }
         }
         // A new world has none of it: nothing to put back.
         on<LevelEvent.Unload> { placed = null; gen++; jobs.clear(); phase = Phase.IDLE }
