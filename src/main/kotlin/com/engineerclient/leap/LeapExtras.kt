@@ -50,11 +50,10 @@ object LeapExtras : Module(
     private var simFromLeap = false
     /** Bumped by every finish and every stop, so a pending restart knows whether it's still wanted. */
     private var simRound = 0
-    private const val NEXT_SIM_MS = 500L
 
     /**
      * SS Practice's keybind with Infinileap in your hand: Odin's numbers terminal simulator. Finishing
-     * one starts another half a second later, in the same menu; Escape to stop. False: not holding it.
+     * one starts another straight away, in the same menu; Escape to stop. False: not holding it.
      */
     @JvmStatic
     fun openNumbersSim(): Boolean {
@@ -68,21 +67,17 @@ object LeapExtras : Module(
     /**
      * Every screen the game is told to open (from the mixin). True: don't. Odin's termsim menu,
      * which a finished simulator opens, is kept off when that simulator came from [openNumbersSim]: the
-     * finished one stays up and a new one replaces it [NEXT_SIM_MS] later, opened again rather than
-     * refilled so Odin starts a new terminal (its solver and its finish) as it would for any.
-     * Anything but a simulator (Escape, say) ends it.
+     * finished one is replaced by a new one on the next frame (not inside the finish, which is
+     * still running), opened again rather than refilled so Odin starts a new terminal (its solver
+     * and its finish) as it would for any. Anything but a simulator (Escape, say) ends it.
      */
-    /** A simulator from [openNumbersSim] is on screen (no first click protection on it). */
-    @JvmStatic
-    fun simActive(): Boolean = simFromLeap && EngineerClient.mc.screen is TermSimGUI
-
     @JvmStatic
     fun cancelScreen(screen: Screen?): Boolean {
         if (!simFromLeap) return false
         if (screen === StartGUI && EngineerClient.mc.screen === NumbersSim) {
             val round = ++simRound
+            // From another thread, so it's queued for the next frame rather than run right here.
             Thread.ofVirtual().start {
-                Thread.sleep(NEXT_SIM_MS)
                 EngineerClient.mc.execute {
                     if (simFromLeap && round == simRound && EngineerClient.mc.screen === NumbersSim) NumbersSim.open(0L)
                 }
@@ -92,6 +87,10 @@ object LeapExtras : Module(
         if (screen !is TermSimGUI) { simFromLeap = false; simRound++ }
         return false
     }
+
+    /** A simulator from [openNumbersSim] is on screen (no first click protection on it). */
+    @JvmStatic
+    fun simActive(): Boolean = simFromLeap && EngineerClient.mc.screen is TermSimGUI
 
     /**
      * Set by POV Previews while its previews are up: Odin's leap boxes shrink toward the middle by
