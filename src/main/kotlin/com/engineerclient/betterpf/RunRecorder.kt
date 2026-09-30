@@ -559,6 +559,7 @@ class RunRecorder(
             tracked.remove(id)
             tags.remove(id)
             lastEquipment.remove("#$id")
+            lastStacks.remove("#$id")
             lastStand.remove(id)
             lastFrame.remove(id)
             emit("""{"k":"gone","t":$tick,"id":$id}""")
@@ -580,6 +581,8 @@ class RunRecorder(
     // Held item and armour per player name / "#entityId", written when it changes: vanilla ids, plus
     // the head item's skin texture when it's a player head (dungeon mobs wear those).
     private val lastEquipment = HashMap<String, String>()
+    /** Each entity's equipment stacks last tick (the objects): the same five again means no change, without building its line. */
+    private val lastStacks = HashMap<String, Array<ItemStack>>()
 
     // Armor stands: size, visibility, arms/base plate and their pose (Hypixel poses them for heads,
     // held items and nametags), written when any of it changes.
@@ -616,6 +619,12 @@ class RunRecorder(
     }
 
     private fun recordEquipment(e: LivingEntity, who: String, key: String) {
+        // (the game swaps in new stacks when equipment changes: the same objects as last tick are no change -
+        // building the line for every entity every tick was most of the recorder's time)
+        val stacks = arrayOf(e.mainHandItem, e.getItemBySlot(EquipmentSlot.HEAD), e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
+        val was = lastStacks[key]
+        if (was != null && (0 until 5).all { was[it] === stacks[it] }) return
+        lastStacks[key] = stacks
         val head = e.getItemBySlot(EquipmentSlot.HEAD)
         val items = listOf(e.mainHandItem, head, e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val headTex = head.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
