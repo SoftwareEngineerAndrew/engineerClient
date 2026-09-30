@@ -71,7 +71,7 @@ object SimonSaysPractice : Module(
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown").withDependency { clickSounds }
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
     private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
-    private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, how long each round's clicking took, next to the fastest healers' medians from Better PF runs.")
+    private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
 
     // ------------------------------------------------------------------ the real device
 
@@ -180,6 +180,10 @@ object SimonSaysPractice : Module(
     private var firstLight = 0L
     private var roundUp = 0L
     private val rounds = ArrayList<Double>()
+    /** Each finished round's presses: seconds from the one before, the first from when its button came up. */
+    private val splits = ArrayList<List<Double>>()
+    private val roundClicks = ArrayList<Double>()
+    private var lastClickMs = 0L
     /** The solver's list: this round's cells, each added as its light goes out (a stray light never). */
     private val revealed = ArrayList<Int>()
     private var fails = 0
@@ -231,6 +235,7 @@ object SimonSaysPractice : Module(
         after(8 * n) { out(n - 1) }
         val open = {
             accepting = true; roundUp = tick
+            roundClicks.clear(); lastClickMs = System.currentTimeMillis()
         }
         if (stray) {
             after(8 * (n - 1) + 5) { for (c in 0 until 16) if (c != cells.last()) setButton(c, true); open() }
@@ -258,7 +263,7 @@ object SimonSaysPractice : Module(
             Phase.IDLE, Phase.DONE, Phase.RUNNING -> {
                 reset()
                 phase = Phase.STARTING
-                startPresses = 1; firstLight = 0L; rounds.clear(); fails = 0
+                startPresses = 1; firstLight = 0L; rounds.clear(); splits.clear(); fails = 0
                 after(6) { begin() }
             }
             Phase.STARTING -> startPresses++
@@ -280,10 +285,13 @@ object SimonSaysPractice : Module(
         if (!accepting) return
         if (cell == expected[next]) {
             if (clickSounds) playSoundSettings(correctSound())
+            val now = System.currentTimeMillis()
+            roundClicks += (now - lastClickMs) / 1000.0; lastClickMs = now
             next++
             if (next < expected.size) return
             accepting = false
             rounds += (tick + 6 - roundUp) / 20.0
+            splits += roundClicks.toList()
             val n = expected.size
             if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
@@ -297,7 +305,7 @@ object SimonSaysPractice : Module(
                 newSequence()
                 val s = sequence
                 show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
-                rounds.clear()
+                rounds.clear(); splits.clear()
             }
         }
     }
@@ -308,12 +316,16 @@ object SimonSaysPractice : Module(
         val colour = if (total <= TOP_TOTAL) "§a" else if (total <= TOP_TOTAL + 1) "§e" else "§c"
         EngineerClient.msg("§7SS Practice: done in $colour${fmt(total)}s§7 (first light to done)" +
             (if (fails > 0) " §8· §c$fails wrong" else "") + " §8· §7top healers ~${fmt(TOP_TOTAL)}s. Start again to go again.")
-        if (roundTimes && rounds.size == TOP_ROUNDS.size) {
-            val names = arrayOf("first", "r3", "r4", "r5")
-            EngineerClient.msg("§7clicking: " + rounds.indices.joinToString(" §8· ") { i ->
-                val c = if (rounds[i] <= TOP_ROUNDS[i]) "§a" else if (rounds[i] <= TOP_ROUNDS[i] + 0.3) "§e" else "§c"
-                "§8${names[i]} $c${fmt(rounds[i])}§8/${fmt(TOP_ROUNDS[i])}"
-            })
+        if (!roundTimes) return
+        // One line a round: its clicking time (vs the top healers' median, with the skip start),
+        // then each press, the first from when its button came up, the rest from the press before.
+        val vsTop = rounds.size == TOP_ROUNDS.size
+        for (i in rounds.indices) {
+            val presses = splits.getOrNull(i).orEmpty()
+            val name = if (vsTop && i == 0) "skip" else "r${presses.size}"
+            val c = if (!vsTop) "§f" else if (rounds[i] <= TOP_ROUNDS[i]) "§a" else if (rounds[i] <= TOP_ROUNDS[i] + 0.3) "§e" else "§c"
+            val top = if (vsTop) "§8/${fmt(TOP_ROUNDS[i])}" else ""
+            EngineerClient.msg("§8 ${name.padEnd(4)} $c${fmt(rounds[i])}$top §8| §7" + presses.joinToString(" §8› §7") { fmt(it) })
         }
     }
 
