@@ -7,6 +7,7 @@ import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.utils.Color.Companion.withAlpha
@@ -67,6 +68,7 @@ object SimonSaysPractice : Module(
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again.").onPress { summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
+    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 5.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.")
     private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one.")
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown").withDependency { clickSounds }
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
@@ -227,21 +229,25 @@ object SimonSaysPractice : Module(
         revealed.clear()
         val n = cells.size
         val out = { i: Int -> light(cells[i], false); if (!(stray && i == 0)) revealed += cells[i] }
-        for (i in 0 until n) after(8 * i) {
+        // Light i comes on at [at] i: 8 ticks apart, divided by Show Speed. Rounded to whole ticks
+        // from the start (not per gap), so the pace is right on average; the buttons' timings
+        // below count from the last light, never sped up.
+        val at = { i: Int -> Math.round(8 * i / showSpeed).toInt() }
+        for (i in 0 until n) after(at(i)) {
             if (i > 0) out(i - 1)
             light(cells[i], true)
             if (firstLight == 0L) firstLight = tick
         }
-        after(8 * n) { out(n - 1) }
+        after(at(n)) { out(n - 1) }
         val open = {
             accepting = true; roundUp = tick
             roundClicks.clear(); lastClickMs = System.currentTimeMillis()
         }
         if (stray) {
-            after(8 * (n - 1) + 5) { for (c in 0 until 16) if (c != cells.last()) setButton(c, true); open() }
-            after(8 * n + 10) { setButton(cells.last(), true) }
+            after(at(n - 1) + 5) { for (c in 0 until 16) if (c != cells.last()) setButton(c, true); open() }
+            after(at(n) + 10) { setButton(cells.last(), true) }
         } else {
-            after(8 * n + 10) { for (c in 0 until 16) setButton(c, true); open() }
+            after(at(n) + 10) { for (c in 0 until 16) setButton(c, true); open() }
         }
     }
 
