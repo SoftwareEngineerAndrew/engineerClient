@@ -251,8 +251,12 @@ object SimonSaysPractice : Module(
         }
     }
 
+    /** The last run's start presses, for a restart from the grid (left click) to start the same way. */
+    private var lastStartPresses = 3
+
     private fun begin() {
         phase = Phase.RUNNING
+        lastStartPresses = startPresses.coerceAtMost(3)
         newSequence()
         val s = sequence
         when (startPresses.coerceAtMost(3)) {
@@ -260,6 +264,15 @@ object SimonSaysPractice : Module(
             2 -> show(listOf(stray(s[0]), s[0]), listOf(s[0]), stray = true)
             else -> show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
         }
+    }
+
+    private fun restart() {
+        if (placed == null) return
+        reset()
+        phase = Phase.STARTING
+        startPresses = lastStartPresses; firstLight = 0L; rounds.clear(); splits.clear(); fails = 0
+        if (clickSounds) playSoundSettings(correctSound())
+        after(6) { begin() }
     }
 
     private fun pressStart() {
@@ -371,7 +384,10 @@ object SimonSaysPractice : Module(
     /** Left click on the device: nothing (like the real one), and nothing sent. */
     @JvmStatic
     fun onAttack(): Boolean {
-        target() ?: return false
+        val pos = target() ?: return false
+        val p = placed ?: return false
+        // A left click on the grid (obsidian, lantern or button) restarts: a new run, started as the last one was.
+        if ((0 until 16).any { p.at(lampAt(it)) == pos || p.at(buttonAt(it)) == pos }) EngineerClient.safely("ss practice restart") { restart() }
         mc.player?.swing(InteractionHand.MAIN_HAND, false)
         return true
     }
