@@ -21,13 +21,14 @@ import java.util.concurrent.CompletionStage
 import java.util.concurrent.Executors
 
 /**
- * Better PF Menu: while the Party Finder menu is open, what it lists shows up live on
- * undonecoffee.com/betterpf/menu under your name. Someone on that page can turn on auto refresh:
- * this clicks the menu's Refresh button every 5 s, for as long as they watch and the menu is open.
+ * Better PF Menu: while it's on and you're in a world, undonecoffee.com/betterpf/menu lists you
+ * ("not in the menu"), and while the Party Finder menu is open, what it lists. Someone on that page
+ * can turn on auto refresh: this clicks the menu's Refresh button every 5 s, for as long as they
+ * watch and the menu is open.
  *
- * One WebSocket (/betterpf/api/pfmenu/share), opened with the menu and closed a few seconds after
- * it closes (so the menus a party opens on click don't drop you off the page). The menu is read on
- * the client thread once a second and sent only when it changed.
+ * One WebSocket (/betterpf/api/pfmenu/share) for as long as you're in a world. The menu is read on
+ * the client thread once a second and sent only when it changed; a closed menu counts as still open
+ * for a few seconds (so the menus a party opens on click don't flicker you off it).
  */
 object BetterPFMenu : Module(
     name = "Better PF Menu",
@@ -41,6 +42,7 @@ object BetterPFMenu : Module(
     private const val REFRESH_MS = 5_000L
     private const val LINGER_MS = 5_000L
     private const val RESEND_MS = 15_000L
+    private const val PING_MS = 30_000L
 
     private val CONTROL_CODES = Regex("§.")
     private val memberLine = Regex("^(\\w{1,16}): (\\w+) \\((\\d+)\\)$")
@@ -56,6 +58,7 @@ object BetterPFMenu : Module(
     private var nextTry = 0L
     private var backoffMs = 1_000L
     private var pending: String? = null
+    private var failSaid = false
 
     // client thread
     @Volatile private var auto = false
@@ -64,6 +67,8 @@ object BetterPFMenu : Module(
     private var lastSent = ""
     private var lastSentAt = 0L
     private var lastRefresh = 0L
+    private var lastPing = 0L
+    private var inWorldAt = 0L
 
     init {
         on<TickEvent.End> { EngineerClient.safely("pf menu tick") { tick() } }
@@ -71,25 +76,41 @@ object BetterPFMenu : Module(
 
     private fun tick() {
         val now = System.currentTimeMillis()
-        val screen = EngineerClient.mc.screen as? AbstractContainerScreen<*>
-        val open = screen != null && clean(screen.title.string).startsWith("Party Finder")
-        if (!open) {
-            if (lastOpen != 0L && now - lastOpen > LINGER_MS) { lastOpen = 0L; lastSent = ""; io.execute { disconnect("menu closed") } }
+        if (EngineerClient.mc.player == null) {
+            // Out of the world (a server switch is a moment of this): gone from the page after a while.
+            if (inWorldAt != 0L && now - inWorldAt > LINGER_MS) { inWorldAt = 0L; lastOpen = 0L; lastSent = ""; io.execute { disconnect("left the world") } }
             return
         }
-        lastOpen = now
+        inWorldAt = now
+        val screen = EngineerClient.mc.screen as? AbstractContainerScreen<*>
+        val open = screen != null && clean(screen.title.string).startsWith("Party Finder")
+        if (open) lastOpen = now
         if (now - lastRead >= 1_000L) {
             lastRead = now
-            val body = read(screen!!).toString()
-            if (body != lastSent || now - lastSentAt > RESEND_MS) {
+            // Just closed: the page keeps what the menu last showed for a few seconds.
+            val body = when {
+                open -> read(screen!!).toString()
+                lastOpen != 0L && now - lastOpen <= LINGER_MS -> null
+                else -> closed().toString()
+            }
+            if (body != null && (body != lastSent || now - lastSentAt > RESEND_MS)) {
                 lastSent = body; lastSentAt = now
                 io.execute { pending = body; flush() }
             }
         }
-        if (auto && allowAuto && now - lastRefresh >= REFRESH_MS) {
+        if (now - lastPing >= PING_MS) { lastPing = now; io.execute { ws?.sendText("ping", true) } }
+        if (open && auto && allowAuto && now - lastRefresh >= REFRESH_MS) {
             lastRefresh = now
             clickRefresh(screen!!)
         }
+    }
+
+    /** On, but no Party Finder open. */
+    private fun closed() = JsonObject().apply {
+        addProperty("t", "menu")
+        addProperty("name", EngineerClient.mc.user.name)
+        addProperty("open", false)
+        add("parties", JsonArray())
     }
 
     /** The menu as the page wants it: each party's leader, floor, note, members and its lines as shown. */
@@ -131,6 +152,7 @@ object BetterPFMenu : Module(
         return JsonObject().apply {
             addProperty("t", "menu")
             addProperty("name", EngineerClient.mc.user.name)
+            addProperty("open", true)
             addProperty("title", clean(screen.title.string))
             addProperty("refresh", refresh)
             add("parties", parties)
@@ -152,7 +174,7 @@ object BetterPFMenu : Module(
         if (socket == null) { connect(); return }
         val body = pending ?: return
         pending = null
-        socket.sendText(body, true).exceptionally { io.execute { fail() }; null }
+        socket.sendText(body, true).exceptionally { t -> io.execute { fail("send: $t") }; null }
     }
 
     private fun connect() {
@@ -166,6 +188,9 @@ object BetterPFMenu : Module(
                     connecting = false
                     if (gen != generation) { webSocket.abort(); return@execute }
                     ws = webSocket; backoffMs = 1_000L
+                    if (failSaid) EngineerClient.msg("§7Better PF Menu: connected again.")
+                    failSaid = false
+                    EngineerClient.logger.info("[ec] pf menu: connected")
                     flush()
                 }
                 webSocket.request(1)
@@ -177,17 +202,17 @@ object BetterPFMenu : Module(
                 return null
             }
             override fun onClose(webSocket: WebSocket, statusCode: Int, reason: String): CompletionStage<*>? {
-                io.execute { if (gen == generation) fail() }
+                io.execute { if (gen == generation) fail("closed $statusCode $reason") }
                 return null
             }
             override fun onError(webSocket: WebSocket, error: Throwable) {
-                io.execute { if (gen == generation) fail() }
+                io.execute { if (gen == generation) fail(error.toString()) }
             }
         }
         http.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10)).buildAsync(URI.create(URL), listener)
             .whenCompleteAsync({ socket, err ->
                 if (gen != generation) { socket?.abort(); return@whenCompleteAsync }
-                if (err != null) { connecting = false; fail() }
+                if (err != null) { connecting = false; fail((err.cause ?: err).toString()) }
             }, io)
     }
 
@@ -207,8 +232,10 @@ object BetterPFMenu : Module(
         }
     }
 
-    /** Lost the connection while the menu is open: try again, a little later each time. The next menu read resends. */
-    private fun fail() {
+    /** Lost the connection: try again, a little later each time. The next menu read resends. */
+    private fun fail(why: String) {
+        EngineerClient.logger.warn("[ec] pf menu: connection failed: $why")
+        if (!failSaid) { failSaid = true; EngineerClient.msg("§cBetter PF Menu: can't reach ${BetterPF.SITE} ($why). Retrying.") }
         disconnect("failed")
         nextTry = System.currentTimeMillis() + backoffMs
         backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
@@ -224,7 +251,7 @@ object BetterPFMenu : Module(
 
     override fun onDisable() {
         super.onDisable()
-        lastOpen = 0L; lastSent = ""
+        lastOpen = 0L; lastSent = ""; inWorldAt = 0L
         io.execute { disconnect("off") }
     }
 
