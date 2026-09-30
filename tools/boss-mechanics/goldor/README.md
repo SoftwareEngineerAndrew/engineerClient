@@ -25,6 +25,7 @@ python3 sections.py OUT_DIR                     # 3. per-recording section timel
 python3 deathtick.py OUT_DIR                    # 4. the 60-tick death tick and who it hits
 python3 goldor.py OUT_DIR                       # 5. Goldor's track, speeds, catch-up, flight, death -> goldor_packets.json
 python3 splits.py OUT_DIR                       # 6. split distributions and the fastest runs -> splits.json
+python3 roles.py OUT_DIR [--restarts N --iters N] # 7. static terminal roles: measurements + schedule search -> roles.json (~10 min)
 ```
 
 `extract.py` skips recordings whose extract is newer than the recording.
@@ -41,6 +42,10 @@ python3 splits.py OUT_DIR                       # 6. split distributions and the
 - `sections.py` - completion lines, doors, gates, the core door; section contents and counting,
   the gate/door rule. `active_section()` is used by the later steps.
 - `deathtick.py`, `goldor.py`, `splits.py` - the steps above.
+- `roles.py` (with `roledata.py`: per-recording job timelines, the arena's numbered stations;
+  `rolemeasure.py`: solve / open / lever / gate / leap / device / walking times from the fastest
+  runs; `roleplan.py`: the schedule model and the plan search) - behind
+  `docs/mechanics/terminal-roles.md`.
 
 ## Caveats
 
