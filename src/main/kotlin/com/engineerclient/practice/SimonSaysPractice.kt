@@ -194,6 +194,8 @@ object SimonSaysPractice : Module(
     private var lastClickMs = 0L
     /** The tick the 4-button round's last press went in (0: not yet this run). */
     private var r4Done = 0L
+    /** Ticks Show Speed took off this run's shows: added back, the times are as at 1x. */
+    private var shownFaster = 0L
     /** The solver's list: this round's cells, each added as its light goes out (a stray light never). */
     private val revealed = ArrayList<Int>()
     private var fails = 0
@@ -253,9 +255,13 @@ object SimonSaysPractice : Module(
         }
         if (stray) {
             after(at(n - 1) + 5) { for (c in 0 until 16) if (c != cells.last()) setButton(c, true); open() }
-            after(at(n) + 10) { setButton(cells.last(), true) }
+            // The lit cell's: 10 ticks after its light would go out at 1x (13 after the rest), so
+            // the clicking is the same at any speed.
+            after(at(n - 1) + 8 + 10) { setButton(cells.last(), true) }
+            shownFaster += 8 * (n - 1) - at(n - 1)
         } else {
             after(at(n) + 10) { for (c in 0 until 16) setButton(c, true); open() }
+            shownFaster += 8 * n - at(n)
         }
     }
 
@@ -278,7 +284,7 @@ object SimonSaysPractice : Module(
         if (placed == null) return
         reset()
         phase = Phase.STARTING
-        startPresses = lastStartPresses; firstLight = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
+        startPresses = lastStartPresses; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
         if (clickSounds) playSoundSettings(correctSound())
         after(6) { begin() }
     }
@@ -290,7 +296,7 @@ object SimonSaysPractice : Module(
             Phase.IDLE, Phase.DONE, Phase.RUNNING -> {
                 reset()
                 phase = Phase.STARTING
-                startPresses = 1; firstLight = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
+                startPresses = 1; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
                 after(6) { begin() }
             }
             Phase.STARTING -> startPresses++
@@ -319,7 +325,7 @@ object SimonSaysPractice : Module(
             accepting = false
             rounds += (tick + 6 - roundUp) / 20.0
             splits += roundClicks.toList()
-            if (expected.size == 4) r4Done = tick
+            if (expected.size == 4) r4Done = tick + shownFaster
             val n = expected.size
             if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
@@ -340,12 +346,14 @@ object SimonSaysPractice : Module(
 
     private fun done() {
         phase = Phase.DONE
-        val total = (tick - firstLight) / 20.0
+        // As at 1x: the time Show Speed saved added back.
+        val total = (tick + shownFaster - firstLight) / 20.0
         // Green: the goal. Yellow: still before the death tick. Red: after it.
         val colour = if (total <= GOAL) "§a" else if (total < DEATH_TICK) "§e" else "§c"
         // In brackets, first light to r4's last press.
         val r4 = if (r4Done != 0L) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
-        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (fails > 0) " §c$fails wrong" else ""))
+        val speed = if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
+        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (fails > 0) " §c$fails wrong" else "") + speed)
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
