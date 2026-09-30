@@ -72,6 +72,10 @@ object LeapExtras : Module(
      * refilled so Odin starts a new terminal (its solver and its finish) as it would for any.
      * Anything but a simulator (Escape, say) ends it.
      */
+    /** A simulator from [onAttack] is on screen (no first click protection on it). */
+    @JvmStatic
+    fun simActive(): Boolean = simFromLeap && EngineerClient.mc.screen is TermSimGUI
+
     @JvmStatic
     fun cancelScreen(screen: Screen?): Boolean {
         if (!simFromLeap) return false
