@@ -13,7 +13,13 @@ if [ -z "$PID" ]; then
     exit 2
 fi
 STATE="${XDG_CACHE_HOME:-$HOME/.cache}/ec-hotswap/$PID-$(awk '{print $22}' "/proc/$PID/stat").state"
+# The jar the game launched with: still open, though deploy replaced it on disk.
+LAUNCH_JAR=""
+for fd in /proc/"$PID"/fd/*; do
+    case "$(readlink "$fd" 2>/dev/null)" in *mods/engineerclient-*.jar*) LAUNCH_JAR="$fd"; break;; esac
+done
+[ -n "$LAUNCH_JAR" ] || { echo "hotswap: can't find the game's engineerclient jar in /proc/$PID/fd"; exit 1; }
 
 JAVA_HOME_DIR="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 VERSION="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"
-exec "$JAVA_HOME_DIR/bin/java" tools/hotswap/Hotswap.java "$PORT" "build/libs/engineerclient-$VERSION.jar" "$STATE"
+exec "$JAVA_HOME_DIR/bin/java" tools/hotswap/Hotswap.java "$PORT" "build/libs/engineerclient-$VERSION.jar" "$LAUNCH_JAR" "$STATE"
