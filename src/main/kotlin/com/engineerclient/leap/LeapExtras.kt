@@ -237,6 +237,13 @@ object LeapExtras : Module(
         EngineerClient.logger.error("[ec] map leap: $what failed - back to Odin's leap boxes for this session", t)
     }
 
+    /**
+     * When the map was last drawn as the leap menu. A click only picks from the map while it is what
+     * the screen shows: on an Odin whose render handler the hook can't find (the modified one numbers
+     * its handlers differently) the boxes stay up, and clicks must keep going to them.
+     */
+    private var mapDrawnAt = 0L
+
     /** Who can be leapt to, without the placeholder Odin's leap menu fills empty corners with. */
     private fun mapTargets(): List<DungeonPlayer> =
         DungeonUtils.leapTeammates.filter { !(it.clazz == DungeonClass.EMPTY && it.name == "Empty") }
@@ -258,6 +265,7 @@ object LeapExtras : Module(
         if (!mapMode()) return false
         return try {
             LeapMap.render(event.guiGraphics, mapTargets(), event.mouseX.toFloat(), event.mouseY.toFloat(), mapLeapSize, palette())
+            mapDrawnAt = System.currentTimeMillis()
             true
         } catch (t: Throwable) {
             broke("drawing", t); false
@@ -271,7 +279,7 @@ object LeapExtras : Module(
      */
     @JvmStatic
     fun mapLeapClick(screen: AbstractContainerScreen<*>, x: Int, y: Int): Boolean {
-        if (!mapMode()) return false
+        if (!mapMode() || System.currentTimeMillis() - mapDrawnAt > 1000) return false
         return try {
             LeapMap.targetAt(mapTargets(), x.toFloat(), y.toFloat(), mapLeapSize)
                 ?.let { OdinLeap.leap(screen, it, DungeonUtils.leapTeammates.indexOf(it)) }
