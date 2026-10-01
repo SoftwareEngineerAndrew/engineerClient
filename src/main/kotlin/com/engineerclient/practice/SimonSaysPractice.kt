@@ -207,7 +207,7 @@ object SimonSaysPractice : Module(
     private val splits = ArrayList<List<Double>>()
     private val roundClicks = ArrayList<Double>()
     private var lastClickMs = 0L
-    /** The tick the 4-button round's last press went in (0: not yet this run). */
+    /** When the device would be done with no r5: 6 ticks after r4's last press, as at 1x (0: not yet this run). */
     private var r4Done = 0L
     /** Ticks Show Speed took off this run's shows: added back, the times are as at 1x. */
     private var shownFaster = 0L
@@ -535,7 +535,9 @@ object SimonSaysPractice : Module(
             accepting = false
             rounds += (tick + 6 - roundUp) / 20.0
             splits += roundClicks.toList()
-            if (expected.size == 4) r4Done = tick + shownFaster
+            // Where the device would be done with no r5 (SkyBlock's coming SS): 6 ticks after r4's
+            // last press, as it's done 6 ticks after r5's now.
+            if (expected.size == 4) r4Done = tick + 6 + shownFaster
             val n = expected.size
             if (fromRound > 0 && n == 5) { fromDone(); after(6) { fromRun() }; return }
             if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
@@ -568,7 +570,7 @@ object SimonSaysPractice : Module(
             total <= 13.5 -> "§c"
             else -> "§4"
         }
-        // In brackets, first light to r4's last press.
+        // In brackets, first light to done as it would be with no r5 (done after r4).
         val r4 = if (r4Done != 0L) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
         val speed = if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
         EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (fails > 0) " §c$fails wrong" else "") + speed)
