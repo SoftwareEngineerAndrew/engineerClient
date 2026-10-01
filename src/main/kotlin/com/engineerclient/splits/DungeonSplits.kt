@@ -87,9 +87,16 @@ object DungeonSplits : Module(
             "§e25.85\t§29.75\t§20.55\t§210.15\t§e0.30\t§75.10", "§c46.40\t§734.35\t§20.60\t§c0.45\t§e4.60\t§e1.30\t§60.10\t§75.10",
             "§e47.20\t§e12.90\t§a9.40\t§c13.80\t§e8.90", "§e7.90\t§03.40\t§24.50",
             "§230.35\t§77.95\t§e0.70\t§77.85\t§e3.30\t§60.05\t§77.55\t§73.10",
+            "§3Pace 4:58 §8(4:57)", "§8Lag §71.35s",
         ))
         val now = now()
-        scorecard(this, card.rows(tracker.splits(), now, blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)) { scorecardCells(it, now) })
+        val rows = card.rows(tracker.splits(), now, blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)) { scorecardCells(it, now) }
+        // Pace against the dark green times (F7), real time first; and the time lost to lag.
+        val extra = if (rows.isEmpty()) emptyList() else listOfNotNull(
+            pace(now)?.let { "§3Pace " + SplitPace.mss(it.ms) + " §8(" + SplitPace.mss(it.ticks * 50) + ")" },
+            "§8Lag §7" + SplitFormat.seconds(SplitPace.lag(tracker.splits(), now)),
+        )
+        scorecard(this, rows + extra)
     }
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
@@ -674,6 +681,20 @@ object DungeonSplits : Module(
         val other = if (r.real) r.ticks * 50 else r.ms
         return "$name §b> ${r.grade}${SplitFormat.seconds(main)} §8(§7${SplitFormat.seconds(other)}§8)"
     }
+
+    /**
+     * The run's pace against the dark green times ([SplitPace]), on F7 once the run has started;
+     * null otherwise (no dark green times off F7).
+     */
+    fun pace(now: Stamp = now()): SplitPace.Clocks? {
+        if (DungeonUtils.floor?.name != "F7") return null
+        val splits = tracker.splits()
+        if (splits.isEmpty()) return null
+        return SplitPace.pace(splits, { label -> subs.forSplit(label).zip(subs.idsForSplit(label)) { s, id -> SplitPace.Sub(id, s) } }, now)
+    }
+
+    /** Time lost to lag so far on the tick-timed splits, or null before the run starts. */
+    fun lag(now: Stamp = now()): Long? = tracker.splits().takeIf { it.isNotEmpty() }?.let { SplitPace.lag(it, now) }
 
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
     fun bestOf(floor: String, id: String): Long? = bests(floor)[id]

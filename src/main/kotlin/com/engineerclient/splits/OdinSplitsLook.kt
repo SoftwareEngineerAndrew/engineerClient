@@ -170,7 +170,9 @@ object OdinSplitsLook {
         val rows = if (example) exampleRows() else rows()
         val opts = options()
         val lines = EngineerLook.lines(rows, opts, place, master, targets(if (example) EngineerLook.Place.FLOOR7 else place, master),
-            if (example || place != EngineerLook.Place.FLOOR7) null else { n, ms, t, over -> grade(n, ms, t, over, master) })
+            if (example || place != EngineerLook.Place.FLOOR7) null else { n, ms, t, over -> grade(n, ms, t, over, master) },
+            if (example || place != EngineerLook.Place.FLOOR7 || master) null else DungeonSplits.pace()?.let { it.ms to it.ticks },
+            if (example || place != EngineerLook.Place.FLOOR7) null else DungeonSplits.lag())
         if (lines.isEmpty()) return 0 to 0
         val font = EngineerClient.mc.font
 
