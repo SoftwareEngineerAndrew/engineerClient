@@ -4,8 +4,8 @@
     python3 subsplits.py DATA_DIR [--cache DIR] [--jobs N] [--old-until ISO] [section ...]
 
 DATA_DIR is laid out like the site's API (see tools/boss-movement/README.md): runs.json,
-optional ids.txt, runs/<id>.gz (gzip or xz). Sections: data alpha watcher maxor storm necron
-fixes (default: all). --cache DIR keeps one small extract per recording (re-used while it is
+optional ids.txt, runs/<id>.gz (gzip or xz). Sections: data alpha watcher maxor storm
+goldor necron fixes bands (default: all). --cache DIR keeps one small extract per recording (re-used while it is
 newer than the recording). --old-until (default 2026-09-29T12:00:00Z, the end of the data the
 mechanics reports used) splits "old" runs from the rest by upload time, for the old vs all
 comparison. Standard library only; nothing is written to DATA_DIR.
@@ -54,7 +54,10 @@ N_START = ("[BOSS] Necron: You went further than any human before, congratulatio
            "[BOSS] Necron: Finally, I heard so much about you. The Eye likes you very much.")
 N_ARGH = '[BOSS] Necron: ARGH!'
 N_END = '[BOSS] Necron: All this, for nothing...'
-KEEP = ('[BOSS]', DOOR, '⚠', CHARGING)
+G_START = R.GOLDOR_START
+CORE_OPEN = 'The Core entrance is opening!'
+KEEP = ('[BOSS]', DOOR, '⚠', CHARGING, CORE_OPEN, ' ☠ ', ' ❣ ')
+EXTRACT_VERSION = 2
 
 # ---------------------------------------------------------------- places
 MAXOR_SPAWN = (73.0, 226.0, 53.0)
@@ -65,6 +68,15 @@ NECRON_MID = (54.0, 66.0, 76.0)
 BEACON = (73, 221, 73)
 PYLONS = ((52.5, 41.5), (94.5, 41.5))
 PILLARS = B.PILLARS
+# Goldor's section doors (docs/mechanics/goldor.md, tools/boss-mechanics/goldor/doors.py): search
+# boxes (x0, x1, y0, y1, z0, z1); each door's 228 barrier blocks turn to air in the tick its
+# section ends (max(last completion, gate)).
+DOOR_BOXES = {1: (90, 112, 110, 140, 118, 126), 2: (12, 22, 105, 140, 122, 142), 3: (0, 16, 110, 140, 45, 54)}
+
+
+def in_core(x, y, z):
+    """DungeonSplits.everyoneInCore's box."""
+    return 39 <= x < 71 and y < 155.5 and 54 <= z < 118
 
 
 def skin(tex):
@@ -95,6 +107,8 @@ def extract(path):
     zskin = {}
     mobs = {}          # blood mob (player-shaped) name -> first sighting / pgone
     beacon, pillar_air = [], collections.Counter()
+    door_air = collections.Counter()
+    inside = {}                       # real player -> [(n, t, in the core box)] on change
     alpha_line = False
     for l in lines:
         k = l['k']
@@ -135,11 +149,15 @@ def extract(path):
             zskin.setdefault(l['id'], skin(l['headTex']))
         elif k == 'p':
             for d in l['d']:
-                if (len(d) > 7 and d[7] == 2) or '#' in d[0]:
-                    base = d[0].split('#')[0].strip()
-                    if base in REGULAR or base in MINI:
-                        if d[0] not in mobs:
-                            mobs[d[0]] = {'name': base, 't': t, 'pos': (d[1], d[2], d[3]), 'gone': None}
+                if not ((len(d) > 7 and d[7] == 2) or '#' in d[0]):
+                    v = in_core(d[1], d[2], d[3])
+                    h = inside.setdefault(d[0], [])
+                    if not h or h[-1][2] != v:
+                        h.append((N(t), t, v))
+                    continue
+                base = d[0].split('#')[0].strip()
+                if (base in REGULAR or base in MINI) and d[0] not in mobs:
+                    mobs[d[0]] = {'name': base, 't': t, 'pos': (d[1], d[2], d[3]), 'gone': None}
         elif k == 'pgone':
             m = mobs.get(l['name'])
             if m is not None and m['gone'] is None:
@@ -149,6 +167,10 @@ def extract(path):
             s = pal.get(l['s'], '')
             if (x, y, z) == BEACON:
                 beacon.append((N(t), t, s))
+            if 105 <= y <= 140 and s.split('[')[0] == 'minecraft:air':
+                for dn, (a0, a1, b0, b1, c0, c1) in DOOR_BOXES.items():
+                    if a0 <= x <= a1 and b0 <= y <= b1 and c0 <= z <= c1:
+                        door_air[(t, dn)] += 1
             elif 170 <= y <= 205 and s.split('[')[0] in ('minecraft:air', ''):
                 for name, (a0, a1, c0, c1) in PILLARS.items():
                     if a0 <= x <= a1 and c0 <= z <= c1:
@@ -164,7 +186,8 @@ def extract(path):
     resets = sorted((N(t), t, p) for (t, p), c in pillar_air.items() if c >= 50)
     return {'has_st': has_st, 'chat': chat, 'times': times, 'blood': blood, 'ents': keep,
             'mobs': [dict(m, n=N(m['t']), ngone=N(m['gone']) if m['gone'] is not None else None) for m in mobs.values()],
-            'beacon': beacon, 'resets': resets, 'alpha_line': alpha_line,
+            'beacon': beacon, 'resets': resets, 'alpha_line': alpha_line, 'version': EXTRACT_VERSION,
+            'doors': sorted((N(t), t, dn, c) for (t, dn), c in door_air.items() if c >= 100), 'inside': inside,
             'st_first': st[0] if st else None}
 
 
@@ -173,7 +196,9 @@ def extract_cached(args):
     if cache:
         c = os.path.join(cache, os.path.basename(path)[:-3] + '.pkl')
         if os.path.exists(c) and os.path.getmtime(c) > os.path.getmtime(path):
-            return pickle.load(open(c, 'rb'))
+            x = pickle.load(open(c, 'rb'))
+            if x.get('version') == EXTRACT_VERSION:
+                return x
     x = extract(path)
     if cache:
         pickle.dump(x, open(c, 'wb'))
@@ -207,12 +232,35 @@ def packets(e):
     """De-lerped packets [(n, x, y, z)] of one entity (the positions the server sent)."""
     ev = [(v[1],) + tuple(v[2:]) for v in e['ev']]
     nmap = {v[1]: v[0] for v in e['ev']}
-    pk, _ = B.delerp([list(v) for v in ev], 3)
+    # newer recorders write positions to 1/100 block (the lerp test needs a looser tolerance)
+    dec = 2
+    for v in ev[:300]:
+        if v[1] == 'e' and any(len(repr(c).split('.')[1]) == 3 for c in (v[2], v[4]) if '.' in repr(c)):
+            dec = 3
+            break
+    pk, _ = B.delerp([list(v) for v in ev], dec)
     out = []
     for t, x, y, z, kind in pk:
         out.append((nmap.get(t, None), x, y, z, kind, t))
     # n for ticks that are not exactly an ev tick (shouldn't happen: packets sit on ev ticks)
     return [(n, x, y, z, kind) for n, x, y, z, kind, t in out if n is not None]
+
+
+def raw(e):
+    """The positions as the client drew them: [(n, x, y, z)], None where the entity left view.
+
+    Recorders from 0.6.15 on write mobs over 32 blocks away on even ticks only, which breaks the
+    de-interpolation (packets()), so the boundaries use these: a lerp starts on the tick its
+    packet arrives, so the first tick a position changes is when the client learnt of the move."""
+    out = []
+    for v in e['ev']:
+        if v[2] == 'g':
+            out.append(None)
+        else:
+            if v[2] == 's':
+                out.append(None)
+            out.append((v[0], v[3], v[4], v[5]))
+    return out
 
 
 def withers_near(x, point, tol, after=None, before=None):
@@ -285,8 +333,10 @@ def watcher_events(x):
     H = first(ch, W_HANDLE, after=D)
     P = first(ch, W_PROVEN, after=D)
     ev = {'D': D, 'H': H, 'P': P}
-    # the Watcher's move: the first packet after "handle this" that takes him > 0.5 blocks
-    # (horizontally) from the middle, once he is back in the middle
+    # the Watcher's move: the first tick his position changes after he has hovered (two or more
+    # recorded ticks at one spot, 6+ ticks long) within 2 blocks of the middle, from "handle this"
+    # or from his arrival just after it. That is the packet's arrival: the departure on the server
+    # is 1-3 ticks earlier.
     if x['blood'] and H is not None:
         cx, cz = x['blood']
         mid = (cx - 0.5, cz - 0.5)
@@ -294,18 +344,26 @@ def watcher_events(x):
         for i, e in x['ents'].items():
             if e['type'] != 'minecraft:zombie':
                 continue
-            pk = packets(e)
-            home = False
-            for n, a, b, c, kind in pk:
-                if n < H - 80:
+            prev, s0_, s1_ = None, None, None
+            for p in raw(e):
+                if p is None:
+                    prev = s0_ = s1_ = None
                     continue
-                d = math.hypot(a - mid[0], c - mid[1])
-                if d < 0.5:
-                    home = True
-                elif home and d > 0.5 and n >= H:
-                    if best is None or n < best:
-                        best = n
+                if p[0] < H - 300:
+                    continue
+                if prev is not None and math.dist(p[1:], prev[1:]) <= 0.02:
+                    s1_ = p[0]
+                    prev = p
+                    continue
+                if (prev is not None and s0_ is not None and s1_ is not None and s1_ > s0_ and p[0] >= H
+                        and p[0] - s0_ >= 6 and s0_ <= H + 10 and math.hypot(prev[1] - mid[0], prev[3] - mid[1]) <= 2.0):
+                    if best is None or p[0] < best:
+                        best = p[0]
                     break
+                if p[0] > H + 10 and prev is not None:
+                    break           # he moved on after "handle this" without a hover seen: not this leg
+                s0_, s1_ = p[0], None
+                prev = p
         ev['move'] = best
     # blood mobs: first sighting falling over the middle (a fresh spawn), 19 = 17 + Giant + 1 mini-boss
     if x['blood']:
@@ -346,18 +404,38 @@ def maxor_events(x):
     # the kill: beacon at (73, 221, 73) turns to bedrock
     k = [n for n, t, s in x['beacon'] if n >= s0 and 'bedrock' in s]
     ev['kill'] = k[0] if k else None
-    # placed crystals (on the pylons, y 224.375) vanishing: hit + 42 (or the kill)
-    van = []
+    # placed crystals (on the pylons, y 224.375) vanishing: hit + 42 (or the kill). A crystal also
+    # "goes" when the recorder moves out of range, so a hit needs both pylons' crystals gone within
+    # 2 ticks of each other and the top crystals respawning (hit + 41) a tick before.
+    van, top = [], []
     for i, e in x['ents'].items():
         if e['type'] != 'minecraft:end_crystal':
             continue
+        for v in e['ev']:
+            if v[2] == 's' and abs(v[4] - 238.375) < 0.1 and v[0] >= s0 + 20:
+                top.append((v[0], v[1]))
         sp = e['ev'][0]
         if sp[2] != 's' or abs(sp[4] - 224.375) > 0.1 or not any(abs(sp[3] - px) < 0.6 and abs(sp[5] - pz) < 0.6 for px, pz in PYLONS):
             continue
-        g = [v[0] for v in e['ev'] if v[2] == 'g']
-        if g and g[0] >= s0:
+        g = [(v[0], v[1]) for v in e['ev'] if v[2] == 'g']
+        if g and g[0][0] >= s0:
             van.append(g[0])
-    ev['vanish'] = sorted(van)
+    van.sort()
+    pairs = []
+    for a, b in zip(van, van[1:]):
+        if b[0] - a[0] <= 2 and (not pairs or a[0] - pairs[-1][0] > 5):
+            pairs.append(a)
+    top.sort()
+    tp2 = []
+    for a, b in zip(top, top[1:]):
+        if b[0] - a[0] <= 1 and (not tp2 or a[0] - tp2[-1][0] > 5):    # both top crystals back
+            tp2.append(a)
+    vt = [a for a in pairs if any(-4 <= a[0] - tp[0] <= 2 for tp in tp2)]
+    ev['vanish'] = [a[0] for a in pairs]
+    ev['vanish_top'] = [a[0] for a in vt]
+    ev['vanish_top_ms'] = [ms_at(x['times'], a[1]) for a in vt]
+    ev['top'] = [a[0] for a in tp2]
+    ev['top_ms'] = [ms_at(x['times'], a[1]) for a in tp2]
     # real time of the stun lines
     ev['stun_ms'] = [ms_at(x['times'], t) for n, t, m in ch if m in R.MAXOR_STUN and s0 <= n <= s0 + 3000]
     ev['times'] = x['times']
@@ -388,29 +466,21 @@ def storm_events(x):
     ids = withers_near(x, STORM_SPAWN, 1.5, t0 - 5, t0 + 30) + withers_near(x, STORM_PARK, 0.6, t0 + 400, t0 + 700)
     dep = arr = None
     if ids:
-        pk = []
+        tr = []
         for i in set(ids):
-            pk += packets(x['ents'][i])
-        pk.sort()
-        parked = False
-        for n, a, b, c, kind in pk:
-            if n < t0 + 400:
-                continue
-            d = math.dist((a, b, c), STORM_PARK)
-            if d < 0.3:
-                parked = True
-            elif parked and d > 0.3:
-                dep = n
+            tr += [p for p in raw(x['ents'][i]) if p is not None]
+        tr.sort()
+        prev = None
+        for p in tr:
+            if p[0] >= t0 + 500 and prev is not None and math.dist(prev[1:], STORM_PARK) < 0.15 and math.dist(p[1:], STORM_PARK) > 0.15:
+                dep = p[0]
                 break
+            prev = p
         if ev['enrage'] is not None:
-            for n, a, b, c, kind in pk:
-                if n > ev['enrage'] and math.hypot(a - YELLOW_POINT[0], c - YELLOW_POINT[1]) <= 2.4:
-                    arr = n
+            for p in tr:
+                if p[0] > ev['enrage'] and math.hypot(p[1] - YELLOW_POINT[0], p[3] - YELLOW_POINT[1]) <= 2.4:
+                    arr = p[0]
                     break
-            ev['near'] = min([math.hypot(a - YELLOW_POINT[0], c - YELLOW_POINT[1]) for n, a, b, c, k in pk
-                              if ev['enrage'] < n < ev['enrage'] + 300] or [None]) if pk else None
-        ev['seen'] = [(pk[0][0], pk[-1][0])] if pk else []
-        ev['pk_after_enrage'] = len([1 for p in pk if ev['enrage'] is not None and ev['enrage'] < p[0] < ev['enrage'] + 120])
     ev['dep'] = dep
     ev['arr'] = arr
     return ev
@@ -427,30 +497,92 @@ def necron_events(x):
     ids = withers_near(x, NECRON_MID, 0.01, n0 - 5, n0 + 100)
     trips = []
     if ids:
-        pk = []
+        tr = []
         for i in set(ids):
-            pk += packets(x['ents'][i])
-        pk.sort()
+            tr += [p for p in raw(x['ents'][i]) if p is not None]
+        tr.sort()
         cur = None
-        for n, a, b, c, kind in pk:
+        for n, a, b, c in tr:
             if n < n0:
                 continue
             d = math.dist((a, b, c), NECRON_MID)
-            if cur is None and d > 0.2:
+            if cur is None and d > 0.02:
                 cur = [n, None]
-            elif cur is not None and d < 0.05:
-                cur[1] = n
+            elif cur is not None and d < 0.01:
+                cur[1] = n - 2          # the teleport's 3-tick lerp lands 2 ticks after its packet
                 trips.append(cur)
                 cur = None
         if cur:
             trips.append(cur)
-        ev['seen'] = (pk[0][0], pk[-1][0]) if pk else None
     ev['trips'] = trips
     return ev
 
 
+DEATH = re.compile(r"^ ☠ (\w+) (?:was killed by .*|was crushed|died.*|disconnected) and became a ghost\.$")
+REVIVED = re.compile(r"^ ❣ (\w+) was revived by \w+!$|^ ☠ (\w+) reconnected\.$")
+
+
+def goldor_events(x, party=None):
+    """Section doors, the core opening, everyone in the core, Necron's first line; each as
+    server tick plus wall-clock ms (the terminal sections are shown in real seconds)."""
+    ch = x['chat']
+    g0 = first_t(ch, G_START)
+    if g0 is None:
+        return None
+    n0, t0 = g0
+    ev = {'g0': n0, 'ms0': ms_at(x['times'], t0)}
+    for dn in (1, 2, 3):
+        d = [(n, t) for n, t, k, c in x['doors'] if k == dn and c >= 185 and n >= n0]
+        src = 'barrier'
+        if not d:
+            d = [(n - 6, t - 6) for n, t, k, c in x['doors'] if k == dn and 150 <= c < 185 and n >= n0]
+            src = 'portcullis-6'
+        ev['door%d' % dn] = d[0][0] if d else None
+        ev['door%d_ms' % dn] = ms_at(x['times'], d[0][1]) if d else None
+        ev['door%d_src' % dn] = src if d else None
+    c = first_t(ch, CORE_OPEN, after=n0)
+    ev['core'] = c[0] if c else None
+    ev['core_ms'] = ms_at(x['times'], c[1]) if c else None
+    nl = first_t(ch, N_START, after=n0)
+    ev['necron'] = nl[0] if nl else None
+    # everyone in: the first tick from the core opening with every living party member's last
+    # seen position inside DungeonSplits.everyoneInCore's box
+    ev['in'] = None
+    if c is not None and party:
+        ghost = set()
+        events = []
+        for n, t, m in ch:
+            if n0 <= n:
+                mm = DEATH.match(m)
+                if mm:
+                    events.append((n, 'dead', mm.group(1)))
+                mm = REVIVED.match(m)
+                if mm:
+                    events.append((n, 'alive', mm.group(1) or mm.group(2)))
+        state = {}
+        for name, h in x['inside'].items():
+            for n, t, v in h:
+                events.append((n, 'pos', name, v))
+        events.sort(key=lambda e: e[0])
+        seen = set()
+        for e in events:
+            if e[1] == 'dead':
+                ghost.add(e[2])
+            elif e[1] == 'alive':
+                ghost.discard(e[2])
+            else:
+                state[e[2]] = e[3]
+                seen.add(e[2])
+            if e[0] >= c[0]:
+                live = [p for p in party if p not in ghost]
+                if live and all(state.get(p) for p in live):
+                    ev['in'] = max(e[0], c[0])
+                    break
+    return ev
+
+
 BOSSES = (('watcher', watcher_events, 'D'), ('maxor', maxor_events, 's0'), ('storm', storm_events, 't0'),
-          ('necron', necron_events, 'n0'))
+          ('goldor', goldor_events, 'g0'), ('necron', necron_events, 'n0'))
 
 
 def rel(ev, anchor):
@@ -471,7 +603,7 @@ def rel(ev, anchor):
         return v
     out = {}
     for k, v in ev.items():
-        if k in ('times', 'stun_ms', 'near', 'pk_after_enrage'):
+        if k in ('times', 'stun_ms', 'near', 'pk_after_enrage') or k.endswith('_ms') or k == 'ms0' or k.endswith('_src'):
             out[k] = v
         elif k == 'resets':
             out[k] = [(n - a, p) for n, p in v]
@@ -521,15 +653,15 @@ def build_runs(info, xs, old_until):
         r.ev = {}
         bad = [i for i in ids if i in R.ALPHA_RUNS or i in SUSPECT_ALPHA or xs[i]['alpha_line']]
         sig = [alpha_signature(xs[i]) for i in ids]
-        if any(s is not None and s < 125 for s in sig):
-            bad += [i for i, s in zip(ids, sig) if s is not None and s < 125]
+        if any(s is not None and 90 <= s <= 125 for s in sig):
+            bad += [i for i, s in zip(ids, sig) if s is not None and 90 <= s <= 125]
         if bad:
             excluded[g] = (sorted(set(bad)), sig, [xs[i]['alpha_line'] for i in ids])
             continue
         for boss, fn, anchor in BOSSES:
             evs = []
             for i in r.ids:
-                e = fn(xs[i])
+                e = fn(xs[i], [m[0] for m in info[i]['party']]) if boss == 'goldor' else fn(xs[i])
                 if e is not None and e[anchor] is not None:
                     e = rel(e, anchor)
                     e['rid'] = i
@@ -573,14 +705,18 @@ def watcher_splits(r):
     lastkind = None
     if len(reg) == 17 and 'Giant' in fresh and any(k in MINI for k in fresh):
         last, lastkind = max(fresh.values()), 'fresh'
+    elif len(reg) == 17:
+        # the Giant and the mini-boss come in the dialogue phase; the last mob is always a regular
+        last, lastkind = max(fresh[k] for k in reg), 'fresh17'
     elif len([k for k in seen if k in REGULAR]) == 17 and 'Giant' in seen and any(k in MINI for k in seen):
         last, lastkind = max(seen.values()), 'seen'
     s['H'], s['P'], s['move'], s['last'], s['lastkind'] = H, P, move, last, lastkind
     s['Dialogue'] = H
     s['Wait'] = move - H if (move is not None and H is not None) else None
     s['move_abs'] = move
-    s['Camp'] = last - move if (last is not None and move is not None) else None
-    s['Clear'] = P - last if (P is not None and last is not None) else None
+    ok = lastkind in ('fresh', 'fresh17')
+    s['Camp'] = last - move if (ok and last is not None and move is not None) else None
+    s['Clear'] = P - last if (ok and P is not None and last is not None) else None
     s['total'] = P - 2 if P is not None else None
     return s
 
@@ -594,33 +730,46 @@ def maxor_splits(r):
     s['kill'] = pick(evs, 'kill')
     s['storm'] = pick(evs, 'storm')
     s['too_young'] = pick(evs, 'too_young')
-    # hits: each stun line, unless a pylon crystal vanished > 3 ticks earlier than line - 42 allows
-    lines = pick(evs, None, lambda e: tuple(e['stun_lines'][:2]) if e['stun_lines'] else None)
+    # hits. Every hit shows as the top crystals coming back at hit + 41 and (unless the kill came
+    # first) the placed crystals vanishing at hit + 42. The stun line comes on the hit, or later
+    # when an ability holds it (taunt + 62/82).
+    lines = pick(evs, None, lambda e: tuple(e['stun_lines'][:3]) if e['stun_lines'] else None)
     lines = list(lines) if lines else []
-    van = pick(evs, None, lambda e: tuple(e['vanish']) if e['vanish'] else None)
-    van = list(van) if van else []
     kill = s['kill']
-    # a vanish at the kill (within 2 ticks) is the kill, not a hit
-    hitv = sorted(set(v - 42 for v in van if kill is None or abs(v - kill) > 2))
+    evid = []
+    for e in evs:
+        evid += [(v - 42, 'vanish') for v in e['vanish_top']]
+        evid += [(v - 41, 'top') for v in e['top'] if kill is None or v - 41 <= kill + 2]
+    evid.sort()
+    hv = []          # clustered crystal evidence: [tick, kinds]
+    for t, k in evid:
+        if t < 150:
+            continue
+        if hv and t - hv[-1][0] <= 3:
+            hv[-1][1].add(k)
+        else:
+            hv.append([t, {k}])
     hits, src = [], []
+    used = set()
+    prev = 150
     for j in range(2):
-        ln = lines[j] if j < len(lines) else None
-        cand = [h for h in hitv if (not hits or h > hits[-1] + 20)]
-        hv = cand[0] if cand else None
-        if ln is not None and (hits and ln <= hits[-1] + 20):
-            ln = None
-        if hv is not None and (ln is None or hv < ln - 3):
-            if ln is not None and ln - hv > 120:      # vanish belongs to an earlier, unseen hit? keep the line
-                hits.append(ln); src.append('line')
-            else:
-                hits.append(hv); src.append('vanish')
+        ev_ = next((h for h in hv if h[0] > prev + 20), None) if j else next((h for h in hv if h[0] >= prev), None)
+        ln = next((x_ for x_ in lines if x_ not in used and x_ > (prev + 20 if j else prev)), None)
+        if ev_ is not None and ln is not None and abs(ln - ev_[0]) <= 3:
+            hits.append(ln); src.append('line'); used.add(ln)
+        elif ev_ is not None and (ln is None or ev_[0] < ln - 3):
+            hits.append(ev_[0]); src.append('silent:' + ('vanish' if 'vanish' in ev_[1] else 'top'))
+            if ln is not None and ln - ev_[0] < 120:
+                used.add(ln)        # the held line of this hit
         elif ln is not None:
-            hits.append(ln); src.append('line')
+            hits.append(ln); src.append('line-only'); used.add(ln)
         else:
             hits.append(None); src.append(None)
-    # second hit silent and the kill came first: the stun line is late; the hit is before the kill
-    if hits[1] is not None and kill is not None and hits[1] > kill:
-        src[1] = 'line-after-kill'
+        if hits[-1] is None:
+            break
+        prev = hits[-1]
+    while len(hits) < 2:
+        hits.append(None); src.append(None)
     s['hit1'], s['hit2'], s['src'] = hits[0], hits[1], src
     s['Crystals'] = s['charging']
     s['Lure'] = hits[0] - s['charging'] if (hits[0] is not None and s['charging'] is not None) else None
@@ -628,21 +777,31 @@ def maxor_splits(r):
     s['Kill'] = kill - hits[1] if (kill is not None and hits[1] is not None) else None
     s['Animation'] = s['storm'] - kill if (s['storm'] is not None and kill is not None) else None
     s['total'] = s['storm']
-    # real seconds between the two hits, from the recorder's clock
-    sec = []
-    for e in evs:
-        if not e['times'] or hits[0] is None or hits[1] is None:
-            continue
-        sec.append(None)
+    # real seconds between the two hits, from the recorder's clock: a hit seen as its stun line
+    # takes the line's time; a silent one the crystals' time less 42 / 41 ticks at 50 ms
+    def hit_ms(e, h, sr):
+        if sr in ('line', 'line-only'):
+            for n, m in zip(e['stun_lines'], e['stun_ms']):
+                if abs(n - h) <= 3:
+                    return m
+        elif sr == 'silent:vanish':
+            for n, m in zip(e['vanish_top'], e['vanish_top_ms']):
+                if abs(n - 42 - h) <= 3 and m is not None:
+                    return m - 42 * 50
+        elif sr == 'silent:top':
+            for n, m in zip(e['top'], e['top_ms']):
+                if abs(n - 41 - h) <= 3 and m is not None:
+                    return m - 41 * 50
+        return None
     s['Cooldown_s'] = None
-    for e in evs:
-        if hits[0] is None or hits[1] is None or not e['times']:
-            continue
-        # client tick of a server tick: invert this recording's chat (n, t) pairs is not stored;
-        # use the stun lines' own real times when both hits are lines
-        if src[0] == 'line' and src[1] == 'line' and len(e['stun_ms']) >= 2 and all(e['stun_ms'][:2]):
-            s['Cooldown_s'] = (e['stun_ms'][1] - e['stun_ms'][0]) / 1000
-            break
+    if hits[0] is not None and hits[1] is not None:
+        v = []
+        for e in evs:
+            a_, b_ = hit_ms(e, hits[0], src[0]), hit_ms(e, hits[1], src[1])
+            if a_ is not None and b_ is not None:
+                v.append((b_ - a_) / 1000)
+        if v:
+            s['Cooldown_s'] = sorted(v)[(len(v) - 1) // 2]
     return s
 
 
@@ -670,19 +829,45 @@ def storm_splits(r):
             s['crush2'] = later[0] - 20
             s['crush2_src'] = 'reset'
     s['opening_line'] = s['lightning'] + 139 if s['lightning'] is not None else None
-    s['Opening'] = s['dep'] if s['dep'] is not None else s['opening_line']
-    s['Opening_src'] = 'position' if s['dep'] is not None else ('lightning' if s['lightning'] is not None else None)
+    s['Opening'] = s['opening_line'] if s['opening_line'] is not None else s['dep']
+    s['Opening_src'] = 'lightning' if s['opening_line'] is not None else ('position' if s['dep'] is not None else None)
+    s['Opening_pos'] = s['dep']
+    s['Crush1_pos'] = s['crush1'] - s['dep'] if (s['crush1'] is not None and s['dep'] is not None) else None
+    # the pillar that crushed: the one that resets on the next check
+    s['pillar1'] = next((p for n, p in rs if s['crush1'] is not None and 15 <= n - s['crush1'] <= 25), None)
     s['Crush1'] = s['crush1'] - s['Opening'] if (s['crush1'] is not None and s['Opening'] is not None) else None
     s['check1'] = 699 + 20 * round((s['crush1'] - 699) / 20) if s['crush1'] is not None else None
     s['Pin'] = s['enrage'] - s['crush1'] if (s['enrage'] is not None and s['crush1'] is not None and s['enrage'] >= s['crush1'] - 2) else None
-    s['Flight'] = s['arr'] - s['enrage'] if (s['arr'] is not None and s['enrage'] is not None) else None
-    s['Crush2'] = s['crush2'] - s['arr'] if (s['crush2'] is not None and s['arr'] is not None) else None
+    purple = s['pillar1'] == 'purple'
+    s['Flight'] = s['arr'] - s['enrage'] if (purple and s['arr'] is not None and s['enrage'] is not None) else None
+    s['Crush2'] = s['crush2'] - s['arr'] if (purple and s['crush2'] is not None and s['arr'] is not None and s['Flight'] is not None) else None
     s['FlightCrush2'] = s['crush2'] - s['enrage'] if (s['crush2'] is not None and s['enrage'] is not None) else None
     s['Kill'] = s['dead'] - s['crush2'] if (s['dead'] is not None and s['crush2'] is not None) else None
     s['Animation'] = s['goldor'] - s['dead'] if (s['goldor'] is not None and s['dead'] is not None) else None
     s['total'] = s['goldor']
     s['taunts_adv'] = sorted(set(pick(evs, None, lambda e: tuple(e['taunts_adv'])) or ()))
-    s['pillar1'] = None
+    return s
+
+
+def goldor_splits(r):
+    evs = r.ev.get('goldor') or []
+    if not evs:
+        return None
+    s = {}
+    for k in ('door1', 'door2', 'door3', 'core', 'in', 'necron'):
+        s[k] = pick(evs, k)
+    marks = [('S1', None, 'door1'), ('S2', 'door1', 'door2'), ('S3', 'door2', 'door3'), ('S4', 'door3', 'core')]
+    for name, a, b in marks:
+        s[name] = (s[b] - (s[a] if a else 0)) if (s[b] is not None and (a is None or s[a] is not None)) else None
+
+        def sec(e, a=a, b=b):
+            ma = e['ms0'] if a is None else e.get(a + '_ms')
+            mb = e.get(b + '_ms')
+            return (mb - ma) / 1000 if (ma is not None and mb is not None) else None
+        s[name + '_s'] = pick(evs, None, sec)
+    s['Leaps'] = s['in'] - s['core'] if (s['in'] is not None and s['core'] is not None) else None
+    s['Kill'] = s['necron'] - s['in'] if (s['necron'] is not None and s['in'] is not None) else None
+    s['door_src'] = [pick(evs, None, lambda e, k=k: e.get(k)) for k in ('door1_src', 'door2_src', 'door3_src')]
     return s
 
 
@@ -697,9 +882,23 @@ def necron_splits(r):
     s['argh2'] = ar[1] if len(ar) > 1 else None
     s['end'] = pick(evs, 'end')
 
+    a1 = s['argh1']
+
     def trip(j, k):
-        return pick(evs, None, lambda e: e['trips'][j][k] if len(e['trips']) > j else None)
+        def f(e):
+            if a1 is None:
+                return None
+            tr = [t for t in e['trips'] if (t[0] < a1 if j == 0 else t[0] > a1)]
+            if not tr:
+                return None
+            t = tr[0]
+            if j == 0 and (t[0] > 200 or (t[1] is not None and t[1] > a1)):
+                return None     # he left mid out of view: not trip 1's start
+            return t[k]
+        return pick(evs, None, f)
     s['L1'], s['B1'], s['L2'], s['B2'] = trip(0, 0), trip(0, 1), trip(1, 0), trip(1, 1)
+    if s['B2'] is not None and s['argh2'] is not None and s['B2'] > s['argh2']:
+        s['B2'] = None
     g = lambda a, b: (s[b] - s[a]) if (s[a] is not None and s[b] is not None) else None  # noqa: E731
     s['Intro'] = s['L1']
     s['Trip1'] = g('L1', 'B1')
@@ -764,7 +963,8 @@ def section_watcher(runs):
         table(k, have, k, lambda r: S[r.id])
     print('  coverage: H %d, move %d, last spawn fresh %d / seen-only %d, of %d' % (
         sum(S[r.id]['H'] is not None for r in have), sum(S[r.id]['move'] is not None for r in have),
-        sum(S[r.id]['lastkind'] == 'fresh' for r in have), sum(S[r.id]['lastkind'] == 'seen' for r in have), len(have)))
+        sum(S[r.id]['lastkind'] in ('fresh', 'fresh17') for r in have), sum(S[r.id]['lastkind'] == 'seen' for r in have), len(have)))
+    print('  last spawn: all 19 fresh %d, 17 regulars fresh %d' % (sum(S[r.id]['lastkind'] == 'fresh' for r in have), sum(S[r.id]['lastkind'] == 'fresh17' for r in have)))
     mv = [S[r.id]['move'] for r in have if S[r.id]['move'] is not None]
     print('  move tick mod 40:', hist([m % 40 for m in mv]))
     print('  move values:', hist(mv, 20))
@@ -806,7 +1006,8 @@ def section_storm(runs):
     S = {r.id: storm_splits(r) for r in R5}
     have = [r for r in R5 if S[r.id] and S[r.id]['goldor'] is not None]
     print('5-player timed runs reaching Goldor: %d (old %d)' % (len(have), sum(r.old for r in have)))
-    for k in ('Opening', 'Crush1', 'Pin', 'Flight', 'Crush2', 'FlightCrush2', 'Kill', 'Animation', 'total'):
+    print('  crush 1 pillar:', collections.Counter(S[r.id]['pillar1'] for r in have))
+    for k in ('Opening', 'Opening_pos', 'Crush1', 'Crush1_pos', 'Pin', 'Flight', 'Crush2', 'FlightCrush2', 'Kill', 'Animation', 'total'):
         table(k, have, k, lambda r: S[r.id])
     print('  Opening source:', collections.Counter(S[r.id]['Opening_src'] for r in have))
     dl = [S[r.id]['dep'] - S[r.id]['lightning'] for r in have if S[r.id]['dep'] is not None and S[r.id]['lightning'] is not None]
@@ -829,7 +1030,7 @@ def section_necron(runs):
     print('5-player timed runs reaching "All this, for nothing...": %d (old %d)' % (len(have), sum(r.old for r in have)))
     for k in ('Intro', 'Trip1', 'B1', 'Lock1', 'argh1', 'Space', 'L2', 'Trip2', 'B2', 'Lock2', 'argh2', 'Animation', 'total'):
         table(k, have, k, lambda r: S[r.id])
-    print('  coverage: L1 %d B1 %d L2 %d B2 %d of %d' % tuple(sum(S[r.id][k] is not None for r in have) for k in ('L1', 'B1', 'L2', 'B2')) + (len(have),))
+    print('  coverage: L1 %d B1 %d L2 %d B2 %d of %d' % (tuple(sum(S[r.id][k] is not None for r in have) for k in ('L1', 'B1', 'L2', 'B2')) + (len(have),)))
     print('  total hist:', hist([S[r.id]['total'] for r in have], 20))
     print('  argh1 hist:', hist([S[r.id]['argh1'] for r in have if S[r.id]['argh1'] is not None]))
     print('  argh2 hist:', hist([S[r.id]['argh2'] for r in have if S[r.id]['argh2'] is not None]))
@@ -885,7 +1086,7 @@ def section_fixes(runs, WS, MS, SS):
     st2 = []
     for r in R5:
         s = maxor_splits(r)
-        if s and s['too_young'] is not None and s['hit2'] is not None and s['src'][1] in ('line', 'line-after-kill'):
+        if s and s['too_young'] is not None and s['hit2'] is not None and s['src'][1] in ('line', 'line-only'):
             st2.append(s['too_young'] - s['hit2'])
     print('   TOO YOUNG - 2nd stun line:', stats(st2), '|', hist(st2))
     # 3. lightning + 688 vs departure
