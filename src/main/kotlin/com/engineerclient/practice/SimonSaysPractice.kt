@@ -66,8 +66,8 @@ import java.util.Locale
  *    except that light's own button, which waits until 10 ticks after it goes out.
  *  - A pressed button stays down 3 ticks (pressing it again meanwhile does nothing).
  *  - The next round starts 6 ticks after the round's last correct press; after round 5 that is
- *    the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks after it a new (practice: 15, FAIL_RESTART_TICKS)
- *    sequence, shown the way the skip shows it.
+ *    the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks after it a new (in the game)
+ *    sequence, shown the way the skip shows it. Practice: a wrong press restarts the run at once.
  */
 object SimonSaysPractice : Module(
     name = "SS Practice",
@@ -397,14 +397,14 @@ object SimonSaysPractice : Module(
         }
     }
 
-    private fun restart() {
+    private fun restart(sound: Boolean = true) {
         if (placed == null) return
         if (Inf.on) { startInf(); return }
-        if (fromRound > 0) { startFrom(fromRound); return }
+        if (fromRound > 0) { startFrom(fromRound, sound); return }
         reset()
         phase = Phase.STARTING
         startPresses = lastStartPresses; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
-        if (clickSounds) playSoundSettings(correctSound())
+        if (sound && clickSounds) playSoundSettings(correctSound())
         after(6) { begin() }
     }
 
@@ -493,16 +493,16 @@ object SimonSaysPractice : Module(
      * Start-on-round mode (the buttons above the start one): rounds [fromRound] to 5, over and
      * over, a new sequence each time; round n shows the sequence's first n lights, the buttons back
      * 10 ticks after the last goes out, as in the game. The next run starts 6 ticks after your last
-     * press (a wrong press: FAIL_RESTART_TICKS after it). Each run's rounds go in chat. 0: not in this mode.
+     * press (a wrong press: at once). Each run's rounds go in chat. 0: not in this mode.
      */
     private var fromRound = 0
 
-    private fun startFrom(n: Int) {
+    private fun startFrom(n: Int, sound: Boolean = true) {
         reset()
         fromRound = n
         markMode(n)
         phase = Phase.RUNNING
-        if (clickSounds) playSoundSettings(correctSound())
+        if (sound && clickSounds) playSoundSettings(correctSound())
         after(6) { fromRun() }
     }
 
@@ -548,7 +548,6 @@ object SimonSaysPractice : Module(
     private var startedAt = 0L
     private val LATE_START_TICKS get() = 20
     /** After a wrong press, ticks until the new sequence (the game's 25, a bit sooner for practice). */
-    private val FAIL_RESTART_TICKS get() = 15
 
     private fun pressStart() {
         val p = placed ?: return
@@ -617,13 +616,8 @@ object SimonSaysPractice : Module(
             fails++
             revealed.clear()
             after(3) { for (c in 0 until 16) setButton(c, false) }
-            if (fromRound > 0) { after(FAIL_RESTART_TICKS) { fromRun() }; return }
-            after(FAIL_RESTART_TICKS) {
-                newSequence()
-                val s = sequence
-                show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
-                rounds.clear(); splits.clear(); r4Done = 0L
-            }
+            // A wrong press: the run starts over at once, as the start button would.
+            restart(sound = false)
         }
     }
 
