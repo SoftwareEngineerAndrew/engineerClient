@@ -34,7 +34,7 @@ dependencies {
     // terrain pass directly. Optional at runtime (guarded by FabricLoader.isModLoaded).
     compileOnly(files("libs/sodium-fabric-0.9.2-alpha.4+mc26.1.2.jar"))
     // Optional at runtime (DevonianBridge checks isModLoaded); vendored like sodium for the API types.
-    compileOnly(files("libs/devonian-1.28.9.jar"))
+    compileOnly(files("libs/devonian-1.32.9.jar"))
 
     // The rotation engine is deliberately free of Minecraft/Odin, so it tests headlessly.
     testImplementation(kotlin("test"))
