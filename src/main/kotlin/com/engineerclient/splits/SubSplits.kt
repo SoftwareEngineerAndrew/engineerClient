@@ -28,8 +28,11 @@ import kotlin.math.hypot
  */
 class SubSplitTracker {
 
-    /** Which split a step belongs to, and how it reads on the HUD. A null label ends a split and isn't shown. */
-    private class Step(val split: String, val label: String?)
+    /**
+     * Which split a step belongs to, how it reads on the HUD, and its [id] for its colour bands and
+     * best time ([SubSplitGrades]). A null label ends a split and isn't shown.
+     */
+    private class Step(val split: String, val label: String?, val id: String = "")
 
     private val steps = SEQUENCE
     private val starts = arrayOfNulls<Stamp>(SEQUENCE.size)
@@ -72,6 +75,10 @@ class SubSplitTracker {
         }
         return out
     }
+
+    /** The ids of [split]'s steps, in [forSplit]'s order. */
+    fun idsForSplit(split: String): List<String> =
+        steps.indices.filter { steps[it].split == split && steps[it].label != null && starts[it] != null }.map { steps[it].id }
 
     /**
      * For Debug: how each of [split]'s steps (in [forSplit]'s order) came to an end - how the next
@@ -321,24 +328,26 @@ class SubSplitTracker {
          * purpose: it is the second crush or trip that tells you whether the first was slow.
          */
         val SEQUENCE: List<Step> = listOf(
-            Step(SplitTracker.BLOOD, "&7Dialogue"), Step(SplitTracker.BLOOD, "&5Wait"), Step(SplitTracker.BLOOD, "&cCamp"),
-            Step(SplitTracker.BLOOD, "&aClear"), Step(SplitTracker.BLOOD, null),
+            Step(SplitTracker.BLOOD, "&7Dialogue", "watcher.dialogue"), Step(SplitTracker.BLOOD, "&5Wait", "watcher.wait"), Step(SplitTracker.BLOOD, "&cCamp", "watcher.camp"),
+            Step(SplitTracker.BLOOD, "&aClear", "watcher.clear"), Step(SplitTracker.BLOOD, null),
 
-            Step(SplitTracker.MAXOR, "&dCrystals"), Step(SplitTracker.MAXOR, "&6Lure"), Step(SplitTracker.MAXOR, "&5Cooldown"),
-            Step(SplitTracker.MAXOR, "&cKill"), Step(SplitTracker.MAXOR, "&dAnimation"),
+            Step(SplitTracker.MAXOR, "&dCrystals", "maxor.crystals"), Step(SplitTracker.MAXOR, "&6Lure", "maxor.lure"), Step(SplitTracker.MAXOR, "&5Cooldown", "maxor.cooldown"),
+            Step(SplitTracker.MAXOR, "&cKill", "maxor.kill"), Step(SplitTracker.MAXOR, "&dAnimation", "maxor.animation"),
 
-            Step(SplitTracker.STORM, "&aOpening"), Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cPin"),
-            Step(SplitTracker.STORM, "&bFlight"), Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cKill"),
-            Step(SplitTracker.STORM, "&aAnimation"),
+            Step(SplitTracker.STORM, "&aOpening", "storm.opening"), Step(SplitTracker.STORM, "&6Crush", "storm.crush1"),
+            Step(SplitTracker.STORM, "&cPin", "storm.pin"), Step(SplitTracker.STORM, "&bFlight", "storm.flight"),
+            Step(SplitTracker.STORM, "&6Crush", "storm.crush2"), Step(SplitTracker.STORM, "&cKill", "storm.kill"),
+            Step(SplitTracker.STORM, "&aAnimation", "storm.animation"),
 
-            Step(SplitTracker.TERMS, "&6S1"), Step(SplitTracker.TERMS, "&6S2"),
-            Step(SplitTracker.TERMS, "&6S3"), Step(SplitTracker.TERMS, "&6S4"),
+            Step(SplitTracker.TERMS, "&6S1", "terms.s1"), Step(SplitTracker.TERMS, "&6S2", "terms.s2"),
+            Step(SplitTracker.TERMS, "&6S3", "terms.s3"), Step(SplitTracker.TERMS, "&6S4", "terms.s4"),
 
-            Step(SplitTracker.GOLDOR, "&5Leaps"), Step(SplitTracker.GOLDOR, "&cKill"),
+            Step(SplitTracker.GOLDOR, "&5Leaps", "goldor.leaps"), Step(SplitTracker.GOLDOR, "&cKill", "goldor.kill"),
 
-            Step(SplitTracker.NECRON, "&dIntro"), Step(SplitTracker.NECRON, "&cTrip"), Step(SplitTracker.NECRON, "&aLock"),
-            Step(SplitTracker.NECRON, "&dSpace"), Step(SplitTracker.NECRON, "&cTrip"), Step(SplitTracker.NECRON, "&aLock"),
-            Step(SplitTracker.NECRON, "&dAnimation"), Step(SplitTracker.NECRON, null),
+            Step(SplitTracker.NECRON, "&dIntro", "necron.intro"), Step(SplitTracker.NECRON, "&cTrip", "necron.trip1"),
+            Step(SplitTracker.NECRON, "&aLock", "necron.lock1"), Step(SplitTracker.NECRON, "&dSpace", "necron.space"),
+            Step(SplitTracker.NECRON, "&cTrip", "necron.trip2"), Step(SplitTracker.NECRON, "&aLock", "necron.lock2"),
+            Step(SplitTracker.NECRON, "&dAnimation", "necron.animation"), Step(SplitTracker.NECRON, null),
         )
     }
 }
