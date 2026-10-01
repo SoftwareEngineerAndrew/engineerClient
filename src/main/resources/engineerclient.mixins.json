@@ -22,6 +22,7 @@
     "ItemFoilMixin",
     "LeapTermsimMixin",
     "LeapTermsimProtMixin",
+    "NumbersHandlerMixin",
     "LivingEntityAccessor",
     "LocalPlayerDropMixin",
     "MinecraftAccessor",
