@@ -83,6 +83,8 @@ object SimonSaysPractice : Module(
     private val START = BlockPos(110, 121, 91)
     /** The second start button, 2 above the first: starts Inf mode. */
     private val EXTRA get() = BlockPos(110, 123, 91)
+    /** The third start button, 2 below the first: Last Round mode (round 5 on repeat). */
+    private val LOWER get() = BlockPos(110, 119, 91)
     /** Cell 0-15: row from the top (y 123 down), column from z 92. */
     private fun buttonAt(cell: Int) = BlockPos(110, 123 - cell / 4, 92 + cell % 4)
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
@@ -154,11 +156,12 @@ object SimonSaysPractice : Module(
             }
             p.set(START, BUTTON)
             p.set(EXTRA, BUTTON)
+            p.set(LOWER, BUTTON)
         }
         placed = p
         reset()
         markMode(inf = false)
-        EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip; the one above it for Inf mode. The keybind again takes it away.")
+        EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip; the one above it for Inf mode, the one below for the last round on repeat. The keybind again takes it away.")
     }
 
     private fun remove() {
@@ -207,6 +210,7 @@ object SimonSaysPractice : Module(
     /** Everything back to a dark, buttonless device, waiting for the start button. */
     private fun reset() {
         stopInf()
+        lastOnly = false
         gen++
         jobs.clear()
         phase = Phase.IDLE
@@ -288,6 +292,7 @@ object SimonSaysPractice : Module(
     private fun restart() {
         if (placed == null) return
         if (Inf.on) { startInf(); return }
+        if (lastOnly) { startLast(); return }
         reset()
         phase = Phase.STARTING
         startPresses = lastStartPresses; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
@@ -355,12 +360,57 @@ object SimonSaysPractice : Module(
         Inf.queue += infPick()
     }
 
-    /** Light grey wool behind the start button of the mode you're in, black behind the other. */
-    private fun markMode(inf: Boolean) {
+    /** Light grey wool behind the start button of the mode you're in, black behind the others. */
+    private fun markMode(inf: Boolean, last: Boolean = false) {
         val p = placed ?: return
         val grey = Blocks.LIGHT_GRAY_WOOL.defaultBlockState(); val black = Blocks.BLACK_WOOL.defaultBlockState()
-        p.set(START.east(), if (inf) black else grey)
+        p.set(START.east(), if (inf || last) black else grey)
         p.set(EXTRA.east(), if (inf) grey else black)
+        p.set(LOWER.east(), if (last) grey else black)
+    }
+
+    // ------------------------------------------------------------------ Last Round mode
+
+    /**
+     * Last Round mode (the lower start button): only round 5, over and over, a new sequence each
+     * time: five lights, the buttons back 10 ticks after the last goes out, as in the game. The next
+     * starts 6 ticks after your last press (a wrong press: 25 ticks after it). Each round's time and
+     * presses go in chat.
+     */
+    private var lastOnly = false
+
+    private fun startLast() {
+        reset()
+        lastOnly = true
+        markMode(inf = false, last = true)
+        phase = Phase.RUNNING
+        if (clickSounds) playSoundSettings(correctSound())
+        after(6) { lastRound() }
+    }
+
+    private fun lastRound() {
+        newSequence()
+        firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
+        val cells = sequence.take(5)
+        show(cells, cells, stray = false)
+    }
+
+    /** One finished round in Last Round mode: its time (vs the top healers' r5) and its presses. */
+    private fun lastDone() {
+        val t = rounds.lastOrNull() ?: return
+        val top = TOP_ROUNDS.last()
+        val c = if (t <= top) "§a" else if (t <= top + 0.3) "§e" else "§c"
+        val presses = splits.lastOrNull().orEmpty()
+        EngineerClient.msg("§8 r5   $c${fmt(t)}§8/${fmt(top)} §8| " + presses.withIndex().joinToString(" §8› ") { (j, x) -> pressColour(false, j, x) + fmt(x) })
+    }
+
+    private fun pressLast() {
+        val p = placed ?: return
+        startLast()
+        // After the reset in startLast, so it doesn't cancel the button coming back up.
+        click(p.at(LOWER))
+        p.set(LOWER, BUTTON.setValue(ButtonBlock.POWERED, true))
+        after(2) { placed?.set(LOWER, BUTTON) }
     }
 
     private fun pressExtra() {
@@ -412,6 +462,7 @@ object SimonSaysPractice : Module(
             splits += roundClicks.toList()
             if (expected.size == 4) r4Done = tick + shownFaster
             val n = expected.size
+            if (lastOnly) { lastDone(); after(6) { lastRound() }; return }
             if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
         } else {
@@ -420,6 +471,7 @@ object SimonSaysPractice : Module(
             fails++
             revealed.clear()
             after(3) { for (c in 0 until 16) setButton(c, false) }
+            if (lastOnly) { after(25) { lastRound() }; return }
             after(25) {
                 newSequence()
                 val s = sequence
@@ -488,6 +540,7 @@ object SimonSaysPractice : Module(
         EngineerClient.safely("ss practice use") {
             if (pos == p.at(START)) pressStart()
             else if (pos == p.at(EXTRA)) pressExtra()
+            else if (pos == p.at(LOWER)) pressLast()
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
         }
         // Your arm moves for a button, as in the game; not for the obsidian or wool. Nothing is sent.
