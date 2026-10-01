@@ -8,7 +8,9 @@
     "InvincibilityHudMixin",
     "LeapMenuClickMixin",
     "LeapMenuReleaseMixin",
-    "LeapMenuRenderMixin"
+    "LeapMenuRenderMixin",
+    "SimonSaysBlocksMixin",
+    "SimonSaysTicksMixin"
   ],
   "injectors": {
     "defaultRequire": 0
