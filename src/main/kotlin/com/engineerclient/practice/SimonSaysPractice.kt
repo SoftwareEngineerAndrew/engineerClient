@@ -81,7 +81,7 @@ object SimonSaysPractice : Module(
     /** Where you stand in the arena to do it (your feet), facing +x. */
     private const val AX = 108; private const val AY = 120; private const val AZ = 94
     private val START = BlockPos(110, 121, 91)
-    /** A second button, 2 above the start one. It presses and clicks; nothing else. */
+    /** The second start button, 2 above the first: starts Inf mode. */
     private val EXTRA get() = BlockPos(110, 123, 91)
     /** Cell 0-15: row from the top (y 123 down), column from z 92. */
     private fun buttonAt(cell: Int) = BlockPos(110, 123 - cell / 4, 92 + cell % 4)
@@ -157,7 +157,8 @@ object SimonSaysPractice : Module(
         }
         placed = p
         reset()
-        EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip. The keybind again takes it away.")
+        markMode(inf = false)
+        EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip; the one above it for Inf mode. The keybind again takes it away.")
     }
 
     private fun remove() {
@@ -205,6 +206,7 @@ object SimonSaysPractice : Module(
 
     /** Everything back to a dark, buttonless device, waiting for the start button. */
     private fun reset() {
+        stopInf()
         gen++
         jobs.clear()
         phase = Phase.IDLE
@@ -285,6 +287,7 @@ object SimonSaysPractice : Module(
 
     private fun restart() {
         if (placed == null) return
+        if (Inf.on) { startInf(); return }
         reset()
         phase = Phase.STARTING
         startPresses = lastStartPresses; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
@@ -292,8 +295,78 @@ object SimonSaysPractice : Module(
         after(6) { begin() }
     }
 
+    // ------------------------------------------------------------------ Inf mode
+
+    /**
+     * Inf mode (the upper start button): every button up, no lights, and always three to press,
+     * highlighted green, gold, red like the solver. The order comes in bags of all 16, so each
+     * button comes up once before any again; a new bag starts with [Inf.FRESH] buttons that
+     * aren't highlighted (nor just pressed). Its own object, so its state is set up when first
+     * used (hotswap-friendly too).
+     */
+    private object Inf {
+        const val SHOWN = 3
+        const val FRESH = 6
+        var on = false
+        val queue = ArrayList<Int>()
+        val bag = ArrayDeque<Int>()
+        var lastPressed = -1
+        var lastMs = 0L
+        val gaps = ArrayList<Long>()
+    }
+
+    private fun startInf() {
+        val p = placed ?: return
+        reset()
+        markMode(inf = true)
+        Inf.on = true
+        Inf.queue.clear(); Inf.bag.clear(); Inf.gaps.clear(); Inf.lastPressed = -1; Inf.lastMs = 0L
+        while (Inf.queue.size < Inf.SHOWN) Inf.queue += infPick()
+        for (c in 0 until 16) setButton(c, true)
+        if (clickSounds) playSoundSettings(correctSound())
+    }
+
+    /** Ends Inf mode (by any other start, a restart, removing the device), with its pace in chat. */
+    private fun stopInf() {
+        if (!Inf.on) return
+        Inf.on = false
+        if (Inf.gaps.isEmpty()) return
+        val avg = Inf.gaps.average() / 1000.0
+        EngineerClient.msg("§7Inf SS: §f${Inf.gaps.size + 1}§7 presses §8· §f${String.format(Locale.ROOT, "%.3f", avg)}s§7 between")
+    }
+
+    private fun infPick(): Int {
+        if (Inf.bag.isEmpty()) {
+            val fresh = (0 until 16).filter { it !in Inf.queue && it != Inf.lastPressed }.shuffled(rng).take(Inf.FRESH)
+            Inf.bag += fresh
+            Inf.bag += (0 until 16).filter { it !in fresh }.shuffled(rng)
+        }
+        return Inf.bag.removeFirst()
+    }
+
+    private fun infPress(cell: Int) {
+        if (cell != Inf.queue.firstOrNull()) { if (clickSounds) playSoundSettings(wrongSound()); return }
+        if (clickSounds) playSoundSettings(correctSound())
+        val now = System.currentTimeMillis()
+        if (Inf.lastMs != 0L) Inf.gaps += now - Inf.lastMs
+        Inf.lastMs = now
+        Inf.lastPressed = cell
+        Inf.queue.removeAt(0)
+        Inf.queue += infPick()
+    }
+
+    /** Light grey wool behind the start button of the mode you're in, black behind the other. */
+    private fun markMode(inf: Boolean) {
+        val p = placed ?: return
+        val grey = Blocks.LIGHT_GRAY_WOOL.defaultBlockState(); val black = Blocks.BLACK_WOOL.defaultBlockState()
+        p.set(START.east(), if (inf) black else grey)
+        p.set(EXTRA.east(), if (inf) grey else black)
+    }
+
     private fun pressExtra() {
         val p = placed ?: return
+        startInf()
+        // After the reset in startInf, so it doesn't cancel the button coming back up.
         click(p.at(EXTRA))
         p.set(EXTRA, BUTTON.setValue(ButtonBlock.POWERED, true))
         after(2) { placed?.set(EXTRA, BUTTON) }
@@ -312,6 +385,7 @@ object SimonSaysPractice : Module(
             Phase.STARTING -> startPresses++
         }
         // After the reset above, so it doesn't cancel the button coming back up.
+        markMode(inf = false)
         click(p.at(START))
         if (clickSounds) playSoundSettings(correctSound())
         p.set(START, BUTTON.setValue(ButtonBlock.POWERED, true))
@@ -325,6 +399,7 @@ object SimonSaysPractice : Module(
         setButton(cell, true, pressed = true)
         downUntil[cell] = tick + 3
         after(3) { if (buttonUp[cell]) setButton(cell, true) }
+        if (Inf.on) { infPress(cell); return }
         if (!accepting) return
         if (cell == expected[next]) {
             if (clickSounds) playSoundSettings(correctSound())
@@ -447,6 +522,13 @@ object SimonSaysPractice : Module(
         on<RenderEvent.Extract> {
             val p = placed ?: return@on
             if (!solver || p.level !== mc.level) return@on
+            if (Inf.on) {
+                for ((i, cell) in Inf.queue.withIndex()) {
+                    val lamp = lampAt(cell)
+                    drawStyledBox(p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, 2, true)
+                }
+                return@on
+            }
             for (i in next until revealed.size) {
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
