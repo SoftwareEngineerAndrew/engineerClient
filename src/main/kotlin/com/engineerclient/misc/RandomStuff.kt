@@ -16,8 +16,14 @@ import com.odtheking.odin.clickgui.settings.impl.HudElement
 import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
+import com.odtheking.odin.utils.playSoundAtPlayer
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.sounds.SoundEvents
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.boss.TerminalSounds
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
 import com.odtheking.odin.utils.Color
@@ -98,6 +104,9 @@ object RandomStuff : Module(
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "In dungeons only: hides every armor stand (except terminals, active or inactive) and removes fishing bobbers' extended line.")
+    private val muteDing by BooleanSetting("Mute Completion Ding", true, desc = "In P3, mutes the ding that plays every time anyone completes a terminal, lever or device (Hypixel's pling with each \"activated a terminal!\" message). Odin's own Terminal Sounds still play.")
+    private val keepGateDing by BooleanSetting("Keep Gate & Core Ding", true, desc = "Still plays the ding for \"The gate has been destroyed!\" and \"The Core entrance is opening!\".").withDependency { muteDing }
+    private val ding = CompletionDing()
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
     private val blackSky by BooleanSetting("Black Sky", false, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
 
@@ -312,6 +321,19 @@ object RandomStuff : Module(
         TerminalUtils.currentTerm != null || mc.screen is TermSimGUI
 
     init {
+        // Completion ding (see CompletionDing): both packets on the network thread, in arrival order.
+        onReceive<ClientboundSoundPacket> {
+            if (muteDing && DungeonUtils.getF7Phase() == M7Phases.P3 &&
+                ding.sound(sound.value() == SoundEvents.NOTE_BLOCK_PLING.value(), volume, pitch, System.currentTimeMillis())) it.cancel()
+        }
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (overlay || !muteDing || !keepGateDing || DungeonUtils.getF7Phase() != M7Phases.P3) return@onReceive
+            if (content.string.replace(Regex("§."), "").trim() !in CompletionDing.KEPT) return@onReceive
+            val replay = ding.keptMessage(System.currentTimeMillis()) ?: return@onReceive
+            // Odin's Terminal Sounds already plays its own for these while you're in a terminal.
+            if (TerminalSounds.enabled && TerminalSounds.clickSounds && TerminalUtils.currentTerm != null) return@onReceive
+            playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), replay.volume, replay.pitch)
+        }
         on<TickEvent.End> {
             if (hideDamage) mc.player?.hurtTime = 0
             resolveArmorStands()
