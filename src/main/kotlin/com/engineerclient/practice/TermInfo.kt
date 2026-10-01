@@ -36,7 +36,7 @@ object TermInfo : Module(
     description = "F7 terminals: section progress HUD, hides the terminal completion titles, and each section's time when it's done.",
 ) {
     private val simple by BooleanSetting("Simple Mode", true, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
-    private val hideTitles by BooleanSetting("Hide Completion Titles", false, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals.")
+    private val hideTitles by BooleanSetting("Hide Completion Titles", false, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening titles.")
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
     private val sectionSeconds by NumberSetting("Section Time Seconds", 2.0, 0.5, 10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
 
@@ -65,6 +65,7 @@ object TermInfo : Module(
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val GATE = "The gate has been destroyed!"
     private val TASK = Regex("^(\\w+) (?:activated|completed) a (terminal|lever|device)! \\((\\d)/\\d\\)$")
+    private val GATE_CORE_TITLE = Regex("gate (?:has been )?destroyed|core entrance is opening", RegexOption.IGNORE_CASE)
     private val TITLE = Regex("^(\\w{1,16}) (?:activated a (?:terminal|lever)|completed a device)! \\(\\d+/\\d+\\)$")
 
     private class Section(val terms: Int, val number: Int) {
@@ -180,7 +181,10 @@ object TermInfo : Module(
     }
 
     private fun hidden(raw: String): Boolean {
-        if (!hideTitles || active !in 0..3) return false
-        return TITLE.matches(raw.replace(CONTROL_CODES, ""))
+        if (!hideTitles) return false
+        val text = raw.replace(CONTROL_CODES, "")
+        // The gate and core titles: by their text, whenever (the core one comes as terminals end).
+        if (GATE_CORE_TITLE.containsMatchIn(text)) return true
+        return active in 0..3 && TITLE.matches(text)
     }
 }
