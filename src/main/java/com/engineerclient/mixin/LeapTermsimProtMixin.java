@@ -15,6 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class LeapTermsimProtMixin {
     @Inject(method = "shouldProtect", at = @At("HEAD"), cancellable = true)
     private void ec$noProt(CallbackInfoReturnable<Boolean> cir) {
-        if (LeapExtras.simActive() || com.engineerclient.practice.InfiNumbersSim.active()) cir.setReturnValue(false);
+        if (LeapExtras.simActive() || com.engineerclient.practice.InfNumbersSim.active()) cir.setReturnValue(false);
     }
 }

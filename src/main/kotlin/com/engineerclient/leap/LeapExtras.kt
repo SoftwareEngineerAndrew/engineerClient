@@ -36,7 +36,7 @@ import net.minecraft.resources.Identifier
 object LeapExtras : Module(
     name = "Leap Extras",
     category = Category.custom("Engineer Client"),
-    description = "Adds to Odin's Leap Menu: a click delay when it opens, and an outline of where each person will be. Also: crouch + left click with Infinileap for the numbers termsim.",
+    description = "Adds to Odin's Leap Menu: a click delay when it opens, and an outline of where each person will be.",
     toggled = true,
 ) {
     private val clickDelay by NumberSetting("Click Delay", 1, 0, 10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")

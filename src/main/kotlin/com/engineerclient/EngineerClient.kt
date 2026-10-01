@@ -225,8 +225,8 @@ object EngineerClient : ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /betterpf: the link to all your uploaded runs, private ones included.
             for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 })
-            // /termsim infi: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
-            dispatcher.register(literal("termsim").then(literal("infi").executes { mc.schedule { com.engineerclient.practice.InfiNumbersSim.open(0L) }; 1 }))
+            // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
+            dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // Same tree registered under the formal name (both casings, since Brigadier
             // literals are case-sensitive) and the short alias. Built fresh per name —
             // a bare redirect would not run the root executes on the alias itself.
