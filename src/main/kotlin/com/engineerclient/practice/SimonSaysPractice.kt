@@ -178,17 +178,18 @@ object SimonSaysPractice : Module(
                 val (a, b) = when (level) { -1 -> "Harder" to "spread out"; 0 -> "Normal RNG" to "random"; 1 -> "Easier" to "tighter"; else -> "Easiest" to "tightest" }
                 sign(p, rngButton(level), a, b, Direction.SOUTH)
             }
-            // On top, above the grid's edges: the game version.
-            for (a in listOf(false, true)) {
-                p.set(versionButton(a), BUTTON)
-                topSign(p, versionButton(a), if (a) "Alpha" else "Normal", if (a) "no r5" else "")
-            }
+            // On top, above the grid's edges: Full Block left, Alpha right (toggles, grey when on).
+            p.set(FULL_BUTTON, BUTTON)
+            topSign(p, FULL_BUTTON, "Full Block", "hitboxes")
+            p.set(ALPHA_BUTTON, BUTTON)
+            topSign(p, ALPHA_BUTTON, "Alpha", "no r5")
         }
         placed = p
+        gridCells = (0 until 16).map { p.at(buttonAt(it)) }.toSet()
         reset()
         markMode(0)
         markRng()
-        markVersion()
+        markToggles()
         EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip. The others are signed. The keybind again takes it away.")
     }
 
@@ -298,26 +299,56 @@ object SimonSaysPractice : Module(
      */
     private var alpha = false
 
-    /** The version buttons on top of the wall: Normal above the grid's left edge, Alpha its right. */
-    private fun versionButton(alpha: Boolean) = BlockPos(110, 124, if (alpha) 95 else 92)
+    /** The toggles on top of the wall: Full Block above the grid's left edge, Alpha its right. */
+    private val FULL_BUTTON = BlockPos(110, 124, 92)
+    private val ALPHA_BUTTON = BlockPos(110, 124, 95)
+
+    /** Full Block: the grid's buttons click as the whole face of their block (still a button's depth). */
+    private var fullBlock = false
+    /** The grid buttons' world positions while placed, for [fullBlockShape]. */
+    private var gridCells: Set<BlockPos> = emptySet()
 
     /** The last round of a run: 4 on Alpha (but in start-on-r5 mode), else 5. */
     private fun finalRound() = if (alpha && fromRound != 5) 4 else 5
 
-    private fun markVersion() {
+    /** Light grey wool behind each toggle that's on, black when off. */
+    private fun markToggles() {
         val p = placed ?: return
-        for (a in listOf(false, true)) p.set(versionButton(a).east(), if (a == alpha) Blocks.LIGHT_GRAY_WOOL.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
+        val grey = Blocks.LIGHT_GRAY_WOOL.defaultBlockState(); val black = Blocks.BLACK_WOOL.defaultBlockState()
+        p.set(ALPHA_BUTTON.east(), if (alpha) grey else black)
+        p.set(FULL_BUTTON.east(), if (fullBlock) grey else black)
     }
 
-    /** Picks the version; it counts from the next run on. */
-    private fun pressVersion(a: Boolean) {
+    /** Flips Alpha (counts from the next run on) or Full Block (at once). */
+    private fun pressToggle(button: BlockPos) {
         val p = placed ?: return
-        alpha = a
-        markVersion()
-        click(p.at(versionButton(a)))
+        if (button == ALPHA_BUTTON) alpha = !alpha else fullBlock = !fullBlock
+        markToggles()
+        click(p.at(button))
         if (clickSounds) playSoundSettings(correctSound())
-        p.set(versionButton(a), BUTTON.setValue(ButtonBlock.POWERED, true))
-        after(2) { placed?.set(versionButton(a), BUTTON) }
+        p.set(button, BUTTON.setValue(ButtonBlock.POWERED, true))
+        after(2) { placed?.set(button, BUTTON) }
+    }
+
+    /** Odin's solver box for a cell (in front of its lamp): the button's size, or the whole face with Full Block. */
+    private fun solverBox(p: Placement, lamp: BlockPos): AABB =
+        if (fullBlock) p.box(lamp.x - 0.15, lamp.y + 0.0, lamp.z + 0.0, lamp.x + 0.05, lamp.y + 1.0, lamp.z + 1.0)
+        else p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7)
+
+    /**
+     * For ButtonBlock.getShape: with Full Block on, a practice grid button is the whole face of its
+     * block (16x16) at a button's depth (2 px, 1 pressed), against the block it's on. Else null.
+     */
+    @JvmStatic
+    fun fullBlockShape(state: BlockState, pos: BlockPos): net.minecraft.world.phys.shapes.VoxelShape? {
+        if (!fullBlock || placed == null || pos !in gridCells) return null
+        val d = if (state.getValue(ButtonBlock.POWERED)) 1.0 else 2.0
+        return when (state.getValue(BlockStateProperties.HORIZONTAL_FACING)) {
+            Direction.WEST -> Block.box(16 - d, 0.0, 0.0, 16.0, 16.0, 16.0)
+            Direction.EAST -> Block.box(0.0, 0.0, 0.0, d, 16.0, 16.0)
+            Direction.NORTH -> Block.box(0.0, 0.0, 16 - d, 16.0, 16.0, 16.0)
+            else -> Block.box(0.0, 0.0, 0.0, 16.0, 16.0, d)
+        }
     }
 
     /** A standing sign on top of the wool block [button] is on, facing you. */
@@ -791,10 +822,10 @@ object SimonSaysPractice : Module(
         EngineerClient.safely("ss practice use") {
             val from = (3..5).firstOrNull { pos == p.at(fromButton(it)) }
             val rngPick = (-1..2).firstOrNull { pos == p.at(rngButton(it)) }
-            val versionPick = listOf(false, true).firstOrNull { pos == p.at(versionButton(it)) }
+            val toggle = listOf(ALPHA_BUTTON, FULL_BUTTON).firstOrNull { pos == p.at(it) }
             if (pos == p.at(START)) pressStart()
             else if (rngPick != null) pressRng(rngPick)
-            else if (versionPick != null) pressVersion(versionPick)
+            else if (toggle != null) pressToggle(toggle)
             else if (pos == p.at(EXTRA)) pressExtra()
             else if (from != null) pressFrom(from)
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
@@ -835,7 +866,7 @@ object SimonSaysPractice : Module(
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
-                    drawStyledBox(p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, 2, true)
+                    drawStyledBox(solverBox(p, lamp), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, 2, true)
                 }
                 return@on
             }
@@ -843,7 +874,7 @@ object SimonSaysPractice : Module(
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
                 val lamp = lampAt(revealed[i])
-                drawStyledBox(p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7), colour, 2, true)
+                drawStyledBox(solverBox(p, lamp), colour, 2, true)
             }
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution. After
