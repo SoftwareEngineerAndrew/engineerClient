@@ -1,5 +1,6 @@
 package com.engineerclient.misc
 
+import com.engineerclient.EngineerClient
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
@@ -21,6 +22,7 @@ import com.odtheking.odin.utils.playSoundAtPlayer
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.sounds.SoundEvents
+import net.minecraft.sounds.SoundSource
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.boss.TerminalSounds
@@ -107,6 +109,8 @@ object RandomStuff : Module(
     private val muteDing by BooleanSetting("Mute Completion Ding", true, desc = "In P3, mutes the ding that plays every time anyone completes a terminal, lever or device (Hypixel's pling with each \"activated a terminal!\" message). Odin's own Terminal Sounds still play.")
     private val keepGateDing by BooleanSetting("Keep Gate & Core Ding", true, desc = "Still plays the ding for \"The gate has been destroyed!\" and \"The Core entrance is opening!\".").withDependency { muteDing }
     private val ding = CompletionDing()
+    private val mutePartyInBoss by BooleanSetting("Mute Party Chat In Boss", true, desc = "In a dungeon boss, party chat messages make no sound (Hypixel's chat ping). Guild and private messages still do.")
+    private val partyPing = PartyPing()
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
     private val blackSky by BooleanSetting("Black Sky", false, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
 
@@ -320,12 +324,28 @@ object RandomStuff : Module(
     private fun inTerminal(): Boolean =
         TerminalUtils.currentTerm != null || mc.screen is TermSimGUI
 
+    /** A held chat ping that turned out not to be party chat's. */
+    private fun replayPing(p: PartyPing.Ping) = EngineerClient.mc.execute {
+        EngineerClient.mc.level?.playLocalSound(p.x, p.y, p.z, SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 1f, 1f, false)
+    }
+
     init {
         // Completion ding (see CompletionDing): both packets on the network thread, in arrival order.
         onReceive<ClientboundSoundPacket> {
             if (muteDing && DungeonUtils.getF7Phase() == M7Phases.P3 &&
                 ding.sound(sound.value() == SoundEvents.NOTE_BLOCK_PLING.value(), volume, pitch, System.currentTimeMillis())) it.cancel()
         }
+        // Party chat ping in boss (see PartyPing): the ping comes just before its line.
+        onReceive<ClientboundSoundPacket> {
+            if (!mutePartyInBoss || !DungeonUtils.inBoss) return@onReceive
+            val isPing = sound.value() == SoundEvents.EXPERIENCE_ORB_PICKUP && source == SoundSource.PLAYERS && volume == 1f && pitch == 1f
+            if (partyPing.sound(isPing, x, y, z, System.currentTimeMillis())) it.cancel()
+        }
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (overlay) return@onReceive
+            partyPing.chat(PartyPing.isPartyLine(content.string.replace(Regex("§."), "").trim()), System.currentTimeMillis())?.let(::replayPing)
+        }
+        ClientTickEvents.END_CLIENT_TICK.register { partyPing.expired(System.currentTimeMillis())?.let(::replayPing) }
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay || !muteDing || !keepGateDing || DungeonUtils.getF7Phase() != M7Phases.P3) return@onReceive
             if (content.string.replace(Regex("§."), "").trim() !in CompletionDing.KEPT) return@onReceive
