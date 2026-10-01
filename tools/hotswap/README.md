@@ -11,11 +11,15 @@ Enhanced redefinition needs G1 or Serial (not ZGC). Bind JDWP to 127.0.0.1 only:
 control of the JVM. On the NixOS box this is the "f7 hotswap" instance, sharing f7's game folder.
 
 **Use:** `tools/hotswap/hotswap.sh` builds, deploys the jar (atomic, as deploy.sh), then sends
-the classes that changed since the last send to this game process. Classes not loaded yet load
-from the new jar.
+the classes that changed since the last send to this game process (or since launch). The game
+keeps reading the jar it launched with (deploy replaces it on disk; the game holds the old one
+open), so a new class, or a change to a class it hasn't loaded yet, can't go in live: the tool
+then sends nothing and says to restart.
 
-**Works:** method bodies, new or removed methods and lambdas, new fields (but they start at
+**Works:** method bodies, new or removed methods and lambdas (Kotlin compiles them to
+invokedynamic, no new classes), new fields (but they start at
 0/null: initializers don't run; the tool lists them).
 
-**Needs a restart:** mixins (applied at class load), new modules or settings (Odin registers
+**Needs a restart:** new classes (nested `object`s, `when` on an enum's first use, inline
+`on<...>` listeners), mixins (applied at class load), new modules or settings (Odin registers
 them once), anything run in an `init` that has already run, changed superclasses.

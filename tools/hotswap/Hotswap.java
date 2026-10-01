@@ -18,7 +18,12 @@ import java.util.stream.Collectors;
  * Pushes changed engineerClient classes into a running game (the "f7 hotswap" Prism instance:
  * JetBrains Runtime, -XX:+AllowEnhancedClassRedefinition, JDWP on 127.0.0.1:5005).
  *
- * Usage: java Hotswap.java <port> <mod jar> <state file>
+ * Usage: java Hotswap.java <port> <mod jar> <launch jar> <state file>
+ *
+ * <launch jar>: the jar the game opened at launch (hotswap.sh finds it in /proc/<pid>/fd; deploy
+ * replaced it on disk, but the game keeps reading that one). Classes the game hasn't loaded yet
+ * will come from it, not from the new jar, so a change to one of those, or a class it doesn't
+ * have at all, can't go in live: then nothing is sent and it says to restart.
  *
  * Only classes the game has loaded are redefined; the rest load from the jar deploy.sh just
  * installed. The state file holds each class's hash as last sent to this game process, so
@@ -28,7 +33,8 @@ public class Hotswap {
     public static void main(String[] args) throws Exception {
         int port = Integer.parseInt(args[0]);
         Path jar = Path.of(args[1]);
-        Path state = Path.of(args[2]);
+        Path launchJar = Path.of(args[2]);
+        Path state = Path.of(args[3]);
 
         Map<String, String> sent = new HashMap<>();
         if (Files.exists(state)) for (String line : Files.readAllLines(state)) {
@@ -38,19 +44,14 @@ public class Hotswap {
 
         // Every class in the jar (what the game loads), but mixins: those are applied at load,
         // never loaded as classes.
-        Map<String, byte[]> built = new TreeMap<>();
-        try (var zip = new java.util.zip.ZipFile(jar.toFile())) {
-            for (var e : Collections.list(zip.entries())) {
-                String n = e.getName();
-                if (!n.endsWith(".class") || n.startsWith("META-INF/")) continue;
-                String name = n.substring(0, n.length() - 6).replace('/', '.');
-                if (name.startsWith("com.engineerclient.mixin.")) continue;
-                try (var in = zip.getInputStream(e)) { built.put(name, in.readAllBytes()); }
-            }
-        }
+        Map<String, byte[]> built = classes(jar);
         Map<String, String> hashes = new HashMap<>();
         for (var e : built.entrySet()) hashes.put(e.getKey(), sha(e.getValue()));
-        List<String> changed = built.keySet().stream().filter(n -> !hashes.get(n).equals(sent.get(n))).toList();
+        Map<String, String> launched = new HashMap<>();
+        for (var e : classes(launchJar).entrySet()) launched.put(e.getKey(), sha(e.getValue()));
+        // What the game has now: what was last sent to it, else what it launched with.
+        List<String> changed = built.keySet().stream()
+            .filter(n -> !hashes.get(n).equals(sent.getOrDefault(n, launched.get(n)))).toList();
 
         AttachingConnector socket = Bootstrap.virtualMachineManager().attachingConnectors().stream()
             .filter(c -> c.name().equals("com.sun.jdi.SocketAttach")).findFirst().orElseThrow();
@@ -68,10 +69,21 @@ public class Hotswap {
         try {
             Map<ReferenceType, byte[]> redefine = new LinkedHashMap<>();
             List<String> warnings = new ArrayList<>();
-            int notLoaded = 0;
+            // Not loaded yet and not as the launch jar has it (or not in it at all): when the game
+            // gets to it, it would load the old one or none. Only a restart fixes that.
+            List<String> unloadable = new ArrayList<>();
+            for (String name : built.keySet()) {
+                if (hashes.get(name).equals(launched.get(name))) continue;
+                if (vm.classesByName(name).isEmpty()) unloadable.add(name);
+            }
+            if (!unloadable.isEmpty()) {
+                System.out.println("hotswap: RESTART NEEDED - nothing sent. The game can't load these new/changed classes (it reads the jar it launched with):");
+                for (String n : unloadable) System.out.println("  " + n);
+                System.out.println("The new jar is deployed: relaunch and it's all in.");
+                System.exit(3);
+            }
             for (String name : changed) {
                 List<ReferenceType> loaded = vm.classesByName(name);
-                if (loaded.isEmpty()) { notLoaded++; continue; }
                 byte[] bytes = built.get(name);
                 for (ReferenceType t : loaded) {
                     redefine.put(t, bytes);
@@ -87,9 +99,7 @@ public class Hotswap {
             if (!redefine.isEmpty()) vm.redefineClasses(redefine);
             Files.createDirectories(state.getParent());
             Files.write(state, hashes.entrySet().stream().map(e -> e.getKey() + " " + e.getValue()).sorted().toList());
-            System.out.println("hotswap: " + redefine.size() + " class(es) swapped" +
-                (notLoaded > 0 ? ", " + notLoaded + " changed but not loaded yet (they'll load the new jar)" : "") +
-                (changed.isEmpty() ? " (nothing changed)" : ""));
+            System.out.println("hotswap: " + redefine.size() + " class(es) swapped" + (changed.isEmpty() ? " (nothing changed)" : ""));
             if (redefine.size() <= 20) for (var t : redefine.keySet()) System.out.println("  " + t.name());
             if (!warnings.isEmpty()) {
                 System.out.println("hotswap: new fields start as 0/null (initializers don't run); restart if they need a value:");
@@ -101,6 +111,21 @@ public class Hotswap {
         } finally {
             vm.dispose();
         }
+    }
+
+    /** A jar's classes, but mixins: those are applied at load, never loaded as classes. */
+    private static Map<String, byte[]> classes(Path jar) throws Exception {
+        Map<String, byte[]> out = new TreeMap<>();
+        try (var zip = new java.util.zip.ZipFile(jar.toFile())) {
+            for (var e : Collections.list(zip.entries())) {
+                String n = e.getName();
+                if (!n.endsWith(".class") || n.startsWith("META-INF/")) continue;
+                String name = n.substring(0, n.length() - 6).replace('/', '.');
+                if (name.startsWith("com.engineerclient.mixin.")) continue;
+                try (var in = zip.getInputStream(e)) { out.put(name, in.readAllBytes()); }
+            }
+        }
+        return out;
     }
 
     private static String sha(byte[] b) throws Exception {
