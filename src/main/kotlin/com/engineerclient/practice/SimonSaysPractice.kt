@@ -59,7 +59,7 @@ import java.util.Locale
  *    except that light's own button, which waits until 10 ticks after it goes out.
  *  - A pressed button stays down 3 ticks (pressing it again meanwhile does nothing).
  *  - The next round starts 6 ticks after the round's last correct press; after round 5 that is
- *    the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks after it a new
+ *    the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks after it a new (practice: 15, FAIL_RESTART_TICKS)
  *    sequence, shown the way the skip shows it.
  */
 object SimonSaysPractice : Module(
@@ -389,7 +389,7 @@ object SimonSaysPractice : Module(
      * Start-on-round mode (the buttons above the start one): rounds [fromRound] to 5, over and
      * over, a new sequence each time; round n shows the sequence's first n lights, the buttons back
      * 10 ticks after the last goes out, as in the game. The next run starts 6 ticks after your last
-     * press (a wrong press: 25 ticks after it). Each run's rounds go in chat. 0: not in this mode.
+     * press (a wrong press: FAIL_RESTART_TICKS after it). Each run's rounds go in chat. 0: not in this mode.
      */
     private var fromRound = 0
 
@@ -440,17 +440,26 @@ object SimonSaysPractice : Module(
         after(2) { placed?.set(EXTRA, BUTTON) }
     }
 
+    /** The tick of a run's first start press; presses within [LATE_START_TICKS] of it never restart. */
+    private var startedAt = 0L
+    private val LATE_START_TICKS get() = 20
+    /** After a wrong press, ticks until the new sequence (the game's 25, a bit sooner for practice). */
+    private val FAIL_RESTART_TICKS get() = 15
+
     private fun pressStart() {
         val p = placed ?: return
-        when (phase) {
+        when {
+            phase == Phase.STARTING -> startPresses++
+            // A late press of the start spam (after the 6 ticks that count, as in the game): nothing.
+            phase == Phase.RUNNING && tick - startedAt < LATE_START_TICKS -> {}
             // Mid-run it's a restart: the lights and buttons go and it starts over, as from idle.
-            Phase.IDLE, Phase.DONE, Phase.RUNNING -> {
+            else -> {
                 reset()
                 phase = Phase.STARTING
+                startedAt = tick
                 startPresses = 1; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); r4Done = 0L; fails = 0
                 after(6) { begin() }
             }
-            Phase.STARTING -> startPresses++
         }
         // After the reset above, so it doesn't cancel the button coming back up.
         markMode(0)
@@ -489,8 +498,8 @@ object SimonSaysPractice : Module(
             fails++
             revealed.clear()
             after(3) { for (c in 0 until 16) setButton(c, false) }
-            if (fromRound > 0) { after(25) { fromRun() }; return }
-            after(25) {
+            if (fromRound > 0) { after(FAIL_RESTART_TICKS) { fromRun() }; return }
+            after(FAIL_RESTART_TICKS) {
                 newSequence()
                 val s = sequence
                 show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
