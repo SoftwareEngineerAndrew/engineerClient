@@ -112,4 +112,14 @@ class ScorecardTest {
         val rows = card.rows(listOf(split(SplitTracker.NECRON, 5229, 5835)), stamp(5835), emptyList(), true, emptyList())
         assertEquals(listOf("§c30.3\t§a2.0"), rows)
     }
+
+    @Test
+    fun `a boss split's graded cells replace the scorecard's own`() {
+        val card = Scorecard()
+        val storm = split(SplitTracker.STORM, 2950, 4100)
+        val rows = card.rows(listOf(storm), stamp(4100), emptyList(), true, emptyList()) { s ->
+            if (s.label == SplitTracker.STORM) listOf("§c46.40", "§734.35", "§20.60") else null
+        }
+        assertEquals("§c46.40\t§734.35\t§20.60", rows[0])
+    }
 }
