@@ -161,10 +161,17 @@ object SimonSaysPractice : Module(
             sign(p, EXTRA, "Inf", "")
             sign(p, START, "Start", "3x for the skip")
             for (n in 3..5) sign(p, fromButton(n), "Start on r$n", "on repeat")
+            // Right of the grid: how tight the patterns are.
+            for (level in -1..2) {
+                p.set(rngButton(level), BUTTON)
+                val (a, b) = when (level) { -1 -> "Harder" to "spread out"; 0 -> "Normal RNG" to "random"; 1 -> "Easier" to "tighter"; else -> "Easiest" to "tightest" }
+                sign(p, rngButton(level), a, b, Direction.SOUTH)
+            }
         }
         placed = p
         reset()
         markMode(0)
+        markRng()
         EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip. The others are signed. The keybind again takes it away.")
     }
 
@@ -233,9 +240,53 @@ object SimonSaysPractice : Module(
         placed?.set(lampAt(cell), if (on) Blocks.SEA_LANTERN.defaultBlockState() else Blocks.OBSIDIAN.defaultBlockState())
     }
 
+    /**
+     * Five different cells. Normal RNG: any order. Otherwise each after the first is picked with a
+     * weight by its distance (in cells) from the one before: tighter levels favour near cells
+     * (Easier e^-d, Easiest e^-2d), Harder far ones (e^d).
+     */
     private fun newSequence() {
-        val cells = (0 until 16).shuffled(rng)
-        sequence = IntArray(5) { cells[it] }
+        if (rngLevel == 0) {
+            val cells = (0 until 16).shuffled(rng)
+            sequence = IntArray(5) { cells[it] }
+            return
+        }
+        val k = when (rngLevel) { -1 -> -1.0; 1 -> 1.0; else -> 2.0 }
+        val out = ArrayList<Int>()
+        out += rng.nextInt(16)
+        while (out.size < 5) {
+            val last = out.last()
+            val left = (0 until 16).filter { it !in out }
+            val w = left.map { c -> Math.exp(-k * Math.hypot((c / 4 - last / 4).toDouble(), (c % 4 - last % 4).toDouble())) }
+            var r = rng.nextDouble() * w.sum()
+            var pick = left.last()
+            for (i in left.indices) { r -= w[i]; if (r <= 0) { pick = left[i]; break } }
+            out += pick
+        }
+        sequence = out.toIntArray()
+    }
+
+    /** Pattern tightness: -1 Harder (spread), 0 Normal RNG, 1 Easier, 2 Easiest. Kept across runs. */
+    private var rngLevel = 0
+
+    /** The RNG buttons, right of the grid (on the wall's wool at z 96): Normal RNG level with the start one. */
+    private fun rngButton(level: Int) = BlockPos(110, 121 + level, 96)
+
+    /** Light grey wool behind the selected RNG button, black behind the others. */
+    private fun markRng() {
+        val p = placed ?: return
+        for (level in -1..2) p.set(rngButton(level).east(), if (level == rngLevel) Blocks.LIGHT_GRAY_WOOL.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
+    }
+
+    /** Picks a pattern tightness; it counts from the next sequence on. */
+    private fun pressRng(level: Int) {
+        val p = placed ?: return
+        rngLevel = level
+        markRng()
+        click(p.at(rngButton(level)))
+        if (clickSounds) playSoundSettings(correctSound())
+        p.set(rngButton(level), BUTTON.setValue(ButtonBlock.POWERED, true))
+        after(2) { placed?.set(rngButton(level), BUTTON) }
     }
 
     /** A cell that isn't [not], for the stray first light. */
@@ -373,10 +424,10 @@ object SimonSaysPractice : Module(
         for (n in 3..5) p.set(fromButton(n).east(), if (mode == n) grey else black)
     }
 
-    /** A wall sign on the side (north face) of the wool block [button] is on. */
-    private fun sign(p: Placement, button: BlockPos, line1: String, line2: String) {
-        val real = button.east().north()
-        p.set(real, Blocks.OAK_WALL_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.WallSignBlock.FACING, Direction.NORTH))
+    /** A wall sign on the [side] (north: left, south: right) of the wool block [button] is on. */
+    private fun sign(p: Placement, button: BlockPos, line1: String, line2: String, side: Direction = Direction.NORTH) {
+        val real = button.east().relative(side)
+        p.set(real, Blocks.OAK_WALL_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.WallSignBlock.FACING, side))
         val be = p.level.getBlockEntity(p.at(real)) as? net.minecraft.world.level.block.entity.SignBlockEntity ?: return
         be.setText(net.minecraft.world.level.block.entity.SignText()
             .setMessage(1, net.minecraft.network.chat.Component.literal(line1))
@@ -566,7 +617,9 @@ object SimonSaysPractice : Module(
         val button = mc.level?.getBlockState(pos)?.block is ButtonBlock
         EngineerClient.safely("ss practice use") {
             val from = (3..5).firstOrNull { pos == p.at(fromButton(it)) }
+            val rngPick = (-1..2).firstOrNull { pos == p.at(rngButton(it)) }
             if (pos == p.at(START)) pressStart()
+            else if (rngPick != null) pressRng(rngPick)
             else if (pos == p.at(EXTRA)) pressExtra()
             else if (from != null) pressFrom(from)
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
