@@ -158,6 +158,17 @@ object RandomStuff : Module(
         ScoreboardLines.dump()
     }
 
+    /** The sidebar where you put it: vanilla's own drawing, moved (ScoreboardMove). Off: where vanilla puts it. */
+    private val scoreboardHud by HUD("Scoreboard", "Moves and scales the sidebar scoreboard. Off: it stays where the game puts it.", false, 400, 100, 1f) { example ->
+        val size = ScoreboardMove.draw(this)
+        if (example && size.first == 0) {
+            fill(0, 0, 80, 60, 0x66000000)
+            text(mc.font, "Scoreboard", 18, 2, -1, false)
+            return@HUD 80 to 60
+        }
+        size
+    }
+
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
 
     // Auto join state. All in-memory, never saved - "only the first time" is just "once per game
@@ -309,6 +320,7 @@ object RandomStuff : Module(
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
+            ScoreboardMove.active = enabled && scoreboardHud.enabled
         }
 
         // Hide Armor Stands: a stand's name and equipment (what tells a key or a starred mob's tag
