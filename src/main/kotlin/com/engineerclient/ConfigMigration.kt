@@ -16,7 +16,7 @@ object ConfigMigration {
      *  - BR Waypoints 2 is BR Roles;
      *  - Lowest BIN is two settings in Random Stuff;
      *  - what used to live in a modified Odin and ships with engineerClient now - Leap Menu's Click
-     *    Delay and Leap Outline (Leap Extras), Player Display's Health/Mana Bar HUDs (Random Stuff) -
+     *    Delay, Leap Outline and Map Leap (Leap Extras), Player Display's Health/Mana Bar HUDs (Random Stuff) -
      *    is copied out of Odin's own config, where that Odin saved it;
      *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
      *  - engineerClient's own Splits HUD is Odin's Splits in the Engineer Splits look now, so if it
@@ -75,6 +75,13 @@ object ConfigMigration {
                 changed = true
             }
             copy("Leap Menu", "Leap Extras", listOf("Click Delay", "Leap Outline"))
+            // Map Leap separately: copy() skips once its target has any of the keys, and an install
+            // that already migrated Click Delay would otherwise never get these.
+            copy("Leap Menu", "Leap Extras", listOf(
+                "Map Leap", "Map Leap Size", "Map Leap Colors", "Map Background",
+                "Normal Room", "Puzzle Room", "Trap Room", "Blood Room", "Entrance Room", "Fairy Room", "Champion Room", "Rare Room", "Unknown Room",
+                "Normal Door", "Wither Door", "Blood Door", "Fairy Door", "Unopened Door",
+            ))
             copy("Player Display", "Random Stuff", listOf("Health Bar HUD", "Health Bar Width", "Health Bar Height", "Mana Bar HUD", "Mana Bar Width", "Mana Bar Height"))
 
             val oldSplitsHud = module(modules, "Sub Splits")?.let(::settings)?.get("Splits")
