@@ -143,15 +143,17 @@ class SubSplitTracker {
     }
 
     /**
-     * A crystal placed on Maxor's pylons vanishing. They go 42 ticks after a laser hit, which is how
-     * a hit shows when an ability holds back its stun line.
+     * Crystals back on Maxor's top platforms: they return 41 ticks after a laser hit, which is how a
+     * hit shows when an ability holds back its stun line. (The placed ones vanishing at +42 doesn't
+     * work for the second hit: the kill usually comes first and takes them with it.) The fresh pair
+     * at his start comes before the laser line, so only counts from Lure on.
      */
-    fun onPlacedCrystalGone(at: Stamp) {
-        val hit = at.minus(CRYSTALS_GONE)
+    fun onTopCrystal(at: Stamp) {
+        val hit = at.minus(CRYSTALS_BACK)
         when (current) {
-            M_CRYSTALS, M_LURE -> jumpTo(M_COOLDOWN, maxOf(hit, starts[current]!!), "his placed crystals vanishing, $CRYSTALS_GONE ticks after a silent hit")
+            M_LURE -> jumpTo(M_COOLDOWN, maxOf(hit, starts[current]!!), "crystals back on top, $CRYSTALS_BACK ticks after a silent hit")
             M_COOLDOWN -> if (hit.tick - starts[M_COOLDOWN]!!.tick >= MIN_HIT_GAP)
-                jumpTo(M_KILL, maxOf(hit, starts[current]!!), "his placed crystals vanishing, $CRYSTALS_GONE ticks after a silent hit")
+                jumpTo(M_KILL, maxOf(hit, starts[current]!!), "crystals back on top, $CRYSTALS_BACK ticks after a silent hit")
         }
     }
 
@@ -220,7 +222,9 @@ class SubSplitTracker {
             msg in STORM_LIGHTNING -> if (current == S_OPENING && lightning == null) { lightning = at; ticks = 0 }
             msg in STORM_CRUSHED -> when (current) {
                 S_OPENING, S_CRUSH1 -> jumpTo(S_PIN, at, said(msg))
-                S_FLIGHT, S_CRUSH2 -> jumpTo(S_KILL, at, said(msg))
+                S_CRUSH2 -> jumpTo(S_KILL, at, said(msg))
+                // Crushed before he was seen within 2.4 blocks of Yellow (10 in 136 runs): Crush is 0.
+                S_FLIGHT -> { jumpTo(S_CRUSH2, at, said(msg) + ", before he was seen reaching Yellow"); jumpTo(S_KILL, at, said(msg)) }
             }
             msg == STORM_ENRAGED -> if (current == S_PIN) jumpTo(S_FLIGHT, at, "\"$STORM_ENRAGED\"")
             // Some deaths come with no second crush line: the death still ends whatever is running.
@@ -293,8 +297,8 @@ class SubSplitTracker {
         /** The camp is always 19 mobs: 17 regulars, the Giant and one mini-boss. */
         const val BLOOD_MOBS = 19
 
-        /** Maxor's placed crystals vanish 42 ticks after a hit; his wither goes 80 after the kill. */
-        const val CRYSTALS_GONE = 42
+        /** Maxor's top crystals come back 41 ticks after a hit; his wither goes 80 after the kill. */
+        const val CRYSTALS_BACK = 41
         const val MAXOR_DESPAWN = 80
         /** Two hits are 10 s of real time apart (110-200 ticks even with lag): closer is the same hit. */
         const val MIN_HIT_GAP = 100

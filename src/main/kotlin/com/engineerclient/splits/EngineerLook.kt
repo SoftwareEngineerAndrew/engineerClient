@@ -75,7 +75,9 @@ object EngineerLook {
      * As in Odin's own look, a split that hasn't started (time 0) only shows with Show 0 splits,
      * and before the run starts that is all there is to show - Pace then is the targets' total.
      */
-    fun lines(rows: List<Row>, opts: Options, place: Place, master: Boolean, targets: List<Double?>?): List<Line> {
+    fun lines(rows: List<Row>, opts: Options, place: Place, master: Boolean, targets: List<Double?>?,
+              /** A split's time colour (Odin's name, ms, ticks, over), or null for its label's colour. */
+              grade: ((String, Long, Long, Boolean) -> String?)? = null): List<Line> {
         if (rows.isEmpty()) return emptyList()
         val segments = rows.dropLast(1)
         val out = mutableListOf<Line>()
@@ -96,7 +98,11 @@ object EngineerLook {
         }
 
         segments.forEachIndexed { i, s ->
-            if (s.ms != 0L || opts.show0) out += line(label(s.name, place, master), s.ms, s.ticks, opts, SplitFormat::seconds)
+            if (s.ms != 0L || opts.show0) {
+                val l = line(label(s.name, place, master), s.ms, s.ticks, opts, SplitFormat::seconds)
+                val over = current < 0 || i < current
+                out += grade?.invoke(s.name, s.ms, s.ticks, over && s.ms != 0L)?.let { l.copy(colour = it) } ?: l
+            }
             // Odin's Boss Entry: after the third split, the first three together - with Enter
             // After Entry, only once they are all over.
             val entered = current > 2 || (current == -1 && started)

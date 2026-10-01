@@ -11,8 +11,8 @@ mechanics reports used) splits "old" runs from the rest by upload time, for the 
 comparison. Standard library only; nothing is written to DATA_DIR.
 
 Every boundary is detected from what a live client sees: chat lines, block changes, and the
-boss wither's positions as recorded (de-interpolated as in tools/boss-movement/bosslib.py, i.e.
-the packets the client received). Times are server ticks: `st` lines, or a chat line's own `n`
+boss wither's positions as recorded (the first tick a position changes is when the client
+received the move). Times are server ticks: `st` lines, or a chat line's own `n`
 (the server tick on arrival) when the recorder wrote it. Only runs whose every recording has
 server ticks are timed. Alpha-server runs (recording.ALPHA_RUNS, the Watcher report's suspect,
 and any recording showing the alpha signature) are left out.
@@ -20,7 +20,6 @@ and any recording showing the alpha signature) are left out.
 import base64
 import bisect
 import collections
-import json
 import math
 import os
 import pickle
@@ -228,30 +227,13 @@ def all_n(chat, msgs, after=None, before=None):
     return [n for n, t, m in chat if m in msgs and (after is None or n >= after) and (before is None or n <= before)]
 
 
-def packets(e):
-    """De-lerped packets [(n, x, y, z)] of one entity (the positions the server sent)."""
-    ev = [(v[1],) + tuple(v[2:]) for v in e['ev']]
-    nmap = {v[1]: v[0] for v in e['ev']}
-    # newer recorders write positions to 1/100 block (the lerp test needs a looser tolerance)
-    dec = 2
-    for v in ev[:300]:
-        if v[1] == 'e' and any(len(repr(c).split('.')[1]) == 3 for c in (v[2], v[4]) if '.' in repr(c)):
-            dec = 3
-            break
-    pk, _ = B.delerp([list(v) for v in ev], dec)
-    out = []
-    for t, x, y, z, kind in pk:
-        out.append((nmap.get(t, None), x, y, z, kind, t))
-    # n for ticks that are not exactly an ev tick (shouldn't happen: packets sit on ev ticks)
-    return [(n, x, y, z, kind) for n, x, y, z, kind, t in out if n is not None]
-
-
 def raw(e):
     """The positions as the client drew them: [(n, x, y, z)], None where the entity left view.
 
-    Recorders from 0.6.15 on write mobs over 32 blocks away on even ticks only, which breaks the
-    de-interpolation (packets()), so the boundaries use these: a lerp starts on the tick its
-    packet arrives, so the first tick a position changes is when the client learnt of the move."""
+    Recorders from 0.6.15 on write mobs over 32 blocks away on even ticks only ("farHalf"), which
+    breaks the de-interpolation of tools/boss-movement (bosslib.delerp), so the boundaries use
+    these: a lerp starts on the tick its packet arrives, so the first tick a position changes is
+    when the client learnt of the move."""
     out = []
     for v in e['ev']:
         if v[2] == 'g':
@@ -604,7 +586,7 @@ def rel(ev, anchor):
         return v
     out = {}
     for k, v in ev.items():
-        if k in ('times', 'stun_ms', 'near', 'pk_after_enrage') or k.endswith('_ms') or k == 'ms0' or k.endswith('_src'):
+        if k in ('times', 'stun_ms', 'ms0') or k.endswith('_ms') or k.endswith('_src'):
             out[k] = v
         elif k == 'resets':
             out[k] = [(n - a, p) for n, p in v]
@@ -837,13 +819,15 @@ def storm_splits(r):
     s['Crush1_pos'] = s['crush1'] - s['dep'] if (s['crush1'] is not None and s['dep'] is not None) else None
     # the pillar that crushed: the one that resets on the next check
     s['pillar1'] = next((p for n, p in rs if s['crush1'] is not None and 15 <= n - s['crush1'] <= 25), None)
+    if s['pillar1'] is None and s['crush1'] is not None and abs(s['crush1'] - 699) <= 3:
+        s['pillar1'] = 'purple'     # 12 ticks after he leaves he can only be over Purple
     s['Crush1'] = s['crush1'] - s['Opening'] if (s['crush1'] is not None and s['Opening'] is not None) else None
     s['check1'] = 699 + 20 * round((s['crush1'] - 699) / 20) if s['crush1'] is not None else None
     s['Pin'] = s['enrage'] - s['crush1'] if (s['enrage'] is not None and s['crush1'] is not None and s['enrage'] >= s['crush1'] - 2) else None
     purple = s['pillar1'] == 'purple'
     s['Flight'] = s['arr'] - s['enrage'] if (purple and s['arr'] is not None and s['enrage'] is not None) else None
     s['Crush2'] = s['crush2'] - s['arr'] if (purple and s['crush2'] is not None and s['arr'] is not None and s['Flight'] is not None) else None
-    s['FlightCrush2'] = s['crush2'] - s['enrage'] if (s['crush2'] is not None and s['enrage'] is not None) else None
+    s['FlightCrush2'] = s['crush2'] - s['enrage'] if (purple and s['crush2'] is not None and s['enrage'] is not None) else None
     s['Kill'] = s['dead'] - s['crush2'] if (s['dead'] is not None and s['crush2'] is not None) else None
     s['Animation'] = s['goldor'] - s['dead'] if (s['goldor'] is not None and s['dead'] is not None) else None
     s['total'] = s['goldor']
@@ -919,7 +903,7 @@ def necron_splits(r):
 
 # ================================================================ report
 
-def table(name, runs, key, fn, lag_floor=None):
+def table(name, runs, key, fn):
     """floor (min), fastest 10% (p10), median, p90 over 5-player timed runs, old vs all."""
     out = []
     for label, sel in (('old', [r for r in runs if r.old]), ('all', runs)):

@@ -140,6 +140,19 @@ object OdinSplitsLook {
     /** Odin keys a PB by the split's name as it has it, colour codes included. */
     private val PB_NAMES by lazy { listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name } }
 
+    /**
+     * A floor 7 split's time colour (SubSplitGrades): bands from the recorded F7 runs, gold for your
+     * best (kept with the sub splits' bests), on M7 gold only.
+     */
+    private fun grade(name: String, ms: Long, ticks: Long, over: Boolean, master: Boolean): String? {
+        val id = SubSplitGrades.MAIN_SPLITS[name.replace(Regex("§."), "").trim()] ?: return null
+        val floor = if (master) "M7" else "F7"
+        val value = SubSplitGrades.value(id, ms, ticks)
+        DungeonSplits.recordBest(floor, id, value, over)
+        return SubSplitGrades.colour(id, value, over, DungeonSplits.bestOf(floor, id), !master, "")
+            .takeIf { it.isNotEmpty() }
+    }
+
     private fun rows(): List<EngineerLook.Row> =
         SplitsManager.currentRows().map { EngineerLook.Row(it.name, it.time, it.tickTime, it.isCurrent) }
 
@@ -156,7 +169,8 @@ object OdinSplitsLook {
         val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.value == 1) else place()
         val rows = if (example) exampleRows() else rows()
         val opts = options()
-        val lines = EngineerLook.lines(rows, opts, place, master, targets(if (example) EngineerLook.Place.FLOOR7 else place, master))
+        val lines = EngineerLook.lines(rows, opts, place, master, targets(if (example) EngineerLook.Place.FLOOR7 else place, master),
+            if (example || place != EngineerLook.Place.FLOOR7) null else { n, ms, t, over -> grade(n, ms, t, over, master) })
         if (lines.isEmpty()) return 0 to 0
         val font = EngineerClient.mc.font
 
