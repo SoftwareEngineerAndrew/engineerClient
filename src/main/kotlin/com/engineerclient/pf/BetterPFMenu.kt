@@ -4,6 +4,7 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.betterpf.BetterPF
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -11,6 +12,7 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.core.component.DataComponents
+import net.minecraft.world.inventory.ContainerInput
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.WebSocket
@@ -20,9 +22,9 @@ import java.util.concurrent.Executors
 
 /**
  * Better PF Menu: while it's on and you're in a world, undonecoffee.com/betterpf/menu lists you
- * ("not in the menu"), and while the Party Finder menu is open, what it lists. It only reads the
- * menu: it never clicks anything (an auto refresh that clicked Refresh got Hypixel to kick for
- * "badly behaving modifications", 2026-09-30, so it's gone).
+ * ("not in the menu"), and while the Party Finder menu is open, what it lists. Someone on that page
+ * can turn on auto refresh: this clicks the menu's Refresh button every 3-4.5 s (random each time), for as long as they
+ * watch and the menu is open.
  *
  * One WebSocket (/betterpf/api/pfmenu/share) for as long as you're in a world. The menu is read on
  * the client thread once a second and sent only when it changed; a closed menu counts as still open
@@ -31,10 +33,14 @@ import java.util.concurrent.Executors
 object BetterPFMenu : Module(
     name = "Better PF Menu",
     category = Category.custom("Engineer Client"),
-    description = "Shows your Party Finder menu live on undonecoffee.com/betterpf/menu while you have it open.",
+    description = "Shows your Party Finder menu live on undonecoffee.com/betterpf/menu while you have it open. People there can make it auto refresh.",
 ) {
+    private val allowAuto by BooleanSetting("Allow Auto Refresh", true, desc = "Lets someone watching your menu on the site make it click Refresh every 3-4.5 seconds (random) while it's open.")
+    private val autoMessage by BooleanSetting("Auto Refresh Message", true, desc = "Says in chat when auto refresh is turned on or off from the site.")
 
     private const val URL = "wss://${BetterPF.SITE}/betterpf/api/pfmenu/share"
+    /** Auto refresh's gap, picked anew after each click: 3 to 4.5 s. */
+    private fun refreshGap() = 3_000L + (Math.random() * 1_500).toLong()
     private const val LINGER_MS = 5_000L
     private const val RESEND_MS = 15_000L
     private const val PING_MS = 30_000L
@@ -56,10 +62,13 @@ object BetterPFMenu : Module(
     private var failSaid = false
 
     // client thread
+    @Volatile private var auto = false
     private var lastOpen = 0L
     private var lastRead = 0L
     private var lastSent = ""
     private var lastSentAt = 0L
+    private var lastRefresh = 0L
+    private var refreshGap = 0L
     private var lastPing = 0L
     private var inWorldAt = 0L
 
@@ -92,6 +101,11 @@ object BetterPFMenu : Module(
             }
         }
         if (now - lastPing >= PING_MS) { lastPing = now; io.execute { ws?.sendText("ping", true) } }
+        if (open && auto && allowAuto && now - lastRefresh >= refreshGap) {
+            lastRefresh = now
+            refreshGap = refreshGap()
+            clickRefresh(screen!!)
+        }
     }
 
     /** On, but no Party Finder open. */
@@ -152,6 +166,13 @@ object BetterPFMenu : Module(
         }
     }
 
+    /** One left click on the menu's Refresh button, as a click of your own would send it. */
+    private fun clickRefresh(screen: AbstractContainerScreen<*>) {
+        val player = EngineerClient.mc.player ?: return
+        if (!screen.menu.carried.isEmpty) return
+        val slot = screen.menu.slots.firstOrNull { it.container !== player.inventory && isRefresh(clean(it.item.hoverName.string).trim()) } ?: return
+        EngineerClient.mc.gameMode?.handleContainerInput(screen.menu.containerId, slot.index, 0, ContainerInput.PICKUP, player)
+    }
 
     // ---------------------------------------------------------------- socket (io thread)
 
@@ -202,9 +223,21 @@ object BetterPFMenu : Module(
             }, io)
     }
 
-    /** The site says nothing the mod acts on any more (its old {t:"auto"} is ignored). */
-    @Suppress("UNUSED_PARAMETER")
-    private fun said(msg: String) {}
+    /** The site: {t:"auto", on}. */
+    private fun said(msg: String) {
+        val obj = runCatching { JsonParser.parseString(msg).asJsonObject }.getOrNull() ?: return
+        if (obj.get("t")?.asString != "auto") return
+        val on = obj.get("on")?.asBoolean == true
+        EngineerClient.mc.execute {
+            if (on == auto) return@execute
+            auto = on
+            if (autoMessage) EngineerClient.msg(
+                if (!on) "§7Better PF Menu: auto refresh off."
+                else if (allowAuto) "§7Better PF Menu: auto refresh on from the site (Refresh every 3-4.5s while the menu is open)."
+                else "§7Better PF Menu: the site asked for auto refresh; §fAllow Auto Refresh§7 is off."
+            )
+        }
+    }
 
     /** Lost the connection: try again, a little later each time. The next menu read resends. */
     private fun fail(why: String) {
@@ -220,6 +253,7 @@ object BetterPFMenu : Module(
         generation++
         ws?.let { runCatching { it.sendClose(WebSocket.NORMAL_CLOSURE, why) }; it.abort() }
         ws = null; connecting = false; pending = null
+        EngineerClient.mc.execute { auto = false }
     }
 
     override fun onDisable() {
