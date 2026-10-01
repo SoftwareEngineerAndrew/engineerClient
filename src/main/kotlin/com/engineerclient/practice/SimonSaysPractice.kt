@@ -9,7 +9,12 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.features.impl.boss.SimonSays
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.Colors
@@ -70,7 +75,7 @@ object SimonSaysPractice : Module(
     private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: Odin's numbers terminal simulator instead, one after another.").onPress { if (!LeapExtras.openNumbersSim()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
     private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 5.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.")
-    private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one.")
+    private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one. Here and on the real device in P3 (turns Odin's own Custom Click Sounds off).")
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown").withDependency { clickSounds }
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
     private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
@@ -659,6 +664,42 @@ object SimonSaysPractice : Module(
         return hit.blockPos.takeIf { it in p.saved }
     }
 
+    // ------------------------------------------------------------------ the real device's sounds
+
+    // Odin's Simon Says solution: the buttons' lamps in order, and how many of them the server has
+    // seen pressed. Private in Odin, so read reflectively.
+    private val odinOrder by lazy { SimonSays::class.java.getDeclaredField("clickInOrder").apply { isAccessible = true } }
+    private val odinNeeded by lazy { SimonSays::class.java.getDeclaredField("clickNeeded").apply { isAccessible = true } }
+    /** Our own presses not yet confirmed by the server (lamp, when), so fast presses aren't judged against a stale count. */
+    private val pending = ArrayList<Pair<BlockPos, Long>>()
+    private const val PENDING_MS = 1000L
+
+    /**
+     * A right click on F7's real Simon Says in P3: the correct sound for the start button and the
+     * button Odin's solution has next, the wrong one for any other. Odin's own Custom Click Sounds
+     * (one sound for every press unless it blocks) is turned off so the two don't play together.
+     */
+    private fun realClick(pos: BlockPos) {
+        if (placed != null || !clickSounds) return
+        if (DungeonUtils.getF7Phase() != M7Phases.P3) return
+        val isStart = pos == START
+        if (!isStart && (pos.x != 110 || pos.y !in 120..123 || pos.z !in 92..95)) return
+        val state = mc.level?.getBlockState(pos) ?: return
+        if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
+        (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
+        if (isStart) { playSoundSettings(correctSound()); return }
+
+        @Suppress("UNCHECKED_CAST")
+        val order = ArrayList(odinOrder.get(null) as List<BlockPos>)
+        val now = System.currentTimeMillis()
+        pending.removeAll { now - it.second > PENDING_MS }
+        var i = odinNeeded.getInt(null)
+        while (i < order.size && pending.any { it.first == order[i] }) i++
+        val right = order.getOrNull(i) == pos.east()
+        if (right) pending.add(pos.east().immutable() to now)
+        playSoundSettings(if (right) correctSound() else wrongSound())
+    }
+
     /** Right click. True: it was on the device, handled here, and the game must not use it. */
     @JvmStatic
     fun onUse(): Boolean {
@@ -722,6 +763,8 @@ object SimonSaysPractice : Module(
                 drawStyledBox(p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7), colour, 2, true)
             }
         }
+        // The real device: the same sounds as here, right or wrong, read off Odin's solution.
+        on<BlockInteractEvent>(ignoreCancelled = true) { EngineerClient.safely("ss real sounds") { realClick(pos) } }
         // A new world has none of it: nothing to put back.
         on<LevelEvent.Unload> { placed = null; gen++; jobs.clear(); phase = Phase.IDLE }
     }

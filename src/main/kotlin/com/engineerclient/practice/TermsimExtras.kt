@@ -3,9 +3,10 @@ package com.engineerclient.practice
 import com.engineerclient.mixin.ContainerScreenAccessor
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.GuiEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.ModuleManager
+import com.odtheking.odin.features.impl.boss.TerminalSimulator
 import com.odtheking.odin.features.impl.boss.TerminalSolver
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
@@ -19,17 +20,22 @@ import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
  * under the mouse goes in when its turn comes). Through Odin's own click, as a mouse click would
  * go: its solver, prediction and first click protection all apply. Not melody (its timing is the
  * point).
+ *
+ * The setting lives in Odin's own Terminal Simulator module ([install]), like OdinSplitsLook's.
  */
-object TermsimExtras : Module(
-    name = "Termsim",
-    category = Category.custom("Engineer Client"),
-    description = "Extras for Odin's terminal simulator. Only in the simulator, never real terminals.",
-) {
-    private val hoverTerms by BooleanSetting("Hover Terms", false, desc = "Hovering the slot to click clicks it (numbers: the next number). Termsim only.")
+object TermsimExtras {
+    private val hoverTerms = BooleanSetting("Hover Terms", false, desc = "Hovering the slot to click clicks it (numbers: the next number). Termsim only. Added by engineerClient.")
+
+    /** Adds Hover Terms to Odin's Terminal Simulator, re-reading the configs for its saved value. */
+    fun install() {
+        TerminalSimulator.registerSetting(hoverTerms)
+        ModuleManager.loadConfigurations()
+        EventBus.subscribe(this)
+    }
 
     init {
         on<GuiEvent.Render> {
-            if (!hoverTerms) return@on
+            if (!hoverTerms.value) return@on
             val screen = screen as? TermSimGUI ?: return@on
             val term = TerminalUtils.currentTerm ?: return@on
             if (term.type == TerminalTypes.MELODY) return@on
