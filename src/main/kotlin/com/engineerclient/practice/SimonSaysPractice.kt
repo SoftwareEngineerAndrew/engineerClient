@@ -688,21 +688,20 @@ object SimonSaysPractice : Module(
 
     // ------------------------------------------------------------------ the real device's sounds
 
-    // Odin's Simon Says solution: the buttons' lamps in order, and how many of them the server has
-    // seen pressed. Private in Odin, so read reflectively.
+    // Odin's Simon Says solution: the buttons' lamps in order, and how many of them have been
+    // pressed. Private in Odin, so read reflectively. Your own press counts as soon as you click:
+    // the client presses the button itself before the server answers, and Odin sees that.
     private val odinOrder by lazy { SimonSays::class.java.getDeclaredField("clickInOrder").apply { isAccessible = true } }
     private val odinNeeded by lazy { SimonSays::class.java.getDeclaredField("clickNeeded").apply { isAccessible = true } }
-    /** Our own presses not yet confirmed by the server (lamp, when), so fast presses aren't judged against a stale count. */
-    private val pending = ArrayList<Pair<BlockPos, Long>>()
-    private const val PENDING_MS = 1000L
 
     /**
      * A right click on F7's real Simon Says in P3: the correct sound for the start button and the
-     * button Odin's solution has next, the wrong one for any other. Odin's own Custom Click Sounds
-     * (one sound for every press unless it blocks) is turned off so the two don't play together.
+     * button Odin's solution has next, the wrong one for any other, and for any press Odin's Block
+     * Wrong Clicks stopped ([blocked]: it never reached the device, so it isn't timed either).
+     * Odin's own Custom Click Sounds is turned off so the two don't play together.
      * The presses also go into the real device's round times ([Real]).
      */
-    private fun realClick(pos: BlockPos) {
+    private fun realClick(pos: BlockPos, blocked: Boolean) {
         if (placed != null || (!clickSounds && !realTimes)) return
         if (DungeonUtils.getF7Phase() != M7Phases.P3) return
         val isStart = pos == START
@@ -710,18 +709,15 @@ object SimonSaysPractice : Module(
         val state = mc.level?.getBlockState(pos) ?: return
         if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
         if (clickSounds) (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
+        if (blocked) { if (clickSounds) playSoundSettings(wrongSound()); return }
         if (isStart) { if (clickSounds) playSoundSettings(correctSound()); return }
 
         @Suppress("UNCHECKED_CAST")
-        val order = ArrayList(odinOrder.get(null) as List<BlockPos>)
-        val now = System.currentTimeMillis()
-        pending.removeAll { now - it.second > PENDING_MS }
-        var i = odinNeeded.getInt(null)
-        while (i < order.size && pending.any { it.first == order[i] }) i++
+        val order = odinOrder.get(null) as List<BlockPos>
+        val i = odinNeeded.getInt(null)
         val right = order.getOrNull(i) == pos.east()
-        if (right) pending.add(pos.east().immutable() to now)
         if (clickSounds) playSoundSettings(if (right) correctSound() else wrongSound())
-        if (realTimes) Real.press(right, last = right && i == order.size - 1, now)
+        if (realTimes) Real.press(right, last = right && i == order.size - 1, System.currentTimeMillis())
     }
 
     /**
@@ -847,8 +843,10 @@ object SimonSaysPractice : Module(
                 drawStyledBox(p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7), colour, 2, true)
             }
         }
-        // The real device: the same sounds as here, right or wrong, read off Odin's solution.
-        on<BlockInteractEvent>(ignoreCancelled = true) { EngineerClient.safely("ss real sounds") { realClick(pos) } }
+        // The real device: the same sounds as here, right or wrong, read off Odin's solution. After
+        // Odin's own listener (priority -1) and even when it cancelled the press (ignoreCancelled
+        // here means "skip cancelled ones"), so a press Block Wrong Clicks stopped still sounds wrong.
+        on<BlockInteractEvent>(priority = -1) { EngineerClient.safely("ss real sounds") { realClick(pos, isCancelled) } }
         on<BlockUpdateEvent> {
             if (!realTimes || placed != null || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             EngineerClient.safely("ss real times") { Real.block(pos, old, updated) }
