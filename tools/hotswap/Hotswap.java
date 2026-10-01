@@ -47,8 +47,9 @@ public class Hotswap {
         Map<String, byte[]> built = classes(jar);
         Map<String, String> hashes = new HashMap<>();
         for (var e : built.entrySet()) hashes.put(e.getKey(), sha(e.getValue()));
+        Map<String, byte[]> launchedBytes = classes(launchJar);
         Map<String, String> launched = new HashMap<>();
-        for (var e : classes(launchJar).entrySet()) launched.put(e.getKey(), sha(e.getValue()));
+        for (var e : launchedBytes.entrySet()) launched.put(e.getKey(), sha(e.getValue()));
         // What the game has now: what was last sent to it, else what it launched with.
         List<String> changed = built.keySet().stream()
             .filter(n -> !hashes.get(n).equals(sent.getOrDefault(n, launched.get(n)))).toList();
@@ -74,6 +75,8 @@ public class Hotswap {
             List<String> unloadable = new ArrayList<>();
             for (String name : built.keySet()) {
                 if (hashes.get(name).equals(launched.get(name))) continue;
+                // Only line numbers moved (an edit higher up the same file): the old copy runs the same.
+                if (launchedBytes.containsKey(name) && codeOnly(built.get(name)).equals(codeOnly(launchedBytes.get(name)))) continue;
                 if (vm.classesByName(name).isEmpty()) unloadable.add(name);
             }
             if (!unloadable.isEmpty()) {
@@ -126,6 +129,16 @@ public class Hotswap {
             }
         }
         return out;
+    }
+
+    /** A class's hash without its debug info (line numbers, local names, source map). */
+    private static String codeOnly(byte[] b) throws Exception {
+        var cf = ClassFile.of(ClassFile.DebugElementsOption.DROP_DEBUG, ClassFile.LineNumbersOption.DROP_LINE_NUMBERS,
+            ClassFile.ConstantPoolSharingOption.NEW_POOL, ClassFile.StackMapsOption.DROP_STACK_MAPS);
+        ClassModel m = cf.parse(b);
+        return sha(cf.transformClass(m, (builder, e) -> {
+            if (!(e instanceof java.lang.classfile.attribute.SourceDebugExtensionAttribute)) builder.with(e);
+        }));
     }
 
     private static String sha(byte[] b) throws Exception {
