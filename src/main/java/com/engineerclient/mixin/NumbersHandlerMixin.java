@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.practice.InfiNumbersSim;
+import com.engineerclient.practice.InfNumbersSim;
 import com.odtheking.odin.utils.Color;
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.terminalhandler.NumbersHandler;
 import kotlin.Pair;
@@ -13,16 +13,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** /termsim infi on Odin's numbers solver: its order from the simulator's queue, and no numbers drawn. */
+/** /termsim inf on Odin's numbers solver: its order from the simulator's queue, and no numbers drawn. */
 @Mixin(value = NumbersHandler.class, remap = false)
 public class NumbersHandlerMixin {
     @Inject(method = "solve", at = @At("HEAD"), cancellable = true)
     private void ec$infiOrder(List<Slot> slots, int updatedIndex, CallbackInfoReturnable<List<Integer>> cir) {
-        if (InfiNumbersSim.active()) cir.setReturnValue(new ArrayList<>(InfiNumbersSim.getQueue()));
+        if (InfNumbersSim.active()) cir.setReturnValue(new ArrayList<>(InfNumbersSim.getQueue()));
     }
 
     @Inject(method = "renderSlot", at = @At("RETURN"), cancellable = true)
     private void ec$infiNoNumbers(int slotIndex, CallbackInfoReturnable<Pair<Color, String>> cir) {
-        if (InfiNumbersSim.active() && cir.getReturnValue() != null) cir.setReturnValue(new Pair<>(cir.getReturnValue().getFirst(), null));
+        if (InfNumbersSim.active() && cir.getReturnValue() != null) cir.setReturnValue(new Pair<>(cir.getReturnValue().getFirst(), null));
     }
 }
