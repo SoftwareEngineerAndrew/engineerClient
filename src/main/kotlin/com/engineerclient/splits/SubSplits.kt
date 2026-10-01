@@ -1,65 +1,63 @@
 package com.engineerclient.splits
 
+import kotlin.math.hypot
+
 /**
- * The boss broken down into its 25 moments — Maxor's stuns, Storm's crushes, the four terminal
- * sections, the leap into the core, Necron's mids — each timed on both clocks.
+ * The boss fights broken into sub splits, each timed on both clocks: the Watcher's camp, Maxor,
+ * Storm, the four terminal sections, Goldor and Necron.
  *
- * This is a port of the team's own ChatTriggers module (undonecoffee/allModules,
- * `made by us/EngineerClient/features/EngineerSubSplits.js`): the same 25 steps in the same order
- * with the same colours, advanced by the same lines. What changed is the presentation — they are
- * [Split]s here, so they render exactly like the run's normal splits instead of in that module's
- * own `Move > 8.12s (8.00s)` style.
+ * The steps come from what the recorded runs showed about each fight (docs/mechanics/sub-splits.md):
+ * every step is either the game's own script, which nobody can speed up, or the party's time,
+ * never a mix. So a fixed step that runs long points at lag or a missed grid tick, and a
+ * controlled step's time over its floor is exactly what the party lost.
  *
- * A step runs until the next one starts, so the whole sequence is a stopwatch that gets handed on
- * rather than 25 separate timers. Three things move it along:
+ * A step runs until the next one starts, so the whole sequence is a stopwatch that is handed on.
+ * What moves it on:
  *
- *  - a boss line (most of them),
- *  - the terminal/gate interplay, where a section ends on whichever of "last device done" and
- *    "gate destroyed" arrives second — they can come in either order,
- *  - and two waits on the server's own tick count, for the moments Hypixel never announces: Maxor
- *    starting to move (when he can't be seen doing it), and Storm's first lightning.
+ *  - chat lines (most steps);
+ *  - the terminal sections: a section ends when its door opens, which is when both its last
+ *    completion and its gate are in. The door's barriers turning to air is seen whatever chat
+ *    cleaners hide; chat's last completion plus "The gate has been destroyed!" is the other way;
+ *  - things the module sees in the world: Maxor's beacon turning to bedrock (the kill), his placed
+ *    crystals vanishing (42 ticks after a hit, for a hit an ability kept quiet), Storm leaving his
+ *    spot and reaching Yellow, Necron leaving and coming back to mid, the Watcher's move, and the
+ *    camp's last mob appearing;
+ *  - one count on the server's ticks: Storm leaves his spot 139 ticks after his lightning line.
  *
- * Nothing here touches Minecraft. What it cannot work out for itself needs the world: Maxor's
- * wither starting to move ([onMaxorMoved]) and the party all being in the core
- * ([onEveryoneInCore]); the module feeds those in.
+ * Nothing here touches Minecraft; the module feeds the world's moments in.
  */
 class SubSplitTracker {
 
-    /** Which split a step belongs to, and how it reads on the HUD. */
-    private class Step(val split: String, val label: String)
+    /** Which split a step belongs to, and how it reads on the HUD. A null label ends a split and isn't shown. */
+    private class Step(val split: String, val label: String?)
 
     private val steps = SEQUENCE
     private val starts = arrayOfNulls<Stamp>(SEQUENCE.size)
-    /** How each step's start was found, for Debug: a chat line, a timed wait, the core box. */
+    /** How each step's start was found, for Debug: a chat line, a timed wait, something seen. */
     private val sources = arrayOfNulls<String>(SEQUENCE.size)
-    /** The line that armed the running timed wait. */
-    private var armedBy = ""
 
-    /** 0 before the boss starts, otherwise the 1-based step being timed. */
-    private var current = 0
-    private var last: Stamp? = null
+    /** -1 before anything starts, otherwise the index of the step being timed. */
+    private var current = -1
 
-    /** Server ticks since the current step began — the two timed waits below count on this. */
+    /** Server ticks since Storm's lightning line, while waiting for him to leave his spot. */
     private var ticks = 0
-    /** Where a timed wait started counting: the line that armed it, not the step's own start. */
-    private var watchFrom: Stamp? = null
-    private var stormCrushes = 0
-    private var laserWaitDone = false
+    private var lightning: Stamp? = null
 
-    /** The gate and the last device can arrive in either order; a section ends on the second. */
+    /** The Watcher's mobs seen appearing so far: the 19th is the last. */
+    private var bloodMobs = 0
+
+    /** The gate and the last completion can arrive in either order; a section ends on the second. */
     private var gateBlown = false
     private var gateWaiting = false
 
-    /** Set when the team starts leaping in, so the core-entry watch knows to run. */
+    /** Set once the core is open, so the core-entry watch knows to run. */
     var watchingCore = false
         private set
 
     fun reset() {
         java.util.Arrays.fill(starts, null)
         java.util.Arrays.fill(sources, null)
-        armedBy = ""
-        current = 0; last = null; ticks = 0; watchFrom = null
-        stormCrushes = 0; laserWaitDone = false
+        current = -1; ticks = 0; lightning = null; bloodMobs = 0
         gateBlown = false; gateWaiting = false; watchingCore = false
     }
 
@@ -67,7 +65,7 @@ class SubSplitTracker {
     fun forSplit(split: String): List<Split> {
         val out = mutableListOf<Split>()
         steps.forEachIndexed { i, step ->
-            if (step.split != split) return@forEachIndexed
+            if (step.split != split || step.label == null) return@forEachIndexed
             val start = starts[i] ?: return@forEachIndexed
             val stop = (i + 1 until starts.size).firstNotNullOfOrNull { starts[it] }
             out += Split(step.label, start, stop)
@@ -77,17 +75,17 @@ class SubSplitTracker {
 
     /**
      * For Debug: how each of [split]'s steps (in [forSplit]'s order) came to an end - how the next
-     * step's start was found - or "running". A step can end on a later split's first line when the
+     * step's start was found - or "running". A step can end on a later step's moment when the
      * moments between were never seen; that shows here too.
      */
     fun endSources(split: String): List<String> {
         val out = mutableListOf<String>()
         steps.forEachIndexed { i, step ->
-            if (step.split != split || starts[i] == null) return@forEachIndexed
+            if (step.split != split || step.label == null || starts[i] == null) return@forEachIndexed
             val next = (i + 1 until starts.size).firstOrNull { starts[it] != null }
             out += when {
                 next == null -> "running"
-                next != i + 1 -> (sources[next] ?: "?") + " - the steps between were never seen"
+                next != i + 1 && steps[i + 1].split == split -> (sources[next] ?: "?") + " - the steps between were never seen"
                 else -> sources[next] ?: "?"
             }
         }
@@ -98,178 +96,249 @@ class SubSplitTracker {
     fun startSource(split: String): String? =
         steps.indices.firstOrNull { steps[it].split == split && starts[it] != null }?.let { sources[it] }
 
-    /** Whether any split has steps yet — the HUDs fall back to chat events until it does. */
-    fun started(): Boolean = current > 0
+    /** Whether any split has steps yet - the HUDs fall back to chat events until it does. */
+    fun started(): Boolean = current >= 0
 
-    /** Odin's server tick. The two waits below are the only reason this class counts them. */
+    // ------------------------------------------------------------------ the world's moments
+
+    /** Odin's server tick: Storm leaves his spot a fixed 139 of them after his lightning line. */
     fun onServerTick() {
         ticks++
-        // Maxor starts moving 46 ticks after "DON'T DISAPPOINT ME" (seen, when he is in view - this
-        // is the fallback), and Storm's first lightning lands about thirty-four seconds in. Hypixel
-        // says nothing either time, so without seeing it the only way to split there is to count.
-        val from = watchFrom ?: return
-        val after = { n: Int -> Stamp(from.realMs + n * 50L, from.tick + n) }
-        if (ticks >= MAXOR_MOVE_GIVE_UP && !laserWaitDone) {
-            laserWaitDone = true; watchFrom = null
-            advance(after(MAXOR_MOVE_TICKS), "$MAXOR_MOVE_TICKS server ticks after $armedBy - he wasn't seen moving, so counted")
-        } else if (ticks >= STORM_LIGHTNING_TICKS && stormCrushes == 0) {
-            watchFrom = null
-            advance(after(STORM_LIGHTNING_TICKS), "$STORM_LIGHTNING_TICKS server ticks after $armedBy - never announced, so counted")
+        val from = lightning ?: return
+        if (current == S_OPENING && ticks >= STORM_LEAVES) {
+            lightning = null
+            jumpTo(S_CRUSH1, from.plus(STORM_LEAVES), "$STORM_LEAVES server ticks after the lightning line - he wasn't seen leaving, so counted")
         }
     }
 
-    /**
-     * Maxor's wither gone during his last DPS: he is dead. He says "I'M TOO YOUNG TO DIE AGAIN!" as
-     * he dies in some runs only (11 of 27 recorded) - it is the moment when said, his wither going
-     * 3-13 ticks later - so without it the wither going is what ends the DPS and starts his
-     * animation. Before that step, a wither going is just him leaving view.
-     */
-    fun onMaxorDead(at: Stamp) {
-        if (current == 5) advance(at, "his wither going - the death line wasn't said, so a few ticks after the kill")
+    /** The Watcher seen starting his move, the first leg after his dialogue. */
+    fun onWatcherMoved(at: Stamp) {
+        if (current == W_WAIT) jumpTo(W_CAMP, at, "the Watcher seen starting his move")
     }
 
-    /** Maxor's intro is over and he is about to start moving: the module watches his wither for it. */
-    val waitingForMaxorMove: Boolean get() = current == 1 && !laserWaitDone && watchFrom != null
+    /** A blood mob appearing: the 19th (17 regulars, the Giant and a mini-boss) is the camp's last. */
+    fun onBloodMobSpawn(at: Stamp) {
+        if (current !in W_DIALOGUE..W_CAMP) return
+        if (++bloodMobs >= BLOOD_MOBS) jumpTo(W_CLEAR, at, "the ${BLOOD_MOBS}th blood mob seen appearing")
+    }
 
-    /** Maxor's wither seen starting to move: Move is over. */
-    fun onMaxorMoved(at: Stamp) {
-        if (!waitingForMaxorMove) return
-        laserWaitDone = true; watchFrom = null
-        advance(at, "his wither seen starting to move")
+    /** Maxor's beacon at (73, 221, 73) turning to bedrock: he is dead. */
+    fun onMaxorKilled(at: Stamp) {
+        if (current in M_CRYSTALS until M_ANIMATION) jumpTo(M_ANIMATION, at, "his beacon turning to bedrock")
+    }
+
+    /**
+     * Maxor's wither gone, close by: he died 80 ticks earlier. Only for when the beacon wasn't
+     * seen; before the last step a wither going is just him leaving view.
+     */
+    fun onMaxorDead(at: Stamp) {
+        if (current == M_KILL) jumpTo(M_ANIMATION, maxOf(at.minus(MAXOR_DESPAWN), starts[M_KILL]!!), "his wither going, $MAXOR_DESPAWN ticks after the kill - the beacon wasn't seen")
+    }
+
+    /**
+     * A crystal placed on Maxor's pylons vanishing. They go 42 ticks after a laser hit, which is how
+     * a hit shows when an ability holds back its stun line.
+     */
+    fun onPlacedCrystalGone(at: Stamp) {
+        val hit = at.minus(CRYSTALS_GONE)
+        when (current) {
+            M_CRYSTALS, M_LURE -> jumpTo(M_COOLDOWN, maxOf(hit, starts[current]!!), "his placed crystals vanishing, $CRYSTALS_GONE ticks after a silent hit")
+            M_COOLDOWN -> if (hit.tick - starts[M_COOLDOWN]!!.tick >= MIN_HIT_GAP)
+                jumpTo(M_KILL, maxOf(hit, starts[current]!!), "his placed crystals vanishing, $CRYSTALS_GONE ticks after a silent hit")
+        }
+    }
+
+    /** Storm's wither, as the server last placed him. */
+    fun onStormPosition(at: Stamp, x: Double, y: Double, z: Double) {
+        when (current) {
+            S_OPENING -> if (lightning != null && hypot(x - STORM_SPOT_X, z - STORM_SPOT_Z) > 0.5) {
+                lightning = null
+                jumpTo(S_CRUSH1, at, "Storm seen leaving his spot")
+            }
+            S_FLIGHT -> if (hypot(x - YELLOW_X, z - YELLOW_Z) <= YELLOW_REACHED) jumpTo(S_CRUSH2, at, "Storm seen reaching Yellow")
+        }
+    }
+
+    /** Necron's wither, how far the server has him from mid. He leaves it twice and is put back exactly. */
+    fun onNecronPosition(at: Stamp, fromMid: Double) {
+        when (current) {
+            N_INTRO -> if (fromMid > OFF_MID) jumpTo(N_TRIP1, at, "Necron seen leaving mid")
+            N_TRIP1 -> if (fromMid < ON_MID) jumpTo(N_LOCK1, at, "Necron seen back at mid")
+            N_SPACE -> if (fromMid > OFF_MID) jumpTo(N_TRIP2, at, "Necron seen leaving mid")
+            N_TRIP2 -> if (fromMid < ON_MID) jumpTo(N_LOCK2, at, "Necron seen back at mid")
+        }
+    }
+
+    /** A terminal section's door opening (its barriers turning to air): [section] 1-3 is over. */
+    fun onSectionDoor(at: Stamp, section: Int) {
+        val step = T_S1 + section - 1
+        if (current == step) jumpTo(step + 1, at, "S$section's door opening")
     }
 
     /** The party is all inside the core ([how] it was told): the leap is over and Goldor's kill begins. */
     fun onEveryoneInCore(at: Stamp, how: String) {
         if (!watchingCore) return
         watchingCore = false
-        advance(at, how)
+        if (current == G_LEAPS) jumpTo(G_KILL, at, how)
     }
+
+    // ------------------------------------------------------------------ chat
 
     fun onChat(msg: String, at: Stamp) {
         when {
-            msg == MAXOR_START -> { reset(); jumpTo(1, at, said(msg)) }
-            current == 0 -> return
+            // The Watcher: any line of his starts the camp, as it starts the Blood split.
+            msg.startsWith(WATCHER) && current < W_DIALOGUE -> { reset(); jumpTo(W_DIALOGUE, at, said(msg)) }
+            msg == WATCHER_HANDLE -> if (current == W_DIALOGUE) jumpTo(W_WAIT, at, said(msg))
+            msg == WATCHER_DONE -> if (current in W_DIALOGUE..W_CLEAR) jumpTo(W_END, at, said(msg))
 
-            // A jump rather than a step, so a missed line earlier cannot leave the rest misaligned.
-            msg == STORM_START -> jumpTo(7, at, said(msg))
-            msg == GOLDOR_START -> jumpTo(13, at, said(msg))
-            msg in NECRON_START -> { watchingCore = false; jumpTo(19, at, said(msg)) }
+            // A jump rather than a step, so a missed moment earlier cannot leave the rest misaligned.
+            msg == MAXOR_START -> jumpTo(M_CRYSTALS, at, said(msg))
+            msg == STORM_START -> { lightning = null; jumpTo(S_OPENING, at, said(msg)) }
+            msg == GOLDOR_START -> { gateBlown = false; gateWaiting = false; jumpTo(T_S1, at, said(msg)) }
+            msg == CORE_OPENING -> if (current in T_S1..T_S4) { jumpTo(G_LEAPS, at, "\"$CORE_OPENING\""); watchingCore = true }
+            msg in NECRON_START -> { watchingCore = false; jumpTo(N_INTRO, at, said(msg)) }
+            msg == NECRON_END -> if (current in N_INTRO until N_END) jumpTo(N_END, at, said(msg))
 
-            // The lines that arm a timed wait: Maxor's intro ends, Storm calls its lightning.
-            msg in ARMS_WAIT -> { watchFrom = at; ticks = 0; armedBy = said(msg) }
+            current < 0 -> return
 
-            // Storm takes a crush. Four of them and it is dead, so the fifth is not a new step.
-            msg in STORM_CRUSHED -> {
-                ticks = 0
-                if (stormCrushes <= 3) { stormCrushes++; advance(at, said(msg)) }
+            // Maxor: the laser charging, the two hits.
+            msg == LASER_CHARGING -> if (current == M_CRYSTALS) jumpTo(M_LURE, at, "\"$LASER_CHARGING\"")
+            msg in MAXOR_STUN -> when (current) {
+                M_CRYSTALS, M_LURE -> jumpTo(M_COOLDOWN, at, said(msg))
+                // A held-back stun line after a silent hit is the same hit, not the next one.
+                M_COOLDOWN -> if (at.tick - starts[M_COOLDOWN]!!.tick >= MIN_HIT_GAP) jumpTo(M_KILL, at, said(msg))
             }
 
-            msg in ADVANCES -> advance(at, said(msg))
+            // Storm: the lightning arms the count to his leaving; crushes, the pin's end, the death.
+            msg in STORM_LIGHTNING -> if (current == S_OPENING && lightning == null) { lightning = at; ticks = 0 }
+            msg in STORM_CRUSHED -> when (current) {
+                S_OPENING, S_CRUSH1 -> jumpTo(S_PIN, at, said(msg))
+                S_FLIGHT, S_CRUSH2 -> jumpTo(S_KILL, at, said(msg))
+            }
+            msg == STORM_ENRAGED -> if (current == S_PIN) jumpTo(S_FLIGHT, at, "\"$STORM_ENRAGED\"")
+            // Some deaths come with no second crush line: the death still ends whatever is running.
+            msg == STORM_DEAD -> if (current in S_OPENING until S_ANIMATION) jumpTo(S_ANIMATION, at, said(msg))
 
-            msg == GATE_DESTROYED -> if (gateWaiting) advance(at, "the gate destroyed, after the last device") else gateBlown = true
+            // Necron: each ARGH! ends a lock on mid.
+            msg == NECRON_ARGH -> when (current) {
+                in N_INTRO..N_LOCK1 -> jumpTo(N_SPACE, at, said(msg))
+                in N_SPACE..N_LOCK2 -> jumpTo(N_ANIMATION, at, said(msg))
+            }
 
+            // Terminals: a section is over once its last completion and its gate are both in.
+            msg == GATE_DESTROYED -> if (current in T_S1..T_S3) {
+                if (gateWaiting) jumpTo(current + 1, at, "the gate destroyed, after the last completion") else gateBlown = true
+            }
             else -> {
+                if (current !in T_S1..T_S4) return
                 val m = SECTION_DONE.find(msg) ?: return
-                // Only the last device of a section closes it.
                 if (m.groupValues[2] != m.groupValues[3]) return
-                when (current) {
-                    15 -> watchingCore = true   // S3 done: the team starts moving to the core
-                    16 -> { advance(at, "the last device (${m.groupValues[3]}/${m.groupValues[3]}) - no gate after S4"); return }
+                val done = "the last completion (${m.groupValues[3]}/${m.groupValues[3]})"
+                when {
+                    current == T_S4 -> { jumpTo(G_LEAPS, at, "$done - no gate after S4"); watchingCore = true }
+                    gateBlown -> jumpTo(current + 1, at, "$done, after the gate")
+                    else -> gateWaiting = true
                 }
-                if (gateBlown) advance(at, "the last device (${m.groupValues[3]}/${m.groupValues[3]}), after the gate") else gateWaiting = true
             }
         }
     }
-
-    private fun advance(at: Stamp, source: String) = jumpTo(current + 1, at, source)
 
     /** A chat line as a source: `"YOU TRICKED ME!"`, the speaker left off. */
     private fun said(msg: String) = "\"" + msg.substringAfter(": ").let { if (it.length > 32) it.take(30) + "..." else it } + "\""
 
     private fun jumpTo(step: Int, at: Stamp, source: String) {
-        if (step > steps.size) return
         ticks = 0
-        watchFrom = null
         gateBlown = false
         gateWaiting = false
         current = step
-        last = at
-        starts[step - 1] = at
-        sources[step - 1] = source
+        starts[step] = at
+        sources[step] = source
     }
 
+    private fun Stamp.plus(n: Int) = Stamp(realMs + n * 50L, tick + n)
+    private fun Stamp.minus(n: Int) = Stamp(realMs - n * 50L, tick - n)
+    private fun maxOf(a: Stamp, b: Stamp) = if (a.tick >= b.tick) a else b
+
     private companion object {
+        const val WATCHER = "[BOSS] The Watcher: "
+        const val WATCHER_HANDLE = "[BOSS] The Watcher: Let's see how you can handle this."
+        const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
         const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
+        const val LASER_CHARGING = "The Energy Laser is charging up!"
         const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
+        const val STORM_ENRAGED = "⚠ Storm is enraged! ⚠"
+        const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
         const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
         const val GATE_DESTROYED = "The gate has been destroyed!"
+        const val CORE_OPENING = "The Core entrance is opening!"
+        const val NECRON_ARGH = "[BOSS] Necron: ARGH!"
+        const val NECRON_END = "[BOSS] Necron: All this, for nothing..."
         val SECTION_DONE = Regex("""^(\w+) (?:activated|completed) a (?:terminal|device|lever)! \((\d+)/(\d+)\)$""")
 
-        /**
-         * Maxor starts moving 46 server ticks (2.3 s) after "DON'T DISAPPOINT ME" - 45 to 51 in
-         * every recorded run he was in view for. His wither moving is what ends Move; this count is
-         * only for when he can't be seen, given up on after [MAXOR_MOVE_GIVE_UP].
-         */
-        const val MAXOR_MOVE_TICKS = 46
-        const val MAXOR_MOVE_GIVE_UP = 60
-
-        /** About 34.4s: Storm's first lightning, the end of its opening animation. */
-        const val STORM_LIGHTNING_TICKS = 688
-
+        val MAXOR_STUN = setOf("[BOSS] Maxor: YOU TRICKED ME!", "[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!")
+        val STORM_LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
+        val STORM_CRUSHED = setOf("[BOSS] Storm: Oof", "[BOSS] Storm: Ouch, that hurt!")
         val NECRON_START = setOf(
             "[BOSS] Necron: Finally, I heard so much about you. The Eye likes you very much.",
             "[BOSS] Necron: You went further than any human before, congratulations.",
         )
 
-        val ARMS_WAIT = setOf(
-            "[BOSS] Maxor: DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.",
-            "[BOSS] Storm: ENERGY HEED MY CALL!",
-            "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!",
-        )
+        /** The camp is always 19 mobs: 17 regulars, the Giant and one mini-boss. */
+        const val BLOOD_MOBS = 19
 
-        val STORM_CRUSHED = setOf("[BOSS] Storm: Oof", "[BOSS] Storm: Ouch, that hurt!")
+        /** Maxor's placed crystals vanish 42 ticks after a hit; his wither goes 80 after the kill. */
+        const val CRYSTALS_GONE = 42
+        const val MAXOR_DESPAWN = 80
+        /** Two hits are 10 s of real time apart (110-200 ticks even with lag): closer is the same hit. */
+        const val MIN_HIT_GAP = 100
 
-        /** Every other line that simply hands the stopwatch to the next step. */
-        val ADVANCES = setOf(
-            "[BOSS] Maxor: YOU TRICKED ME!",
-            "[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!",
-            "⚠ Maxor is enraged! ⚠",
-            "[BOSS] Maxor: I'M TOO YOUNG TO DIE AGAIN!",
+        /** Storm parks at (102.375, 183, 52.375) and leaves 139 ticks after his lightning line. */
+        const val STORM_LEAVES = 139
+        const val STORM_SPOT_X = 102.375
+        const val STORM_SPOT_Z = 52.375
+        /** He switches from his flight to chasing ~2.4 blocks from Yellow's point (46, 65). */
+        const val YELLOW_X = 46.0
+        const val YELLOW_Z = 65.0
+        const val YELLOW_REACHED = 2.4
 
-            "[BOSS] Storm: I should have known that I stood no chance.",
-            "[BOSS] Storm: THAT WAS ONLY IN MY WAY!",
-            "[BOSS] Storm: Slowing me down will be your greatest accomplishment!",
-            "[BOSS] Storm: This factory is too small for me!",
-            "[BOSS] Storm: BEGONE PILLAR!",
-            "[BOSS] Necron: That's a very impressive trick. I guess I'll have to handle this myself.",
-            "[BOSS] Necron: Sometimes when you have a problem, you just need to destroy it all and start again.",
-            "[BOSS] Necron: WITNESS MY RAW NUCLEAR POWER!",
-            "[BOSS] Necron: ARGH!",
-            "[BOSS] Necron: Let's make some space!",
-            "[BOSS] Necron: All this, for nothing...",
-        )
+        /** Necron's mid: leaving it is a scripted sidestep, coming back a teleport to exactly mid. */
+        const val OFF_MID = 0.5
+        const val ON_MID = 0.05
+
+        // Step indices into [SEQUENCE].
+        const val W_DIALOGUE = 0; const val W_WAIT = 1; const val W_CAMP = 2; const val W_CLEAR = 3; const val W_END = 4
+        const val M_CRYSTALS = 5; const val M_LURE = 6; const val M_COOLDOWN = 7; const val M_KILL = 8; const val M_ANIMATION = 9
+        const val S_OPENING = 10; const val S_CRUSH1 = 11; const val S_PIN = 12; const val S_FLIGHT = 13
+        const val S_CRUSH2 = 14; const val S_KILL = 15; const val S_ANIMATION = 16
+        const val T_S1 = 17; const val T_S4 = 20; const val T_S3 = 19
+        const val G_LEAPS = 21; const val G_KILL = 22
+        const val N_INTRO = 23; const val N_TRIP1 = 24; const val N_LOCK1 = 25; const val N_SPACE = 26
+        const val N_TRIP2 = 27; const val N_LOCK2 = 28; const val N_ANIMATION = 29; const val N_END = 30
 
         /**
-         * The 25 steps, in order, with the colours the ChatTriggers module used. Two phases repeat
-         * a name on purpose — Maxor is stunned twice and Storm is crushed twice before it dies —
-         * and the repeat is the point: it is the second one that tells you whether the first was
-         * slow.
+         * The steps, in order. Fixed steps (the game's script): Dialogue, Wait, Animation, Opening,
+         * Flight, Intro, Lock, Space. The rest are the party's. Storm and Necron repeat a name on
+         * purpose: it is the second crush or trip that tells you whether the first was slow.
          */
         val SEQUENCE: List<Step> = listOf(
-            Step(SplitTracker.MAXOR, "&6Move"), Step(SplitTracker.MAXOR, "&5Stun"), Step(SplitTracker.MAXOR, "&cDps"),
-            Step(SplitTracker.MAXOR, "&5Stun"), Step(SplitTracker.MAXOR, "&cDps"), Step(SplitTracker.MAXOR, "&dAnimation"),
+            Step(SplitTracker.BLOOD, "&7Dialogue"), Step(SplitTracker.BLOOD, "&5Wait"), Step(SplitTracker.BLOOD, "&cCamp"),
+            Step(SplitTracker.BLOOD, "&aClear"), Step(SplitTracker.BLOOD, null),
 
-            Step(SplitTracker.STORM, "&aAnimation"), Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cDps"),
-            Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cDps"), Step(SplitTracker.STORM, "&aAnimation"),
+            Step(SplitTracker.MAXOR, "&dCrystals"), Step(SplitTracker.MAXOR, "&6Lure"), Step(SplitTracker.MAXOR, "&5Cooldown"),
+            Step(SplitTracker.MAXOR, "&cKill"), Step(SplitTracker.MAXOR, "&dAnimation"),
+
+            Step(SplitTracker.STORM, "&aOpening"), Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cPin"),
+            Step(SplitTracker.STORM, "&bFlight"), Step(SplitTracker.STORM, "&6Crush"), Step(SplitTracker.STORM, "&cKill"),
+            Step(SplitTracker.STORM, "&aAnimation"),
 
             Step(SplitTracker.TERMS, "&6S1"), Step(SplitTracker.TERMS, "&6S2"),
             Step(SplitTracker.TERMS, "&6S3"), Step(SplitTracker.TERMS, "&6S4"),
 
             Step(SplitTracker.GOLDOR, "&5Leaps"), Step(SplitTracker.GOLDOR, "&cKill"),
 
-            Step(SplitTracker.NECRON, "&dAnimation"), Step(SplitTracker.NECRON, "&aMid"), Step(SplitTracker.NECRON, "&cDps"),
-            Step(SplitTracker.NECRON, "&cDps"), Step(SplitTracker.NECRON, "&aMid"), Step(SplitTracker.NECRON, "&cDps"),
-            Step(SplitTracker.NECRON, "&dAnimation"),
+            Step(SplitTracker.NECRON, "&dIntro"), Step(SplitTracker.NECRON, "&cTrip"), Step(SplitTracker.NECRON, "&aLock"),
+            Step(SplitTracker.NECRON, "&dSpace"), Step(SplitTracker.NECRON, "&cTrip"), Step(SplitTracker.NECRON, "&aLock"),
+            Step(SplitTracker.NECRON, "&dAnimation"), Step(SplitTracker.NECRON, null),
         )
     }
 }

@@ -27,12 +27,11 @@ class BossDetail(private val detail: SplitDetail) {
 
     fun onChat(msg: String, at: Stamp) {
         when {
-            msg == WATCHER_HANDLE -> detail.add(SplitTracker.BLOOD, at, "§chandle this", step = true, note = CHAT)
             WATCHER_TAUNT.matches(msg) -> detail.add(SplitTracker.BLOOD, at, "§7" + msg.removePrefix(WATCHER).trimEnd('.'), step = true, note = CHAT)
             msg == WATCHER_DONE -> detail.add(SplitTracker.PORTAL, at, "§dopen", step = true, note = CHAT)
             msg == MAXOR_START -> detail.add(SplitTracker.PORTAL, at, "§dentered", step = true, note = CHAT)
             msg in LIGHTNING -> detail.add(SplitTracker.STORM, at, "§elightning", note = CHAT)
-            msg in STORM_FREE -> detail.add(SplitTracker.STORM, at, "§bbroke free", note = "chat - said once, whichever crush it was")
+            msg in STORM_FREE -> detail.add(SplitTracker.STORM, at, "§bbroke free", note = CHAT)
             msg == GOLDOR_DEAD -> detail.add(SplitTracker.GOLDOR, at, "§ckilled", note = CHAT)
             msg == GATE_DESTROYED -> detail.add(SplitTracker.TERMS, at, "§cgate destroyed", note = CHAT)
             CRYSTALS_ACTIVE.matches(msg) -> detail.add(SplitTracker.MAXOR, at, "§d" + msg.removeSuffix("!").lowercase(), note = "chat - says 1/2 for both crystals")
@@ -91,7 +90,6 @@ class BossDetail(private val detail: SplitDetail) {
         fun blocks(d: Double) = String.format(java.util.Locale.ROOT, "%.0f blocks", d)
 
         private const val WATCHER = "[BOSS] The Watcher: "
-        private const val WATCHER_HANDLE = "[BOSS] The Watcher: Let's see how you can handle this."
         private const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
         private const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
         private const val GOLDOR_DEAD = "[BOSS] Goldor: ...."
@@ -108,7 +106,8 @@ class BossDetail(private val detail: SplitDetail) {
         private val SECTION_DONE = Regex("""^(\w+) (?:activated|completed) a (terminal|lever|device)! \((\d+)/(\d+)\)$""")
         private val CRYSTAL_PICKUP = Regex("""^(\w+) picked up an Energy Crystal!$""")
         private val CRYSTALS_ACTIVE = Regex("""^\d+/\d+ Energy Crystals are now active!$""")
-        private val STORM_FREE = setOf("[BOSS] Storm: Slowing me down will be your greatest accomplishment!")
+        /** Storm breaking free of his pin. ("Slowing me down..." is one of his random taunts, not this.) */
+        private val STORM_FREE = setOf("⚠ Storm is enraged! ⚠")
         private const val GATE_DESTROYED = "The gate has been destroyed!"
     }
 }
