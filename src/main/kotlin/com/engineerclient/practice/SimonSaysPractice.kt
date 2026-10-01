@@ -76,7 +76,8 @@ object SimonSaysPractice : Module(
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: Odin's numbers terminal simulator instead, one after another.").onPress { if (!LeapExtras.openNumbersSim()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
-    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 5.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.")
+    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
+    private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")
     private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one. Here and on the real device in P3 (turns Odin's own Custom Click Sounds off).")
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown").withDependency { clickSounds }
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
@@ -358,7 +359,7 @@ object SimonSaysPractice : Module(
         // Light i comes on at [at] i: 8 ticks apart, divided by Show Speed. Rounded to whole ticks
         // from the start (not per gap), so the pace is right on average; the buttons' timings
         // below count from the last light, never sped up.
-        val at = { i: Int -> Math.round(8 * i / showSpeed).toInt() }
+        val at = { i: Int -> if (instantShow) 0 else Math.round(8 * i / showSpeed).toInt() }
         for (i in 0 until n) after(at(i)) {
             if (i > 0) out(i - 1)
             light(cells[i], true)
@@ -641,7 +642,7 @@ object SimonSaysPractice : Module(
         // In brackets, first light to done as it would be with no r5 (done after r4).
         // (On Alpha the run already ends there: no brackets.)
         val r4 = if (r4Done != 0L && !alpha) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
-        val speed = if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
+        val speed = if (instantShow) " §8(instant, as at 1x)" else if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
         EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (alpha) " §8(alpha)" else "") + (if (fails > 0) " §c$fails wrong" else "") + speed)
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
