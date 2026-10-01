@@ -164,11 +164,17 @@ object SimonSaysPractice : Module(
                 val (a, b) = when (level) { -1 -> "Harder" to "spread out"; 0 -> "Normal RNG" to "random"; 1 -> "Easier" to "tighter"; else -> "Easiest" to "tightest" }
                 sign(p, rngButton(level), a, b, Direction.SOUTH)
             }
+            // On top, above the grid's edges: the game version.
+            for (a in listOf(false, true)) {
+                p.set(versionButton(a), BUTTON)
+                topSign(p, versionButton(a), if (a) "Alpha" else "Normal", if (a) "no r5" else "")
+            }
         }
         placed = p
         reset()
         markMode(0)
         markRng()
+        markVersion()
         EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip. The others are signed. The keybind again takes it away.")
     }
 
@@ -268,6 +274,44 @@ object SimonSaysPractice : Module(
 
     /** The RNG buttons, right of the grid (on the wall's wool at z 96): Normal RNG level with the start one. */
     private fun rngButton(level: Int) = BlockPos(110, 121 + level, 96)
+
+    /**
+     * Alpha: SkyBlock's coming SS, with no r5: a run is done after r4 (6 ticks after its last press,
+     * as after r5 now), and start on r3 / r4 run to r4. Start on r5 and Inf are as they are.
+     */
+    private var alpha = false
+
+    /** The version buttons on top of the wall: Normal above the grid's left edge, Alpha its right. */
+    private fun versionButton(alpha: Boolean) = BlockPos(110, 124, if (alpha) 95 else 92)
+
+    /** The last round of a run: 4 on Alpha (but in start-on-r5 mode), else 5. */
+    private fun finalRound() = if (alpha && fromRound != 5) 4 else 5
+
+    private fun markVersion() {
+        val p = placed ?: return
+        for (a in listOf(false, true)) p.set(versionButton(a).east(), if (a == alpha) Blocks.LIGHT_GRAY_WOOL.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
+    }
+
+    /** Picks the version; it counts from the next run on. */
+    private fun pressVersion(a: Boolean) {
+        val p = placed ?: return
+        alpha = a
+        markVersion()
+        click(p.at(versionButton(a)))
+        if (clickSounds) playSoundSettings(correctSound())
+        p.set(versionButton(a), BUTTON.setValue(ButtonBlock.POWERED, true))
+        after(2) { placed?.set(versionButton(a), BUTTON) }
+    }
+
+    /** A standing sign on top of the wool block [button] is on, facing you. */
+    private fun topSign(p: Placement, button: BlockPos, line1: String, line2: String) {
+        val real = button.east().above()
+        p.set(real, Blocks.OAK_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.StandingSignBlock.ROTATION, 4))
+        val be = p.level.getBlockEntity(p.at(real)) as? net.minecraft.world.level.block.entity.SignBlockEntity ?: return
+        be.setText(net.minecraft.world.level.block.entity.SignText()
+            .setMessage(1, net.minecraft.network.chat.Component.literal(line1))
+            .setMessage(2, net.minecraft.network.chat.Component.literal(line2)), true)
+    }
 
     /** Light grey wool behind the selected RNG button, black behind the others. */
     private fun markRng() {
@@ -467,7 +511,7 @@ object SimonSaysPractice : Module(
             val presses = splits.getOrNull(i).orEmpty()
             EngineerClient.msg("§8 r$r   $c${fmt(t)}§8/${fmt(top)} §8| " + presses.withIndex().joinToString(" §8› ") { (j, x) -> pressColour(false, j, x) + fmt(x) })
         }
-        if (rounds.size > 1) EngineerClient.msg("§7 r$fromRound-r5 clicking: §f${fmt(rounds.sum())}s")
+        if (rounds.size > 1) EngineerClient.msg("§7 r$fromRound-r${finalRound()} clicking: §f${fmt(rounds.sum())}s")
     }
 
     private fun pressFrom(n: Int) {
@@ -539,8 +583,8 @@ object SimonSaysPractice : Module(
             // last press, as it's done 6 ticks after r5's now.
             if (expected.size == 4) r4Done = tick + 6 + shownFaster
             val n = expected.size
-            if (fromRound > 0 && n == 5) { fromDone(); after(6) { fromRun() }; return }
-            if (n == 5) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
+            if (fromRound > 0 && n == finalRound()) { fromDone(); after(6) { fromRun() }; return }
+            if (n == finalRound()) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
         } else {
             if (clickSounds) playSoundSettings(wrongSound())
@@ -571,13 +615,14 @@ object SimonSaysPractice : Module(
             else -> "§4"
         }
         // In brackets, first light to done as it would be with no r5 (done after r4).
-        val r4 = if (r4Done != 0L) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
+        // (On Alpha the run already ends there: no brackets.)
+        val r4 = if (r4Done != 0L && !alpha) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
         val speed = if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
-        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (fails > 0) " §c$fails wrong" else "") + speed)
+        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (alpha) " §8(alpha)" else "") + (if (fails > 0) " §c$fails wrong" else "") + speed)
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
-        val vsTop = rounds.size == TOP_ROUNDS.size
+        val vsTop = rounds.size == TOP_ROUNDS.size - (if (alpha) 1 else 0)
         for (i in rounds.indices) {
             val presses = splits.getOrNull(i).orEmpty()
             val name = if (vsTop && i == 0) "skip" else "r${presses.size}"
@@ -623,8 +668,10 @@ object SimonSaysPractice : Module(
         EngineerClient.safely("ss practice use") {
             val from = (3..5).firstOrNull { pos == p.at(fromButton(it)) }
             val rngPick = (-1..2).firstOrNull { pos == p.at(rngButton(it)) }
+            val versionPick = listOf(false, true).firstOrNull { pos == p.at(versionButton(it)) }
             if (pos == p.at(START)) pressStart()
             else if (rngPick != null) pressRng(rngPick)
+            else if (versionPick != null) pressVersion(versionPick)
             else if (pos == p.at(EXTRA)) pressExtra()
             else if (from != null) pressFrom(from)
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
