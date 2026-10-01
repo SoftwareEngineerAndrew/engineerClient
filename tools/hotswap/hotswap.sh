@@ -8,9 +8,11 @@ EC_MODS_DIR="${EC_MODS_DIR:-$HOME/.local/share/PrismLauncher/instances/f7/minecr
 
 # State per game process: the pid listening on the port and its start time.
 PID="$(ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2 || true)"
-KEY="none"
-[ -n "$PID" ] && KEY="$PID-$(awk '{print $22}' "/proc/$PID/stat" 2>/dev/null)"
-STATE="${XDG_CACHE_HOME:-$HOME/.cache}/ec-hotswap/$KEY.state"
+if [ -z "$PID" ]; then
+    echo "hotswap: no game listening on 127.0.0.1:$PORT (launch the \"f7 hotswap\" instance). Jar is deployed for the next launch."
+    exit 2
+fi
+STATE="${XDG_CACHE_HOME:-$HOME/.cache}/ec-hotswap/$PID-$(awk '{print $22}' "/proc/$PID/stat").state"
 
 JAVA_HOME_DIR="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 VERSION="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"

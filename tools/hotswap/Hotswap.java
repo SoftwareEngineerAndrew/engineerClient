@@ -90,7 +90,7 @@ public class Hotswap {
             System.out.println("hotswap: " + redefine.size() + " class(es) swapped" +
                 (notLoaded > 0 ? ", " + notLoaded + " changed but not loaded yet (they'll load the new jar)" : "") +
                 (changed.isEmpty() ? " (nothing changed)" : ""));
-            for (var t : redefine.keySet()) System.out.println("  " + t.name());
+            if (redefine.size() <= 20) for (var t : redefine.keySet()) System.out.println("  " + t.name());
             if (!warnings.isEmpty()) {
                 System.out.println("hotswap: new fields start as 0/null (initializers don't run); restart if they need a value:");
                 for (String w : warnings) System.out.println("  " + w);
