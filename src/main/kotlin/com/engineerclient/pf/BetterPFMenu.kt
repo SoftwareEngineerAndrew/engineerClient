@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
 /**
  * Better PF Menu: while it's on and you're in a world, undonecoffee.com/betterpf/menu lists you
  * ("not in the menu"), and while the Party Finder menu is open, what it lists. Someone on that page
- * can turn on auto refresh: this clicks the menu's Refresh button every 5 s, for as long as they
+ * can turn on auto refresh: this clicks the menu's Refresh button every 3-4.5 s (random each time), for as long as they
  * watch and the menu is open.
  *
  * One WebSocket (/betterpf/api/pfmenu/share) for as long as you're in a world. The menu is read on
@@ -35,11 +35,12 @@ object BetterPFMenu : Module(
     category = Category.custom("Engineer Client"),
     description = "Shows your Party Finder menu live on undonecoffee.com/betterpf/menu while you have it open. People there can make it auto refresh.",
 ) {
-    private val allowAuto by BooleanSetting("Allow Auto Refresh", true, desc = "Lets someone watching your menu on the site make it click Refresh every 5 seconds while it's open.")
+    private val allowAuto by BooleanSetting("Allow Auto Refresh", true, desc = "Lets someone watching your menu on the site make it click Refresh every 3-4.5 seconds (random) while it's open.")
     private val autoMessage by BooleanSetting("Auto Refresh Message", true, desc = "Says in chat when auto refresh is turned on or off from the site.")
 
     private const val URL = "wss://${BetterPF.SITE}/betterpf/api/pfmenu/share"
-    private const val REFRESH_MS = 5_000L
+    /** Auto refresh's gap, picked anew after each click: 3 to 4.5 s. */
+    private fun refreshGap() = 3_000L + (Math.random() * 1_500).toLong()
     private const val LINGER_MS = 5_000L
     private const val RESEND_MS = 15_000L
     private const val PING_MS = 30_000L
@@ -67,6 +68,7 @@ object BetterPFMenu : Module(
     private var lastSent = ""
     private var lastSentAt = 0L
     private var lastRefresh = 0L
+    private var refreshGap = 0L
     private var lastPing = 0L
     private var inWorldAt = 0L
 
@@ -99,8 +101,9 @@ object BetterPFMenu : Module(
             }
         }
         if (now - lastPing >= PING_MS) { lastPing = now; io.execute { ws?.sendText("ping", true) } }
-        if (open && auto && allowAuto && now - lastRefresh >= REFRESH_MS) {
+        if (open && auto && allowAuto && now - lastRefresh >= refreshGap) {
             lastRefresh = now
+            refreshGap = refreshGap()
             clickRefresh(screen!!)
         }
     }
@@ -230,7 +233,7 @@ object BetterPFMenu : Module(
             auto = on
             if (autoMessage) EngineerClient.msg(
                 if (!on) "§7Better PF Menu: auto refresh off."
-                else if (allowAuto) "§7Better PF Menu: auto refresh on from the site (Refresh every 5s while the menu is open)."
+                else if (allowAuto) "§7Better PF Menu: auto refresh on from the site (Refresh every 3-4.5s while the menu is open)."
                 else "§7Better PF Menu: the site asked for auto refresh; §fAllow Auto Refresh§7 is off."
             )
         }
