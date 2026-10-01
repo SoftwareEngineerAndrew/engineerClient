@@ -149,6 +149,9 @@ object SimonSaysPractice : Module(
 
     private var placed: Placement? = null
 
+    /** The practice device is out (its blocks are client-side, and not the real one's). */
+    val practicing: Boolean get() = placed != null
+
     private fun summonOrRemove() {
         if (placed != null) { remove(); EngineerClient.msg("§7SS Practice: removed."); return }
         val player = mc.player ?: return

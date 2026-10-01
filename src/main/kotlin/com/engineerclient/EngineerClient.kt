@@ -67,6 +67,7 @@ object EngineerClient : ClientModInitializer {
 
         // The Engineer Splits look, added to Odin's own Splits module - before anything saves the
         // configs, which would drop saved values for settings that don't exist yet.
+        safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
         safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
