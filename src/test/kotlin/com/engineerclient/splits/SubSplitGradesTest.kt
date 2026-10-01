@@ -16,7 +16,7 @@ class SubSplitGradesTest {
         assertEquals("§2", colour("storm.pin", 0))
         assertEquals("§a", colour("storm.pin", 3))
         assertEquals("§e", colour("storm.pin", 6))
-        assertEquals("§c", colour("storm.pin", 16))
+        assertEquals("§c", colour("storm.pin", 15))
         assertEquals("§4", colour("storm.pin", 25))
         assertEquals("§0", colour("storm.pin", 26))
     }

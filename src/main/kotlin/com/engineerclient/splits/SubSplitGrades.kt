@@ -42,18 +42,20 @@ object SubSplitGrades {
         Bands(clock, longArrayOf(onTime, onTime, onTime + step, onTime + 2 * step, onTime + 3 * step), floor, fromStart)
 
     /**
-     * Per step id (SubSplitTracker's), from 173 five-player F7 runs (tools/boss-mechanics/subsplits.py).
+     * Per step id (SubSplitTracker's). Fixed numbers: set once from 173 five-player F7 runs
+     * (tools/boss-mechanics/subsplits.py, docs/mechanics/sub-splits.md) and not recomputed from
+     * anything the client sees. Change them here.
      *
-     * Continuous steps are cut at the runs' p5 / p25 / p50 / p75 / p90. Steps locked to a check grid
+     * Continuous steps: the runs' p5 / p25 / p50 / p75 / p90, rounded. Steps locked to a check grid
      * are graded by checks missed instead, since a percentile cut would split identical outcomes:
      * the whole on-time step is dark green, the tick or two it jitters by included, then each
      * missed check one colour down (yellow, red, dark red, black) - [stepped].
      */
     val BANDS: Map<String, Bands> = mapOf(
-        "watcher.dialogue" to ticks(385, 413, 443, 457, 478, 508),
-        "watcher.wait" to ticks(44, 46, 65, 83, 102, 118),
-        "watcher.camp" to ticks(645, 674, 725, 758, 806, 826),
-        "watcher.clear" to ticks(0, 2, 7, 11, 17, 25),
+        "watcher.dialogue" to ticks(385, 415, 440, 460, 480, 510),
+        "watcher.wait" to ticks(44, 45, 65, 85, 100, 120),
+        "watcher.camp" to ticks(645, 680, 720, 760, 800, 830),
+        "watcher.clear" to ticks(0, 2, 6, 10, 16, 25),
 
         // 10-tick checks: both crystals placed on the s0+166 check make "charging up" at 194-196.
         "maxor.crystals" to stepped(Clock.TICKS, 192, 196, 10),
@@ -67,27 +69,27 @@ object SubSplitGrades {
         "storm.opening" to filler(),
         // 20-tick crush checks: 11-13 is the t 699 check.
         "storm.crush1" to stepped(Clock.TICKS, 10, 13, 20),
-        "storm.pin" to ticks(0, 1, 3, 6, 16, 25),
-        "storm.flight" to ticks(81, 86, 89, 92, 94, 100),
+        "storm.pin" to ticks(0, 1, 3, 6, 15, 25),
+        "storm.flight" to ticks(81, 86, 89, 92, 95, 100),
         // The first check after he reaches Yellow is up to 20 ticks away.
         "storm.crush2" to stepped(Clock.TICKS, 0, 20, 20),
-        "storm.kill" to ticks(0, 2, 4, 5, 10, 24),
+        "storm.kill" to ticks(0, 2, 4, 6, 10, 24),
         "storm.animation" to filler(),
 
-        "terms.s1" to real(9600, 11450, 12650, 13750, 15800, 23450),
-        "terms.s2" to real(5450, 7000, 9730, 12500, 15450, 19500),
-        "terms.s3" to real(6550, 8150, 10850, 12800, 15850, 18600),
-        "terms.s4" to real(4550, 6200, 8320, 10460, 13250, 18300),
+        "terms.s1" to real(9600, 11500, 12500, 14000, 16000, 23500),
+        "terms.s2" to real(5450, 7000, 10000, 12500, 15500, 19500),
+        "terms.s3" to real(6550, 8000, 11000, 13000, 16000, 18500),
+        "terms.s4" to real(4550, 6000, 8500, 10500, 13000, 18000),
 
-        "goldor.leaps" to ticks(4, 11, 17, 20, 34, 62),
+        "goldor.leaps" to ticks(4, 10, 16, 20, 35, 60),
         // Includes the fixed 81-83 ticks from his death to Necron's line.
-        "goldor.kill" to ticks(82, 98, 119, 138, 159, 179),
+        "goldor.kill" to ticks(82, 100, 120, 140, 160, 180),
 
         "necron.intro" to filler(),
         "necron.trip1" to ticks(6, 9, 12, 16, 22, 28),
         // ARGH 1 on its first grid tick is said at 327-332 ticks into the fight.
         "necron.lock1" to Bands(Clock.TICKS, null, 0, lateAfter = 335),
-        "necron.space" to ticks(56, 59, 63, 67, 72, 78),
+        "necron.space" to ticks(56, 60, 63, 67, 72, 78),
         "necron.trip2" to ticks(1, 1, 3, 5, 8, 20),
         // ARGH 2 on its first grid tick: 543-547.
         "necron.lock2" to Bands(Clock.TICKS, null, 0, lateAfter = 550),
@@ -95,12 +97,12 @@ object SubSplitGrades {
 
         // The run's own splits (Odin's), F7. Maxor's is graded in ticks like the rest, so its floor
         // stops a laggy run (fewer ticks for his 10 s of real-time cooldown) from setting a best.
-        "split.blood" to ticks(1080, 1198, 1257, 1312, 1377, 1427),
+        "split.blood" to ticks(1080, 1200, 1260, 1310, 1380, 1430),
         // Maxor and Storm: dark green is a perfect fight and its few ticks of jitter (506-511, 901-906).
-        "split.maxor" to ticks(500, 511, 515, 520, 531, 604),
-        "split.storm" to ticks(895, 906, 915, 924, 965, 1029),
-        "split.terms" to real(33000, 38950, 44350, 50450, 59100, 71700),
-        "split.goldor" to ticks(110, 124, 146, 166, 187, 213),
+        "split.maxor" to ticks(500, 511, 515, 520, 530, 600),
+        "split.storm" to ticks(895, 906, 915, 925, 965, 1030),
+        "split.terms" to real(33000, 39000, 44000, 50000, 59000, 72000),
+        "split.goldor" to ticks(110, 125, 145, 165, 185, 215),
         // Necron's grid: 606-610 is every ARGH on time, then one colour down per 20-tick step.
         "split.necron" to stepped(Clock.TICKS, 599, 610, 20),
     )
