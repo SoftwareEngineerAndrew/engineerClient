@@ -266,6 +266,8 @@ object DungeonSplits : Module(
                     // Fresh crystals sit on the upper platforms (y 238), placed ones on the lower (y 224).
                     val placed = e.y < 231
                     boss.onCrystal(now(), placed, if (placed) nearestTeammate(e.x, e.y, e.z) else null)
+                    // Back on top 41 ticks after a laser hit: a hit an ability kept quiet.
+                    if (!placed) subs.onTopCrystal(now())
                 }
                 // The Watcher's mobs are player entities that are not on the team.
                 e is Player && open(SplitTracker.BLOOD) && e.name.string !in teamNames() -> {
@@ -276,8 +278,6 @@ object DungeonSplits : Module(
             }
         }
         on<EntityEvent.Remove> {
-            // A crystal placed on Maxor's pylons (y 224) going: 42 ticks after a laser hit.
-            if (entity is EndCrystal && entity.y < 231 && open(SplitTracker.MAXOR)) subs.onPlacedCrystalGone(now())
             if (entity is WitherBoss && open(SplitTracker.MAXOR)) {
                 card.onMaxorGone(now())
                 val d = distanceTo(entity)
@@ -597,7 +597,7 @@ object DungeonSplits : Module(
             val ticks = (stop.tick - st.start.tick).toLong()
             val id = ids.getOrElse(i) { "" }
             val end = ends.getOrElse(i) { "?" }
-            val value = SubSplitGrades.value(id, ms, ticks)
+            val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
             // A step ended by a moment further on (the ones between unseen) is not a real time.
             val finished = st.stop != null && !end.contains("never seen")
             if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (bests[id] ?: Long.MAX_VALUE)) {
@@ -638,6 +638,16 @@ object DungeonSplits : Module(
         val main = if (r.real) r.ms else r.ticks * 50
         val other = if (r.real) r.ticks * 50 else r.ms
         return "$name §b> ${r.grade}${SplitFormat.seconds(main)} §8(§7${SplitFormat.seconds(other)}§8)"
+    }
+
+    /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
+    fun bestOf(floor: String, id: String): Long? = bests(floor)[id]
+
+    /** Records a finished [value] of [id] as the best on [floor] when it is one. */
+    fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
+        if (!finished || !SubSplitGrades.canBeBest(id, value)) return
+        val bests = bests(floor)
+        if (value < (bests[id] ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
     }
 
     private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(

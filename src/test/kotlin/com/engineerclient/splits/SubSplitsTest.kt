@@ -27,7 +27,7 @@ class SubSplitsTest {
         s.onChat("The Energy Laser is charging up!", stamp(195))
         s.onChat("[BOSS] Maxor: YOU TRICKED ME!", stamp(206))
         s.onChat("⚠ Maxor is enraged! ⚠", stamp(220))                 // changes nothing
-        s.onPlacedCrystalGone(stamp(248))                               // the same hit, 42 later
+        s.onTopCrystal(stamp(247))                                       // the same hit, 41 later
         s.onChat("The Energy Laser is charging up!", stamp(300))        // the second charge: nothing
         s.onChat("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", stamp(406))
         s.onMaxorKilled(stamp(408))
@@ -38,12 +38,14 @@ class SubSplitsTest {
     }
 
     @Test
-    fun `a hit an ability keeps quiet shows by the crystals vanishing`() {
+    fun `a hit an ability keeps quiet shows by the crystals coming back on top`() {
         val s = SubSplitTracker()
         s.onChat("[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!", stamp(0))
+        s.onTopCrystal(stamp(5))                                         // the fresh pair: nothing
         s.onChat("The Energy Laser is charging up!", stamp(195))
         s.onChat("[BOSS] Maxor: YOU TRICKED ME!", stamp(206))
-        s.onPlacedCrystalGone(stamp(448))                               // hit 2 at 406, line held back
+        s.onTopCrystal(stamp(247))                                       // back after hit 1: the same hit
+        s.onTopCrystal(stamp(447))                                       // hit 2 at 406, line held back
         s.onChat("[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!", stamp(460)) // the held line: same hit
         s.onMaxorDead(stamp(490))                                       // no beacon seen: kill = 410
         assertEquals(listOf("&dCrystals 0-195", "&6Lure 195-206", "&5Cooldown 206-406", "&cKill 406-410", "&dAnimation 410--"),
