@@ -81,6 +81,8 @@ object SimonSaysPractice : Module(
     /** Where you stand in the arena to do it (your feet), facing +x. */
     private const val AX = 108; private const val AY = 120; private const val AZ = 94
     private val START = BlockPos(110, 121, 91)
+    /** A second button, 2 above the start one. It presses and clicks; nothing else. */
+    private val EXTRA get() = BlockPos(110, 123, 91)
     /** Cell 0-15: row from the top (y 123 down), column from z 92. */
     private fun buttonAt(cell: Int) = BlockPos(110, 123 - cell / 4, 92 + cell % 4)
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
@@ -151,6 +153,7 @@ object SimonSaysPractice : Module(
                 p.set(BlockPos(111, y, z), if (grid) Blocks.OBSIDIAN.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
             }
             p.set(START, BUTTON)
+            p.set(EXTRA, BUTTON)
         }
         placed = p
         reset()
@@ -289,6 +292,13 @@ object SimonSaysPractice : Module(
         after(6) { begin() }
     }
 
+    private fun pressExtra() {
+        val p = placed ?: return
+        click(p.at(EXTRA))
+        p.set(EXTRA, BUTTON.setValue(ButtonBlock.POWERED, true))
+        after(2) { placed?.set(EXTRA, BUTTON) }
+    }
+
     private fun pressStart() {
         val p = placed ?: return
         when (phase) {
@@ -402,6 +412,7 @@ object SimonSaysPractice : Module(
         val button = mc.level?.getBlockState(pos)?.block is ButtonBlock
         EngineerClient.safely("ss practice use") {
             if (pos == p.at(START)) pressStart()
+            else if (pos == p.at(EXTRA)) pressExtra()
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
         }
         // Your arm moves for a button, as in the game; not for the obsidian or wool. Nothing is sent.
