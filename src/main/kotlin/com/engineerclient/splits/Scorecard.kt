@@ -127,9 +127,12 @@ class Scorecard {
      * room's total in ticks and [rushOver] whether the blood door is open; [terms] the four
      * terminal sections.
      */
-    fun rows(splits: List<Split>, now: Stamp, bloodRooms: List<Long>, rushOver: Boolean, terms: List<Split>): List<String> {
+    fun rows(splits: List<Split>, now: Stamp, bloodRooms: List<Long>, rushOver: Boolean, terms: List<Split>,
+             /** A boss split's graded cells (total, then its sub splits), or null for this class's own. */
+             graded: (Split) -> List<String>? = { null }): List<String> {
         val out = mutableListOf<String>()
         for (s in splits) {
+            graded(s)?.let { out += trimEmpty(it); continue }
             val end = s.stop ?: now
             val cells = mutableListOf<String>()
             when (s.label) {

@@ -83,11 +83,13 @@ object DungeonSplits : Module(
 
     private val scorecardHud by HUD("Scorecard Splits", "The whole run as a table: each split's total, then its sub splits.", true, 10, 150, 1f) { example ->
         if (example) return@HUD scorecard(this, listOf(
-            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§c62.0\t§723.4\t§54.8\t§c33.8", "§d3.1\t§53.0\t§60.0",
-            "§525.2\t§32.2\t§62.0\t§36.5", "§b45.9\t§60.4\t§c0.1\t§63.5\t§c0.2", "§620.9\t§811.9\t§85.2\t§83.9\t§84.1",
-            "§e7.7\t§51.2\t§32.5\t§c2.9", "§c30.7\t§a9.8",
+            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§e63.40\t§e22.60\t§e4.10\t§e36.30\t§e0.40", "§d3.1\t§53.0\t§60.0",
+            "§e25.85\t§29.75\t§20.55\t§210.15\t§e0.30\t§75.10", "§c46.40\t§734.35\t§20.60\t§c0.45\t§e4.60\t§e1.30\t§60.10\t§75.10",
+            "§e47.20\t§e12.90\t§a9.40\t§c13.80\t§e8.90", "§e7.90\t§03.40\t§24.50",
+            "§230.35\t§77.95\t§e0.70\t§77.85\t§e3.30\t§60.05\t§77.55\t§73.10",
         ))
-        scorecard(this, card.rows(tracker.splits(), now(), blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)))
+        val now = now()
+        scorecard(this, card.rows(tracker.splits(), now, blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)) { scorecardCells(it, now) })
     }
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
@@ -582,31 +584,8 @@ object DungeonSplits : Module(
 
         // The boss's own steps each run until the next; the Watcher's and Portal's are moments,
         // timed from the start of the split.
-        val boss = subs.forSplit(s.window)
-        // In Debug each boss step says how it ended: the line, timed wait or check that started the next.
-        val ends = subs.endSources(s.window)
-        // Each boss step graded on its own clock (SubSplitGrades): bands from the recorded F7 runs,
-        // gold for a best, gray for a step that never varies.
-        val ids = subs.idsForSplit(s.window)
-        val floor = DungeonUtils.floor?.name
-        val bests = bests(floor)
-        var newBest = false
-        val steps = boss.mapIndexed { i, st ->
-            val stop = st.stop ?: now
-            val ms = stop.realMs - st.start.realMs
-            val ticks = (stop.tick - st.start.tick).toLong()
-            val id = ids.getOrElse(i) { "" }
-            val end = ends.getOrElse(i) { "?" }
-            val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
-            // A step ended by a moment further on (the ones between unseen) is not a real time.
-            val finished = st.stop != null && !end.contains("never seen")
-            if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (bests[id] ?: Long.MAX_VALUE)) {
-                bests[id] = value; newBest = true
-            }
-            val grade = SubSplitGrades.colour(id, value, finished, bests[id], floor == "F7", st.label.take(2).replace('&', '§'))
-            Row(st.label, st.start, ms, ticks, note = "ended by $end", grade = grade, real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL)
-        } + detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, note = e.note) } }
-        if (newBest) saveBests(floor, bests)
+        val steps = gradedSteps(s.window, split, now) +
+            detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, note = e.note) } }
 
         if (level == BloodRunDetail.Level.COMPACT) {
             if (steps.isEmpty()) return emptyList()
@@ -628,6 +607,62 @@ object DungeonSplits : Module(
         if (debug) out += debugFooter(s, split, now)
         return out
     }
+
+    /**
+     * [window]'s boss steps, each graded on its own clock (SubSplitGrades): bands from the recorded
+     * F7 runs, gold for a best, gray for a step that never varies. A new best is saved here. In Debug
+     * each step says how it ended: the line, timed wait or check that started the next.
+     */
+    private fun gradedSteps(window: String, split: Split, now: Stamp): List<Row> {
+        val boss = subs.forSplit(window)
+        val ends = subs.endSources(window)
+        val ids = subs.idsForSplit(window)
+        val floor = DungeonUtils.floor?.name
+        val bests = bests(floor)
+        var newBest = false
+        val steps = boss.mapIndexed { i, st ->
+            val stop = st.stop ?: now
+            val ms = stop.realMs - st.start.realMs
+            val ticks = (stop.tick - st.start.tick).toLong()
+            val id = ids.getOrElse(i) { "" }
+            val end = ends.getOrElse(i) { "?" }
+            val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
+            // A step ended by a moment further on (the ones between unseen) is not a real time.
+            val finished = st.stop != null && !end.contains("never seen")
+            if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (bests[id] ?: Long.MAX_VALUE)) {
+                bests[id] = value; newBest = true
+            }
+            val grade = SubSplitGrades.colour(id, value, finished, bests[id], floor == "F7", st.label.take(2).replace('&', '§'))
+            Row(st.label, st.start, ms, ticks, note = "ended by $end", grade = grade, real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL)
+        }
+        if (newBest) saveBests(floor, bests)
+        return steps
+    }
+
+    /**
+     * The scorecard's row for a boss split: its total, graded like Odin's split (the best only read
+     * here; Odin's split keeps it), then its graded sub splits, two decimals each. Null for the
+     * rows the scorecard draws itself (the blood rush and the portal).
+     */
+    private fun scorecardCells(split: Split, now: Stamp): List<String>? {
+        val id = SCORECARD_SPLITS[split.label] ?: return null
+        val floor = DungeonUtils.floor?.name
+        val stop = split.stop ?: now
+        val ms = stop.realMs - split.start.realMs
+        val ticks = (stop.tick - split.start.tick).toLong()
+        val value = SubSplitGrades.value(id, ms, ticks)
+        val real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL
+        val total = SubSplitGrades.colour(id, value, split.stop != null, bests(floor)[id], floor == "F7", split.label.take(2).replace('&', '§')) +
+            SplitFormat.seconds(if (real) ms else ticks * 50).removeSuffix("s")
+        return listOf(total) + gradedSteps(split.label, split, now).map {
+            it.grade + SplitFormat.seconds(if (it.real) it.ms else it.ticks * 50).removeSuffix("s")
+        }
+    }
+
+    private val SCORECARD_SPLITS = mapOf(
+        SplitTracker.BLOOD to "split.blood", SplitTracker.MAXOR to "split.maxor", SplitTracker.STORM to "split.storm",
+        SplitTracker.TERMS to "split.terms", SplitTracker.GOLDOR to "split.goldor", SplitTracker.NECRON to "split.necron",
+    )
 
     /**
      * A graded boss step: its name in its own colour, then its time on the clock it is graded on, in
