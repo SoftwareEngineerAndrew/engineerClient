@@ -22,15 +22,19 @@ class SubSplitGradesTest {
     }
 
     @Test
-    fun `grid steps are graded by checks missed`() {
-        assertEquals("§a", colour("storm.crush1", 12))   // the t 699 check
-        assertEquals("§c", colour("storm.crush1", 32))   // one check late
-        assertEquals("§4", colour("storm.crush1", 52))   // two
-        assertEquals("§0", colour("storm.crush1", 72))   // three
+    fun `grid steps are graded by checks missed, the on-time step all dark green`() {
+        assertEquals("§2", colour("storm.crush1", 11))   // the t 699 check...
+        assertEquals("§2", colour("storm.crush1", 13))   // ...with its jitter
+        assertEquals("§e", colour("storm.crush1", 32))   // one check late
+        assertEquals("§c", colour("storm.crush1", 52))   // two
+        assertEquals("§4", colour("storm.crush1", 72))   // three
+        assertEquals("§0", colour("storm.crush1", 92))   // four
         // Maxor's lure on the tick of his first hit, from his first line.
         assertEquals(206L, SubSplitGrades.value("maxor.lure", 600, 11, 206))
-        assertEquals("§a", colour("maxor.lure", 206))
-        assertEquals("§c", colour("maxor.lure", 216))
+        assertEquals("§2", colour("maxor.lure", 207))
+        assertEquals("§e", colour("maxor.lure", 216))
+        assertEquals("§2", colour("split.necron", 608))
+        assertEquals("§e", colour("split.necron", 627))
     }
 
     @Test
@@ -53,7 +57,8 @@ class SubSplitGradesTest {
     @Test
     fun `real-time steps use milliseconds, and off F7 only gold and gray apply`() {
         assertEquals(10150L, SubSplitGrades.value("maxor.cooldown", 10150, 199))
-        assertEquals("§e", colour("maxor.cooldown", 10150))
+        assertEquals("§2", colour("maxor.cooldown", 10150))
+        assertEquals("§e", colour("maxor.cooldown", 10650))
         assertEquals("§x", colour("terms.s2", 9000, banded = false))
         assertEquals("§6", colour("terms.s2", 9000, best = 9000, banded = false))
     }
