@@ -1,6 +1,11 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.misc.ScoreboardLines;
+import com.engineerclient.misc.ScoreboardMove;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.scores.Objective;
@@ -58,5 +63,19 @@ public class ScoreboardSidebarMixin {
         } catch (Throwable t) {
             return objective.getDisplayName();
         }
+    }
+
+    /** A new frame: no sidebar until vanilla asks for one. */
+    @Inject(method = "extractScoreboardSidebar", at = @At("HEAD"))
+    private void ec$sidebarFrame(GuiGraphicsExtractor graphics, DeltaTracker delta, CallbackInfo ci) {
+        ScoreboardMove.frameStart();
+    }
+
+    /** The movable scoreboard on: vanilla's call is skipped (its objective kept); the HUD draws it. */
+    @Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
+    private void ec$moveSidebar(GuiGraphicsExtractor graphics, Objective objective, CallbackInfo ci) {
+        if (!ScoreboardMove.active || ScoreboardMove.drawing) return;
+        ScoreboardMove.objective = objective;
+        ci.cancel();
     }
 }

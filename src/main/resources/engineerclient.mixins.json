@@ -29,6 +29,7 @@
     "MoveEntityPacketAccessor",
     "RotateHeadPacketAccessor",
     "ScoreboardSidebarMixin",
+    "GuiSidebarInvoker",
     "ScreenBlurMixin",
     "SignEnterMixin",
     "SoundChannelMixin",
