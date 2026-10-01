@@ -45,6 +45,7 @@ object EngineerLook {
     private val FLOOR7_NAMES = mapOf("Maxor" to "§5Maxor", "Storm" to "§bStorm", "Terminals" to "§6Terms", "Goldor" to "§eGoldor", "Necron" to "§cNecron")
     private const val PACE = "§3Pace"
     private const val BOSS_ENTRY = "§9Boss Entry"
+    private const val LAG = "§8Lag"
 
     private val CODES = Regex("§.")
     private fun strip(s: String) = s.replace(CODES, "").trim()
@@ -77,7 +78,11 @@ object EngineerLook {
      */
     fun lines(rows: List<Row>, opts: Options, place: Place, master: Boolean, targets: List<Double?>?,
               /** A split's time colour (Odin's name, ms, ticks, over), or null for its label's colour. */
-              grade: ((String, Long, Long, Boolean) -> String?)? = null): List<Line> {
+              grade: ((String, Long, Long, Boolean) -> String?)? = null,
+              /** Pace against the dark green times ([SplitPace], ms and ticks), in place of the targets' pace. */
+              pace: Pair<Long, Long>? = null,
+              /** Time lost to lag so far ([SplitPace.lag]): a last line when given. */
+              lagMs: Long? = null): List<Line> {
         if (rows.isEmpty()) return emptyList()
         val segments = rows.dropLast(1)
         val out = mutableListOf<Line>()
@@ -94,7 +99,8 @@ object EngineerLook {
                     else -> { ms += s.ms; ticks += s.ticks }
                 }
             }
-            out += line(PACE, ms, ticks, opts, SplitFormat::minutes)
+            out += if (pace != null) Line(PACE, colourOf(PACE), SplitPace.mss(pace.first), SplitPace.mss(pace.second * 50))
+            else line(PACE, ms, ticks, opts, SplitFormat::minutes)
         }
 
         segments.forEachIndexed { i, s ->
@@ -112,13 +118,14 @@ object EngineerLook {
                 if (ms != 0L || opts.show0) out += line(label(BOSS_ENTRY, place, master), ms, ticks, opts, SplitFormat::minutes)
             }
         }
+        if (lagMs != null && started) out += Line(LAG, "§7", SplitFormat.seconds(lagMs), null)
         return out
     }
 
     /** Every label [lines] could show for these rows, shown or not yet: what Fixed Width sizes its name column by. */
     fun allLabels(rows: List<Row>, opts: Options, place: Place, master: Boolean): List<String> {
         val segments = rows.dropLast(1)
-        return listOf(PACE) + segments.map { label(it.name, place, master) } +
+        return listOf(PACE, LAG) + segments.map { label(it.name, place, master) } +
             (if (opts.bossEntry && rows.size > 3) listOf(label(BOSS_ENTRY, place, master)) else emptyList())
     }
 
