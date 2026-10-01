@@ -157,8 +157,7 @@ object SimonSaysPractice : Module(
             p.set(START, BUTTON)
             p.set(EXTRA, BUTTON)
             for (n in 3..5) p.set(fromButton(n), BUTTON)
-            // A sign next to each button, on a column of wool left of the wall.
-            for (y in 120..124) p.set(BlockPos(111, y, 90), Blocks.BLACK_WOOL.defaultBlockState())
+            // A sign on the side of each button's block (its north face, left of the button).
             sign(p, EXTRA, "Inf", "")
             sign(p, START, "Start", "3x for the skip")
             for (n in 3..5) sign(p, fromButton(n), "Start on r$n", "on repeat")
@@ -374,10 +373,10 @@ object SimonSaysPractice : Module(
         for (n in 3..5) p.set(fromButton(n).east(), if (mode == n) grey else black)
     }
 
-    /** A wall sign left of [button] (on the wool column at z 90), facing you. */
+    /** A wall sign on the side (north face) of the wool block [button] is on. */
     private fun sign(p: Placement, button: BlockPos, line1: String, line2: String) {
-        val real = BlockPos(button.x, button.y, 90)
-        p.set(real, Blocks.OAK_WALL_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.WallSignBlock.FACING, Direction.WEST))
+        val real = button.east().north()
+        p.set(real, Blocks.OAK_WALL_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.WallSignBlock.FACING, Direction.NORTH))
         val be = p.level.getBlockEntity(p.at(real)) as? net.minecraft.world.level.block.entity.SignBlockEntity ?: return
         be.setText(net.minecraft.world.level.block.entity.SignText()
             .setMessage(1, net.minecraft.network.chat.Component.literal(line1))
