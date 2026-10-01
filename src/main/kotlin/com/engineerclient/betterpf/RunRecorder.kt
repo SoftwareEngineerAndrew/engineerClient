@@ -450,6 +450,26 @@ class RunRecorder(
         if (count > 0) emit("""{"k":"sw","t":$tick,"d":[$sb]}""")
     }
 
+    /**
+     * Your own click on a Simon Says button (start or grid), once per click: whether a mod blocked
+     * it (Odin's Block Wrong Clicks / Block Wrong on Start), and whether the button already showed
+     * as pressed here - the start button's presses almost never show as a block change, the
+     * likely reason being that it already reads as pressed, so a click changes nothing you can see.
+     */
+    fun onSsClick(pos: BlockPos, blocked: Boolean) {
+        val state = EngineerClient.mc.level?.getBlockState(pos)
+        val powered = state != null && state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.POWERED) &&
+            state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.POWERED)
+        emit("""{"k":"ssclick","t":${tick},"x":${pos.x},"y":${pos.y},"z":${pos.z},"blocked":${if (blocked) 1 else 0},"powered":${if (powered) 1 else 0}}""")
+    }
+
+    /** Whether [pos] is one of Simon Says' buttons. */
+    fun isSsButton(pos: BlockPos) = pos in SS_BUTTONS
+
+    /** Any sound at the Simon Says device (button clicks included, whoever pressed). */
+    fun onSsSound(id: String, x: Double, y: Double, z: Double, volume: Float, pitch: Float) =
+        emit("""{"k":"sssound","t":$tick,"id":${str(id)},"x":${n(x)},"y":${n(y)},"z":${n(z)},"v":${f2(volume)},"p":${f2(pitch)}}""")
+
     // Teammates the game isn't rendering: where the dungeon map puts them (Odin decodes the map's
     // player markers), turned into world coordinates the way Odin's map draws them. Clear only -
     // the map shows the room grid, not the boss.
@@ -691,6 +711,9 @@ class RunRecorder(
         private val FORMAT_CODES = Regex("\u00a7.")
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
+        /** Simon Says' start button and its 16 grid buttons. */
+        private val SS_BUTTONS = listOf(BlockPos(110, 121, 91)) + (120..123).flatMap { y -> (92..95).map { z -> BlockPos(110, y, z) } }
+
         /** Mobs further than this (blocks) from you are written every other tick. */
         const val FAR_HALF = 32
         const val NO_EQUIPMENT = """["","","","",""]"""

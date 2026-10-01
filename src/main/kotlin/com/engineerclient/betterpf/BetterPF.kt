@@ -5,6 +5,7 @@ import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderEvent
@@ -146,6 +147,11 @@ object BetterPF : Module(
             }
         }
 
+        // Your Simon Says clicks, after Odin has had its say (so blocked ones are known).
+        on<BlockInteractEvent>(priority = -1) {
+            val s = session ?: return@on
+            if (s.isSsButton(pos)) EngineerClient.safely("betterpf ss click") { s.onSsClick(pos, isCancelled) }
+        }
         on<BlockUpdateEvent> { EngineerClient.safely("betterpf block") { session?.onBlockUpdate(pos, updated) } }
         // Server ticks (Odin's, from the server's per-tick ping): the server's own clock, which falls
         // behind the client's 20 a second when the server lags (what split timers and tick timers use).
@@ -160,6 +166,11 @@ object BetterPF : Module(
         // Bats hit or killed (secret bats: their squeak is quieter than any other bat's).
         onReceive<ClientboundSoundPacket> {
             val sound = getSound().value()
+            // And every sound at the Simon Says device: the start button's presses don't show as a block change.
+            if (getX() in 105.0..116.0 && getY() in 116.0..127.0 && getZ() in 87.0..99.0) {
+                val id = sound.location().toString(); val x = getX(); val y = getY(); val z = getZ(); val v = getVolume(); val p = getPitch()
+                EngineerClient.mc.execute { EngineerClient.safely("betterpf ss sound") { session?.onSsSound(id, x, y, z, v, p) } }
+            }
             if (sound != SoundEvents.BAT_HURT && sound != SoundEvents.BAT_DEATH) return@onReceive
             val x = getX(); val y = getY(); val z = getZ(); val v = getVolume()
             EngineerClient.mc.execute { EngineerClient.safely("betterpf bat sound") { session?.onBatSound(x, y, z, v) } }
