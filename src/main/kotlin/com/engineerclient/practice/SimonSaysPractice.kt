@@ -10,6 +10,7 @@ import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockInteractEvent
+import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.features.impl.boss.SimonSays
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -83,6 +84,7 @@ object SimonSaysPractice : Module(
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
     private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
+    private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
 
     // ------------------------------------------------------------------ the real device
@@ -625,6 +627,15 @@ object SimonSaysPractice : Module(
         phase = Phase.DONE
         // As at 1x: the time Show Speed saved added back.
         val total = (tick + shownFaster - firstLight) / 20.0
+        // In brackets, first light to done as it would be with no r5 (done after r4).
+        // (On Alpha the run already ends there: no brackets.)
+        val r4 = if (r4Done != 0L && !alpha) (r4Done - firstLight) / 20.0 else null
+        val speed = if (instantShow) " §8(instant, as at 1x)" else if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
+        report(total, r4, rounds, splits, alpha, (if (alpha) " §8(alpha)" else "") + (if (fails > 0) " §c$fails wrong" else "") + speed)
+    }
+
+    /** A run's chat lines (practice or the real device): the total, then a line a round with each press. */
+    private fun report(total: Double, r4Total: Double?, rounds: List<Double>, splits: List<List<Double>>, alphaRun: Boolean, suffix: String) {
         // First light to done: green, dark green (under the 12 s death tick), yellow, red, dark red.
         val colour = when {
             total <= 11.6 -> "§a"
@@ -633,15 +644,12 @@ object SimonSaysPractice : Module(
             total <= 13.5 -> "§c"
             else -> "§4"
         }
-        // In brackets, first light to done as it would be with no r5 (done after r4).
-        // (On Alpha the run already ends there: no brackets.)
-        val r4 = if (r4Done != 0L && !alpha) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
-        val speed = if (instantShow) " §8(instant, as at 1x)" else if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
-        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4" + (if (alpha) " §8(alpha)" else "") + (if (fails > 0) " §c$fails wrong" else "") + speed)
+        val r4 = if (r4Total != null) " §7(${fmt(r4Total)}s)" else ""
+        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4$suffix")
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
-        val vsTop = rounds.size == TOP_ROUNDS.size - (if (alpha) 1 else 0)
+        val vsTop = rounds.size == TOP_ROUNDS.size - (if (alphaRun) 1 else 0)
         for (i in rounds.indices) {
             val presses = splits.getOrNull(i).orEmpty()
             val name = if (vsTop && i == 0) "skip" else "r${presses.size}"
@@ -692,16 +700,17 @@ object SimonSaysPractice : Module(
      * A right click on F7's real Simon Says in P3: the correct sound for the start button and the
      * button Odin's solution has next, the wrong one for any other. Odin's own Custom Click Sounds
      * (one sound for every press unless it blocks) is turned off so the two don't play together.
+     * The presses also go into the real device's round times ([Real]).
      */
     private fun realClick(pos: BlockPos) {
-        if (placed != null || !clickSounds) return
+        if (placed != null || (!clickSounds && !realTimes)) return
         if (DungeonUtils.getF7Phase() != M7Phases.P3) return
         val isStart = pos == START
         if (!isStart && (pos.x != 110 || pos.y !in 120..123 || pos.z !in 92..95)) return
         val state = mc.level?.getBlockState(pos) ?: return
         if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
-        (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
-        if (isStart) { playSoundSettings(correctSound()); return }
+        if (clickSounds) (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
+        if (isStart) { if (clickSounds) playSoundSettings(correctSound()); return }
 
         @Suppress("UNCHECKED_CAST")
         val order = ArrayList(odinOrder.get(null) as List<BlockPos>)
@@ -711,7 +720,67 @@ object SimonSaysPractice : Module(
         while (i < order.size && pending.any { it.first == order[i] }) i++
         val right = order.getOrNull(i) == pos.east()
         if (right) pending.add(pos.east().immutable() to now)
-        playSoundSettings(if (right) correctSound() else wrongSound())
+        if (clickSounds) playSoundSettings(if (right) correctSound() else wrongSound())
+        if (realTimes) Real.press(right, last = right && i == order.size - 1, now)
+    }
+
+    /**
+     * The real device's run, timed like the practice one: first light to done, and per round its
+     * clicking and each press (the first from when the round's buttons came up). Your presses are
+     * timed when you click; the device's lights and buttons when their block changes arrive.
+     */
+    private object Real {
+        var firstLight = 0L
+        var roundUp = 0L
+        var buttonsUp = false
+        var lastPress = 0L
+        var r4Done = 0L
+        var fails = 0
+        val rounds = ArrayList<Double>()
+        val splits = ArrayList<List<Double>>()
+        val presses = ArrayList<Double>()
+
+        fun reset() {
+            firstLight = 0L; roundUp = 0L; buttonsUp = false; lastPress = 0L; r4Done = 0L; fails = 0
+            rounds.clear(); splits.clear(); presses.clear()
+        }
+
+        fun block(pos: BlockPos, old: BlockState, new: BlockState) {
+            if (pos.y !in 120..123 || pos.z !in 92..95) return
+            val now = System.currentTimeMillis()
+            when (pos.x) {
+                // The first light of a run (one left over from over 30 s ago: a new run).
+                111 -> if (new.block == Blocks.SEA_LANTERN && old.block != Blocks.SEA_LANTERN && (firstLight == 0L || now - firstLight > 30_000)) { reset(); firstLight = now }
+                110 -> when {
+                    // The round's buttons coming up: its first press is timed from here.
+                    new.block is ButtonBlock && old.block !is ButtonBlock && !buttonsUp -> {
+                        buttonsUp = true; roundUp = now; lastPress = now; presses.clear()
+                    }
+                    new.isAir && old.block is ButtonBlock -> buttonsUp = false
+                }
+            }
+        }
+
+        fun press(right: Boolean, last: Boolean, now: Long) {
+            if (firstLight == 0L || roundUp == 0L) return
+            if (!right) {
+                // The device starts the sequence over: so do the rounds.
+                fails++; rounds.clear(); splits.clear(); presses.clear(); r4Done = 0L
+                return
+            }
+            presses += (now - lastPress) / 1000.0; lastPress = now
+            if (!last) return
+            // A round's clicking ends 6 ticks after its last press, when the next one starts.
+            rounds += (now - roundUp) / 1000.0 + 0.3
+            splits += presses.toList()
+            if (presses.size == 4) r4Done = now + 300
+            if (presses.size == 5) {
+                report((now + 300 - firstLight) / 1000.0, if (r4Done != 0L) (r4Done - firstLight) / 1000.0 else null,
+                    rounds, splits, alphaRun = false, suffix = (if (fails > 0) " §c$fails wrong" else "") + " §8(real)")
+                reset()
+            }
+            presses.clear()
+        }
     }
 
     /** Right click. True: it was on the device, handled here, and the game must not use it. */
@@ -780,6 +849,11 @@ object SimonSaysPractice : Module(
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution.
         on<BlockInteractEvent>(ignoreCancelled = true) { EngineerClient.safely("ss real sounds") { realClick(pos) } }
+        on<BlockUpdateEvent> {
+            if (!realTimes || placed != null || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            EngineerClient.safely("ss real times") { Real.block(pos, old, updated) }
+        }
+        on<LevelEvent.Load> { Real.reset() }
         // The terminals start countdown (Storm dying; Goldor's first line if that was missed): the practice device goes away.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
