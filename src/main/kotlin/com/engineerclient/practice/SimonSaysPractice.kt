@@ -90,12 +90,9 @@ object SimonSaysPractice : Module(
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
 
     /**
-     * The goal, first light to done: a good legit time, under the death tick at 12 s (some of the
-     * fastest runs on Better PF weren't legit). Then each round's clicking: the fastest healers'
-     * medians there, which with the fixed 7.4 s and a 0.3 s start add up to the goal.
+     * Each round's clicking: the fastest healers' medians on Better PF, which with the fixed 7.4 s
+     * and a 0.3 s start add up to 11.90 (a good legit total, under the death tick at 12 s).
      */
-    private const val GOAL = 11.90
-    private const val DEATH_TICK = 12.0
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05, 1.25)
 
     // Odin's Simon Says colours.
@@ -563,8 +560,14 @@ object SimonSaysPractice : Module(
         phase = Phase.DONE
         // As at 1x: the time Show Speed saved added back.
         val total = (tick + shownFaster - firstLight) / 20.0
-        // Green: the goal. Yellow: still before the death tick. Red: after it.
-        val colour = if (total <= GOAL) "§a" else if (total < DEATH_TICK) "§e" else "§c"
+        // First light to done: green, dark green (under the 12 s death tick), yellow, red, dark red.
+        val colour = when {
+            total <= 11.6 -> "§a"
+            total <= 11.95 -> "§2"
+            total <= 12.6 -> "§e"
+            total <= 13.5 -> "§c"
+            else -> "§4"
+        }
         // In brackets, first light to r4's last press.
         val r4 = if (r4Done != 0L) " §7(${fmt((r4Done - firstLight) / 20.0)}s)" else ""
         val speed = if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
