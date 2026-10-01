@@ -4,6 +4,7 @@ import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
@@ -22,8 +23,8 @@ import java.util.Locale
  *
  *  - Term Info HUD: the current section's progress, 3/7 (green once the gate is down), or in
  *    detail its terms, levers, device and gate.
- *  - Hide Completion Titles: the "X activated a terminal! (3/7)" titles, optionally keeping yours.
- *  - Section Times: when a section is done, how long it took, in purple, for a few seconds. S1 runs
+ *  - Hide Completion Titles: the "X activated a terminal! (3/7)" titles, everyone's.
+ *  - Section Times: when a section is done, how long it took, in purple, for a few seconds (server ticks). S1 runs
  *    from Goldor's first line, each next one from the last one's end.
  *
  * Terminals run from Goldor's first line (or the first task message) to "The Core entrance is
@@ -36,7 +37,6 @@ object TermInfo : Module(
 ) {
     private val simple by BooleanSetting("Simple Mode", true, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
     private val hideTitles by BooleanSetting("Hide Completion Titles", false, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals.")
-    private val onlyOwn by BooleanSetting("Only Show Own", true, desc = "Still shows the completion titles for your own terminals, levers and devices.").withDependency { hideTitles }
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
     private val sectionSeconds by NumberSetting("Section Time Seconds", 2.0, 0.5, 10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
 
@@ -53,7 +53,7 @@ object TermInfo : Module(
     }
 
     private val timeHud by HUD("Section Time", "The last terminal section's time, for a few seconds after it's done.", true, 200, 120, 2f) { example ->
-        if (example) return@HUD lines(this, listOf("§5S1: 14.35s"))
+        if (example) return@HUD lines(this, listOf("§514.35"))
         if (!sectionTimes) return@HUD 0 to 0
         val (text, at) = shownTime ?: return@HUD 0 to 0
         if (System.currentTimeMillis() - at > sectionSeconds * 1000) return@HUD 0 to 0
@@ -80,7 +80,9 @@ object TermInfo : Module(
     private val sections = listOf(Section(4, 1), Section(5, 2), Section(4, 3), Section(4, 4))
     /** The section being done (0-3); -1 outside terminals, 4 once S4 is done. */
     @Volatile private var active = -1
-    @Volatile private var sectionStart = 0L
+    /** Odin's server ticks, counted here; a section's time is in these, so server lag doesn't count. */
+    @Volatile private var serverTicks = 0
+    @Volatile private var sectionStart = 0
     @Volatile private var shownTime: Pair<String, Long>? = null
 
     private fun current() = sections.getOrNull(active)
@@ -103,7 +105,7 @@ object TermInfo : Module(
     private fun start() {
         reset()
         active = 0
-        sectionStart = System.currentTimeMillis()
+        sectionStart = serverTicks
     }
 
     /** Devonian's TerminalSection.onChat, for the active section only. */
@@ -149,14 +151,15 @@ object TermInfo : Module(
 
         if (cur.termsDone >= cur.terms && cur.leversDone >= 2 && cur.deviceDone && cur.gateDestroyed) {
             val now = System.currentTimeMillis()
-            shownTime = "§5S${cur.number}: ${String.format(Locale.ROOT, "%.2f", (now - sectionStart) / 1000.0)}s" to now
-            sectionStart = now
+            shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to now
+            sectionStart = serverTicks
             active++
         }
     }
 
     init {
         on<LevelEvent.Load> { reset(); shownTime = null }
+        on<TickEvent.Server> { serverTicks++ }
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
@@ -178,7 +181,6 @@ object TermInfo : Module(
 
     private fun hidden(raw: String): Boolean {
         if (!hideTitles || active !in 0..3) return false
-        val match = TITLE.matchEntire(raw.replace(CONTROL_CODES, "")) ?: return false
-        return !(onlyOwn && match.groupValues[1] == mc.player?.name?.string)
+        return TITLE.matches(raw.replace(CONTROL_CODES, ""))
     }
 }
