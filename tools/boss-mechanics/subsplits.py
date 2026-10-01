@@ -461,6 +461,7 @@ def storm_events(x):
     ev['dead'] = first(ch, R.STORM_DEAD, after=t0)
     ev['goldor'] = first(ch, R.GOLDOR_START, after=t0)
     ev['taunts_adv'] = [n for n, t, m in ch if m in STORM_TAUNTS_ADV and n >= t0]
+    ev['slow'] = first(ch, R.STORM_FREE, after=t0)
     ev['resets'] = [(n, p) for n, t, p in x['resets'] if n >= t0]
     # Storm's wither: the one seen at his spawn or parking spot
     ids = withers_near(x, STORM_SPAWN, 1.5, t0 - 5, t0 + 30) + withers_near(x, STORM_PARK, 0.6, t0 + 400, t0 + 700)
@@ -509,7 +510,7 @@ def necron_events(x):
             if cur is None and d > 0.02:
                 cur = [n, None]
             elif cur is not None and d < 0.01:
-                cur[1] = n - 2          # the teleport's 3-tick lerp lands 2 ticks after its packet
+                cur[1] = max(cur[0] + 1, n - 2)   # the teleport's 3-tick lerp lands 2 ticks after its packet
                 trips.append(cur)
                 cur = None
         if cur:
@@ -1096,23 +1097,17 @@ def section_fixes(runs, WS, MS, SS):
         if s and s['lightning'] is not None and s['dep'] is not None:
             e.append(s['dep'] - s['lightning'])
     print('3. departure - lightning line:', stats(e))
-    # 4. "Slowing me down" vs enrage
-    sl = []
-    for r in allr:
-        for ev in r.ev.get('storm', [])[:1]:
-            pass
+    # 4. "Slowing me down..." is not the break-free: where is it against the enrage?
+    d, n_en = [], 0
     for r in allr:
         s = storm_splits(r)
-        if not s:
+        if not s or s['crush1'] is None or s['enrage'] is None:
             continue
-        evs = r.ev['storm']
-    n_sl = n_en = 0
-    for r in allr:
-        s = storm_splits(r)
-        if not s or s['crush1'] is None:
-            continue
-        n_en += s['enrage'] is not None
-    print('4. timed runs with a crush 1 and an enrage line: %d' % n_en)
+        n_en += 1
+        slow = pick(r.ev['storm'], None, lambda e: e.get('slow'))
+        if slow is not None:
+            d.append(slow - s['enrage'])
+    print('4. runs with crush 1 and "Storm is enraged!": %d; "Slowing me down" said in %d, line - enrage: %s' % (n_en, len(d), stats(d)))
     # 5. no second crush line
     nl = []
     for r in allr:
@@ -1121,6 +1116,100 @@ def section_fixes(runs, WS, MS, SS):
             continue
         nl.append(s['crush2_src'])
     print('5. runs with Storm\'s death and a crush 1: crush 2 from', collections.Counter(nl))
+
+
+def section_goldor(runs):
+    print('== Terminals and Goldor (from "Who dares trespass into my domain?" = g0)')
+    R5 = five(runs)
+    S = {r.id: goldor_splits(r) for r in R5}
+    have = [r for r in R5 if S[r.id] and S[r.id]['core'] is not None]
+    print('5-player timed runs with the core opening: %d (old %d)' % (len(have), sum(r.old for r in have)))
+    for k in ('S1', 'S1_s', 'S2', 'S2_s', 'S3', 'S3_s', 'S4', 'S4_s', 'core', 'Leaps', 'Kill'):
+        table(k, have, k, lambda r: S[r.id])
+    print('  door source:', collections.Counter(tuple(S[r.id]['door_src']) for r in have))
+    print('  coverage: doors %d, everyone in %d, Necron line %d of %d' % (
+        sum(all(S[r.id][k] is not None for k in ('door1', 'door2', 'door3')) for r in have),
+        sum(S[r.id]['in'] is not None for r in have), sum(S[r.id]['necron'] is not None for r in have), len(have)))
+    return S
+
+
+PCTS = (0, 5, 10, 25, 50, 75, 90, 100)
+
+
+def band_row(name, v, unit):
+    v = sorted(a for a in v if a is not None)
+    if not v:
+        return '| %s | %s | 0 |' % (name, unit) + ' - |' * len(PCTS)
+    f = (lambda a: '%.2f' % a) if unit == 's' else (lambda a: '%d' % round(a))
+    cells = [f(pct(v, q)) for q in PCTS]
+    spread = pct(v, 90) - pct(v, 10)
+    fixed = spread <= (0.25 if unit == 's' else 4)
+    return '| %s | %s | %d | %s | %s |' % (name, unit, len(v), ' | '.join(cells), 'fixed (p10-p90 %s)' % f(spread) if fixed else '')
+
+
+def grid_hist(v, base, step, first_said=None):
+    out = collections.Counter()
+    for a in v:
+        if a is None:
+            continue
+        out[base + step * round((a - base) / step)] += 1
+    return ', '.join('%s%s: %d' % (g, ' (said %d)' % first_said[1] if first_said and g == first_said[0] else '', out[g]) for g in sorted(out))
+
+
+def section_bands(runs):
+    """Percentiles of every sub split over all 5-player timed runs (alpha left out)."""
+    R5 = five(runs)
+    W = {r.id: watcher_splits(r) for r in R5}
+    Mx = {r.id: maxor_splits(r) for r in R5}
+    St = {r.id: storm_splits(r) for r in R5}
+    Go = {r.id: goldor_splits(r) for r in R5}
+    Ne = {r.id: necron_splits(r) for r in R5}
+
+    def col(D, k):
+        return [D[r.id].get(k) if D[r.id] else None for r in R5]
+    rows = [('Watcher Dialogue (D -> handle)', col(W, 'Dialogue'), 't'),
+            ('Watcher Wait', col(W, 'Wait'), 't'),
+            ('Watcher Camp', col(W, 'Camp'), 't'),
+            ('Watcher Clear', col(W, 'Clear'), 't'),
+            ('Maxor Crystals', col(Mx, 'Crystals'), 't'),
+            ('Maxor Lure', col(Mx, 'Lure'), 't'),
+            ('Maxor Cooldown', col(Mx, 'Cooldown_s'), 's'),
+            ('Maxor Cooldown (ticks)', col(Mx, 'Cooldown'), 't'),
+            ('Maxor Kill', [a if a is None or a >= 0 else None for a in col(Mx, 'Kill')], 't'),
+            ('Maxor Animation', col(Mx, 'Animation'), 't'),
+            ('Storm Opening', col(St, 'Opening'), 't'),
+            ('Storm Crush 1', col(St, 'Crush1'), 't'),
+            ('Storm Pin', col(St, 'Pin'), 't'),
+            ('Storm Flight', col(St, 'Flight'), 't'),
+            ('Storm Crush 2', col(St, 'Crush2'), 't'),
+            ('Storm Flight + Crush 2', col(St, 'FlightCrush2'), 't'),
+            ('Storm Kill', col(St, 'Kill'), 't'),
+            ('Storm Animation', col(St, 'Animation'), 't'),
+            ('Terminals S1', col(Go, 'S1_s'), 's'),
+            ('Terminals S2', col(Go, 'S2_s'), 's'),
+            ('Terminals S3', col(Go, 'S3_s'), 's'),
+            ('Terminals S4', col(Go, 'S4_s'), 's'),
+            ('Goldor Leaps', col(Go, 'Leaps'), 't'),
+            ('Goldor Kill', col(Go, 'Kill'), 't'),
+            ('Necron Intro', col(Ne, 'Intro'), 't'),
+            ('Necron Trip 1', col(Ne, 'Trip1'), 't'),
+            ('Necron Lock 1', col(Ne, 'Lock1'), 't'),
+            ('Necron Space', col(Ne, 'Space'), 't'),
+            ('Necron Trip 2', col(Ne, 'Trip2'), 't'),
+            ('Necron Lock 2', col(Ne, 'Lock2'), 't'),
+            ('Necron Animation', col(Ne, 'Animation'), 't')]
+    print('== bands: 5-player timed runs, all data (t = server ticks, s = real seconds)')
+    print('| split | unit | n | min | p5 | p10 | p25 | p50 | p75 | p90 | max | spread |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for name, v, unit in rows:
+        print(band_row(name, v, unit))
+    print('grid steps reached:')
+    print('  Storm crush 1 check (t after the first line):', grid_hist(col(St, 'crush1'), 699, 20))
+    print('  Storm crush 2 check:', grid_hist(col(St, 'crush2'), 699, 20))
+    print('  Storm crush 2 - crush 1:', grid_hist([St[r.id]['crush2'] - St[r.id]['crush1'] if St[r.id] and St[r.id]['crush2'] is not None and St[r.id]['crush1'] is not None else None for r in R5], 0, 20))
+    print('  Necron ARGH 1 slot:', grid_hist(col(Ne, 'argh1'), 5, 20, (325, 330)))
+    print('  Necron ARGH 2 slot:', grid_hist(col(Ne, 'argh2'), 5, 20))
+    print('  Watcher move (D+, 20-tick steps):', grid_hist(col(W, 'move_abs'), 0, 20))
 
 
 OLD_UNTIL_ = [OLD_UNTIL]
@@ -1137,7 +1226,7 @@ def main():
         i = args.index('--old-until'); OLD_UNTIL_[0] = args[i + 1]; del args[i:i + 2]
     if not args:
         sys.exit(__doc__)
-    data_dir, sections = args[0], args[1:] or ['data', 'alpha', 'watcher', 'maxor', 'storm', 'necron', 'fixes']
+    data_dir, sections = args[0], args[1:] or ['data', 'alpha', 'watcher', 'maxor', 'storm', 'goldor', 'necron', 'fixes', 'bands']
     info, xs = load(data_dir, cache, jobs)
     runs, excluded = build_runs(info, xs, OLD_UNTIL_[0])
     WS = MS = SS = None
@@ -1151,10 +1240,14 @@ def main():
         MS = section_maxor(runs)
     if 'storm' in sections:
         SS = section_storm(runs)
+    if 'goldor' in sections:
+        section_goldor(runs)
     if 'necron' in sections:
         section_necron(runs)
     if 'fixes' in sections:
         section_fixes(runs, WS, MS, SS)
+    if 'bands' in sections:
+        section_bands(runs)
 
 
 if __name__ == '__main__':
