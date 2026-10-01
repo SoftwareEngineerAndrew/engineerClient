@@ -82,6 +82,7 @@ object SimonSaysPractice : Module(
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
     private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
+    private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
 
     // ------------------------------------------------------------------ the real device
 
@@ -571,6 +572,19 @@ object SimonSaysPractice : Module(
         after(2) { placed?.set(START, BUTTON) }
     }
 
+    /** Trigger Bot: the button under the crosshair, pressed as soon as it's the next one. Only the practice device. */
+    private fun trigger() {
+        val p = placed ?: return
+        if (mc.screen != null) return
+        val pos = target() ?: return
+        val cell = (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos } ?: return
+        if (!buttonUp[cell] || downUntil[cell] > tick) return
+        val due = if (Inf.on) Inf.queue.firstOrNull() else if (accepting) expected.getOrNull(next) else null
+        if (cell != due) return
+        press(cell)
+        mc.player?.swing(InteractionHand.MAIN_HAND, false)
+    }
+
     private fun press(cell: Int) {
         val p = placed ?: return
         if (!buttonUp[cell] || downUntil[cell] > tick) return
@@ -745,6 +759,7 @@ object SimonSaysPractice : Module(
 
     init {
         on<TickEvent.End> {
+            if (triggerBot) EngineerClient.safely("ss trigger bot") { trigger() }
             tick++
             if (jobs.isEmpty()) return@on
             val due = jobs.filter { it.at <= tick }
