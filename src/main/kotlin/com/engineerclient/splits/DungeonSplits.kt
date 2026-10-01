@@ -3,6 +3,8 @@ package com.engineerclient.splits
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
+import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
@@ -86,6 +88,15 @@ object DungeonSplits : Module(
             "§e7.7\t§51.2\t§32.5\t§c2.9", "§c30.7\t§a9.8",
         ))
         scorecard(this, card.rows(tracker.splits(), now(), blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)))
+    }
+
+    /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
+    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "").hide()
+    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "").hide()
+    private val resetBests by ActionSetting("Reset Sub Split Bests", desc = "Forgets every boss sub split's best time (the gold ones), on F7 and M7.") {
+        bestsF7 = ""; bestsM7 = ""
+        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        EngineerClient.msg("§7Sub split bests cleared.")
     }
 
     private val cardDebug by BooleanSetting("Scorecard Debug", false, desc = "Says in chat each moment the scorecard picks up, and what it read it from — for checking the new ones (portal, leaps, Goldor's first hit, Storm breaking free).")
@@ -463,7 +474,9 @@ object DungeonSplits : Module(
     private val KEY = Regex("""(?:Wither|Blood) Key""")
 
     /** One timed thing in a section: its label, when it started, and how long it has run. */
-    private class Row(val label: String, val at: Stamp, val ms: Long, val ticks: Long, val who: String = "", val note: String = "")
+    private class Row(val label: String, val at: Stamp, val ms: Long, val ticks: Long, val who: String = "", val note: String = "",
+                      /** A graded boss step: the colour of its time, and whether that time is real (else ticks). */
+                      val grade: String? = null, val real: Boolean = false)
 
     /** Maxor's wither: its id, where it was last tick, and whether it was moving. */
     private var maxorAt: Triple<Int, net.minecraft.world.phys.Vec3, Boolean>? = null
@@ -572,19 +585,34 @@ object DungeonSplits : Module(
         val boss = subs.forSplit(s.window)
         // In Debug each boss step says how it ended: the line, timed wait or check that started the next.
         val ends = subs.endSources(s.window)
-        // Maxor's are each the time since Maxor started, at the end of that step (so far, for the
-        // one running): where in the fight each stun and DPS landed, rather than how long each took.
-        val fromStart = s.window == SplitTracker.MAXOR
+        // Each boss step graded on its own clock (SubSplitGrades): bands from the recorded F7 runs,
+        // gold for a best, gray for a step that never varies.
+        val ids = subs.idsForSplit(s.window)
+        val floor = DungeonUtils.floor?.name
+        val bests = bests(floor)
+        var newBest = false
         val steps = boss.mapIndexed { i, st ->
             val stop = st.stop ?: now
-            val from = if (fromStart) split.start else st.start
-            Row(st.label, st.start, stop.realMs - from.realMs, (stop.tick - from.tick).toLong(), note = "ended by " + ends.getOrElse(i) { "?" })
+            val ms = stop.realMs - st.start.realMs
+            val ticks = (stop.tick - st.start.tick).toLong()
+            val id = ids.getOrElse(i) { "" }
+            val end = ends.getOrElse(i) { "?" }
+            val value = SubSplitGrades.value(id, ms, ticks)
+            // A step ended by a moment further on (the ones between unseen) is not a real time.
+            val finished = st.stop != null && !end.contains("never seen")
+            if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (bests[id] ?: Long.MAX_VALUE)) {
+                bests[id] = value; newBest = true
+            }
+            val grade = SubSplitGrades.colour(id, value, finished, bests[id], floor == "F7", st.label.take(2).replace('&', '§'))
+            Row(st.label, st.start, ms, ticks, note = "ended by $end", grade = grade, real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL)
         } + detail.lines(s.window).filter { it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, note = e.note) } }
+        if (newBest) saveBests(floor, bests)
 
         if (level == BloodRunDetail.Level.COMPACT) {
             if (steps.isEmpty()) return emptyList()
             return listOf(s.colour + s.name + ": " + steps.joinToString(" §8| ") {
-                it.label.take(2).replace('&', '§') + SplitFormat.seconds(it.ms)
+                if (it.grade != null) it.grade + SplitFormat.seconds(if (it.real) it.ms else it.ticks * 50)
+                else it.label.take(2).replace('&', '§') + SplitFormat.seconds(it.ms)
             })
         }
 
@@ -594,11 +622,31 @@ object DungeonSplits : Module(
             rows = rows + detail.lines(s.window).filter { !it.step }.map { e -> since(e.at).let { Row(e.label, e.at, it.ms, it.ticks, e.who, e.note) } }
         }
         val out = rows.sortedBy { it.at.realMs }.map { r ->
-            SplitFormat.line(r.label, r.ms, r.ticks) + (if (r.who.isEmpty()) "" else " §7" + r.who) +
+            (if (r.grade != null) graded(r) else SplitFormat.line(r.label, r.ms, r.ticks)) + (if (r.who.isEmpty()) "" else " §7" + r.who) +
                 (if (debug && r.note.isNotEmpty()) " §8· " + r.note else "")
         }.toMutableList()
         if (debug) out += debugFooter(s, split, now)
         return out
+    }
+
+    /**
+     * A graded boss step: its name in its own colour, then its time on the clock it is graded on, in
+     * its grade's colour, and the other clock in brackets.
+     */
+    private fun graded(r: Row): String {
+        val name = r.label.take(2).replace('&', '§') + r.label.drop(2)
+        val main = if (r.real) r.ms else r.ticks * 50
+        val other = if (r.real) r.ticks * 50 else r.ms
+        return "$name §b> ${r.grade}${SplitFormat.seconds(main)} §8(§7${SplitFormat.seconds(other)}§8)"
+    }
+
+    private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
+        when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })
+
+    private fun saveBests(floor: String?, bests: Map<String, Long>) {
+        val text = SubSplitGrades.formatBests(bests)
+        when (floor) { "F7" -> bestsF7 = text; "M7" -> bestsM7 = text; else -> return }
+        com.odtheking.odin.features.ModuleManager.saveConfigurations()
     }
 
     /**
