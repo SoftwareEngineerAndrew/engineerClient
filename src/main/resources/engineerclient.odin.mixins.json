@@ -8,6 +8,7 @@
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",
     "LeapMenuClickMixin",
+    "LeapMenuQuadrantMixin",
     "LeapMenuReleaseMixin",
     "LeapMenuRenderMixin",
     "PersonalBestSimMixin",

@@ -66,6 +66,20 @@ class ConfigMigrationTest {
     }
 
     @Test
+    fun `Map Leap comes across even when Click Delay already did`() {
+        val ec = """[{"name":"Leap Extras","enabled":true,"settings":{"Click Delay":2,"Leap Outline":false}}]"""
+        val odin = """[{"name":"Leap Menu","enabled":true,"settings":{"Click Delay":5,"Map Leap":true,"Map Leap Size":0.65,"Blood Room":{"r":200,"g":0,"b":0,"a":1.0}}}]"""
+        val d = dir(ec, odin)
+        assertTrue(ConfigMigration.run(d))
+        val leap = modules(d).named("Leap Extras")!!
+        assertEquals(2, leap.s("Click Delay").asInt) // the earlier migration's value stays
+        assertTrue(leap.s("Map Leap").asBoolean)
+        assertEquals(0.65, leap.s("Map Leap Size").asDouble)
+        assertEquals(200, leap.s("Blood Room").asJsonObject["r"].asInt)
+        assertFalse(ConfigMigration.run(d))
+    }
+
+    @Test
     fun `a stock Odin config copies nothing`() {
         val d = dir("""[{"name":"Random Stuff","enabled":true,"settings":{}}]""", """[{"name":"Leap Menu","enabled":true,"settings":{"Render Scale":1.0}}]""")
         assertFalse(ConfigMigration.run(d))
