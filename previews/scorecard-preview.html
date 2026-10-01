@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Scorecard Preview</title>
+<style>
+:root{--bg:#1e2a1e;--panel:rgba(0,0,0,.55);--fg:#ddd}
+body{margin:0;min-height:100vh;box-sizing:border-box;padding:24px 16px;background:linear-gradient(#5b7c99,#2b3a2b);font-family:"Minecraft","Courier New",monospace;color:var(--fg)}
+h1{font:600 18px system-ui,sans-serif;color:#fff;margin:0 0 4px}
+p.note{font:13px system-ui,sans-serif;color:#e6e6e6;margin:0 0 16px;max-width:760px}
+.hud{display:inline-block;background:var(--panel);padding:8px 10px;border-radius:2px;text-shadow:2px 2px 0 rgba(0,0,0,.6);font-size:15px;line-height:20px;max-width:100%;overflow-x:auto}
+table{border-collapse:collapse}td{padding:0 9px 0 0;white-space:nowrap;text-align:right}td.l{text-align:left;padding-right:12px}
+tr.names td{font-size:11px;line-height:14px;color:#888;text-shadow:none}
+.legend{margin-top:18px;font:13px system-ui,sans-serif;color:#eee}.legend span.sw{display:inline-block;width:12px;height:12px;margin:0 4px -2px 10px;border:1px solid #888}
+</style></head><body>
+<h1>Scorecard splits, graded</h1>
+<p class="note">A sample F7 run, coloured by the fixed bands in SubSplitGrades. Each row: the split's total, then its sub splits. The small gray names are only for this preview; in game the row is just the numbers. Blood is in tick seconds; Terms is in real seconds.</p>
+<div class="hud"><table>
+<tr class="names"><td class="l"></td><td></td><td>Dialogue</td><td>Wait</td><td>Camp</td><td>Clear</td></tr>
+<tr><td class="l"><span style="color:#FF5555;">Blood</span></td><td><span style="color:#FFFF55;">63.40</span></td><td><span style="color:#FFFF55;">22.60</span></td><td><span style="color:#FFFF55;">4.10</span></td><td><span style="color:#FFFF55;">36.30</span></td><td><span style="color:#FFFF55;">0.40</span></td></tr>
+<tr class="names"><td class="l"></td><td></td><td>Crystals</td><td>Lure</td><td>Cooldown</td><td>Kill</td><td>Animation</td></tr>
+<tr><td class="l"><span style="color:#AA00AA;">Maxor</span></td><td><span style="color:#FFFF55;">25.85</span></td><td><span style="color:#00AA00;">9.75</span></td><td><span style="color:#00AA00;">0.55</span></td><td><span style="color:#00AA00;">10.15</span></td><td><span style="color:#FFFF55;">0.30</span></td><td><span style="color:#AAAAAA;">5.10</span></td></tr>
+<tr class="names"><td class="l"></td><td></td><td>Opening</td><td>Crush</td><td>Pin</td><td>Flight</td><td>Crush</td><td>Kill</td><td>Animation</td></tr>
+<tr><td class="l"><span style="color:#55FFFF;">Storm</span></td><td><span style="color:#FF5555;">46.40</span></td><td><span style="color:#AAAAAA;">34.35</span></td><td><span style="color:#00AA00;">0.60</span></td><td><span style="color:#FF5555;">0.45</span></td><td><span style="color:#FFFF55;">4.60</span></td><td><span style="color:#FFFF55;">1.30</span></td><td><span style="color:#FFAA00;">0.10</span></td><td><span style="color:#AAAAAA;">5.10</span></td></tr>
+<tr class="names"><td class="l"></td><td></td><td>S1</td><td>S2</td><td>S3</td><td>S4</td></tr>
+<tr><td class="l"><span style="color:#FFAA00;">Terms</span></td><td><span style="color:#FFFF55;">47.2</span></td><td><span style="color:#FFFF55;">12.90</span></td><td><span style="color:#55FF55;">9.40</span></td><td><span style="color:#FF5555;">13.80</span></td><td><span style="color:#FFFF55;">8.90</span></td></tr>
+<tr class="names"><td class="l"></td><td></td><td>Leaps</td><td>Kill</td></tr>
+<tr><td class="l"><span style="color:#FFFF55;">Goldor</span></td><td><span style="color:#FFFF55;">7.90</span></td><td><span style="color:#000000;">3.40</span></td><td><span style="color:#00AA00;">4.50</span></td></tr>
+<tr class="names"><td class="l"></td><td></td><td>Intro</td><td>Trip</td><td>Lock</td><td>Space</td><td>Trip</td><td>Lock</td><td>Animation</td></tr>
+<tr><td class="l"><span style="color:#FF5555;">Necron</span></td><td><span style="color:#00AA00;">30.35</span></td><td><span style="color:#AAAAAA;">7.95</span></td><td><span style="color:#FFFF55;">0.70</span></td><td><span style="color:#AAAAAA;">7.85</span></td><td><span style="color:#FFFF55;">3.30</span></td><td><span style="color:#FFAA00;">0.05</span></td><td><span style="color:#AAAAAA;">7.55</span></td><td><span style="color:#AAAAAA;">3.10</span></td></tr>
+</table></div><div class="legend">
+<span class="sw" style="background:#00AA00"></span>fastest 5% / on time
+<span class="sw" style="background:#55FF55"></span>p25
+<span class="sw" style="background:#FFFF55"></span>median
+<span class="sw" style="background:#FF5555"></span>p75
+<span class="sw" style="background:#AA0000"></span>p90
+<span class="sw" style="background:#000000"></span>slower
+<span class="sw" style="background:#FFAA00"></span>your best
+<span class="sw" style="background:#AAAAAA"></span>filler
+</div></body></html>
