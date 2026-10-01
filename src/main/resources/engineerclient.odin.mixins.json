@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "HudElementMixin",
+    "InvincibilityHudMixin",
     "LeapMenuClickMixin",
     "LeapMenuReleaseMixin",
     "LeapMenuRenderMixin"
