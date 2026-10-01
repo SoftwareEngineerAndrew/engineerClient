@@ -7,32 +7,24 @@ import com.odtheking.odin.utils.skyblock.Island
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.multiplayer.ClientLevel
-import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
-import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.core.component.DataComponents
-import net.minecraft.world.entity.Entity
+import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.entity.item.FallingBlockEntity
 import net.minecraft.world.entity.item.ItemEntity
-import net.minecraft.world.entity.decoration.ItemFrame
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
-import java.io.BufferedWriter
-import java.io.OutputStreamWriter
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import java.util.concurrent.Executors
-import java.util.zip.GZIPOutputStream
+import java.util.IdentityHashMap
 
 /**
  * One recording session: everything that happens in one world, from the moment it loads.
@@ -45,41 +37,49 @@ import java.util.zip.GZIPOutputStream
  * flushed, so the recording still starts at instance load. If Odin works out the area is something else, or a minute passes without it, the
  * session is dropped - a hub or island visit costs nothing on disk.
  *
- * Disk writes happen on a single background thread; the client thread only builds strings.
+ * Threads: this class runs on the game thread and only captures. It copies what each line needs out
+ * of the game - numbers, strings, and references to objects the game never changes once made (items,
+ * block states, armour stand poses) - and hands each tick's worth to [RunWriter] in one lock-free
+ * insert. Formatting, working out what changed, JSON, compression and the file all happen on the
+ * writer's thread, so recording can't hold up a frame, and lines come out exactly as before. Names
+ * and skins can only be read here, but only change when the game swaps in a new name/profile object,
+ * so each is read once per change rather than every tick.
  */
 class RunRecorder(
-    private val dir: Path,
+    dir: Path,
     private val captureGeometry: Boolean,
     libraryKeys: () -> Set<String>? = { null },
-    private val onSaved: (Path) -> Unit = {},
-) {
+    onSaved: (Path) -> Unit = {},
+) : RecorderApi {
 
     private var tick = 0
     private var confirmed = false
-    var abandoned = false
+    override var abandoned = false
         private set
-    private val backlog = ArrayList<String>()
+    private var closed = false
 
-    private val io = Executors.newSingleThreadExecutor { Thread(it, "ec-betterpf-writer").apply { isDaemon = true } }
-    private var writer: BufferedWriter? = null
-    private var tempFile: Path? = null
-    private var linesWritten = 0L
-
-    private val startedAt = LocalDateTime.now()
-    private var floorName: String? = null
-    private var partyKey = ""
-
-    // Entity tracking: last written position/name per entity id, to only write changes.
-    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float)
-    private val tracked = HashMap<Int, Tracked>()
+    private val out = RunWriter(dir, LocalDateTime.now(), captureGeometry, onSaved)
+    private var pending = ArrayList<WriterTask>(64)
 
     // Geometry: rooms go to the server's room library once, gaps between rooms per run (GeometryCapture).
-    private val geometry = GeometryCapture(::emit, libraryKeys)
-    private val palette = HashMap<BlockState, Int>()
+    private val geometry = GeometryCapture(libraryKeys, ::post)
+
+    /** Queues a task for the writer. Tasks capture copies only - never this recorder's fields. */
+    private fun post(task: WriterTask) {
+        if (!abandoned && !closed) pending.add(task)
+    }
+
+    /** Hands everything queued since the last tick to the writer. */
+    private fun publish() {
+        if (pending.isEmpty()) return
+        out.submit(pending)
+        pending = ArrayList(64)
+    }
 
     // ------------------------------------------------------------------ inputs
 
-    fun onTick(level: ClientLevel) {
+    override fun onTick(level: ClientLevel) {
+        if (closed) return
         flushFrames()
         flushMouse()
         tick++
@@ -89,116 +89,132 @@ class RunRecorder(
             // right away rather than buffered for the full timeout.
             else if (tick > ABANDON_AFTER_TICKS || !LocationUtils.isCurrentArea(Island.Unknown)) { abandon(); return }
         }
-        if (tick % 20 == 0) emit("""{"k":"time","t":$tick,"ms":${System.currentTimeMillis()}}""")
-        if (serverTicks != lastServerTicks) { lastServerTicks = serverTicks; emit("""{"k":"st","t":$tick,"n":$serverTicks}""") }
-        recordEther()
-        recordFloorAndParty()
-        if (tick % 10 == 0) recordRooms()
-        recordPlayers(level)
-        recordHotbar()
-        recordSwings(level)
-        if (tick % 5 == 0) recordMapPlayers()
-        recordEntities(level)
-        if (confirmed && tick % 20 == 0) recordSkulls(level)
-        if (confirmed && captureGeometry) geometry.tick(level, tick)
+        val t = tick
+        if (t % 20 == 0) { val ms = System.currentTimeMillis(); post { it.time(t, ms) } }
+        if (serverTicks != lastServerTicks) { lastServerTicks = serverTicks; val n = serverTicks; post { it.serverTicks(t, n) } }
+        captureEther(t)
+        captureFloorAndParty(t)
+        if (t % 10 == 0) captureRooms(t)
+        capturePlayers(level, t)
+        captureHotbar(t)
+        captureSwings(level, t)
+        if (t % 5 == 0) captureMapPlayers(t)
+        captureEntities(level, t)
+        if (confirmed && t % 20 == 0) captureSkulls(level, t)
+        if (confirmed && captureGeometry) geometry.tick(level, t)
+        publish()
     }
 
     // Your own look direction every rendered frame, not just every tick: the mouse turns the camera
     // between ticks, so this is what you actually saw. Written once per tick as a "cam" line. Frames
     // where the view didn't move are left out, except the last one before it moves again, so a
     // replay holds still through the gap instead of drifting across it.
-    private val frames = StringBuilder()
+    private val frames = FrameBuffer()
     private var lastFrameYaw = Float.NaN
     private var lastFramePitch = Float.NaN
-    private var heldFrame: String? = null
     private var lastFrameNs = 0L
 
-    fun onFrame(partialTick: Float, yaw: Float, pitch: Float) {
+    override fun onFrame(partialTick: Float, yaw: Float, pitch: Float) {
         // At most 60 a second, whatever the game's frame rate.
         val now = System.nanoTime()
         if (now - lastFrameNs < FRAME_NS) return
         lastFrameNs = now
-        val entry = "[${f2(partialTick)},${f2(yaw)},${f2(pitch)}]"
-        if (yaw == lastFrameYaw && pitch == lastFramePitch) { heldFrame = entry; return }
-        heldFrame?.let { if (frames.isNotEmpty()) frames.append(','); frames.append(it) }
-        heldFrame = null
+        if (yaw == lastFrameYaw && pitch == lastFramePitch) { frames.hold(partialTick, yaw, pitch); return }
         lastFrameYaw = yaw; lastFramePitch = pitch
-        if (frames.isNotEmpty()) frames.append(',')
-        frames.append(entry)
+        frames.add(partialTick, yaw, pitch)
     }
 
     private fun flushFrames() {
-        if (frames.isEmpty()) return
-        emit("""{"k":"cam","t":$tick,"d":[$frames]}""")
-        frames.setLength(0)
+        val d = frames.take() ?: return
+        val t = tick
+        post { it.cam(t, d) }
     }
 
-    fun onBlockUpdate(pos: BlockPos, state: BlockState) {
-        emit("""{"k":"block","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"s":${paletteIndex(state)}}""")
+    override fun onBlockUpdate(pos: BlockPos, state: BlockState) {
+        val t = tick; val x = pos.x; val y = pos.y; val z = pos.z
+        post { it.block(t, x, y, z, state) }
     }
 
-    /** A chat line: plain [message], plus [colored] (with § formatting codes) when it has any formatting. */
     // ------------------------------------------------------------------ server ticks
     // The server's own tick count (Odin's per-tick ping), written when it moved: split and tick
     // timers count these, and they fall behind the client's ticks when the server lags.
     private var serverTicks = 0
     private var lastServerTicks = 0
-    fun onServerTick() { serverTicks++ }
+    override fun onServerTick() { serverTicks++ }
 
     // ------------------------------------------------------------------ what you do
     /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
-    fun onSlotClick(slot: Int, button: Int, type: String) =
-        emit("""{"k":"slotclick","t":$tick,"slot":$slot,"button":$button,"type":${str(type)}}""")
+    override fun onSlotClick(slot: Int, button: Int, type: String) {
+        val t = tick
+        post { it.slotClick(t, slot, button, type) }
+    }
 
     /** A block you right-clicked (chests, levers, secrets...). */
-    fun onBlockUse(pos: BlockPos) = emit("""{"k":"use","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z}}""")
+    override fun onBlockUse(pos: BlockPos) {
+        val t = tick; val x = pos.x; val y = pos.y; val z = pos.z
+        post { it.blockUse(t, x, y, z) }
+    }
 
     /**
      * A teleport the server put you through, where it put you (absolute); rel lists any parts the
      * packet gave relative to where you were, when that couldn't be worked out.
      */
-    fun onTeleport(x: Double, y: Double, z: Double, yaw: Float, pitch: Float, rel: List<String>) {
-        val r = if (rel.isEmpty()) "" else rel.joinToString(",", ",\"rel\":[", "]") { str(it) }
-        emit("""{"k":"tp","t":$tick,"x":${n(x)},"y":${n(y)},"z":${n(z)},"yaw":${a(yaw)},"pitch":${a(pitch)}$r}""")
+    override fun onTeleport(x: Double, y: Double, z: Double, yaw: Float, pitch: Float, rel: List<String>) {
+        val t = tick; val r = rel.toList()
+        post { it.teleport(t, x, y, z, yaw, pitch, r) }
     }
 
     /** A bat hurt or killed (the sound's position and volume: secret bats squeak at 0.1). */
-    fun onBatSound(x: Double, y: Double, z: Double, volume: Float) =
-        emit("""{"k":"batsound","t":$tick,"x":${n(x)},"y":${n(y)},"z":${n(z)},"v":${f2(volume)}}""")
+    override fun onBatSound(x: Double, y: Double, z: Double, volume: Float) {
+        val t = tick
+        post { it.batSound(t, x, y, z, volume) }
+    }
 
     /** An item entity picked up, and by whom (a player's name, else the collector's entity id). */
-    fun onPickup(itemId: Int, collectorId: Int) {
-        val by = EngineerClient.mc.level?.getEntity(collectorId)?.let { if (it is Player) str(it.name.string) else null } ?: collectorId.toString()
-        emit("""{"k":"pickup","t":$tick,"id":$itemId,"by":$by}""")
+    override fun onPickup(itemId: Int, collectorId: Int) {
+        val t = tick
+        val name = (EngineerClient.mc.level?.getEntity(collectorId) as? Player)?.name?.string
+        post { it.pickup(t, itemId, collectorId, name) }
     }
 
-    // Your held item's etherwarp: whether it has Etherwarp merged and how many Transmission Tuners
-    // (each +1 block of range), written when it changes.
-    private var lastEther = ""
-    private fun recordEther() {
-        val tag = EngineerClient.mc.player?.mainHandItem?.get(DataComponents.CUSTOM_DATA)?.copyTag()
-        val entry = """"merge":${tag?.getIntOr("ethermerge", 0) ?: 0},"tuners":${tag?.getIntOr("tuned_transmission", 0) ?: 0}"""
-        if (entry == lastEther) return
-        lastEther = entry
-        emit("""{"k":"ether","t":$tick,$entry}""")
-    }
-
-    fun onChat(message: String, colored: String? = null) {
-        val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
-        emit("""{"k":"chat","t":$tick,"m":${str(message)}$c}""")
+    /** A chat line: plain [message], plus [colored] (with § formatting codes) when it has any formatting. */
+    override fun onChat(message: String, colored: String?) {
+        val t = tick
+        post { it.chat(t, message, colored) }
     }
 
     /** A chest (or ender chest) lid event: [openCount] players now have it open (0 = it closes). */
-    fun onChestEvent(pos: BlockPos, openCount: Int) =
-        emit("""{"k":"bev","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"b":$openCount}""")
+    override fun onChestEvent(pos: BlockPos, openCount: Int) {
+        val t = tick; val x = pos.x; val y = pos.y; val z = pos.z
+        post { it.chestEvent(t, x, y, z, openCount) }
+    }
 
-    fun onRoomEnter(name: String?) = emit("""{"k":"room","t":$tick,"name":${str(name ?: "Unknown")}}""")
+    override fun onRoomEnter(name: String?) {
+        val t = tick
+        post { it.roomEnter(t, name) }
+    }
+
+    // Your held item's etherwarp: whether it has Etherwarp merged and how many Transmission Tuners
+    // (each +1 block of range), written when it changes. CustomData never changes once made, so the
+    // same object means the same values: only a different one is read.
+    private var lastEtherData: Any? = UNSET
+
+    private fun captureEther(t: Int) {
+        val data = EngineerClient.mc.player?.mainHandItem?.get(DataComponents.CUSTOM_DATA)
+        if (data === lastEtherData) return
+        lastEtherData = data
+        val tag = data?.copyTag()
+        val merge = tag?.getIntOr("ethermerge", 0) ?: 0
+        val tuners = tag?.getIntOr("tuned_transmission", 0) ?: 0
+        post { it.ether(t, merge, tuners) }
+    }
 
     /** Your own container screens (terminals are GUIs with fixed titles): exact open/close times. */
-    fun onGuiClose() {
+    override fun onGuiClose() {
         flushMouse()
-        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
-        emit("""{"k":"guiclose","t":$tick}""")
+        lastMouseX = Float.NaN
+        val t = tick
+        post { it.guiClose(t) }
     }
 
     // ------------------------------------------------------------------ what's in your open container
@@ -207,428 +223,333 @@ class RunRecorder(
     // like the camera) and your clicks. Positions are GUI pixels from the window's top-left.
 
     /** A container screen opened: its menu type ("inventory" for your own), size and slot positions. */
-    fun onContainerOpen(title: String, menu: String, w: Int, h: Int, slots: List<IntArray>) {
-        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
-        val sb = StringBuilder()
-        slots.forEachIndexed { i, p -> if (i > 0) sb.append(','); sb.append('[').append(p[0]).append(',').append(p[1]).append(']') }
-        emit("""{"k":"gui","t":$tick,"title":${str(title)},"menu":${str(menu)},"w":$w,"h":$h,"slots":[$sb]}""")
+    override fun onContainerOpen(title: String, menu: String, w: Int, h: Int, slots: List<IntArray>) {
+        lastMouseX = Float.NaN
+        val t = tick; val s = slots.toList()
+        post { it.guiOpen(t, title, menu, w, h, s) }
     }
 
-    private val lastSlots = HashMap<Int, String>()
-    private var lastCarried: String? = null
+    // Per slot: the last name object seen and its plain text, so a name is only read when it changes.
+    private var slotNameObj = arrayOfNulls<Component>(0)
+    private var slotName = arrayOfNulls<String>(0)
 
-    /** Each tick while a container is open: slots that changed since the last line, and the cursor's item. */
-    fun onContainerTick(items: List<ItemStack>, carried: ItemStack) {
-        val sb = StringBuilder()
-        items.forEachIndexed { i, stack ->
-            val entry = slotEntry(i, stack)
-            if (lastSlots.put(i, entry) == entry) return@forEachIndexed
-            if (sb.isNotEmpty()) sb.append(',')
-            sb.append(entry)
+    /** Each tick while a container is open: every slot's item and the cursor's (the writer keeps only changes). */
+    override fun onContainerTick(items: List<ItemStack>, carried: ItemStack) {
+        if (slotNameObj.size < items.size) {
+            slotNameObj = slotNameObj.copyOf(items.size)
+            slotName = slotName.copyOf(items.size)
         }
-        if (sb.isNotEmpty()) emit("""{"k":"slots","t":$tick,"s":[$sb]}""")
-        val c = """"id":${str(vanillaId(carried))},"count":${if (carried.isEmpty) 0 else carried.count}"""
-        if (c != lastCarried) { lastCarried = c; emit("""{"k":"carried","t":$tick,$c}""") }
+        val slots = Array(items.size) { i -> slotSnap(i, items[i]) }
+        val c = ItemSnap.of(carried)
+        val count = if (carried.isEmpty) 0 else carried.count
+        val t = tick
+        post { it.containerTick(t, slots, c, count) }
     }
 
-    private fun slotEntry(i: Int, stack: ItemStack): String {
-        val tex = stack.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
+    private fun slotSnap(i: Int, stack: ItemStack): SlotSnap {
         // [index, id, count, head skin or "", plain name, glint 0/1] - terminals are solved by names
         // and Hypixel marks clicked items with the enchantment glint.
-        val name = if (stack.isEmpty) "" else stack.hoverName.string.replace(FORMAT_CODES, "")
-        val glint = if (!stack.isEmpty && (stack.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) || stack.hasFoil())) 1 else 0
-        return "[$i,${str(vanillaId(stack))},${if (stack.isEmpty) 0 else stack.count},${str(tex ?: "")},${str(name)},$glint]"
+        val tex = profileTex(stack.get(DataComponents.PROFILE))
+        if (stack.isEmpty) return if (tex == null) SlotSnap.EMPTY else SlotSnap(ItemSnap.EMPTY, 0, tex, "", 0)
+        val nameObj = stack.hoverName
+        val name = if (slotNameObj[i] === nameObj) slotName[i]!!
+        else nameObj.string.replace(FORMAT_CODES, "").also { slotNameObj[i] = nameObj; slotName[i] = it }
+        val glint = if (stack.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) || stack.hasFoil()) 1 else 0
+        return SlotSnap(ItemSnap.of(stack), stack.count, tex, name, glint)
     }
 
-    private val mouse = StringBuilder()
+    private val mouse = FrameBuffer()
     private var lastMouseNs = 0L
     private var lastMouseX = Float.NaN
     private var lastMouseY = Float.NaN
-    private var heldMouse: String? = null
 
     /** The mouse over the open container, per rendered frame (60 a second at most); still frames skipped. */
-    fun onContainerMouse(partialTick: Float, x: Float, y: Float) {
+    override fun onContainerMouse(partialTick: Float, x: Float, y: Float) {
         val now = System.nanoTime()
         if (now - lastMouseNs < FRAME_NS) return
         lastMouseNs = now
-        val entry = "[${f2(partialTick)},${f2(x)},${f2(y)}]"
-        if (x == lastMouseX && y == lastMouseY) { heldMouse = entry; return }
-        heldMouse?.let { if (mouse.isNotEmpty()) mouse.append(','); mouse.append(it) }
-        heldMouse = null
+        if (x == lastMouseX && y == lastMouseY) { mouse.hold(partialTick, x, y); return }
         lastMouseX = x; lastMouseY = y
-        if (mouse.isNotEmpty()) mouse.append(',')
-        mouse.append(entry)
+        mouse.add(partialTick, x, y)
     }
 
     private fun flushMouse() {
-        if (mouse.isEmpty()) return
-        emit("""{"k":"mouse","t":$tick,"d":[$mouse]}""")
-        mouse.setLength(0)
+        val d = mouse.take() ?: return
+        val t = tick
+        post { it.mouse(t, d) }
     }
 
-    fun onContainerClick(x: Float, y: Float, button: Int) =
-        emit("""{"k":"click","t":$tick,"x":${f2(x)},"y":${f2(y)},"button":$button}""")
+    override fun onContainerClick(x: Float, y: Float, button: Int) {
+        val t = tick
+        post { it.click(t, x, y, button) }
+    }
 
-    /** Ends the session: closes the file (on the writer thread) and gives it its final name. */
-    fun finish() {
+    /** Ends the session: the writer closes the file and gives it its final name, off this thread. */
+    override fun finish() {
+        if (closed || abandoned) return
         if (!confirmed) { abandon(); return }
-        emit("""{"k":"end","t":$tick,"ms":${System.currentTimeMillis()}}""")
-        val temp = tempFile ?: return
-        val finalName = "${startedAt.format(STAMP)}_${(floorName ?: "unknown").replace(Regex("[^A-Za-z0-9]+"), "")}.jsonl.gz"
-        val lines = linesWritten
-        io.execute {
-            try {
-                writer?.close()
-                val target = temp.resolveSibling(finalName)
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
-                val mb = Files.size(target) / 1_000_000.0
-                EngineerClient.chat("§8[§6EC§8]§7 Better PF: saved run §f$finalName §7(${String.format(Locale.ROOT, "%.1f", mb)} MB, $lines lines, ${tick / 20}s)")
-                onSaved(target)
-            } catch (t: Throwable) {
-                EngineerClient.logger.error("[ec] betterpf: failed to finish run file", t)
-            }
-        }
-        io.shutdown()
+        val t = tick; val ms = System.currentTimeMillis()
+        post { it.finish(t, ms) }
+        publish()
+        closed = true
     }
 
     // ------------------------------------------------------------------ lifecycle
 
     private fun confirm() {
         confirmed = true
-        Files.createDirectories(dir)
-        val temp = dir.resolve("recording-${startedAt.format(STAMP)}.jsonl.gz.part")
-        tempFile = temp
-        writer = BufferedWriter(OutputStreamWriter(GZIPOutputStream(Files.newOutputStream(temp)), Charsets.UTF_8), 1 shl 16)
         val self = EngineerClient.mc.player?.name?.string ?: "?"
         val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient")
             .map { it.metadata.version.friendlyString }.orElse("?")
-        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry}""")
-        backlog.forEach(::writeNow)
-        backlog.clear()
-        EngineerClient.chat("§8[§6EC§8]§7 Better PF: recording this run")
+        val startMs = System.currentTimeMillis() - tick * 50L
+        val t = tick
+        post { it.confirm(self, version, startMs, t) }
     }
 
     private fun abandon() {
+        pending.clear() // the writer would drop it anyway
+        post { it.abandon() }
+        publish()
         abandoned = true
-        backlog.clear()
-        tracked.clear()
-        io.shutdown()
-    }
-
-    private fun emit(line: String) {
-        if (abandoned) return
-        if (confirmed) writeNow(line) else backlog.add(line)
-    }
-
-    private fun writeNow(line: String) {
-        val w = writer ?: return
-        linesWritten++
-        io.execute {
-            try { w.write(line); w.newLine() } catch (t: Throwable) { EngineerClient.logger.error("[ec] betterpf write failed", t) }
-        }
+        names.clear()
     }
 
     // ------------------------------------------------------------------ per-tick snapshots
 
-    private fun recordFloorAndParty() {
+    private fun captureFloorAndParty(t: Int) {
         val floor = DungeonUtils.floor?.name
-        if (floor != null && floor != floorName) {
-            floorName = floor
-            emit("""{"k":"floor","t":$tick,"floor":${str(floor)}}""")
-        }
-        val party = DungeonUtils.dungeonTeammates
-        val key = party.joinToString("|") { "${it.name}:${it.clazz.name}" }
-        if (key != partyKey && party.isNotEmpty()) {
-            partyKey = key
-            emit("""{"k":"party","t":$tick,"m":[${party.joinToString(",") { "[${str(it.name)},${str(it.clazz.name)}]" }}]}""")
-        }
+        val party = DungeonUtils.dungeonTeammates.toList()
+        val names = Array(party.size) { party[it].name }
+        val classes = Array(party.size) { party[it].clazz.name }
+        post { it.floorAndParty(t, floor, names, classes) }
     }
-
-    private var roomsKey = ""
 
     /**
      * Odin's own room classification: every room it knows (from the dungeon map, and named once its
      * core has been seen), with type, shape, rotation and checkmark. Rewritten whenever any of that
      * changes, which is also how cleared/failed state shows up over time.
      */
-    private fun recordRooms() {
+    private fun captureRooms(t: Int) {
         val rooms = DungeonScan.rooms
         if (rooms.isEmpty()) return
-        val sb = StringBuilder()
-        rooms.forEachIndexed { i, r ->
-            if (i > 0) sb.append(',')
-            sb.append('[').append(str(r.name ?: "")).append(',').append(str(r.type.name)).append(',')
-                .append(str(r.shape.name)).append(',').append(str(r.rotation?.name ?: "")).append(',')
-                .append(str(r.checkmark.name)).append(",[")
-            r.tiles.forEachIndexed { j, t -> if (j > 0) sb.append(','); sb.append('[').append(t.x).append(',').append(t.z).append(']') }
-            // Secrets found / total. "Found" comes from the action bar (the room you're in) and other
-            // Odin users, so it's a lower bound for rooms nobody running Odin is in.
-            sb.append("],").append(r.foundSecrets ?: -1).append(',').append(r.data?.maxSecrets ?: -1)
-            // [8]: the room's library key when it's known (rotation found, variant told apart).
-            RoomKeys.key(r)?.let { sb.append(',').append(str(it)) }
-            sb.append(']')
+        val snaps = rooms.map { r ->
+            val tiles = r.tiles.toList()
+            RoomSnap(
+                r.name ?: "", r.type.name, r.shape.name, r.rotation?.name ?: "", r.checkmark.name,
+                IntArray(tiles.size * 2) { j -> if (j % 2 == 0) tiles[j / 2].x else tiles[j / 2].z },
+                // Secrets found / total. "Found" comes from the action bar (the room you're in) and other
+                // Odin users, so it's a lower bound for rooms nobody running Odin is in.
+                r.foundSecrets ?: -1, r.data?.maxSecrets ?: -1,
+                // [8]: the room's library key when it's known (rotation found, variant told apart).
+                RoomKeys.key(r),
+            )
         }
-        val body = sb.toString()
-        if (body == roomsKey) return
-        roomsKey = body
-        emit("""{"k":"rooms","t":$tick,"r":[$body]}""")
-    }
-
-    // Last written entry per player name; only players whose entry changed go in a "p" line.
-    private val lastPlayer = HashMap<String, String>()
-
-    // Your own hotbar: the nine items, which slot is selected, and the skins of any player heads in it.
-    private var lastHotbar = ""
-    private fun recordHotbar() {
-        val inv = EngineerClient.mc.player?.inventory ?: return
-        val items = (0 until 9).joinToString(",", "[", "]") { str(vanillaId(inv.getItem(it))) }
-        val tex = (0 until 9).mapNotNull { i ->
-            inv.getItem(i).get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }?.let { "\"$i\":${str(it)}" }
-        }.joinToString(",", "{", "}")
-        val body = """"items":$items,"sel":${inv.selectedSlot},"tex":$tex"""
-        if (body == lastHotbar) return
-        lastHotbar = body
-        emit("""{"k":"hotbar","t":$tick,$body}""")
-    }
-
-    // The skin of a player head someone holds (the leap item, for one), written when it changes.
-    private val lastHeldHead = HashMap<String, String>()
-    private fun recordHeldHead(p: Player, name: String) {
-        val tex = p.mainHandItem.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) } ?: ""
-        val prev = lastHeldHead.put(name, tex)
-        if (prev != tex && !(prev == null && tex.isEmpty())) emit("""{"k":"held","t":$tick,"name":${str(name)},"tex":${str(tex)}}""")
-    }
-
-    private fun recordPlayers(level: ClientLevel) {
-        val sb = StringBuilder()
-        var changed = 0
-        val seen = HashSet<String>()
-        for (p in level.players()) {
-            val name = p.name.string
-            seen += name
-            val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { vanillaId(it) } }
-            if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
-            recordEquipment(p, "\"name\":${str(name)}", name)
-            // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one; [9] 1 while crouching.
-            val entry = "[${str(name)},${n(p.x)},${n(p.y)},${n(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
-            recordHeldHead(p, name)
-            if (lastPlayer.put(name, entry) == entry) continue
-            if (changed++ > 0) sb.append(',')
-            sb.append(entry)
-        }
-        if (changed > 0) emit("""{"k":"p","t":$tick,"d":[$sb]}""")
-        for (name in lastPlayer.keys.filter { it !in seen }) {
-            lastPlayer.remove(name)
-            emit("""{"k":"pgone","t":$tick,"name":${str(name)}}""")
-        }
-    }
-
-    // Arm swings: a left click, or a right click that hit something (opening a terminal swings too).
-    // Other players' swings arrive as animation packets; a new one shows as swinging with swingTime
-    // at -1 or 0 (depending on whether the entity has ticked since), so -1 then 0 is one swing.
-    private val lastSwingTime = HashMap<String, Int>()
-
-    private fun recordSwings(level: ClientLevel) {
-        val sb = StringBuilder()
-        var count = 0
-        for (p in level.players()) {
-            val name = p.name.string
-            val prev = lastSwingTime.put(name, if (p.swinging) p.swingTime else 99) ?: 99
-            if (!p.swinging || p.swingTime > 0 || prev == -1) continue
-            if (count++ > 0) sb.append(',')
-            sb.append(str(name))
-        }
-        if (count > 0) emit("""{"k":"sw","t":$tick,"d":[$sb]}""")
-    }
-
-    // Teammates the game isn't rendering: where the dungeon map puts them (Odin decodes the map's
-    // player markers), turned into world coordinates the way Odin's map draws them. Clear only -
-    // the map shows the room grid, not the boss.
-    private val lastMapPos = HashMap<String, String>()
-
-    private fun recordMapPlayers() {
-        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) return
-        val sb = StringBuilder()
-        var count = 0
-        for (p in DungeonUtils.dungeonTeammatesNoSelf) {
-            if (p.isDead || p.entity != null) { lastMapPos.remove(p.name); continue }
-            val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
-            val z = ((p.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
-            val entry = "[${str(p.name)},${n(x)},${n(z)},${a(p.yaw)}]"
-            if (lastMapPos.put(p.name, entry) == entry) continue
-            if (count++ > 0) sb.append(',')
-            sb.append(entry)
-        }
-        if (count > 0) emit("""{"k":"mp","t":$tick,"d":[$sb]}""")
-    }
-
-    private fun recordEntities(level: ClientLevel) {
-        val seen = HashSet<Int>(tracked.size + 16)
-        val moved = StringBuilder()
-        var movedCount = 0
-        for (e in level.entitiesForRendering()) {
-            if (e is Player) continue
-            // An entity the game hasn't placed yet (NaN position) would make an unreadable line.
-            if (!e.x.isFinite() || !e.y.isFinite() || !e.z.isFinite()) continue
-            val id = e.id
-            seen += id
-            val name = e.customName?.string ?: ""
-            // The name with its colours (§ codes), when it has any: "c" next to the plain "name".
-            val colored = e.customName?.let { BetterPF.legacyText(it) } ?: ""
-            val c = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
-            val t = tracked[id]
-            // Mobs turn their heads apart from their bodies (the way they look at you).
-            val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
-            if (t == null) {
-                tracked[id] = Tracked(e.x, e.y, e.z, e.yRot, colored, headYaw)
-                // Falling blocks carry which block they are, so the viewer can draw it.
-                val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
-                // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
-                val item = (e as? ItemEntity)?.item?.let { ",\"item\":" + str(it.hoverName.string.replace(FORMAT_CODES, "")) + ",\"itemId\":" + str(vanillaId(it)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item}""")
-                if (e is ArmorStand) recordStand(e)
-                if (e is ItemFrame) recordFrame(e)
-                continue
-            }
-            if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
-            if (e is ArmorStand) recordStand(e)
-            if (e is ItemFrame) recordFrame(e)
-            if (colored != t.name) {
-                t.name = colored
-                emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}$c}""")
-            }
-            if (e.x != t.x || e.y != t.y || e.z != t.z || e.yRot != t.yaw || headYaw != t.headYaw) {
-                t.x = e.x; t.y = e.y; t.z = e.z; t.yaw = e.yRot; t.headYaw = headYaw
-                if (movedCount++ > 0) moved.append(',')
-                moved.append('[').append(id).append(',').append(n(e.x)).append(',').append(n(e.y)).append(',')
-                    .append(n(e.z)).append(',').append(a(e.yRot))
-                if (e is LivingEntity) moved.append(',').append(a(headYaw))
-                moved.append(']')
-            }
-        }
-        if (movedCount > 0) emit("""{"k":"e","t":$tick,"d":[$moved]}""")
-        val gone = tracked.keys.filter { it !in seen }
-        for (id in gone) {
-            tracked.remove(id)
-            lastEquipment.remove("#$id")
-            lastStand.remove(id)
-            lastFrame.remove(id)
-            emit("""{"k":"gone","t":$tick,"id":$id}""")
-        }
-    }
-
-    // Item frames: what they hold and how it's turned (0-7), on spawn and when either changes
-    // (the Arrow Align device's arrows).
-    private val lastFrame = HashMap<Int, String>()
-    private fun recordFrame(f: ItemFrame) {
-        val entry = """"item":${str(vanillaId(f.item))},"rot":${f.rotation}"""
-        if (lastFrame.put(f.id, entry) == entry) return
-        emit("""{"k":"frame","t":$tick,"id":${f.id},$entry}""")
+        post { it.rooms(t, snaps) }
     }
 
     // Players' skins (their profile's "textures" property, base64) once per name.
     private val skinsWritten = HashSet<String>()
 
-    // Held item and armour per player name / "#entityId", written when it changes: vanilla ids, plus
-    // the head item's skin texture when it's a player head (dungeon mobs wear those).
-    private val lastEquipment = HashMap<String, String>()
+    private fun capturePlayers(level: ClientLevel, t: Int) {
+        val players = level.players()
+        val snaps = ArrayList<PlayerSnap>(players.size)
+        for (p in players) {
+            val name = p.name.string
+            val skin = if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties()) else null
+            val main = p.mainHandItem
+            snaps += PlayerSnap(
+                name, skin, equipment(p),
+                p.x, p.y, p.z, p.yRot, p.xRot,
+                if (main.isEmpty) "" else main.itemId,
+                p.uuid.version(),
+                p.isCrouching,
+                // The skin of a player head someone holds (the leap item, for one).
+                profileTex(main.get(DataComponents.PROFILE)) ?: "",
+            )
+        }
+        post { it.players(t, snaps) }
+    }
+
+    // Your own hotbar: the nine items, which slot is selected, and the skins of any player heads in it.
+    private fun captureHotbar(t: Int) {
+        val inv = EngineerClient.mc.player?.inventory ?: return
+        val items = Array(9) { ItemSnap.of(inv.getItem(it)) }
+        val tex = Array(9) { profileTex(inv.getItem(it).get(DataComponents.PROFILE)) }
+        val selected = inv.selectedSlot
+        post { it.hotbar(t, items, tex, selected) }
+    }
+
+    // Arm swings: a left click, or a right click that hit something (opening a terminal swings too).
+    // Other players' swings arrive as animation packets; a new one shows as swinging with swingTime
+    // at -1 or 0 (depending on whether the entity has ticked since), so -1 then 0 is one swing.
+    private fun captureSwings(level: ClientLevel, t: Int) {
+        val players = level.players()
+        val names = Array(players.size) { players[it].name.string }
+        val swinging = BooleanArray(players.size) { players[it].swinging }
+        val swingTime = IntArray(players.size) { players[it].swingTime }
+        post { it.swings(t, names, swinging, swingTime) }
+    }
+
+    // Teammates the game isn't rendering: where the dungeon map puts them (Odin decodes the map's
+    // player markers), turned into world coordinates the way Odin's map draws them. Clear only -
+    // the map shows the room grid, not the boss.
+    private fun captureMapPlayers(t: Int) {
+        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) return
+        val snaps = ArrayList<MapSnap>()
+        for (p in DungeonUtils.dungeonTeammatesNoSelf) {
+            if (p.isDead || p.entity != null) { snaps += MapSnap(p.name, false, 0.0, 0.0, 0f); continue }
+            val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
+            val z = ((p.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
+            snaps += MapSnap(p.name, true, x, z, p.yaw)
+        }
+        post { it.mapPlayers(t, snaps) }
+    }
+
+    // Per entity id: its name object last tick and the strings read from it (plain and with § colour
+    // codes), and the same for a dropped item's name. Entries not seen in a tick are pruned each second.
+    private class Names(var nameObj: Component?, var name: String, var colored: String, var seen: Int) {
+        var itemNameObj: Component? = null
+        var itemName = ""
+    }
+    private val names = HashMap<Int, Names>()
+
+    private fun captureEntities(level: ClientLevel, t: Int) {
+        val snaps = ArrayList<EntitySnap>(names.size + 16)
+        for (e in level.entitiesForRendering()) {
+            if (e is Player) continue
+            // An entity the game hasn't placed yet (NaN position) would make an unreadable line.
+            if (!e.x.isFinite() || !e.y.isFinite() || !e.z.isFinite()) continue
+            val id = e.id
+            val nameObj = e.customName
+            val n = names[id]?.takeIf { it.nameObj === nameObj }
+                // The name with its colours (§ codes), when it has any: "c" next to the plain "name".
+                ?: Names(nameObj, nameObj?.string ?: "", nameObj?.let { BetterPF.legacyText(it) } ?: "", t).also { names[id] = it }
+            n.seen = t
+            val living = e as? LivingEntity
+            // Mobs turn their heads apart from their bodies (the way they look at you).
+            val headYaw = living?.yHeadRot ?: e.yRot
+            var itemSnap = ItemSnap.EMPTY
+            if (e is ItemEntity) {
+                // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
+                val stack = e.item
+                val itemNameObj = stack.hoverName
+                if (n.itemNameObj !== itemNameObj) { n.itemNameObj = itemNameObj; n.itemName = itemNameObj.string.replace(FORMAT_CODES, "") }
+                itemSnap = ItemSnap.of(stack)
+            }
+            val frame = e as? ItemFrame
+            snaps += EntitySnap(
+                id, e.type, e.x, e.y, e.z, e.yRot, headYaw,
+                living != null, living?.isBaby == true,
+                n.name, n.colored,
+                // Falling blocks carry which block they are, so the viewer can draw it.
+                (e as? FallingBlockEntity)?.blockState,
+                e is ItemEntity, n.itemName, itemSnap,
+                (e as? ArmorStand)?.let(::standSnap),
+                frame?.let { ItemSnap.of(it.item) }, frame?.rotation ?: 0,
+                living?.let(::equipment),
+            )
+        }
+        if (t % 20 == 0) names.values.removeIf { it.seen != t }
+        post { it.entities(t, snaps) }
+    }
 
     // Armor stands: size, visibility, arms/base plate and their pose (Hypixel poses them for heads,
-    // held items and nametags), written when any of it changes.
-    private val lastStand = HashMap<Int, String>()
-
-    private fun recordStand(e: ArmorStand) {
-        val f = (if (e.isSmall) 1 else 0) or (if (e.isInvisible) 2 else 0) or (if (e.showArms()) 4 else 0) or
+    // held items and nametags). The poses are immutable, so they go to the writer as they are.
+    private fun standSnap(e: ArmorStand): StandSnap {
+        val flags = (if (e.isSmall) 1 else 0) or (if (e.isInvisible) 2 else 0) or (if (e.showArms()) 4 else 0) or
             (if (!e.showBasePlate()) 8 else 0) or (if (e.isMarker) 16 else 0)
-        val pose = listOf(e.headPose, e.bodyPose, e.leftArmPose, e.rightArmPose, e.leftLegPose, e.rightLegPose)
-            .joinToString(",") { "${a(it.x())},${a(it.y())},${a(it.z())}" }
-        val body = """"f":$f,"pose":[$pose]"""
-        if (lastStand.put(e.id, body) == body) return
-        emit("""{"k":"stand","t":$tick,"id":${e.id},$body}""")
+        return StandSnap(flags, arrayOf(e.headPose, e.bodyPose, e.leftArmPose, e.rightArmPose, e.leftLegPose, e.rightLegPose))
+    }
+
+    // Held item and armour: vanilla ids, plus the head item's skin texture when it's a player head
+    // (dungeon mobs wear those).
+    private fun equipment(e: LivingEntity): EquipSnap {
+        val head = e.getItemBySlot(EquipmentSlot.HEAD)
+        return EquipSnap(
+            arrayOf(
+                ItemSnap.of(e.mainHandItem), ItemSnap.of(head), ItemSnap.of(e.getItemBySlot(EquipmentSlot.CHEST)),
+                ItemSnap.of(e.getItemBySlot(EquipmentSlot.LEGS)), ItemSnap.of(e.getItemBySlot(EquipmentSlot.FEET)),
+            ),
+            profileTex(head.get(DataComponents.PROFILE)),
+        )
     }
 
     // Player heads placed as blocks (skulls on walls, floors, the boss arena): their skin, once per
     // position and again if it changes. The viewer would otherwise draw a default head.
-    private val lastSkull = HashMap<BlockPos, String>()
-
-    private fun recordSkulls(level: ClientLevel) {
+    private fun captureSkulls(level: ClientLevel, t: Int) {
         val player = EngineerClient.mc.player ?: return
         val cx = player.blockPosition().x shr 4
         val cz = player.blockPosition().z shr 4
+        val found = ArrayList<SkullSnap>()
         for (x in cx - SKULL_CHUNKS..cx + SKULL_CHUNKS) for (z in cz - SKULL_CHUNKS..cz + SKULL_CHUNKS) {
             val chunk = level.chunkSource.getChunk(x, z, ChunkStatus.FULL, false) ?: continue
             for (be in chunk.blockEntities.values) {
                 if (be !is SkullBlockEntity) continue
-                val tex = be.ownerProfile?.let { texturesOf(it.partialProfile().properties()) } ?: continue
+                val tex = profileTex(be.ownerProfile) ?: continue
                 val pos = be.blockPos
-                if (lastSkull.put(pos.immutable(), tex) == tex) continue
-                emit("""{"k":"skull","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"tex":${str(tex)}}""")
+                found += SkullSnap(pos.x, pos.y, pos.z, tex)
             }
         }
+        post { it.skulls(t, found) }
     }
 
-    private fun recordEquipment(e: LivingEntity, who: String, key: String) {
-        val head = e.getItemBySlot(EquipmentSlot.HEAD)
-        val items = listOf(e.mainHandItem, head, e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
-        val headTex = head.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
-        val body = items.joinToString(",", "[", "]") { str(vanillaId(it)) } + (headTex?.let { ",\"headTex\":${str(it)}" } ?: "")
-        val previous = lastEquipment.put(key, body)
-        if (previous == body || (previous == null && body == NO_EQUIPMENT)) return
-        emit("""{"k":"eq","t":$tick,$who,"eq":$body}""")
-    }
+    // A profile's "textures" property, per profile object: profiles never change once made and are
+    // shared by every copy of a stack, so each is read once. Bounded by clearing when it gets big.
+    private val profileTexCache = IdentityHashMap<ResolvableProfile, Any>()
 
-    /** The game item id, plus "#rrggbb" for dyed items (leather armour) so the viewer can colour it. */
-    private fun vanillaId(stack: ItemStack): String {
-        if (stack.isEmpty) return ""
-        // The item it looks like: Hypixel builds many items on a base item with another item's model
-        // (paper that is drawn as TNT), so a vanilla item_model wins over the base item.
-        val modelId = stack.get(DataComponents.ITEM_MODEL)
-        val model = modelId?.takeIf { it.namespace == "minecraft" }?.toString()
-        var id = model ?: BuiltInRegistries.ITEM.getKey(stack.item).toString()
-        // A model from another namespace (Hypixel's own) is kept after "@", for the viewer to map.
-        if (modelId != null && model == null) id += "@" + modelId
-        val dye = stack.get(DataComponents.DYED_COLOR) ?: return id
-        return id + "#" + String.format(Locale.ROOT, "%06x", dye.rgb() and 0xFFFFFF)
+    private fun profileTex(profile: ResolvableProfile?): String? {
+        if (profile == null) return null
+        profileTexCache[profile]?.let { return if (it === NO_TEX) null else it as String }
+        if (profileTexCache.size >= PROFILE_CACHE_MAX) profileTexCache.clear()
+        val tex = texturesOf(profile.partialProfile().properties())
+        profileTexCache[profile] = tex ?: NO_TEX
+        return tex
     }
 
     private fun texturesOf(props: com.mojang.authlib.properties.PropertyMap): String? = props.get("textures").firstOrNull()?.value()
 
-    // ------------------------------------------------------------------ block palette (for "block" change lines)
+    /**
+     * Frames ([partialTick, a, b] triples) since the last tick, with the "held" still frame: the last
+     * frame before the view moves again, written ahead of the frame that moves.
+     */
+    private class FrameBuffer {
+        private var data = FloatArray(96)
+        private var size = 0
+        private var held = false
+        private var h0 = 0f
+        private var h1 = 0f
+        private var h2 = 0f
 
-    private fun paletteIndex(state: BlockState): Int = palette.getOrPut(state) {
-        val i = palette.size
-        emit("""{"k":"pal","i":$i,"s":${str(BlockStateParser.serialize(state))}}""")
-        i
-    }
+        fun hold(a: Float, b: Float, c: Float) { held = true; h0 = a; h1 = b; h2 = c }
 
-    // ------------------------------------------------------------------ formatting
-
-    private fun typeOf(e: Entity): String = BuiltInRegistries.ENTITY_TYPE.getKey(e.type).toString()
-
-    private fun n(v: Double) = String.format(Locale.ROOT, "%.3f", v)
-    private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
-    private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
-
-    private fun str(s: String): String {
-        val sb = StringBuilder(s.length + 2).append('"')
-        for (ch in s) when {
-            ch == '"' -> sb.append("\\\"")
-            ch == '\\' -> sb.append("\\\\")
-            ch == '\n' -> sb.append("\\n")
-            ch < ' ' -> sb.append(String.format(Locale.ROOT, "\\u%04x", ch.code))
-            else -> sb.append(ch)
+        fun add(a: Float, b: Float, c: Float) {
+            if (held) { put(h0, h1, h2); held = false }
+            put(a, b, c)
         }
-        return sb.append('"').toString()
+
+        private fun put(a: Float, b: Float, c: Float) {
+            if (size + 3 > data.size) data = data.copyOf(data.size * 2)
+            data[size++] = a; data[size++] = b; data[size++] = c
+        }
+
+        /** The frames so far (null if none), leaving the buffer empty; a held frame stays held. */
+        fun take(): FloatArray? {
+            if (size == 0) return null
+            val d = data.copyOf(size)
+            size = 0
+            return d
+        }
     }
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
-        private val FORMAT_CODES = Regex("\u00a7.")
+        private val FORMAT_CODES = Regex("§.")
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
-        const val NO_EQUIPMENT = """["","","","",""]"""
         // How far around you (in chunks) placed player heads are looked for, every second.
         const val SKULL_CHUNKS = 12
-        val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
+        const val PROFILE_CACHE_MAX = 4096
+        val UNSET = Any()
+        val NO_TEX = Any()
     }
 }

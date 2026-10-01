@@ -79,8 +79,19 @@ object BetterPF : Module(
     private val CONTROL_CODES = Regex("\u00a7.")
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
-    private var session: RunRecorder? = null
+    private var session: RecorderApi? = null
     private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("betterpf").resolve("runs")
+
+    /**
+     * A new session. With a VERIFY_RECORDER file next to the runs folder, the 0.6.13 recorder records
+     * the same run into runs-legacy/ as well (no upload, no chat), so the two files can be diffed.
+     */
+    private fun newSession(): RecorderApi {
+        val main = RunRecorder(runsDir, captureGeometry, { libraryKeys }, ::upload)
+        if (!Files.exists(runsDir.resolveSibling("VERIFY_RECORDER"))) return main
+        EngineerClient.logger.info("[ec] betterpf: verify mode - also recording with the 0.6.13 recorder")
+        return TeeRecorder(main, LegacyRunRecorder(runsDir.resolveSibling("runs-legacy"), captureGeometry, { libraryKeys }))
+    }
 
     init {
         on<LevelEvent.Load> {
@@ -89,7 +100,7 @@ object BetterPF : Module(
                 libraryKeys = null
                 fetchLibraryKeys()
                 RoomKeys.reset()
-                session = RunRecorder(runsDir, captureGeometry, { libraryKeys }, ::upload)
+                session = newSession()
             }
         }
 
