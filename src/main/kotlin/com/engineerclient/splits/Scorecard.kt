@@ -223,7 +223,8 @@ class Scorecard {
         val LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
         val STORM_CRUSHED = setOf("[BOSS] Storm: Oof", "[BOSS] Storm: Ouch, that hurt!")
         /** Said when he breaks free of a crush without dying — only sometimes; his moving is the rest. */
-        val STORM_FREE = setOf("[BOSS] Storm: Slowing me down will be your greatest accomplishment!")
+        /** Storm breaking free of his pin. ("Slowing me down..." is one of his random taunts, not this.) */
+        val STORM_FREE = setOf("⚠ Storm is enraged! ⚠")
         const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
         const val GOLDOR_DEAD = "[BOSS] Goldor: ...."
     }

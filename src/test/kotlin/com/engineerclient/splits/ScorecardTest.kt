@@ -74,7 +74,7 @@ class ScorecardTest {
         val card = Scorecard()
         card.onChat("[BOSS] Storm: ENERGY HEED MY CALL!", stamp(3500))
         card.onChat("[BOSS] Storm: Oof", stamp(3600))
-        card.onChat("[BOSS] Storm: Slowing me down will be your greatest accomplishment!", stamp(3700))
+        card.onChat("⚠ Storm is enraged! ⚠", stamp(3700))
         card.onChat("[BOSS] Storm: Oof", stamp(3800))
         card.onChat("[BOSS] Storm: Oof", stamp(4000))
         card.onChat("[BOSS] Storm: I should have known that I stood no chance.", stamp(4010))

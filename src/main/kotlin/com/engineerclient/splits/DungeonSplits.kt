@@ -184,6 +184,14 @@ object DungeonSplits : Module(
                 if (updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
                 else if (old.block == Blocks.BARRIER && updated.isAir) cleared += pos.x to pos.z
             }
+            // A terminal section's door: its ~228 barriers turn to air in the tick the section ends
+            // (its last completion and its gate both in). Seen whatever chat cleaners hide.
+            if (open(SplitTracker.TERMS) && old.block == Blocks.BARRIER && updated.isAir) {
+                val section = SECTION_DOORS.indexOfFirst { (x, z) -> pos.x in x && pos.z in z }
+                if (section >= 0) sectionDoor[section]++
+            }
+            // Maxor's beacon turning to bedrock is his kill.
+            if (open(SplitTracker.MAXOR) && pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK) subs.onMaxorKilled(now())
             // Simon Says: a button on the device's face, or its start button, pressed.
             if (open(SplitTracker.TERMS) && pos.x == 110 && updated.block == Blocks.STONE_BUTTON &&
                 old.block == Blocks.STONE_BUTTON && updated.getValue(BlockStateProperties.POWERED)
@@ -198,6 +206,14 @@ object DungeonSplits : Module(
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
             if (cleared.size >= DoorBlocks.DOOR_BLOCKS) door(cleared) { at, a, b -> blood.onDoorDown(at, a, b) }
             barriers.clear(); cleared.clear()
+            for (i in sectionDoor.indices) {
+                if (sectionDoor[i] >= SECTION_DOOR_BLOCKS) subs.onSectionDoor(now(), i + 1)
+                sectionDoor[i] = 0
+            }
+
+            // Storm and Necron where the server last put them (not where they are drawn, 3 ticks behind).
+            if (open(SplitTracker.STORM)) bossWither(level, "Storm")?.positionCodec?.base?.let { subs.onStormPosition(now(), it.x, it.y, it.z) }
+            if (open(SplitTracker.NECRON)) bossWither(level, "Necron")?.positionCodec?.base?.let { subs.onNecronPosition(now(), it.distanceTo(NECRON_MID)) }
 
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
             if (blood.active) for (e in level.entitiesForRendering()) {
@@ -244,11 +260,13 @@ object DungeonSplits : Module(
                 e is Player && open(SplitTracker.BLOOD) && e.name.string !in teamNames() -> {
                     val name = e.name.string.trim()
                     val at = now()
-                    if (watchedMobs.put(e.id, name to at) == null) boss.onMobSpawn(at, name, distanceTo(e))
+                    if (watchedMobs.put(e.id, name to at) == null) { boss.onMobSpawn(at, name, distanceTo(e)); subs.onBloodMobSpawn(at) }
                 }
             }
         }
         on<EntityEvent.Remove> {
+            // A crystal placed on Maxor's pylons (y 224) going: 42 ticks after a laser hit.
+            if (entity is EndCrystal && entity.y < 231 && open(SplitTracker.MAXOR)) subs.onPlacedCrystalGone(now())
             if (entity is WitherBoss && open(SplitTracker.MAXOR)) {
                 card.onMaxorGone(now())
                 val d = distanceTo(entity)
@@ -435,6 +453,13 @@ object DungeonSplits : Module(
     }
 
     private const val LINE_HEIGHT = 10
+
+    /** The S1/S2, S2/S3 and S3/S4 doors (x, z), each where its gate stands on Goldor's track. */
+    private val SECTION_DOORS = listOf(92..108 to 120..125, 15..20 to 124..140, 0..16 to 47..52)
+    /** A door is ~228 barriers going at once; nothing else in P3 clears this many there. */
+    private const val SECTION_DOOR_BLOCKS = 100
+    private val sectionDoor = IntArray(3)
+    private val NECRON_MID = net.minecraft.world.phys.Vec3(54.0, 66.0, 76.0)
     private val KEY = Regex("""(?:Wither|Blood) Key""")
 
     /** One timed thing in a section: its label, when it started, and how long it has run. */
@@ -458,7 +483,6 @@ object DungeonSplits : Module(
         val moving = prev != null && prev.first == e.id && e.position().distanceTo(prev.second) > 0.03
         maxorAt = Triple(e.id, e.position(), moving)
         if (prev == null || prev.first != e.id) return
-        if (moving && subs.waitingForMaxorMove) subs.onMaxorMoved(now())
         val check = maxorCheck ?: return
         if (serverTicks > check.first) {
             boss.extra(SplitTracker.MAXOR, now(), "§8not seen " + (if (check.second) "moving" else "freezing"), "his wither out of view, or it didn't happen")
@@ -498,6 +522,7 @@ object DungeonSplits : Module(
         if (prev == null || prev.first != e.id || serverTicks - handle.tick < 45) return
         if (e.position().distanceTo(prev.second) > 0.001) {
             card.onWatcherMoved(now(), "seen")
+            subs.onWatcherMoved(now())
             boss.extra(SplitTracker.BLOOD, now(), "§5watcher moved", "seen, " + (serverTicks - handle.tick) + " ticks after \"handle this\" - " + BossDetail.blocks(distanceTo(e)) + " away")
         }
     }
