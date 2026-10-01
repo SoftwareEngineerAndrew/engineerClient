@@ -24,6 +24,8 @@ import com.odtheking.odin.utils.render.drawStyledBox
 import net.minecraft.world.phys.AABB
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import net.minecraft.client.multiplayer.ClientLevel
@@ -182,6 +184,9 @@ object SimonSaysPractice : Module(
         markVersion()
         EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip. The others are signed. The keybind again takes it away.")
     }
+
+    private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
+    private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
 
     private fun remove() {
         val p = placed ?: return
@@ -765,6 +770,13 @@ object SimonSaysPractice : Module(
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution.
         on<BlockInteractEvent>(ignoreCancelled = true) { EngineerClient.safely("ss real sounds") { realClick(pos) } }
+        // The terminals start countdown (Storm dying; Goldor's first line if that was missed): the practice device goes away.
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (overlay) return@onReceive
+            val msg = content.string.replace(Regex("§."), "")
+            if (msg != STORM_DEAD && msg != GOLDOR_START) return@onReceive
+            mc.execute { if (placed != null) EngineerClient.safely("ss practice countdown") { remove(); EngineerClient.msg("§7SS Practice: removed (terminals starting).") } }
+        }
         // A new world has none of it: nothing to put back.
         on<LevelEvent.Unload> { placed = null; gen++; jobs.clear(); phase = Phase.IDLE }
     }
