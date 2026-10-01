@@ -332,7 +332,7 @@ def watcher_events(x):
         return None
     H = first(ch, W_HANDLE, after=D)
     P = first(ch, W_PROVEN, after=D)
-    ev = {'D': D, 'H': H, 'P': P}
+    ev = {'D': D, 'H': H, 'P': P, 'W1': first(ch, W + 'Things feel a little more roomy now, eh?', after=D)}
     # the Watcher's move: the first tick his position changes after he has hovered (two or more
     # recorded ticks at one spot, 6+ ticks long) within 2 blocks of the middle, from "handle this"
     # or from his arrival just after it. That is the packet's arrival: the departure on the server
@@ -718,7 +718,8 @@ def watcher_splits(r):
     ok = lastkind in ('fresh', 'fresh17')
     s['Camp'] = last - move if (ok and last is not None and move is not None) else None
     s['Clear'] = P - last if (ok and P is not None and last is not None) else None
-    s['total'] = P - 2 if P is not None else None
+    W1 = pick(evs, 'W1')
+    s['total'] = P - (W1 if W1 is not None else 2) if P is not None else None
     return s
 
 
@@ -866,8 +867,12 @@ def goldor_splits(r):
             mb = e.get(b + '_ms')
             return (mb - ma) / 1000 if (ma is not None and mb is not None) else None
         s[name + '_s'] = pick(evs, None, sec)
+    if s['in'] is not None and s['necron'] is not None and s['in'] >= s['necron']:
+        s['in'] = None          # someone was never seen in the box: no usable "everyone in"
     s['Leaps'] = s['in'] - s['core'] if (s['in'] is not None and s['core'] is not None) else None
     s['Kill'] = s['necron'] - s['in'] if (s['necron'] is not None and s['in'] is not None) else None
+    s['Terms_s'] = pick(evs, None, lambda e: (e['core_ms'] - e['ms0']) / 1000 if e.get('core_ms') is not None and e.get('ms0') is not None else None)
+    s['Goldor'] = s['necron'] - s['core'] if (s['necron'] is not None and s['core'] is not None) else None
     s['door_src'] = [pick(evs, None, lambda e, k=k: e.get(k)) for k in ('door1_src', 'door2_src', 'door3_src')]
     return s
 
@@ -1019,6 +1024,8 @@ def section_storm(runs):
     print('  crush 2 source:', collections.Counter(S[r.id]['crush2_src'] for r in have))
     print('  arrival seen: %d of %d with an enrage' % (sum(S[r.id]['arr'] is not None for r in have), sum(S[r.id]['enrage'] is not None for r in have)))
     print('  Flight hist:', hist([S[r.id]['Flight'] for r in have if S[r.id]['Flight'] is not None], 20))
+    c2 = [S[r.id]['Crush2'] for r in have if S[r.id]['Crush2'] is not None]
+    print('  crush 2 before Storm came within 2.4 blocks of the point: %d of %d' % (sum(1 for v in c2 if v < 0), len(c2)))
     print('  Crush2 (arrival -> crush 2) hist:', hist([S[r.id]['Crush2'] for r in have if S[r.id]['Crush2'] is not None], 20))
     return S
 
@@ -1197,7 +1204,13 @@ def section_bands(runs):
             ('Necron Space', col(Ne, 'Space'), 't'),
             ('Necron Trip 2', col(Ne, 'Trip2'), 't'),
             ('Necron Lock 2', col(Ne, 'Lock2'), 't'),
-            ('Necron Animation', col(Ne, 'Animation'), 't')]
+            ('Necron Animation', col(Ne, 'Animation'), 't'),
+            ('**Blood** (Watcher\'s first line -> proven)', col(W, 'total'), 't'),
+            ('**Maxor** (-> Storm\'s first line)', col(Mx, 'total'), 't'),
+            ('**Storm** (-> Goldor\'s first line)', col(St, 'total'), 't'),
+            ('**Terms** (-> core opening)', col(Go, 'Terms_s'), 's'),
+            ('**Goldor** (core opening -> Necron\'s first line)', col(Go, 'Goldor'), 't'),
+            ('**Necron** (-> "All this, for nothing...")', col(Ne, 'total'), 't')]
     print('== bands: 5-player timed runs, all data (t = server ticks, s = real seconds)')
     print('| split | unit | n | min | p5 | p10 | p25 | p50 | p75 | p90 | max | spread |')
     print('|---|---|---|---|---|---|---|---|---|---|---|---|')
