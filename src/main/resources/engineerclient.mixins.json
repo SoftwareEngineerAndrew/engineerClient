@@ -55,6 +55,7 @@
     "RecContainerScreenAccessor",
     "RecGuiAccessor",
     "RecTabOverlayAccessor",
+    "RecThumbFrameMixin",
     "RotateHeadPacketAccessor",
     "ScoreboardSidebarMixin",
     "GuiSidebarInvoker",

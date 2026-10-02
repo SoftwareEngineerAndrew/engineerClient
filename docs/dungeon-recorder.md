@@ -30,6 +30,8 @@ blood mob's metadata" or "what packet tells me the gate blew" is answered by loo
 | Hide Private Chats | on | private, guild, officer, co-op and friend lines are kept as `f: {"hidden": "private"}` (their raw bytes withheld) |
 | Raw Packets | on | every packet's exact bytes, both ways, in the `raw.gz` sidecar (`raw` on a line gives its frames' seq range) |
 | Max MB Per Hour | 1000 | compressed size cap per clock hour; past 90% of it, entity movement, particles and sounds are left out until the hour turns |
+| Frame Thumbnails | off | small JPEGs of the screen as you saw it (`thumb` lines, files in `thumbs/`); they show private chat and cannot be redacted |
+| Thumbnail FPS | 1 | 0.5-4 a second, plus one after each screen opens and each title |
 | Open Folder | | |
 
 ## Size
@@ -74,6 +76,7 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | `world` / `end` | `t, ms` | a world loaded / the recording ended |
 | `budget` | `ms, note` | the hour's size budget is nearly used: bulk lines are being left out |
 | `dropped` | `lines, ms` | the writer fell behind and dropped this many lines (a slow disk) |
+| `thumb` | `file, w, h, why, fw, fh, q, skipped?` | a frame thumbnail (Frame Thumbnails on): `file` relative to the recording (`thumbs/partNNNN/<seq>.jpg`), `w`x`h` the JPEG, `fw`x`fh` the frame it shrinks, `why` what asked for it (`fps`, `screen`, `title`, `subtitle`, joined by `+`), `skipped` frames not taken since the last one (`gpu` busy, encoder `queue` full) |
 | `error` | `what` | a packet that couldn't be written out |
 
 ### Input and what it came to
@@ -191,4 +194,5 @@ it (a few hundred server ticks, movement left out) plus one `example` of each pa
 
 Recordings stay on your computer. Private chats are left out and typed chat is redacted unless you
 turn those settings off. The server address and the names of players around you are in the file,
-as they are in the game; check before sharing one.
+as they are in the game; check before sharing one. Frame Thumbnails (off by default) are pictures of
+your screen: whatever was on it, private chat included, is in them.
