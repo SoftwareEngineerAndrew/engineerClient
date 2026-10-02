@@ -78,6 +78,8 @@ object DungeonRecorder : Module(
     private val compactEntities by BooleanSetting("Compact Entity Rows", false, desc = "Writes the per-tick entity rows to a separate xz file per part (smaller, slower to read).")
     private val rawPackets by BooleanSetting("Raw Packets", true, desc = "Also keeps every packet's exact bytes as they crossed the wire, both ways, in a sidecar file (the ground truth behind each line).")
     internal val odinInternals by BooleanSetting("Odin Internals", true, desc = "Odin's private solver/tracker state via reflection (version-fragile, read-only).")
+    private val thumbs by BooleanSetting("Frame Thumbnails", false, desc = "Small JPEGs of the screen as you saw it (what other mods draw: HUDs, waypoints, custom GUIs). They show private chat too and cannot be redacted. Adds 100-400 MB an hour.")
+    private val thumbFps by NumberSetting("Thumbnail FPS", 1.0, 0.5, 4.0, 0.5, desc = "Frame thumbnails a second (plus one on each screen open and title).")
     private val bookmark by KeybindSetting("Bookmark", GLFW.GLFW_KEY_UNKNOWN, "Marks this moment in the recording (also /ecrec mark [note]).").onPress { EngineerClient.safely("recorder bookmark") { Rec.mark(null) } }
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         EngineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); net.minecraft.util.Util.getPlatform().openPath(dir) }
@@ -115,6 +117,7 @@ object DungeonRecorder : Module(
         OdinEvents.install()
         OdinInternals.install()
         EngineerClient.safely("recorder ec") { EcRec.install() }
+        ThumbCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -273,6 +276,8 @@ object DungeonRecorder : Module(
         FrameCapture.perFrame = perFrameCamera
         EffectsCapture.sounds = playedSounds
         EffectsCapture.particles = spawnedParticles
+        ThumbCapture.on = thumbs
+        ThumbCapture.fps = thumbFps
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
         if (Rec.settingsSource == null) Rec.settingsSource = { settingsSnapshot() }

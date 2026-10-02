@@ -184,6 +184,9 @@ class RecorderSession(
     // ------------------------------------------------------------------ writer thread state
 
     private var part = 0
+
+    /** The part being written (the writer's view; may lag a line), for side files such as thumbnails. 0 before the first. */
+    val currentPart: Int get() = part
     private var partOpenMs = 0L
     private var partRaw = 0L
     private var prevPart: String? = null
