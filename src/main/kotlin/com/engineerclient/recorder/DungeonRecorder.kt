@@ -57,6 +57,8 @@ object DungeonRecorder : Module(
     private val outbound by BooleanSetting("Your Packets", true, desc = "Every packet you send (movement, clicks, container clicks, item use).")
     private val movement by BooleanSetting("Entity Movement", true, desc = "Other entities' movement and head turns (the bulk of the packets).")
     private val effects by BooleanSetting("Particles And Sounds", true, desc = "Particle and sound packets.")
+    private val playedSounds by BooleanSetting("Played Sounds", true, desc = "Every sound the game played or tried to (the server's, the client's own and mods'): the file it resolved to, volume, and whether it started; and every stop.")
+    private val spawnedParticles by BooleanSetting("Spawned Particles", true, desc = "Every particle requested from the world and every particle that actually spawned (client-made ones included), once per tick.")
     private val chunks by BooleanSetting("Chunk Data", false, desc = "Chunk loads in full (large: every block of each loaded chunk). Off: only which chunk loaded.")
     private val state by BooleanSetting("Client State", true, desc = "Your own state every tick, Odin's dungeon state and the sidebar when they change.")
     private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat and commands. Off: only that something was sent.")
@@ -90,6 +92,7 @@ object DungeonRecorder : Module(
         on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
         on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        EffectsCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -189,6 +192,8 @@ object DungeonRecorder : Module(
     /** Hands the core the settings it acts on, and how to read all of them for `settings` lines. */
     private fun pushConfig() {
         PacketJson.cookiePayloads = cookiePayloads
+        EffectsCapture.sounds = playedSounds
+        EffectsCapture.particles = spawnedParticles
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
         if (Rec.settingsSource == null) Rec.settingsSource = { settingsSnapshot() }
