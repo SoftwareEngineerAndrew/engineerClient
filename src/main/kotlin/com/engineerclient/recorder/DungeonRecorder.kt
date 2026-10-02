@@ -75,7 +75,6 @@ object DungeonRecorder : Module(
 
     @Volatile private var session: RecorderSession? = null
     private var lastState = ""
-    private var lastDungeon = ""
     private var lastSidebar = ""
 
     /** Packet types never worth a line: keep-alives and the bundle markers. (Light is kept: its arrays are decoded per section.) */
@@ -90,6 +89,9 @@ object DungeonRecorder : Module(
         on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
         on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        // Odin's dungeon state and its event stream (each subscribes itself; idle while not recording).
+        OdinState.install()
+        OdinEvents.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -209,7 +211,7 @@ object DungeonRecorder : Module(
         val s = RecorderSession(dir, meta)
         session = s
         Rec.begin(s)
-        lastState = ""; lastDungeon = ""; lastSidebar = ""
+        lastState = ""; lastSidebar = ""
     }
 
     private fun stop() {
@@ -248,11 +250,7 @@ object DungeonRecorder : Module(
         if (st != lastState) { lastState = st; Rec.emit("me", st) }
 
         if (Rec.tick % 10 != 0) return
-        val effects = p.activeEffects.joinToString(",") { "[${q(BuiltInRegistries.MOB_EFFECT.getKey(it.effect.value()).toString())},${it.amplifier},${it.duration}]" }
-        val team = DungeonUtils.dungeonTeammates.joinToString(",") { "[${q(it.name)},${q(it.clazz.name)},${it.isDead}]" }
-        val dungeon = """"area":${q(LocationUtils.currentArea.name)},"floor":${q(DungeonUtils.floor?.name ?: "")},"boss":${DungeonUtils.inBoss},""" +
-            """"room":${q(DungeonUtils.currentRoomName)},"party":[$team],"effects":[$effects],"fps":${mc.fps}"""
-        if (dungeon != lastDungeon) { lastDungeon = dungeon; Rec.emit("game", dungeon) }
+        // Odin's dungeon state (the old "game" line) is OdinState's now: odin.dungeon, team, loc, where...
 
         val board = mc.level?.scoreboard
         val objective = board?.getDisplayObjective(DisplaySlot.SIDEBAR)
