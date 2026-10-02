@@ -46,8 +46,9 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | k | fields | |
 |---|---|---|
 | `meta` | `format: "recorder-1", part, mod, mc, self, selfId, server, t, n, ms` | first line of every part; `selfId` is your entity id |
-| `in` | `p, t, n, ms, f` | a packet from the server: `p` its protocol id (`minecraft:set_entity_data`...), `f` its fields |
-| `out` | `p, t, n, ms, f` | a packet you sent |
+| `in` | `p, t, n, ms, e?, self?, f` | a packet from the server: `p` its protocol id (`minecraft:set_entity_data`...), `e` the entities it is about, `f` its fields |
+| `out` | `p, t, n, ms, e?, self?, f` | a packet you sent |
+| `commands` | `tree` | the client's command tree after a commands packet was applied |
 | `me` | `t, n, pos, rot, vel, ground, hp, abs, food, slot, held, keys, screen` | you, every tick anything in it changed. `keys` the controls held (`w a s d jump sneak sprint attack use`); `screen` the open screen's class and title |
 | `game` | `t, n, area, floor, boss, room, party: [[name, class, dead]], effects: [[id, amplifier, ticks]], fps` | Odin's view, when it changes (checked twice a second) |
 | `sidebar` | `t, n, title, lines` | the sidebar's lines, plain, when they change |
@@ -58,19 +59,43 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 
 ### How fields are written (`f`)
 
-Every instance field of the packet, by name, recursively:
+Every instance field of the packet, by name, recursively, losing nothing (recorder/PacketJson.kt,
+RichJson.kt, PacketDecode.kt):
 
-- text (chat, names, titles) as plain text;
-- items as `{id, count, name, sb, lore}` (`sb` the Skyblock id);
-- block states as `minecraft:stone[...]`, positions as `[x, y, z]`, registry entries by name;
-- entity data as `[[index, value], ...]`;
-- bulk data (byte buffers, chunk payloads) as `{"bytes": n}`.
+- every reflected object starts with `"@c"`, its concrete class (`ClientboundMoveEntityPacket$Pos`);
+- text as `{"t": plain, "j": json}`: `j` is the game's own JSON (styles, click and hover events,
+  translation keys), left out when it is just the plain string;
+- items as `{id, count, sb, name, lore, full, cd}`: `sb` the Skyblock id, `lore` every line plain,
+  `full` the whole stack through the game's item codec (or `patch`, its components, when the codec
+  refuses an odd stack), `cd` the custom data as SNBT; an empty stack is `null`. Recipe results
+  (`ItemStackTemplate`) are tagged with `"@c"`;
+- particles as `{type, opts}`; blocks, items, entity types, block entity types, menus, sounds,
+  effects and component types by registry id; block states as `minecraft:stone[...]`; positions as
+  `[x, y, z]`; NBT as `{"snbt": ...}`; player profiles as `{id, name, props: [{name, value, sig}]}`;
+- entity data as `[[index, serializerId, value], ...]`;
+- bytes (`byte[]`, buffers) as `{"len", "b64"}`; the login encryption handshake as
+  `{"len", "withheld": "crypto"}`; server cookies as `{"len", "sha256"}` unless Cookie Payloads is on;
+  bit sets as `{"bits": [longs]}`;
+- numbers exactly: doubles in their shortest round-trip form, `"NaN"`/`"Infinity"`/`"-Infinity"` as
+  strings, longs beyond 2^53 as strings.
 
-Lists longer than 128 and strings longer than 4000 are cut, with `"..."` marking the cut. Bundled
-packets (how the server sends a new entity with its data) are written as their separate packets.
+Nothing is cut. A real reference cycle is written as `{"@cycle": class}` and anything nested over 64
+deep as `{"@depth": text}`; a field that fails to read is `{"@error": ...}` and a JDK object whose
+fields are closed `{"@c", "@inaccessible": true, "str"}`. Packets holding items or entity data are
+written on the network thread as they arrive, before the game applies (and changes) them.
 
-Left out entirely: keep-alives, pongs, bundle markers, light updates, chunk-batch markers. Written
-as a name only: the command tree, tags, recipes, advancements.
+Decoded members added beside the fields: `changes: [[x, y, z, state]]` (section_blocks_update, in
+place of the packed arrays), `colorPatch: {x, y, w, h, len, b64, full}` (map_item_data), `light:
+{sky, block}` each `{mask, empty, arrays: {"<bit>": b64}}` with `y0` the section of bit 0
+(light_update, level_chunk_with_light), `etype, deg, dataState, facing` (add_entity), `state`
+(level_event 2001, block broken), `eventName` (game_event), `snbt` (block_entity_data), `names`
+(update_tags: tag members by name for the built-in registries). A packet line also carries
+`e: [entity ids]` for the packets about entities, and `self: true` when you are one of them.
+
+The command tree, tags, recipes and advancements are written in full. After the client applies a
+command tree, a `commands` line holds the resulting tree (`tree`, vanilla's own JSON form).
+Bundled packets (how the server sends a new entity with its data) are written as their separate
+packets. Left out entirely: keep-alives, pongs, bundle markers, chunk-batch markers.
 
 ## Using it as LLM context
 
