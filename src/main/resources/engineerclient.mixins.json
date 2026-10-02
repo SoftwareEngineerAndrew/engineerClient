@@ -8,6 +8,7 @@
     "BlurRadiusMixin",
     "CameraAccessor",
     "CameraOffsetMixin",
+    "CommandsAppliedMixin",
     "ContainerScreenAccessor",
     "ChatComponentMixin",
     "ConnectionTapMixin",

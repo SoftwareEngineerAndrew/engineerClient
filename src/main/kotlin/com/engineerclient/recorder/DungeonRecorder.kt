@@ -61,6 +61,7 @@ object DungeonRecorder : Module(
     private val state by BooleanSetting("Client State", true, desc = "Your own state every tick, Odin's dungeon state and the sidebar when they change.")
     private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat and commands. Off: only that something was sent.")
     private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat and friend notices out.")
+    private val cookiePayloads by BooleanSetting("Cookie Payloads", false, desc = "Include server cookie bytes (may hold session tokens); off writes length and hash only")
     private val minFreeGb by NumberSetting("Min Free Disk GB", 10.0, 0.0, 500.0, 1.0, desc = "Stops the recording (saying so in the file) when the disk has less free space than this.")
     private val maxFolderGb by NumberSetting("Max Recordings Folder GB", 0.0, 0.0, 2000.0, 10.0, desc = "0 = no limit. Stops the recording when the recordings folder grows past this.")
     private val deleteOldest by BooleanSetting("Delete Oldest When Full", false, desc = "At the folder limit, deletes the oldest finished recordings instead of stopping. Never the one being written.")
@@ -77,10 +78,8 @@ object DungeonRecorder : Module(
     private var lastDungeon = ""
     private var lastSidebar = ""
 
-    /** Packet types never worth a line: keep-alives, the bundle markers, light. */
-    private val SKIP = setOf("minecraft:keep_alive", "minecraft:pong", "minecraft:bundle_delimiter", "minecraft:light_update", "minecraft:chunk_batch_start", "minecraft:chunk_batch_finished")
-    /** Big and rarely useful: their name and size only. */
-    private val SUMMARY = setOf("minecraft:commands", "minecraft:update_tags", "minecraft:update_recipes", "minecraft:recipe_book_add", "minecraft:update_advancements")
+    /** Packet types never worth a line: keep-alives and the bundle markers. (Light is kept: its arrays are decoded per section.) */
+    private val SKIP = setOf("minecraft:keep_alive", "minecraft:pong", "minecraft:bundle_delimiter", "minecraft:chunk_batch_start", "minecraft:chunk_batch_finished")
     private val MOVEMENT = setOf("minecraft:move_entity_pos", "minecraft:move_entity_pos_rot", "minecraft:move_entity_rot", "minecraft:rotate_head",
         "minecraft:set_entity_motion", "minecraft:entity_position_sync", "minecraft:teleport_entity")
     private val EFFECTS = setOf("minecraft:level_particles", "minecraft:sound", "minecraft:sound_entity")
@@ -113,7 +112,7 @@ object DungeonRecorder : Module(
             val type = PacketJson.type(p)
             if (type in SKIP || type == "minecraft:pong") return@onSend
             val redact = !Rec.typedChat && (p is ServerboundChatPacket || p is ServerboundChatCommandPacket || p is ServerboundChatCommandSignedPacket)
-            line("out", type) { if (redact) "{\"redacted\":true}" else PacketJson.write(p) }
+            packetLine("out", type, p, if (redact) ({ "{\"redacted\":true}" }) else PacketJson.capture(p))
         }
     }
 
@@ -138,23 +137,24 @@ object DungeonRecorder : Module(
         if ((type in MOVEMENT && !movement) || (type in EFFECTS && !effects)) return
         val text = when (p) { is ClientboundSystemChatPacket -> p.content.string; is ClientboundPlayerChatPacket -> p.body.content; else -> null }
         if (text != null && Rec.privateText(text)) return
-        line("in", type) {
-            when {
-                p is ClientboundLevelChunkWithLightPacket && !chunks -> "{\"x\":${p.x},\"z\":${p.z}}"
-                type in SUMMARY -> "{\"summary\":true}"
-                else -> PacketJson.write(p)
-            }
-        }
+        val body: () -> String =
+            if (p is ClientboundLevelChunkWithLightPacket && !chunks) { val x = p.x; val z = p.z; { "{\"x\":$x,\"z\":$z}" } }
+            else PacketJson.capture(p)
+        packetLine("in", type, p, body)
     }
 
     /**
      * One packet line: the envelope (seq, ticks, clock taken now, on the packet's own thread), its
-     * type, then its fields, built later on the writer thread.
+     * type and the entities it is about, then its fields. [body] comes from [PacketJson.capture]: the
+     * packets holding mutable state are already a finished string, the rest are built on the writer
+     * thread.
      */
-    private fun line(dir: String, type: String, body: () -> String) {
+    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String) {
         val seq = Rec.nextSeq()
         val env = Rec.envelope(dir, seq)
-        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":\"$type\",\"f\":${body()}}" }
+        val e = PacketDecode.entityMembers(p)
+        val pt = q(type)
+        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$e,\"f\":${body()}}" }
     }
 
     // ------------------------------------------------------------------ lifecycle and client state
@@ -188,6 +188,7 @@ object DungeonRecorder : Module(
 
     /** Hands the core the settings it acts on, and how to read all of them for `settings` lines. */
     private fun pushConfig() {
+        PacketJson.cookiePayloads = cookiePayloads
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
         if (Rec.settingsSource == null) Rec.settingsSource = { settingsSnapshot() }
@@ -238,7 +239,7 @@ object DungeonRecorder : Module(
         val o = mc.options
         val keys = listOf(o.keyUp to "w", o.keyLeft to "a", o.keyDown to "s", o.keyRight to "d", o.keyJump to "jump", o.keyShift to "sneak",
             o.keySprint to "sprint", o.keyAttack to "attack", o.keyUse to "use").filter { it.first.isDown }.joinToString(",") { "\"${it.second}\"" }
-        val held = StringBuilder().also { PacketJson.item(it, p.mainHandItem) }
+        val held = RichJson.itemNow(p.mainHandItem)
         val screen = mc.screen?.let { "{\"class\":${q(it.javaClass.simpleName)},\"title\":${q(it.title.string)}}" } ?: "null"
         val v = p.deltaMovement
         val st = """"pos":[${f(p.x)},${f(p.y)},${f(p.z)}],"rot":[${f1(p.yRot)},${f1(p.xRot)}],"vel":[${f(v.x)},${f(v.y)},${f(v.z)}],""" +
