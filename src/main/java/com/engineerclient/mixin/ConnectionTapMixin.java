@@ -29,6 +29,6 @@ public class ConnectionTapMixin {
     private void ec$tap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
         P3Rotation.INSTANCE.tap(packet);
         BossRecorder.INSTANCE.tap(packet);
-        DungeonRecorder.INSTANCE.tap(packet);
+        DungeonRecorder.INSTANCE.tap((Connection) (Object) this, packet);
     }
 }
