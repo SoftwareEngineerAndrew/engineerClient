@@ -90,6 +90,7 @@ object DungeonRecorder : Module(
         on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
         on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        PacketFate.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -127,11 +128,11 @@ object DungeonRecorder : Module(
         if (!enabled) return
         if (packet is ClientboundPingPacket && packet.id != 0) Rec.serverTicks++
         if (!Rec.active || !inbound) return
-        EngineerClient.safely("recorder tap") { inbound(packet) }
+        EngineerClient.safely("recorder tap") { inbound(packet); PacketFate.readBegin(packet) }
     }
 
     private fun inbound(p: Packet<*>) {
-        if (p is ClientboundBundlePacket) { p.subPackets().forEach { inbound(it) }; return }
+        if (p is ClientboundBundlePacket) { p.subPackets().forEach { inbound(it) }; PacketFate.rememberBundle(p, p.subPackets()); return }
         val type = PacketJson.type(p)
         if (type in SKIP) return
         if ((type in MOVEMENT && !movement) || (type in EFFECTS && !effects)) return
@@ -154,6 +155,7 @@ object DungeonRecorder : Module(
         val env = Rec.envelope(dir, seq)
         val e = PacketDecode.entityMembers(p)
         val pt = q(type)
+        if (dir == "in") PacketFate.remember(p, seq)
         Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$e,\"f\":${body()}}" }
     }
 
