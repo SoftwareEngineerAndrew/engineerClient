@@ -155,6 +155,30 @@ class RecorderSessionTest {
     }
 
     @Test
+    fun `entity loads and the big moments also go to the side indexes`() {
+        val s = RecorderSession(root, notify = {})
+        Rec.begin(s)
+        Rec.emit("espawn", "\"id\":7,\"type\":\"minecraft:zombie\",\"at\":\"load\"")
+        Rec.emit("espawn", "\"id\":7,\"type\":\"minecraft:zombie\",\"at\":\"tick\"")
+        Rec.emit("world", "\"via\":\"login\"")
+        Rec.emit("end", "")
+        Rec.emit("hello", "\"x\":1")
+        Rec.mark("here")
+        s.confirm("F7")
+        Rec.end(s)
+        assertTrue(s.closeAndWait(10_000))
+        val d = only(root) { Files.isDirectory(it) }.single()
+        val ents = Files.readAllLines(d.resolve("entities.jsonl")).map(::json)
+        assertEquals(1, ents.size, "only the load, not the tick-end resnap")
+        assertEquals(7, ents[0]["id"].asInt)
+        assertTrue(ents[0]["of"].asLong > 0)
+        val events = Files.readAllLines(d.resolve("events.jsonl")).map(::json)
+        assertEquals(listOf("world", "end", "mark"), events.map { it["kind"].asString })
+        assertEquals("here", events.last()["note"].asString)
+        for (e in events) assertEquals(listOf("k", "seq", "t", "n", "ms", "ns"), e.keySet().take(6), e.toString())
+    }
+
+    @Test
     fun `an abandoned session leaves nothing behind`() {
         val s = RecorderSession(root, notify = {})
         Rec.begin(s)

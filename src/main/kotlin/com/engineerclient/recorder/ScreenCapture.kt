@@ -82,6 +82,8 @@ object ScreenCapture {
         current = screen
         if (!reinit) resetDiff(screen)
         Rec.emit("screen", openBody(screen, w, h, reinit))
+        // A thumbnail of the frame that first shows it (only when Frame Thumbnails is on).
+        if (!reinit) ThumbCapture.request("screen")
     }
 
     private fun closed(screen: Screen) {

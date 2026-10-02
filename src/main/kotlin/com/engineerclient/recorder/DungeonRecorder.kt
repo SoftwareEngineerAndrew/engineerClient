@@ -35,24 +35,29 @@ import net.minecraft.network.protocol.game.ServerboundChatPacket
 import org.lwjgl.glfw.GLFW
 
 /**
- * Dungeon Recorder: everything that happens in a dungeon, for building mods with an LLM. Where
- * Better PF records a replay and Boss Recorder the boss fights, this keeps the lot:
+ * Dungeon Recorder: everything that happens in a dungeon, losslessly, for building mods with an LLM.
+ * Where Better PF records a replay and Boss Recorder the boss fights, this keeps the lot:
  *
- *  - every packet the server sends and every packet you send, each written out field by field
- *    ([PacketJson]) with the server tick it arrived on;
- *  - your own state every tick (position, look, motion, health, held item, the screen open, the
- *    block being mined) and the game's derived state when it changes (Odin's floor, room and
- *    party, the sidebar);
- *  - your input as it happens and what it came to ([InputCapture]).
+ *  - every packet both ways, field by field ([PacketJson]), with every frame's exact bytes and the
+ *    connection's lifecycle ([WireTap], [RecorderLifecycle]) and what became of each packet ([PacketFate]);
+ *  - the world as the client held it ([ChunkCapture], [WorldCapture]) and every entity every tick
+ *    ([EntityMirror], [EntityCapture]);
+ *  - you: input and what it came to ([InputCapture]), your full state, the camera and the clock
+ *    ([PlayerState], [FrameCapture], [EnvOptions]), screens, chat and HUD as drawn ([ScreenCapture],
+ *    [HudCapture]), sounds and particles ([EffectsCapture]), opt-in thumbnails ([ThumbCapture]);
+ *  - what the mods made of it: Odin's state, events and internals ([OdinState], [OdinEvents],
+ *    [OdinInternals]) and Engineer Client's own modules ([EcRec]).
  *
- * Files: <game dir>/engineerclient-recordings/, one directory per recording: gzipped JSON Lines
- * parts with an index, a raw packet sidecar and a manifest ([RecorderSession], [Rec]; format:
- * docs/dungeon-recorder.md; tools/recorder/read.py turns them into readable timelines).
+ * This object holds the settings and the packet path; each capture unit installs its own hooks and
+ * does nothing while no recording is open. Files: <game dir>/engineerclient-recordings/, one
+ * directory per recording: gzipped JSON Lines parts with an index, a raw packet sidecar and a
+ * manifest ([RecorderSession], [Rec]; format: docs/dungeon-recorder.md; tools/recorder/read.py
+ * turns them into timelines, rebuilt states and LLM context packs).
  */
 object DungeonRecorder : Module(
     name = "Dungeon Recorder",
     category = Category.custom("Engineer Client"),
-    description = "Records everything in a dungeon - every packet both ways, field by field, and your own state every tick - as context for building mods. Saved to engineerclient-recordings/ in the game folder.",
+    description = "Records everything in a dungeon, losslessly - every packet both ways, the world, every entity, your input and state, screens and HUD, Odin's and our modules' state - as context for building mods. Saved to engineerclient-recordings/ in the game folder.",
 ) {
     private val where by SelectorSetting("Where", "Dungeons", listOf("Dungeons", "Dungeons + Hub", "Everywhere"), desc = "When to record: in dungeons only, also in the Dungeon Hub (party finder, queueing), or always.")
     private val inbound by BooleanSetting("Server Packets", true, desc = "Every packet the server sends.")
@@ -104,20 +109,25 @@ object DungeonRecorder : Module(
         // world before's late disconnect never ends the next world's recording.
         ClientPlayConnectionEvents.DISCONNECT.register { handler, _ -> EngineerClient.safely("recorder world end") { RecorderLifecycle.onDisconnect(handler) } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        // Every capture unit registers its own hooks once. Each is guarded on its own: one that fails
+        // to install (an Odin or Minecraft change) leaves the rest, and the game, running.
         EngineerClient.safely("recorder world capture") { WorldCapture.install() }
-        EntityCapture.install()
-        PacketFate.install()
-        InputCapture.install()
-        PlayerState.install(); FrameCapture.install(); EnvOptions.install()
-        // Screens, chat as shown, HUD, tab list, scoreboards and boss bars (U9).
-        ScreenCapture.install(); HudCapture.install()
-        EffectsCapture.install()
-        // Odin's dungeon state and its event stream (each subscribes itself; idle while not recording).
-        OdinState.install()
-        OdinEvents.install()
-        OdinInternals.install()
+        EngineerClient.safely("recorder entities") { EntityCapture.install() }
+        EngineerClient.safely("recorder packet fate") { PacketFate.install() }
+        EngineerClient.safely("recorder input") { InputCapture.install() }
+        EngineerClient.safely("recorder player") { PlayerState.install() }
+        EngineerClient.safely("recorder frames") { FrameCapture.install() }
+        EngineerClient.safely("recorder env") { EnvOptions.install() }
+        // Screens, chat as shown, HUD, tab list, scoreboards and boss bars.
+        EngineerClient.safely("recorder screens") { ScreenCapture.install() }
+        EngineerClient.safely("recorder hud") { HudCapture.install() }
+        EngineerClient.safely("recorder effects") { EffectsCapture.install() }
+        // Odin's dungeon state, its event stream and its private solver/tracker state.
+        EngineerClient.safely("recorder odin state") { OdinState.install() }
+        EngineerClient.safely("recorder odin events") { OdinEvents.install() }
+        EngineerClient.safely("recorder odin internals") { OdinInternals.install() }
         EngineerClient.safely("recorder ec") { EcRec.install() }
-        ThumbCapture.install()
+        EngineerClient.safely("recorder thumbs") { ThumbCapture.install() }
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -206,7 +216,7 @@ object DungeonRecorder : Module(
             val subs = p.subPackets().toList()
             val b = Rec.nextSeq()
             val env = Rec.envelope("bundle", b)
-            Rec.emitLine(b, 96, "bundle", System.currentTimeMillis()) { "$env,\"b\":$b,\"n\":${subs.size},\"ph\":\"$ph\"$rawM}" }
+            Rec.emitLine(b, 96, "bundle", System.currentTimeMillis()) { "$env,\"b\":$b,\"count\":${subs.size},\"ph\":\"$ph\"$rawM}" }
             subs.forEachIndexed { i, sub -> inboundOne(sub, ",\"ph\":\"$ph\",\"b\":$b,\"bi\":$i") }
             PacketFate.rememberBundle(p, subs)
             return

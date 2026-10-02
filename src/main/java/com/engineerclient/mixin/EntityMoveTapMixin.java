@@ -27,6 +27,10 @@ public class EntityMoveTapMixin {
     )
     private void ec$recMove(Optional<Vec3> pos, Optional<Float> yRot, Optional<Float> xRot, CallbackInfo ci) {
         if (!EntityCapture.movesOn) return;
-        EntityCapture.onMove((Entity) (Object) this, pos, yRot, xRot);
+        // The recorder must never break the game: whatever it hits stays here.
+        try {
+            EntityCapture.onMove((Entity) (Object) this, pos, yRot, xRot);
+        } catch (Throwable ignored) {
+        }
     }
 }

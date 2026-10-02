@@ -21,6 +21,10 @@ public class RecThumbFrameMixin {
 
     @Inject(method = "renderFrame(Z)V", at = @At("RETURN"), require = 0, expect = 0)
     private void ec$recThumbFrame(boolean advanceGameTime, CallbackInfo ci) {
-        ThumbCapture.INSTANCE.onFrameEnd();
+        // The recorder must never break the game: whatever it hits stays here.
+        try {
+            ThumbCapture.INSTANCE.onFrameEnd();
+        } catch (Throwable ignored) {
+        }
     }
 }

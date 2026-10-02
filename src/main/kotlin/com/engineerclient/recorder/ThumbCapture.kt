@@ -79,7 +79,7 @@ object ThumbCapture {
     }
 
     /**
-     * Asks for a thumbnail of the next finished frame (any thread; U9 calls it with "screen").
+     * Asks for a thumbnail of the next finished frame (any thread; ScreenCapture calls it with "screen" when a screen opens).
      * The frame being drawn when this is called may predate the change, so it is served at the end
      * of the next whole frame, which always shows it.
      */
