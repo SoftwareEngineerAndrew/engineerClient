@@ -68,6 +68,8 @@ object DungeonRecorder : Module(
     private val minFreeGb by NumberSetting("Min Free Disk GB", 10.0, 0.0, 500.0, 1.0, desc = "Stops the recording (saying so in the file) when the disk has less free space than this.")
     private val maxFolderGb by NumberSetting("Max Recordings Folder GB", 0.0, 0.0, 2000.0, 10.0, desc = "0 = no limit. Stops the recording when the recordings folder grows past this.")
     private val deleteOldest by BooleanSetting("Delete Oldest When Full", false, desc = "At the folder limit, deletes the oldest finished recordings instead of stopping. Never the one being written.")
+    internal val entityTicks by BooleanSetting("Entity Ticks", true, desc = "Every entity's position, rotation, motion and health each tick it changes, and each move the client applies.")
+    internal val renderedEntities by BooleanSetting("Rendered Entities", true, desc = "Which entities were drawn each tick, with their name tags and outlines.")
     private val compactEntities by BooleanSetting("Compact Entity Rows", false, desc = "Writes the per-tick entity rows to a separate xz file per part (smaller, slower to read).")
     private val rawPackets by BooleanSetting("Raw Packets", true, desc = "Also keeps every packet's exact bytes as they crossed the wire, both ways, in a sidecar file (the ground truth behind each line).")
     private val bookmark by KeybindSetting("Bookmark", GLFW.GLFW_KEY_UNKNOWN, "Marks this moment in the recording (also /ecrec mark [note]).").onPress { EngineerClient.safely("recorder bookmark") { Rec.mark(null) } }
@@ -101,6 +103,7 @@ object DungeonRecorder : Module(
         ClientPlayConnectionEvents.DISCONNECT.register { handler, _ -> EngineerClient.safely("recorder world end") { RecorderLifecycle.onDisconnect(handler) } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
         EngineerClient.safely("recorder world capture") { WorldCapture.install() }
+        EntityCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -197,6 +200,8 @@ object DungeonRecorder : Module(
     }
 
     private fun inboundOne(p: Packet<*>, extra: String) {
+        // Before any filter: the mirror must see every entity packet to keep its bases right.
+        val abs = try { EntityMirror.annotate(p) } catch (t: Throwable) { "\"absErr\":${q(t.toString())}" }
         val type = PacketJson.type(p)
         if (type in SKIP) return
         if ((type in MOVEMENT && !movement) || (type in EFFECTS && !effects)) return
@@ -207,7 +212,7 @@ object DungeonRecorder : Module(
             p is ClientboundChunksBiomesPacket -> ChunkCapture.biomes(p)
             else -> PacketJson.capture(p)
         }
-        packetLine("in", type, p, body, extra)
+        packetLine("in", type, p, body, extra, abs)
     }
 
     /**
@@ -216,12 +221,13 @@ object DungeonRecorder : Module(
      * packets holding mutable state are already a finished string, the rest are built on the writer
      * thread.
      */
-    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String, extra: String) {
+    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String, extra: String, tail: String? = null) {
         val seq = Rec.nextSeq()
         val env = Rec.envelope(dir, seq)
         val e = PacketDecode.entityMembers(p)
         val pt = q(type)
-        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$extra$e,\"f\":${body()}}" }
+        val x = if (tail == null) "" else ",$tail"
+        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$extra$e,\"f\":${body()}$x}" }
     }
 
     // ------------------------------------------------------------------ lifecycle and client state
