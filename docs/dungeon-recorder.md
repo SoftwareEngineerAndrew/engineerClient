@@ -22,8 +22,9 @@ blood mob's metadata" or "what packet tells me the gate blew" is answered by loo
 | Particles And Sounds | on | |
 | Chunk Data | off | full chunk loads (large); off, a chunk load is just its x, z |
 | Client State | on | the `me`, `game` and `sidebar` lines below |
-| Typed Chat | off | what you type in chat and commands; off, the line says `redacted` |
-| Hide Private Chats | on | private, guild, officer, co-op and friend lines are left out |
+| Typed Chat | off | what you type in chat and commands; off, a command keeps only its name (`{"command", "args": "<redacted>"}`) and a chat message its length and signing data (`{"redacted": true, "len", ...}`) |
+| Hide Private Chats | on | private, guild, officer, co-op and friend lines are kept as `f: {"hidden": "private"}` (their raw bytes withheld) |
+| Raw Packets | on | every packet's exact bytes, both ways, in the `raw.gz` sidecar (`raw` on a line gives its frames' seq range) |
 | Max MB Per Hour | 1000 | compressed size cap per clock hour; past 90% of it, entity movement, particles and sounds are left out until the hour turns |
 | Open Folder | | |
 
@@ -52,7 +53,14 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | `me` | `t, n, pos, rot, vel, ground, hp, abs, food, slot, held, keys, screen` | you, every tick anything in it changed. `keys` the controls held (`w a s d jump sneak sprint attack use`); `screen` the open screen's class and title |
 | `game` | `t, n, area, floor, boss, room, party: [[name, class, dead]], effects: [[id, amplifier, ticks]], fps` | Odin's view, when it changes (checked twice a second) |
 | `sidebar` | `t, n, title, lines` | the sidebar's lines, plain, when they change |
-| `world` / `end` | `t, ms` | a world loaded / the recording ended |
+| `world` | `via (login\|respawn), selfId, dimension, dimType, minY, height, logicalHeight, sky, ceiling, seaLevel, gameType, chunkRadius?, simDistance?, hardcore?, enforcesSecureChat?, dataToKeep?` | the dimension the server put you in, from the login or respawn packet itself. A respawn (a server switch) does not start a new recording |
+| `config` | `dir, ph, p, raw?, f` | a login- or configuration-phase packet (registries, tags, packs) from before the world's login, replayed at the start of the recording with its original `seq` and `ns` (negative: before the start) |
+| `meta2` | `server, settings, filters` | the part of the meta read on the game thread, when the recording opened on the network thread |
+| `bundle` | `b, n, ph, raw?` | a bundle of `n` packets; each packet in it is its own `in` line with `b` (this line's seq) and `bi` (its index) |
+| `wire_out` | `p, ph, len, rawSeq?` | a packet you sent actually left (written by the encoder); `out` is only what was attempted, with `cancelled` |
+| `disconnect` | `by (client\|server\|error), reason, report, bugReport` | the game connection closed |
+| `conn_error` | `error, stack` | the exception that broke the connection |
+| `end` | `why` | the recording ended (`reconfigure`, `reconnect`, `disconnect`, `disabled`, `replaced`) |
 | `budget` | `ms, note` | the hour's size budget is nearly used: bulk lines are being left out |
 | `dropped` | `lines, ms` | the writer fell behind and dropped this many lines (a slow disk) |
 | `error` | `what` | a packet that couldn't be written out |
@@ -95,7 +103,15 @@ place of the packed arrays), `colorPatch: {x, y, w, h, len, b64, full}` (map_ite
 The command tree, tags, recipes and advancements are written in full. After the client applies a
 command tree, a `commands` line holds the resulting tree (`tree`, vanilla's own JSON form).
 Bundled packets (how the server sends a new entity with its data) are written as their separate
-packets. Left out entirely: keep-alives, pongs, bundle markers, chunk-batch markers.
+packets, after a `bundle` line that ties them together. Nothing is left out: keep-alives, pongs and
+chunk-batch markers are lines like any other. `in` and `out` lines carry `ph`, the protocol phase
+(`login`, `configuration` or `play`).
+
+The raw sidecar holds each frame as the game encoded it (`[packet id][payload]`, no compression or
+encryption); its phase byte is 0 handshaking, 1 status, 2 login, 3 configuration, 4 play. The login
+encryption handshake is withheld (`crypto`), as are cookies without Cookie Payloads (`cookie`),
+hidden private chats (`private`) and what you typed without Typed Chat (`typed_chat`): only their
+length is kept.
 
 ## Using it as LLM context
 
