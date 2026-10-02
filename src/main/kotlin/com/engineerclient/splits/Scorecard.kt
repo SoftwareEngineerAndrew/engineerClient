@@ -1,5 +1,6 @@
 package com.engineerclient.splits
 
+import com.engineerclient.recorder.EcRec
 import java.util.Locale
 
 /**
@@ -65,26 +66,26 @@ class Scorecard {
 
     fun onChat(msg: String, at: Stamp) {
         when {
-            msg == WATCHER_HANDLE && watcherHandle == null -> { watcherHandle = at; note("watcher dialog over") }
-            CRYSTAL_ACTIVE.matches(msg) -> { crystals += at; note("crystal active ${crystals.size}") }
-            msg in MAXOR_STUNNED && crystals.size >= 2 -> { maxorStuns += at; note("Maxor stunned ${maxorStuns.size}") }
-            msg in LIGHTNING && stormMoving == null -> { stormMoving = at; note("Storm moving (lightning)") }
-            msg in STORM_CRUSHED -> { crushes += at; note("Storm crushed ${crushes.size}") }
+            msg == WATCHER_HANDLE && watcherHandle == null -> { watcherHandle = at; note("watcher dialog over", at) }
+            CRYSTAL_ACTIVE.matches(msg) -> { crystals += at; note("crystal active ${crystals.size}", at) }
+            msg in MAXOR_STUNNED && crystals.size >= 2 -> { maxorStuns += at; note("Maxor stunned ${maxorStuns.size}", at) }
+            msg in LIGHTNING && stormMoving == null -> { stormMoving = at; note("Storm moving (lightning)", at) }
+            msg in STORM_CRUSHED -> { crushes += at; note("Storm crushed ${crushes.size}", at) }
             msg in STORM_FREE && crushes.size > freed.size -> stormFree(at, "chat")
-            msg == STORM_DEAD -> { stormDead = at; note("Storm dead") }
-            msg == GOLDOR_DEAD -> { goldorDead = at; note("Goldor dead") }
+            msg == STORM_DEAD -> { stormDead = at; note("Storm dead", at) }
+            msg == GOLDOR_DEAD -> { goldorDead = at; note("Goldor dead", at) }
         }
     }
 
     /** The Watcher's move: his first, at least 45 server ticks after the dialog ends. */
-    fun onWatcherMoved(at: Stamp, how: String) { if (watcherHandle != null && watcherMoved == null) { watcherMoved = at; note("watcher moved ($how)") } }
+    fun onWatcherMoved(at: Stamp, how: String) { if (watcherHandle != null && watcherMoved == null) { watcherMoved = at; note("watcher moved ($how)", at) } }
 
     /** The dialog is over and the Watcher's move is still to come. */
     val waitingForWatcher: Boolean get() = watcherHandle != null && watcherMoved == null
 
     /** The first nether portal block of the run: the portal out of the blood room has opened. */
 
-    fun onPortal(at: Stamp) { if (portalOpen == null) { portalOpen = at; note("portal open") } }
+    fun onPortal(at: Stamp) { if (portalOpen == null) { portalOpen = at; note("portal open", at) } }
 
     /** Storm moved away from where a crush pinned him: that DPS window is over. */
     fun onStormMoved(at: Stamp) { if (crushes.size > freed.size) stormFree(at, "Storm moved") }
@@ -92,14 +93,14 @@ class Scorecard {
     /** Whether Storm is pinned by a crush right now, so the module knows to watch him. */
     val stormPinned: Boolean get() = crushes.size > freed.size && stormDead == null
 
-    fun onEveryoneInCore(at: Stamp, how: String) { if (allIn == null) { allIn = at; note("everyone in core ($how)") } }
+    fun onEveryoneInCore(at: Stamp, how: String) { if (allIn == null) { allIn = at; note("everyone in core ($how)", at) } }
 
     /** A wither removed while Maxor is up; the last before Storm is Maxor dying. */
-    fun onMaxorGone(at: Stamp) { maxorGone = at; note("a wither went (Maxor dead?)") }
+    fun onMaxorGone(at: Stamp) { maxorGone = at; note("a wither went (Maxor dead?)", at) }
 
     /** Necron off mid after his animation, then first back on it. */
-    fun onNecronOffMid(at: Stamp) { if (necronFree == null) { necronFree = at; note("Necron left mid") } }
-    fun onNecronBackAtMid(at: Stamp) { if (necronFree != null && necronMid == null) { necronMid = at; note("Necron back at mid") } }
+    fun onNecronOffMid(at: Stamp) { if (necronFree == null) { necronFree = at; note("Necron left mid", at) } }
+    fun onNecronBackAtMid(at: Stamp) { if (necronFree != null && necronMid == null) { necronMid = at; note("Necron back at mid", at) } }
 
     /** Which of Necron's moves the module should watch for next, if any. */
     val necronWatch: Boolean get() = necronMid == null
@@ -112,15 +113,29 @@ class Scorecard {
     fun onGoldorHit(at: Stamp, how: String) {
         if (goldorHit != null || goldorDead != null) return
         goldorHit = at
-        note("first hit on Goldor ($how)")
+        note("first hit on Goldor ($how)", at)
     }
 
     private fun stormFree(at: Stamp, how: String) {
         freed += at
-        note("Storm free of crush ${freed.size} ($how)")
+        note("Storm free of crush ${freed.size} ($how)", at)
     }
 
-    private fun note(what: String) = onEvent(what)
+    /**
+     * A moment taken: [onEvent] (the debug line), and the recorder with the moment's own stamp and
+     * every moment the card holds so far, so the table can be rebuilt from any one line.
+     */
+    private fun note(what: String, at: Stamp) {
+        onEvent(what)
+        EcRec.line("ec.card") { o ->
+            o.str("what", what).at(at)
+            o.stamp("watcherHandle", watcherHandle).stamp("watcherMoved", watcherMoved).stamp("portalOpen", portalOpen)
+            o.stamps("crystals", crystals).stamps("maxorStuns", maxorStuns).stamp("maxorGone", maxorGone)
+            o.stamp("stormMoving", stormMoving).stamps("crushes", crushes).stamps("freed", freed).stamp("stormDead", stormDead)
+            o.stamp("allIn", allIn).stamp("goldorHit", goldorHit).stamp("goldorDead", goldorDead)
+            o.stamp("necronFree", necronFree).stamp("necronMid", necronMid)
+        }
+    }
 
     /**
      * The table's rows, one per split that has started. [bloodRooms] is each finished blood rush

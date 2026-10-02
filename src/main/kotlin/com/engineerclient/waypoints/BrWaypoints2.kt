@@ -1,6 +1,7 @@
 package com.engineerclient.waypoints
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.recorder.EcRec
 import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
@@ -233,6 +234,7 @@ object BrWaypoints2 : Module(
             watchDeaths()
             // Right click repeats every few ticks while held; a pull is one per press.
             if (!mc.options.keyUse.isDown) useHeld = false
+            recState()
         }
 
         on<RenderEvent.Extract> {
@@ -373,6 +375,25 @@ object BrWaypoints2 : Module(
 
     // --- blood rush ------------------------------------------------------------------------------
 
+    /**
+     * What the module knows, for the recorder, each tick it changes: the rush, the doors each room
+     * is entered by, the starred mobs and the boxes they claimed, and how many boxes each room has.
+     */
+    private fun recState() = EcRec.changed("ec.brw", "brw", { o ->
+        o.bool("rushing", rushing).str("rushRoom", rushRoom).strs("rushed", rushed.sorted()).bool("startDoor", startDoor)
+        o.raw("path", recDoors(path)).raw("entrances", recDoors(entrances)).raw("entryDoors", recDoors(entryDoors)).raw("walkedIn", recDoors(walkedIn))
+        o.raw("myTile", recDoor(myTile)).str("currentRoom", DungeonUtils.currentRoom?.name)
+        o.obj("loadedRooms") { r -> loadedRooms.forEach { (k, v) -> r.str(k, v) } }
+        o.obj("boxes") { b -> boxes.groupBy { it.room }.forEach { (room, list) -> b.num(room ?: "?", list.size) } }
+        o.objs("mobs", mobs) { m, it ->
+            m.str("room", it.room).nums("spawn", listOf(it.x, it.y, it.z)).num("id", it.entity?.id).num("tag", it.tag?.id).bool("dead", it.dead).num("tagGoneAt", it.tagGoneAt)
+            m.bool("claimed", it.claimed).raw("claim", it.claim?.let { c -> c.c.joinToString(",", "[", "]") } ?: "null")
+        }
+    }, { o -> o.num("tick", ticks) })
+
+    private fun recDoor(d: Pair<Int, Int>?) = if (d == null) "null" else "[${d.first},${d.second}]"
+    private fun recDoors(m: Map<String, Pair<Int, Int>?>) = m.entries.joinToString(",", "{", "}") { EcRec.Obj.str(it.key) + ":" + recDoor(it.value) }
+
     /** Between the dungeon starting and the blood door opening. */
     private var rushing = false
     /** The room the rush is heading into: the one behind the door that last started falling. */
@@ -400,6 +421,11 @@ object BrWaypoints2 : Module(
      * walks through by fairy's own open door and so never has a wither door into.
      */
     private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?, door: DoorBlocks.Door) {
+        EcRec.line("ec.door") { o ->
+            o.str("by", "brw2").str("phase", "start").num("tick", ticks).bool("startDoor", startDoor)
+                .nums("tileA", listOf(door.a.first, door.a.second)).nums("tileB", listOf(door.b.first, door.b.second))
+                .str("a", a?.name).str("aType", a?.type?.name).str("b", b?.name).str("bType", b?.type?.name)
+        }
         val sides = listOfNotNull(a, b)
         if (startDoor) {
             // At the start other doors come down too (fairy's); the rush's is the one out of Entrance.

@@ -120,6 +120,9 @@ object P3Rotation : Module(
         private set
     private var sectionComplete = false
     private var gateBlown = false
+    /** Read-only, for the Dungeon Recorder: the live section's last count is in, and its gate is down. */
+    val recSectionComplete: Boolean get() = sectionComplete
+    val recGateBlown: Boolean get() = gateBlown
 
     init {
         RotationEngine.masksAvailable = { ign -> MaskTracker.available(ign) }

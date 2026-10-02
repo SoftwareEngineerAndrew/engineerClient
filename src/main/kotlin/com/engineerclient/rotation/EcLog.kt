@@ -6,6 +6,7 @@ import java.nio.file.Path
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * EC's own log: one file per game session under `logs/engineerclient/`, meant to be sent as-is when a run
@@ -55,10 +56,18 @@ object EcLog {
         }
     }
 
-    @Synchronized
+    /**
+     * Told every line after it is written, file open or not (the Dungeon Recorder mirrors the log
+     * this way). Called on the logging thread, outside the file lock; a listener that throws is
+     * skipped for that line.
+     */
+    val listeners = CopyOnWriteArrayList<(String, String) -> Unit>()
+
     fun log(tag: String, message: String) {
-        val w = out ?: return
-        w.println(LocalTime.now().format(stamp) + "\t" + tag + "\t" + message.replace('\n', ' '))
+        synchronized(this) {
+            out?.println(LocalTime.now().format(stamp) + "\t" + tag + "\t" + message.replace('\n', ' '))
+        }
+        for (l in listeners) try { l(tag, message) } catch (_: Throwable) {}
     }
 
     @Synchronized

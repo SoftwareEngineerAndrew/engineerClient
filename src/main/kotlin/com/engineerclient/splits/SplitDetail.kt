@@ -1,5 +1,7 @@
 package com.engineerclient.splits
 
+import com.engineerclient.recorder.EcRec
+
 /**
  * The moments inside a split, filed under the split's label ([SplitTracker]'s constants).
  *
@@ -17,6 +19,7 @@ class SplitDetail {
 
     fun add(split: String, at: Stamp, label: String, who: String = "", step: Boolean = false, note: String = "") {
         entries.getOrPut(split) { mutableListOf() } += Entry(label, at, who, step, note)
+        EcRec.line("ec.detail") { o -> o.str("split", split).str("label", label).at(at).str("who", who).bool("step", step).str("note", note) }
     }
 
     fun lines(split: String): List<Entry> = entries[split].orEmpty()

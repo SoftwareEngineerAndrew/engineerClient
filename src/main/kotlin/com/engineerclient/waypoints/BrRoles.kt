@@ -81,6 +81,8 @@ object BrRoles {
         }
     /** Who has which role, in the order they said so. */
     private val taken = LinkedHashMap<String, Int>()
+    /** A copy of [taken], for the Dungeon Recorder. */
+    fun recClaims(): Map<String, Int> = LinkedHashMap(taken)
     /** Who said they are on the door. */
     private var doorClaim: String? = null
 
