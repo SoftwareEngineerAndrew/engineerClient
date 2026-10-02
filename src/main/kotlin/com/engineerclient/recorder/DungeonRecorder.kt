@@ -77,6 +77,7 @@ object DungeonRecorder : Module(
     internal val renderedEntities by BooleanSetting("Rendered Entities", true, desc = "Which entities were drawn each tick, with their name tags and outlines.")
     private val compactEntities by BooleanSetting("Compact Entity Rows", false, desc = "Writes the per-tick entity rows to a separate xz file per part (smaller, slower to read).")
     private val rawPackets by BooleanSetting("Raw Packets", true, desc = "Also keeps every packet's exact bytes as they crossed the wire, both ways, in a sidecar file (the ground truth behind each line).")
+    internal val odinInternals by BooleanSetting("Odin Internals", true, desc = "Odin's private solver/tracker state via reflection (version-fragile, read-only).")
     private val bookmark by KeybindSetting("Bookmark", GLFW.GLFW_KEY_UNKNOWN, "Marks this moment in the recording (also /ecrec mark [note]).").onPress { EngineerClient.safely("recorder bookmark") { Rec.mark(null) } }
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         EngineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); net.minecraft.util.Util.getPlatform().openPath(dir) }
@@ -112,6 +113,7 @@ object DungeonRecorder : Module(
         // Odin's dungeon state and its event stream (each subscribes itself; idle while not recording).
         OdinState.install()
         OdinEvents.install()
+        OdinInternals.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
