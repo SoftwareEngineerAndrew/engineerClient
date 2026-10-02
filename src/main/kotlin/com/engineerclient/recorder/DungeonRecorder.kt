@@ -1,7 +1,6 @@
 package com.engineerclient.recorder
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.misc.ScoreboardLines
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
@@ -31,7 +30,6 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket
 import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket
 import net.minecraft.network.protocol.game.ServerboundChatPacket
-import net.minecraft.world.scores.DisplaySlot
 import org.lwjgl.glfw.GLFW
 
 /**
@@ -76,7 +74,6 @@ object DungeonRecorder : Module(
     @Volatile private var session: RecorderSession? = null
     private var lastState = ""
     private var lastDungeon = ""
-    private var lastSidebar = ""
 
     /** Packet types never worth a line: keep-alives and the bundle markers. (Light is kept: its arrays are decoded per section.) */
     private val SKIP = setOf("minecraft:keep_alive", "minecraft:pong", "minecraft:bundle_delimiter", "minecraft:chunk_batch_start", "minecraft:chunk_batch_finished")
@@ -90,6 +87,8 @@ object DungeonRecorder : Module(
         on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
         on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        // Screens, chat as shown, HUD, tab list, scoreboards and boss bars (U9).
+        ScreenCapture.install(); HudCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -209,7 +208,7 @@ object DungeonRecorder : Module(
         val s = RecorderSession(dir, meta)
         session = s
         Rec.begin(s)
-        lastState = ""; lastDungeon = ""; lastSidebar = ""
+        lastState = ""; lastDungeon = ""
     }
 
     private fun stop() {
@@ -254,13 +253,7 @@ object DungeonRecorder : Module(
             """"room":${q(DungeonUtils.currentRoomName)},"party":[$team],"effects":[$effects],"fps":${mc.fps}"""
         if (dungeon != lastDungeon) { lastDungeon = dungeon; Rec.emit("game", dungeon) }
 
-        val board = mc.level?.scoreboard
-        val objective = board?.getDisplayObjective(DisplaySlot.SIDEBAR)
-        if (board != null && objective != null) {
-            val lines = ScoreboardLines.sidebarEntries(board, objective).joinToString(",") { q(ScoreboardLines.plain(ScoreboardLines.lineText(board, it))) }
-            val sidebar = """"title":${q(objective.displayName.string)},"lines":[$lines]"""
-            if (sidebar != lastSidebar) { lastSidebar = sidebar; Rec.emit("sidebar", sidebar) }
-        }
+        // The sidebar (and every other scoreboard slot) is HudCapture's "board" line now.
     }
 
     private fun q(s: String) = com.google.gson.JsonPrimitive(s).toString()
