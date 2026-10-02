@@ -1,0 +1,32 @@
+package com.engineerclient.mixin;
+
+import com.engineerclient.recorder.EntityCapture;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.Optional;
+
+/**
+ * Dungeon Recorder: every move the client applies to an entity. The three other overloads, and so
+ * every move/teleport/position-sync handler, end up in this one; whether the entity then snaps or
+ * interpolates is its own choice (items and arrows snap). Fires thousands of times a second, so the
+ * hook returns on a plain flag when the recorder is off and otherwise only appends to a buffer.
+ */
+@Mixin(Entity.class)
+public class EntityMoveTapMixin {
+
+    @Inject(
+        method = "moveOrInterpolateTo(Ljava/util/Optional;Ljava/util/Optional;Ljava/util/Optional;)V",
+        at = @At("HEAD"),
+        require = 0,
+        expect = 0
+    )
+    private void ec$recMove(Optional<Vec3> pos, Optional<Float> yRot, Optional<Float> xRot, CallbackInfo ci) {
+        if (!EntityCapture.movesOn) return;
+        EntityCapture.onMove((Entity) (Object) this, pos, yRot, xRot);
+    }
+}
