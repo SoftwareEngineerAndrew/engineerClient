@@ -20,10 +20,12 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.network.Connection
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
-import net.minecraft.network.protocol.common.ClientboundPingPacket
+import net.minecraft.network.protocol.PacketFlow
 import net.minecraft.network.protocol.game.ClientboundBundlePacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket
@@ -66,29 +68,36 @@ object DungeonRecorder : Module(
     private val maxFolderGb by NumberSetting("Max Recordings Folder GB", 0.0, 0.0, 2000.0, 10.0, desc = "0 = no limit. Stops the recording when the recordings folder grows past this.")
     private val deleteOldest by BooleanSetting("Delete Oldest When Full", false, desc = "At the folder limit, deletes the oldest finished recordings instead of stopping. Never the one being written.")
     private val compactEntities by BooleanSetting("Compact Entity Rows", false, desc = "Writes the per-tick entity rows to a separate xz file per part (smaller, slower to read).")
+    private val rawPackets by BooleanSetting("Raw Packets", true, desc = "Also keeps every packet's exact bytes as they crossed the wire, both ways, in a sidecar file (the ground truth behind each line).")
     private val bookmark by KeybindSetting("Bookmark", GLFW.GLFW_KEY_UNKNOWN, "Marks this moment in the recording (also /ecrec mark [note]).").onPress { EngineerClient.safely("recorder bookmark") { Rec.mark(null) } }
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         EngineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); net.minecraft.util.Util.getPlatform().openPath(dir) }
     }
 
-    private val dir get() = EngineerClient.mc.gameDirectory.toPath().resolve("engineerclient-recordings")
+    internal val dir get() = EngineerClient.mc.gameDirectory.toPath().resolve("engineerclient-recordings")
 
-    @Volatile private var session: RecorderSession? = null
+    /** The session the change-only lines below were last compared in; a new one starts them over. */
+    private var lastSession: RecorderSession? = null
     private var lastState = ""
     private var lastDungeon = ""
     private var lastSidebar = ""
 
-    /** Packet types never worth a line: keep-alives and the bundle markers. (Light is kept: its arrays are decoded per section.) */
-    private val SKIP = setOf("minecraft:keep_alive", "minecraft:pong", "minecraft:bundle_delimiter", "minecraft:chunk_batch_start", "minecraft:chunk_batch_finished")
+    /**
+     * Packet types never written as lines. Empty: keep-alives, pongs and chunk batches carry timing,
+     * and bundles have their own `bundle` line. Kept as the place for a user filter.
+     */
+    private val SKIP = emptySet<String>()
     private val MOVEMENT = setOf("minecraft:move_entity_pos", "minecraft:move_entity_pos_rot", "minecraft:move_entity_rot", "minecraft:rotate_head",
         "minecraft:set_entity_motion", "minecraft:entity_position_sync", "minecraft:teleport_entity")
     private val EFFECTS = setOf("minecraft:level_particles", "minecraft:sound", "minecraft:sound_entity")
 
     init {
-        // Each world gets its own recording, started as it loads so its first packets (the entities
-        // and blocks already there) are kept, and only written once it turns out to be wanted.
-        on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
-        on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
+        // Each world gets its own recording, opened at its login packet by the wire tap
+        // (RecorderLifecycle); joining a world without one (a missed login) opens it here.
+        on<LevelEvent.Load> { EngineerClient.safely("recorder world") { RecorderLifecycle.onJoin() } }
+        // Fabric's event rather than Odin's LevelEvent.Unload: it says which connection left, so the
+        // world before's late disconnect never ends the next world's recording.
+        ClientPlayConnectionEvents.DISCONNECT.register { handler, _ -> EngineerClient.safely("recorder world end") { RecorderLifecycle.onDisconnect(handler) } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
@@ -106,14 +115,38 @@ object DungeonRecorder : Module(
                 })))
         }
 
-        onSend<Packet<*>>(priority = -1000) {
+        // Last of all listeners and including cancelled sends: "cancelled" says whether some mod
+        // stopped it. Whether it really left is the encoder's `wire_out` line (WireTap).
+        onSend<Packet<*>>(priority = Int.MIN_VALUE) { ev ->
             if (!Rec.active || !outbound) return@onSend
             val p = this
-            val type = PacketJson.type(p)
-            if (type in SKIP || type == "minecraft:pong") return@onSend
-            val redact = !Rec.typedChat && (p is ServerboundChatPacket || p is ServerboundChatCommandPacket || p is ServerboundChatCommandSignedPacket)
-            packetLine("out", type, p, if (redact) ({ "{\"redacted\":true}" }) else PacketJson.capture(p))
+            EngineerClient.safely("recorder out") {
+                // Odin's hook is on every Connection: the integrated server's sends are clientbound.
+                if (runCatching { p.type().flow() }.getOrNull() == PacketFlow.CLIENTBOUND) return@safely
+                val type = PacketJson.type(p)
+                if (type in SKIP) return@safely
+                packetLine("out", type, p, outBody(p), ",\"ph\":\"${WireTap.phase()}\",\"cancelled\":${ev.isCancelled}")
+            }
         }
+    }
+
+    /**
+     * An outbound packet's "f": in full, or with what you typed left out when Typed Chat is off. A
+     * command keeps its name (which command was run is not private), a chat message its length and
+     * signing data.
+     */
+    internal fun outBody(p: Packet<*>): () -> String {
+        if (Rec.typedChat) return PacketJson.capture(p)
+        val s = when (p) {
+            is ServerboundChatCommandPacket -> WireTap.redactedCommand(p.command())
+            is ServerboundChatCommandSignedPacket -> WireTap.redactedCommand(p.command())
+            is ServerboundChatPacket -> StringBuilder(128).append("{\"redacted\":true,\"len\":").append(p.message().length)
+                .append(",\"timeStamp\":").append(runCatching { p.timeStamp().toEpochMilli() }.getOrDefault(-1L))
+                .append(",\"salt\":").append(PacketJson.writeNow(p.salt()))
+                .append(",\"lastSeen\":").append(PacketJson.writeNow(p.lastSeenMessages())).append('}').toString()
+            else -> return PacketJson.capture(p)
+        }
+        return { s }
     }
 
     private fun bookmarkCommand(source: net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource, note: String?) {
@@ -122,25 +155,55 @@ object DungeonRecorder : Module(
         source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7recording marked" + (note?.let { ": §f$it" } ?: ".")))
     }
 
-    /** Every packet from the server, on the network thread, ahead of any mod that could cancel it (ConnectionTapMixin). */
-    fun tap(packet: Packet<*>) {
-        if (!enabled) return
-        if (packet is ClientboundPingPacket && packet.id != 0) Rec.serverTicks++
-        if (!Rec.active || !inbound) return
-        EngineerClient.safely("recorder tap") { inbound(packet) }
+    /**
+     * Every packet any connection receives, on its network thread, ahead of any mod that could cancel
+     * it (ConnectionTapMixin). [WireTap] keeps the game connection's and calls back into [inbound].
+     */
+    fun tap(conn: Connection, packet: Packet<*>) {
+        if (!enabled) { WireTap.clearPending(); return }
+        EngineerClient.safely("recorder tap") { WireTap.tap(conn, packet) }
     }
 
-    private fun inbound(p: Packet<*>) {
-        if (p is ClientboundBundlePacket) { p.subPackets().forEach { inbound(it) }; return }
+    /** Whether frames' bytes are kept (Raw Packets); read on the network thread. */
+    internal fun rawOn(): Boolean = enabled && rawPackets
+
+    /** A private chat line Hide Private Chats leaves out (in a bundle: any of its packets). */
+    internal fun hiddenPrivate(p: Packet<*>): Boolean = when (p) {
+        is ClientboundBundlePacket -> p.subPackets().any { hiddenPrivate(it) }
+        is ClientboundSystemChatPacket -> Rec.privateText(p.content.string)
+        is ClientboundPlayerChatPacket -> Rec.privateText(p.body.content)
+        else -> false
+    }
+
+    /**
+     * One received packet's line(s), from [WireTap.tap]: [ph] the protocol phase, [raw] the seq
+     * range of its frames in the raw sidecar. A bundle gets a `bundle` line and each packet in it
+     * its own line tagged with the bundle's seq and its index.
+     */
+    internal fun inbound(p: Packet<*>, ph: String, raw: String?) {
+        if (!inbound) return
+        val rawM = raw?.let { ",\"raw\":$it" } ?: ""
+        if (p is ClientboundBundlePacket) {
+            val subs = p.subPackets().toList()
+            val b = Rec.nextSeq()
+            val env = Rec.envelope("bundle", b)
+            Rec.emitLine(b, 96, "bundle", System.currentTimeMillis()) { "$env,\"b\":$b,\"n\":${subs.size},\"ph\":\"$ph\"$rawM}" }
+            subs.forEachIndexed { i, sub -> inboundOne(sub, ",\"ph\":\"$ph\",\"b\":$b,\"bi\":$i") }
+            return
+        }
+        inboundOne(p, ",\"ph\":\"$ph\"$rawM")
+    }
+
+    private fun inboundOne(p: Packet<*>, extra: String) {
         val type = PacketJson.type(p)
         if (type in SKIP) return
         if ((type in MOVEMENT && !movement) || (type in EFFECTS && !effects)) return
-        val text = when (p) { is ClientboundSystemChatPacket -> p.content.string; is ClientboundPlayerChatPacket -> p.body.content; else -> null }
-        if (text != null && Rec.privateText(text)) return
-        val body: () -> String =
-            if (p is ClientboundLevelChunkWithLightPacket && !chunks) { val x = p.x; val z = p.z; { "{\"x\":$x,\"z\":$z}" } }
-            else PacketJson.capture(p)
-        packetLine("in", type, p, body)
+        val body: () -> String = when {
+            hiddenPrivate(p) -> ({ "{\"hidden\":\"private\"}" })
+            p is ClientboundLevelChunkWithLightPacket && !chunks -> { val x = p.x; val z = p.z; { "{\"x\":$x,\"z\":$z}" } }
+            else -> PacketJson.capture(p)
+        }
+        packetLine("in", type, p, body, extra)
     }
 
     /**
@@ -149,45 +212,40 @@ object DungeonRecorder : Module(
      * packets holding mutable state are already a finished string, the rest are built on the writer
      * thread.
      */
-    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String) {
+    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String, extra: String) {
         val seq = Rec.nextSeq()
         val env = Rec.envelope(dir, seq)
         val e = PacketDecode.entityMembers(p)
         val pt = q(type)
-        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$e,\"f\":${body()}}" }
+        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$extra$e,\"f\":${body()}}" }
     }
 
     // ------------------------------------------------------------------ lifecycle and client state
 
-    private fun wanted(): Boolean = when (where) {
+    internal fun wanted(): Boolean = when (where) {
         0 -> DungeonUtils.inDungeons
         1 -> DungeonUtils.inDungeons || LocationUtils.isCurrentArea(com.odtheking.odin.utils.skyblock.Island.DungeonHub)
         else -> EngineerClient.mc.level != null
     }
 
-    /** Whether the current session has been confirmed, and when it started (for the give-up). */
-    private var confirmed = false
-    private var startedTick = 0
+    /** Odin knows where we are, and it is not a place to record. */
+    internal fun knownUnwanted(): Boolean = where != 2 && LocationUtils.currentArea != com.odtheking.odin.utils.skyblock.Island.Unknown && !wanted()
 
     private fun onTick() {
         Rec.tick++
         pushConfig()
         Rec.onTickEnd()
-        val s = session ?: return
-        if (!confirmed) {
-            // Odin knows the area a second or two after the world loads; a minute without it is not one to keep.
-            if (wanted()) { confirmed = true; s.confirm(label()); Rec.requestKeyframe("confirm") }
-            else if (Rec.tick - startedTick > 20 * 60 || (where != 2 && LocationUtils.currentArea != com.odtheking.odin.utils.skyblock.Island.Unknown && !wanted())) {
-                session = null; Rec.end(s); s.abandon(); return
-            }
-        }
-        if (state) clientState()
+        // Odin knows the area a second or two after the world loads; RecorderLifecycle confirms or gives up.
+        RecorderLifecycle.onTick()
+        val s = Rec.session ?: return
+        if (s !== lastSession) { lastSession = s; lastState = ""; lastDungeon = ""; lastSidebar = "" }
+        if (state && Rec.active) clientState()
     }
 
-    private fun label() = DungeonUtils.floor?.name ?: LocationUtils.currentArea.name
+    internal fun label() = DungeonUtils.floor?.name ?: LocationUtils.currentArea.name
 
     /** Hands the core the settings it acts on, and how to read all of them for `settings` lines. */
-    private fun pushConfig() {
+    internal fun pushConfig() {
         PacketJson.cookiePayloads = cookiePayloads
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
@@ -197,39 +255,28 @@ object DungeonRecorder : Module(
     private fun settingsSnapshot(): Map<String, String> =
         settings.entries.filter { it.value !is ActionSetting }.associate { (k, v) -> k to runCatching { v.value.toString() }.getOrDefault("?") }
 
-    private fun settingsJson() = settingsSnapshot().entries.joinToString(",", "{", "}") { "${q(it.key)}:${q(it.value)}" }
+    internal fun settingsJson() = settingsSnapshot().entries.joinToString(",", "{", "}") { "${q(it.key)}:${q(it.value)}" }
 
-    private fun start() {
-        val mc = EngineerClient.mc
-        val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")
-        confirmed = false; startedTick = Rec.tick
-        pushConfig()
-        val meta = """"mod":${q(version)},"mc":"26.1.2","self":${q(mc.player?.name?.string ?: "?")},""" +
-            """"selfId":${mc.player?.id ?: -1},"server":${q(mc.currentServer?.ip ?: "?")},"settings":${settingsJson()}"""
-        val s = RecorderSession(dir, meta)
-        session = s
-        Rec.begin(s)
-        lastState = ""; lastDungeon = ""; lastSidebar = ""
-    }
-
-    private fun stop() {
-        val s = session ?: return
-        session = null
-        if (!confirmed) { Rec.end(s); s.abandon(); return }
-        Rec.emit("end", "")
-        Rec.end(s)
-        s.close()
+    /** Which packet groups are left out of the lines (the raw sidecar keeps them all). */
+    internal fun filtersJson(): String {
+        val off = ArrayList<String>()
+        if (!inbound) off += "in"
+        if (!outbound) off += "out"
+        if (!movement) off += MOVEMENT
+        if (!effects) off += EFFECTS
+        return "{\"skip\":${SKIP.joinToString(",", "[", "]") { q(it) }},\"off\":${off.joinToString(",", "[", "]") { q(it) }}," +
+            "\"chunkData\":$chunks,\"raw\":$rawPackets,\"typedChat\":$typedChat,\"hidePrivate\":$hidePrivate}"
     }
 
     /** Turned on mid-world: record from here (the world's first packets are already gone). */
     override fun onEnable() {
         super.onEnable()
-        if (EngineerClient.mc.level != null && session == null) EngineerClient.safely("recorder on") { start(); Rec.requestKeyframe("enable") }
+        EngineerClient.safely("recorder on") { RecorderLifecycle.onEnable() }
     }
 
     override fun onDisable() {
         super.onDisable()
-        stop()
+        EngineerClient.safely("recorder off") { RecorderLifecycle.onDisable() }
     }
 
     /** Your own state, every tick it changes; Odin's dungeon state and the sidebar when they change. */
