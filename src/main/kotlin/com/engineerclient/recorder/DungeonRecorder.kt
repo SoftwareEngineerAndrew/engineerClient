@@ -109,6 +109,9 @@ object DungeonRecorder : Module(
         // Screens, chat as shown, HUD, tab list, scoreboards and boss bars (U9).
         ScreenCapture.install(); HudCapture.install()
         EffectsCapture.install()
+        // Odin's dungeon state and its event stream (each subscribes itself; idle while not recording).
+        OdinState.install()
+        OdinEvents.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
