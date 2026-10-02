@@ -24,6 +24,10 @@ public class EntityRenderTapMixin {
     )
     private void ec$recDrawn(Entity entity, float partialTick, CallbackInfoReturnable<EntityRenderState> cir) {
         if (!EntityCapture.drawnOn) return;
-        EntityCapture.onExtract((EntityRenderDispatcher) (Object) this, entity, cir.getReturnValue());
+        // The recorder must never break the game: whatever it hits stays here.
+        try {
+            EntityCapture.onExtract((EntityRenderDispatcher) (Object) this, entity, cir.getReturnValue());
+        } catch (Throwable ignored) {
+        }
     }
 }

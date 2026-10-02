@@ -23,6 +23,10 @@ public class EntityRemoveTapMixin {
         expect = 0
     )
     private void ec$recRemove(int id, Entity.RemovalReason reason, CallbackInfo ci) {
-        EntityCapture.onLevelRemove((ClientLevel) (Object) this, id, reason);
+        // The recorder must never break the game: whatever it hits stays here.
+        try {
+            EntityCapture.onLevelRemove((ClientLevel) (Object) this, id, reason);
+        } catch (Throwable ignored) {
+        }
     }
 }

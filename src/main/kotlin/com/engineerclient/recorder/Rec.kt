@@ -76,7 +76,14 @@ object Rec {
         val sq = nextSeq()
         val ms = System.currentTimeMillis()
         s.line(sq, kind, ms, close(RecorderFiles.envelope(kind, sq, tick, serverTicks, ms, System.nanoTime() - s.startNs), body))
+        // The side indexes: a reader finds every entity and every big moment without decompressing
+        // the parts. Each entry repeats the line ("of" its seq), so nothing has to be joined back.
+        if (kind in EVENT_KINDS) index("events", "\"of\":$sq,\"kind\":${RecorderFiles.q(kind)}" + if (body.isBlank()) "" else ",$body")
+        else if (kind == "espawn" && body.contains("\"at\":\"load\"")) index("entities", "\"of\":$sq,$body")
     }
+
+    /** Kinds that also go to events.jsonl (with marks): the moments a reader looks for first. */
+    private val EVENT_KINDS = setOf("world", "end", "death", "revive", "leap", "ec.split", "settings")
 
     /**
      * A line whose body is built later on the writer thread (big, slow-to-format, immutable inputs
@@ -171,6 +178,7 @@ object Rec {
         val ms = System.currentTimeMillis()
         s.line(sq, "mark", ms, RecorderFiles.envelope("mark", sq, tick, serverTicks, ms, System.nanoTime() - s.startNs) + ",\"note\":${RecorderFiles.q(note)}}")
         s.addMark(sq, ms, note)
+        index("events", "\"of\":$sq,\"kind\":\"mark\",\"note\":${RecorderFiles.q(note)}")
         requestKeyframe("mark")
     }
 

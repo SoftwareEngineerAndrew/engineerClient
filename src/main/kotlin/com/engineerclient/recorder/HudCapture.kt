@@ -185,7 +185,7 @@ object HudCapture {
 
     private fun kf(full: Boolean) = if (full) "\"kf\":${Rec.keyframeId}," else ""
 
-    /** The tab list rows in drawn order; only changed rows are written ([i, ...]) with the row count "n". */
+    /** The tab list rows in drawn order; only changed rows are written ([i, ...]) with the row count "count" (not "n": that is the envelope's server tick). */
     private fun tab(full: Boolean) {
         val mc = EngineerClient.mc
         if (mc.player == null) return
@@ -212,7 +212,7 @@ object HudCapture {
         if (d.changed.isEmpty() && !d.countChanged && !headerChanged && !footerChanged && !openChanged) return
         tabSeen = true; tabHeader = header; tabFooter = footer; tabOpen = open
         val sb = StringBuilder(512)
-        sb.append(kf(full)).append("\"open\":").append(open).append(",\"n\":").append(rows.size)
+        sb.append(kf(full)).append("\"open\":").append(open).append(",\"count\":").append(rows.size)
         if (headerChanged) { sb.append(",\"header\":"); comp(sb, header) }
         if (footerChanged) { sb.append(",\"footer\":"); comp(sb, footer) }
         sb.append(",\"rows\":[")
