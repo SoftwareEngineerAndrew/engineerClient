@@ -43,8 +43,10 @@ import org.lwjgl.glfw.GLFW
  *
  *  - every packet the server sends and every packet you send, each written out field by field
  *    ([PacketJson]) with the server tick it arrived on;
- *  - your own state every tick (position, look, motion, health, held item, keys held, the screen
- *    open) and the game's derived state when it changes (Odin's floor, room and party, the sidebar).
+ *  - your own state every tick (position, look, motion, health, held item, the screen open, the
+ *    block being mined) and the game's derived state when it changes (Odin's floor, room and
+ *    party, the sidebar);
+ *  - your input as it happens and what it came to ([InputCapture]).
  *
  * Files: <game dir>/engineerclient-recordings/, one directory per recording: gzipped JSON Lines
  * parts with an index, a raw packet sidecar and a manifest ([RecorderSession], [Rec]; format:
@@ -64,6 +66,9 @@ object DungeonRecorder : Module(
     private val state by BooleanSetting("Client State", true, desc = "Your own state every tick, Odin's dungeon state and the sidebar when they change.")
     private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat and commands. Off: only that something was sent.")
     private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat and friend notices out.")
+    /** Read by [InputCapture]'s hooks. */
+    internal val inputOn by BooleanSetting("Input", true, desc = "Every key, mouse button, scroll and look turn, the actions they start, what Odin cancelled, what the crosshair is on and what each interaction returned.")
+    internal val cursorMovesOn by BooleanSetting("Cursor Moves", true, desc = "Every cursor move, with its time in the tick (the largest part of the input lines).")
     private val cookiePayloads by BooleanSetting("Cookie Payloads", false, desc = "Include server cookie bytes (may hold session tokens); off writes length and hash only")
     private val minFreeGb by NumberSetting("Min Free Disk GB", 10.0, 0.0, 500.0, 1.0, desc = "Stops the recording (saying so in the file) when the disk has less free space than this.")
     private val maxFolderGb by NumberSetting("Max Recordings Folder GB", 0.0, 0.0, 2000.0, 10.0, desc = "0 = no limit. Stops the recording when the recordings folder grows past this.")
@@ -105,6 +110,7 @@ object DungeonRecorder : Module(
         EngineerClient.safely("recorder world capture") { WorldCapture.install() }
         EntityCapture.install()
         PacketFate.install()
+        InputCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -297,15 +303,12 @@ object DungeonRecorder : Module(
     private fun clientState() {
         val mc = EngineerClient.mc
         val p = mc.player ?: return
-        val o = mc.options
-        val keys = listOf(o.keyUp to "w", o.keyLeft to "a", o.keyDown to "s", o.keyRight to "d", o.keyJump to "jump", o.keyShift to "sneak",
-            o.keySprint to "sprint", o.keyAttack to "attack", o.keyUse to "use").filter { it.first.isDown }.joinToString(",") { "\"${it.second}\"" }
         val held = RichJson.itemNow(p.mainHandItem)
         val screen = mc.screen?.let { "{\"class\":${q(it.javaClass.simpleName)},\"title\":${q(it.title.string)}}" } ?: "null"
         val v = p.deltaMovement
         val st = """"pos":[${f(p.x)},${f(p.y)},${f(p.z)}],"rot":[${f1(p.yRot)},${f1(p.xRot)}],"vel":[${f(v.x)},${f(v.y)},${f(v.z)}],""" +
             """"ground":${p.onGround()},"hp":${f1(p.health)},"abs":${f1(p.absorptionAmount)},"food":${p.foodData.foodLevel},""" +
-            """"slot":${p.inventory.selectedSlot},"held":$held,"keys":[$keys],"screen":$screen"""
+            """"slot":${p.inventory.selectedSlot},"held":$held,"screen":$screen""" + InputCapture.mineMembers()
         if (st != lastState) { lastState = st; Rec.emit("me", st) }
 
         if (Rec.tick % 10 != 0) return
