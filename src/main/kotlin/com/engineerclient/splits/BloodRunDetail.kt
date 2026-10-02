@@ -1,5 +1,7 @@
 package com.engineerclient.splits
 
+import com.engineerclient.recorder.EcRec
+
 /**
  * The blood rush, room by room, rebuilt every frame so the room being run counts up live.
  *
@@ -92,6 +94,7 @@ class BloodRunDetail {
             // A door straight from the last room into fairy: this stretch of the rush is fairy.
             r.name = fairy.name; r.mapId = fairy.id
             previous?.toFairy = true
+            rec(r, "door down")
             return
         }
         val next = sides.firstOrNull { !it.entrance && !it.fairy && it.id != previous?.mapId }
@@ -99,6 +102,7 @@ class BloodRunDetail {
         // The door out of fairy, which the rush walked into through fairy's own open door: the
         // room before this one is the one that led there.
         if (fairy != null && previous != null && previous.mapId != fairy.id) previous.toFairy = true
+        rec(r, "door down")
     }
 
     /** A "Wither Key" or "Blood Key" armor stand appeared, [distance] blocks from you: the mob holding it just died. */
@@ -130,6 +134,7 @@ class BloodRunDetail {
             r.doorOpened = at
             r.doorBy = door.groupValues[1]
             rooms += r
+            rec(r, "wither door")
             room = Room(at)
             return
         }
@@ -139,6 +144,7 @@ class BloodRunDetail {
             rooms += r
             room = null
             done = true
+            rec(r, "blood door")
         }
     }
 
@@ -154,6 +160,17 @@ class BloodRunDetail {
     val over: Boolean get() = done
 
     private fun all() = rooms + listOfNotNull(room)
+
+    /** A room's whole record for the recorder, as it stands when it is [why] (its door out opened). */
+    private fun rec(r: Room, why: String) = EcRec.line("ec.bloodroom") { o ->
+        o.str("why", why).num("index", rooms.indexOf(r).let { if (it < 0) rooms.size else it }).str("name", r.name).str("mapId", r.mapId).bool("toFairy", r.toFairy)
+        o.stamp("start", r.start).str("startFrom", r.startFrom).stamp("doorFell", r.doorFell).stamp("mobKilled", r.mobKilled)
+        o.num("keySeenAt", r.keySeenAt).stamp("keyPicked", r.keyPicked).str("keyBy", r.keyBy).bool("pickupAnonymous", r.pickupAnonymous)
+        o.stamp("doorOpened", r.doorOpened).str("doorBy", r.doorBy).bool("bloodDoor", done)
+        // The room before may have just been marked as leading into fairy.
+        val i = rooms.indexOf(r).let { if (it < 0) rooms.size else it }
+        rooms.getOrNull(i - 1)?.let { p -> o.obj("previous") { q -> q.str("name", p.name).bool("toFairy", p.toFairy) } }
+    }
 
     fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> = when (level) {
         Level.COMPACT -> compact(now, totalRow)

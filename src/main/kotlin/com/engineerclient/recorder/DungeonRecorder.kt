@@ -90,6 +90,7 @@ object DungeonRecorder : Module(
         on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
         on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        EngineerClient.safely("recorder ec") { EcRec.install() }
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.

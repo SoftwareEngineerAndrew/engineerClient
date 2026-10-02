@@ -1,5 +1,6 @@
 package com.engineerclient.splits
 
+import com.engineerclient.recorder.EcRec
 import java.util.Locale
 
 /**
@@ -81,14 +82,19 @@ class SplitTracker {
 
     fun onChat(msg: String, at: Stamp) {
         if (start == null) {
-            if (msg == MORT) { start = at; starts[0] = at }
+            if (msg == MORT) { start = at; starts[0] = at; rec(0, at, msg) }
             return
         }
         if (end != null) return
-        if (EXTRA_STATS.matches(msg)) { end = at; return }
+        if (EXTRA_STATS.matches(msg)) { end = at; rec(-1, at, msg); return }
         for (i in 1 until PHASES.size) {
-            if (starts[i] == null && PHASES[i].starts(msg)) starts[i] = at
+            if (starts[i] == null && PHASES[i].starts(msg)) { starts[i] = at; rec(i, at, msg) }
         }
+    }
+
+    /** A split starting (or, [idx] -1, the run's end) for the recorder, with the line that did it. */
+    private fun rec(idx: Int, at: Stamp, msg: String) = EcRec.line("ec.split") { o ->
+        o.num("idx", idx).str("label", if (idx < 0) "end" else PHASES[idx].label).at(at).str("msg", msg)
     }
 
     /** Every phase that has started, in order, each running until the next one starts. */

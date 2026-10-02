@@ -1,6 +1,7 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.recorder.EcRec
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
@@ -60,6 +61,10 @@ object DungeonSplits : Module(
 
     private var serverTicks = 0
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
+
+    /** Read-only, for the Dungeon Recorder (ec.clocks, ec.pace): this module's server-tick count and its clock now. */
+    val recServerTicks: Int get() = serverTicks
+    fun recNow(): Stamp = now()
 
     /** One sub-split HUD: its name, the split whose window it covers, and the colour of its name. */
     private class Section(val name: String, val window: String, val colour: String)
@@ -197,6 +202,7 @@ object DungeonSplits : Module(
                 card.onPortal(now())
                 if (!portalSeen) {
                     portalSeen = true
+                    EcRec.obs(now(), "portal", "nether portal block seen") { o -> o.raw("pos", "[${pos.x},${pos.y},${pos.z}]") }
                     boss.extra(SplitTracker.PORTAL, now(), "§dportal appeared", "its blocks seen - out of render distance this is missing")
                 }
             }
@@ -211,39 +217,63 @@ object DungeonSplits : Module(
                 if (section >= 0) sectionDoor[section]++
             }
             // Maxor's beacon turning to bedrock is his kill.
-            if (open(SplitTracker.MAXOR) && pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK) subs.onMaxorKilled(now())
+            if (open(SplitTracker.MAXOR) && pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK) {
+                EcRec.obs(now(), "maxor_beacon", "beacon at 73,221,73 turned to bedrock")
+                subs.onMaxorKilled(now())
+            }
             // Simon Says: a button on the device's face, or its start button, pressed.
             if (open(SplitTracker.TERMS) && pos.x == 110 && updated.block == Blocks.STONE_BUTTON &&
                 old.block == Blocks.STONE_BUTTON && updated.getValue(BlockStateProperties.POWERED)
             ) {
                 val face = pos.y in 120..123 && pos.z in 92..95
-                if (face || (pos.y == 121 && pos.z == 91)) boss.onSimonPress(now(), nearestTeammate(110.5, pos.y + 0.5, pos.z + 0.5))
+                if (face || (pos.y == 121 && pos.z == 91)) {
+                    val who = nearestTeammate(110.5, pos.y + 0.5, pos.z + 0.5)
+                    EcRec.obs(now(), "ss_press", if (face) "face button powered" else "start button powered", who) { o -> o.raw("pos", "[${pos.x},${pos.y},${pos.z}]") }
+                    boss.onSimonPress(now(), who)
+                }
             }
         }
 
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons) return@on
-            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
-            if (cleared.size >= DoorBlocks.DOOR_BLOCKS) door(cleared) { at, a, b -> blood.onDoorDown(at, a, b) }
+            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers, "start") { at, a, b -> blood.onDoorStart(at, a, b) }
+            if (cleared.size >= DoorBlocks.DOOR_BLOCKS) door(cleared, "down") { at, a, b -> blood.onDoorDown(at, a, b) }
             barriers.clear(); cleared.clear()
             for (i in sectionDoor.indices) {
-                if (sectionDoor[i] >= SECTION_DOOR_BLOCKS) subs.onSectionDoor(now(), i + 1)
+                if (sectionDoor[i] >= SECTION_DOOR_BLOCKS) {
+                    EcRec.obs(now(), "section_door", "barriers to air in one tick") { o -> o.num("section", i + 1).num("blocks", sectionDoor[i]) }
+                    subs.onSectionDoor(now(), i + 1)
+                }
                 sectionDoor[i] = 0
             }
 
             // Storm and Necron where the server last put them (not where they are drawn, 3 ticks behind).
-            if (open(SplitTracker.STORM)) bossWither(level, "Storm")?.positionCodec?.base?.let { subs.onStormPosition(now(), it.x, it.y, it.z) }
-            if (open(SplitTracker.NECRON)) bossWither(level, "Necron")?.positionCodec?.base?.let { subs.onNecronPosition(now(), it.distanceTo(NECRON_MID)) }
+            if (open(SplitTracker.STORM)) bossWither(level, "Storm")?.positionCodec?.base?.let {
+                EcRec.obsChanged(now(), "storm_pos", "server position") { o -> o.nums("val", listOf(it.x, it.y, it.z)) }
+                subs.onStormPosition(now(), it.x, it.y, it.z)
+            }
+            if (open(SplitTracker.NECRON)) bossWither(level, "Necron")?.positionCodec?.base?.let {
+                EcRec.obsChanged(now(), "necron_from_mid", "server position") { o -> o.num("val", it.distanceTo(NECRON_MID)).nums("pos", listOf(it.x, it.y, it.z)) }
+                subs.onNecronPosition(now(), it.distanceTo(NECRON_MID))
+            }
 
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
             if (blood.active) for (e in level.entitiesForRendering()) {
                 if (e !is ArmorStand || e.id in keysSeen) continue
                 val name = e.customName?.string ?: continue
-                if (KEY.containsMatchIn(name)) { keysSeen += e.id; blood.onKeySpawned(now(), distanceTo(e)) }
+                if (KEY.containsMatchIn(name)) {
+                    keysSeen += e.id
+                    EcRec.line("label") { o -> o.str("by", "ec").str("what", "key").num("id", e.id).str("name", name).at(now()).num("dist", distanceTo(e)).nums("pos", listOf(e.x, e.y, e.z)) }
+                    blood.onKeySpawned(now(), distanceTo(e))
+                }
             }
 
             // Goldor's leap ends when the last teammate is inside the core.
             val inCore = if (subs.watchingCore || open(SplitTracker.GOLDOR)) everyoneInCore(level) else false
+            if (subs.watchingCore || open(SplitTracker.GOLDOR)) EcRec.obsChanged(now(), "core", "teammates in the core box (null: someone unseen)") { o ->
+                o.bool("val", inCore)
+                if (inCore == null) o.strs("unseen", unseenTeammates(level))
+            }
             if (inCore == true) {
                 if (subs.watchingCore || card.waitingForCore) boss.extra(SplitTracker.GOLDOR, now(), "§5everyone in", "every teammate seen inside the core")
                 subs.onEveryoneInCore(now(), "every teammate seen inside the core")
@@ -274,6 +304,8 @@ object DungeonSplits : Module(
                 e is EndCrystal && open(SplitTracker.MAXOR) && crystalsSeen.add(e.id) -> {
                     // Fresh crystals sit on the upper platforms (y 238), placed ones on the lower (y 224).
                     val placed = e.y < 231
+                    EcRec.obs(now(), "crystal", if (placed) "appeared on a lower platform" else "appeared on a top platform",
+                        if (placed) nearestTeammate(e.x, e.y, e.z) else null) { o -> o.bool("placed", placed).num("id", e.id).nums("pos", listOf(e.x, e.y, e.z)) }
                     boss.onCrystal(now(), placed, if (placed) nearestTeammate(e.x, e.y, e.z) else null)
                     // Back on top 41 ticks after a laser hit: a hit an ability kept quiet.
                     if (!placed) subs.onTopCrystal(now())
@@ -282,7 +314,10 @@ object DungeonSplits : Module(
                 e is Player && open(SplitTracker.BLOOD) && e.name.string !in teamNames() -> {
                     val name = e.name.string.trim()
                     val at = now()
-                    if (watchedMobs.put(e.id, name to at) == null) { boss.onMobSpawn(at, name, distanceTo(e)); subs.onBloodMobSpawn(at) }
+                    if (watchedMobs.put(e.id, name to at) == null) {
+                        EcRec.line("label") { o -> o.str("by", "ec").str("what", "blood mob").num("id", e.id).str("name", name).at(at).num("dist", distanceTo(e)).nums("pos", listOf(e.x, e.y, e.z)) }
+                        boss.onMobSpawn(at, name, distanceTo(e)); subs.onBloodMobSpawn(at)
+                    }
                 }
             }
         }
@@ -290,12 +325,17 @@ object DungeonSplits : Module(
             if (entity is WitherBoss && open(SplitTracker.MAXOR)) {
                 card.onMaxorGone(now())
                 val d = distanceTo(entity)
+                EcRec.obs(now(), "wither_gone", "wither removed while Maxor is up") { o -> o.num("id", entity.id).num("dist", d) }
                 if (d <= 48) subs.onMaxorDead(now())
                 boss.extra(SplitTracker.MAXOR, now(), "§5wither gone", BossDetail.blocks(d) + " away" +
                     if (d > 48) " - probably out of view, not his death" else " - his death, 1-2 s before Storm speaks")
             }
             val (name, spawned) = watchedMobs.remove(entity.id) ?: return@on
             val at = now()
+            EcRec.line("label.gone") { o ->
+                o.str("by", "ec").str("what", "blood mob").num("id", entity.id).str("name", name).at(at).stamp("spawned", spawned)
+                    .num("dist", distanceTo(entity)).str("reason", entity.removalReason?.name)
+            }
             boss.onMobGone(at, name, at.realMs - spawned.realMs, distanceTo(entity))
         }
 
@@ -305,6 +345,7 @@ object DungeonSplits : Module(
             EngineerClient.mc.execute {
                 val e = EngineerClient.mc.level?.getEntity(id) as? WitherBoss ?: return@execute
                 val at = now()
+                EcRec.obs(at, "wither_hit", "damage event packet") { o -> o.num("id", id).bool("alive", e.isAlive).bool("goldor", open(SplitTracker.GOLDOR)).bool("necron", open(SplitTracker.NECRON)) }
                 if (open(SplitTracker.GOLDOR)) { boss.onBossHit(SplitTracker.GOLDOR, at); goldorHit(at, "damage packet (he was in view)") }
                 else if (open(SplitTracker.NECRON) && e.isAlive) boss.onBossHit(SplitTracker.NECRON, at)
             }
@@ -325,6 +366,7 @@ object DungeonSplits : Module(
                     if (bar.first != id) return
                     val dropped = progress < bar.second - 0.0005f
                     goldorBar = id to progress
+                    EcRec.obs(now(), "goldor_bar", "boss bar progress") { o -> o.num("val", progress).num("was", bar.second).bool("dropped", dropped) }
                     if (dropped) EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) goldorHit(now(), "his boss bar dropping") }
                 }
             })
@@ -334,6 +376,7 @@ object DungeonSplits : Module(
         onReceive<ClientboundSoundPacket> {
             val id = sound.value().location().path
             if (id != "entity.wither.hurt") return@onReceive
+            EcRec.obs(now(), "wither_hurt", "wither hurt sound packet") { o -> o.nums("pos", listOf(x, y, z)) }
             EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) goldorHit(now(), "a wither hurt sound") }
         }
     }
@@ -390,7 +433,11 @@ object DungeonSplits : Module(
         val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>()
         val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
         val anchor = tag ?: mc.player ?: return null
-        return withers.minByOrNull { it.distanceToSqr(anchor) }
+        val found = withers.minByOrNull { it.distanceToSqr(anchor) }
+        EcRec.obsChanged(now(), "boss_wither.$name", if (tag != null) "nearest its name tag" else "nearest you (tag not seen)") { o ->
+            o.num("val", found?.id).num("withers", withers.size).bool("tag", tag != null)
+        }
+        return found
     }
 
     /** Goldor and where he waits once the core opens. */
@@ -412,6 +459,7 @@ object DungeonSplits : Module(
         val d = e.position().distanceTo(at.second)
         if (d > 8) goldorAt = e.id to e.position()
         else if (d > 0.1) {
+            EcRec.obs(now(), "goldor_moved", "his wither moved off where the core opened") { o -> o.num("id", e.id).num("dist", d).bool("trusted", trusted) }
             if (trusted) {
                 card.onEveryoneInCore(now(), "Goldor moved, someone out of sight")
                 subs.onEveryoneInCore(now(), "Goldor starting to move - someone was out of render distance, so the core box couldn't tell")
@@ -457,9 +505,19 @@ object DungeonSplits : Module(
      * between two map tiles, which are 32 blocks apart with the grid's first at -185.
      */
     /** Each door among [blocks] ([DoorBlocks]), handed to [sink] with the rooms either side of it. */
-    private fun door(blocks: List<Pair<Int, Int>>, sink: (Stamp, BloodRunDetail.MapRoom?, BloodRunDetail.MapRoom?) -> Unit) {
-        for (d in DoorBlocks.doors(blocks)) sink(now(), room(d.a.first, d.a.second), room(d.b.first, d.b.second))
+    private fun door(blocks: List<Pair<Int, Int>>, phase: String, sink: (Stamp, BloodRunDetail.MapRoom?, BloodRunDetail.MapRoom?) -> Unit) {
+        for (d in DoorBlocks.doors(blocks)) {
+            val a = room(d.a.first, d.a.second); val b = room(d.b.first, d.b.second)
+            EcRec.line("ec.door") { o ->
+                o.str("by", "splits").str("phase", phase).at(now()).num("blocks", blocks.size)
+                    .nums("tileA", listOf(d.a.first, d.a.second)).nums("tileB", listOf(d.b.first, d.b.second)).raw("a", recRoom(a)).raw("b", recRoom(b))
+            }
+            sink(now(), a, b)
+        }
     }
+
+    private fun recRoom(r: BloodRunDetail.MapRoom?): String =
+        if (r == null) "null" else "{" + EcRec.Obj().str("id", r.id).str("name", r.name).bool("fairy", r.fairy).bool("entrance", r.entrance) + "}"
 
     private fun room(x: Int, z: Int): BloodRunDetail.MapRoom? {
         if (x !in 0..5 || z !in 0..5) return null
@@ -504,6 +562,7 @@ object DungeonSplits : Module(
         val e = (prev?.let { level.getEntity(it.first) } ?: bossWither(level, "Maxor")) ?: run { maxorAt = null; return }
         val moving = prev != null && prev.first == e.id && e.position().distanceTo(prev.second) > 0.03
         maxorAt = Triple(e.id, e.position(), moving)
+        EcRec.obsChanged(now(), "maxor_moving", "his wither tick to tick") { o -> o.bool("val", moving).num("id", e.id) }
         if (prev == null || prev.first != e.id) return
         val check = maxorCheck ?: return
         if (serverTicks > check.first) {
@@ -541,6 +600,7 @@ object DungeonSplits : Module(
             return
         }
         watcherAt = e.id to e.position()
+        EcRec.obsChanged(now(), "watcher", "zombie in one of his skins") { o -> o.num("val", e.id).bool("moved", prev != null && prev.first == e.id && e.position().distanceTo(prev.second) > 0.001) }
         if (prev == null || prev.first != e.id || serverTicks - handle.tick < 45) return
         if (e.position().distanceTo(prev.second) > 0.001) {
             card.onWatcherMoved(now(), "seen")

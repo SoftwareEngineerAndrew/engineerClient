@@ -1,6 +1,7 @@
 package com.engineerclient.storm
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.recorder.EcRec
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
@@ -170,15 +171,35 @@ object StormPhase : Module(
         val level = mc.level ?: return
         val storm = level.entitiesForRendering().filterIsInstance<WitherBoss>()
             .filter { it.isAlive && ARENA.contains(it.position()) }
-            .minByOrNull { it.distanceToSqr(70.0, 180.0, 53.0) } ?: return
+            .minByOrNull { it.distanceToSqr(70.0, 180.0, 53.0) }
+        if (storm == null) { recCheck(now) { o -> o.str("verdict", "no storm in view") }; return }
+        val fromServer = storm.positionCodec.base != Vec3.ZERO
         val at = storm.positionCodec.base.takeIf { it != Vec3.ZERO } ?: storm.position()
         val pillar = StormCrush.nearest(at.x, at.z)
-        if (StormCrush.distance(pillar, at.x, at.z) > RANGE) return
+        val dist = StormCrush.distance(pillar, at.x, at.z)
+        if (dist > RANGE) {
+            recCheck(now) { o -> o.str("verdict", "far").num("id", storm.id).nums("pos", listOf(at.x, at.y, at.z)).bool("serverPos", fromServer).str("pillar", pillar.name).num("dist", dist) }
+            return
+        }
         val bottom = bottomOf(level, pillar)
         val verdict = StormCrush.judge(pillar, at.x, at.y, at.z, bottom)
+        recCheck(now) { o ->
+            o.str("verdict", if (verdict.inside) "inside" else "outside").num("id", storm.id).nums("pos", listOf(at.x, at.y, at.z)).bool("serverPos", fromServer)
+            o.str("pillar", pillar.name).num("dist", dist).num("inset", verdict.inset).num("head", verdict.head).num("bottom", bottom)
+            o.bool("armed", StormCrush.armed(lastStep[pillar], now)).num("lastStep", lastStep[pillar])
+        }
         val box = AABB(at.x, at.y, at.z, at.x + 1, at.y + StormCrush.HEAD, at.z + 1)
         snapshots += Snapshot(box, verdict, bottom, StormCrush.armed(lastStep[pillar], now), System.currentTimeMillis())
     }
+
+    /** A crush check for the recorder: the server tick it ran on, the phase count, and what it found. */
+    private inline fun recCheck(now: Int, body: (EcRec.Obj) -> Unit) = EcRec.line("ec.storm.check") { o ->
+        o.num("tick", now).num("count", count()).num("offset", offset).num("phaseStart", phaseStart)
+        body(o)
+    }
+
+    /** Read-only, for the Dungeon Recorder's ec.clocks. */
+    val recServerTicks: Int get() = serverTicks
 
     /** The pillar's lowest block: down its piston column from the top until the first air. */
     private fun bottomOf(level: net.minecraft.client.multiplayer.ClientLevel, p: StormCrush.Pillar): Int? {
