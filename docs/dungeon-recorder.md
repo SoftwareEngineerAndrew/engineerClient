@@ -50,6 +50,8 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | `in` | `p, t, n, ms, e?, self?, f` | a packet from the server: `p` its protocol id (`minecraft:set_entity_data`...), `e` the entities it is about, `f` its fields |
 | `out` | `p, t, n, ms, e?, self?, f` | a packet you sent |
 | `commands` | `tree` | the client's command tree after a commands packet was applied |
+| `applied` | `on, seqs, dur?` | server packets taking effect. `on: "game"`: one line per drain of the game thread's packet queue (once a frame), `seqs` the `in` lines applied (runs as `[first,last]`), `dur` nanoseconds in their handlers; its `t`/`ns` are when they applied, not when they arrived. A bundle is applied as one, under all its sub-packets' seqs. `on: "netty"`: a packet handled on the network thread |
+| `fate` | `seqs, p?, fate, at?, err?` | a server packet that did not simply apply: `cancelled_odin` (cancelled on Odin's bus), `cancelled_read0` (another mod cancelled it at channelRead0), `rejected` (refused by the listener, `at` read0 or game), `error` (its handler threw, `err` the stack trace) or `expired` (nothing seen of it for 30 s). Cancels inside other mods' ClientPacketListener hooks are not visible |
 | `me` | `t, n, pos, rot, vel, ground, hp, abs, food, slot, held, keys, screen` | you, every tick anything in it changed. `keys` the controls held (`w a s d jump sneak sprint attack use`); `screen` the open screen's class and title |
 | `game` | `t, n, area, floor, boss, room, party: [[name, class, dead]], effects: [[id, amplifier, ticks]], fps` | Odin's view, when it changes (checked twice a second) |
 | `sidebar` | `t, n, title, lines` | the sidebar's lines, plain, when they change |
