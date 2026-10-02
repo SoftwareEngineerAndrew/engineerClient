@@ -53,6 +53,7 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | `applied` | `on, seqs, dur?` | server packets taking effect. `on: "game"`: one line per drain of the game thread's packet queue (once a frame), `seqs` the `in` lines applied (runs as `[first,last]`), `dur` nanoseconds in their handlers; its `t`/`ns` are when they applied, not when they arrived. A bundle is applied as one, under all its sub-packets' seqs. `on: "netty"`: a packet handled on the network thread |
 | `fate` | `seqs, p?, fate, at?, err?` | a server packet that did not simply apply: `cancelled_odin` (cancelled on Odin's bus), `cancelled_read0` (another mod cancelled it at channelRead0), `rejected` (refused by the listener, `at` read0 or game), `error` (its handler threw, `err` the stack trace) or `expired` (nothing seen of it for 30 s). Cancels inside other mods' ClientPacketListener hooks are not visible |
 | `me` | `t, n, pos, rot, vel, ground, hp, abs, food, slot, held, keys, screen` | you, every tick anything in it changed. `keys` the controls held (`w a s d jump sneak sprint attack use`); `screen` the open screen's class and title |
+| `me` | `t, n, pos, rot, vel, ground, hp, abs, food, slot, held, screen, mine?` | you, every tick anything in it changed. `screen` the open screen's class and title; `mine` `{pos, stage, progress}` while you break a block. The keys you hold are in the input lines below |
 | `game` | `t, n, area, floor, boss, room, party: [[name, class, dead]], effects: [[id, amplifier, ticks]], fps` | Odin's view, when it changes (checked twice a second) |
 | `sidebar` | `t, n, title, lines` | the sidebar's lines, plain, when they change |
 | `world` | `via (login\|respawn), selfId, dimension, dimType, minY, height, logicalHeight, sky, ceiling, seaLevel, gameType, chunkRadius?, simDistance?, hardcore?, enforcesSecureChat?, dataToKeep?` | the dimension the server put you in, from the login or respawn packet itself. A respawn (a server switch) does not start a new recording |
@@ -66,6 +67,30 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | `budget` | `ms, note` | the hour's size budget is nearly used: bulk lines are being left out |
 | `dropped` | `lines, ms` | the writer fell behind and dropped this many lines (a slow disk) |
 | `error` | `what` | a packet that couldn't be written out |
+
+### Input and what it came to
+
+Settings **Input** (on) and **Cursor Moves** (on). All on the game thread; discrete events are
+written as they happen, so their `seq` sits exactly between the packets around them. Cursor and look
+samples are batched per tick, each with its own `ns`, and a batch is always written before the next
+discrete event.
+
+| k | fields | |
+|---|---|---|
+| `key` | `key, code, scan, mods, act, screen, maps` | every key event (`act` 0 release, 1 press, 2 repeat; `key` the GLFW name, `maps` the key mappings it matches). In a chat, sign or book screen or a focused text field, only `{redacted, screen}` unless Typed Chat is on |
+| `char` | `cp, s, screen` | a typed character; only with Typed Chat on |
+| `btn` | `b, act, mods, gx, gy, screen, maps` | a mouse button (window pixels) |
+| `scroll` | `dx, dy, screen` | the wheel, before anything (the wand, Odin) cancels it |
+| `cur` | `d: [[ns, x, y, grabbed]...]` | cursor moves this tick (Cursor Moves) |
+| `look` | `d: [[ns, dYaw, dPitch]...]` | Entity.turn deltas for you (after sensitivity, smoothing, invert; the game turns by 0.15 degrees per unit) |
+| `act` | `what, arg?, aim, done, r?` | the game started `startAttack`, `startUseItem`, `continueAttack` (while held and once on release) or `pickBlockOrEntity`. `done` false: it never reached its end (a mod cancelled it before any packet). `seq` is taken at the start |
+| `bind` | `key, cancelled` | Odin's InputEvent, after every module (cancelled = some module ate it) |
+| `attempt` | `what, cancelled/consumed, ...` | `slot_click` (slot, button), `block_interact` (pos), `entity_interact` (eid, etype, pos), `screen_click` / `screen_release` (button, mods, x, y), `screen_key` on Odin's bus; `hotbar_scroll` (from, to, dx, dy); Fabric's `screen.after*` key and mouse events inside screens (`consumed` = the screen handled it) |
+| `aim` | `type, pos?, face?, hit, inside?, border?, id?, etype?, pick?, kf?` | what the crosshair is on, when it changes and at keyframes |
+| `use` / `interact` / `attack` / `useon` | `hand, result` / `id, etype, hand, hit, result` / `id, etype` / `hand, pos, face, hit, inside, result` | what an item use, entity interaction, attack or block use came to on the client (`result` the InteractionResult, reflected) |
+| `typed` | `kind, text` or `kind, redacted, len, root?`, `cancelled?` | chat and commands as sent (`kind` chat, command, or odin for Odin's MessageSentEvent), including ones cancelled before a packet. Off Typed Chat: only the length and a command's name |
+| `break` | `by, self, pos, stage` | a block-breaking stage drawn, yours or anyone's (stage -1 or 10+ clears it) |
+| `broke` | `pos, state` | a block you broke, on the client |
 
 ### How fields are written (`f`)
 
