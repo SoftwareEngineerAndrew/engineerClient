@@ -104,6 +104,8 @@ object DungeonRecorder : Module(
         PacketFate.install()
         InputCapture.install()
         PlayerState.install(); FrameCapture.install(); EnvOptions.install()
+        // Screens, chat as shown, HUD, tab list, scoreboards and boss bars (U9).
+        ScreenCapture.install(); HudCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
