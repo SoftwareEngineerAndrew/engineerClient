@@ -1,5 +1,6 @@
 package com.engineerclient.practice
 
+import com.engineerclient.recorder.EcRec
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
@@ -174,11 +175,29 @@ object TermInfo : Module(
                     onTaskChat(msg)
                 }
             }
+            recState(msg)
         }
 
-        onReceive<ClientboundSetTitleTextPacket> { if (hidden(text.string)) it.cancel() }
-        onReceive<ClientboundSetSubtitleTextPacket> { if (hidden(text.string)) it.cancel() }
+        onReceive<ClientboundSetTitleTextPacket> { if (hidden(text.string)) { it.cancel(); recHid("title", text.string) } }
+        onReceive<ClientboundSetSubtitleTextPacket> { if (hidden(text.string)) { it.cancel(); recHid("subtitle", text.string) } }
     }
+
+    /**
+     * Every section's counts after a chat line, for the recorder, when they changed. On the network
+     * thread, which is the one that changes them.
+     */
+    private fun recState(msg: String) = EcRec.changed("ec.terms", "terms", { o ->
+        o.num("active", active).num("sectionStart", sectionStart)
+        o.objs("sections", sections) { s, it ->
+            s.num("number", it.number).num("terms", it.terms).num("termsDone", it.termsDone).num("leversDone", it.leversDone)
+                .bool("deviceDone", it.deviceDone).bool("gate", it.gateDestroyed).str("lastIgn", it.lastIgn).num("lastIndex", it.lastIndex).str("lastType", it.lastType)
+        }
+    }, { o -> o.str("msg", msg).num("serverTicks", serverTicks).str("shown", shownTime?.first) })
+
+    private fun recHid(what: String, text: String) = EcRec.line("ec.terms") { o -> o.str("hid", what).str("text", text).num("active", active) }
+
+    /** Read-only, for the Dungeon Recorder's ec.clocks. */
+    val recServerTicks: Int get() = serverTicks
 
     private fun hidden(raw: String): Boolean {
         if (!hideTitles) return false

@@ -114,6 +114,7 @@ object DungeonRecorder : Module(
         OdinState.install()
         OdinEvents.install()
         OdinInternals.install()
+        EngineerClient.safely("recorder ec") { EcRec.install() }
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.

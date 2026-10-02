@@ -1,5 +1,6 @@
 package com.engineerclient.splits
 
+import com.engineerclient.recorder.EcRec
 import kotlin.math.hypot
 
 /**
@@ -258,6 +259,11 @@ class SubSplitTracker {
     private fun said(msg: String) = "\"" + msg.substringAfter(": ").let { if (it.length > 32) it.take(30) + "..." else it } + "\""
 
     private fun jumpTo(step: Int, at: Stamp, source: String) {
+        // The recorder gets every jump: the step that was running ("current") and how this one was found.
+        EcRec.line("ec.sub") { o ->
+            o.num("idx", step).str("id", steps[step].id).str("split", steps[step].split).str("label", steps[step].label)
+                .at(at).str("source", source).num("current", current).num("ticks", ticks).bool("watchingCore", watchingCore)
+        }
         ticks = 0
         gateBlown = false
         gateWaiting = false

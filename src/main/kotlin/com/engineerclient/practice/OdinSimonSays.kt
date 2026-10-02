@@ -1,6 +1,7 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.recorder.EcRec
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
@@ -74,10 +75,23 @@ object OdinSimonSays {
                     else -> return@safely
                 }
                 sync()
+                // What the solver was told and what Odin now holds, read back after the write.
+                EcRec.line("ec.ss") { o ->
+                    o.num("tick", tick).raw("pos", "[${pos.x},${pos.y},${pos.z}]")
+                        .str("old", old.toString()).str("new", updated.toString())
+                        .raw("answer", cells(solver.answer)).num("next", solver.next)
+                    @Suppress("UNCHECKED_CAST")
+                    o.raw("odinOrder", cells(odinOrder.get(null) as List<BlockPos>)).num("odinNeeded", odinNeeded.getInt(null))
+                }
             }
         }
         EventBus.subscribe(this)
     }
+
+    private fun cells(list: List<BlockPos>) = list.joinToString(",", "[", "]") { "[${it.x},${it.y},${it.z}]" }
+
+    /** Read-only, for the Dungeon Recorder's ec.clocks. */
+    val recTick: Long get() = tick
 
     /** Odin's boxes, Block Wrong Clicks and announcements read these. */
     private fun sync() {
