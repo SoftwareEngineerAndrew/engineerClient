@@ -59,6 +59,8 @@ object DungeonRecorder : Module(
     private val outbound by BooleanSetting("Your Packets", true, desc = "Every packet you send (movement, clicks, container clicks, item use).")
     private val movement by BooleanSetting("Entity Movement", true, desc = "Other entities' movement and head turns (the bulk of the packets).")
     private val effects by BooleanSetting("Particles And Sounds", true, desc = "Particle and sound packets.")
+    private val playedSounds by BooleanSetting("Played Sounds", true, desc = "Every sound the game played or tried to (the server's, the client's own and mods'): the file it resolved to, volume, and whether it started; and every stop.")
+    private val spawnedParticles by BooleanSetting("Spawned Particles", true, desc = "Every particle requested from the world and every particle that actually spawned (client-made ones included), once per tick.")
     private val chunks by BooleanSetting("Chunk Data", true, desc = "Every block, block entity, biome, heightmap and light of each loaded chunk.")
     private val state by BooleanSetting("Client State", true, desc = "Your own state every tick at full precision, your inventory, effects and cooldowns.")
     private val perFrameCamera by BooleanSetting("Per-Frame Camera", true, desc = "The camera in every rendered frame (partial tick, look, position, FOV), so what was on screen can be rebuilt exactly.")
@@ -106,6 +108,7 @@ object DungeonRecorder : Module(
         PlayerState.install(); FrameCapture.install(); EnvOptions.install()
         // Screens, chat as shown, HUD, tab list, scoreboards and boss bars (U9).
         ScreenCapture.install(); HudCapture.install()
+        EffectsCapture.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -262,6 +265,8 @@ object DungeonRecorder : Module(
         ChunkCapture.enabled = chunks
         PlayerState.enabled = state
         FrameCapture.perFrame = perFrameCamera
+        EffectsCapture.sounds = playedSounds
+        EffectsCapture.particles = spawnedParticles
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
         if (Rec.settingsSource == null) Rec.settingsSource = { settingsSnapshot() }
