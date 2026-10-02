@@ -20,7 +20,7 @@ blood mob's metadata" or "what packet tells me the gate blew" is answered by loo
 | Server Packets / Your Packets | on | each direction |
 | Entity Movement | on | other entities' moves and head turns: the bulk of the packets |
 | Particles And Sounds | on | |
-| Chunk Data | off | full chunk loads (large); off, a chunk load is just its x, z |
+| Chunk Data | on | every block, block entity, biome, heightmap and light of each loaded chunk, and the chunks in keyframes; off, a chunk packet is just its x, z |
 | Client State | on | the `me`, `game` and `sidebar` lines below |
 | Typed Chat | off | what you type in chat and commands; off, the line says `redacted` |
 | Hide Private Chats | on | private, guild, officer, co-op and friend lines are left out |
@@ -96,6 +96,30 @@ The command tree, tags, recipes and advancements are written in full. After the 
 command tree, a `commands` line holds the resulting tree (`tree`, vanilla's own JSON form).
 Bundled packets (how the server sends a new entity with its data) are written as their separate
 packets. Left out entirely: keep-alives, pongs, bundle markers, chunk-batch markers.
+
+### The world (recorder/ChunkCapture.kt, WorldCapture.kt)
+
+A `level_chunk_with_light` line's `f` is the chunk decoded: `{x, z, minSy, s, be, hm, light}`.
+`s` holds every section bottom up, `{i, y, n, fl, pal, rle?, bio, bioRle?}`: `y` the section's y
+(`minSy + i`), `n`/`fl` its non-air and fluid block counts, `pal` its block states
+(`minecraft:oak_stairs[facing=east,...]`) and `rle` `[count, paletteIndex, ...]` over its 4096
+blocks in index order y, z, x (x fastest; left out when the palette has one entry); `bio`/`bioRle`
+the same for its 64 biome cells (4x4x4). `be` is `[[x, y, z, type, snbt]]` (skull textures
+included), `hm` `{type: [256 absolute heights]}` in order x + 16z, `light` as for light_update.
+`chunks_biomes` lines decode the same way as `{chunks: [{x, z, minSy, s: [{i, y, bio, bioRle?}]}]}`.
+
+| k | fields | |
+|---|---|---|
+| `cchunk` | `ev, x, z` | the client loaded (`load`) or dropped (`unload`) a chunk; `ignored`: a chunk packet that never loaded within 2 ticks (outside the view range) |
+| `blk` | `p: [x, y, z], old, new, src` | every block change the client applied, with the state before; `src` is `server` (block/section update), `ack` (the server settling your predicted blocks) or `local` (your own prediction, client-side effects) |
+| `mapfull` | `kf?, id, scale, locked, sha1, b64, dec: [[type, x, y, rot, name]], odinIgnored` | a map's whole 128x128 picture after a map packet changed it (the dungeon map as assembled); `dec` its decorations |
+| `env` | `kf?, clock, gameTime, rain, thunder, border: [x, z, size], gameMode, minY, height` | polled each second, written when changed |
+| `kfchunk` | `kf, dirty?, x, z, minSy, s` | a keyframe's copy of one loaded chunk, sections as above (no counts); `dirty: true` for the 60 s pass over chunks changed since their last copy |
+| `kfbe` | `kf, dirty?, x, z, d: [[x, y, z, type, state, snbt]]` | that chunk's block entities |
+| `kfchunks` | `kf, scan: [cx, cz, r], count, chunks: [[x, z]]` | every chunk the client held at the keyframe (found by scanning radius `r` around the player's chunk) |
+
+A keyframe's chunks are copied 64 a tick, nearest first, so their lines trail the `keyframe` line by
+a few ticks; the maps, `env` and `kfchunks` come at once.
 
 ## Using it as LLM context
 
