@@ -1,7 +1,6 @@
 package com.engineerclient.recorder
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.misc.ScoreboardLines
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
@@ -20,7 +19,6 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
-import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.common.ClientboundPingPacket
@@ -31,7 +29,6 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket
 import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket
 import net.minecraft.network.protocol.game.ServerboundChatPacket
-import net.minecraft.world.scores.DisplaySlot
 import org.lwjgl.glfw.GLFW
 
 /**
@@ -58,7 +55,8 @@ object DungeonRecorder : Module(
     private val movement by BooleanSetting("Entity Movement", true, desc = "Other entities' movement and head turns (the bulk of the packets).")
     private val effects by BooleanSetting("Particles And Sounds", true, desc = "Particle and sound packets.")
     private val chunks by BooleanSetting("Chunk Data", false, desc = "Chunk loads in full (large: every block of each loaded chunk). Off: only which chunk loaded.")
-    private val state by BooleanSetting("Client State", true, desc = "Your own state every tick, Odin's dungeon state and the sidebar when they change.")
+    private val state by BooleanSetting("Client State", true, desc = "Your own state every tick at full precision, your inventory, effects and cooldowns.")
+    private val perFrameCamera by BooleanSetting("Per-Frame Camera", true, desc = "The camera in every rendered frame (partial tick, look, position, FOV), so what was on screen can be rebuilt exactly.")
     private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat and commands. Off: only that something was sent.")
     private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat and friend notices out.")
     private val cookiePayloads by BooleanSetting("Cookie Payloads", false, desc = "Include server cookie bytes (may hold session tokens); off writes length and hash only")
@@ -74,9 +72,6 @@ object DungeonRecorder : Module(
     private val dir get() = EngineerClient.mc.gameDirectory.toPath().resolve("engineerclient-recordings")
 
     @Volatile private var session: RecorderSession? = null
-    private var lastState = ""
-    private var lastDungeon = ""
-    private var lastSidebar = ""
 
     /** Packet types never worth a line: keep-alives and the bundle markers. (Light is kept: its arrays are decoded per section.) */
     private val SKIP = setOf("minecraft:keep_alive", "minecraft:pong", "minecraft:bundle_delimiter", "minecraft:chunk_batch_start", "minecraft:chunk_batch_finished")
@@ -90,6 +85,7 @@ object DungeonRecorder : Module(
         on<LevelEvent.Load> { EngineerClient.safely("recorder world") { stop(); if (enabled) start() } }
         on<LevelEvent.Unload> { EngineerClient.safely("recorder world end") { stop() } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        PlayerState.install(); FrameCapture.install(); EnvOptions.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -181,7 +177,7 @@ object DungeonRecorder : Module(
                 session = null; Rec.end(s); s.abandon(); return
             }
         }
-        if (state) clientState()
+        PlayerState.tick()
     }
 
     private fun label() = DungeonUtils.floor?.name ?: LocationUtils.currentArea.name
@@ -189,6 +185,8 @@ object DungeonRecorder : Module(
     /** Hands the core the settings it acts on, and how to read all of them for `settings` lines. */
     private fun pushConfig() {
         PacketJson.cookiePayloads = cookiePayloads
+        PlayerState.enabled = state
+        FrameCapture.perFrame = perFrameCamera
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
         if (Rec.settingsSource == null) Rec.settingsSource = { settingsSnapshot() }
@@ -209,7 +207,6 @@ object DungeonRecorder : Module(
         val s = RecorderSession(dir, meta)
         session = s
         Rec.begin(s)
-        lastState = ""; lastDungeon = ""; lastSidebar = ""
     }
 
     private fun stop() {
@@ -232,38 +229,5 @@ object DungeonRecorder : Module(
         stop()
     }
 
-    /** Your own state, every tick it changes; Odin's dungeon state and the sidebar when they change. */
-    private fun clientState() {
-        val mc = EngineerClient.mc
-        val p = mc.player ?: return
-        val o = mc.options
-        val keys = listOf(o.keyUp to "w", o.keyLeft to "a", o.keyDown to "s", o.keyRight to "d", o.keyJump to "jump", o.keyShift to "sneak",
-            o.keySprint to "sprint", o.keyAttack to "attack", o.keyUse to "use").filter { it.first.isDown }.joinToString(",") { "\"${it.second}\"" }
-        val held = RichJson.itemNow(p.mainHandItem)
-        val screen = mc.screen?.let { "{\"class\":${q(it.javaClass.simpleName)},\"title\":${q(it.title.string)}}" } ?: "null"
-        val v = p.deltaMovement
-        val st = """"pos":[${f(p.x)},${f(p.y)},${f(p.z)}],"rot":[${f1(p.yRot)},${f1(p.xRot)}],"vel":[${f(v.x)},${f(v.y)},${f(v.z)}],""" +
-            """"ground":${p.onGround()},"hp":${f1(p.health)},"abs":${f1(p.absorptionAmount)},"food":${p.foodData.foodLevel},""" +
-            """"slot":${p.inventory.selectedSlot},"held":$held,"keys":[$keys],"screen":$screen"""
-        if (st != lastState) { lastState = st; Rec.emit("me", st) }
-
-        if (Rec.tick % 10 != 0) return
-        val effects = p.activeEffects.joinToString(",") { "[${q(BuiltInRegistries.MOB_EFFECT.getKey(it.effect.value()).toString())},${it.amplifier},${it.duration}]" }
-        val team = DungeonUtils.dungeonTeammates.joinToString(",") { "[${q(it.name)},${q(it.clazz.name)},${it.isDead}]" }
-        val dungeon = """"area":${q(LocationUtils.currentArea.name)},"floor":${q(DungeonUtils.floor?.name ?: "")},"boss":${DungeonUtils.inBoss},""" +
-            """"room":${q(DungeonUtils.currentRoomName)},"party":[$team],"effects":[$effects],"fps":${mc.fps}"""
-        if (dungeon != lastDungeon) { lastDungeon = dungeon; Rec.emit("game", dungeon) }
-
-        val board = mc.level?.scoreboard
-        val objective = board?.getDisplayObjective(DisplaySlot.SIDEBAR)
-        if (board != null && objective != null) {
-            val lines = ScoreboardLines.sidebarEntries(board, objective).joinToString(",") { q(ScoreboardLines.plain(ScoreboardLines.lineText(board, it))) }
-            val sidebar = """"title":${q(objective.displayName.string)},"lines":[$lines]"""
-            if (sidebar != lastSidebar) { lastSidebar = sidebar; Rec.emit("sidebar", sidebar) }
-        }
-    }
-
     private fun q(s: String) = com.google.gson.JsonPrimitive(s).toString()
-    private fun f(d: Double) = String.format(java.util.Locale.ROOT, "%.3f", d)
-    private fun f1(v: Float) = String.format(java.util.Locale.ROOT, "%.1f", v)
 }
