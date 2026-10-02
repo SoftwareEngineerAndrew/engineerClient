@@ -2,6 +2,7 @@ package com.engineerclient
 
 import com.engineerclient.betterpf.BetterPF
 import com.engineerclient.bossrecorder.BossRecorder
+import com.engineerclient.recorder.DungeonRecorder
 import com.engineerclient.gui.BrwScreen
 import com.engineerclient.misc.AgroLeaderboard
 import com.engineerclient.misc.RandomStuff
@@ -63,7 +64,7 @@ object EngineerClient : ClientModInitializer {
         // Register our own module into Odin's module system: own ClickGUI panel
         // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, RandomStuff, ChatHider, LeapExtras, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor, StormPhase, BossRecorder, EntityDistance, CameraOffset, BetterPFMenu, SimonSaysPractice, com.engineerclient.practice.TermInfo)
+        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, RandomStuff, ChatHider, LeapExtras, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor, StormPhase, BossRecorder, EntityDistance, CameraOffset, BetterPFMenu, SimonSaysPractice, com.engineerclient.practice.TermInfo, DungeonRecorder)
 
         // The Engineer Splits look, added to Odin's own Splits module - before anything saves the
         // configs, which would drop saved values for settings that don't exist yet.
