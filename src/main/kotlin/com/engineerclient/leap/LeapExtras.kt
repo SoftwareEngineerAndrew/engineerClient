@@ -1,6 +1,7 @@
 package com.engineerclient.leap
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.recorder.EcRec
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.ScreenEvent
@@ -116,8 +117,14 @@ object LeapExtras : Module(
 
     init {
         on<ScreenEvent.Open> {
-            if (screen is AbstractContainerScreen<*> && screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player"))
+            if (screen is AbstractContainerScreen<*> && screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")) {
                 openedAt = System.currentTimeMillis()
+                // The window clicks are ignored for, from this moment (the mixins read inClickDelay).
+                EcRec.line("ec.leap") { o ->
+                    o.str("title", screen.title.string).num("openedAt", openedAt).num("clickDelayTicks", clickDelay).num("clickDelayMs", clickDelay * 50L)
+                        .bool("enabled", enabled).bool("leapMenu", LeapMenu.enabled).bool("outline", leapOutline)
+                }
+            }
         }
 
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "leap_outline")) { g, _ ->

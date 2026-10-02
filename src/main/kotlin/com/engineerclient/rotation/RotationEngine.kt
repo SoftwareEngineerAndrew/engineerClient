@@ -81,6 +81,12 @@ object RotationEngine {
 
     fun saidBy(ign: String): Set<String> = said[ign.lowercase()].orEmpty()
 
+    // Read-only copies for the Dungeon Recorder's P3 snapshot.
+    fun recUsedExits(): Map<String, Set<Int>> = usedExits.mapValues { it.value.toSet() }
+    fun recSaid(): Map<String, Set<String>> = said.mapValues { it.value.toSet() }
+    fun recFinished(): List<String> = finished.toList()
+    fun recInCore(): List<String> = inCore.toList()
+
     /** Set when a player reached a pot with no exit left for them — a defect in the spec or a mis-detected run. */
     var stuck: Stuck? = null
         private set
