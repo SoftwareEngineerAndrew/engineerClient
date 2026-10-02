@@ -21,6 +21,10 @@ blood mob's metadata" or "what packet tells me the gate blew" is answered by loo
 | Entity Movement | on | other entities' moves and head turns: the bulk of the packets |
 | Particles And Sounds | on | |
 | Chunk Data | on | every block, block entity, biome, heightmap and light of each loaded chunk, and the chunks in keyframes; off, a chunk packet is just its x, z |
+| Particles And Sounds | on | the particle and sound packets |
+| Played Sounds | on | the `snd` and `sndstop` lines below: every sound the client played or tried to, its own and mods' included |
+| Spawned Particles | on | the `ptc` lines below: every particle requested and spawned, client-made ones included |
+| Chunk Data | off | full chunk loads (large); off, a chunk load is just its x, z |
 | Client State | on | the `me`, `game` and `sidebar` lines below |
 | Typed Chat | off | what you type in chat and commands; off, a command keeps only its name (`{"command", "args": "<redacted>"}`) and a chat message its length and signing data (`{"redacted": true, "len", ...}`) |
 | Hide Private Chats | on | private, guild, officer, co-op and friend lines are kept as `f: {"hidden": "private"}` (their raw bytes withheld) |
@@ -64,6 +68,10 @@ the server's tick count (one per ping, as Odin counts them), `ms` wall-clock mil
 | `disconnect` | `by (client\|server\|error), reason, report, bugReport` | the game connection closed |
 | `conn_error` | `error, stack` | the exception that broke the connection |
 | `end` | `why` | the recording ended (`reconfigure`, `reconnect`, `disconnect`, `disabled`, `replaced`) |
+| `snd` | `id, file, path, src, pos, vol, pitch, att, rel, loop, delay, range?, sub?, cls, res` | a sound the engine was asked to play (the server's, the client's own and mods'): `id` the sound event, `file`/`path` the variant it resolved to, `cls` the sound instance class, `res` `STARTED`, `STARTED_SILENTLY` or `NOT_STARTED`; `range` and `sub` (subtitle) when it got far enough to reach the listeners |
+| `sndstop` | `what: inst\|match\|all, id, src, cls?, active?` | the engine stopping one sound instance (`active`: it was playing), every sound matching an id and/or source (null = any), or all |
+| `ptc` | `opts, req?, spawned?, emit?` | one per tick with particles: `req` rows `[type, x, y, z, dx, dy, dz, force, always, o, made]` (asked of the level; `made` how many the Particles option and distance let through, null if the call never returned), `spawned` rows `[class, x, y, z, xd, yd, zd, lifetime]` (every particle added to the engine; vanilla classes without their package), `emit` rows `[entityId, entityType, o, lifetime]` (tracking emitters, -1 = default), `o` an index into `opts` (`{type, opts}` per distinct options object that tick) |
+| `world` / `end` | `t, ms` | a world loaded / the recording ended |
 | `budget` | `ms, note` | the hour's size budget is nearly used: bulk lines are being left out |
 | `dropped` | `lines, ms` | the writer fell behind and dropped this many lines (a slow disk) |
 | `error` | `what` | a packet that couldn't be written out |
