@@ -1,6 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.bossrecorder.BossRecorder;
+import com.engineerclient.recorder.DungeonRecorder;
 import com.engineerclient.rotation.P3Rotation;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.Connection;
@@ -28,5 +29,6 @@ public class ConnectionTapMixin {
     private void ec$tap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
         P3Rotation.INSTANCE.tap(packet);
         BossRecorder.INSTANCE.tap(packet);
+        DungeonRecorder.INSTANCE.tap(packet);
     }
 }
