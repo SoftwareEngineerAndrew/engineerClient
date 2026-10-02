@@ -27,6 +27,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.PacketFlow
 import net.minecraft.network.protocol.game.ClientboundBundlePacket
+import net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -59,7 +60,7 @@ object DungeonRecorder : Module(
     private val outbound by BooleanSetting("Your Packets", true, desc = "Every packet you send (movement, clicks, container clicks, item use).")
     private val movement by BooleanSetting("Entity Movement", true, desc = "Other entities' movement and head turns (the bulk of the packets).")
     private val effects by BooleanSetting("Particles And Sounds", true, desc = "Particle and sound packets.")
-    private val chunks by BooleanSetting("Chunk Data", false, desc = "Chunk loads in full (large: every block of each loaded chunk). Off: only which chunk loaded.")
+    private val chunks by BooleanSetting("Chunk Data", true, desc = "Every block, block entity, biome, heightmap and light of each loaded chunk.")
     private val state by BooleanSetting("Client State", true, desc = "Your own state every tick, Odin's dungeon state and the sidebar when they change.")
     private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat and commands. Off: only that something was sent.")
     private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat and friend notices out.")
@@ -99,6 +100,7 @@ object DungeonRecorder : Module(
         // world before's late disconnect never ends the next world's recording.
         ClientPlayConnectionEvents.DISCONNECT.register { handler, _ -> EngineerClient.safely("recorder world end") { RecorderLifecycle.onDisconnect(handler) } }
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
+        EngineerClient.safely("recorder world capture") { WorldCapture.install() }
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -198,9 +200,11 @@ object DungeonRecorder : Module(
         val type = PacketJson.type(p)
         if (type in SKIP) return
         if ((type in MOVEMENT && !movement) || (type in EFFECTS && !effects)) return
+        ChunkCapture.observe(p)
         val body: () -> String = when {
             hiddenPrivate(p) -> ({ "{\"hidden\":\"private\"}" })
-            p is ClientboundLevelChunkWithLightPacket && !chunks -> { val x = p.x; val z = p.z; { "{\"x\":$x,\"z\":$z}" } }
+            p is ClientboundLevelChunkWithLightPacket -> ChunkCapture.capture(p)
+            p is ClientboundChunksBiomesPacket -> ChunkCapture.biomes(p)
             else -> PacketJson.capture(p)
         }
         packetLine("in", type, p, body, extra)
@@ -247,6 +251,7 @@ object DungeonRecorder : Module(
     /** Hands the core the settings it acts on, and how to read all of them for `settings` lines. */
     internal fun pushConfig() {
         PacketJson.cookiePayloads = cookiePayloads
+        ChunkCapture.enabled = chunks
         val c = RecConfig(hidePrivate, typedChat, compactEntities, minFreeGb, maxFolderGb, deleteOldest)
         if (c != Rec.config) Rec.config = c
         if (Rec.settingsSource == null) Rec.settingsSource = { settingsSnapshot() }

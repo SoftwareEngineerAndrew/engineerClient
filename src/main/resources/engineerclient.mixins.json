@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "ArmorFoilMixin",
+    "BlockChangeSourceMixin",
     "BlurRadiusMixin",
     "CameraAccessor",
     "CameraOffsetMixin",
@@ -27,6 +28,7 @@
     "NumbersHandlerMixin",
     "LivingEntityAccessor",
     "LocalPlayerDropMixin",
+    "MapAppliedMixin",
     "MinecraftAccessor",
     "MoveEntityPacketAccessor",
     "PacketDecoderTapMixin",
