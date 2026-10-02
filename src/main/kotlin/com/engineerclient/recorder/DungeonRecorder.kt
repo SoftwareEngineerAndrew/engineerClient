@@ -104,6 +104,7 @@ object DungeonRecorder : Module(
         on<TickEvent.End> { EngineerClient.safely("recorder tick") { onTick() } }
         EngineerClient.safely("recorder world capture") { WorldCapture.install() }
         EntityCapture.install()
+        PacketFate.install()
 
         // A recording the game did not get to close (a crash) is cut back to its last whole member
         // and renamed; off the game thread, it only touches files.
@@ -166,7 +167,7 @@ object DungeonRecorder : Module(
      */
     fun tap(conn: Connection, packet: Packet<*>) {
         if (!enabled) { WireTap.clearPending(); return }
-        EngineerClient.safely("recorder tap") { WireTap.tap(conn, packet) }
+        EngineerClient.safely("recorder tap") { WireTap.tap(conn, packet); PacketFate.readBegin(packet) }
     }
 
     /** Whether frames' bytes are kept (Raw Packets); read on the network thread. */
@@ -194,6 +195,7 @@ object DungeonRecorder : Module(
             val env = Rec.envelope("bundle", b)
             Rec.emitLine(b, 96, "bundle", System.currentTimeMillis()) { "$env,\"b\":$b,\"n\":${subs.size},\"ph\":\"$ph\"$rawM}" }
             subs.forEachIndexed { i, sub -> inboundOne(sub, ",\"ph\":\"$ph\",\"b\":$b,\"bi\":$i") }
+            PacketFate.rememberBundle(p, subs)
             return
         }
         inboundOne(p, ",\"ph\":\"$ph\"$rawM")
@@ -226,6 +228,7 @@ object DungeonRecorder : Module(
         val env = Rec.envelope(dir, seq)
         val e = PacketDecode.entityMembers(p)
         val pt = q(type)
+        if (dir == "in") PacketFate.remember(p, seq)
         val x = if (tail == null) "" else ",$tail"
         Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$extra$e,\"f\":${body()}$x}" }
     }
