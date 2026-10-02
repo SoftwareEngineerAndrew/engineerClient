@@ -28,6 +28,7 @@
     "LocalPlayerDropMixin",
     "MinecraftAccessor",
     "MoveEntityPacketAccessor",
+    "RecThumbFrameMixin",
     "RotateHeadPacketAccessor",
     "ScoreboardSidebarMixin",
     "GuiSidebarInvoker",
