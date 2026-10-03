@@ -57,9 +57,9 @@ object P3Sim : Module(
     val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1, 10, 1, unit = "/s", desc = "Charges back each second (20 max). Recordings: ~3 a second; the wiki says 2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest at once).")
-    val realMasksS = +BooleanSetting("Real Masks", false, desc = "Masks are real helmets: only the one you wear can save you, swap them in your inventory (cooldowns stay with each mask). Off: whichever is ready saves you.")
-    val wornMaskS = +SelectorSetting("Starting Mask", "Spirit", arrayListOf("Spirit", "Bonzo"), desc = "Real Masks: the mask you start wearing (the other is in your inventory).")
-    val phoenixS = +BooleanSetting("Phoenix Pet", true, desc = "Real Masks: Phoenix is your active pet (saves you when your worn mask can't).")
+    val realMasksS = +BooleanSetting("Real Masks", false, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
+    val wornMaskS = +SelectorSetting("Starting Mask", "Spirit", arrayListOf("Spirit", "Bonzo"), desc = "Real Masks: the mask you wear (/stats swaps it).")
+    val phoenixS = +BooleanSetting("Phoenix Pet", true, desc = "Your pet: Phoenix (saves you from a death, 100 less speed) or Black Cat (your full speed). The Pet Rod swaps them.")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
     val p3OnlyS = +BooleanSetting("Stop After P3", true, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
@@ -96,6 +96,13 @@ object P3Sim : Module(
         SimServer.register()
         P3Plan.load()
         // /p3sim: the menu in the sim (or opens the sim); /p3sim <start> starts it; /p3sim rebuild remakes the world.
+        // /stats: Hypixel's equipment window, here to swap masks. On the sim's own server only (a
+        // server command, so Hypixel's /stats is never touched).
+        net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
+            dispatcher.register(net.minecraft.commands.Commands.literal("stats")
+                .requires { it.server === SimServer.server }
+                .executes { ctx -> ctx.source.player?.let { p -> Masks.openStats(p) }; 1 })
+        }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             val cmd = ClientCommands.literal("p3sim").executes { openMenuOrSim(); 1 }
             for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {

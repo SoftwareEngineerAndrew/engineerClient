@@ -193,7 +193,8 @@ class Devices(val phase: GoldorPhase) {
         private val levers = (58..62).flatMap { x -> (133..136).map { y -> x to y } }
         private val on = HashSet<Pair<Int, Int>>()
 
-        fun place() { on.clear(); draw() }
+        /** Pre-done (as in Maxor): every lamp lit, one click in S2 finishes it. */
+        fun place() { on.clear(); on += right; draw() }
 
         fun solve() { on.clear(); on += right; draw() }
 
@@ -251,9 +252,9 @@ class Devices(val phase: GoldorPhase) {
                 }
                 frames[i] = Sim.spawn(f)
             }
-            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79).
+            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
             frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
-                ?.let { (j, f) -> f.setRotation((solution[j] + 1 + Random.nextInt(7)) % 8) }
+                ?.let { (j, f) -> f.setRotation((solution[j] + 7) % 8) }
         }
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }

@@ -101,7 +101,7 @@ object SimItems {
         return s
     }
 
-    val SUPERBOOM get() = item(Items.PAPER, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Right-click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
+    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§9⚚ Bonzo's Staff §6✪✪✪✪✪", listOf("§6Ability: Showtime §e§lRIGHT CLICK", "§7Shoots balloons that knock you back."))
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
@@ -115,6 +115,7 @@ object SimItems {
     val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", "§5Wither Cloak Sword", listOf("§6Ability: Creeper Veil §e§lRIGHT CLICK", "§7Immune to damage (death ticks) while on."))
     val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", "§aSkyBlock Menu §7(Click)", listOf("§7Opens the §aP3 Sim§7 menu: start any", "§7phase or section, teleport, change", "§7settings.", "", "§eClick to open!"))
     val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", "§5Heroic Aspect of the Void", listOf("§6Ability: Instant Transmission §e§lRIGHT CLICK", "§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK"), glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }
+    val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", "§aPet Rod", listOf("§7Cast it to swap your pet:", "§6Phoenix §7(saves you, 400 speed) and", "§6Black Cat §7(500 speed)."))
     val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
 
     /** The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory. */
@@ -123,7 +124,7 @@ object SimItems {
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PEARLS, LEAP, JERRY, CLOAK, MENU)
         bar.forEachIndexed { i, s -> inv.setItem(i, s) }
-        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW)
+        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW); inv.setItem(12, PET_ROD)
         Masks.equip(p)
         inv.selectedSlot = 3
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))
@@ -186,8 +187,14 @@ object SimItems {
     fun clientHitBlock(pos: BlockPos): Boolean {
         val player = mc.player ?: return false
         val level = mc.level ?: return false
-        if (!simClient(level) || idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
+        if (!simClient(level)) return false
         val at = pos.immutable()
+        // Superboom: a left click on a gate blows it too.
+        if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
+            SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { superboom(p, at) } } }
+            return true
+        }
+        if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
         val state = level.getBlockState(at)
         if (state.isAir) return true
         // The client breaks it at once (as Hypixel's do); the server keeps it or sends it back.
@@ -233,6 +240,7 @@ object SimItems {
             "INFINITE_SPIRIT_LEAP" -> openLeap(p)
             "SUPERBOOM_TNT" -> asClicked(p, "superboom") { superboom(p, null) }
             "TERMINATOR" -> asClicked(p, "term") { shoot(p, 3) }
+            "PET_ROD" -> Fight.afterPing("pet rod") { Masks.swapPet(p) }
             "ITEM_SPIRIT_BOW" -> asClicked(p, "spirit bow") { shoot(p, 1) }
             else -> return InteractionResult.PASS
         }

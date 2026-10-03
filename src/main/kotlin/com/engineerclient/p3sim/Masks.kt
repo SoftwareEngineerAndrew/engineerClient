@@ -16,8 +16,8 @@ import net.minecraft.world.item.component.ItemLore
  * timer and Masks Used read them). With none left you die: back to the start of the section.
  *
  * Real Masks off: the first one off cooldown saves you. On (dungeonbreaker.md, masks): they're
- * helmets, only the one you wear saves you, then Phoenix if it's your pet; swap them in your
- * inventory, each keeps its own cooldown.
+ * helmets, only the one you wear saves you, then Phoenix if it's your pet; swap them in /stats,
+ * each keeps its own cooldown. The Pet Rod swaps Phoenix and Black Cat.
  */
 object Masks {
     private class Item(val id: String, val name: String, val cooldown: Int, val safe: Int, val line: String) { var readyAt = 0 }
@@ -44,12 +44,64 @@ object Masks {
         return s
     }
 
-    /** Real Masks: the starting one on your head, the other in the inventory. */
+    /** Real Masks: the chosen one on your head (/stats swaps it). */
     fun equip(p: ServerPlayer) {
         if (!P3Sim.realMasks) { if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) p.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY); return }
-        val spirit = P3Sim.wornMaskS.value == 0
-        p.setItemSlot(EquipmentSlot.HEAD, if (spirit) SPIRIT_MASK else BONZO_MASK)
-        p.inventory.setItem(12, if (spirit) BONZO_MASK else SPIRIT_MASK)
+        p.setItemSlot(EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) SPIRIT_MASK else BONZO_MASK)
+    }
+
+    // ------------------------------------------------------------------ /stats: swapping masks
+
+    /** The /stats window: your masks, a click puts that one on (each keeps its own cooldown). */
+    fun openStats(p: ServerPlayer) {
+        p.openMenu(net.minecraft.world.SimpleMenuProvider({ id, inv, _ -> StatsMenu(id, inv) }, Component.literal("Your Equipment and Stats")))
+    }
+
+    private val SLOTS = mapOf(11 to 0, 15 to 1)
+
+    class StatsMenu(id: Int, inv: net.minecraft.world.entity.player.Inventory) :
+        net.minecraft.world.inventory.ChestMenu(net.minecraft.world.inventory.MenuType.GENERIC_9x3, id, inv, net.minecraft.world.SimpleContainer(27), 3) {
+        init { draw() }
+
+        private fun draw() {
+            for (i in 0 until 27) container.setItem(i, Terminals.FILLER)
+            val worn = P3Sim.wornMaskS.value
+            for ((slot, m) in SLOTS) {
+                val s = if (m == 0) SPIRIT_MASK else BONZO_MASK
+                val lore = s.get(DataComponents.LORE)?.lines().orEmpty() + Component.literal("") +
+                    Component.literal(if (m == worn) "§aCurrently wearing" else "§eClick to wear!")
+                s.set(DataComponents.LORE, ItemLore(lore.map { l -> l.copy().withStyle { it.withItalic(false) } }))
+                container.setItem(slot, s)
+            }
+            container.setItem(13, Terminals.named(net.minecraft.world.item.Items.BONE, "§aPet: §6${if (P3Sim.phoenix) "Phoenix" else "Black Cat"} §7(Pet Rod swaps it)"))
+        }
+
+        override fun clicked(slot: Int, button: Int, input: net.minecraft.world.inventory.ContainerInput, p: net.minecraft.world.entity.player.Player) {
+            val m = SLOTS[slot] ?: return
+            val sp = p as ServerPlayer
+            if (m != P3Sim.wornMaskS.value) {
+                P3Sim.wornMaskS.value = m
+                Sim.sound(SoundEvents.ARMOR_EQUIP_GENERIC.value(), 1f, 1f)
+                if (P3Sim.realMasks) equip(sp)
+                else Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
+            }
+            draw()
+            broadcastChanges()
+            sp.inventoryMenu.broadcastChanges()
+        }
+
+        override fun quickMoveStack(p: net.minecraft.world.entity.player.Player, i: Int): ItemStack = ItemStack.EMPTY
+        override fun stillValid(p: net.minecraft.world.entity.player.Player) = true
+    }
+
+    // ------------------------------------------------------------------ the pet rod
+
+    /** The Pet Rod: Phoenix (saves you once, 400 speed) <-> Black Cat (your full speed). */
+    fun swapPet(p: ServerPlayer) {
+        P3Sim.phoenixS.value = !P3Sim.phoenix
+        Fight.applySpeed(p)
+        Sim.sound(SoundEvents.FISHING_BOBBER_THROW, 0.5f, 0.4f)
+        Sim.chat("§aYou summoned your §6${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}§r§a!")
     }
 
     /** Invincible until (after a proc). */
@@ -62,7 +114,7 @@ object Masks {
     /** For the menu: each one's cooldown (and which you're wearing). */
     fun status(): String {
         val worn = worn()
-        return items.filter { !P3Sim.realMasks || it.id != "PHOENIX" || P3Sim.phoenix }.joinToString(" ") {
+        return items.filter { it.id != "PHOENIX" || P3Sim.phoenix }.joinToString(" ") {
             val left = it.readyAt - Fight.serverTick
             val mark = if (P3Sim.realMasks && it.id == worn) "§e⛑" else ""
             mark + if (left <= 0) "§a${it.name}" else "§c${it.name} ${(left + 19) / 20}s"
@@ -73,10 +125,10 @@ object Masks {
     fun hit(p: ServerPlayer, by: String?) {
         val now = Fight.serverTick
         if (now < safeUntil) return
-        val ready = items.filter { it.readyAt <= now }
+        val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
             else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD)) }
-                ?: ready.firstOrNull { it.id == "PHOENIX" && P3Sim.phoenix }
+                ?: ready.firstOrNull { it.id == "PHOENIX" }
         if (item != null) {
             item.readyAt = now + item.cooldown
             safeUntil = now + item.safe

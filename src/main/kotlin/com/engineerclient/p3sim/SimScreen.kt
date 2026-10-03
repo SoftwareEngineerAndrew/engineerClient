@@ -123,7 +123,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         row(listOf(
             change("Real masks: ${onOff(P3Sim.realMasks)}", 100) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
             change("Start in: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value; server { Sim.player?.let { Masks.equip(it) } } },
-            change("Phoenix pet: ${onOff(P3Sim.phoenix)}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix },
+            change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
             change("No melodies: ${onOff(P3Sim.noMelodies)}", 100) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
         ))
         row(listOf(

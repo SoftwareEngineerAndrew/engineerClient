@@ -101,12 +101,18 @@ object Fight {
     /** Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. */
     fun setup(player: ServerPlayer) {
         if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.ADVENTURE)
-        player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = P3Sim.speed.toDouble() / 1000.0
+        applySpeed(player)
         player.getAttribute(Attributes.KNOCKBACK_RESISTANCE)?.baseValue = 1.0
         player.getAttribute(Attributes.STEP_HEIGHT)?.baseValue = 0.6
         player.isInvulnerable = true
         player.addEffect(MobEffectInstance(MobEffects.SATURATION, -1, 0, false, false, false))
         SimItems.giveHotbar(player)
+    }
+
+    /** Your speed: the setting with Black Cat out, 100 less with Phoenix. */
+    fun applySpeed(player: ServerPlayer) {
+        val speed = P3Sim.speed - if (P3Sim.phoenix) 100 else 0
+        player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = speed.coerceAtLeast(100).toDouble() / 1000.0
     }
 
     /** What the menu last started (the Restart keybind starts it again). */
