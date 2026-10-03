@@ -217,6 +217,7 @@ object Terminals {
         }
         override fun tick(t: Int) {
             // t = ticks since the items appeared: a step every 10.
+            if (t <= 0) lastStep = -1
             if (t <= 0 || t % 10 != 0 || t == lastStep) return
             lastStep = t
             if (lime + dir !in 1..5) dir = -dir
@@ -263,10 +264,10 @@ object Terminals {
         }
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
-            if (!filled || term.done || slot !in 0 until term.size) return
+            if (!filled || term.done || slot !in 0 until term.size) { undo(slot); return }
             Fight.afterPing("terminal click") {
                 if (player.containerMenu !== this || term.done) return@afterPing
-                if (!term.click(slot, button, input)) return@afterPing
+                if (!term.click(slot, button, input)) { undo(slot); return@afterPing }
                 sync()
                 if (term.solved()) {
                     term.done = true
@@ -274,6 +275,12 @@ object Terminals {
                     player.closeContainer()
                 }
             }
+        }
+
+        /** A refused click: the client's guess (the item on its cursor, the slot emptied) is put back. */
+        private fun undo(slot: Int) {
+            player.connection.send(net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket(ItemStack.EMPTY))
+            if (slot in 0 until slots.size) player.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(containerId, incrementStateId(), slot, getSlot(slot).item.copy()))
         }
 
         /** A click from a client a step behind: answer slot by slot, never with a full refill (Odin ignores those). */

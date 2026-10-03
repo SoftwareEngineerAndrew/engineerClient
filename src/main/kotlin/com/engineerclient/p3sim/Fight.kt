@@ -44,12 +44,14 @@ object Fight {
     var serverTick = 0
         private set
 
-    private class Later(val at: Int, val what: String, val run: () -> Unit)
+    private class Later(val at: Int, val what: String, val epoch: Int, val run: () -> Unit)
+    /** Bumped by every stop: actions queued before it never run after. */
+    private var epoch = 0
     private val later = ArrayList<Later>()
 
     /** Runs [run] [ticks] server ticks from now (0 = later this tick). Cleared when a phase starts. */
     fun later(ticks: Int, what: String = "later", run: () -> Unit) {
-        later += Later(serverTick + ticks.coerceAtLeast(0), what, run)
+        later += Later(serverTick + ticks.coerceAtLeast(0), what, epoch, run)
     }
 
     /** The player's ping, in server ticks: what their clicks and items wait before the server acts. */
@@ -58,12 +60,16 @@ object Fight {
     /** Runs [run] after the simulated ping (at once with none). */
     fun afterPing(what: String, run: () -> Unit) {
         val n = pingTicks
-        if (n == 0) run() else later(n, what, run)
+        val p = phase
+        if (n == 0) run() else later(n, what) { if (phase === p) run() }
     }
 
     fun reset(server: MinecraftServer) {
         serverTick = 0
+        epoch++
         later.clear()
+        Terminals.closeAll()
+        SimItems.reset()
         phase = null
         Sim.clearEntities()
         Sim.command("time set noon")
@@ -74,7 +80,9 @@ object Fight {
     fun stop() {
         phase?.let { EngineerClient.safely("p3sim stop ${it.name}") { it.stop() } }
         phase = null
+        epoch++
         later.clear()
+        Terminals.closeAll()
     }
 
     fun join(player: ServerPlayer) {
@@ -99,9 +107,14 @@ object Fight {
         SimItems.giveHotbar(player)
     }
 
+    /** What the menu last started (the Restart keybind starts it again). */
+    @Volatile var lastStart = Start.P3
+        private set
+
     /** Starts [what] from its beginning (stopping whatever ran). */
     fun start(what: Start) {
         val player = Sim.player ?: return
+        lastStart = what
         stop()
         later.clear()
         Sim.clearEntities()
@@ -148,7 +161,7 @@ object Fight {
         if (later.isNotEmpty()) {
             val due = later.filter { it.at <= serverTick }
             later.removeAll(due.toSet())
-            due.forEach { EngineerClient.safely("p3sim ${it.what}") { it.run() } }
+            due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.run() } }
         }
         Blocks.tick()
         Terminals.tick()

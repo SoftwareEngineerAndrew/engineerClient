@@ -49,10 +49,12 @@ object Party {
         var wait = 0
         var working: Station? = null
         val idle get() = to == null && wait <= 0
+        /** Sent to the core (section 5), whatever was left of the plan. */
+        var cored = false
     }
 
     /** One step of a bot's plan; [run] returns true when the step is over. */
-    class Job(val what: String, val run: Bot.(GoldorPhase) -> Boolean)
+    class Job(val what: String, val section: Int = 0, val run: Bot.(GoldorPhase) -> Boolean)
 
     private val bots = ArrayList<Bot>()
 
@@ -62,10 +64,14 @@ object Party {
         return bots
     }
 
-    fun bot(role: Role) = bots().firstOrNull { it.role == role }
+    fun bot(role: Role) = bots.firstOrNull { it.role == role }
+
+    /** Bumped by every clear: a leap queued before a restart doesn't move the new bots. */
+    private var generation = 0
 
     fun clear() {
-        bots.forEach { it.entity?.discard(); it.entity = null; it.jobs.clear(); it.job = null; it.to = null; it.working = null }
+        generation++
+        bots.forEach { it.entity?.discard(); it.entity = null; it.jobs.clear(); it.job = null; it.to = null; it.working = null; it.wait = 0; it.cored = false }
     }
 
     /** Is a bot doing [st] right now. */
@@ -81,14 +87,20 @@ object Party {
         if (!P3Sim.bots) return
         for (b in bots()) {
             spawn(b, startPos(b.role, phase.from))
-            b.jobs = ArrayDeque(plan(b.role).filter { it.first >= phase.from }.map { it.second })
+            // Steps of earlier sections are dropped, except stations still to do (i4's target): those go last, before the core.
+            val all = plan(b.role)
+            val kept = all.filter { it.first >= phase.from }.map { it.second }
+            val owed = all.filter { it.first < phase.from && it.second.section >= phase.from }.map { it.second }
+            b.jobs = ArrayDeque(kept.dropLast(1) + owed + kept.last())
         }
     }
 
     fun tickP3(phase: GoldorPhase) {
         if (!P3Sim.bots) return
-        for (b in bots) {
+        for (b in bots.toList()) {
             if (b.entity == null) continue
+            // The core is open: everyone heads in, whatever they were stuck on.
+            if (phase.section >= 5 && !b.cored) { b.cored = true; b.job = null; b.working = null; b.wait = 0; b.jobs = ArrayDeque(listOf(core())) }
             // Moving.
             b.to?.let { to ->
                 b.moved++
@@ -157,7 +169,8 @@ object Party {
         val target = if (role == myRole) Sim.player?.position() else bot(role)?.pos
         target ?: return
         wait = if (atDoor) 14 else 8
-        Fight.later(wait - 1, "bot leap") { pos = target; to = null }
+        val gen = generation
+        Fight.later(wait - 1, "bot leap") { if (gen == generation) { pos = target; to = null } }
     }
 
     // ------------------------------------------------------------------ jobs
@@ -165,7 +178,7 @@ object Party {
     private fun st(phase: GoldorPhase, s: Int, label: String) = phase.station(s, label)
 
     /** Go to [label] in S[s], wait until it can be done, do it in its time. Skipped if done already. */
-    private fun doIt(s: Int, label: String) = Job("S$s $label") { phase ->
+    private fun doIt(s: Int, label: String) = Job("S$s $label", s) { phase ->
         val st = st(phase, s, label)
         if (st.done) { working = null; return@Job true }
         val spot = STANDS["S$s $label"] ?: st.at
@@ -181,7 +194,7 @@ object Party {
         working = null
         if (st.kind == Station.Kind.LEVER) phase.pullLever(st, name) else st.complete(name)
         if (st.kind == Station.Kind.DEVICE) phase.devices.shownDone(st.label)
-        true
+        st.done
     }
 
     private fun solveTime(st: Station, phase: GoldorPhase): Int = when (st.kind) {
@@ -202,11 +215,11 @@ object Party {
     private fun jitter(t: Int) = (t * (0.8 + Random.nextDouble() * 0.45)).toInt().coerceAtLeast(1)
 
     private fun gate(s: Int) = Job("gate $s") { phase ->
-        if (phase.gateIsDown(s)) return@Job true
+        if (phase.gateIsDown(s)) { if (working === GATE_MARK) working = null; return@Job true }
         val spot = GATES[s]
         if (pos.distanceTo(spot) > 1.5) { walk(spot); return@Job false }
         if (phase.section < s) return@Job false
-        if (working == null) { wait = 9; working = GATE_MARK; return@Job false }
+        if (working !== GATE_MARK) { wait = 9; working = GATE_MARK; return@Job false }
         working = null
         phase.blowGate(s, name)
         true

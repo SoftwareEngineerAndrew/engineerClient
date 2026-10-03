@@ -42,6 +42,9 @@ object P3Sim : Module(
     description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
 ) {
     val menuKey by KeybindSetting("Menu Keybind", GLFW.GLFW_KEY_UNKNOWN, "Opens the P3 Sim menu in the sim world (so do /p3sim and the SkyBlock Menu star in your hotbar). Outside it, opens the sim.").onPress { openMenuOrSim() }
+    val restartKey by KeybindSetting("Restart Keybind", GLFW.GLFW_KEY_UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch.").onPress {
+        if (inSim) SimServer.run("restart") { Fight.start(Fight.lastStart) }
+    }
     // Kept as objects (not delegates) so the sim's own menu can change them.
     val roleS = +SelectorSetting("Your Role", "i4 (Berserk)", arrayListOf("ss (Healer)", "i4 (Berserk)", "ee3 (Archer)", "42·gates (Tank)", "ee2·core (Mage)"), desc = "Your P3 role (docs/mechanics/terminal-roles.md): its jobs are yours, the bots do the other four. The menu lists your jobs.")
     val speedS = +NumberSetting("Speed", 500, 100, 600, 10, desc = "Your Skyblock speed in the sim. Most players run boss at 500 (the cap): 1.40 blocks a tick sprinting, as measured in Better PF runs.")
@@ -145,10 +148,13 @@ object P3Sim : Module(
         setArea(Island.Unknown)
     }
 
-    private val areaField by lazy { LocationUtils::class.java.getDeclaredField("currentArea").apply { isAccessible = true } }
-    private val skyblockField by lazy { LocationUtils::class.java.getDeclaredField("isInSkyblock").apply { isAccessible = true } }
+    // Resolved once: if Odin renames them, the bridge stays off instead of failing every tick.
+    private val areaField = runCatching { LocationUtils::class.java.getDeclaredField("currentArea").apply { isAccessible = true } }.getOrNull()
+    private val skyblockField = runCatching { LocationUtils::class.java.getDeclaredField("isInSkyblock").apply { isAccessible = true } }.getOrNull()
 
     private fun setArea(area: Island) {
+        val areaField = areaField ?: return
+        val skyblockField = skyblockField ?: return
         if (LocationUtils.currentArea != area) areaField.set(null, area)
         if (skyblockField.getBoolean(null) != (area == Island.Dungeon)) skyblockField.setBoolean(null, area == Island.Dungeon)
     }

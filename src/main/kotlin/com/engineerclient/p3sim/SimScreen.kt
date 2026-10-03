@@ -23,11 +23,13 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         layout.defaultCellSetting().alignHorizontallyCenter()
 
         layout.addChild(StringWidget(Component.literal("§6§lP3 Sim §8· §7${status()}"), font))
-        layout.addChild(StringWidget(Component.literal("§7Your role §f${Party.myRole.label}§7: ${Party.myJobs().joinToString(" §8|§7 ")}"), font))
+        layout.addChild(StringWidget(Component.literal("§7Your role: §f${Party.myRole.label}"), font))
+        Party.myJobs().chunked(2).forEach { layout.addChild(StringWidget(Component.literal("§7" + it.joinToString(" §8|§7 ")), font)) }
 
         label("§eStart")
-        row(Fight.Start.entries.map { s -> button(s.label.substringBefore(' '), 44) { server { Fight.start(s) } } } +
-            button("§cStop", 44) { server { Fight.end() } })
+        row(Fight.Start.entries.filter { it != Fight.Start.S1 }.map { s -> button(s.label.substringBefore(' '), 40) { server { Fight.start(s) } } } +
+            button("§aRestart", 50) { server { Fight.start(Fight.lastStart) } } +
+            button("§cStop", 40) { server { Fight.end() } })
 
         label("§eTeleport")
         Spots.teleports.chunked(5).forEach { chunk ->

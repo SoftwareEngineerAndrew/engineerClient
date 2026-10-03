@@ -81,6 +81,7 @@ class P1Maxor : Fight.Phase("P1") {
     private var carrying = 0
     private val placed = BooleanArray(2)
     private var placedCount = 0
+    private var botPlaced = false
     private var chargeAt = -1
     private var armed = false
     private var hits = 0
@@ -116,8 +117,8 @@ class P1Maxor : Fight.Phase("P1") {
         if (!::maxor.isInitialized) return
         // Bots place a crystal at the first check they can, if the other is yours.
         if (P3Sim.bots && t >= 166 && check()) {
-            val free = (0..1).firstOrNull { !placed[it] && it != 0 }
-            if (free != null) place(free, "bot")
+            val free = if (!placed[1]) 1 else if (!placed[0]) 0 else null
+            if (free != null && !botPlaced) { botPlaced = true; place(free, "bot") }
         }
         if (chargeAt >= 0 && t == chargeAt) Sim.chat("§aThe Energy Laser is charging up!")
         if (chargeAt >= 0 && t > chargeAt && t >= 206 && check() && !armed) { armed = true; Blocks.set(BlockPos(73, 221, 73), B.BEACON.defaultBlockState()) }
@@ -273,7 +274,7 @@ class P2Storm : Fight.Phase("P2") {
         if (t == lightningAt) Sim.boss("Storm", if (Random.nextBoolean()) "ENERGY HEED MY CALL!" else "THUNDER LET ME BE YOUR CATALYST!")
         if (t == lightningAt + 10 || t == lightningAt + 20) giga()
         pillars.forEach { tickPillar(it) }
-        if (deadAt >= 0) {
+        if (deadAt >= 0 && t >= deadAt) {
             when (t - deadAt) {
                 0 -> Sim.boss("Storm", "I should have known that I stood no chance.")
                 62 -> Sim.boss("Storm", "At least my son died by your hands.")
@@ -337,7 +338,7 @@ class P2Storm : Fight.Phase("P2") {
         pl.spent = true
         pl.steps = 0; pl.nextStep = -1
         storm.moveTo(storm.pos)
-        if (crushes >= 2) { Fight.later(6, "storm dead") { if (Fight.phase === this) deadAt = t } ; pinnedUntilBeam = true; return }
+        if (crushes >= 2) { deadAt = t + 6; pinnedUntilBeam = true; return }
         pinnedUntilBeam = true
         pinnedAt = t
         mageBeam = if (P3Sim.bots && Party.myRole != Party.Role.CORE) 3 + Random.nextInt(10) else Int.MAX_VALUE / 2

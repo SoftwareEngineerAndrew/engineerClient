@@ -81,14 +81,15 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         sectionStart[section] = startN
         goldor.spawn(startN)
         Party.startP3(this)
-        val player = Sim.player ?: return
-        if (!arrived) {
-            val spot = Spots.p3Start(from)
-            Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
-            SimItems.giveHotbar(player, p3 = true)
-        } else {
-            // From Storm: the Superboom goes back in slot 1.
-            player.inventory.setItem(0, SimItems.SUPERBOOM)
+        Sim.player?.let { player ->
+            if (!arrived) {
+                val spot = Spots.p3Start(from)
+                Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
+                SimItems.giveHotbar(player, p3 = true)
+            } else {
+                // From Storm: the Superboom goes back in slot 1.
+                player.inventory.setItem(0, SimItems.SUPERBOOM)
+            }
         }
         if (from == 1) {
             Sim.boss("Goldor", "Who dares trespass into my domain?")
@@ -320,7 +321,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         private var pos = Vec3.ZERO
         var killAt = Int.MAX_VALUE
             private set
-        val arrived get() = flying && pos.distanceTo(CORE_POINT) < 0.5
+        val arrived get() = flying && Math.hypot(pos.x - CORE_POINT.x, pos.z - CORE_POINT.z) < 0.5
         val position: Vec3 get() = pos
 
         fun spawn(n: Int) {
@@ -422,8 +423,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val lever = st.lever ?: return
         if (st.done) { if (by == Sim.me) Sim.chat("§cThis lever has already been used."); return }
         if (st.section != section) { if (by == Sim.me) Sim.chat("§cThis lever doesn't seem to be responsive at the moment."); return }
-        val state = Blocks.get(lever) ?: return
-        if (state.hasProperty(LeverBlock.POWERED)) Blocks.set(lever, state.setValue(LeverBlock.POWERED, true))
+        Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, true)) }
         Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, 0.6f, Vec3.atCenterOf(lever))
         complete(st, by)
     }

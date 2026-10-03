@@ -126,6 +126,7 @@ object SimItems {
         inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, TERMINATOR)
         inv.setItem(17, ItemStack(Items.ARROW, 64))
         inv.selectedSlot = 3
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))
         p.containerMenu.broadcastChanges()
         p.inventoryMenu.broadcastChanges()
     }
@@ -186,20 +187,34 @@ object SimItems {
         }
     }
 
+    /** Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets). */
+    private fun asClicked(p: ServerPlayer, what: String, run: () -> Unit) {
+        val xRot = p.xRot; val yRot = p.yRot
+        Fight.afterPing(what) {
+            if (p.isRemoved || Sim.player !== p) return@afterPing
+            val nowX = p.xRot; val nowY = p.yRot
+            p.xRot = xRot; p.yRot = yRot
+            try { run() } finally { p.xRot = nowX; p.yRot = nowY }
+        }
+    }
+
+    /** The cloak and the arrows: nothing carries over from an earlier sim server. */
+    fun reset() { cloakUntil = 0; cloakReady = 0; arrows.clear(); lastMotion.clear() }
+
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
         (Fight.phase as? P1Maxor)?.let { if (it.usePylon(p.position())) return InteractionResult.SUCCESS }
         if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         when (id) {
-            "ASPECT_OF_THE_VOID" -> Fight.afterPing("aotv") { if (p.isShiftKeyDown) etherwarp(p) else blink(p, 12) }
-            "HYPERION" -> Fight.afterPing("hype") { blink(p, 10); implode(p) }
-            "STARRED_BONZO_STAFF" -> Fight.afterPing("bonzo") { bonzo(p) }
-            "JERRY_STAFF" -> Fight.afterPing("jerry") { jerry(p) }
-            "WITHER_CLOAK" -> Fight.afterPing("cloak") { cloak(p) }
+            "ASPECT_OF_THE_VOID" -> { val sneak = p.isShiftKeyDown; asClicked(p, "aotv") { if (sneak) etherwarp(p) else blink(p, 12) } }
+            "HYPERION" -> asClicked(p, "hype") { blink(p, 10); implode(p) }
+            "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }
+            "JERRY_STAFF" -> asClicked(p, "jerry") { jerry(p) }
+            "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
             "INFINITE_SPIRIT_LEAP" -> openLeap(p)
-            "SUPERBOOM_TNT" -> Fight.afterPing("superboom") { superboom(p, null) }
-            "TERMINATOR" -> Fight.afterPing("term") { shoot(p, 3) }
-            "ITEM_SPIRIT_BOW" -> Fight.afterPing("spirit bow") { shoot(p, 1) }
+            "SUPERBOOM_TNT" -> asClicked(p, "superboom") { superboom(p, null) }
+            "TERMINATOR" -> asClicked(p, "term") { shoot(p, 3) }
+            "ITEM_SPIRIT_BOW" -> asClicked(p, "spirit bow") { shoot(p, 1) }
             else -> return InteractionResult.PASS
         }
         // Keep the client's copy of the stack (some of these are block items it may think it placed).
@@ -502,7 +517,7 @@ object SimItems {
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
             if (slot !in 11..15) return
-            val name = container.getItem(slot).hoverName.string
+            val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
             val bot = bots.firstOrNull { it.name == name } ?: return
             val sp = p as ServerPlayer
             sp.closeContainer()

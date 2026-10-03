@@ -43,6 +43,7 @@ object SimWorld {
         mc.execute {
             if (P3Sim.inSim) return@execute
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening P3 Sim"))
+            opening = true
             EngineerClient.safely("p3sim open") { openOrCreate() }
         }
     }
@@ -75,6 +76,7 @@ object SimWorld {
     fun rebuild() {
         mc.execute {
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim"))
+            opening = true
             EngineerClient.safely("p3sim rebuild") {
                 mc.levelSource.createAccess(NAME).use { it.deleteLevel() }
                 create()
@@ -98,6 +100,11 @@ object SimWorld {
     }
 
     /** Called on the server once it runs: stamps which arena the world was built from. */
+    /** The mod is opening (or making) the sim world right now. */
+    @Volatile var opening = false
+
+    fun isBuilt(worldDir: java.nio.file.Path) = Files.exists(worldDir.resolve(MARKER))
+
     fun markBuilt(worldDir: java.nio.file.Path) {
         EngineerClient.safely("p3sim marker") { Files.writeString(worldDir.resolve(MARKER), arenaVersion) }
     }

@@ -23,8 +23,10 @@ object SimServer {
     @Volatile var server: MinecraftServer? = null
         private set
 
+    /** The sim's world: named p3sim and opened by the mod (or built by it before), never just any world of that name. */
     fun isSim(server: MinecraftServer?): Boolean =
-        server is IntegratedServer && server.worldData.levelName == SimWorld.NAME
+        server is IntegratedServer && server.worldData.levelName == SimWorld.NAME &&
+            (SimWorld.opening || SimWorld.isBuilt(server.getWorldPath(LevelResource.ROOT)))
 
     val level: ServerLevel? get() = server?.overworld()
 
@@ -40,6 +42,7 @@ object SimServer {
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { s ->
             if (isSim(s)) { server = s; EngineerClient.logger.info("[p3sim] sim server starting") }
+            SimWorld.opening = false
         }
         ServerLifecycleEvents.SERVER_STARTED.register { s ->
             if (s !== server) return@register
