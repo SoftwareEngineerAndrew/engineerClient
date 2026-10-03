@@ -32,7 +32,7 @@ object Stats {
 
     /** Records [ticks] for [key] if it's a best; the chat suffix. */
     private fun best(what: String, ticks: Int): String {
-        val key = "$what @ bots ${P3Plan.botMin}-${P3Plan.botMax}s"
+        val key = "$what @ ${P3Plan.skillName()} ${Roles.label(P3Sim.myClass)}" + if (P3Plan.skill == P3Plan.RANDOM) " ${P3Plan.botMin}-${P3Plan.botMax}s" else ""
         val old = bests.getProperty(key)?.toIntOrNull()
         if (old != null && ticks >= old) return " §8PB ${s(old)}"
         bests.setProperty(key, ticks.toString())

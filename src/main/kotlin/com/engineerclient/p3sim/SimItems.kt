@@ -121,9 +121,9 @@ object SimItems {
     fun giveHotbar(p: ServerPlayer, p3: Boolean = true) {
         val inv = p.inventory
         inv.clearContent()
-        val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, SPIRIT_BOW, DUNGEONBREAKER, PEARLS, LEAP, JERRY, CLOAK, MENU)
+        val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PEARLS, LEAP, JERRY, CLOAK, MENU)
         bar.forEachIndexed { i, s -> inv.setItem(i, s) }
-        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, TERMINATOR)
+        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW)
         inv.setItem(17, ItemStack(Items.ARROW, 64))
         inv.selectedSlot = 3
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))

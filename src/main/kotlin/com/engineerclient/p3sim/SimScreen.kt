@@ -45,41 +45,49 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
     // ------------------------------------------------------------------ tabs
 
     private fun planTab() {
-        text("§7Click a job to make it yours (§a✔§7). Bots do the rest, each ${sec(P3Plan.botMin)}-${sec(P3Plan.botMax)} into its section.")
+        row(listOf<AbstractWidget>(label("§eSkill", 40)) +
+            P3Plan.SKILLS.mapIndexed { i, name -> change(if (i == P3Plan.skill) "§a§n$name" else name, 70) { P3Plan.chooseSkill(i) } } +
+            change("Class: ${Roles.label(P3Sim.myClass)}", 90) { P3Sim.classS.value = (P3Sim.classS.value + 1) % 5 })
+        // The roles, by class (yours highlighted).
+        val roles = P3Plan.preset().roles
+        for ((c, role) in roles) text((if (c == P3Sim.myClass) "§b§l${Roles.label(c)} §b(you)§7: §f" else "§7${Roles.label(c)}: §8") + role)
+        text("§7Click: yours §a✔§7 or a bot's (letter: which). §8* stack: yours if it's in your role.")
         for (s in 1..4) {
             val jobs = P3Plan.jobsIn(s)
-            text("§6§lSection $s §8· §7${jobs.count { P3Plan.isMine(it) }} yours")
-            row(jobs.map { job -> change((if (P3Plan.isMine(job)) "§a✔ " else "§7") + short(job), 48) { P3Plan.toggle(job) } })
+            row(listOf<AbstractWidget>(label("§6§lS$s", 18)) + jobs.map { job ->
+                val stack = if (P3Plan.isStack(job)) "*" else ""
+                val text = if (P3Plan.isMine(job)) "§a✔ ${short(job)}$stack" else "§7${short(job)}$stack §8${P3Plan.doer(job)?.let { Roles.label(it).take(1) } ?: "?"}"
+                change(text, 48) { P3Plan.toggle(job) }
+            })
         }
-        row(listOf(
-            label("§eBot times", 60),
+        val extra = mutableListOf<AbstractWidget>(
+            change("Reset to my role", 100) { P3Plan.resetMine() },
+            change("Bots: ${onOff(P3Sim.bots)}", 64) { P3Sim.botsS.value = !P3Sim.bots },
+        )
+        if (P3Plan.skill == P3Plan.RANDOM) extra += listOf(
+            label("§eBot times", 56),
             change("-", 16) { P3Plan.botMin = (P3Plan.botMin - 0.5).coerceAtLeast(0.0); P3Plan.save() },
-            label("§ffrom ${sec(P3Plan.botMin)}", 54),
+            label("§f${sec(P3Plan.botMin)}", 30),
             change("+", 16) { P3Plan.botMin = (P3Plan.botMin + 0.5).coerceAtMost(P3Plan.botMax); P3Plan.save() },
             change("-", 16) { P3Plan.botMax = (P3Plan.botMax - 0.5).coerceAtLeast(P3Plan.botMin); P3Plan.save() },
-            label("§fto ${sec(P3Plan.botMax)}", 50),
+            label("§f${sec(P3Plan.botMax)}", 30),
             change("+", 16) { P3Plan.botMax = (P3Plan.botMax + 0.5).coerceAtMost(60.0); P3Plan.save() },
-            change("Bots: ${onOff(P3Sim.bots)}", 64) { P3Sim.botsS.value = !P3Sim.bots },
-        ))
-        row(listOf<AbstractWidget>(label("§ePresets", 50)) +
-            P3Plan.PRESETS.map { (name, jobs) -> change(name, 52) { P3Plan.mine.clear(); P3Plan.mine += jobs(); P3Plan.save() } })
-        text("§8Changes apply from the next start.")
+        )
+        row(extra)
     }
 
     private fun earlyEnterTab() {
-        text("§7Off, you, or the bot in a leap slot. A bot walks to the spot that long into the section before,")
-        text("§7and the party leaps onto it when the section opens. Yours: get there and they leap onto you.")
+        text("§7Who early-enters comes from the roles (Plan tab). The bot goes to the spot after its last job;")
+        text("§7the others pre-leap onto it. Yours: get there and they leap onto you, one after another.")
         for (ee in P3Plan.earlyEnters) {
             val into = if (ee.into == 5) "core" else "S${ee.into}"
+            val who = ee.owner?.let { if (ee.byYou) "§bYou (${Roles.label(it)})" else "§a${Roles.label(it)}" } ?: "§8nobody"
             row(listOf(
                 label("§f${ee.label} §8→ $into", 60),
-                change(who(ee.who), 110) { ee.who = if (ee.who >= 4) -1 else ee.who + 1; P3Plan.save() },
+                label(who, 100),
                 change("Spot: here", 60) { mc.player?.let { ee.spot = Vec3(round1(it.x), Math.floor(it.y * 100) / 100.0, round1(it.z)) }; P3Plan.save() },
-                change("-", 16) { ee.after = (ee.after - 0.5).coerceAtLeast(0.0); P3Plan.save() },
-                label("§fgo at ${sec(ee.after)}", 52),
-                change("+", 16) { ee.after = (ee.after + 0.5).coerceAtMost(60.0); P3Plan.save() },
+                label("§8${"%.1f, %.1f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)}", 110),
             ))
-            text("§8${"%.1f, %.1f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)}")
         }
         row(listOf(
             change("Wait for you: ${onOff(P3Plan.waitForYou)}", 110) { P3Plan.waitForYou = !P3Plan.waitForYou; P3Plan.save() },
@@ -126,12 +134,6 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
     }
 
     // ------------------------------------------------------------------ pieces
-
-    private fun who(w: Int) = when (w) {
-        -1 -> "§8Off"
-        0 -> "§bYou"
-        else -> "§aSlot $w§7: ${P3Plan.botOrder().getOrNull(w - 1)?.let { name(it) } ?: "?"}"
-    }
 
     private fun name(c: com.odtheking.odin.utils.skyblock.dungeon.DungeonClass) = c.name.lowercase().replaceFirstChar { it.uppercase() }
 

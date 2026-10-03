@@ -36,6 +36,8 @@ dependencies {
 
     // The rotation engine is deliberately free of Minecraft/Odin, so it tests headlessly.
     testImplementation(kotlin("test"))
+    // The P3 sim's role presets are keyed by Odin's DungeonClass (a plain enum).
+    testImplementation(files("libs/Odin-0.3.4-26.1.jar"))
 }
 
 tasks {
