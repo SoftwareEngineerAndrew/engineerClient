@@ -118,6 +118,13 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         stepper("Goldor kill", "${P3Sim.goldorKill} ticks", { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) })
         stepper("Terminator cooldown", "${P3Sim.termCooldown} ticks", { P3Sim.termCooldownS.value = (P3Sim.termCooldown - 1).coerceAtLeast(1) }, { P3Sim.termCooldownS.value = (P3Sim.termCooldown + 1).coerceAtMost(20) })
         stepper("Terminator spread", "±${P3Sim.termSpread}°", { P3Sim.termSpreadS.value = (P3Sim.termSpread - 0.5).coerceAtLeast(0.0) }, { P3Sim.termSpreadS.value = (P3Sim.termSpread + 0.5).coerceAtMost(15.0) })
+        stepper("Breaker refill", "${P3Sim.breakerRefill}/s", { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill - 1).coerceAtLeast(1) }, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill + 1).coerceAtMost(10) })
+        stepper("Breaker blocks back", "${P3Sim.breakerRegen}s", { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen - 0.5).coerceAtLeast(1.0) }, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen + 0.5).coerceAtMost(30.0) })
+        row(listOf(
+            change("Real masks: ${onOff(P3Sim.realMasks)}", 100) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
+            change("Start in: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value; server { Sim.player?.let { Masks.equip(it) } } },
+            change("Phoenix pet: ${onOff(P3Sim.phoenix)}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix },
+        ))
         row(listOf(
             change("Start on join: ${onOff(P3Sim.autoStart)}", 110) { P3Sim.autoStartS.value = !P3Sim.autoStart },
             button("Reset Items", 80) { server { Sim.player?.let { SimItems.giveHotbar(it, Fight.phase !is P1Maxor && Fight.phase !is P2Storm) } } },

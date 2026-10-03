@@ -105,7 +105,7 @@ object SimItems {
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§9⚚ Bonzo's Staff §6✪✪✪✪✪", listOf("§6Ability: Showtime §e§lRIGHT CLICK", "§7Shoots balloons that knock you back."))
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
-    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§6Dungeonbreaker", listOf("§7Mines any dungeon block instantly", "§7(not gates, doors or the arena's shell)."), glint = true)
+    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§6Dungeonbreaker", listOf("§7Breaks most dungeon blocks instantly.", "§7Uses a charge per block (§a${MAX_CHARGES}§7 max,", "§7refills every second); blocks come back."), glint = true)
     val PEARLS get() = item(Items.ENDER_PEARL, "ENDER_PEARL", "§fEnder Pearl").also { it.count = 16 }
     val LEAP get() = head(LEAP_TEX, "§5Infinileap").also { s ->
         s.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Right-click to leap to a teammate.").withStyle { it.withItalic(false) })))
@@ -125,6 +125,7 @@ object SimItems {
         bar.forEachIndexed { i, s -> inv.setItem(i, s) }
         inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW)
         inv.setItem(17, ItemStack(Items.ARROW, 64))
+        Masks.equip(p)
         inv.selectedSlot = 3
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))
         p.containerMenu.broadcastChanges()
@@ -188,7 +189,11 @@ object SimItems {
         val level = mc.level ?: return false
         if (!simClient(level) || idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
         val at = pos.immutable()
-        SimServer.run("dungeonbreaker") { mine(at) }
+        val state = level.getBlockState(at)
+        if (state.isAir) return true
+        // The client breaks it at once (as Hypixel's do); the server keeps it or sends it back.
+        if (state.getDestroySpeed(level, at) >= 0) level.destroyBlock(at, false)
+        SimServer.run("dungeonbreaker") { Sim.player?.let { p -> Fight.afterPing("dungeonbreaker") { mine(p, at) } } }
         return true
     }
 
@@ -204,7 +209,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { cloakUntil = 0; cloakReady = 0; lastHype = -100; bowReady = 0; leapReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear() }
+    fun reset() { resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; bowReady = 0; leapReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -501,26 +506,78 @@ object SimItems {
     }
 
     /** Blocks the Dungeonbreaker never mines: the shell, gates, doors, the core's gold and anything the fight uses. */
-    private fun unbreakable(pos: BlockPos, s: BlockState): Boolean {
-        if (s.isAir || s.getDestroySpeed(Sim.level, pos) < 0) return true
+    // ------------------------------------------------------------------ Dungeonbreaker (dungeonbreaker.md)
+
+    private const val THAT_BLOCK = "§cA mystical force prevents you from digging that block!"
+    private const val INNER_CHAMBER = "§cA mystical force prevents you from leaving the inner chamber!"
+    private const val NO_CHARGES = "§cYou don't have enough charges to break this block right now!"
+    const val MAX_CHARGES = 20
+
+    /** The core entrance's gold door (the only gold you can mine). */
+    private val CORE_DOOR = AABB(52.0, 115.0, 54.0, 57.0, 122.0, 55.0)
+    /** The inner chamber under the core platform: you can mine into it, not out of it. */
+    private val INNER = AABB(39.0, 0.0, 99.0, 70.0, 113.0, 130.0)
+
+    /** Why Hypixel refuses [pos]: a chat line, "" (silently), or null (it breaks). */
+    private fun refusal(p: ServerPlayer, pos: BlockPos, s: BlockState): String? {
         val b = s.block
-        if (b == net.minecraft.world.level.block.Blocks.BARRIER || b == net.minecraft.world.level.block.Blocks.BEDROCK || b == net.minecraft.world.level.block.Blocks.GOLD_BLOCK) return true
-        val phase = Fight.phase as? GoldorPhase
-        if (phase != null && GoldorPhase.GATE_BOXES.drop(1).any { it.inflate(0.5).contains(Vec3.atCenterOf(pos)) }) return true
-        if (b is LeverBlock || b is ButtonBlock) return true
-        return false
+        val c = Vec3.atCenterOf(pos)
+        // Out of the core (into it is fine).
+        if (INNER.contains(p.position()) && !INNER.contains(c)) return INNER_CHAMBER
+        if (s.getDestroySpeed(Sim.level, pos) < 0) return THAT_BLOCK
+        if (b == net.minecraft.world.level.block.Blocks.BARRIER || b == net.minecraft.world.level.block.Blocks.BEDROCK) return THAT_BLOCK
+        if (b is net.minecraft.world.level.block.CommandBlock) return THAT_BLOCK
+        if (b == net.minecraft.world.level.block.Blocks.GOLD_BLOCK && !CORE_DOOR.contains(c)) return THAT_BLOCK
+        if (b is LeverBlock || b is ButtonBlock) return THAT_BLOCK
+        if (GoldorPhase.GATE_BOXES.drop(1).any { it.inflate(0.5).contains(c) }) return THAT_BLOCK
+        // Out of reach (4.5 from the eyes): the server just puts it back.
+        if (p.eyePosition.distanceTo(c) > 5.2) return ""
+        return null
     }
 
-    /** At most one block every 4 ticks (items-timing.md). */
-    private var minedAt = -100
+    /** Charges (max 20), refilled in a batch every second; blocks broken, oldest first, and when. */
+    var charges = MAX_CHARGES; private set
+    private var refillAt = 0
+    private class Broken(val pos: BlockPos, val state: BlockState, val at: Int)
+    private val broken = ArrayDeque<Broken>()
+    private var refusedSaidAt = -100
+    private var noChargesSaidAt = -100
 
-    private fun mine(pos: BlockPos) {
-        if (Fight.serverTick - minedAt < 4) return
-        val s = Sim.level.getBlockState(pos)
-        if (unbreakable(pos, s)) return
-        minedAt = Fight.serverTick
+    private fun resetBreaker() { charges = MAX_CHARGES; refillAt = 0; broken.clear(); refusedSaidAt = -100; noChargesSaidAt = -100 }
+
+    /**
+     * A hit with the Dungeonbreaker reaching the server (after the ping): breaks that one block for
+     * a charge, or refuses it and sends it back (the client already broke it, as on Hypixel).
+     */
+    private fun mine(p: ServerPlayer, pos: BlockPos) {
+        val level = Sim.level
+        val s = level.getBlockState(pos)
+        if (s.isAir) return
+        val now = Fight.serverTick
+        val why = refusal(p, pos, s)
+        if (why != null || charges <= 0) {
+            p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos))
+            if (why == null) { if (now - noChargesSaidAt >= 20) { noChargesSaidAt = now; Sim.chat(NO_CHARGES) } }
+            else if (why.isNotEmpty() && now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(why) }
+            return
+        }
+        charges--
         Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
-        Sim.sound(s.soundType.breakSound, 0.7f, 1f, Vec3.atCenterOf(pos))
+        broken.addLast(Broken(pos, s, now))
+        // The 21st block broken brings the first back.
+        while (broken.size > MAX_CHARGES) restore(broken.removeFirst())
+    }
+
+    private fun restore(b: Broken) {
+        if (Sim.level.getBlockState(b.pos).isAir) Blocks.set(b.pos, b.state)
+    }
+
+    private fun tickBreaker() {
+        val now = Fight.serverTick
+        if (charges < MAX_CHARGES && now >= refillAt) { charges = (charges + P3Sim.breakerRefill).coerceAtMost(MAX_CHARGES); refillAt = now + 20 }
+        else if (charges >= MAX_CHARGES) refillAt = now + 20
+        val regen = (P3Sim.breakerRegen * 20).toInt()
+        while (broken.isNotEmpty() && now - broken.first().at >= regen) restore(broken.removeFirst())
     }
 
     /** The next tick a shortbow can fire (P3Sim's Terminator Cooldown apart). */
@@ -553,6 +610,7 @@ object SimItems {
     /** Arrows that hit something: the target device's blocks count, every arrow goes away after 3 s. */
     fun tick() {
         val level = SimServer.level ?: return
+        tickBreaker()
         // Vanilla bow arrows too.
         level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !in arrows }.forEach { arrows += it }
         // Each arrow's path since last tick (and a little on), traced against the blocks: the first
