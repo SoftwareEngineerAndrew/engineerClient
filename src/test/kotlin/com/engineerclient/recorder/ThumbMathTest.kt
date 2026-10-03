@@ -6,23 +6,22 @@ import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** Frame thumbnails' pure parts: the GPU downscale factor, sizes, paths, box scaling and JPEG output. */
+/** Frame thumbnails' pure parts: the GPU readback's layout, sizes, paths, box scaling and JPEG output. */
 class ThumbMathTest {
 
     @Test
-    fun gpuFactorAlwaysDividesBothSides() {
-        assertEquals(4, ThumbMath.gpuFactor(1920, 1080))
-        assertEquals(2, ThumbMath.gpuFactor(1366, 768))
-        assertEquals(3, ThumbMath.gpuFactor(1281, 723))
-        assertEquals(1, ThumbMath.gpuFactor(1279, 721))
-        for (w in 1..300) for (h in listOf(1, 2, 7, 480, 721)) {
-            val f = ThumbMath.gpuFactor(w, h)
-            assertTrue(w % f == 0 && h % f == 0, "$w x $h -> $f")
-        }
+    fun fromGlFlipsRowsAndSwapsRedAndBlue() {
+        // 2x2 readback, bottom row first, ABGR: bottom-left red, bottom-right green, top-left blue, top-right white.
+        val gl = intArrayOf(0xFF0000FF.toInt(), 0xFF00FF00.toInt(), 0x00FF0000, 0xFFFFFFFF.toInt())
+        assertContentEquals(
+            intArrayOf(0xFF0000FF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt()),
+            ThumbMath.fromGl(gl, 2, 2),
+        )
     }
 
     @Test
@@ -71,6 +70,18 @@ class ThumbMathTest {
             assertContentEquals(byteArrayOf(1, 2, 3), Files.readAllBytes(dir.resolve("thumbs/part0001/7.jpg")))
         } finally {
             RecorderFiles.deleteRecursively(dir)
+        }
+    }
+
+    @Test
+    fun writeIntoNeverCreatesTheRecordingDirectory() {
+        val parent = Files.createTempDirectory("ecthumb")
+        try {
+            val gone = parent.resolve(".pending-x")
+            assertFailsWith<java.nio.file.NoSuchFileException> { ThumbCapture.writeInto(gone, ThumbMath.relPath(1, 7), byteArrayOf(1)) }
+            assertTrue(Files.notExists(gone))
+        } finally {
+            RecorderFiles.deleteRecursively(parent)
         }
     }
 }

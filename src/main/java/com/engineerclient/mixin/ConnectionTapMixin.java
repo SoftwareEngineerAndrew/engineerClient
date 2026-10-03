@@ -2,6 +2,7 @@ package com.engineerclient.mixin;
 
 import com.engineerclient.bossrecorder.BossRecorder;
 import com.engineerclient.recorder.DungeonRecorder;
+import com.engineerclient.recorder.PacketFate;
 import com.engineerclient.rotation.P3Rotation;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.Connection;
@@ -30,5 +31,27 @@ public class ConnectionTapMixin {
         P3Rotation.INSTANCE.tap(packet);
         BossRecorder.INSTANCE.tap(packet);
         DungeonRecorder.INSTANCE.tap((Connection) (Object) this, packet);
+    }
+
+    /**
+     * Dungeon Recorder: the packet passed the vanilla checks and is about to be handed on. Priority 1
+     * puts this ahead of any mod that cancels at the same call (Odin does), so PacketFate can tell
+     * such a cancel from a vanilla rejection.
+     */
+    @Inject(
+        method = "channelRead0(Lio/netty/channel/ChannelHandlerContext;Lnet/minecraft/network/protocol/Packet;)V",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/network/Connection;genericsFtw(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;)V"
+        ),
+        require = 0,
+        expect = 0
+    )
+    private void ec$readPassed(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
+        try {
+            PacketFate.INSTANCE.readStage(packet, PacketFate.STAGE_PASSED);
+        } catch (Throwable ignored) {
+            // Never let the recorder break the game.
+        }
     }
 }

@@ -11,10 +11,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Optional;
 
 /**
- * Dungeon Recorder: every move the client applies to an entity. The three other overloads, and so
- * every move/teleport/position-sync handler, end up in this one; whether the entity then snaps or
- * interpolates is its own choice (items and arrows snap). Fires thousands of times a second, so the
- * hook returns on a plain flag when the recorder is off and otherwise only appends to a buffer.
+ * Dungeon Recorder: every move the client applies to an entity through moveOrInterpolateTo. The
+ * three other overloads end up in this one; whether the entity then snaps or interpolates is its own
+ * choice (items and arrows snap). The handlers' moves that skip it (a far or non-ticking position
+ * sync's snapTo, a non-interpolated teleport's setPos) are EntitySnapTapMixin's. Fires thousands of
+ * times a second, so the hook returns on a plain flag when the recorder is off and otherwise only
+ * stores a few numbers.
  */
 @Mixin(Entity.class)
 public class EntityMoveTapMixin {

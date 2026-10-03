@@ -170,7 +170,7 @@ object HudCapture {
     }
 
     private fun resetDiff() {
-        tabRows.reset(); tabHeader = null; tabFooter = null; tabOpen = null; tabSeen = false
+        tabRows.reset(); tabHeader = null; tabFooter = null; tabOpen = null; tabSeen = false; tabCache.clear()
         boardKeys.clear(); lastBars = ""
         actionBars.reset()
     }
@@ -185,6 +185,20 @@ object HudCapture {
 
     private fun kf(full: Boolean) = if (full) "\"kf\":${Rec.keyframeId}," else ""
 
+    /**
+     * What a tab row is made of (the shown name is built from the display name, or the team's
+     * decoration of the profile name, and the game mode): equal keys make the same row, so its JSON
+     * (a codec encode, about 8 µs) is built only when one of these changed.
+     */
+    private class TabKey(val disp: Any?, val team: Any?, val prefix: Any?, val suffix: Any?, val color: Any?,
+                         val latency: Int, val mode: Any?, val order: Int, val name: String) {
+        fun same(o: TabKey) = disp === o.disp && team === o.team && prefix == o.prefix && suffix == o.suffix && color == o.color &&
+            latency == o.latency && mode == o.mode && order == o.order && name == o.name
+    }
+    private class TabRow(val key: TabKey, val json: String)
+    /** The last row built for each PlayerInfo shown (game thread). */
+    private var tabCache = java.util.IdentityHashMap<Any, TabRow>()
+
     /** The tab list rows in drawn order; only changed rows are written ([i, ...]) with the row count "count" (not "n": that is the envelope's server tick). */
     private fun tab(full: Boolean) {
         val mc = EngineerClient.mc
@@ -192,15 +206,26 @@ object HudCapture {
         val overlay = mc.gui.tabList
         val acc = overlay as RecTabOverlayAccessor
         val infos = acc.`ec$recPlayerInfos`()
+        if (full) tabCache.clear()
+        val next = java.util.IdentityHashMap<Any, TabRow>(infos.size * 2)
         val rows = infos.map { info ->
-            val sb = StringBuilder(160)
             val p = info.profile
-            sb.append(RecorderFiles.q(p.id().toString())).append(',').append(RecorderFiles.q(p.name())).append(',')
-            RichJson.component(sb, overlay.getNameForDisplay(info))
-            sb.append(',').append(info.latency).append(',').append(RecorderFiles.q(info.gameMode.serializedName))
-                .append(',').append(RecorderFiles.q(info.team?.name)).append(',').append(info.tabListOrder)
-            sb.toString()
+            val team = info.team
+            val key = TabKey(info.tabListDisplayName, team, team?.playerPrefix, team?.playerSuffix, team?.color,
+                info.latency, info.gameMode, info.tabListOrder, p.name())
+            val cached = tabCache[info]
+            val json = if (cached != null && cached.key.same(key)) cached.json else {
+                val sb = StringBuilder(160)
+                sb.append(RecorderFiles.q(p.id().toString())).append(',').append(RecorderFiles.q(p.name())).append(',')
+                RichJson.component(sb, overlay.getNameForDisplay(info))
+                sb.append(',').append(info.latency).append(',').append(RecorderFiles.q(info.gameMode.serializedName))
+                    .append(',').append(RecorderFiles.q(team?.name)).append(',').append(info.tabListOrder)
+                sb.toString()
+            }
+            next[info] = TabRow(key, json)
+            json
         }
+        tabCache = next
         if (full) tabRows.reset()
         val d = tabRows.diff(rows)
         val header = acc.`ec$recHeader`()

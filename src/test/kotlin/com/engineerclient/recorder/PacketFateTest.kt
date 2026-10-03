@@ -2,6 +2,7 @@ package com.engineerclient.recorder
 
 import com.engineerclient.recorder.PacketFate.STAGE_BODY
 import com.engineerclient.recorder.PacketFate.STAGE_DISPATCHED
+import com.engineerclient.recorder.PacketFate.STAGE_PASSED
 import com.engineerclient.recorder.PacketFate.STAGE_TAPPED
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,6 +45,15 @@ class PacketFateTest {
     fun bodyWithoutDispatchIsRejected() {
         assertEquals("rejected", outcome(STAGE_BODY))
         assertEquals("rejected", outcome(STAGE_BODY, atReturn = false))
+    }
+
+    @Test
+    fun passingTheChecksButNotDispatchedIsACancel() {
+        // Another mod cancelled at genericsFtw (Odin's own point): not a vanilla rejection.
+        assertEquals("cancelled_read0", outcome(STAGE_PASSED))
+        assertEquals("cancelled_read0", outcome(STAGE_PASSED, atReturn = false))
+        assertNull(outcome(STAGE_PASSED, odin = true))
+        assertNull(outcome(STAGE_PASSED, dispatchSeen = false))
     }
 
     @Test

@@ -20,6 +20,7 @@
     "DestroyProgressTapMixin",
     "EntityEventPacketAccessor",
     "EntityMoveTapMixin",
+    "EntitySnapTapMixin",
     "EntityRemoveTapMixin",
     "EntityRenderTapMixin",
     "FogColorMixin",

@@ -13,8 +13,11 @@ import net.minecraft.network.PacketListener
  * (a `.pending-` directory) until Odin says this is a place to record, and is deleted if it never is.
  *
  * It ends when the connection starts over (a reconfiguration or a new login), when the client
- * leaves the world it belongs to, or when the module is turned off. A respawn (Hypixel's server
- * switches) does not end it: one recording follows you from the lobby into the run.
+ * leaves the world it belongs to, when the game closes, or when the module is turned off. A respawn
+ * (Hypixel's server switches) does not end it by itself: one recording follows you from the lobby
+ * into the run. But once a confirmed recording has respawned somewhere Odin says is not a place to
+ * record (back to the hub or your island after the run), it ends there ("left"), and the next
+ * respawn into a wanted place starts a new one.
  *
  * Each session remembers the packet listener it belongs to, so the late "disconnected" event of the
  * world before (it runs on the game thread, after the network thread may already have opened the
@@ -28,6 +31,10 @@ object RecorderLifecycle {
     @Volatile private var owner: PacketListener? = null
     @Volatile private var confirmed = false
     @Volatile private var startedTick = 0
+    /** The tick of the last respawn (server switch) seen on the game connection, any session or none. */
+    @Volatile private var lastRespawnTick = -1
+    /** The tick the current session was confirmed. */
+    @Volatile private var confirmedTick = 0
 
     /** A minute without Odin recognising a wanted place is not a world to keep. */
     private const val GIVE_UP_TICKS = 20 * 60
@@ -104,14 +111,30 @@ object RecorderLifecycle {
         WireTap.reset()
     }
 
-    /** Game thread, every tick: confirm the pending session once Odin knows the place, or give it up. */
+    /** WireTap, on a respawn packet (network thread). */
+    fun onRespawn() { lastRespawnTick = Rec.tick }
+
+    /** The game is closing: end as for any other exit (an `end` line; a pending recording is deleted). */
+    fun onExit() = endWorld("exit")
+
+    /**
+     * Game thread, every tick: confirm the pending session once Odin knows the place, or give it up;
+     * end a confirmed one that a server switch took somewhere not to record.
+     */
     fun onTick() {
         val s = Rec.session ?: return
-        if (confirmed) return
+        if (confirmed) {
+            val r = lastRespawnTick
+            if (r > confirmedTick && Rec.tick - r > SETTLE_TICKS && DungeonRecorder.knownUnwanted()) {
+                synchronized(lock) { if (Rec.session === s && confirmed) endLocked("left") }
+            }
+            return
+        }
         if (DungeonRecorder.wanted()) {
             synchronized(lock) {
                 if (Rec.session !== s) return
                 confirmed = true
+                confirmedTick = Rec.tick
                 s.confirm(DungeonRecorder.label())
             }
             Rec.requestKeyframe("confirm")

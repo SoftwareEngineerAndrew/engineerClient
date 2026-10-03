@@ -76,7 +76,7 @@ object OdinState {
 
     fun install() {
         on<TickEvent.End> { if (Rec.active) EngineerClient.safely("recorder odin state") { tick() } }
-        on<LevelEvent.Load> { deaths.clear(); lastDead.clear(); lastRooms.clear(); termOpen = false }
+        on<LevelEvent.Load> { deaths.clear(); lastDead.clear(); lastRooms.clear(); termOpen = false; entityParts.clear() }
 
         // Right after Odin's own (priority 0) parse of the tab list, on the network thread.
         onReceive<ClientboundPlayerInfoUpdatePacket>(priority = -1000) { if (Rec.active) EngineerClient.safely("recorder odin net") { netSnapshot("player_info") } }
@@ -198,6 +198,31 @@ object OdinState {
         return j.toString()
     }
 
+    /**
+     * Each teammate's entity members (eid, loaded, pos) as last read on the game thread, which owns
+     * the entities: the network thread's snapshots reuse them instead of reading a live entity.
+     */
+    private val entityParts = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private const val NO_ENTITY = "\"eid\":null,\"loaded\":false,\"pos\":null"
+
+    /** [p]'s entity members: read now on the game thread (one position, so x/y/z agree), cached for the network thread. */
+    private fun entityPart(p: DungeonPlayer): String {
+        if (!EngineerClient.mc.isSameThread) return entityParts[p.name] ?: NO_ENTITY
+        val part = try {
+            val e = p.entity
+            if (e == null) NO_ENTITY else {
+                val v = e.position()
+                val sb = StringBuilder(96).append("\"eid\":").append(e.id).append(",\"loaded\":").append(!e.isRemoved).append(",\"pos\":")
+                OdinJs.nums(sb, v.x, v.y, v.z)
+                sb.toString()
+            }
+        } catch (t: Throwable) {
+            val sb = StringBuilder("\"eid\":null,\"loaded\":null,\"pos\":"); PacketJson.error(sb, t); sb.toString()
+        }
+        entityParts[p.name] = part
+        return part
+    }
+
     private fun player(out: StringBuilder, p: DungeonPlayer) {
         val o = OdinJs(256)
         o.s("name", p.name)
@@ -206,10 +231,8 @@ object OdinState {
         o.b("isDead", p.isDead)
         o.n("deathsOdin", p.deaths)
         o.n("deaths", deaths[p.name] ?: 0)
-        val e = p.entity
-        o.n("eid", e?.id)
-        o.b("loaded", e != null && !e.isRemoved)
-        o.safe("pos") { if (e == null) it.append("null") else OdinJs.nums(it, e.x, e.y, e.z) }
+        // eid, loaded, pos: never read from a live entity off the game thread.
+        o.sb.append(',').append(entityPart(p))
         o.safe("map") { val m = p.mapPos; OdinJs.nums(it, m.x, m.z) }
         o.safe("mapWorld") {
             val m = p.mapPos

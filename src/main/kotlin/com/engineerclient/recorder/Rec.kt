@@ -43,7 +43,7 @@ object Rec {
     /** Name -> value of the module's settings, for the `settings` line when they change. */
     @Volatile var settingsSource: (() -> Map<String, String>)? = null
 
-    /** The game (client) thread, learned on its first tick; the queue lets only it wait a moment. */
+    /** The game (client) thread, learned on its first tick (units that keep per-tick buffers check it). */
     @Volatile var gameThread: Thread? = null
         private set
 
@@ -154,14 +154,55 @@ object Rec {
     fun ops(): DynamicOps<JsonElement> =
         runCatching { EngineerClient.mc.connection?.registryAccess()?.createSerializationContext(JsonOps.INSTANCE) }.getOrNull() ?: JsonOps.INSTANCE
 
-    private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > )""")
+    // Hypixel's forms, then vanilla's /msg as the chat box shows it (signed chat on other servers).
+    private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > |\w{1,16} whispers to you: |You whisper to \w{1,16}: )""")
     private val COLOR = Regex("§.")
 
     /** A private message, guild/officer/co-op line or friend notice, when Hide Private Chats is on. */
     fun privateText(plain: String): Boolean = config.hidePrivate && PRIVATE_CHAT.containsMatchIn(COLOR.replace(plain, ""))
 
+    /** A signed chat line whose chat type is a private message (/msg, /teammsg), when Hide Private Chats is on. */
+    fun privateType(b: net.minecraft.network.chat.ChatType.Bound): Boolean = config.hidePrivate && runCatching {
+        b.chatType().unwrapKey().map { it == net.minecraft.network.chat.ChatType.MSG_COMMAND_INCOMING || it == net.minecraft.network.chat.ChatType.MSG_COMMAND_OUTGOING ||
+            it == net.minecraft.network.chat.ChatType.TEAM_MSG_COMMAND_INCOMING || it == net.minecraft.network.chat.ChatType.TEAM_MSG_COMMAND_OUTGOING }.orElse(false)
+    }.getOrDefault(false)
+
     /** Whether what you type may be written out (Typed Chat). */
     val typedChat: Boolean get() = config.typedChat
+
+    /** Commands that send a private, guild, officer or co-op message (Hypixel's and vanilla's). */
+    private val PRIVATE_COMMANDS = setOf("msg", "w", "whisper", "tell", "message", "pm", "r", "reply", "teammsg", "tm",
+        "gc", "gchat", "guildchat", "oc", "ochat", "officerchat", "cc", "coopchat")
+    private val PRIVATE_SUBCOMMANDS = setOf("chat", "c", "officerchat", "oc", "officer", "o")
+    /** Hypixel /chat channels whose lines Hide Private Chats leaves out. */
+    private val PRIVATE_CHANNELS = setOf("g", "guild", "o", "officer", "coop", "co-op", "cc")
+
+    /** The channel plain chat goes to, from the last `/chat <channel>` you sent (best effort; "all" on a new connection). */
+    @Volatile var chatChannel = "all"
+
+    /** [cmd] (with or without its slash) sends a private message: /msg, /r, /gc, /g chat, /oc, /cc... */
+    fun privateCommand(cmd: String): Boolean {
+        val words = cmd.trim().removePrefix("/").split(' ', limit = 3)
+        val root = words[0].lowercase()
+        if (root in PRIVATE_COMMANDS) return true
+        return (root == "g" || root == "guild") && words.getOrNull(1)?.lowercase() in PRIVATE_SUBCOMMANDS
+    }
+
+    /** Notes a command you sent: `/chat <channel>` changes where plain chat goes. */
+    fun noteCommand(cmd: String) {
+        val words = cmd.trim().removePrefix("/").split(' ')
+        if (words[0].equals("chat", true)) chatChannel = words.getOrNull(1)?.lowercase()?.ifEmpty { null } ?: "all"
+    }
+
+    /**
+     * Something you sent (a command when [command], else a chat line) goes to a private, guild,
+     * officer or co-op channel and Hide Private Chats is on: it stays hidden even with Typed Chat on.
+     */
+    fun privateOutbound(text: String, command: Boolean): Boolean =
+        config.hidePrivate && (if (command) privateCommand(text) else chatChannel in PRIVATE_CHANNELS)
+
+    /** What you sent may be written in full: Typed Chat is on and it is not a private message. */
+    fun typedAllowed(text: String, command: Boolean): Boolean = typedChat && !privateOutbound(text, command)
 
     private val changedMap = ConcurrentHashMap<String, String>()
 
@@ -235,4 +276,12 @@ object Rec {
     }
 
     private fun close(env: String, body: String): String = if (body.isBlank()) "$env}" else "$env,$body}"
+}
+
+/**
+ * A line body's builder that knows how many bytes it holds while it waits in the queue (a finished
+ * string, a copied chunk), so the queue's memory cap counts what is really there.
+ */
+class Sized(val est: Int, private val build: () -> String) : () -> String {
+    override fun invoke(): String = build()
 }

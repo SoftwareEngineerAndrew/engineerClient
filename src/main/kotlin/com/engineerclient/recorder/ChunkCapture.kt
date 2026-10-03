@@ -109,7 +109,10 @@ object ChunkCapture {
             })
             val light = RichJson.copyLight(p.lightData)
             val minSy = minY shr 4
-            ({ chunkBody(x, z, minY, height, minSy, factory, data, hm, bes, light) })
+            // What the builder keeps alive until the writer gets to it, and the JSON it grows into.
+            val est = 2L * runCatching { data.readBuffer.readableBytes() }.getOrDefault(0) + light.bytes + 256L * bes.size +
+                hm.sumOf { 8L * it.second.size } + 1024
+            Sized(est.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) { chunkBody(x, z, minY, height, minSy, factory, data, hm, bes, light) }
         } catch (t: Throwable) {
             val msg = t.toString()
             ({ "{\"x\":$x,\"z\":$z,\"@error\":${RecorderFiles.q(msg)}}" })

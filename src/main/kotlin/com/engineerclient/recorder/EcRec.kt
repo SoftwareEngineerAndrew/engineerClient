@@ -149,7 +149,9 @@ object EcRec {
         EcLog.listeners += { tag, msg ->
             line("eclog") { o ->
                 o.str("tag", tag)
-                if (Rec.privateText(msg)) o.str("hidden", "private") else o.str("msg", msg)
+                // ChatHider's log prefixes the line ("rule ⇐ text"): the text after it is checked too.
+                val private = Rec.privateText(msg) || (msg.contains(" ⇐ ") && Rec.privateText(msg.substringAfter(" ⇐ ")))
+                if (private) o.str("hidden", "private") else o.str("msg", msg)
             }
         }
         // The engine's decision trail, uncapped; chained so a listener set before this keeps working.

@@ -22,6 +22,10 @@ import net.minecraft.network.protocol.game.CommonPlayerSpawnInfo
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket
 import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket
 import net.minecraft.network.protocol.game.ServerboundChatPacket
+import net.minecraft.network.protocol.game.ServerboundCommandSuggestionPacket
+import net.minecraft.network.protocol.game.ServerboundEditBookPacket
+import net.minecraft.network.protocol.game.ServerboundRenameItemPacket
+import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket
 import net.minecraft.network.protocol.login.ClientboundHelloPacket
 import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket
 import net.minecraft.network.protocol.login.ServerboundKeyPacket
@@ -111,6 +115,7 @@ object WireTap {
         if (proto == ConnectionProtocol.LOGIN) {
             gameConn = conn
             kicked = false; errored = false
+            Rec.chatChannel = "all"
             RecorderLifecycle.endWorld("reconnect")
             cache.clear()
             betweenWorlds = true
@@ -186,6 +191,7 @@ object WireTap {
             is ClientboundRespawnPacket -> {
                 // A server switch (or an end-portal trip): the same recording carries on; one that
                 // was dropped (an unwanted lobby) starts again here, so the new world's packets are kept.
+                RecorderLifecycle.onRespawn()
                 if (Rec.session == null) RecorderLifecycle.beginWorld("respawn", conn.packetListener, PacketDecode.selfId)
                 if (Rec.active) {
                     world("respawn", PacketDecode.selfId, packet.commonPlayerSpawnInfo(), null, null, null, null, packet.dataToKeep())
@@ -209,7 +215,7 @@ object WireTap {
             else cache.add(ConfigCache.Raw(f.seq, System.currentTimeMillis(), 0, f.phase, if (withheld != null) null else f.bytes, withheld != null, f.bytes.size))
         }
         val raw = if (frames.isEmpty()) null else "[${frames.first().seq},${frames.last().seq}]"
-        if (active) DungeonRecorder.inbound(packet, ph, raw)
+        if (active) DungeonRecorder.inbound(packet, ph, raw, frames.sumOf { it.bytes.size })
         else {
             val type = PacketJson.type(packet)
             val f = if (hidden) "{\"hidden\":\"private\"}" else PacketJson.capture(packet)()
@@ -271,11 +277,14 @@ object WireTap {
         if (!recording(conn)) return
         val seq = Rec.nextSeq()
         val type = PacketJson.type(packet)
+        when (packet) {
+            is ServerboundChatCommandPacket -> Rec.noteCommand(packet.command())
+            is ServerboundChatCommandSignedPacket -> Rec.noteCommand(packet.command())
+        }
         val withheld = when {
             packet is ServerboundKeyPacket -> "crypto"
             packet is ServerboundCookieResponsePacket && !PacketJson.cookiePayloads -> "cookie"
-            !Rec.typedChat && (packet is ServerboundChatPacket || packet is ServerboundChatCommandPacket || packet is ServerboundChatCommandSignedPacket) -> "typed_chat"
-            else -> null
+            else -> typedReason(packet)
         }
         // A withheld frame is still copied so the session can write its length; it drops the bytes.
         val bytes = if (rawOn) ByteBufUtil.getBytes(out, start, len) else null
@@ -334,10 +343,73 @@ object WireTap {
         val taken = cache.take()
         for (e in taken.entries) when (e) {
             is ConfigCache.Line -> s.line(e.seq, e.kind, e.ms,
-                RecorderFiles.envelope(e.kind, e.seq, e.t, e.n, e.ms, e.nanoTime - s.startNs) + (if (e.body.isEmpty()) "}" else ",${e.body}}"))
+                RecorderFiles.envelope(e.kind, e.seq, e.t, e.n, e.ms, e.nanoTime - s.startNs) + (if (e.body.isEmpty()) "}" else ",${e.body}}"), t = e.t, n = e.n)
             is ConfigCache.Raw -> s.raw(e.seq, e.dir, e.phase, e.data, e.withheld, e.len)
         }
         taken.dropped?.let { d -> Rec.emit("gap", d.json()) }
+    }
+
+    /** Every serverbound packet that carries text you typed (unit-tested against every String-holding packet). */
+    val TYPED_TEXT_PACKETS: Set<Class<*>> = setOf(
+        ServerboundChatPacket::class.java, ServerboundChatCommandPacket::class.java, ServerboundChatCommandSignedPacket::class.java,
+        ServerboundCommandSuggestionPacket::class.java, ServerboundSignUpdatePacket::class.java, ServerboundRenameItemPacket::class.java,
+        ServerboundEditBookPacket::class.java,
+        // Creative-mode text fields: typed too.
+        net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket::class.java,
+        net.minecraft.network.protocol.game.ServerboundSetCommandMinecartPacket::class.java,
+        net.minecraft.network.protocol.game.ServerboundSetStructureBlockPacket::class.java,
+        net.minecraft.network.protocol.game.ServerboundSetJigsawBlockPacket::class.java,
+        net.minecraft.network.protocol.game.ServerboundSetTestBlockPacket::class.java,
+    )
+
+    /**
+     * Why [p]'s text is left out, or null when it carries none or may be written: "typed_chat"
+     * (Typed Chat off) or "private" (a private message, Hide Private Chats on). The packet line, the
+     * raw frame and the config cache all follow it.
+     */
+    fun typedReason(p: Packet<*>): String? {
+        if (p.javaClass !in TYPED_TEXT_PACKETS) return null
+        if (!Rec.typedChat) return "typed_chat"
+        val private = when (p) {
+            is ServerboundChatCommandPacket -> Rec.privateOutbound(p.command(), true)
+            is ServerboundChatCommandSignedPacket -> Rec.privateOutbound(p.command(), true)
+            is ServerboundCommandSuggestionPacket -> Rec.privateOutbound(p.command, true)
+            is ServerboundChatPacket -> Rec.privateOutbound(p.message(), false)
+            else -> false
+        }
+        return if (private) "private" else null
+    }
+
+    /**
+     * The "f" of an outbound packet whose text is left out ([typedReason]), or null to write it in
+     * full. A command keeps its name (which command was run is not private), a chat message its
+     * length and signing data, a sign its line lengths, an anvil name its length, a book its page count.
+     */
+    fun typedRedaction(p: Packet<*>): String? {
+        val why = typedReason(p) ?: return null
+        val sb = StringBuilder(128)
+        when (p) {
+            is ServerboundChatCommandPacket -> return redactedCommand(p.command())
+            is ServerboundChatCommandSignedPacket -> return redactedCommand(p.command())
+            is ServerboundCommandSuggestionPacket -> {
+                val c = redactedCommand(p.command.removePrefix("/"))
+                sb.append("{\"id\":").append(p.id).append(",\"len\":").append(p.command.length).append(',').append(c, 1, c.length)
+                return sb.toString()
+            }
+            is ServerboundChatPacket -> sb.append("{\"redacted\":true,\"len\":").append(p.message().length)
+                .append(",\"timeStamp\":").append(runCatching { p.timeStamp().toEpochMilli() }.getOrDefault(-1L))
+                .append(",\"salt\":").append(PacketJson.writeNow(p.salt()))
+                .append(",\"lastSeen\":").append(PacketJson.writeNow(p.lastSeenMessages()))
+            is ServerboundSignUpdatePacket -> sb.append("{\"redacted\":true,\"pos\":").append(PacketJson.writeNow(p.pos))
+                .append(",\"isFrontText\":").append(p.isFrontText)
+                .append(",\"lens\":").append(p.lines.joinToString(",", "[", "]") { it.length.toString() })
+            is ServerboundRenameItemPacket -> sb.append("{\"redacted\":true,\"len\":").append(p.name.length)
+            is ServerboundEditBookPacket -> sb.append("{\"redacted\":true,\"slot\":").append(p.slot()).append(",\"pages\":").append(p.pages().size)
+                .append(",\"title\":").append(p.title().isPresent)
+            else -> sb.append("{\"redacted\":true")
+        }
+        sb.append(",\"why\":").append(RecorderFiles.q(why)).append('}')
+        return sb.toString()
     }
 
     /**

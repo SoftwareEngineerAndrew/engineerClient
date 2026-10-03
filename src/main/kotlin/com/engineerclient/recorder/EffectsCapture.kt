@@ -35,9 +35,10 @@ import java.util.IdentityHashMap
  *    the tracking emitters created (`emit`) and the options of each distinct particle options
  *    instance seen (`opts`, which the rows point into).
  *
- * Everything runs on the game thread (sounds and particles are created on it), and is frozen into
- * strings there; the particle buffer is still guarded by a lock, so a mod spawning particles from
- * another thread cannot corrupt it.
+ * Everything runs on the game thread (sounds and particles are created on it). Sounds are frozen
+ * into strings there; particles only as numbers (thousands a second in a boss fight), turned into
+ * text on the writer thread. The particle buffer is still guarded by a lock, so a mod spawning
+ * particles from another thread cannot corrupt it.
  */
 object EffectsCapture {
 
@@ -150,14 +151,15 @@ object EffectsCapture {
     // ------------------------------------------------------------------ particles
 
     private val lock = Any()
-    private val buf = ParticleBuffer()
+    private val buf = ParticleBuffer { optsJson(it as ParticleOptions) }
 
     /** ParticleTapMixin, at the head of ClientLevel.doAddParticle (every particle the level is asked for). */
     @JvmStatic
     fun requested(opts: ParticleOptions?, force: Boolean, always: Boolean, x: Double, y: Double, z: Double, dx: Double, dy: Double, dz: Double) {
         if (!Rec.active || !particles || opts == null) return
         try {
-            synchronized(lock) { buf.request(particleId(opts), opts, { optsJson(opts) }, x, y, z, dx, dy, dz, force, always) }
+            val id = particleId(opts)
+            synchronized(lock) { buf.request(id, opts, x, y, z, dx, dy, dz, force, always) }
         } catch (t: Throwable) { fail("ptc", t) }
     }
 
@@ -187,17 +189,22 @@ object EffectsCapture {
         try {
             val id = entity?.id ?: -1
             val type = entity?.let { runCatching { BuiltInRegistries.ENTITY_TYPE.getKey(it.type).toString() }.getOrNull() }
-            synchronized(lock) { buf.emitter(id, type, opts, { optsJson(opts) }, lifetime) }
+            synchronized(lock) { buf.emitter(id, type, opts, lifetime) }
         } catch (t: Throwable) { fail("ptc", t) }
     }
 
+    /** The tick's particles: the numbers are taken here, the text is built on the writer thread. */
     private fun flushParticles() {
-        val body = synchronized(lock) { buf.drain() } ?: return
-        Rec.emit("ptc", body)
+        val snap = synchronized(lock) { buf.take() } ?: return
+        Rec.emitLazy("ptc", snap.est, "ptc") { snap.json() }
     }
 
-    private fun particleId(o: ParticleOptions): String =
+    /** Particle type -> id, so a burst of thousands does one registry lookup. */
+    private val particleIds = java.util.concurrent.ConcurrentHashMap<Any, String>()
+
+    private fun particleId(o: ParticleOptions): String = particleIds.getOrPut(o.type) {
         runCatching { BuiltInRegistries.PARTICLE_TYPE.getKey(o.type)?.toString() }.getOrNull() ?: PacketJson.simpleName(o.javaClass)
+    }
 
     private fun optsJson(o: ParticleOptions): String = StringBuilder(64).also { RichJson.particle(it, o) }.toString()
 
@@ -216,89 +223,150 @@ object EffectsCapture {
 }
 
 /**
- * One tick's particles as JSON members (pure, so it can be tested without a game). Rows:
+ * One tick's particles (pure, so it can be tested without a game), kept as numbers while the tick
+ * runs (a request or spawn only stores primitives: no formatting on the game thread) and written as
+ * JSON members by [Snapshot.json] on the writer thread. Rows:
  *  - req: `[typeId, x, y, z, dx, dy, dz, force, always, o, made]`, `o` the index into `opts` and
  *    `made` how many particles the request added (0 when the particle option or distance filtered it
  *    out, null when the call never returned);
  *  - spawned: `[class, x, y, z, xd, yd, zd, lifetime]`;
  *  - emit: `[entityId, entityType, o, lifetime]` (lifetime -1: the emitter's default);
  *  - opts: `{type, opts}` per distinct options instance this tick (simple particles are singletons,
- *    so a tick of flames carries one entry).
+ *    so a tick of flames carries one entry), built by [optsJson] from the (immutable) options.
  */
-class ParticleBuffer {
-    private val req = StringBuilder(4096)
-    private val spawned = StringBuilder(4096)
-    private val emit = StringBuilder()
-    private val opts = StringBuilder()
+class ParticleBuffer(private val optsJson: (Any) -> String) {
+    private var reqD = DoubleArray(6 * 64)
+    private var reqI = IntArray(REQ_INTS * 64)
+    private var nReq = 0
+    private var spD = DoubleArray(6 * 64)
+    private var spI = IntArray(2 * 64)
+    private var nSp = 0
+    private val emitRows = ArrayList<Emit>()
+    internal class Emit(val id: Int, val type: String?, val o: Int, val lifetime: Int)
+    private val strings = ArrayList<String>()
+    private val stringIndex = HashMap<String, Int>()
+    private val opts = ArrayList<Any>()
     private val optsIndex = IdentityHashMap<Any, Int>()
     private var spawnedCount = 0
+    private var openRequest = -1
     private var openRequestSpawnedAt = -1
 
-    /** Index of [key] in this tick's opts, adding it (built by [json]) the first time. */
-    fun optsIndex(key: Any, json: () -> String): Int = optsIndex.getOrPut(key) {
-        val i = optsIndex.size
-        if (i > 0) opts.append(',')
-        opts.append(json())
-        i
-    }
+    /** Index of [key] in this tick's opts, adding it the first time. */
+    fun optsIndex(key: Any): Int = optsIndex.getOrPut(key) { opts += key; opts.size - 1 }
 
-    fun request(typeId: String, key: Any, json: () -> String, x: Double, y: Double, z: Double, dx: Double, dy: Double, dz: Double, force: Boolean, always: Boolean) {
-        closeOpen(null)
-        val o = optsIndex(key, json)
-        if (req.isNotEmpty()) req.append(',')
-        req.append('['); PacketJson.str(req, typeId)
-        for (d in doubleArrayOf(x, y, z, dx, dy, dz)) { req.append(','); PacketJson.num(req, d) }
-        req.append(',').append(force).append(',').append(always).append(',').append(o)
+    private fun str(s: String): Int = stringIndex.getOrPut(s) { strings += s; strings.size - 1 }
+
+    fun request(typeId: String, key: Any, x: Double, y: Double, z: Double, dx: Double, dy: Double, dz: Double, force: Boolean, always: Boolean) {
+        closeOpen()
+        if (nReq * REQ_INTS == reqI.size) { reqI = reqI.copyOf(reqI.size * 2); reqD = reqD.copyOf(reqD.size * 2) }
+        val d = nReq * 6
+        reqD[d] = x; reqD[d + 1] = y; reqD[d + 2] = z; reqD[d + 3] = dx; reqD[d + 4] = dy; reqD[d + 5] = dz
+        val i = nReq * REQ_INTS
+        reqI[i] = str(typeId); reqI[i + 1] = (if (force) 1 else 0) or (if (always) 2 else 0); reqI[i + 2] = optsIndex(key); reqI[i + 3] = -1
+        openRequest = nReq
         openRequestSpawnedAt = spawnedCount
+        nReq++
     }
 
     fun requestDone() {
-        if (openRequestSpawnedAt < 0) return
-        closeOpen(spawnedCount - openRequestSpawnedAt)
+        if (openRequest < 0) return
+        reqI[openRequest * REQ_INTS + 3] = spawnedCount - openRequestSpawnedAt
+        openRequest = -1; openRequestSpawnedAt = -1
     }
 
-    private fun closeOpen(made: Int?) {
-        if (openRequestSpawnedAt < 0) return
-        req.append(',').append(made?.toString() ?: "null").append(']')
-        openRequestSpawnedAt = -1
-    }
+    /** A request whose return was never seen keeps made = null. */
+    private fun closeOpen() { openRequest = -1; openRequestSpawnedAt = -1 }
 
     fun spawned(cls: String, x: Double, y: Double, z: Double, xd: Double, yd: Double, zd: Double, lifetime: Int) {
         spawnedCount++
-        if (spawned.isNotEmpty()) spawned.append(',')
-        spawned.append('['); PacketJson.str(spawned, cls)
-        for (d in doubleArrayOf(x, y, z, xd, yd, zd)) { spawned.append(','); PacketJson.num(spawned, d) }
-        spawned.append(',').append(lifetime).append(']')
+        if (nSp * 2 == spI.size) { spI = spI.copyOf(spI.size * 2); spD = spD.copyOf(spD.size * 2) }
+        val d = nSp * 6
+        spD[d] = x; spD[d + 1] = y; spD[d + 2] = z; spD[d + 3] = xd; spD[d + 4] = yd; spD[d + 5] = zd
+        spI[nSp * 2] = str(cls); spI[nSp * 2 + 1] = lifetime
+        nSp++
     }
 
-    fun emitter(entityId: Int, entityType: String?, key: Any, json: () -> String, lifetime: Int) {
-        val o = optsIndex(key, json)
-        if (emit.isNotEmpty()) emit.append(',')
-        emit.append('[').append(entityId).append(',')
-        if (entityType == null) emit.append("null") else PacketJson.str(emit, entityType)
-        emit.append(',').append(o).append(',').append(lifetime).append(']')
+    fun emitter(entityId: Int, entityType: String?, key: Any, lifetime: Int) {
+        emitRows += Emit(entityId, entityType, optsIndex(key), lifetime)
     }
 
-    /** The tick's members (`"opts":[..],"req":[..],...`, empty lists left out), or null when nothing happened; starts the next tick. */
-    fun drain(): String? {
-        closeOpen(null)
-        if (req.isEmpty() && spawned.isEmpty() && emit.isEmpty()) { clear(); return null }
-        val sb = StringBuilder(opts.length + req.length + spawned.length + emit.length + 48)
-        sb.append("\"opts\":[").append(opts).append(']')
-        if (req.isNotEmpty()) sb.append(",\"req\":[").append(req).append(']')
-        if (spawned.isNotEmpty()) sb.append(",\"spawned\":[").append(spawned).append(']')
-        if (emit.isNotEmpty()) sb.append(",\"emit\":[").append(emit).append(']')
+    /** One tick's rows, private to whoever took them (the writer thread builds the JSON). */
+    class Snapshot internal constructor(
+        private val reqD: DoubleArray, private val reqI: IntArray, private val nReq: Int,
+        private val spD: DoubleArray, private val spI: IntArray, private val nSp: Int,
+        private val emits: List<Emit>, private val strings: List<String>, private val opts: List<Any>, private val optsJson: (Any) -> String,
+    ) {
+        val est: Int get() = 64 + nReq * 160 + nSp * 150 + emits.size * 48 + opts.size * 96
+
+        /** `"opts":[..],"req":[..],...`, empty lists left out. */
+        fun json(): String {
+            val sb = StringBuilder(est)
+            sb.append("\"opts\":[")
+            opts.forEachIndexed { i, o -> if (i > 0) sb.append(','); sb.append(optsJson(o)) }
+            sb.append(']')
+            if (nReq > 0) {
+                sb.append(",\"req\":[")
+                for (r in 0 until nReq) {
+                    if (r > 0) sb.append(',')
+                    val i = r * REQ_INTS
+                    sb.append('['); PacketJson.str(sb, strings[reqI[i]])
+                    for (k in 0 until 6) { sb.append(','); PacketJson.num(sb, reqD[r * 6 + k]) }
+                    val f = reqI[i + 1]
+                    sb.append(',').append(f and 1 != 0).append(',').append(f and 2 != 0).append(',').append(reqI[i + 2]).append(',')
+                    val made = reqI[i + 3]
+                    if (made < 0) sb.append("null") else sb.append(made)
+                    sb.append(']')
+                }
+                sb.append(']')
+            }
+            if (nSp > 0) {
+                sb.append(",\"spawned\":[")
+                for (r in 0 until nSp) {
+                    if (r > 0) sb.append(',')
+                    sb.append('['); PacketJson.str(sb, strings[spI[r * 2]])
+                    for (k in 0 until 6) { sb.append(','); PacketJson.num(sb, spD[r * 6 + k]) }
+                    sb.append(',').append(spI[r * 2 + 1]).append(']')
+                }
+                sb.append(']')
+            }
+            if (emits.isNotEmpty()) {
+                sb.append(",\"emit\":[")
+                emits.forEachIndexed { i, e ->
+                    if (i > 0) sb.append(',')
+                    sb.append('[').append(e.id).append(',')
+                    if (e.type == null) sb.append("null") else PacketJson.str(sb, e.type)
+                    sb.append(',').append(e.o).append(',').append(e.lifetime).append(']')
+                }
+                sb.append(']')
+            }
+            return sb.toString()
+        }
+    }
+
+    /** The tick's rows, or null when nothing happened; starts the next tick. Cheap: copies of the used parts of the arrays. */
+    fun take(): Snapshot? {
+        closeOpen()
+        if (nReq == 0 && nSp == 0 && emitRows.isEmpty()) { clear(); return null }
+        val s = Snapshot(reqD.copyOf(nReq * 6), reqI.copyOf(nReq * REQ_INTS), nReq, spD.copyOf(nSp * 6), spI.copyOf(nSp * 2), nSp,
+            ArrayList(emitRows), ArrayList(strings), ArrayList(opts), optsJson)
         clear()
-        return sb.toString()
+        return s
     }
+
+    /** [take] and its JSON at once (tests). */
+    fun drain(): String? = take()?.json()
 
     fun clear() {
-        req.setLength(0); spawned.setLength(0); emit.setLength(0); opts.setLength(0)
-        optsIndex.clear(); spawnedCount = 0; openRequestSpawnedAt = -1
+        nReq = 0; nSp = 0; emitRows.clear(); strings.clear(); stringIndex.clear()
+        opts.clear(); optsIndex.clear(); spawnedCount = 0; openRequest = -1; openRequestSpawnedAt = -1
+        if (reqI.size > REQ_INTS * 65536) { reqD = DoubleArray(6 * 64); reqI = IntArray(REQ_INTS * 64) }
+        if (spI.size > 2 * 65536) { spD = DoubleArray(6 * 64); spI = IntArray(2 * 64) }
     }
 
     companion object {
         private const val VANILLA = "net.minecraft.client.particle."
+        /** Per request: type string index, force|always bits, opts index, made (-1: never returned). */
+        private const val REQ_INTS = 4
 
         /** `FlameParticle` for vanilla's own particle classes (nested ones keep their `$`), the full binary name otherwise. */
         fun className(binaryName: String): String = if (binaryName.startsWith(VANILLA)) binaryName.substring(VANILLA.length) else binaryName

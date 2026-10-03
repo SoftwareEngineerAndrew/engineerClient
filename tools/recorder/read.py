@@ -402,14 +402,36 @@ def stream(rec, flt=None, jobs=None, sort=True):
     bounds = [m[4]['seq'][0] if m[4] and m[4].get('seq') else None for m in todo]
     args = [(m[1], m[2], m[3], flt) for m in todo]
     results = map_members(args, jobs)
-    heap, counter = [], 0
+    heap = []
 
     def emit_ready(limit):
         while heap and (limit is None or heap[0][0] < limit):
             yield heapq.heappop(heap)[2]
 
     ent_parts = [p for p in rec.parts if p.ent and (flt is None or flt.kind_ok('ent'))]
+    ent_loaded = set()
+
+    def load_ent(upto):
+        # Compact Entity Rows: a part's ent rows join the heap before anything at or past that part
+        # can be emitted, so they come out in seq order with the member lines around them.
+        for part in ent_parts:
+            if part.no in ent_loaded or (upto is not None and part.no > upto):
+                continue
+            ent_loaded.add(part.no)
+            est = {'notes': [], 'bad': 0}
+            for o in ent_lines(part, flt, est):
+                if not sort:
+                    yield o
+                    continue
+                nonlocal_counter[0] += 1
+                heapq.heappush(heap, (o.get('seq') if isinstance(o.get('seq'), int) else -1, nonlocal_counter[0], o))
+            totals['bad'] += est['bad']
+            for note in est['notes']:
+                warn(note)
+
+    nonlocal_counter = [0]
     for i, (lines, st) in enumerate(results):
+        yield from load_ent(todo[i][0])
         for key in ('truncated', 'bad', 'torn'):
             totals[key] += st[key]
         samples += st['bad_samples']
@@ -421,21 +443,15 @@ def stream(rec, flt=None, jobs=None, sort=True):
             if not sort:
                 yield o
                 continue
-            counter += 1
-            heapq.heappush(heap, (o.get('seq') if isinstance(o.get('seq'), int) else -1, counter, o))
+            nonlocal_counter[0] += 1
+            heapq.heappush(heap, (o.get('seq') if isinstance(o.get('seq'), int) else -1, nonlocal_counter[0], o))
         if sort and i + 1 < len(bounds):
             # Lines from different threads reach a member a little out of order; everything below the
             # next member's first seq is final (an unindexed tail keeps everything back).
+            yield from load_ent(todo[i + 1][0])
             nxt = bounds[i + 1]
             yield from emit_ready(nxt if nxt is not None else -1)
-    for part in ent_parts:
-        st = {'notes': [], 'bad': 0}
-        for o in ent_lines(part, flt, st):
-            counter += 1
-            heapq.heappush(heap, (o.get('seq', -1), counter, o))
-        totals['bad'] += st['bad']
-        for note in st['notes']:
-            warn(note)
+    yield from load_ent(None)
     yield from emit_ready(None)
     if totals['bad']:
         warn('%d line(s) did not parse as JSON (not shown); first: %s' % (totals['bad'], samples[:3]))
@@ -590,9 +606,16 @@ def cmd_events(rec, a):
     lines, bad = rec.side('events.jsonl')
     if bad:
         warn('%d torn line(s) in events.jsonl' % bad)
-    if lines is None or a.rebuild:
+    from_side = not (lines is None or a.rebuild)
+    if not from_side:
         lines = list(stream(rec, Filter(kinds=['world', 'end', 'death', 'revive', 'leap', 'ec.split', 'settings', 'mark', 'keyframe', 'gap', 'stopped', 'disconnect']), a.j))
     for o in lines:
+        if from_side and 'of' in o:
+            # An events.jsonl line is its own line ("k":"events", its own seq); the event's seq is "of".
+            # Shown as the event, so the # printed works with timeline --around.
+            o = dict(o)
+            o['seq'] = o.pop('of')
+            o['k'] = o.pop('kind', o.get('k'))
         print(compact(o, a.max_chars))
 
 
@@ -842,7 +865,10 @@ class World:
                 self.chunk(f)
             elif p == 'forget_level_chunk':
                 pos = f.get('pos')
-                if isinstance(pos, dict):
+                # PacketJson writes a ChunkPos as [x, z].
+                if isinstance(pos, list) and len(pos) == 2:
+                    self.unload(pos[0], pos[1])
+                elif isinstance(pos, dict):
                     self.unload(pos.get('x'), pos.get('z'))
             elif p == 'map_item_data':
                 self.map_patch(f)
@@ -1044,22 +1070,26 @@ def hexdump(b, limit):
 
 
 def cmd_raw(rec, a):
-    want = {a.seq}
+    # seq -> the direction its frame must have (None: either). A line's raw:[a,b] is a range of global
+    # seqs: an outbound frame encoded between a bundle's inbound frames can fall inside it.
+    want = {a.seq: None}
     line = None
     for o in stream(rec, Filter(seq=(a.seq, a.seq), everything=True), a.j):
         line = o
     if line is not None:
         r = line.get('raw')
         if isinstance(r, list) and len(r) == 2:
-            want |= set(range(r[0], r[1] + 1))
+            d = 1 if line.get('dir') == 'out' else 0
+            for s in range(r[0], r[1] + 1):
+                want.setdefault(s, d)
         if isinstance(line.get('rawSeq'), int):
-            want.add(line['rawSeq'])
+            want.setdefault(line['rawSeq'], 1)
         print('line #%d: %s' % (a.seq, compact(line, 300)))
     found = 0
     stats = {'truncated': 0, 'notes': []}
     for part in rec.parts:
         for seq, d, ph, withheld, ln, body in raw_records(part, stats):
-            if seq in want:
+            if seq in want and want[seq] in (None, d):
                 found += 1
                 print('frame #%d %s %s %d bytes%s' % (seq, 'in' if d == 0 else 'out', PHASES.get(ph, ph), ln, ' (withheld: only its length is kept)' if withheld else ''))
                 if body:
@@ -1090,7 +1120,7 @@ def cmd_context(rec, a):
         out += ['', '## State at seq %d (rebuilt from keyframe at seq %s)' % (target, kf_seq)]
         describe_state(w, a, out)
     head = '\n'.join(out)
-    remaining = max(0, budget - len(head.encode()) - 600)
+    remaining = max(0, budget - blen(head) - 600)
     flt = timeline_filter(a)
     lines = []
     if target is None:
@@ -1119,7 +1149,7 @@ def cmd_context(rec, a):
         order = list(range(len(rendered)))
     keep, used = set(), 0
     for i in order:
-        size = len(rendered[i][1].encode()) + 1
+        size = blen(rendered[i][1]) + 1
         if used + size > remaining:
             continue
         keep.add(i)
@@ -1141,7 +1171,19 @@ def cmd_context(rec, a):
 
 # ---------------------------------------------------------------------------------------------- main
 
+def blen(s):
+    """Bytes [s] takes once printed (a lone surrogate, which PacketJson keeps on purpose, as its \\u escape)."""
+    return len(s.encode('utf-8', 'backslashreplace'))
+
+
 def main(argv):
+    # PacketJson writes lone surrogates as \\uXXXX so no character is lost; json.loads turns them back
+    # into lone surrogates, which a strict stdout cannot encode. Print them as their escape instead.
+    for stream_ in (sys.stdout, sys.stderr):
+        try:
+            stream_.reconfigure(errors='backslashreplace')
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     sub = ap.add_subparsers(dest='cmd', required=True)
 

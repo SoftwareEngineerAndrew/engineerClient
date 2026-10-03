@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object WorldCapture {
 
-    /** Where the block change being applied came from; set around the server and ack paths by BlockChangeSourceMixin. */
+    /** Where the block change being applied came from; set around the server and ack paths by BlockChangeSourceMixin (game thread only). */
     private var source: String? = null
 
     /** Chunk packets seen on the network thread and not yet loaded: chunk -> tick seen. */
@@ -59,6 +59,8 @@ object WorldCapture {
     private var lastDirtyPassTick = 0
 
     private const val CHUNKS_PER_TICK = 64
+    private const val MIN_CHUNKS_PER_TICK = 4
+    private const val TICK_BUDGET_NS = 1_000_000L
     private const val DIRTY_PASS_TICKS = 20 * 60
     /** Chunks scanned around the player for a keyframe: past any server view distance plus the cache margin. */
     private const val SCAN_RADIUS = 40
@@ -68,8 +70,10 @@ object WorldCapture {
         ClientChunkEvents.CHUNK_LOAD.register { _, chunk -> if (Rec.active) EngineerClient.safely("recorder chunk load") { chunkEvent("load", chunk.pos.x, chunk.pos.z) } }
         ClientChunkEvents.CHUNK_UNLOAD.register { _, chunk -> if (Rec.active) EngineerClient.safely("recorder chunk unload") { chunkEvent("unload", chunk.pos.x, chunk.pos.z) } }
         // Odin posts this from LevelChunk.setBlockState before the change is made: the old state is still there.
+        // Odin's mixin is common, so in singleplayer it also posts the integrated server's changes, on
+        // the server thread: only the client's (the game thread's) are this world's.
         on<BlockUpdateEvent>(priority = Int.MIN_VALUE) {
-            if (!Rec.active) return@on
+            if (!Rec.active || !EngineerClient.mc.isSameThread) return@on
             EngineerClient.safely("recorder blk") { blockChange(this) }
         }
         on<TickEvent.End>(priority = Int.MIN_VALUE) {
@@ -157,8 +161,10 @@ object WorldCapture {
             lastDirtyPassTick = Rec.tick
             if (ChunkCapture.enabled) dirty.toList().forEach { snapshotQueue.add(Pending(it, Rec.keyframeId, true)) }
         }
+        // A time budget, not only a count: a keyframe's chunks never cost a tick more than about a millisecond.
         var n = 0
-        while (n < CHUNKS_PER_TICK) {
+        val t0 = System.nanoTime()
+        while (n < CHUNKS_PER_TICK && (n < MIN_CHUNKS_PER_TICK || System.nanoTime() - t0 < TICK_BUDGET_NS)) {
             val job = snapshotQueue.poll() ?: break
             if (snapshotChunk(level, job)) n++
         }
@@ -212,8 +218,8 @@ object WorldCapture {
     /**
      * The "world" part of a keyframe (game thread). A full one (confirm, new part, turned on,
      * respawn, after a gap) queues every loaded chunk; any other asks only for the chunks changed
-     * since their last snapshot. The chunks go out [CHUNKS_PER_TICK] a tick so a keyframe never
-     * stalls a frame; the maps, env and chunk list go out at once.
+     * since their last snapshot. The chunks go out a few a tick (up to [CHUNKS_PER_TICK], within
+     * about a millisecond) so a keyframe never stalls a frame; the maps, env and chunk list go out at once.
      */
     private fun keyframe(reason: String) {
         if (!Rec.active) return
@@ -249,7 +255,8 @@ object WorldCapture {
 
     /**
      * One chunk of a keyframe: its sections copied here, packed on the writer thread (`kfchunk`), and
-     * its block entities saved and written out here (`kfbe`). False if the chunk is gone.
+     * its block entities saved here (each save is a fresh tag nothing else holds) and written out on
+     * the writer thread (`kfbe`). False if the chunk is gone.
      */
     private fun snapshotChunk(level: ClientLevel, job: Pending): Boolean {
         val x = ChunkPos.getX(job.key); val z = ChunkPos.getZ(job.key)
@@ -278,20 +285,26 @@ object WorldCapture {
         val bes = chunk.blockEntities.values.toList()
         if (bes.isNotEmpty()) {
             val ra = level.registryAccess()
-            val sb = StringBuilder(256 * bes.size)
-            sb.append("\"kf\":").append(kf).append(tag).append(",\"x\":").append(x).append(",\"z\":").append(z).append(",\"d\":[")
-            bes.forEachIndexed { i, be ->
-                if (i > 0) sb.append(',')
+            class Be(val x: Int, val y: Int, val z: Int, val type: String, val state: net.minecraft.world.level.block.state.BlockState, val tag: net.minecraft.nbt.CompoundTag?)
+            val rows = bes.map { be ->
                 val pos = be.blockPos
-                sb.append('[').append(pos.x).append(',').append(pos.y).append(',').append(pos.z).append(',')
-                PacketJson.str(sb, BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.type)?.toString() ?: "?"); sb.append(',')
-                PacketJson.str(sb, ChunkCapture.stateName(be.blockState)); sb.append(',')
-                val snbt = try { be.saveWithoutMetadata(ra).toString() } catch (t: Throwable) { null }
-                if (snbt == null) sb.append("null") else PacketJson.str(sb, snbt)
-                sb.append(']')
+                Be(pos.x, pos.y, pos.z, BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.type)?.toString() ?: "?", be.blockState,
+                    try { be.saveWithoutMetadata(ra) } catch (t: Throwable) { null })
             }
-            sb.append(']')
-            Rec.emit("kfbe", sb.toString())
+            Rec.emitLazy("kfbe", 64 + 256 * rows.size, "kfbe") {
+                val sb = StringBuilder(256 * rows.size)
+                sb.append("\"kf\":").append(kf).append(tag).append(",\"x\":").append(x).append(",\"z\":").append(z).append(",\"d\":[")
+                rows.forEachIndexed { i, r ->
+                    if (i > 0) sb.append(',')
+                    sb.append('[').append(r.x).append(',').append(r.y).append(',').append(r.z).append(',')
+                    PacketJson.str(sb, r.type); sb.append(',')
+                    PacketJson.str(sb, ChunkCapture.stateName(r.state)); sb.append(',')
+                    val snbt = r.tag?.let { runCatching { it.toString() }.getOrNull() }
+                    if (snbt == null) sb.append("null") else PacketJson.str(sb, snbt)
+                    sb.append(']')
+                }
+                sb.append(']').toString()
+            }
         }
         return true
     }
