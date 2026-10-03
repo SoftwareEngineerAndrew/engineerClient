@@ -96,11 +96,12 @@ class Station(
 
         /**
          * All 30, positions from the recordings (stands), numbered as in terminal-roles.md: the
-         * n-th terminal a player reaches walking in from the section's start. Except S2's 4 and 5,
+         * n-th terminal a player reaches walking in from the section's start. Except, named as players do:
+         * S1's by how close they are to the levers (1 nearest), and S2's 4 and 5,
          * named as players do: 5 is the high one (by the low lever), 4 the low one by ll (the high lever).
          */
         fun all(): List<Station> = listOf(
-            t(1, 1, 110.5, 118.0, 79.5), t(1, 2, 90.5, 121.0, 101.5), t(1, 3, 110.5, 112.0, 73.5), t(1, 4, 90.5, 111.0, 92.5),
+            t(1, 1, 90.5, 121.0, 101.5), t(1, 2, 90.5, 111.0, 92.5), t(1, 3, 110.5, 118.0, 79.5), t(1, 4, 110.5, 112.0, 73.5),
             l(1, "east lever", 106, 124, 113), l(1, "west lever", 94, 124, 113),
             d(1, "SS", 110.5, 119.0, 91.5),
             t(2, 1, 68.5, 108.0, 122.5), t(2, 2, 59.5, 119.0, 123.5), t(2, 3, 47.5, 108.0, 122.5), t(2, 4, 39.5, 107.0, 142.5), t(2, 5, 40.5, 123.0, 123.5),
