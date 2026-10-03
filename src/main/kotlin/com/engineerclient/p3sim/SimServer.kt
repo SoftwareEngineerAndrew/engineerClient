@@ -28,6 +28,13 @@ object SimServer {
         server is IntegratedServer && server.worldData.levelName == SimWorld.NAME &&
             (SimWorld.opening || SimWorld.isBuilt(server.getWorldPath(LevelResource.ROOT)))
 
+    /** Is [level] the sim's (server side). */
+    @JvmStatic
+    fun isSimLevel(level: net.minecraft.world.level.Level): Boolean {
+        val s = server ?: return false
+        return level is ServerLevel && level.server === s
+    }
+
     val level: ServerLevel? get() = server?.overworld()
 
     /** The (only) player in the sim. */
