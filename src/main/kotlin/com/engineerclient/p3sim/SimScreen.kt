@@ -95,7 +95,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             label("§fleaps ${sec(P3Plan.leapGap)} apart", 90),
             change("+", 16) { P3Plan.leapGap = (P3Plan.leapGap + 0.25).coerceAtMost(5.0); P3Plan.save() },
         ))
-        row(listOf<AbstractWidget>(label("§eLeap menu", 60)) +
+        row(listOf<AbstractWidget>(label("§eLeap menu", 60), change("Sort: ${if (P3Plan.odinSort) "§bOdin" else "§fCustom"}", 80) { P3Plan.odinSort = !P3Plan.odinSort; P3Plan.save() }) +
             P3Plan.botOrder().mapIndexed { i, c -> change("${i + 1}: ${name(c)}", 76) { P3Plan.cycleSlot(i + 1) } })
         text("§8Leap slot: click to swap with the next. Wait for you: a section's last bot job waits")
         text("§8until you're at your early enter for the next section.")
@@ -124,6 +124,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("Real masks: ${onOff(P3Sim.realMasks)}", 100) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
             change("Start in: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value; server { Sim.player?.let { Masks.equip(it) } } },
             change("Phoenix pet: ${onOff(P3Sim.phoenix)}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix },
+            change("No melodies: ${onOff(P3Sim.noMelodies)}", 100) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
         ))
         row(listOf(
             change("Start on join: ${onOff(P3Sim.autoStart)}", 110) { P3Sim.autoStartS.value = !P3Sim.autoStart },

@@ -124,7 +124,6 @@ object SimItems {
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PEARLS, LEAP, JERRY, CLOAK, MENU)
         bar.forEachIndexed { i, s -> inv.setItem(i, s) }
         inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW)
-        inv.setItem(17, ItemStack(Items.ARROW, 64))
         Masks.equip(p)
         inv.selectedSlot = 3
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))
@@ -195,6 +194,16 @@ object SimItems {
         if (state.getDestroySpeed(level, at) >= 0) level.destroyBlock(at, false)
         SimServer.run("dungeonbreaker") { Sim.player?.let { p -> Fight.afterPing("dungeonbreaker") { mine(p, at) } } }
         return true
+    }
+
+    /** A left click on the client (ShortbowSimMixin): the shortbows shoot on it too, as on Hypixel. */
+    @JvmStatic
+    fun clientLeftClick() {
+        val player = mc.player ?: return
+        val level = mc.level ?: return
+        if (!simClient(level)) return
+        val n = when (idOf(player.mainHandItem)) { "TERMINATOR" -> 3; "ITEM_SPIRIT_BOW" -> 1; else -> return }
+        SimServer.run("left click") { Sim.player?.let { p -> asClicked(p, "shortbow") { shoot(p, n) } } }
     }
 
     /** Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets). */

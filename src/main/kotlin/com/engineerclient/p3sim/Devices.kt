@@ -229,7 +229,7 @@ class Devices(val phase: GoldorPhase) {
     /**
      * Arrow Align (S3): item frames at x=-2, y120-124, z75-79 (index (y-120) + (z-75)*5), only on
      * one of Odin's nine layouts' arrow cells plus its few extra (non-arrow) frames, never on the
-     * other cells (devices.md §2). Start rotations uniform 0-7; a click turns one +1. Frames turn
+     * other cells (devices.md §2). It starts solved but for the arrow nearest the bottom left; a click turns one +1. Frames turn
      * any time (pre-dev); the device line comes in the same tick as the solving click in S3.
      */
     inner class Arrows {
@@ -247,12 +247,13 @@ class Devices(val phase: GoldorPhase) {
                 f.isInvulnerable = true
                 if (solution[i] >= 0) {
                     f.setItem(ItemStack(Items.ARROW), false)
-                    f.setRotation(Random.nextInt(8))
+                    f.setRotation(solution[i])
                 }
                 frames[i] = Sim.spawn(f)
             }
-            // Never already solved.
-            if (frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) frames.entries.first { solution[it.key] >= 0 }.value.let { it.setRotation((it.rotation + 1) % 8) }
+            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79).
+            frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
+                ?.let { (j, f) -> f.setRotation((solution[j] + 1 + Random.nextInt(7)) % 8) }
         }
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }

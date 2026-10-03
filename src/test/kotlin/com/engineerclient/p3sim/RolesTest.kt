@@ -58,5 +58,8 @@ class RolesTest {
         assertEquals(DungeonClass.TANK, plan.ee[3])
         assertEquals(listOf("S2 T1"), plan.jobsOf.getValue(DungeonClass.HEALER).filter { it.startsWith("S2") })
         assertEquals(listOf(DungeonClass.MAGE, DungeonClass.BERSERK), plan.owners["S2 T3"])
+        // The early enterers wait for: ee2 -> ee3, 4, 5; ee3 -> 1-4.
+        assertEquals(listOf("ee3", "4", "5"), plan.moves.single { it.kind == "waits" && it.who == "ee2" }.args)
+        assertEquals(listOf("1", "2", "3", "4"), plan.moves.single { it.kind == "waits" && it.who == "ee3" }.args)
     }
 }

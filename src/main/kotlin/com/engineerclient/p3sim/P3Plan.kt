@@ -89,12 +89,22 @@ object P3Plan {
         val mineClass = P3Sim.myClass
         val order = (leapOrder + Party.CLASSES).distinct().filter { it != mineClass }
         leapOrder.clear(); leapOrder += order
-        return order
+        return if (odinSort) odinOrder(order) ?: order else order
     }
+
+    /** The leap menu sorted as Odin does by default: by class priority, into Odin's quadrants. */
+    var odinSort = false
+
+    private fun odinOrder(classes: List<DungeonClass>): List<DungeonClass>? = runCatching {
+        val players = classes.map { com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer(Roles.label(it), it, 50, null) }.sortedBy { it.clazz.priority }
+        com.odtheking.odin.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
+    }.getOrNull()?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
 
     /** Slot [slot] (1-4) takes the next class: swaps with the slot that had it. */
     fun cycleSlot(slot: Int) {
+        // From Odin's order to your own, starting from what it showed.
         val order = botOrder().toMutableList()
+        odinSort = false
         val i = slot - 1
         val j = (i + 1) % order.size
         val t = order[i]; order[i] = order[j]; order[j] = t
@@ -107,7 +117,7 @@ object P3Plan {
     private class Saved(
         val skill: Int? = null, val mine: List<String>? = null, val mineFor: String? = null,
         val botMin: Double? = null, val botMax: Double? = null,
-        val waitForYou: Boolean? = null, val leapGap: Double? = null, val leapOrder: List<String>? = null,
+        val waitForYou: Boolean? = null, val leapGap: Double? = null, val leapOrder: List<String>? = null, val odinSort: Boolean? = null,
         val spots: Map<String, List<Double>>? = null,
     )
 
@@ -128,6 +138,7 @@ object P3Plan {
             s.botMax?.let { botMax = it }
             s.waitForYou?.let { waitForYou = it }
             s.leapGap?.let { leapGap = it }
+            s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
             s.spots?.forEach { (k, v) -> earlyEnters.firstOrNull { it.key == k }?.let { if (v.size == 3) it.spot = Vec3(v[0], v[1], v[2]) } }
         }
@@ -135,7 +146,7 @@ object P3Plan {
 
     fun save() {
         EngineerClient.safely("p3sim plan save") {
-            val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().map { it.name },
+            val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
                 earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z) })
             file.parentFile.mkdirs()
             file.writeText(gson.toJson(s))

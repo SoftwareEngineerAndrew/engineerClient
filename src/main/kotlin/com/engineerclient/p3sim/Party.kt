@@ -90,11 +90,16 @@ object Party {
     private val preleapAt = IntArray(6)
     private val eeSpotBy = IntArray(6)
     private val holdJob = arrayOfNulls<String>(6)
+    /** Whose leaps each early enterer waits for before moving on ("1" = that section's T1's doer, "ee3"...); null: everyone free. */
+    private val waitsFor = arrayOfNulls<List<String>>(6)
+    /** You've been on the early enterer (leapt onto it). */
+    private val youOn = BooleanArray(6)
     private var lastLeap = 0
+    private val sectionN = IntArray(6)
 
     fun startP3(phase: GoldorPhase) {
         clear()
-        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null)
+        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false)
         planned = 0
         lastLeap = 0
         if (!P3Sim.bots) return
@@ -152,7 +157,7 @@ object Party {
         if (!P3Sim.bots) return
         val n = phase.n
         val s = phase.section
-        if (s != planned) { planned = s; sectionStarted(phase, s) }
+        if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = n; sectionStarted(phase, s) }
         // Jobs someone else (you, on a stack) already did.
         jobs.removeAll { j -> phase.stations.firstOrNull { it.id == j.job }?.done == true || (j.job.startsWith("gate") && phase.gateIsDown(sectionOf(j.job))) }
         youAtEarlyEnter(phase)
@@ -184,6 +189,7 @@ object Party {
         finished.forEach { walkOn(it, n) }
         earlyEnterBots(phase)
         preleaps(phase)
+        releaseEarlyEnterers(phase)
         for (b in bots) move(b, n)
         // Working: at its terminal for the last 2 s before it's done.
         for (b in bots) b.working = next(b)?.takeIf { it.at >= 0 && it.at - n <= 40 }?.let { j -> phase.stations.firstOrNull { it.id == j.job && it.kind == Station.Kind.TERMINAL } }
@@ -200,6 +206,7 @@ object Party {
                 "spot" -> into(m.who)?.let { if (at != null) eeSpotBy[it] = at }
                 "preleap" -> into(m.who)?.let { if (at != null) preleapAt[it] = at }
                 "hold" -> holdJob[s + 1] = "S${s + 1} T${m.who}"
+                "waits" -> into(m.who)?.let { waitsFor[it] = m.args }
                 "leaps" -> botOf(Roles.whoIs(plan, m.who))?.let { b ->
                     if (at != null) leaps += Leap(b, at) {
                         // Back into the section: onto someone still working in it (else you).
@@ -214,7 +221,8 @@ object Party {
         var i = 0
         for (b in bots) {
             b.hold = false
-            if (b.inSection >= s || b === onto) { walkOn(b, n); continue }
+            if (b === onto) { b.hold = true; continue }
+            if (b.inSection >= s) { walkOn(b, n); continue }
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.pos }
             else walkOn(b, n)
@@ -261,12 +269,43 @@ object Party {
             if (holdJob[into] != null && jobs.any { it.bot === b && it.job == holdJob[into] }) b.hold = true
             leaps += Leap(b, lastLeap, target)
         }
-        // The early enterer moves on once everyone free has leapt onto it.
-        if (eeBot != null && eeBot.hold && bots.all { it === eeBot || it.inSection >= into || busy(it) } && leaps.none { it.at > n }) {
-            eeBot.hold = false
-            walkOn(eeBot, n)
+    }
+
+    /**
+     * An early enterer (a bot) moves on from its spot once everyone it waits for has leapt onto it
+     * (the preset's "waits"; else everyone free); at the latest 10 s into the section it entered.
+     */
+    private fun releaseEarlyEnterers(phase: GoldorPhase) {
+        val n = phase.n
+        val s = phase.section
+        for (into in s..(s + 1).coerceAtMost(4)) {
+            val ee = P3Plan.ee(into)?.takeIf { !it.byYou } ?: continue
+            val b = botOf(ee.owner) ?: continue
+            if (!b.hold || !eeArrived[into] || b.inSection < into) continue
+            if (!youOn[into] && Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) youOn[into] = true
+            val waits = waitsFor[into]
+            val ok = when {
+                into == s && n - sectionN[s] >= 200 -> true
+                waits != null -> waits.all { t -> leapt(whoFor(t, into), b, into) }
+                into == s -> leaps.none { it.at > n - 1 }
+                else -> preleapOpen(into, n) && bots.all { it === b || it.inSection >= into || busy(it) } && leaps.none { it.at > n - 1 }
+            }
+            if (ok) { b.hold = false; walkOn(b, n) }
         }
     }
+
+    /** "3" -> who does S[into] T3; "ee3" / "core" -> who early-enters there. */
+    private fun whoFor(token: String, into: Int): DungeonClass? =
+        if (token.all { it.isDigit() }) P3Plan.doer("S$into T$token") else P3Plan.plan().ee[into(token) ?: return null]
+
+    /** [c] has leapt onto [onto] (you: been within 3 blocks of it). */
+    private fun leapt(c: DungeonClass?, onto: Bot, into: Int): Boolean = when {
+        c == null || c == onto.clazz -> true
+        c == P3Sim.myClass -> youOn[into]
+        else -> botOf(c)?.let { it.inSection >= into && leaps.none { l -> l.bot === it } } ?: true
+    }
+
+    private fun preleapOpen(into: Int, n: Int) = n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
 
     /** You're at your early enter: the party leaps onto you (pre-leaps() does it). */
     private fun youAtEarlyEnter(phase: GoldorPhase) {

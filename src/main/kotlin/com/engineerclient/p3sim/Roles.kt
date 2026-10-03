@@ -31,6 +31,9 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK
  * - `leap ee2 12.1`: everyone free pre-leaps onto the ee2 bot at 12.1 s (onto you as soon as you're
  *   there, if it's yours); the others right after their last job
  * - `hold 2`: the next section's 2nd-terminal bot waits on the early-enter spot (doesn't walk on)
+ * - `ee3 waits 1 2 3 4`: the ee3 bot stays on its spot until those have leapt onto it (the next
+ *   section's terminals by number, or `ee3` / `core`...: whoever does that); without it, until
+ *   everyone free has
  * Bots that pre-leapt walk on to their next terminals; at the core, everyone leaps in at once.
  */
 object Roles {
@@ -53,7 +56,8 @@ object Roles {
         ),
         moves = listOf(
             "i4 leaps 8.1 | ee2 spot 11.2 | leap ee2 12.1 | hold 2",
-            "", "", "",
+            "ee3 waits 1 2 3 4",
+            "", "",
         ),
     )
 
@@ -74,8 +78,9 @@ object Roles {
             "terms 3.1 | levers 4.2",
         ),
         moves = listOf(
-            "i4 leaps 7.2 | ee2 spot 8.6 | leap ee2 9.1",
-            "", "", "",
+            "i4 leaps 7.2 | ee2 spot 8.6 | leap ee2 9.1 | ee2 waits ee3 4 5",
+            "ee3 waits 1 2 3 4",
+            "", "",
         ),
     )
 
@@ -91,7 +96,7 @@ object Roles {
     // ------------------------------------------------------------------ parsed
 
     /** A move (see the header): [kind] "leaps", "spot", "preleap" or "hold"; [who] the role token it's about. */
-    class Move(val section: Int, val kind: String, val who: String, val at: Double?)
+    class Move(val section: Int, val kind: String, val who: String, val at: Double?, val args: List<String> = emptyList())
 
     class Plan(
         /** Job -> the classes it's in, in role order (two or more: a stack). */
@@ -177,7 +182,7 @@ object Roles {
                 when {
                     ts.size >= 2 && ts[0] == "leap" -> moves += Move(s, "preleap", ts[1], ts.getOrNull(2)?.toDoubleOrNull())
                     ts.size >= 2 && ts[0] == "hold" -> moves += Move(s, "hold", ts[1], null)
-                    ts.size >= 2 -> moves += Move(s, ts[1], ts[0], ts.getOrNull(2)?.toDoubleOrNull())
+                    ts.size >= 2 -> moves += Move(s, ts[1], ts[0], ts.getOrNull(2)?.toDoubleOrNull(), ts.drop(2))
                 }
             }
         }

@@ -31,7 +31,7 @@ object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
 
     /** A random draw, weighted as the first opens of each stand came (terminals.md, n = 156). */
-    fun randomType(): Type = weighted(listOf(Type.ORDER to 29, Type.STARTS to 30, Type.PANES to 27, Type.SELECT to 26, Type.MELODY to 25, Type.RUBIX to 19))
+    fun randomType(): Type = weighted(listOf(Type.ORDER to 29, Type.STARTS to 30, Type.PANES to 27, Type.SELECT to 26, Type.MELODY to 25, Type.RUBIX to 19).filter { it.first != Type.MELODY || !P3Sim.noMelodies })
 
     fun <T> weighted(w: List<Pair<T, Int>>): T {
         var r = kotlin.random.Random.nextInt(w.sumOf { it.second })

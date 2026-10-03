@@ -53,7 +53,8 @@ object P3Sim : Module(
     val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
     val goldorKillS = +NumberSetting("Goldor Kill Time", 57, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of 201 recorded kills: 57).")
     val termCooldownS = +NumberSetting("Terminator Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between Terminator shots (Better PF recordings: volleys ~5 ticks apart at full attack speed).")
-    val termSpreadS = +NumberSetting("Terminator Spread", 5.5, 0.0, 15.0, 0.5, unit = "°", desc = "Degrees between the middle arrow and each side arrow (recordings: the side arrows ~11° apart).")
+    val termSpreadS = +NumberSetting("Terminator Arrow Spread", 4.0, 0.0, 15.0, 0.5, unit = "°", desc = "Degrees between the middle arrow and each side arrow.")
+    val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1, 10, 1, unit = "/s", desc = "Charges back each second (20 max). Recordings: ~3 a second; the wiki says 2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest at once).")
     val realMasksS = +BooleanSetting("Real Masks", false, desc = "Masks are real helmets: only the one you wear can save you, swap them in your inventory (cooldowns stay with each mask). Off: whichever is ready saves you.")
@@ -76,6 +77,7 @@ object P3Sim : Module(
     val termCooldown: Int get() = termCooldownS.value.toInt()
     val termSpread: Float get() = termSpreadS.value.toFloat()
     val lava: Boolean get() = lavaS.value
+    val noMelodies: Boolean get() = noMelodiesS.value
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
     val realMasks: Boolean get() = realMasksS.value
