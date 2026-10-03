@@ -383,7 +383,7 @@ object Party {
     val STANDS: Map<String, Vec3> = mapOf(
         "S1 T1" to Vec3(109.1, 118.8, 79.6), "S1 T2" to Vec3(92.3, 121.0, 99.7), "S1 T3" to Vec3(110.3, 113.0, 73.8), "S1 T4" to Vec3(92.1, 112.0, 92.7),
         "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.1, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),
-        "S2 T1" to Vec3(69.0, 109.0, 124.7), "S2 T2" to Vec3(59.7, 120.0, 125.3), "S2 T3" to Vec3(46.4, 109.0, 122.6), "S2 T4" to Vec3(40.2, 124.0, 124.7), "S2 T5" to Vec3(39.2, 109.0, 140.5),
+        "S2 T1" to Vec3(69.0, 109.0, 124.7), "S2 T2" to Vec3(59.7, 120.0, 125.3), "S2 T3" to Vec3(46.4, 109.0, 122.6), "S2 T4" to Vec3(39.2, 109.0, 140.5), "S2 T5" to Vec3(40.2, 124.0, 124.7),
         "S2 low lever" to Vec3(28.3, 124.0, 128.7), "S2 high lever" to Vec3(25.6, 132.2, 137.5), "S2 Lights" to Vec3(60.6, 134.0, 139.0),
         "S3 T1" to Vec3(0.0, 109.0, 112.2), "S3 T2" to Vec3(1.0, 119.0, 93.6), "S3 T3" to Vec3(16.5, 123.0, 93.7), "S3 T4" to Vec3(0.8, 109.0, 77.5),
         "S3 west lever" to Vec3(4.3, 123.1, 55.4), "S3 east lever" to Vec3(13.0, 122.4, 55.7), "S3 Arrows" to Vec3(0.5, 120.0, 77.5),
