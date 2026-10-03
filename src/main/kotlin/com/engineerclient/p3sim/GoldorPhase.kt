@@ -109,7 +109,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     override fun stop() {
-        P3Traps.clear()
         Terminals.closeAll()
         devices.stop()
         goldor.remove()
@@ -140,10 +139,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
         if (section <= 4 && n % 60 == 59) deathTick()
         goldor.tick(this)
-        // Every 40 ticks Goldor carves an 11x11x11 box around himself; every 200 a TNT cube near the section in progress goes.
-        if (n % 40 == 37 && !goldor.flying) carve()
-        if (n >= 237 && (n - 237) % 200 == 0 && section <= 4) tnt()
-        P3Traps.tick(this)
+        // Goldor's carving and the TNT cubes are left out: the arena stays whole (practice, not scenery).
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
@@ -260,30 +256,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     private fun inSafeSpot(v: Vec3) = CORE_BOX.contains(v) || STRIP.contains(v)
 
-    private fun carve() {
-        val g = goldor.position
-        val x0 = Math.floor(g.x).toInt(); val z0 = Math.floor(g.z).toInt()
-        val air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()
-        val level = Sim.level
-        val p = BlockPos.MutableBlockPos()
-        for (x in x0 - 5..x0 + 5) for (z in z0 - 5..z0 + 5) for (y in 114..124) {
-            p.set(x, y, z)
-            if (!level.getBlockState(p).isAir) Blocks.set(p.immutable(), air)
-        }
-    }
-
-    private val tntDone = HashSet<Int>()
-
-    /** One TNT cube along the section in progress (the first: S1's at x99-101 z85-87). */
-    private fun tnt() {
-        val i = TNT_BY_SECTION[section.coerceIn(1, 4)].firstOrNull { it !in tntDone } ?: return
-        tntDone += i
-        val (xs, ys, zs) = TNT_CUBES[i]
-        val air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()
-        for (x in xs..xs + 2) for (y in ys..ys + 2) for (z in zs..zs + 2) Blocks.set(BlockPos(x, y, z), air)
-        P3Traps.arm(xs, ys, zs)
-    }
-
     // ------------------------------------------------------------------ the core
 
     private fun openCore() {
@@ -357,8 +329,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         /** Gate i/i+1, by i. */
         val GATE_BOXES = arrayOf(AABB.ofSize(Vec3.ZERO, 0.0, 0.0, 0.0), AABB(93.0, 113.0, 121.0, 108.0, 138.0, 125.0), AABB(16.0, 113.0, 125.0, 20.0, 138.0, 140.0), AABB(1.0, 113.0, 48.0, 16.0, 138.0, 52.0))
         /** TNT cubes (min corner) along the track, and the ones each section's timer takes. */
-        val TNT_CUBES = listOf(Triple(99, 127, 85), Triple(99, 127, 103), Triple(71, 127, 131), Triple(53, 127, 131), Triple(35, 127, 131), Triple(7, 127, 103), Triple(7, 127, 85), Triple(7, 127, 67), Triple(35, 129, 39), Triple(53, 127, 39), Triple(71, 129, 39))
-        val TNT_BY_SECTION = arrayOf(listOf(), listOf(0, 1), listOf(2, 3, 4), listOf(5, 6, 7), listOf(8, 9, 10))
         val GATE_CENTRES = arrayOf(Vec3.ZERO, Vec3(100.0, 118.0, 122.5), Vec3(17.5, 118.0, 132.0), Vec3(8.0, 118.0, 49.5))
     }
 
