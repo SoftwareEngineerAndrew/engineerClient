@@ -250,7 +250,7 @@ class P2Storm : Fight.Phase("P2") {
         pinnedAt = t
         lastCrush = pl
         takeoffAt = -1
-        enrageAt = if (P3Sim.bots && Party.myRole != Party.Role.CORE) t + pinLength() else -1
+        enrageAt = if (P3Sim.bots && P3Sim.myClass != com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.MAGE) t + pinLength() else -1
     }
 
     /** The enrage line; he holds still until takeoff 2-3 after it (median 2, movement §3.5). */

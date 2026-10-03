@@ -100,8 +100,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             // The red pad's drop hole: its frames run 24-30 ticks after this line.
             Blocks.play("p3start")
         } else if (from == 5) {
+            com.engineerclient.practice.TermInfo.simStart(5)
             openCore()
         } else {
+            com.engineerclient.practice.TermInfo.simStart(from)
             Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
         }
     }

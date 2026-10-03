@@ -1,9 +1,6 @@
 package com.engineerclient.p3sim
 
-import com.google.common.collect.ImmutableMultimap
 import com.mojang.authlib.GameProfile
-import com.mojang.authlib.properties.Property
-import com.mojang.authlib.properties.PropertyMap
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -16,75 +13,56 @@ import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import java.util.UUID
-import kotlin.math.abs
 import kotlin.random.Random
 
 /**
- * The other four of the party: bots that play the five-role P3 plan of
- * docs/mechanics/terminal-roles.md (ss, i4, ee3, 42·gates, ee2·core), each job at the pace of the
- * fast Better PF runs (terminal solve times by window type, levers 4 ticks, gates 9, leaps 8/14,
- * walks by the measured fit). Your role is yours: no bot does it, and the menu lists its jobs.
+ * The other four of the party: one bot per class you're not, in leap menu slots 1-4 ([P3Plan.botOrder]).
+ *
+ * In P3 they do everything of [P3Plan] that isn't yours: each job at a random time between the
+ * plan's bot times after its section starts (a section's last one held until you're at your early
+ * enter, if you do one). They walk to their jobs, stand on early-enter spots, and leap onto whoever
+ * is early-entering: onto a bot when the door opens, onto you as soon as you're there (pre moves).
  */
 object Party {
-    enum class Role(val label: String, val clazz: DungeonClass, val botName: String) {
-        SS("ss", DungeonClass.HEALER, "SimonBot"),
-        I4("i4", DungeonClass.BERSERK, "FourthBot"),
-        EE3("ee3", DungeonClass.ARCHER, "ArrowBot"),
-        GATES("42·gates", DungeonClass.TANK, "GateBot"),
-        CORE("ee2·core", DungeonClass.MAGE, "CoreBot"),
-    }
+    /** Hypixel's five classes, in their usual order. */
+    val CLASSES by lazy { listOf(DungeonClass.HEALER, DungeonClass.BERSERK, DungeonClass.ARCHER, DungeonClass.TANK, DungeonClass.MAGE) }
 
-    val myRole: Role get() = Role.entries[P3Sim.role.coerceIn(0, 4)]
+    /** Bot walking speed, blocks a tick (sprinting at speed ~400 with turns and climbs). */
+    private const val WALK = 0.95
 
-    class Bot(val role: Role) {
-        /** Replaying a real run's player (Ghosts), or null for the scripted plan. */
-        var ghost: Ghosts.GhostPlayer? = null
-        var heldIx = -1
-        val name get() = ghost?.name ?: role.botName
-        val clazz get() = role.clazz
+    class Bot(val clazz: DungeonClass, val slot: Int) {
+        val name = clazz.name.lowercase().replaceFirstChar { it.uppercase() } + "Bot"
         var entity: Mannequin? = null
         var pos: Vec3 = Vec3.ZERO
         var yaw = 0f
-        /** Walking: from, to, ticks, elapsed. */
-        var from: Vec3 = Vec3.ZERO
+        /** Where it's walking to (null: standing). */
         var to: Vec3? = null
-        var moveTicks = 0
-        var moved = 0
-        var jobs = ArrayDeque<Job>()
-        var job: Job? = null
-        var wait = 0
+        /** At this terminal doing it (others see "already using"). */
         var working: Station? = null
-        val idle get() = to == null && wait <= 0
-        /** Stood at this terminal waiting for its section (it opens 4 after the door, not 6). */
-        var waitedAt: Station? = null
-        /** Sent to the core (section 5), whatever was left of the plan. */
-        var cored = false
+        /** Leapt onto you at your early enter: stays with you until the next section starts. */
+        var parked = false
     }
-
-    /** One step of a bot's plan; [run] returns true when the step is over. */
-    class Job(val what: String, val section: Int = 0, val run: Bot.(GoldorPhase) -> Boolean)
 
     private val bots = ArrayList<Bot>()
 
-    /** The bots (for Odin's party list), whether or not they're spawned. */
+    /** The bots, in leap slot order (rebuilt when your class or the order changes). */
     fun bots(): List<Bot> {
-        if (bots.isEmpty() || bots.any { it.role == myRole }) { clear(); bots.clear(); Role.entries.filter { it != myRole }.forEach { bots += Bot(it) } }
-        val run = Ghosts.run
-        bots.forEach { it.ghost = run?.player(it.clazz.name) }
+        val order = P3Plan.botOrder()
+        if (bots.map { it.clazz } != order) { clear(); bots.clear(); order.forEachIndexed { i, c -> bots += Bot(c, i + 1) } }
         return bots
     }
 
-    fun bot(role: Role) = bots.firstOrNull { it.role == role }
+    fun bot(slot: Int) = bots().getOrNull(slot - 1)
 
-    /** Bumped by every clear: a leap queued before a restart doesn't move the new bots. */
+    /** Bumped by every clear: anything queued before a restart is dropped. */
     private var generation = 0
 
     fun clear() {
         generation++
-        bots.forEach { it.entity?.discard(); it.entity = null; it.jobs.clear(); it.job = null; it.to = null; it.working = null; it.wait = 0; it.cored = false }
+        jobs.clear(); leaps.clear()
+        bots.forEach { it.entity?.discard(); it.entity = null; it.to = null; it.working = null }
     }
 
-    /** Is a bot doing [st] right now. */
     fun busyAt(st: Station) = bots.any { it.working === st }
 
     /** Everyone (the bots) inside [box]. */
@@ -92,52 +70,154 @@ object Party {
 
     // ------------------------------------------------------------------ P3
 
+    /** A bot's job: [job] (a station id or "gate k") done by [bot] at n = [at]. */
+    private class Job(val job: String, val section: Int, val bot: Bot, val at: Int)
+
+    private val jobs = ArrayList<Job>()
+    /** Leaps queued: [bot] onto [onto] (null = you) at n = [at]. */
+    private class Leap(val bot: Bot, val onto: Bot?, val at: Int)
+    private val leaps = ArrayList<Leap>()
+    private var planned = 0
+    /** Early enters you've reached (by section entered). */
+    private val youArrived = BooleanArray(6)
+
     fun startP3(phase: GoldorPhase) {
         clear()
+        youArrived.fill(false)
+        planned = 0
         if (!P3Sim.bots) return
-        Ghosts.run?.let { r ->
-            Ghosts.start()
-            for (b in bots()) spawn(b, b.ghost?.pos(r.starts[phase.from.coerceIn(1, 5)]) ?: startPos(b.role, phase.from))
-            return
-        }
-        for (b in bots()) {
-            spawn(b, startPos(b.role, phase.from))
-            // Steps of earlier sections are dropped, except stations still to do (i4's target): those go last, before the core.
-            val all = plan(b.role)
-            val kept = all.filter { it.first >= phase.from }.map { it.second }
-            val owed = all.filter { it.first < phase.from && it.second.section >= phase.from }.map { it.second }
-            b.jobs = ArrayDeque(kept.dropLast(1) + owed + kept.last())
-        }
+        val from = phase.from.coerceIn(1, 5)
+        val ee = P3Plan.ee(from)?.takeIf { !it.byYou }
+        for (b in bots()) spawn(b, if (ee != null) ee.spot.add(Random.nextDouble(-1.0, 1.0), 0.0, Random.nextDouble(-1.0, 1.0)) else startPos(from))
     }
-
-    /** n when the current section's door opened (its terminals' first-completion floor). */
-    private var doorN = 0
-    private var doorOf = 0
 
     fun tickP3(phase: GoldorPhase) {
         if (!P3Sim.bots) return
-        Ghosts.run?.let { Ghosts.tick(phase, it); return }
-        if (phase.section != doorOf) { doorOf = phase.section; doorN = phase.n }
-        for (b in bots.toList()) {
-            if (b.entity == null) continue
-            // The core is open: everyone heads in, whatever they were stuck on.
-            if (phase.section >= 5 && !b.cored) { b.cored = true; b.job = null; b.working = null; b.wait = 0; b.jobs = ArrayDeque(listOf(core())) }
-            // Moving.
-            b.to?.let { to ->
-                b.moved++
-                val f = (b.moved.toDouble() / b.moveTicks).coerceAtMost(1.0)
-                b.pos = b.from.add(to.subtract(b.from).scale(f))
-                if (f >= 1.0) b.to = null
+        val n = phase.n
+        val s = phase.section
+        if (s != planned) { planned = s; sectionStarted(phase, s) }
+        earlyEnters(phase)
+        // Leaps that are due.
+        leaps.removeAll { l ->
+            if (n < l.at) return@removeAll false
+            val target = l.onto?.pos ?: Sim.player?.position()
+            if (target != null) { l.bot.pos = target; l.bot.to = null; if (l.onto == null) l.bot.parked = true }
+            true
+        }
+        // Jobs that are due (a section's last held while you're on your way to your early enter).
+        val held = holding(phase)
+        jobs.removeAll { j ->
+            if (n < j.at) return@removeAll false
+            val st = phase.stations.firstOrNull { it.id == j.job }
+            if (st != null) {
+                if (st.done) return@removeAll true
+                if (st.section == s && held && phase.stations.count { it.section == s && !it.done } == 1) return@removeAll false
+                if (st.kind == Station.Kind.TERMINAL && Terminals.inUse(st)) return@removeAll false
+                if (st.kind == Station.Kind.LEVER) phase.pullLever(st, j.bot.name) else st.complete(j.bot.name)
+                if (st.kind == Station.Kind.DEVICE) phase.devices.shownDone(st.label)
+                if (!st.done) return@removeAll false
+            } else {
+                val k = j.job.removePrefix("gate ").toIntOrNull() ?: return@removeAll true
+                if (!phase.gateIsDown(k) && !phase.blowGate(k, j.bot.name)) return@removeAll false
             }
-            if (b.wait > 0) b.wait--
-            if (b.idle) {
-                val j = b.job ?: b.jobs.removeFirstOrNull()
-                b.job = j
-                if (j != null && j.run(b, phase)) b.job = null
-            }
-            place(b)
+            j.bot.working = null
+            next(j.bot)?.let { goTo(j.bot, spotOf(it.job)) }
+            true
+        }
+        for (b in bots) move(b)
+        // Working: at its terminal for the last 2 s before it's done.
+        for (b in bots) b.working = next(b)?.takeIf { it.at - n <= 40 }?.let { j -> phase.stations.firstOrNull { it.id == j.job && it.kind == Station.Kind.TERMINAL } }
+    }
+
+    /** Section [s] began: schedule its jobs (and the later devices'), bots walk to theirs or leap onto the early enterer. */
+    private fun sectionStarted(phase: GoldorPhase, s: Int) {
+        val n = phase.n
+        jobs.removeAll { it.section < s }
+        bots.forEach { it.parked = false }
+        if (s >= 5) { core(phase); return }
+        val todo = P3Plan.jobsIn(s).filter { !P3Plan.isMine(it) }.filter { j ->
+            phase.stations.firstOrNull { it.id == j }?.done != true && !(j.startsWith("gate") && phase.gateIsDown(s))
+        }
+        // The bot early-entering the next section is busy getting there.
+        val eeBot = P3Plan.ee(s + 1)?.takeIf { !it.byYou }?.let { bot(it.who) }
+        val free = bots.filter { it !== eeBot }.ifEmpty { bots.toList() }
+        todo.forEachIndexed { i, job ->
+            val owner = P3Plan.DEFAULT_OWNER[job]?.let { c -> free.firstOrNull { it.clazz == c } } ?: free[i % free.size]
+            val at = n + (20 * (P3Plan.botMin + Random.nextDouble() * (P3Plan.botMax - P3Plan.botMin).coerceAtLeast(0.0))).toInt()
+            jobs += Job(job, s, owner, at)
+        }
+        // Into this section: everyone not already in it leaps onto the bot that early-entered, or walks to their first job.
+        val ee = P3Plan.ee(s)
+        val onto = ee?.takeIf { !it.byYou }?.let { bot(it.who) }
+        bots.forEachIndexed { i, b ->
+            if (onto != null && b !== onto && !youArrived[s]) leaps += Leap(b, onto, n + 2 + i * gapTicks())
+            else next(b)?.let { goTo(b, spotOf(it.job)) }
+        }
+        if (eeBot != null) {
+            val e = P3Plan.ee(s + 1)!!
+            val gen = generation
+            Fight.later((e.after * 20).toInt(), "bot early enter") { if (gen == generation) goTo(eeBot, e.spot) }
+        }
+        // After a leap, on to their jobs.
+        if (onto != null) {
+            val gen = generation
+            Fight.later(4 + bots.size * gapTicks(), "bots to jobs") { if (gen == generation) bots.forEach { b -> next(b)?.let { goTo(b, spotOf(it.job)) } } }
         }
     }
+
+    /** Early enters you do: once you're at the spot, the bots leap onto you one by one. */
+    private fun earlyEnters(phase: GoldorPhase) {
+        val ee = P3Plan.ee(phase.section + 1)?.takeIf { it.byYou } ?: return
+        if (youArrived[ee.into]) return
+        val p = Sim.player ?: return
+        if (p.position().distanceTo(ee.spot) > 3.0) return
+        youArrived[ee.into] = true
+        val n = phase.n
+        bots.forEachIndexed { i, b -> leaps += Leap(b, null, n + (i + 1) * gapTicks()) }
+        Sim.note("§aAt your ${ee.label}§7: the party leaps to you.")
+    }
+
+    /** Is a section's last job held for you (you early-enter the next one and aren't there yet). */
+    private fun holding(phase: GoldorPhase): Boolean {
+        if (!P3Plan.waitForYou) return false
+        val ee = P3Plan.ee(phase.section + 1)?.takeIf { it.byYou } ?: return false
+        return !youArrived[ee.into]
+    }
+
+    /** The core: everyone in (onto the core early enterer if there is one). */
+    private fun core(phase: GoldorPhase) {
+        val ee = P3Plan.ee(5)
+        val onto = ee?.takeIf { !it.byYou }?.let { bot(it.who) }
+        bots.forEachIndexed { i, b ->
+            if (onto != null && b !== onto) leaps += Leap(b, onto, phase.n + 2 + i * gapTicks())
+            else goTo(b, CORE_SPOT.add((i - 1.5) * 1.5, 0.0, 2.0 + Random.nextDouble()))
+        }
+        if (onto != null) {
+            val gen = generation
+            Fight.later(4 + bots.size * gapTicks(), "bots into core") { if (gen == generation) bots.forEachIndexed { i, b -> goTo(b, CORE_SPOT.add((i - 1.5) * 1.5, 0.0, 2.0 + Random.nextDouble())) } }
+        }
+    }
+
+    private fun gapTicks() = (P3Plan.leapGap * 20).toInt().coerceAtLeast(1)
+
+    private fun next(b: Bot) = jobs.filter { it.bot === b }.minByOrNull { it.at }
+
+    private fun spotOf(job: String): Vec3 = STANDS[job] ?: job.removePrefix("gate ").toIntOrNull()?.let { GATES.getOrNull(it) } ?: CORE_SPOT
+
+    private fun goTo(b: Bot, at: Vec3) { if (!b.parked) b.to = at }
+
+    private fun move(b: Bot) {
+        val to = b.to
+        if (to != null) {
+            val d = to.subtract(b.pos)
+            val len = d.length()
+            if (len <= WALK) { b.pos = to; b.to = null } else b.pos = b.pos.add(d.scale(WALK / len))
+            if (Math.abs(d.x) + Math.abs(d.z) > 0.01) b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat()
+        }
+        place(b)
+    }
+
+    // ------------------------------------------------------------------ outside P3
 
     /** The bots standing still at [spots] (P1, P2: leap targets). */
     fun standAt(spots: List<Vec3>) {
@@ -151,15 +231,12 @@ object Party {
 
     private fun spawn(b: Bot, at: Vec3) {
         val m = Mannequin(EntityType.MANNEQUIN, Sim.level)
-        val skin = b.ghost?.skin?.takeIf { it.isNotEmpty() }
-        val props = if (skin == null) PropertyMap.EMPTY else PropertyMap(ImmutableMultimap.of("textures", Property("textures", skin)))
-        m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(GameProfile(UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name, props)))
-        b.heldIx = -1
+        m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(GameProfile(UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name)))
         m.setCustomName(Component.literal("§a${b.name} §7(${b.clazz.name[0]})"))
         m.isCustomNameVisible = true
         m.isInvulnerable = true
         m.setNoGravity(true)
-        m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(if (b.role == Role.I4) Items.BOW else Items.DIAMOND_PICKAXE))
+        m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(if (b.clazz == DungeonClass.ARCHER || b.clazz == DungeonClass.BERSERK) Items.BOW else Items.DIAMOND_PICKAXE))
         hideDescription(m)
         b.pos = at
         m.snapTo(at.x, at.y, at.z, 0f, 0f)
@@ -171,172 +248,20 @@ object Party {
 
     private fun place(b: Bot) {
         val e = b.entity ?: return
-        val to = b.to
-        if (to != null) { val d = to.subtract(b.from); if (abs(d.x) + abs(d.z) > 0.01) b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat() }
         e.snapTo(b.pos.x, b.pos.y, b.pos.z, b.yaw, 0f)
         e.yHeadRot = b.yaw; e.yBodyRot = b.yaw
     }
 
-    // ------------------------------------------------------------------ moves
-
-    /** Walks to [at]: ticks = 5.3 + 1.06 x horizontal + 0.78 x climb (the measured fit). */
-    private fun Bot.walk(at: Vec3) {
-        val h = Math.hypot(at.x - pos.x, at.z - pos.z)
-        val climb = (at.y - pos.y).coerceAtLeast(0.0)
-        go(at, (5.3 + 1.06 * h + 0.78 * climb).toInt().coerceAtLeast(1))
-    }
-
-    private fun Bot.go(at: Vec3, ticks: Int) { from = pos; to = at; moveTicks = ticks; moved = 0 }
-
-    /** A Spirit Leap to [role]'s bot (or you): lands 8 ticks after (14 at a door). */
-    private fun Bot.leap(role: Role, atDoor: Boolean) {
-        val target = if (role == myRole) Sim.player?.position() else bot(role)?.pos
-        target ?: return
-        wait = if (atDoor) 14 else 8
-        val gen = generation
-        Fight.later(wait - 1, "bot leap") { if (gen == generation) { pos = target; to = null } }
-    }
-
-    // ------------------------------------------------------------------ jobs
-
-    private fun st(phase: GoldorPhase, s: Int, label: String) = phase.station(s, label)
-
-    /** Go to [label] in S[s], wait until it can be done, do it in its time. Skipped if done already. */
-    private fun doIt(s: Int, label: String) = Job("S$s $label", s) { phase ->
-        val st = st(phase, s, label)
-        if (st.done) { working = null; return@Job true }
-        val spot = STANDS["S$s $label"] ?: st.at
-        if (pos.distanceTo(spot) > 1.5 && working !== st) { walk(spot); return@Job false }
-        val early = st.kind == Station.Kind.DEVICE && s > phase.section
-        if (phase.section != s && !early) { waitedAt = st; return@Job false }
-        if (st.kind == Station.Kind.TERMINAL && Terminals.inUse(st)) return@Job false
-        if (working !== st) {
-            working = st
-            // A terminal opens 4 after the door if you stood at it, else 6 after you got there; the
-            // section's first completion is never under 28 (S2) or 42 (S3, S4) after its door (terminal-roles.md rule 1).
-            val solve = solveTime(st, phase)
-            wait = if (st.kind != Station.Kind.TERMINAL) solve else {
-                val open = if (waitedAt === st) 4 else 6
-                val floor = if (s >= 2 && phase.stations.none { it.section == s && it.done }) (if (s == 2) 28 else 42) - (phase.n - doorN) else 0
-                maxOf(open + solve, floor)
-            }
-            waitedAt = null
-            return@Job false
-        }
-        working = null
-        if (st.kind == Station.Kind.LEVER) phase.pullLever(st, name) else st.complete(name)
-        if (st.kind == Station.Kind.DEVICE) phase.devices.shownDone(st.label)
-        st.done
-    }
-
-    private fun solveTime(st: Station, phase: GoldorPhase): Int = when (st.kind) {
-        Station.Kind.LEVER -> 4
-        Station.Kind.TERMINAL -> when (st.nextType()) {
-            // The fast set's p10 / p25 / median (terminal-roles.md); melody 87-234, mode ~152.
-            Terminals.Type.ORDER -> solve(49, 52, 56); Terminals.Type.PANES -> solve(35, 38, 40); Terminals.Type.RUBIX -> solve(27, 29, 35)
-            Terminals.Type.SELECT -> solve(20, 23, 27); Terminals.Type.STARTS -> solve(18, 23, 28)
-            Terminals.Type.MELODY -> triangular(90.0, 152.0, 234.0)
-        }
-        Station.Kind.DEVICE -> when (st.label) {
-            // Simon Says: done at ~251 (236-259 in fast runs); the target ~147 (72-213); Lights 64 after entering S2; Arrow Align 12.
-            "SS" -> (Random.nextInt(236, 260) - phase.n).coerceAtLeast(1)
-            "Target" -> (Random.nextInt(100, 200) - phase.n).coerceAtLeast(1)
-            "Lights" -> jitter(30)
-            else -> jitter(12)
-        }
-    }
-
-    /** A draw through the measured quantiles: 10% under p10, 15% to p25, 25% to the median, the rest a tail to 1.35x. */
-    private fun solve(p10: Int, p25: Int, p50: Int): Int {
-        val u = Random.nextDouble()
-        val v = when {
-            u < 0.10 -> p10 * (0.85 + 0.15 * u / 0.10)
-            u < 0.25 -> p10 + (p25 - p10) * (u - 0.10) / 0.15
-            u < 0.50 -> p25 + (p50 - p25) * (u - 0.25) / 0.25
-            else -> p50 * (1.0 + 0.35 * ((u - 0.5) / 0.5).let { it * it })
-        }
-        return v.toInt().coerceAtLeast(1)
-    }
-
-    private fun triangular(a: Double, c: Double, b: Double): Int {
-        val u = Random.nextDouble()
-        val f = (c - a) / (b - a)
-        return (if (u < f) a + Math.sqrt(u * (b - a) * (c - a)) else b - Math.sqrt((1 - u) * (b - a) * (b - c))).toInt()
-    }
-
-    private fun jitter(t: Int) = (t * (0.8 + Random.nextDouble() * 0.45)).toInt().coerceAtLeast(1)
-
-    private fun gate(s: Int) = Job("gate $s") { phase ->
-        if (phase.gateIsDown(s)) { if (working === GATE_MARK) working = null; return@Job true }
-        val spot = GATES[s]
-        if (pos.distanceTo(spot) > 1.5) { walk(spot); return@Job false }
-        if (phase.section < s) return@Job false
-        if (working !== GATE_MARK) { wait = 9; working = GATE_MARK; return@Job false }
-        working = null
-        phase.blowGate(s, name)
-        true
-    }
-
-    private fun leapTo(role: Role, atDoor: Boolean = false) = Job("leap ${role.label}") { leap(role, atDoor); true }
-    private fun walkTo(at: Vec3) = Job("walk") { phase -> if (pos.distanceTo(at) > 1.0) { walk(at); false } else true }
-    private fun untilSection(s: Int) = Job("wait S$s") { phase -> phase.section >= s }
-    /** Waits for n = [n], or for section [or] to start (whichever first). */
-    private fun untilN(n: Int, or: Int) = Job("wait $n") { phase -> phase.n >= n || phase.section >= or }
-    private fun core() = Job("core") { phase ->
-        if (phase.section < 5) return@Job false
-        // First in at 11 (the core role), the last at ~22 (terminal-roles.md).
-        if (!GoldorPhase.CORE_BOX.contains(pos)) go(CORE_SPOT.add(Random.nextDouble(-2.0, 2.0), 0.0, Random.nextDouble(0.0, 3.0)), if (role == Role.CORE) 11 else 12 + Random.nextInt(14))
-        true
-    }
-
-    private val GATE_MARK = Station(Station.Kind.LEVER, 0, Vec3.ZERO, "gate")
-
-    /** Each role's plan, by section (pairs of the section the step belongs to and the step). */
-    private fun plan(role: Role): List<Pair<Int, Job>> = when (role) {
-        Role.SS -> listOf(
-            1 to doIt(1, "SS"),
-            2 to untilSection(2), 2 to doIt(2, "T1"),
-            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "west lever"), 3 to doIt(3, "east lever"), 3 to leapTo(Role.CORE),
-            4 to untilN(481, 4), 4 to doIt(4, "low lever"), 4 to doIt(4, "high lever"), 4 to doIt(4, "T4"),
-            5 to core(),
-        )
-        Role.I4 -> listOf(
-            1 to doIt(4, "Target"), 1 to leapTo(Role.SS), 1 to doIt(1, "west lever"), 1 to gate(1),
-            2 to untilSection(2), 2 to leapTo(Role.CORE, true), 2 to doIt(2, "high lever"), 2 to doIt(2, "T5"),
-            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "T3"), 3 to leapTo(Role.EE3), 3 to doIt(3, "Arrows"), 3 to leapTo(Role.CORE),
-            4 to untilSection(4), 4 to doIt(4, "T1"),
-            5 to core(),
-        )
-        Role.EE3 -> listOf(
-            1 to doIt(1, "T1"), 1 to leapTo(Role.SS), 1 to doIt(1, "east lever"),
-            2 to untilSection(2), 2 to leapTo(Role.GATES, true), 2 to doIt(2, "T4"), 2 to walkTo(STANDS.getValue("S3 T1")),
-            3 to untilSection(3), 3 to doIt(3, "T1"), 3 to leapTo(Role.GATES), 3 to doIt(3, "T4"),
-            4 to untilSection(4), 4 to leapTo(Role.GATES, true), 4 to doIt(4, "T3"),
-            5 to core(),
-        )
-        Role.GATES -> listOf(
-            1 to doIt(1, "T4"), 1 to doIt(1, "T2"), 1 to untilN(140, 2), 2 to walkTo(STANDS.getValue("S2 T3")),
-            2 to doIt(2, "T3"), 2 to leapTo(Role.EE3), 2 to gate(2),
-            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "T2"), 3 to leapTo(Role.SS), 3 to gate(3), 3 to leapTo(Role.CORE),
-            4 to untilSection(4), 4 to doIt(4, "T2"),
-            5 to core(),
-        )
-        Role.CORE -> listOf(
-            1 to doIt(1, "T3"), 1 to untilN(108, 2), 2 to doIt(2, "Lights"),
-            2 to untilSection(2), 2 to doIt(2, "T2"), 2 to leapTo(Role.EE3), 2 to doIt(2, "low lever"), 2 to walkTo(STRIP),
-            5 to core(),
-        )
-    }
-
-    private fun startPos(role: Role, from: Int): Vec3 = when (from) {
-        1 -> when (role) { Role.I4 -> STANDS.getValue("S4 Target"); else -> STANDS.getValue("S1 SS").add(Random.nextDouble(-1.5, 0.0), 0.0, Random.nextDouble(-1.5, 1.5)) }
+    private fun startPos(from: Int): Vec3 = when (from) {
+        1 -> STANDS.getValue("S1 SS").add(Random.nextDouble(-1.5, 0.0), 0.0, Random.nextDouble(-1.5, 1.5))
         2 -> GoldorPhase.GATE_CENTRES[1].add(Random.nextDouble(-2.0, 2.0), -3.0, 3.0)
         3 -> GoldorPhase.GATE_CENTRES[2].add(-3.0, -3.0, Random.nextDouble(-2.0, 2.0))
-        4 -> STRIP.add(Random.nextDouble(-4.0, 4.0), 0.0, 0.0)
         else -> STRIP.add(Random.nextDouble(-4.0, 4.0), 0.0, 0.0)
     }
 
-    /** Where a player stands to do each station (median from the recordings, terminal-roles.md). */
+    // ------------------------------------------------------------------ places
+
+    /** Where a player stands to do each job (median from the recordings, terminal-roles.md). */
     val STANDS: Map<String, Vec3> = mapOf(
         "S1 T1" to Vec3(109.1, 118.8, 79.6), "S1 T2" to Vec3(92.3, 121.0, 99.7), "S1 T3" to Vec3(110.3, 113.0, 73.8), "S1 T4" to Vec3(92.1, 112.0, 92.7),
         "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.1, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),
@@ -351,12 +276,9 @@ object Party {
     val STRIP = Vec3(54.6, 115.0, 51.5)
     val CORE_SPOT = Vec3(54.5, 115.0, 58.0)
 
-    /** Your role's jobs, for the menu. */
-    fun myJobs(): List<String> = Ghosts.run?.let { Ghosts.myJobs(it) } ?: when (myRole) {
-        Role.SS -> listOf("S1: Simon Says", "S2: T1", "S3: west lever, east lever, then the strip", "S4: in at 481: low lever, high lever, T4")
-        Role.I4 -> listOf("S1: the target (S4 device) from the plate, west lever, gate 1/2", "S2: high lever, T5", "S3: T3, leap ee3: Arrow Align, leap core (strip)", "S4: T1")
-        Role.EE3 -> listOf("S1: T1, east lever", "S2: T4, then into S3 at T1", "S3: T1, leap gates: T4", "S4: T3")
-        Role.GATES -> listOf("S1: T4, T2, into S2 at 181 (T3)", "S2: T3, gate 2/3", "S3: T2, leap ss: gate 3/4, leap core (strip)", "S4: T2")
-        Role.CORE -> listOf("S1: T3, into S2 at 181, Lights", "S2: T2, low lever, then the strip", "S3/S4: hold the strip, first into the core")
+    /** Your jobs, for the menu. */
+    fun myJobs(): List<String> = (1..4).mapNotNull { s ->
+        val mine = P3Plan.jobsIn(s).filter { P3Plan.isMine(it) }.map { it.removePrefix("S$s ") }
+        if (mine.isEmpty()) null else "S$s: ${mine.joinToString(", ")}"
     }
 }

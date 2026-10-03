@@ -301,7 +301,9 @@ class Devices(val phase: GoldorPhase) {
 
         fun onPlate(): Boolean {
             val p = Sim.player ?: return false
-            return p.blockPosition() == PLATE || p.blockPosition() == PLATE.above()
+            // A pressure plate: pressed while your box overlaps its block (feet within its lower quarter).
+            val b = p.boundingBox
+            return b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
         }
 
         fun tick() {

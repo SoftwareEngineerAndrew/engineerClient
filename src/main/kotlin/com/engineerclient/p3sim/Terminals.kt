@@ -51,10 +51,12 @@ object Terminals {
 
     private fun item(id: String): Item = BuiltInRegistries.ITEM.getValue(Identifier.withDefaultNamespace(id))
 
-    /** Opens [type] (random when null) for [player] at [station]. */
+    /**
+     * Opens [station]'s terminal for [player]. Each terminal's puzzle is made the first time it's
+     * opened and kept until solved: the same type, layout and progress every time you open it.
+     */
     fun open(player: ServerPlayer, station: Station, type: Type? = null) {
-        val t = type ?: station.nextType()
-        val term = station.term?.takeIf { it.type == t && !it.done } ?: Term.create(t).also { station.term = it }
+        val term = station.term?.takeIf { !it.done } ?: Term.create(type ?: station.nextType()).also { station.term = it }
         player.openMenu(SimpleMenuProvider({ id, inv, _ -> TerminalMenu(id, inv, term, station) }, Component.literal(term.title)))
     }
 

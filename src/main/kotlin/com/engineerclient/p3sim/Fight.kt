@@ -171,7 +171,7 @@ object Fight {
         Blocks.tick()
         Terminals.tick()
         SimItems.tick()
-        Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
+        if (P3Sim.lava) Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase ?: return
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++

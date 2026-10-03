@@ -110,6 +110,20 @@ object TermInfo : Module(
         sectionStart = serverTicks
     }
 
+    /**
+     * The P3 sim starting at section [section] (2-4: the earlier ones done, no Goldor line; 5 the
+     * core): counts from that section, as if TermInfo had seen the run so far.
+     */
+    @JvmStatic
+    fun simStart(section: Int) {
+        reset()
+        shownTime = null
+        if (section !in 1..4) return
+        for (i in 0 until section - 1) with(sections[i]) { termsDone = terms; leversDone = 2; deviceDone = true; gateDestroyed = true }
+        active = section - 1
+        sectionStart = serverTicks
+    }
+
     /** Devonian's TerminalSection.onChat, for the active section only. */
     private fun onTaskChat(msg: String) {
         val cur = current() ?: return

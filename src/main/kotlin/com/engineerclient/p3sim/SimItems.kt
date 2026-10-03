@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMultimap
 import com.mojang.authlib.GameProfile
 import com.mojang.authlib.properties.Property
 import com.mojang.authlib.properties.PropertyMap
-import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
@@ -177,15 +176,20 @@ object SimItems {
             EngineerClient.safely("p3sim hit entity") { result = useEntity(player, entity, left = true) }
             result
         }
-        // Adventure mode never sends a block hit to the server: the Dungeonbreaker's is passed on from here.
-        AttackBlockCallback.EVENT.register { player, level, _, pos, _ ->
-            if (!simClient(level)) return@register InteractionResult.PASS
-            if (idOf(player.mainHandItem) == "DUNGEONBREAKER") {
-                val at = pos.immutable()
-                SimServer.run("dungeonbreaker") { mine(at) }
-            }
-            InteractionResult.PASS
-        }
+    }
+
+    /**
+     * A block hit on the client (DungeonbreakerSimMixin: adventure mode drops it before Fabric's
+     * callback). In the sim with the Dungeonbreaker: mined on the sim's server; true = handled.
+     */
+    @JvmStatic
+    fun clientHitBlock(pos: BlockPos): Boolean {
+        val player = mc.player ?: return false
+        val level = mc.level ?: return false
+        if (!simClient(level) || idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
+        val at = pos.immutable()
+        SimServer.run("dungeonbreaker") { mine(at) }
+        return true
     }
 
     /** Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets). */
@@ -200,7 +204,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { cloakUntil = 0; cloakReady = 0; lastHype = -100; arrows.clear(); lastMotion.clear() }
+    fun reset() { cloakUntil = 0; cloakReady = 0; lastHype = -100; bowReady = 0; leapReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -519,10 +523,20 @@ object SimItems {
         Sim.sound(s.soundType.breakSound, 0.7f, 1f, Vec3.atCenterOf(pos))
     }
 
-    /** Shortbows: [n] arrows at once (3 spread 5° for the Terminator), fast and straight. */
+    /** The next tick a shortbow can fire (P3Sim's Terminator Cooldown apart). */
+    private var bowReady = 0
+
+    /**
+     * Shortbows: [n] arrows at once, 3.0 a tick with vanilla gravity. The Terminator's side arrows
+     * are Terminator Spread degrees of yaw off the middle one; a click inside the cooldown does nothing.
+     */
     private fun shoot(p: ServerPlayer, n: Int) {
+        val now = Fight.serverTick
+        if (now < bowReady) return
+        bowReady = now + P3Sim.termCooldown
         val level = Sim.level
-        val yaws = if (n == 3) listOf(-5f, 0f, 5f) else listOf(0f)
+        val spread = P3Sim.termSpread
+        val yaws = if (n == 3) listOf(-spread, 0f, spread) else listOf(0f)
         for (dy in yaws) {
             val a = Arrow(level, p, ItemStack(Items.ARROW), null)
             a.shootFromRotation(p, p.xRot, p.yRot + dy, 0f, 3.0f, 0f)
@@ -541,20 +555,30 @@ object SimItems {
         val level = SimServer.level ?: return
         // Vanilla bow arrows too.
         level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !in arrows }.forEach { arrows += it }
+        // Each arrow's path since last tick (and a little on), traced against the blocks: the first
+        // block on it is what it hit, however vanilla left the arrow (stuck, or still moving).
         val it = arrows.iterator()
         while (it.hasNext()) {
             val a = it.next()
-            if (a.isRemoved) { it.remove(); lastMotion.remove(a); continue }
+            if (a.isRemoved) { it.remove(); lastMotion.remove(a); lastPos.remove(a); continue }
             val v = a.deltaMovement
-            if (v.lengthSqr() > 1e-3) { lastMotion[a] = v; if (a.tickCount > 100) { a.discard() }; continue }
-            // Stuck: the block it's in (a bit along its flight).
-            val m = lastMotion[a] ?: continue
-            val hit = BlockPos.containing(a.position().add(m.normalize().scale(0.3)))
-            (Fight.phase as? GoldorPhase)?.devices?.target?.hit(hit)
-            a.discard()
-            it.remove(); lastMotion.remove(a)
+            if (v.lengthSqr() > 1e-3) lastMotion[a] = v
+            val dir = (lastMotion[a] ?: v).let { if (it.lengthSqr() < 1e-6) Vec3.ZERO else it.normalize() }
+            val from = lastPos[a] ?: a.position().subtract(dir)
+            val to = a.position().add(dir.scale(0.6))
+            lastPos[a] = a.position()
+            val hit = level.clip(net.minecraft.world.level.ClipContext(from, to, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, a))
+            if (hit.type == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                (Fight.phase as? GoldorPhase)?.devices?.target?.hit(hit.blockPos)
+                a.discard()
+                it.remove(); lastMotion.remove(a); lastPos.remove(a)
+                continue
+            }
+            if (a.tickCount > 100 || v.lengthSqr() < 1e-3) { a.discard(); it.remove(); lastMotion.remove(a); lastPos.remove(a) }
         }
     }
+
+    private val lastPos = HashMap<AbstractArrow, Vec3>()
 
     // ------------------------------------------------------------------ Spirit Leap
 
@@ -572,16 +596,11 @@ object SimItems {
     class LeapMenu(id: Int, inv: Inventory, val bots: List<Party.Bot>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
         init {
             for (i in 0 until 36) container.setItem(i, Terminals.FILLER)
-            bots.sortedBy { it.clazz.ordinal }.forEachIndexed { i, b ->
+            // In the plan's leap slot order: slots 1-4 = chest slots 11, 12, 14, 15.
+            bots.sortedBy { it.slot }.forEachIndexed { i, b ->
                 val h = ItemStack(Items.PLAYER_HEAD)
                 h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.GREEN) })
                 h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Class: §e${b.clazz.name}").withStyle { it.withItalic(false) })))
-                // A ghost's own face.
-                b.ghost?.skin?.takeIf { it.isNotEmpty() }?.let { tex ->
-                    val props = com.mojang.authlib.properties.PropertyMap(com.google.common.collect.ImmutableMultimap.of("textures", com.mojang.authlib.properties.Property("textures", tex)))
-                    h.set(DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(com.mojang.authlib.GameProfile(java.util.UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name, props)))
-                }
-                // Slots 11, 12, 14, 15 (13 left empty), as Hypixel's.
                 container.setItem(listOf(11, 12, 14, 15).getOrElse(i) { 16 }, h)
             }
         }

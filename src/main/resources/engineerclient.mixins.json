@@ -6,6 +6,7 @@
   "client": [
     "ArmorFoilMixin",
     "PortalSimMixin",
+    "DungeonbreakerSimMixin",
     "BlockChangeSourceMixin",
     "BlurRadiusMixin",
     "CameraAccessor",
