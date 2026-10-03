@@ -399,7 +399,7 @@ object SimItems {
      */
     private fun implode(p: ServerPlayer) {
         Sim.level.sendParticles(ParticleTypes.EXPLOSION, p.x, p.eyeY, p.z, 1, 0.0, 0.0, 0.0, 0.0)
-        Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.6f, 1f, p.position())
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, p.position())
         val box = net.minecraft.world.phys.AABB(p.x - 6, p.eyeY - 6, p.z - 6, p.x + 6, p.eyeY + 7, p.z + 6)
         val n = Sim.level.getEntitiesOfClass(net.minecraft.world.entity.boss.wither.WitherBoss::class.java, box) { it.isAlive }.size
         if (n > 0) Sim.chat("§7Your Implosion hit §c$n§7 ${if (n == 1) "enemy" else "enemies"} for §c${"%,.1f".format(n * IMPLOSION_DAMAGE)}§7 damage.")
@@ -476,6 +476,7 @@ object SimItems {
         if (cloaked) { cloakUntil = now; cloakReady = now + 200; Sim.chat("§cCreeper Veil De-activated!"); return }
         if (now < cloakReady) { Sim.chat("§cThis ability is on cooldown for ${(cloakReady - now + 19) / 20}s."); return }
         cloakUntil = now + 200; cloakReady = now + 400
+        Fight.later(200, "cloak expired") { if (cloakUntil == now + 200) Sim.chat("§cCreeper Veil De-activated! (Expired)") }
         Sim.chat("§aCreeper Veil Activated!")
         Sim.sound(SoundEvents.CREEPER_PRIMED, 0.6f, 1f, p.position())
     }
@@ -506,9 +507,14 @@ object SimItems {
         return false
     }
 
+    /** At most one block every 4 ticks (items-timing.md). */
+    private var minedAt = -100
+
     private fun mine(pos: BlockPos) {
+        if (Fight.serverTick - minedAt < 4) return
         val s = Sim.level.getBlockState(pos)
         if (unbreakable(pos, s)) return
+        minedAt = Fight.serverTick
         Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
         Sim.sound(s.soundType.breakSound, 0.7f, 1f, Vec3.atCenterOf(pos))
     }
@@ -552,7 +558,12 @@ object SimItems {
 
     // ------------------------------------------------------------------ Spirit Leap
 
+    /** Spirit Leap's 2 s cooldown (items-timing.md). */
+    private var leapReady = 0
+
     private fun openLeap(p: ServerPlayer) {
+        val now = Fight.serverTick
+        if (now < leapReady) { Sim.chat("§cThis ability is on cooldown for ${(leapReady - now + 19) / 20}s."); return }
         val bots = Party.bots().filter { it.entity != null }
         p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap")))
     }
@@ -570,19 +581,22 @@ object SimItems {
                     val props = com.mojang.authlib.properties.PropertyMap(com.google.common.collect.ImmutableMultimap.of("textures", com.mojang.authlib.properties.Property("textures", tex)))
                     h.set(DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(com.mojang.authlib.GameProfile(java.util.UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name, props)))
                 }
-                container.setItem(11 + i, h)
+                // Slots 11, 12, 14, 15 (13 left empty), as Hypixel's.
+                container.setItem(listOf(11, 12, 14, 15).getOrElse(i) { 16 }, h)
             }
         }
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
-            if (slot !in 11..15) return
+            if (slot !in 11..16) return
             val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
             val bot = bots.firstOrNull { it.name == name } ?: return
             val sp = p as ServerPlayer
             sp.closeContainer()
             Fight.afterPing("leap") {
                 val e = bot.pos
-                Sim.tp(sp, e.x, e.y, e.z)
+                leapReady = Fight.serverTick + 40
+                // You land on them exactly, facing as they face.
+                Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
                 Sim.chat("§aYou have teleported to §r§b${bot.name}§r§a!")
                 Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position())
             }

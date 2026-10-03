@@ -225,7 +225,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         gateDown[s] = true
         gateAt[s] = n
         Sim.chat("§aThe gate has been destroyed!")
-        Sim.sound(SoundEvents.GENERIC_EXPLODE, 2f, 1f, GATE_CENTRES[s])
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49f, GATE_CENTRES[s])
         Blocks.play("gate$s${s + 1}")
         if (sectionEnd[s] >= 0) openDoor(s)
         return true
