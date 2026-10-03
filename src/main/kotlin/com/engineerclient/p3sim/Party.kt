@@ -49,6 +49,8 @@ object Party {
         var wait = 0
         var working: Station? = null
         val idle get() = to == null && wait <= 0
+        /** Stood at this terminal waiting for its section (it opens 4 after the door, not 6). */
+        var waitedAt: Station? = null
         /** Sent to the core (section 5), whatever was left of the plan. */
         var cored = false
     }
@@ -95,8 +97,13 @@ object Party {
         }
     }
 
+    /** n when the current section's door opened (its terminals' first-completion floor). */
+    private var doorN = 0
+    private var doorOf = 0
+
     fun tickP3(phase: GoldorPhase) {
         if (!P3Sim.bots) return
+        if (phase.section != doorOf) { doorOf = phase.section; doorN = phase.n }
         for (b in bots.toList()) {
             if (b.entity == null) continue
             // The core is open: everyone heads in, whatever they were stuck on.
@@ -184,11 +191,19 @@ object Party {
         val spot = STANDS["S$s $label"] ?: st.at
         if (pos.distanceTo(spot) > 1.5 && working !== st) { walk(spot); return@Job false }
         val early = st.kind == Station.Kind.DEVICE && s > phase.section
-        if (phase.section != s && !early) return@Job false
+        if (phase.section != s && !early) { waitedAt = st; return@Job false }
         if (st.kind == Station.Kind.TERMINAL && Terminals.inUse(st)) return@Job false
         if (working !== st) {
             working = st
-            wait = solveTime(st, phase)
+            // A terminal opens 4 after the door if you stood at it, else 6 after you got there; the
+            // section's first completion is never under 28 (S2) or 42 (S3, S4) after its door (terminal-roles.md rule 1).
+            val solve = solveTime(st, phase)
+            wait = if (st.kind != Station.Kind.TERMINAL) solve else {
+                val open = if (waitedAt === st) 4 else 6
+                val floor = if (s >= 2 && phase.stations.none { it.section == s && it.done }) (if (s == 2) 28 else 42) - (phase.n - doorN) else 0
+                maxOf(open + solve, floor)
+            }
+            waitedAt = null
             return@Job false
         }
         working = null
@@ -199,10 +214,12 @@ object Party {
 
     private fun solveTime(st: Station, phase: GoldorPhase): Int = when (st.kind) {
         Station.Kind.LEVER -> 4
-        Station.Kind.TERMINAL -> 6 + jitter(when (st.nextType()) {
-            Terminals.Type.ORDER -> 56; Terminals.Type.PANES -> 40; Terminals.Type.RUBIX -> 35
-            Terminals.Type.SELECT -> 27; Terminals.Type.STARTS -> 28; Terminals.Type.MELODY -> 152
-        })
+        Station.Kind.TERMINAL -> when (st.nextType()) {
+            // The fast set's p10 / p25 / median (terminal-roles.md); melody 87-234, mode ~152.
+            Terminals.Type.ORDER -> solve(49, 52, 56); Terminals.Type.PANES -> solve(35, 38, 40); Terminals.Type.RUBIX -> solve(27, 29, 35)
+            Terminals.Type.SELECT -> solve(20, 23, 27); Terminals.Type.STARTS -> solve(18, 23, 28)
+            Terminals.Type.MELODY -> triangular(90.0, 152.0, 234.0)
+        }
         Station.Kind.DEVICE -> when (st.label) {
             // Simon Says: done at ~251 (236-259 in fast runs); the target ~147 (72-213); Lights 64 after entering S2; Arrow Align 12.
             "SS" -> (Random.nextInt(236, 260) - phase.n).coerceAtLeast(1)
@@ -210,6 +227,24 @@ object Party {
             "Lights" -> jitter(30)
             else -> jitter(12)
         }
+    }
+
+    /** A draw through the measured quantiles: 10% under p10, 15% to p25, 25% to the median, the rest a tail to 1.35x. */
+    private fun solve(p10: Int, p25: Int, p50: Int): Int {
+        val u = Random.nextDouble()
+        val v = when {
+            u < 0.10 -> p10 * (0.85 + 0.15 * u / 0.10)
+            u < 0.25 -> p10 + (p25 - p10) * (u - 0.10) / 0.15
+            u < 0.50 -> p25 + (p50 - p25) * (u - 0.25) / 0.25
+            else -> p50 * (1.0 + 0.35 * ((u - 0.5) / 0.5).let { it * it })
+        }
+        return v.toInt().coerceAtLeast(1)
+    }
+
+    private fun triangular(a: Double, c: Double, b: Double): Int {
+        val u = Random.nextDouble()
+        val f = (c - a) / (b - a)
+        return (if (u < f) a + Math.sqrt(u * (b - a) * (c - a)) else b - Math.sqrt((1 - u) * (b - a) * (b - c))).toInt()
     }
 
     private fun jitter(t: Int) = (t * (0.8 + Random.nextDouble() * 0.45)).toInt().coerceAtLeast(1)
@@ -228,10 +263,12 @@ object Party {
     private fun leapTo(role: Role, atDoor: Boolean = false) = Job("leap ${role.label}") { leap(role, atDoor); true }
     private fun walkTo(at: Vec3) = Job("walk") { phase -> if (pos.distanceTo(at) > 1.0) { walk(at); false } else true }
     private fun untilSection(s: Int) = Job("wait S$s") { phase -> phase.section >= s }
-    private fun untilN(n: Int) = Job("wait $n") { phase -> phase.n >= n || phase.section >= 3 }
+    /** Waits for n = [n], or for section [or] to start (whichever first). */
+    private fun untilN(n: Int, or: Int) = Job("wait $n") { phase -> phase.n >= n || phase.section >= or }
     private fun core() = Job("core") { phase ->
         if (phase.section < 5) return@Job false
-        if (!GoldorPhase.CORE_BOX.contains(pos)) go(CORE_SPOT.add(Random.nextDouble(-2.0, 2.0), 0.0, Random.nextDouble(0.0, 3.0)), 11 + Random.nextInt(10))
+        // First in at 11 (the core role), the last at ~22 (terminal-roles.md).
+        if (!GoldorPhase.CORE_BOX.contains(pos)) go(CORE_SPOT.add(Random.nextDouble(-2.0, 2.0), 0.0, Random.nextDouble(0.0, 3.0)), if (role == Role.CORE) 11 else 12 + Random.nextInt(14))
         true
     }
 
@@ -243,32 +280,32 @@ object Party {
             1 to doIt(1, "SS"),
             2 to untilSection(2), 2 to doIt(2, "T1"),
             3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "west lever"), 3 to doIt(3, "east lever"), 3 to leapTo(Role.CORE),
-            4 to untilN(481), 4 to doIt(4, "low lever"), 4 to doIt(4, "high lever"), 4 to doIt(4, "T4"),
+            4 to untilN(481, 4), 4 to doIt(4, "low lever"), 4 to doIt(4, "high lever"), 4 to doIt(4, "T4"),
             5 to core(),
         )
         Role.I4 -> listOf(
             1 to doIt(4, "Target"), 1 to leapTo(Role.SS), 1 to doIt(1, "west lever"), 1 to gate(1),
             2 to untilSection(2), 2 to leapTo(Role.CORE, true), 2 to doIt(2, "high lever"), 2 to doIt(2, "T5"),
-            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "T3"), 3 to doIt(3, "Arrows"), 3 to walkTo(STRIP),
+            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "T3"), 3 to leapTo(Role.EE3), 3 to doIt(3, "Arrows"), 3 to leapTo(Role.CORE),
             4 to untilSection(4), 4 to doIt(4, "T1"),
             5 to core(),
         )
         Role.EE3 -> listOf(
             1 to doIt(1, "T1"), 1 to leapTo(Role.SS), 1 to doIt(1, "east lever"),
             2 to untilSection(2), 2 to leapTo(Role.GATES, true), 2 to doIt(2, "T4"), 2 to walkTo(STANDS.getValue("S3 T1")),
-            3 to untilSection(3), 3 to doIt(3, "T1"), 3 to doIt(3, "T4"),
+            3 to untilSection(3), 3 to doIt(3, "T1"), 3 to leapTo(Role.GATES), 3 to doIt(3, "T4"),
             4 to untilSection(4), 4 to leapTo(Role.GATES, true), 4 to doIt(4, "T3"),
             5 to core(),
         )
         Role.GATES -> listOf(
-            1 to doIt(1, "T4"), 1 to doIt(1, "T2"), 1 to untilN(181), 1 to walkTo(STANDS.getValue("S2 T3")),
+            1 to doIt(1, "T4"), 1 to doIt(1, "T2"), 1 to untilN(140, 2), 2 to walkTo(STANDS.getValue("S2 T3")),
             2 to doIt(2, "T3"), 2 to leapTo(Role.EE3), 2 to gate(2),
-            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "T2"), 3 to gate(3), 3 to walkTo(STRIP),
+            3 to untilSection(3), 3 to leapTo(Role.EE3, true), 3 to doIt(3, "T2"), 3 to leapTo(Role.SS), 3 to gate(3), 3 to leapTo(Role.CORE),
             4 to untilSection(4), 4 to doIt(4, "T2"),
             5 to core(),
         )
         Role.CORE -> listOf(
-            1 to doIt(1, "T3"), 1 to untilN(181), 1 to doIt(2, "Lights"),
+            1 to doIt(1, "T3"), 1 to untilN(108, 2), 2 to doIt(2, "Lights"),
             2 to untilSection(2), 2 to doIt(2, "T2"), 2 to leapTo(Role.EE3), 2 to doIt(2, "low lever"), 2 to walkTo(STRIP),
             5 to core(),
         )
@@ -287,7 +324,7 @@ object Party {
         "S1 T1" to Vec3(109.1, 118.8, 79.6), "S1 T2" to Vec3(92.3, 121.0, 99.7), "S1 T3" to Vec3(110.3, 113.0, 73.8), "S1 T4" to Vec3(92.1, 112.0, 92.7),
         "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.1, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),
         "S2 T1" to Vec3(69.0, 109.0, 124.7), "S2 T2" to Vec3(59.7, 120.0, 125.3), "S2 T3" to Vec3(46.4, 109.0, 122.6), "S2 T4" to Vec3(40.2, 124.0, 124.7), "S2 T5" to Vec3(39.2, 109.0, 140.5),
-        "S2 low lever" to Vec3(28.3, 124.0, 128.7), "S2 high lever" to Vec3(25.6, 132.2, 137.5), "S2 Lights" to Vec3(60.6, 132.0, 139.0),
+        "S2 low lever" to Vec3(28.3, 124.0, 128.7), "S2 high lever" to Vec3(25.6, 132.2, 137.5), "S2 Lights" to Vec3(60.6, 134.0, 139.0),
         "S3 T1" to Vec3(0.0, 109.0, 112.2), "S3 T2" to Vec3(1.0, 119.0, 93.6), "S3 T3" to Vec3(16.5, 123.0, 93.7), "S3 T4" to Vec3(0.8, 109.0, 77.5),
         "S3 west lever" to Vec3(4.3, 123.1, 55.4), "S3 east lever" to Vec3(13.0, 122.4, 55.7), "S3 Arrows" to Vec3(0.5, 120.0, 77.5),
         "S4 T1" to Vec3(41.3, 109.0, 32.6), "S4 T2" to Vec3(45.1, 121.6, 31.2), "S4 T3" to Vec3(67.1, 109.0, 33.1), "S4 T4" to Vec3(72.6, 115.0, 45.5),
@@ -300,9 +337,9 @@ object Party {
     /** Your role's jobs, for the menu. */
     fun myJobs(): List<String> = when (myRole) {
         Role.SS -> listOf("S1: Simon Says", "S2: T1", "S3: west lever, east lever, then the strip", "S4: in at 481: low lever, high lever, T4")
-        Role.I4 -> listOf("S1: the target (S4 device) from the plate, west lever, gate 1/2", "S2: high lever, T5", "S3: T3, Arrow Align, then the strip", "S4: T1")
-        Role.EE3 -> listOf("S1: T1, east lever", "S2: T4, then into S3 at T1", "S3: T1, T4", "S4: T3")
-        Role.GATES -> listOf("S1: T4, T2, into S2 at 181 (T3)", "S2: T3, gate 2/3", "S3: T2, gate 3/4, then the strip", "S4: T2")
+        Role.I4 -> listOf("S1: the target (S4 device) from the plate, west lever, gate 1/2", "S2: high lever, T5", "S3: T3, leap ee3: Arrow Align, leap core (strip)", "S4: T1")
+        Role.EE3 -> listOf("S1: T1, east lever", "S2: T4, then into S3 at T1", "S3: T1, leap gates: T4", "S4: T3")
+        Role.GATES -> listOf("S1: T4, T2, into S2 at 181 (T3)", "S2: T3, gate 2/3", "S3: T2, leap ss: gate 3/4, leap core (strip)", "S4: T2")
         Role.CORE -> listOf("S1: T3, into S2 at 181, Lights", "S2: T2, low lever, then the strip", "S3/S4: hold the strip, first into the core")
     }
 }

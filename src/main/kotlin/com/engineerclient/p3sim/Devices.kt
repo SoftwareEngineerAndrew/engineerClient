@@ -122,17 +122,20 @@ class Devices(val phase: GoldorPhase) {
 
         private fun begin() {
             running = true
-            val r = Random
-            sequence = List(5) { r.nextInt(16) }
+            sequence = newSequence()
             val s = sequence
             when (startPresses.coerceAtMost(3)) {
                 1 -> show(listOf(s[0]), listOf(s[0]), stray = false)
-                2 -> show(listOf(stray(s[0]), s[0]), listOf(s[0]), stray = true)
-                else -> show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
+                2 -> show(listOf(stray(), s[0]), listOf(s[0]), stray = true)
+                else -> show(listOf(stray(), s[0], s[1]), listOf(s[0], s[1]), stray = true)
             }
         }
 
-        private fun stray(not: Int): Int { var c: Int; do c = Random.nextInt(16) while (c == not); return c }
+        /** 5 cells, no repeats (201 of 207), new each time. */
+        private fun newSequence() = (0 until 16).shuffled().take(5)
+
+        /** The stray light: not part of the sequence, so a cell outside it. */
+        private fun stray(): Int = ((0 until 16) - sequence.toSet()).random()
 
         private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean) {
             accepting = false
@@ -169,8 +172,8 @@ class Devices(val phase: GoldorPhase) {
                 after(3) { for (c in 0 until 16) button(c, false) }
                 // A new sequence, shown the skip's way.
                 after(25) {
-                    sequence = List(5) { Random.nextInt(16) }
-                    show(listOf(stray(sequence[0]), sequence[0], sequence[1]), listOf(sequence[0], sequence[1]), stray = true)
+                    sequence = newSequence()
+                    show(listOf(stray(), sequence[0], sequence[1]), listOf(sequence[0], sequence[1]), stray = true)
                 }
             }
         }

@@ -34,7 +34,7 @@ class Station(
 
     val id: String get() = "S$section $label"
 
-    fun nextType(): Terminals.Type = Fight.forcedTerminal ?: Terminals.Type.entries.random()
+    fun nextType(): Terminals.Type = Fight.forcedTerminal ?: Terminals.randomType()
 
     /** Done by [by] (you, or a bot's name): counts it, says so, opens what it opens. */
     fun complete(by: String) {

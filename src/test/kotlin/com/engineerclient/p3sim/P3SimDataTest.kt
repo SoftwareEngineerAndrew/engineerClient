@@ -166,5 +166,15 @@ class P3SimDataTest {
         val a = GoldorPhase.Goldor.trackPos(0.0)
         val b = GoldorPhase.Goldor.trackPos(GoldorPhase.Goldor.LOOP - 1e-6)
         assertTrue(a.distanceTo(b) < 0.1, "$a vs $b")
+        // Unequal segments (goldor.md, the track): S1 0-90.7, S2 -182.1, S3 -272.8, S4 -364.2.
+        val g = GoldorPhase.Goldor
+        assertTrue(g.segment(g.START_S) == 3 && g.segment(90.6) == 0 && g.segment(90.8) == 1 && g.segment(272.9) == 3, "segments")
+        // Each sprint ends ~1.6 past its corner, on the next section's line.
+        for ((i, to) in g.SPRINT_TO.withIndex()) {
+            assertTrue(g.segment(to) == i + 1, "sprint $i ends in ${g.segment(to)}")
+            val corner = g.trackPos(g.BOUNDS[i + 1])
+            val d = g.trackPos(to).distanceTo(corner)
+            assertTrue(d in 1.0..2.5, "sprint $i ends $d past its corner")
+        }
     }
 }

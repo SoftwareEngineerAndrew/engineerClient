@@ -22,11 +22,13 @@ import net.minecraft.world.phys.Vec3
  *  - between sections a gate (blown with Superboom or a Dungeonbreaker, only once its section is
  *    in progress; else it goes 5 s after the section ends) and a door that opens at the later of
  *    the section's last completion and its gate;
- *  - death ticks every 60 n: anyone in a section ahead of the one in progress is hit;
+ *  - death ticks at n = 60k-1: anyone in the next section ahead (and S4 while S1 is in progress)
+ *    is hit;
  *  - Goldor walks the track at 0.06/tick from (80, 119, 40), sprints to the section in progress
- *    (0.6) when he is still in the one that just ended, and after "The Core entrance is opening!"
- *    flies into the core (0.8) once everyone is inside, and dies;
- *  - Necron's first line 81 ticks after Goldor's death, then P4.
+ *    (0.6) when he is still in the one whose door just opened, and after "The Core entrance is
+ *    opening!" flies into the core (0.8) once everyone is inside (4 ticks after the opening at the
+ *    earliest), and dies; his Frenzy hits you every 10 ticks 2-14 blocks from him there;
+ *  - Necron's first line 82 ticks (81-83) after Goldor's death, then P4.
  * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening.
  */
 class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3") {
@@ -52,6 +54,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private var necronAt = -1
     private var deaths = 0
     private var pendingLine = -1
+    /** A taunt for the next 62-tick slot (after a terminal of yours), or null. */
+    private var pendingTaunt: String? = null
 
     val devices = Devices(this)
     val goldor = Goldor()
@@ -120,13 +124,16 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (pendingLine >= 0 && n % 62 == 0) {
             Sim.boss("Goldor", listOf("The little ants have a brain it seems.", "I will replace that gate with a stronger one!", "YOUR END IS NEAR!!")[pendingLine.coerceIn(0, 2)])
             pendingLine = -1
+        } else if (pendingTaunt != null && n % 62 == 0) {
+            Sim.boss("Goldor", pendingTaunt!!)
+            pendingTaunt = null
         }
         // Stand names refresh on a 20-tick grid.
         if (n % 20 == 0) stations.forEach { it.refreshStands() }
         // Gates that open by themselves 5 s after their section ended.
         for (s in 1..3) if (autoGateAt[s] >= 0 && n >= autoGateAt[s] && !gateDown[s]) blowGate(s, null)
-        // Death ticks.
-        if (section <= 4 && n > 0 && n % 60 == 0) deathTick()
+        // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
+        if (section <= 4 && n % 60 == 59) deathTick()
         goldor.tick(this)
         // Every 40 ticks Goldor carves an 11x11x11 box around himself; every 200 a TNT cube near the section in progress goes.
         if (n % 40 == 37 && !goldor.flying) carve()
@@ -151,6 +158,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val k = count(shown)
         Sim.chat("${nameColour(by)}$by§r§a $what (§r§c$k§r§a/${Station.total(shown)})")
         if (by == Sim.me) Stats.done(st, n)
+        // Taunts ride the 62-tick grid (goldor.md, other lines).
+        if (by == Sim.me && st.kind == Station.Kind.TERMINAL && pendingTaunt == null) pendingTaunt = "Stop touching those terminals!"
         if (st.kind == Station.Kind.TERMINAL || st.kind == Station.Kind.LEVER) Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 0.6f, 2f, st.at)
         if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
     }
@@ -166,7 +175,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             Sim.chat("§aThe gate will open in 5 seconds!")
             autoGateAt[s] = n + 100
         }
-        goldor.sectionEnded(s)
     }
 
     private fun openDoor(s: Int) {
@@ -177,6 +185,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         section = s + 1
         sectionStart[section] = n
         Stats.section(s, sectionEnd[s].coerceAtLeast(gateAt[s]) - sectionStart[s], n)
+        // The section ends with its door (max(last completion, gate)): Goldor's catch-up cue.
+        goldor.sectionEnded(s)
         // Stations of the new section that were done early already count.
         if (count(section) >= Station.total(section)) sectionDone(section)
     }
@@ -206,8 +216,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val p = Sim.player ?: return
         if (p.isSpectator || p.isCreative || SimItems.cloaked) return
         if (inSafeSpot(p.position())) return
+        // Only the next section ahead, and S4 while S1 is in progress (goldor.md, death ticks).
         val at = P3Sections.sectionAt(p.x, p.y, p.z)
-        if (at == 0 || at <= section) return
+        if (at != section + 1 && !(section == 1 && at == 4)) return
         deaths++
         Stats.deathTick(n)
         Sim.boss("Goldor", "What do you think you are doing there!")
@@ -262,7 +273,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     private fun coreTick() {
-        if (everyoneInAt < 0 && everyoneIn()) {
+        // Departure: on the last player's entry, 4 ticks after the opening at the earliest.
+        if (everyoneInAt < 0 && n >= coreAt + 4 && everyoneIn()) {
             everyoneInAt = n
             goldor.fly(n)
         }
@@ -271,18 +283,27 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if (arrived && arrivedAt < 0) {
                 arrivedAt = n
                 Sim.boss("Goldor", "You have done it, you destroyed the factory...")
+                // A script on a 62-tick cadence that runs on past his death and Necron's start.
+                Fight.later(62, "goldor arrived 1") { Sim.boss("Goldor", "But you have nowhere to hide anymore!") }
+                Fight.later(124, "goldor arrived 2") { Sim.boss("Goldor", "YOU ARE FACE TO FACE WITH GOLDOR!") }
+                Fight.later(186, "goldor arrived 3") { Sim.boss("Goldor", "....") }
             }
-            if (arrivedAt >= 0 && n == arrivedAt + 62) Sim.boss("Goldor", "But you have nowhere to hide anymore!")
-            if (arrivedAt >= 0 && n == arrivedAt + 124) Sim.boss("Goldor", "YOU ARE FACE TO FACE WITH GOLDOR!")
             if (n >= goldor.killAt) die()
         }
-        if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 81) {
+        // Frenzy: every ~10 ticks while you're 2-14 blocks from him (goldor.md, damage).
+        if (deadAt < 0 && n % 10 == 0) Sim.player?.let { p ->
+            val d = p.position().distanceTo(goldor.position)
+            if (!p.isSpectator && !p.isCreative && d in 2.0..14.0)
+                Sim.chat("§cGoldor's Frenzy hit you for ${"%,d".format(30000 + kotlin.random.Random.nextInt(10001))} damage.")
+        }
+        if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 82) {
             necronAt = n
             Sim.boss("Goldor", "Necron, forgive me.")
             Stats.goldorDone(n)
             if (P3Sim.p3Only) { Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
             Blocks.play("p3end")
-            Fight.later(2, "necron") { Fight.begin(P4Necron(fromP3 = true)) }
+            // Necron's first line comes with "Necron, forgive me." (82 ticks after death, 81-83).
+            Fight.later(0, "necron") { Fight.begin(P4Necron(fromP3 = true)) }
         }
     }
 
@@ -347,11 +368,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
         fun remove() { giant?.discard(); wither?.discard(); giant = null; wither = null }
 
-        /** A section ended: if he is still in its segment, he sprints to the next one's start. */
+        /** Section [sec] ended (its door opened): if he is still in its segment, he sprints to the next one's start. */
         fun sectionEnded(sec: Int) {
-            if (flying) return
-            val seg = (s / SEG).toInt() + 1
-            if (seg == sec) { sprintTo = sec * SEG + 1.6; speed = SPRINT }
+            if (flying || sec !in 1..3) return
+            val inIt = if (sec == 1) s >= S1_ENTRY || s < BOUNDS[1] else segment(s) == sec - 1
+            if (inIt) { sprintTo = SPRINT_TO[sec - 1]; speed = SPRINT }
         }
 
         fun fly(n: Int) {
@@ -379,8 +400,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 }
             } else {
                 if (sprintTo >= 0) {
-                    s += SPRINT
-                    if (s >= sprintTo) { s = sprintTo; sprintTo = -1.0; speed = WALK }
+                    // Distance left, round the loop's seam (a sprint from the S4 line into S1).
+                    val left = ((sprintTo - s) % LOOP + LOOP) % LOOP
+                    if (left <= SPRINT) { s = sprintTo; sprintTo = -1.0; speed = WALK } else s += SPRINT
                 } else s += WALK
                 s %= LOOP
                 pos = trackPos(s)
@@ -392,26 +414,37 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
         private fun yaw(): Float {
             // Walking direction along the loop (S1: +z, S2: -x, S3: -z, S4: +x).
-            return when ((s / SEG).toInt()) { 0 -> 0f; 1 -> 90f; 2 -> 180f; else -> -90f }
+            return when (segment(s)) { 0 -> 0f; 1 -> 90f; 2 -> 180f; else -> -90f }
         }
 
         companion object {
             const val WALK = 0.06
             const val SPRINT = 0.60
             const val FLY = 0.80
-            private val CORNERS = listOf(Vec3(99.5, 119.0, 40.3), Vec3(99.5, 118.5, 131.6), Vec3(8.3, 118.0, 131.6), Vec3(8.3, 118.0, 40.3))
-            const val SEG = 91.3
-            const val LOOP = SEG * 4
+            /** Where the four lines cross (S1 x 99.55, S2 z 131.7, S3 x 8.4, S4 z 40.0; goldor.md, the track). */
+            private val CORNERS = listOf(Vec3(99.55, 119.0, 40.0), Vec3(99.55, 119.0, 131.7), Vec3(8.4, 118.5, 131.7), Vec3(8.4, 118.0, 40.0))
+            /** y along each line: S1 119, S2 118.1-118.9, S3 118, S4 rising 118.1 -> 119. */
+            private val Y_FROM = doubleArrayOf(119.0, 118.5, 118.0, 118.1)
+            private val Y_TO = doubleArrayOf(119.0, 118.5, 118.0, 119.0)
+            /** s at each segment's start (S1 0-90.7, S2 -182.1, S3 -272.8, S4 -364.2), and the loop's end. */
+            val BOUNDS = doubleArrayOf(0.0, 90.7, 182.1, 272.8, 364.2)
+            const val LOOP = 364.2
             /** (80, 119, 40): where he is at "Who dares trespass", 19.5 blocks before the S1 corner. */
-            const val START_S = 3 * SEG + (80.0 - 8.3)
+            const val START_S = 344.7
+            /** Where the S1 segment starts for the catch-up: on the S4 line between x 95.5 (s 360.2) and 98 (362.7). */
+            const val S1_ENTRY = 361.5
+            /** Where a catch-up sprint ends, ~1.6 past the corner (S2 92.2-92.4, S3 183.6-183.8, S4 274.3-276.5). */
+            val SPRINT_TO = doubleArrayOf(92.3, 183.7, 275.0)
             val CORE_POINT = Vec3(54.5, 117.0, 40.5)
 
+            /** The segment (0-3: S1-S4) [s] is in. */
+            fun segment(s: Double): Int { var i = 0; while (i < 3 && s >= BOUNDS[i + 1]) i++; return i }
+
             fun trackPos(s: Double): Vec3 {
-                val i = ((s / SEG).toInt()).coerceIn(0, 3)
-                val f = (s - i * SEG) / SEG
+                val i = segment(s)
+                val f = ((s - BOUNDS[i]) / (BOUNDS[i + 1] - BOUNDS[i])).coerceIn(0.0, 1.0)
                 val a = CORNERS[i]; val b = CORNERS[(i + 1) % 4]
-                val y = if (i == 3) 118.5 + 0.5 * f else a.y + (b.y - a.y) * f
-                return Vec3(a.x + (b.x - a.x) * f, y, a.z + (b.z - a.z) * f)
+                return Vec3(a.x + (b.x - a.x) * f, Y_FROM[i] + (Y_TO[i] - Y_FROM[i]) * f, a.z + (b.z - a.z) * f)
             }
         }
     }
@@ -421,7 +454,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     fun pullLever(st: Station, by: String) {
         val lever = st.lever ?: return
-        if (st.done) { if (by == Sim.me) Sim.chat("§cThis lever has already been used."); return }
+        if (st.done) { if (by == Sim.me) Sim.chat("§cSomeone has already activated this lever!"); return }
         if (st.section != section) { if (by == Sim.me) Sim.chat("§cThis lever doesn't seem to be responsive at the moment."); return }
         Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, true)) }
         Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, 0.6f, Vec3.atCenterOf(lever))

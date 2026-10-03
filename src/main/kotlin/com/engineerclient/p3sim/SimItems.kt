@@ -101,7 +101,7 @@ object SimItems {
         return s
     }
 
-    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Right-click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
+    val SUPERBOOM get() = item(Items.PAPER, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Right-click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§9⚚ Bonzo's Staff §6✪✪✪✪✪", listOf("§6Ability: Showtime §e§lRIGHT CLICK", "§7Shoots balloons that knock you back."))
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
@@ -113,7 +113,7 @@ object SimItems {
     }
     val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", "§6Jerry-chine Gun", listOf("§6Ability: Rapid-fire §e§lRIGHT CLICK", "§7Jerries that knock you up."))
     val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", "§5Wither Cloak Sword", listOf("§6Ability: Creeper Veil §e§lRIGHT CLICK", "§7Immune to damage (death ticks) while on."))
-    val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", "§aP3 Sim Menu §7(Right Click)", listOf("§7Start any phase or section,", "§7teleport, change settings."))
+    val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", "§aSkyBlock Menu §7(Click)", listOf("§7Opens the §aP3 Sim§7 menu: start any", "§7phase or section, teleport, change", "§7settings.", "", "§eClick to open!"))
     val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", "§5Heroic Aspect of the Void", listOf("§6Ability: Instant Transmission §e§lRIGHT CLICK", "§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK"), glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }
     val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
 
@@ -199,7 +199,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { cloakUntil = 0; cloakReady = 0; arrows.clear(); lastMotion.clear() }
+    fun reset() { cloakUntil = 0; cloakReady = 0; lastHype = -100; arrows.clear(); lastMotion.clear() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -207,7 +207,7 @@ object SimItems {
         if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         when (id) {
             "ASPECT_OF_THE_VOID" -> { val sneak = p.isShiftKeyDown; asClicked(p, "aotv") { if (sneak) etherwarp(p) else blink(p, 12) } }
-            "HYPERION" -> asClicked(p, "hype") { blink(p, 10); implode(p) }
+            "HYPERION" -> asClicked(p, "hype") { if (hypeReady()) { blink(p, 10); implode(p) } }
             "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }
             "JERRY_STAFF" -> asClicked(p, "jerry") { jerry(p) }
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
@@ -217,7 +217,7 @@ object SimItems {
             "ITEM_SPIRIT_BOW" -> asClicked(p, "spirit bow") { shoot(p, 1) }
             else -> return InteractionResult.PASS
         }
-        // Keep the client's copy of the stack (some of these are block items it may think it placed).
+        // Keep the client's copy of the stack (the Infinileap is a head, a block item it may think it placed).
         p.containerMenu.broadcastChanges()
         return InteractionResult.SUCCESS
     }
@@ -228,7 +228,7 @@ object SimItems {
         if (phase is GoldorPhase) {
             phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me) }; return InteractionResult.SUCCESS }
             if (phase.devices.use(pos)) return InteractionResult.SUCCESS
-            if (id == "SUPERBOOM_TNT") { Fight.afterPing("superboom") { superboom(p, pos) }; p.containerMenu.broadcastChanges(); return InteractionResult.SUCCESS }
+            if (id == "SUPERBOOM_TNT") { Fight.afterPing("superboom") { superboom(p, pos) }; return InteractionResult.SUCCESS }
         }
         val state = Sim.level.getBlockState(pos)
         // Anything else interactable (a stray lever or button) stays as built.
@@ -378,9 +378,30 @@ object SimItems {
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position())
     }
 
+    /** Wither Impact's server cooldown: a second cast within 2 server ticks is discarded, blink and Implosion both (item-mechanics.md §3, SRV-Q15/16). */
+    private var lastHype = -100
+
+    private fun hypeReady(): Boolean {
+        val now = Fight.serverTick
+        if (now - lastHype < 2) return false
+        lastHype = now
+        return true
+    }
+
+    /** A Hyperion Implosion's hit, for the chat line (no damage model in the sim). */
+    private const val IMPLOSION_DAMAGE = 1_846_213.4
+
+    /**
+     * Implosion (item-mechanics.md §3): at your final position, every mob whose hitbox is within
+     * ±6 x/z, +7 up and -6 down of your eye, through walls, full damage each. The boss withers are
+     * the only mobs here; with none in the box there is no message.
+     */
     private fun implode(p: ServerPlayer) {
         Sim.level.sendParticles(ParticleTypes.EXPLOSION, p.x, p.eyeY, p.z, 1, 0.0, 0.0, 0.0, 0.0)
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.6f, 1f, p.position())
+        val box = net.minecraft.world.phys.AABB(p.x - 6, p.eyeY - 6, p.z - 6, p.x + 6, p.eyeY + 7, p.z + 6)
+        val n = Sim.level.getEntitiesOfClass(net.minecraft.world.entity.boss.wither.WitherBoss::class.java, box) { it.isAlive }.size
+        if (n > 0) Sim.chat("§7Your Implosion hit §c$n§7 ${if (n == 1) "enemy" else "enemies"} for §c${"%,.1f".format(n * IMPLOSION_DAMAGE)}§7 damage.")
     }
 
     // ------------------------------------------------------------------ movement items

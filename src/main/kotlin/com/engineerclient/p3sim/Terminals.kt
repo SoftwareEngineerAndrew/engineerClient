@@ -30,6 +30,15 @@ import kotlin.random.Random
 object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
 
+    /** A random draw, weighted as the first opens of each stand came (terminals.md, n = 156). */
+    fun randomType(): Type = weighted(listOf(Type.ORDER to 29, Type.STARTS to 30, Type.PANES to 27, Type.SELECT to 26, Type.MELODY to 25, Type.RUBIX to 19))
+
+    fun <T> weighted(w: List<Pair<T, Int>>): T {
+        var r = kotlin.random.Random.nextInt(w.sumOf { it.second })
+        for ((v, n) in w) { if (r < n) return v; r -= n }
+        return w.last().first
+    }
+
     /** Item with a plain, non-italic name (and [count]). */
     fun named(item: Item, name: String, count: Int = 1, glint: Boolean = false): ItemStack {
         val s = ItemStack(item, count)
@@ -97,8 +106,8 @@ object Terminals {
         override val title = "Correct all the panes!"
         private val slots = (11..15) + (20..24) + (29..33)
         init {
-            // 0-8 start On, median 3 (measured).
-            val on = listOf(0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 6).random()
+            // 0-8 start On, median 3 (measured, n = 54: 0:2 1:7 2:12 3:14 4:12 5:4 6-8:1 each).
+            val on = weighted(listOf(0 to 2, 1 to 7, 2 to 12, 3 to 14, 4 to 12, 5 to 4, 6 to 1, 7 to 1, 8 to 1))
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
@@ -138,7 +147,8 @@ object Terminals {
         private val letter: Char
         override val title: String
         init {
-            val letters = STARTS_POOL.groupBy { it.second[0] }.filter { it.value.size >= 3 }.keys.toList()
+            // The letters seen on Hypixel (items repeat, so one name with the letter is enough).
+            val letters = "IGRSCEPMLBFWDATN".filter { c -> STARTS_POOL.any { it.second[0] == c } }.toList()
             letter = letters.random()
             title = "What starts with: '$letter'?"
             val right = STARTS_POOL.filter { it.second[0] == letter }
