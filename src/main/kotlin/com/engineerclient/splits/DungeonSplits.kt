@@ -161,13 +161,32 @@ object DungeonSplits : Module(
     private val crystalsSeen = HashSet<Int>()
     private val watchedMobs = HashMap<Int, Pair<String, Stamp>>()
 
+    /** Forgets the run (world load, or a P3 Sim restart). */
+    private fun resetRun() {
+        tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
+        goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
+        portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
+        maxorAt = null; maxorCheck = null
+        barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
+    }
+
+    /**
+     * The P3 Sim starting a fight at [label]'s phase (client thread, before its lines arrive): a
+     * fresh run whose earlier phases are their Pace times. [termsDone]: sections already done when
+     * starting partway through the terminals (now, as no Goldor line comes then).
+     */
+    fun simStart(label: String, termsDone: Int = 0) {
+        resetRun()
+        val before = { l: String -> SplitPace.ref(l).let { SplitTracker.Clock(it?.ms ?: 0, (it?.ticks ?: 0).toInt()) } }
+        if (termsDone > 0) {
+            val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
+            tracker.startAt(label, before, now(), SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt()))
+        } else tracker.startAt(label, before)
+    }
+
     init {
         on<LevelEvent.Load> {
-            tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
-            goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
-            portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
-            maxorAt = null; maxorCheck = null
-            barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear()
+            resetRun()
             serverTicks = 0
         }
 

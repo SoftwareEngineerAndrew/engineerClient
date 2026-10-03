@@ -126,6 +126,19 @@ object Fight {
         Lava.reset()
         Stats.runStart = if (what == Start.P1) serverTick else -1
         previous = null
+        // Our splits: a fresh run from this phase, the ones before it at your Pace times. Queued on
+        // the client before any of this fight's lines can reach it.
+        val (split, termsDone) = when (what) {
+            Start.P1 -> com.engineerclient.splits.SplitTracker.MAXOR to 0
+            Start.P2 -> com.engineerclient.splits.SplitTracker.STORM to 0
+            Start.P3, Start.S1 -> com.engineerclient.splits.SplitTracker.TERMS to 0
+            Start.S2 -> com.engineerclient.splits.SplitTracker.TERMS to 1
+            Start.S3 -> com.engineerclient.splits.SplitTracker.TERMS to 2
+            Start.S4 -> com.engineerclient.splits.SplitTracker.TERMS to 3
+            Start.CORE -> com.engineerclient.splits.SplitTracker.GOLDOR to 0
+            Start.P4 -> com.engineerclient.splits.SplitTracker.NECRON to 0
+        }
+        EngineerClient.mc.execute { EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) } }
         // Odin's Splits start on the dungeon's countdown line.
         Sim.chat("§aStarting in 1 second.")
         val p: Phase = when (what) {

@@ -78,9 +78,48 @@ class SplitTracker {
     fun reset() {
         start = null; end = null
         starts.fill(null)
+        pending = null
+    }
+
+    /** A sim run starting at a phase: its index, how long each earlier phase counts as, and how long ago it began. */
+    private class Pending(val phase: Int, val before: (String) -> Clock, val head: Clock)
+
+    /** A length on both clocks: ms and ticks. */
+    data class Clock(val ms: Long, val ticks: Int)
+
+    private var pending: Pending? = null
+
+    /**
+     * The P3 Sim: a run that begins partway, at [label]'s phase. Every phase before it is filled in
+     * as [before] long, back from the moment it starts, so Pace and Enter read as if they had been
+     * played. With [now], it starts then (no line of its own comes), [head] already into it;
+     * otherwise on its usual line.
+     */
+    fun startAt(label: String, before: (String) -> Clock, now: Stamp? = null, head: Clock = Clock(0, 0)) {
+        reset()
+        val i = PHASES.indexOfFirst { it.label == label }.takeIf { it >= 0 } ?: return
+        pending = Pending(i, before, head)
+        if (now != null) fill(now)
+    }
+
+    private fun fill(at: Stamp) {
+        val p = pending ?: return
+        pending = null
+        var s = Stamp(at.realMs - p.head.ms, at.tick - p.head.ticks)
+        starts[p.phase] = s
+        for (j in p.phase - 1 downTo 0) {
+            val c = p.before(PHASES[j].label)
+            s = Stamp(s.realMs - c.ms, s.tick - c.ticks)
+            starts[j] = s
+        }
+        start = starts[0]
     }
 
     fun onChat(msg: String, at: Stamp) {
+        pending?.let { p ->
+            if (PHASES[p.phase].starts(msg)) fill(at)
+            return
+        }
         if (start == null) {
             if (msg == MORT) { start = at; starts[0] = at; rec(0, at, msg) }
             return

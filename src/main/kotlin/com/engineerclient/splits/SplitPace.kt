@@ -65,6 +65,10 @@ object SplitPace {
         "necron.trip2" to ticks(1), "necron.lock2" to ticks(154), "necron.animation" to ticks(62),
     )
 
+    /** A split's dark green (what Pace counts it as before it runs), or a sub split's. */
+    fun ref(label: String): Clocks? = SPLIT_REFS[label]
+    fun subRef(id: String): Clocks? = SUB_REFS[id]
+
     private fun ticks(t: Long) = Clocks(t * 50, t)
     private fun real(ms: Long) = Clocks(ms, ms / 50)
 
