@@ -12,19 +12,19 @@ class ParticleBufferTest {
 
     @Test
     fun emptyTickWritesNothing() {
-        assertNull(ParticleBuffer().drain())
+        assertNull(ParticleBuffer { "{}" }.drain())
     }
 
     @Test
     fun requestCountsWhatItMadeAndOptionsAreSharedPerInstance() {
-        val b = ParticleBuffer()
-        val flame = Any()
         var built = 0
-        b.request("minecraft:flame", flame, { built++; "{\"type\":\"minecraft:flame\"}" }, 1.0, 2.5, -3.0, 0.0, 0.1, 0.0, false, true)
+        val b = ParticleBuffer { built++; "{\"type\":\"minecraft:flame\"}" }
+        val flame = Any()
+        b.request("minecraft:flame", flame, 1.0, 2.5, -3.0, 0.0, 0.1, 0.0, false, true)
         b.spawned("FlameParticle", 1.0, 2.5, -3.0, 0.0, 0.1, 0.0, 20)
         b.requestDone()
         // Filtered away by the Particles option: nothing spawned between head and return.
-        b.request("minecraft:flame", flame, { built++; "x" }, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, true, false)
+        b.request("minecraft:flame", flame, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, true, false)
         b.requestDone()
         val o = parse(b.drain()!!)
         assertEquals(1, built)
@@ -38,9 +38,9 @@ class ParticleBufferTest {
 
     @Test
     fun requestThatNeverReturnedIsClosedWithNull() {
-        val b = ParticleBuffer()
-        b.request("minecraft:crit", Any(), { "{}" }, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, false, false)
-        b.request("minecraft:crit", Any(), { "{}" }, Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0, false, false)
+        val b = ParticleBuffer { "{}" }
+        b.request("minecraft:crit", Any(), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, false, false)
+        b.request("minecraft:crit", Any(), Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0, false, false)
         val o = parse(b.drain()!!)
         val req = o["req"].asJsonArray
         assertTrue(req[0].asJsonArray[10].isJsonNull)
@@ -51,9 +51,9 @@ class ParticleBufferTest {
 
     @Test
     fun drainStartsTheNextTickClean() {
-        val b = ParticleBuffer()
+        val b = ParticleBuffer { "{\"type\":\"minecraft:crit\"}" }
         val key = Any()
-        b.emitter(42, "minecraft:zombie", key, { "{\"type\":\"minecraft:crit\"}" }, -1)
+        b.emitter(42, "minecraft:zombie", key, -1)
         val o = parse(b.drain()!!)
         assertEquals("[42,\"minecraft:zombie\",0,-1]", o["emit"].asJsonArray[0].toString())
         assertTrue(!o.has("req") && !o.has("spawned"))
@@ -61,6 +61,18 @@ class ParticleBufferTest {
         b.spawned("a.b.Custom", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1)
         val o2 = parse(b.drain()!!)
         assertEquals(0, o2["opts"].asJsonArray.size())
+    }
+
+    @Test
+    fun theTakenSnapshotIsUnaffectedByTheNextTick() {
+        val b = ParticleBuffer { "{}" }
+        b.request("minecraft:crit", Any(), 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, false, false)
+        b.requestDone()
+        val snap = b.take()!!
+        // The game thread carries on before the writer formats the taken tick.
+        b.request("minecraft:flame", Any(), 9.0, 9.0, 9.0, 0.0, 0.0, 0.0, true, true)
+        val o = parse(snap.json())
+        assertEquals("[\"minecraft:crit\",1.0,2.0,3.0,0.0,0.0,0.0,false,false,0,0]", o["req"].asJsonArray.single().toString())
     }
 
     @Test

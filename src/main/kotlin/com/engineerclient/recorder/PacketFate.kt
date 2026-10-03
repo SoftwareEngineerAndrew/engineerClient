@@ -91,8 +91,14 @@ object PacketFate {
     const val STAGE_TAPPED = 0
     /** Reached the method's own first call (Channel.isOpen): no HEAD callback cancelled it. */
     const val STAGE_BODY = 1
-    /** Reached genericsFtw: handed to the listener (run here or queued for the game thread). */
-    const val STAGE_DISPATCHED = 2
+    /**
+     * Passed the vanilla checks (open channel, shouldHandleMessage) and reached the genericsFtw call,
+     * marked by the first callback there (ConnectionTapMixin, priority 1), ahead of any mod that
+     * cancels at that point (Odin 0.3.4 does).
+     */
+    const val STAGE_PASSED = 2
+    /** Reached genericsFtw past every other callback there: handed to the listener (run here or queued for the game thread). */
+    const val STAGE_DISPATCHED = 3
 
     private val read = ThreadLocal.withInitial { Read() }
     /** Whether the in-method points ever fired; until then a missing one must not read as a cancel. */
@@ -164,6 +170,8 @@ object PacketFate {
         queued -> "wait"
         stage >= STAGE_DISPATCHED -> if (atReturn || !returnSeen) "netty" else "error"
         odin -> null
+        // Passed the checks, then a mod's callback at genericsFtw cancelled it.
+        stage == STAGE_PASSED -> if (dispatchSeen) "cancelled_read0" else null
         stage == STAGE_BODY -> "rejected"
         // Never got into the method body: a HEAD callback cancelled it. Only trusted once the
         // in-method points have been seen to work, so a target that failed to apply is not read as a cancel.

@@ -26,12 +26,10 @@ import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.PacketFlow
 import net.minecraft.network.protocol.game.ClientboundBundlePacket
 import net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket
+import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import net.minecraft.network.protocol.game.ServerboundChatCommandPacket
-import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket
-import net.minecraft.network.protocol.game.ServerboundChatPacket
 import org.lwjgl.glfw.GLFW
 
 /**
@@ -69,8 +67,8 @@ object DungeonRecorder : Module(
     private val chunks by BooleanSetting("Chunk Data", true, desc = "Every block, block entity, biome, heightmap and light of each loaded chunk.")
     private val state by BooleanSetting("Client State", true, desc = "Your own state every tick at full precision, your inventory, effects and cooldowns.")
     private val perFrameCamera by BooleanSetting("Per-Frame Camera", true, desc = "The camera in every rendered frame (partial tick, look, position, FOV), so what was on screen can be rebuilt exactly.")
-    private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat and commands. Off: only that something was sent.")
-    private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat and friend notices out.")
+    private val typedChat by BooleanSetting("Typed Chat", false, desc = "What you type in chat, commands, signs, anvils and books. Off: only that something was sent.")
+    private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat and friend notices out, those you send included (even with Typed Chat on).")
     /** Read by [InputCapture]'s hooks. */
     internal val inputOn by BooleanSetting("Input", true, desc = "Every key, mouse button, scroll and look turn, the actions they start, what Odin cancelled, what the crosshair is on and what each interaction returned.")
     internal val cursorMovesOn by BooleanSetting("Cursor Moves", true, desc = "Every cursor move, with its time in the tick (the largest part of the input lines).")
@@ -83,7 +81,7 @@ object DungeonRecorder : Module(
     private val compactEntities by BooleanSetting("Compact Entity Rows", false, desc = "Writes the per-tick entity rows to a separate xz file per part (smaller, slower to read).")
     private val rawPackets by BooleanSetting("Raw Packets", true, desc = "Also keeps every packet's exact bytes as they crossed the wire, both ways, in a sidecar file (the ground truth behind each line).")
     internal val odinInternals by BooleanSetting("Odin Internals", true, desc = "Odin's private solver/tracker state via reflection (version-fragile, read-only).")
-    private val thumbs by BooleanSetting("Frame Thumbnails", false, desc = "Small JPEGs of the screen as you saw it (what other mods draw: HUDs, waypoints, custom GUIs). They show private chat too and cannot be redacted. Adds 100-400 MB an hour.")
+    private val thumbs by BooleanSetting("Frame Thumbnails", false, desc = "Small JPEGs of the screen as you saw it (what other mods draw: HUDs, waypoints, custom GUIs). They show private chat too and cannot be redacted; none are taken while you type (unless Typed Chat is on). Adds 100-400 MB an hour and a little frame time.")
     private val thumbFps by NumberSetting("Thumbnail FPS", 1.0, 0.5, 4.0, 0.5, desc = "Frame thumbnails a second (plus one on each screen open and title).")
     private val bookmark by KeybindSetting("Bookmark", GLFW.GLFW_KEY_UNKNOWN, "Marks this moment in the recording (also /ecrec mark [note]).").onPress { EngineerClient.safely("recorder bookmark") { Rec.mark(null) } }
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
@@ -135,7 +133,12 @@ object DungeonRecorder : Module(
             RecorderFiles.recover(net.fabricmc.loader.api.FabricLoader.getInstance().gameDir.resolve("engineerclient-recordings"))
                 .forEach { EngineerClient.logger.info("[ec] recorder: $it") }
         } }, "ec-recorder-recover").start()
-        ClientLifecycleEvents.CLIENT_STOPPING.register { RecorderSession.shutdownAll(3000) }
+        // End the world first (an `end` line; a recording never confirmed is deleted, not kept), then
+        // wait for the files of every session still writing.
+        ClientLifecycleEvents.CLIENT_STOPPING.register {
+            EngineerClient.safely("recorder exit") { RecorderLifecycle.onExit() }
+            RecorderSession.shutdownAll(3000)
+        }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(literal("ecrec").then(literal("mark")
                 .executes { ctx -> bookmarkCommand(ctx.source, null); 1 }
@@ -160,22 +163,12 @@ object DungeonRecorder : Module(
     }
 
     /**
-     * An outbound packet's "f": in full, or with what you typed left out when Typed Chat is off. A
-     * command keeps its name (which command was run is not private), a chat message its length and
-     * signing data.
+     * An outbound packet's "f": in full, or with what you typed left out when Typed Chat is off (or
+     * it is a private message and Hide Private Chats is on): see [WireTap.typedRedaction].
      */
     internal fun outBody(p: Packet<*>): () -> String {
-        if (Rec.typedChat) return PacketJson.capture(p)
-        val s = when (p) {
-            is ServerboundChatCommandPacket -> WireTap.redactedCommand(p.command())
-            is ServerboundChatCommandSignedPacket -> WireTap.redactedCommand(p.command())
-            is ServerboundChatPacket -> StringBuilder(128).append("{\"redacted\":true,\"len\":").append(p.message().length)
-                .append(",\"timeStamp\":").append(runCatching { p.timeStamp().toEpochMilli() }.getOrDefault(-1L))
-                .append(",\"salt\":").append(PacketJson.writeNow(p.salt()))
-                .append(",\"lastSeen\":").append(PacketJson.writeNow(p.lastSeenMessages())).append('}').toString()
-            else -> return PacketJson.capture(p)
-        }
-        return { s }
+        val r = WireTap.typedRedaction(p) ?: return PacketJson.capture(p)
+        return { r }
     }
 
     private fun bookmarkCommand(source: net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource, note: String?) {
@@ -200,7 +193,9 @@ object DungeonRecorder : Module(
     internal fun hiddenPrivate(p: Packet<*>): Boolean = when (p) {
         is ClientboundBundlePacket -> p.subPackets().any { hiddenPrivate(it) }
         is ClientboundSystemChatPacket -> Rec.privateText(p.content.string)
-        is ClientboundPlayerChatPacket -> Rec.privateText(p.body.content)
+        // A signed whisper's body is only the message: its chat type says it is private.
+        is ClientboundPlayerChatPacket -> Rec.privateType(p.chatType()) || Rec.privateText(p.body.content)
+        is ClientboundDisguisedChatPacket -> Rec.privateType(p.chatType()) || Rec.privateText(p.message().string)
         else -> false
     }
 
@@ -209,7 +204,7 @@ object DungeonRecorder : Module(
      * range of its frames in the raw sidecar. A bundle gets a `bundle` line and each packet in it
      * its own line tagged with the bundle's seq and its index.
      */
-    internal fun inbound(p: Packet<*>, ph: String, raw: String?) {
+    internal fun inbound(p: Packet<*>, ph: String, raw: String?, rawLen: Int = 0) {
         if (!inbound) return
         val rawM = raw?.let { ",\"raw\":$it" } ?: ""
         if (p is ClientboundBundlePacket) {
@@ -217,14 +212,15 @@ object DungeonRecorder : Module(
             val b = Rec.nextSeq()
             val env = Rec.envelope("bundle", b)
             Rec.emitLine(b, 96, "bundle", System.currentTimeMillis()) { "$env,\"b\":$b,\"count\":${subs.size},\"ph\":\"$ph\"$rawM}" }
-            subs.forEachIndexed { i, sub -> inboundOne(sub, ",\"ph\":\"$ph\",\"b\":$b,\"bi\":$i") }
+            val each = if (subs.isEmpty()) 0 else rawLen / subs.size
+            subs.forEachIndexed { i, sub -> inboundOne(sub, ",\"ph\":\"$ph\",\"b\":$b,\"bi\":$i", each) }
             PacketFate.rememberBundle(p, subs)
             return
         }
-        inboundOne(p, ",\"ph\":\"$ph\"$rawM")
+        inboundOne(p, ",\"ph\":\"$ph\"$rawM", rawLen)
     }
 
-    private fun inboundOne(p: Packet<*>, extra: String) {
+    private fun inboundOne(p: Packet<*>, extra: String, rawLen: Int) {
         // Before any filter: the mirror must see every entity packet to keep its bases right.
         val abs = try { EntityMirror.annotate(p) } catch (t: Throwable) { "\"absErr\":${q(t.toString())}" }
         val type = PacketJson.type(p)
@@ -237,23 +233,25 @@ object DungeonRecorder : Module(
             p is ClientboundChunksBiomesPacket -> ChunkCapture.biomes(p)
             else -> PacketJson.capture(p)
         }
-        packetLine("in", type, p, body, extra, abs)
+        packetLine("in", type, p, body, extra, abs, rawLen)
     }
 
     /**
      * One packet line: the envelope (seq, ticks, clock taken now, on the packet's own thread), its
      * type and the entities it is about, then its fields. [body] comes from [PacketJson.capture]: the
      * packets holding mutable state are already a finished string, the rest are built on the writer
-     * thread.
+     * thread. The queue's memory cap counts what the builder holds: its own size when it knows it
+     * ([Sized]: frozen strings, chunks), else about three times the packet's frame ([rawLen]).
      */
-    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String, extra: String, tail: String? = null) {
+    private fun packetLine(dir: String, type: String, p: Packet<*>, body: () -> String, extra: String, tail: String? = null, rawLen: Int = 0) {
         val seq = Rec.nextSeq()
         val env = Rec.envelope(dir, seq)
         val e = PacketDecode.entityMembers(p)
         val pt = q(type)
         if (dir == "in") PacketFate.remember(p, seq)
         val x = if (tail == null) "" else ",$tail"
-        Rec.emitLine(seq, 512, type, System.currentTimeMillis()) { "$env,\"p\":$pt$extra$e,\"f\":${body()}$x}" }
+        val est = maxOf(512, (body as? Sized)?.est ?: 0, 3 * rawLen) + extra.length + (tail?.length ?: 0)
+        Rec.emitLine(seq, est, type, System.currentTimeMillis()) { "$env,\"p\":$pt$extra$e,\"f\":${body()}$x}" }
     }
 
     // ------------------------------------------------------------------ lifecycle and client state

@@ -10,6 +10,8 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.Style
+import net.minecraft.util.FormattedCharSequence
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.world.item.ItemStack
@@ -213,7 +215,33 @@ object ScreenCapture {
      * A tooltip about to be drawn (TooltipTapMixin), every frame it is up. Written when its lines
      * change or it comes back after a tick without one, with the slot under the mouse.
      */
-    fun tooltip(lines: List<Component>, x: Int, y: Int) {
+    fun tooltip(lines: List<Component>, x: Int, y: Int) = tooltip(lines, x, y, seq = false)
+
+    /**
+     * A tooltip drawn from FormattedCharSequence lines (widget and button tooltips, single-Component
+     * and mods' tooltips): turned back into styled lines (runs of one style each), written as
+     * [tooltip] with "seq":true.
+     */
+    fun tooltipSeq(lines: List<FormattedCharSequence>, x: Int, y: Int) {
+        if (!Rec.active) return
+        tooltip(lines.map { seqToComponent(it) }, x, y, seq = true)
+    }
+
+    fun seqToComponent(s: FormattedCharSequence): Component {
+        val out = Component.empty()
+        val run = StringBuilder()
+        var style: Style? = null
+        s.accept { _, st, cp ->
+            if (st != style && run.isNotEmpty()) { out.append(Component.literal(run.toString()).withStyle(style!!)); run.setLength(0) }
+            style = st
+            run.appendCodePoint(cp)
+            true
+        }
+        if (run.isNotEmpty()) out.append(Component.literal(run.toString()).withStyle(style!!))
+        return out
+    }
+
+    private fun tooltip(lines: List<Component>, x: Int, y: Int, seq: Boolean) {
         if (!Rec.active) return
         val hash = 31 * lines.hashCode() + lines.size
         val again = hash == tooltipHash && Rec.tick - tooltipTick <= 1
@@ -225,6 +253,7 @@ object ScreenCapture {
         sb.append("\"slot\":").append(slot ?: "null").append(",\"x\":").append(x).append(",\"y\":").append(y).append(",\"lines\":[")
         lines.forEachIndexed { i, c -> if (i > 0) sb.append(','); RichJson.component(sb, c) }
         sb.append(']')
+        if (seq) sb.append(",\"seq\":true")
         Rec.emit("tooltip", sb.toString())
     }
 }

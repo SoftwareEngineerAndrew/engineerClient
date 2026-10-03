@@ -12,15 +12,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Dungeon Recorder: how far each server packet got through channelRead0 ({@link PacketFate}).
  *
- * ConnectionTapMixin sees every packet first, at HEAD. Other mods (Odin's bus among them) cancel
- * packets with their own HEAD callbacks, which return before the method's own code runs. So this
- * marks the method's own calls instead of trusting a RETURN alone: Channel.isOpen (the first call
- * of the body: no HEAD callback cancelled it), genericsFtw (handed to the listener, run on this
- * thread or queued for the game thread) and RETURN. A packet whose read never reached the body was
- * cancelled; one that reached it but not genericsFtw was rejected (closed channel, or
- * shouldHandleMessage false). Priority 2000 puts these after every default-priority mixin; every
- * injection is optional (require = 0), and PacketFate does not read a missing mark as a cancel
- * until the marks have been seen working.
+ * ConnectionTapMixin sees every packet first, at HEAD. Other mods cancel packets with their own
+ * callbacks: at HEAD (before the method's own code runs) or at the genericsFtw call, after the
+ * vanilla checks (Odin 0.3.4 cancels there, through its bus). So this marks the method's own calls
+ * instead of trusting a RETURN alone: Channel.isOpen (the first call of the body: no HEAD callback
+ * cancelled it), genericsFtw (handed to the listener, run on this thread or queued for the game
+ * thread) and RETURN; ConnectionTapMixin also marks genericsFtw first of all (priority 1, "passed").
+ * A packet whose read never reached the body was cancelled at HEAD; one that passed the checks but
+ * never reached this genericsFtw mark was cancelled there; one that reached the body but never
+ * passed was rejected (closed channel, or shouldHandleMessage false). Priority 2000 puts these after
+ * every default-priority mixin, so a callback inserted at the same call runs before this mark;
+ * every injection is optional (require = 0), and PacketFate does not read a missing mark as a
+ * cancel until the marks have been seen working.
  */
 @Mixin(value = Connection.class, priority = 2000)
 public class ConnectionReadEndMixin {

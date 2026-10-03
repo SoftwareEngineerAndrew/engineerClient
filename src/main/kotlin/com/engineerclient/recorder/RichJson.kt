@@ -147,7 +147,10 @@ object RichJson {
     class LightCopy(
         val skyMask: LongArray, val skyEmpty: LongArray, val sky: List<ByteArray>,
         val blockMask: LongArray, val blockEmpty: LongArray, val block: List<ByteArray>,
-    )
+    ) {
+        /** Bytes this copy holds (for the queue's memory cap). */
+        val bytes: Int get() = 8 * (skyMask.size + skyEmpty.size + blockMask.size + blockEmpty.size) + sky.sumOf { it.size } + block.sumOf { it.size }
+    }
 
     fun copyLight(d: ClientboundLightUpdatePacketData) = LightCopy(
         d.skyYMask.toLongArray(), d.emptySkyYMask.toLongArray(), d.skyUpdates.map { it.clone() },

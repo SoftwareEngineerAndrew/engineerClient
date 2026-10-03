@@ -154,7 +154,7 @@ object OdinEvents {
     /** What you sent: the text only with Typed Chat on; otherwise a command's root word, or a chat line's length. */
     internal fun sent(j: OdinJs, text: String) {
         when {
-            Rec.typedChat -> j.s("text", text)
+            Rec.typedAllowed(text, text.startsWith("/")) -> j.s("text", text)
             text.startsWith("/") -> j.s("command", text.drop(1).substringBefore(' ')).s("args", "<redacted>")
             else -> j.b("redacted", true).n("len", text.length)
         }

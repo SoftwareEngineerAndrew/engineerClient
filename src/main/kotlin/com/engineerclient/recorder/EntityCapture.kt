@@ -31,10 +31,10 @@ import java.util.Optional
  *    then once more at the tick's end, after the rest of its spawn bundle (data, equipment) applied.
  *  - ent: per tick, a row for every rendered entity whose numbers changed: position, previous
  *    position (render lerps between them), rotations, motion, the codec base, health, interpolation.
- *  - emove: each move the client applied (moveOrInterpolateTo), whatever asked for it, and whether
- *    it snaps (items, arrows) or interpolates.
+ *  - emove: each move the client applied (moveOrInterpolateTo, and the handlers' direct snaps and
+ *    teleports), whatever asked for it, and whether it snaps (items, arrows) or interpolates.
  *  - egone: removal with its reason; edata / eeq: data and equipment after the game applied them.
- *  - kfent: at each keyframe, every entity in full, spread over ticks (100 per tick); it also seeds
+ *  - kfent: at each keyframe, every entity in full, spread over ticks (about a millisecond a tick); it also seeds
  *    [EntityMirror] with the bases of entities that spawned before the recording.
  *  - drawn: which entities were actually rendered this tick, with name tags and outlines as drawn.
  *
@@ -49,18 +49,24 @@ object EntityCapture {
 
     private val rows = EntRows()
     private val drawn = DrawnTracker<Component>()
-    private val moves = StringBuilder(4096)
-    private var moveCount = 0
+    /** This tick's applied moves (game thread), as numbers: formatted on the writer thread. */
+    private val moves = MoveBuffer()
+    /** This tick's changed entity rows (game thread): ids and [EntRows.WIDTH] numbers each. */
+    private var entIds = IntArray(256)
+    private var entData = DoubleArray(256 * EntRows.WIDTH)
     private val resnap = ArrayList<Entity>()
     private var lastSession: Any? = null
     /** The id ClientLevel.removeEntity is removing right now: its unload event is the same removal. */
     private var levelRemoving = Int.MIN_VALUE
 
-    // Keyframe in progress: the entities still to write, 100 per tick.
+    // Keyframe in progress: the entities still to write, a few each tick (a time budget, at most 100 a line).
     private var kfList: List<Entity> = emptyList()
     private var kfIndex = 0
+    private var kfChunk = 0
     private var kfId = 0L
     private const val KF_PER_TICK = 100
+    private const val KF_MIN_PER_TICK = 8
+    private const val KF_BUDGET_NS = 1_000_000L
 
     fun install() {
         ClientEntityEvents.ENTITY_LOAD.register { e, _ -> EngineerClient.safely("recorder espawn") { onLoad(e) } }
@@ -138,31 +144,42 @@ object EntityCapture {
     fun onMove(e: Entity, pos: Optional<Vec3>, yRot: Optional<Float>, xRot: Optional<Float>) {
         if (!movesOn) return
         try {
-            if (Thread.currentThread() !== Rec.gameThread) {
-                // Not the game thread (another mod): its own line, never the shared buffer.
-                val sb = StringBuilder(96)
-                moveRow(sb, e, pos, yRot, xRot)
-                Rec.emit("emove", "\"d\":[$sb],\"thread\":${RecorderFiles.q(Thread.currentThread().name)}")
-                return
-            }
-            if (moveCount > 0) moves.append(',')
-            moveRow(moves, e, pos, yRot, xRot)
-            moveCount++
+            val p = pos.orElse(null); val y = yRot.orElse(null); val x = xRot.orElse(null)
+            var flags = 0
+            if (p != null) flags = flags or MoveBuffer.POS
+            if (y != null) flags = flags or MoveBuffer.YROT
+            if (x != null) flags = flags or MoveBuffer.XROT
+            if (e.interpolation != null) flags = flags or MoveBuffer.INTERP
+            record(e.id, p?.x ?: 0.0, p?.y ?: 0.0, p?.z ?: 0.0, y ?: 0f, x ?: 0f, flags)
         } catch (t: Throwable) {
             EngineerClient.logger.error("[ec] recorder emove failed", t)
         }
     }
 
-    /** `[id,x,y,z,yRot,xRot,interp]`, null where the move leaves that part alone. */
-    private fun moveRow(sb: StringBuilder, e: Entity, pos: Optional<Vec3>, yRot: Optional<Float>, xRot: Optional<Float>) {
-        sb.append('[').append(e.id).append(',')
-        val p = pos.orElse(null)
-        if (p == null) sb.append("null,null,null") else { PacketJson.num(sb, p.x); sb.append(','); PacketJson.num(sb, p.y); sb.append(','); PacketJson.num(sb, p.z) }
-        sb.append(',')
-        val y = yRot.orElse(null); if (y == null) sb.append("null") else PacketJson.num(sb, y)
-        sb.append(',')
-        val x = xRot.orElse(null); if (x == null) sb.append("null") else PacketJson.num(sb, x)
-        sb.append(',').append(if (e.interpolation != null) 1 else 0).append(']')
+    /**
+     * A move a packet handler applied without moveOrInterpolateTo (EntitySnapTapMixin, after it): a
+     * far or non-ticking position sync's snap, a teleport set directly. Where it landed, snap flag on.
+     */
+    @JvmStatic
+    fun onSnap(e: Entity) {
+        if (!movesOn) return
+        try {
+            record(e.id, e.x, e.y, e.z, e.yRot, e.xRot, MoveBuffer.POS or MoveBuffer.YROT or MoveBuffer.XROT or MoveBuffer.SNAP)
+        } catch (t: Throwable) {
+            EngineerClient.logger.error("[ec] recorder emove failed", t)
+        }
+    }
+
+    private fun record(id: Int, x: Double, y: Double, z: Double, yRot: Float, xRot: Float, flags: Int) {
+        if (Thread.currentThread() !== Rec.gameThread) {
+            // Not the game thread (another mod): its own line, never the shared buffer.
+            val one = MoveBuffer().also { it.add(id, x, y, z, yRot, xRot, flags) }
+            val sb = StringBuilder(96).append("\"d\":[")
+            one.appendRows(sb)
+            Rec.emit("emove", sb.append("],\"thread\":").append(RecorderFiles.q(Thread.currentThread().name)).toString())
+            return
+        }
+        moves.add(id, x, y, z, yRot, xRot, flags)
     }
 
     // ------------------------------------------------------------------ rendered set
@@ -191,10 +208,14 @@ object EntityCapture {
         val s = Rec.session
         if (s !== lastSession) { clearAll(); lastSession = s }
 
-        if (moveCount > 0) {
-            Rec.emit("emove", "\"d\":[$moves]")
-            moves.setLength(0); moveCount = 0
-            if (moves.capacity() > 1 shl 20) moves.trimToSize()
+        if (moves.count > 0) {
+            // The numbers are copied out here; turning them into text is the writer's job.
+            val taken = moves.take()
+            Rec.emitLazy("emove", 32 + taken.count * 90, "emove") {
+                val sb = StringBuilder(taken.count * 90 + 16).append("\"d\":[")
+                taken.appendRows(sb)
+                sb.append(']').toString()
+            }
         }
 
         if (resnap.isNotEmpty()) {
@@ -217,24 +238,37 @@ object EntityCapture {
 
     private fun clearAll() {
         rows.clear(); drawn.clear(); resnap.clear()
-        moves.setLength(0); moveCount = 0
+        moves.clear()
         kfList = emptyList(); kfIndex = 0
     }
 
     private val row = DoubleArray(EntRows.WIDTH)
 
-    /** One ent line for all rendered entities whose numbers moved since the last row written. */
+    /**
+     * One ent line for all rendered entities whose numbers moved since the last row written. The
+     * comparison is here; the changed rows' numbers are copied out and written as text on the writer thread.
+     */
     private fun entityRows(level: ClientLevel) {
-        val sb = StringBuilder(4096).append("\"d\":[")
         var n = 0
+        val w = EntRows.WIDTH
         for (e in level.entitiesForRendering()) {
             val id = e.id
             try { fill(e, row) } catch (t: Throwable) { continue }
             if (!rows.changed(id, row)) continue
-            if (n++ > 0) sb.append(',')
-            EntRows.append(sb, id, row)
+            if (n == entIds.size) { entIds = entIds.copyOf(n * 2); entData = entData.copyOf(n * 2 * w) }
+            entIds[n] = id
+            row.copyInto(entData, n * w)
+            n++
         }
-        if (n > 0) Rec.emit("ent", sb.append(']').toString())
+        if (n == 0) return
+        val ids = entIds.copyOf(n)
+        val data = entData.copyOf(n * w)
+        if (entIds.size > 4096) { entIds = IntArray(256); entData = DoubleArray(256 * w) }
+        Rec.emitLazy("ent", 32 + n * 220, "ent") {
+            val sb = StringBuilder(n * 220 + 8).append("\"d\":[")
+            for (k in 0 until n) { if (k > 0) sb.append(','); EntRows.append(sb, ids[k], data, k * w) }
+            sb.append(']').toString()
+        }
     }
 
     private fun fill(e: Entity, r: DoubleArray) {
@@ -279,28 +313,34 @@ object EntityCapture {
 
     /** Keyframe contributor: every entity the level holds, written over the next ticks. */
     private fun startKeyframe() {
-        // An unfinished one is written out at once rather than cut.
-        while (kfIndex < kfList.size) keyframeChunk()
+        // An unfinished one is closed (the entities it did not reach listed as "cut"; the new one
+        // has them all again) rather than written out at once, which could stall the tick.
+        if (kfIndex < kfList.size) {
+            val cut = (kfIndex until kfList.size).joinToString(",", "[", "]") { kfList[it].id.toString() }
+            Rec.emit("kfent", "\"kf\":$kfId,\"i\":$kfChunk,\"total\":${kfList.size},\"last\":true,\"d\":[],\"cut\":$cut")
+        }
         val level = EngineerClient.mc.level ?: return
         lastSession = Rec.session
         kfList = level.entitiesForRendering().toList()
         kfIndex = 0
+        kfChunk = 0
         kfId = Rec.keyframeId
         // The next tick writes every row in full and the drawn set's tags and outlines again.
         rows.clear(); drawn.clear()
-        if (kfList.isEmpty()) Rec.emit("kfent", "\"kf\":$kfId,\"i\":0,\"of\":0,\"d\":[]")
+        if (kfList.isEmpty()) Rec.emit("kfent", "\"kf\":$kfId,\"i\":0,\"total\":0,\"last\":true,\"d\":[]")
         else keyframeChunk()
     }
 
+    /** The next line of a keyframe: entities until about a millisecond is spent (at least a few, at most [KF_PER_TICK]). */
     private fun keyframeChunk() {
-        val of = (kfList.size + KF_PER_TICK - 1) / KF_PER_TICK
-        val i = kfIndex / KF_PER_TICK
-        val end = minOf(kfIndex + KF_PER_TICK, kfList.size)
-        val sb = StringBuilder(32 * 1024).append("\"kf\":").append(kfId).append(",\"i\":").append(i).append(",\"of\":").append(of).append(",\"d\":[")
+        val i = kfChunk++
+        val t0 = System.nanoTime()
+        val sb = StringBuilder(32 * 1024).append("\"kf\":").append(kfId).append(",\"i\":").append(i).append(",\"total\":").append(kfList.size).append(",\"d\":[")
         val skipped = IntArrayList()
         var n = 0
-        for (k in kfIndex until end) {
-            val e = kfList[k]
+        var k = kfIndex
+        while (k < kfList.size && k - kfIndex < KF_PER_TICK && (k - kfIndex < KF_MIN_PER_TICK || System.nanoTime() - t0 < KF_BUDGET_NS)) {
+            val e = kfList[k++]
             if (e.isRemoved) { skipped.add(e.id); continue }
             val mark = sb.length
             try {
@@ -315,8 +355,10 @@ object EntityCapture {
         }
         sb.append(']')
         if (!skipped.isEmpty) sb.append(",\"skipped\":").append(skipped.toIntArray().joinToString(",", "[", "]"))
-        kfIndex = end
-        if (kfIndex >= kfList.size) kfList = emptyList()
+        kfIndex = k
+        val last = kfIndex >= kfList.size
+        sb.append(",\"last\":").append(last)
+        if (last) { kfList = emptyList(); kfIndex = 0 }
         Rec.emit("kfent", sb.toString())
     }
 
@@ -443,11 +485,12 @@ internal class EntRows {
         /** Columns that hold floats (rotations, health): written as the float they came from. */
         private val FLOAT_COLS = booleanArrayOf(false, false, false, false, false, false, true, true, true, true, false, false, false, false, false, false, false, false, true)
 
-        fun append(sb: StringBuilder, id: Int, r: DoubleArray) {
+        /** Row [id]'s numbers, [r] from [off] on (several rows may share one array). */
+        fun append(sb: StringBuilder, id: Int, r: DoubleArray, off: Int = 0) {
             sb.append('[').append(id)
             for (i in 0 until 19) {
                 sb.append(',')
-                val v = r[i]
+                val v = r[off + i]
                 when {
                     i == 13 || i == 14 -> sb.append(v.toInt())
                     v.isNaN() -> sb.append("null")
@@ -455,8 +498,8 @@ internal class EntRows {
                     else -> PacketJson.num(sb, v)
                 }
             }
-            if (r[14] == 1.0 && !r[19].isNaN()) {
-                for (i in 19 until 22) { sb.append(','); PacketJson.num(sb, r[i]) }
+            if (r[off + 14] == 1.0 && !r[off + 19].isNaN()) {
+                for (i in 19 until 22) { sb.append(','); PacketJson.num(sb, r[off + i]) }
             }
             sb.append(']')
         }
@@ -511,5 +554,70 @@ internal class DrawnTracker<T : Any> {
 
     fun clear() {
         ids.clear(); seen.clear(); tagNow.clear(); outlineNow.clear(); tagLast.clear(); outlineLast.clear()
+    }
+}
+
+/**
+ * Applied moves as numbers (game thread): `[id,x,y,z,yRot,xRot,interp]` rows, and a trailing 1
+ * for a snap, written as text only when [appendRows] runs (on the writer thread, after [take]).
+ */
+internal class MoveBuffer {
+    var count = 0
+        private set
+    private var ids = IntArray(64)
+    private var pos = DoubleArray(64 * 3)
+    private var rot = FloatArray(64 * 2)
+    private var flags = ByteArray(64)
+
+    fun add(id: Int, x: Double, y: Double, z: Double, yRot: Float, xRot: Float, f: Int) {
+        if (count == ids.size) {
+            val n = count * 2
+            ids = ids.copyOf(n); pos = pos.copyOf(n * 3); rot = rot.copyOf(n * 2); flags = flags.copyOf(n)
+        }
+        ids[count] = id
+        pos[count * 3] = x; pos[count * 3 + 1] = y; pos[count * 3 + 2] = z
+        rot[count * 2] = yRot; rot[count * 2 + 1] = xRot
+        flags[count] = f.toByte()
+        count++
+    }
+
+    /** A copy holding this buffer's rows (for the writer thread); this one starts over. */
+    fun take(): MoveBuffer {
+        val out = MoveBuffer()
+        out.count = count
+        out.ids = ids.copyOf(count); out.pos = pos.copyOf(count * 3); out.rot = rot.copyOf(count * 2); out.flags = flags.copyOf(count)
+        clear()
+        return out
+    }
+
+    fun clear() {
+        count = 0
+        if (ids.size > 1 shl 14) { ids = IntArray(64); pos = DoubleArray(64 * 3); rot = FloatArray(64 * 2); flags = ByteArray(64) }
+    }
+
+    /** The rows, comma-separated: null where the move left that part alone. */
+    fun appendRows(sb: StringBuilder) {
+        for (i in 0 until count) {
+            if (i > 0) sb.append(',')
+            val f = flags[i].toInt()
+            sb.append('[').append(ids[i]).append(',')
+            if (f and POS == 0) sb.append("null,null,null")
+            else { PacketJson.num(sb, pos[i * 3]); sb.append(','); PacketJson.num(sb, pos[i * 3 + 1]); sb.append(','); PacketJson.num(sb, pos[i * 3 + 2]) }
+            sb.append(',')
+            if (f and YROT == 0) sb.append("null") else PacketJson.num(sb, rot[i * 2])
+            sb.append(',')
+            if (f and XROT == 0) sb.append("null") else PacketJson.num(sb, rot[i * 2 + 1])
+            sb.append(',').append(if (f and INTERP != 0) 1 else 0)
+            if (f and SNAP != 0) sb.append(",1")
+            sb.append(']')
+        }
+    }
+
+    companion object {
+        const val POS = 1
+        const val YROT = 2
+        const val XROT = 4
+        const val INTERP = 8
+        const val SNAP = 16
     }
 }

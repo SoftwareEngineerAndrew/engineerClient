@@ -32,8 +32,8 @@ with everything on, and only disk safety ever stops a recording (and says so in 
 | Chunk Data | on | chunk packets decoded block for block, and the chunks in keyframes; off, a chunk packet is `{x, z, off: true}` |
 | Client State | on | `me` every tick, `effects`, `inv`, `cd` |
 | Per-Frame Camera | on | `frames`: the camera in every rendered frame (the `tick` line is written either way) |
-| Typed Chat | **off** | what you type: off, a command keeps only its name (`{"command", "args": "<redacted>"}`), a chat message its length and signing data (`{"redacted": true, "len", ...}`), keys typed into text fields are `{"redacted": true}` and their raw frames are withheld |
-| Hide Private Chats | **on** | private, guild, officer, co-op and friend lines are written as `{"hidden": "private"}` everywhere they appear (packets, chat box, Odin's chat) and their raw bytes withheld |
+| Typed Chat | **off** | what you type: off, a command keeps only its name (`{"command", "args": "<redacted>"}`), a chat message its length and signing data (`{"redacted": true, "len", ...}`), a command suggestion request its id, length and command name, a sign its line lengths, an anvil name its length, a book its page count (each with `"why": "typed_chat"`), keys typed into text fields are `{"redacted": true}`, and their raw frames are withheld |
+| Hide Private Chats | **on** | private, guild, officer, co-op and friend lines are written as `{"hidden": "private"}` everywhere they appear (packets, chat box, Odin's chat) and their raw bytes withheld (Hypixel's forms, and signed `/msg` chat types and "whispers to you" lines elsewhere). Also what you send to them, even with Typed Chat on: `/msg`, `/w`, `/r`, `/gc`, `/g chat`, `/oc`, `/cc` and the like, and plain chat while `/chat` is set to guild, officer or co-op (best effort, from the last `/chat` you sent), are redacted as with Typed Chat off (`"why": "private"`), and so are the keys and characters typed for them |
 | Input | on | the input lines (key, btn, scroll, look, act, attempt, aim, use, ...) |
 | Cursor Moves | on | `cur`: every cursor move (the biggest part of the input lines) |
 | Cookie Payloads | off | server cookies in full; off, their length and SHA-256 only, raw bytes withheld |
@@ -45,7 +45,7 @@ with everything on, and only disk safety ever stops a recording (and says so in 
 | Compact Entity Rows | off | `ent` lines go to a separate `partNNNN.ent.xz` instead of the main stream |
 | Raw Packets | on | the raw sidecar: every frame's exact bytes, both ways |
 | Odin Internals | on | Odin's private solver, boss-tracker and helper state by reflection (version-fragile, read-only) |
-| Frame Thumbnails | **off** | small JPEGs of the screen as you saw it (`thumb`, files in `thumbs/`); they show private chat and cannot be redacted; 100-400 MB an hour |
+| Frame Thumbnails | **off** | small JPEGs of the screen as you saw it (`thumb`, files in `thumbs/`); they show private chat and cannot be redacted; none are taken while you type into chat, a sign, a book or a text field (unless Typed Chat is on); 100-400 MB an hour and a little frame time (the GPU copy and one bulk read of it) |
 | Thumbnail FPS | 1 | 0.5-4 a second, plus one after each screen opens and each title |
 | Bookmark | unbound | a key that writes a `mark` line and a keyframe; also `/ecrec mark [note]` |
 | Open Folder | | opens the recordings folder |
@@ -66,21 +66,33 @@ it is somewhere else) is deleted. Writing starts at the first line, not at confi
 | `partNNNN.idx.jsonl` | one line per member: `{off, len, raw, lines, seq: [a, b], t: [a, b], n: [a, b], ms: [a, b], kf, rawOff?, rawLen?, rawRaw?, ent?: [off, len, lines], types: {type: count}}`. `types` counts packet lines by packet type (`minecraft:...`) and every other line by kind. An index line is written only after its member is whole on disk |
 | `partNNNN.raw.gz` | the raw sidecar (Raw Packets): gzip members aligned with the JSON members (`rawOff`/`rawLen` in the index), holding records `[u32 len][varint seq][u8 dir][u8 phase][u8 flags][bytes]` (big-endian length; dir 0 in, 1 out; phase 0 handshaking, 1 status, 2 login, 3 configuration, 4 play; flags bit 0 = withheld, the bytes left out and `len` their original length). A frame is `[packet id varint][payload]`, after decryption and decompression |
 | `partNNNN.ent.xz` | Compact Entity Rows only: the `ent` lines, one xz block per member |
-| `manifest.json` | rewritten every 10 s and at the end: `format: "recorder-2"`, id, label, the session meta (versions, self, uuid, server, settings, filters), start/end, startNs/startT/startN, `parts: [{name, seq, t, n, ms, bytes, rawBytes, lines}]`, `openPart`, `counts` per type, `errors` per type, `gaps`, `marks: [{seq, ms, t, note}]`, lines, gzBytes, rawBytes, complete, crashed, closed, stoppedReason, ioError, lastGoodSeq, lostAfterSeq |
+| `manifest.json` | rewritten every 10 s and at the end: `format: "recorder-2"`, id, label, the session meta (versions, self, uuid, server, settings, filters), start/end, startNs/startT/startN, `parts: [{name, seq, t, n, ms, bytes, rawBytes, lines}]` (`seq` the range of the lines written to the part), `openPart`, `counts` per type (a line whose build failed counts as `error`), `errors` per type, `gaps: [{range, lines, msRange, why, types}]` (one entry per overload episode: gaps of one reason less than 2 s apart are merged; past 1000 entries the oldest are folded into `gapsOverflow: {why: {entries, lines, range}}`), `marks: [{seq, ms, t, note}]`, lines, gzBytes, rawBytes, complete, crashed, closed, confirmed, finalName, stoppedReason (`disk_free_below`, `folder_cap`, `io_error`, `writer_error`), ioError, lastGoodSeq, lostAfterSeq |
 | `schema.json` | every class the field writer reflected, with its field names in written order, and every enum's constants by ordinal |
 | `entities.jsonl` | one line per entity as it entered the client level (the `espawn` body, `of` the line's seq) |
 | `events.jsonl` | the moments a reader looks for first: `mark`, `world`, `end`, `death`, `revive`, `leap`, `ec.split`, `settings` (each with `of`, the line's seq, and `kind`) |
 | `thumbs/partNNNN/<seq>.jpg` | Frame Thumbnails only |
+| `.lock` | held by the game instance writing the recording; deleted when it is finished. Another instance's recovery and folder cap leave a locked recording alone |
 
 Files being written end in `.part`. **Crash recovery**: at the next start, every `.part` left behind
 is cut back to the end of the last member its index names, renamed, and the manifest marked
-`crashed: true` with `lostAfterSeq`; stale pending directories (over an hour old) are deleted. A
-crash loses at most the member being built (about a second).
+`crashed: true` with `lostAfterSeq`; stale pending directories (over an hour old) are deleted, and a
+confirmed one whose rename failed is renamed. A recording another game instance is still writing
+(its `.lock` is held, or its manifest or a part changed in the last two minutes) is left alone. A
+crash loses whatever had not reached disk: normally the member being built (about a second), more
+if the writer or the disk had fallen behind (up to the writer queue, 512 MB, plus the IO queue, 256
+MB, or less on a small heap; the `rec` lines' `qBytes` and `ioQueueBytes` show the backlog).
+`lostAfterSeq` is the last seq known to be on disk; later lines may be missing without being counted.
 
 **Disk safety**: every 10 s the free space and folder size are checked against the settings; past
 them the recording stops whole with `{"k": "stopped", "why": "disk_free_below" | "folder_cap",
-"freeBytes", "limitBytes"}` and a chat warning. A disk error that persists stops it with `why:
-"io_error"`. Files are never truncated or replaced while writing.
+"freeBytes", "limitBytes"}` and a chat warning. A disk error that persists (or a recordings folder
+that cannot be created) stops it with `io_error`: always in the manifest (`stoppedReason`,
+`ioError`), and also as a `stopped` line when the disk still accepts one. An internal error in the
+writer stops it the same way with `writer_error`. Either way the session stops taking lines at once
+and what was still queued is counted in the manifest's `gaps`. Delete Oldest When Full only ever
+deletes finished recordings (a recorder name, a closed or crashed manifest, no `.part` file, no
+owner), never a folder of yours or a recording still being written. Files are never truncated or
+replaced while writing.
 
 ## Every line
 
@@ -100,9 +112,11 @@ them the recording stops whole with `{"k": "stopped", "why": "disk_free_below" |
 Mutable things (items, entities, Odin and EC objects, live chunks) are turned into finished strings
 on the thread that owns them before they are queued; only immutable inputs are formatted later on
 the writer thread. One writer thread (`ec-recorder-writer`) serializes and gzips, one IO thread
-(`ec-recorder-io`) writes, so the game and network threads only push onto a queue. The queue holds
-up to 512 MB; anything that does not fit is counted and written as a `gap` line. Nothing is dropped
-without a line saying so.
+(`ec-recorder-io`) writes, so the game and network threads only push onto a queue, and never wait for
+it. The queue holds up to 512 MB (an eighth of the game's heap if less), counting what each line
+really holds (a frozen packet's text, a chunk's copied data); anything that does not fit is counted
+and written as a `gap` line (one per reason a second at most). Nothing is dropped without a line
+saying so.
 
 ## When a recording starts and ends
 
@@ -111,15 +125,20 @@ written, so the world's very first packets are in it, and the login and configur
 before (registries, tags, resource packs) are replayed into it as `config` lines with their original
 seq and time. A respawn (Hypixel's server switches) does not split a recording: one follows you from
 the lobby into the run (a `world` line marks each dimension). It ends when the connection starts over
-(a reconfiguration or a new login), when the client leaves the world, or when the module is turned
-off. Turned on mid-world, it starts there (the world's first packets are gone; a keyframe stands in).
+(a reconfiguration or a new login), when the client leaves the world, when the game closes (`exit`;
+a recording never confirmed is deleted then too), or when the module is turned off. A confirmed
+recording also ends (`left`) once a respawn has taken you somewhere Odin says is not a place to
+record (with Where = Dungeons, back to the hub or your island after the run); the next respawn into
+a wanted place starts a new one. Turned on mid-world, it starts there (the world's first packets are
+gone; a keyframe stands in).
 
 ## Keyframes
 
 A `keyframe` line `{kf, reason}` (reasons `confirm`, `part`, `enable`, `respawn`, `mark`, `gap`...;
 at most one every 10 s except confirm/part/enable) is followed by every unit's full snapshot, each
-line tagged `"kf": id`: the loaded chunks (`kfchunk`, `kfbe`, `kfchunks`, 64 chunks a tick, so they
-trail by a few ticks), every map (`mapfull`), `env`, every entity (`kfent`, 100 a tick), your
+line tagged `"kf": id`: the loaded chunks (`kfchunk`, `kfbe`, `kfchunks`, up to 64 chunks a tick
+within about a millisecond, so they trail by a few ticks), every map (`mapfull`), `env`, every
+entity (`kfent`, about a millisecond's worth a tick, at most 100 a line), your
 inventory, effects and cooldowns, the options (`opts`), the screen and container, the HUD state, tab
 list, scoreboards (`kfboard`, `board`) and boss bars, the aim, Odin's whole state and room grid.
 "Only when it changed" lines start over at every keyframe and every part. A reader can start at any
@@ -137,11 +156,11 @@ again (`kfchunk` with `dirty: true`).
 | `settings` | `changed: {name: value}` | a setting changed mid-recording |
 | `keyframe` | `kf, reason` | a full snapshot follows (above) |
 | `mark` | `note` | a bookmark (keybind or `/ecrec mark [note]`) |
-| `gap` | `range: [seqA, seqB], lines, msRange, why, types` | lines that were not recorded: `queue_full` (the writer fell behind), `config_cache` (the between-worlds cache overflowed 64 MB), `stopped`, `after_close` |
-| `stopped` | `why, freeBytes?, limitBytes?, error?` | the recording stopped early for disk safety |
+| `gap` | `range: [seqA, seqB], lines, msRange, why, types` | lines that were not recorded: `queue_full` (the writer fell behind), `config_cache` (the between-worlds cache overflowed 64 MB), `stopped`, `after_close`, `io_error`, `writer_error`; at most one per reason a second, covering everything dropped in it |
+| `stopped` | `why, freeBytes?, limitBytes?, error?` | the recording stopped early for disk safety (`disk_free_below`, `folder_cap`) or a disk error (`io_error`, when the disk still takes the line) |
 | `rec` | `q, qBytes, lagMs, lines, rawBytes, gzBytes, serNs, gzNs, ioNs, ioQueueBytes, freeDisk, linesPerS` | the writer's health, every 10 s |
 | `error` | `p, err` | a line that failed to build (`p` its type) or a capture hook that threw (`p` like `player:me`, `hud:tab`, `keyframe:world`); the line's seq is kept |
-| `end` | `why` | the recording ended: `reconfigure`, `reconnect`, `disconnect`, `disabled`, `replaced` |
+| `end` | `why` | the recording ended: `reconfigure`, `reconnect`, `disconnect`, `disabled`, `replaced`, `exit` (the game closed), `left` (a server switch took you somewhere not to record) |
 
 ### The connection and its packets
 
@@ -191,11 +210,11 @@ decode as `{chunks: [{x, z, minSy, s: [{i, y, bio, bioRle?}]}]}`.
 |---|---|---|
 | `espawn` | `id, uuid, type, pos, base, rot: [yRot, xRot, yHeadRot, yBodyRot], vel, bb, pose, name, display, data, eq, vehicle, pass, hp?, maxHp?, hurt?: [hurtTime, deathTime], age, extra?, src (packet\|client), at (load\|tick)` | an entity entering the client level, in full; again at the tick's end (`at: "tick"`) once the rest of its spawn bundle applied |
 | `ent` | `d: [[id, x, y, z, xo, yo, zo, yRot, xRot, yHeadRot, yBodyRot, vx, vy, vz, onGround, interp, baseX, baseY, baseZ, hp, (ix, iy, iz)]]` | every rendered entity whose numbers changed this tick, bit-exact; `ix, iy, iz` the interpolation target when `interp` is 1; non-living entities have null yBodyRot and hp. The rendered position of a frame is lerp(xo, x, partialTick) with the partial tick from `frames` |
-| `emove` | `d: [[id, x, y, z, yRot, xRot, interp]], thread?` | each move the client applied (moveOrInterpolateTo), whatever asked for it; nulls for what the move left alone |
+| `emove` | `d: [[id, x, y, z, yRot, xRot, interp, snap?]], thread?` | each move the client applied, whatever asked for it: every moveOrInterpolateTo (nulls for what the move left alone), and the packet handlers' moves that skip it (a position sync's snap of a far or non-ticking entity, a teleport set without interpolation), written after the move with where it landed, `interp` 0 and a trailing `snap` 1 |
 | `egone` | `id, reason, src (level\|unload), found?, etype?` | an entity removed, with its reason |
 | `edata` | `id, etype, d` | an entity's data after the game applied it (`[[index, serializerId, value]]`) |
 | `eeq` | `id, slot, item` | an entity's equipment after the game applied it |
-| `kfent` | `kf, i, of, d: [{entity as espawn}], skipped?` | a keyframe's entities, 100 a tick (`i` of `of` lines) |
+| `kfent` | `kf, i, total, last, d: [{entity as espawn}], skipped?, cut?` | a keyframe's entities, about a millisecond's worth a tick (at most 100 a line): `i` the line's index, `total` the entities in the keyframe, `last` on its final line. A keyframe a newer one replaced before it finished ends with a `last` line whose `cut` lists the ids it did not reach (the newer one has them) |
 | `drawn` | `ids, tags?: [[id, component\|null]], outline?: [[id, rgb, appearsGlowing]]` | which entities were rendered this tick; tags and outlines only when they change |
 
 ### You, the camera and the clock
@@ -221,7 +240,7 @@ and a batch is written before the next discrete event.
 | k | fields | |
 |---|---|---|
 | `key` | `key, code, scan, mods, act, screen, maps` | every key event (`act` 0 release, 1 press, 2 repeat; `maps` the key mappings it matches). In a chat, sign or book screen or a focused text field: only `{redacted, screen}` unless Typed Chat is on |
-| `char` | `cp, s, screen` | a typed character; only with Typed Chat on |
+| `char` | `cp, s, screen` or `redacted, screen` | a typed character; only with Typed Chat on (`redacted` while writing a private message, with Hide Private Chats on) |
 | `btn` | `b, act, mods, gx, gy, screen, maps` | a mouse button |
 | `scroll` | `dx, dy, screen` | the wheel, before anything cancels it |
 | `cur` | `d: [[ns, x, y, grabbed]]` | cursor moves this tick (Cursor Moves) |
@@ -242,7 +261,7 @@ and a batch is written before the next discrete event.
 | `screen` | `open, class, reinit?, title, w, h, gw, gh, scale, menu?, cid?, state?, left?, top?, iw?, ih?, slots?: [[index, x, y, containerSlot, containerClass, active]], kf?` | a screen opened (with its layout, so a reader can redraw it) or closed (`open: false`) |
 | `slots` | `kf?, cid, state, s: [[i, item]]` | container slots whose item changed (the client's prediction included) |
 | `carried` / `hover` / `drag` | `item` / `slot` / `on, slots` | the item on the cursor, the slot under the mouse, a drag in progress |
-| `tooltip` | `slot, x, y, lines` | the tooltip exactly as drawn after every mod |
+| `tooltip` | `slot, x, y, lines, seq?` | the tooltip exactly as drawn after every mod: item tooltips, and (`seq: true`) widget and button tooltips and others drawn from formatted text, rebuilt as styled lines (one run per style) |
 | `gmouse` | `d: [[ns, x, y]]` | the mouse inside a screen every frame (flushed per tick) |
 | `chatui` | `stage (offered\|shown), src, tag, sig?, added?, c` or `stage, hidden: "private"` | what reached the chat box (`offered`) and what it displayed (`shown`) |
 | `chatdel` / `chatclear` | `sig` / `history` | a chat line deleted (by signature, base64) / the chat cleared |
@@ -253,7 +272,7 @@ and a batch is written before the next discrete event.
 | `board` | `kf?, slot, obj, title, lines: [[owner, score, line, display?]]` | each scoreboard display slot when it changes (the sidebar as vanilla draws it); `obj: null` when a slot lost its objective |
 | `kfboard` | `kf, objectives: [{name, criteria, title, render, scores}], teams: [[name, display, prefix, suffix, color, players]]` | the whole scoreboard at keyframes |
 | `bars` | `kf?, d: [[uuid, name, progress, color, overlay, darken, music, fog, drawn]]` | boss bars when they change; `drawn` false when a mod hid it |
-| `thumb` | `file, w, h, why, fw, fh, q, skipped?` | a frame thumbnail (Frame Thumbnails): `file` relative to the recording, `why` `fps`, `screen`, `title`, `subtitle` |
+| `thumb` | `file, w, h, why, fw, fh, q, skipped?` | a frame thumbnail (Frame Thumbnails): `file` relative to the recording, `why` `fps`, `screen`, `title`, `subtitle`; `skipped: {gpu, queue, typing}` the frames not taken since the last one (the GPU busy, the encoder behind, a text field being typed into with Typed Chat off) |
 
 ### Sounds and particles
 
@@ -363,16 +382,21 @@ recipes and advancements are written in full.
 Recordings stay on your computer. With the defaults:
 
 - private messages, guild, officer, co-op and friend lines are `{"hidden": "private"}` in packet
-  lines, `chatui`, `chat.dropped` and `odin.chat`, and their raw frames are withheld;
+  lines, `chatui`, `chat.dropped`, `odin.chat` and `eclog`, and their raw frames are withheld; what
+  you send to them (`/msg`, `/r`, `/gc`, chat in a guild channel...) stays redacted even with Typed
+  Chat on;
 - what you type is redacted: commands keep their name (`/warp`, args `<redacted>`), chat its length,
-  keys typed into text fields are `{"redacted": true}`, typed characters are not written, and the
-  raw frames of chat and command packets are withheld;
+  command suggestion requests their command's name, signs their line lengths, anvil names their
+  length, books their page count; keys typed into text fields are `{"redacted": true}`, typed
+  characters are not written, frame thumbnails are not taken while you type, and the raw frames of
+  all those packets are withheld;
 - the login encryption handshake is only a length (`crypto`), cookies only a length and hash;
 - Odin settings whose name looks secret are `<redacted>`.
 
 The server address, your account name and uuid, and the names of players around you are in the
 file, as they are in the game; check before sharing one. Frame Thumbnails (off by default) are
-pictures of your screen: whatever was on it, private chat included, is in them.
+pictures of your screen: whatever was on it, private chat included, is in them (except while you
+type, unless Typed Chat is on).
 
 ## Threads
 

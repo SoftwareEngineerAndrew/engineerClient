@@ -181,6 +181,8 @@ object InputCapture {
     /** KeyboardHandler.charTyped, HEAD: only with Typed Chat on. */
     @JvmStatic fun charTyped(ev: CharacterEvent) {
         if (!on() || !Rec.typedChat) return
+        // A private message being written (Hide Private Chats) keeps its characters out even so.
+        if (redactKeys(mc.screen)) { event("char", "\"redacted\":true,\"screen\":${screenName(mc.screen)}"); return }
         event("char", "\"cp\":${ev.codepoint()},\"s\":${q(ev.codepointAsString())},\"screen\":${screenName(mc.screen)}")
     }
 
@@ -351,7 +353,8 @@ object InputCapture {
 
     private fun typed(kind: String, text: String, cancelled: Boolean?) {
         if (!on()) return
-        EngineerClient.safely("recorder typed") { event("typed", InputJson.typedBody(kind, text, Rec.typedChat, cancelled)) }
+        val command = kind == "command" || (kind == "odin" && text.startsWith("/"))
+        EngineerClient.safely("recorder typed") { event("typed", InputJson.typedBody(kind, text, Rec.typedAllowed(text, command), cancelled)) }
     }
 
     private fun screenKey(what: String, s: Screen, k: KeyEvent) {
@@ -383,10 +386,17 @@ object InputCapture {
         mc.options.keyMappings.filter { runCatching { match(it) }.getOrDefault(false) }.joinToString(",", "[", "]") { q(it.name) }
 
     /** Keys that would spell out what you type: a chat, sign or book screen, or any focused text field. */
-    private fun redactKeys(screen: Screen?): Boolean {
-        if (Rec.typedChat || screen == null) return false
-        return screen is ChatScreen || screen is AbstractSignEditScreen || screen is BookEditScreen || screen is BookSignScreen ||
+    /** A screen you type text into (chat, sign, book, a focused text field), when Typed Chat is off. Also used by [ThumbCapture]. */
+    internal fun redactKeys(screen: Screen?): Boolean {
+        if (screen == null) return false
+        val typing = screen is ChatScreen || screen is AbstractSignEditScreen || screen is BookEditScreen || screen is BookSignScreen ||
             screen.focused.let { it is EditBox || it is MultiLineEditBox }
+        if (!typing) return false
+        if (!Rec.typedChat) return true
+        // Typed Chat on: still hidden while the chat box holds a private message (/msg, /gc, a guild channel...).
+        if (screen !is ChatScreen) return false
+        val draft = (screen.focused as? EditBox)?.value ?: return false
+        return Rec.privateOutbound(draft, draft.startsWith("/"))
     }
 
     private fun screenName(s: Screen?): String = if (s == null) "null" else q(PacketJson.simpleName(s.javaClass))

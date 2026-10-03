@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.LockSupport
 import java.util.zip.GZIPOutputStream
@@ -36,15 +37,21 @@ import java.util.zip.GZIPOutputStream
  * serializer and a heavy packet never stalls the disk.
  *
  * Nothing is thrown away to keep the files small. The queue is bounded only by an estimate of the
- * bytes it holds (512 MB); anything that does not fit is counted per type and written as a `gap`
- * line, so a reader always knows what is missing. Recording stops whole, with a `stopped` line,
+ * bytes it holds (512 MB, or an eighth of the game's heap if that is less); anything that does not
+ * fit is counted per type and written as a `gap` line, so a reader always knows what is missing. No
+ * producer ever waits for the writer: a full queue is a gap, never a stall. Recording stops whole, with a `stopped` line,
  * only when the disk is (nearly) full or failing.
  *
  * Layout (see [RecorderFiles]): a directory per recording, `.pending-<id>` until [confirm] gives it
  * its final name. Each part is a run of independent gzip members of about a second or a MiB each,
  * with an index line per member (offsets, sequence/tick/time ranges, line types), so a reader can
- * seek straight to any moment and a crash loses at most the member being built. Raw packet bytes go
- * to a sidecar whose members line up with the JSON members.
+ * seek straight to any moment. A crash loses whatever had not reached disk: normally the member being
+ * built (about a second), more if the writer or disk had fallen behind (the `rec` lines' qBytes and
+ * ioQueueBytes show the backlog). Raw packet bytes go to a sidecar whose members line up with the
+ * JSON members.
+ *
+ * The IO thread holds a lock on `<dir>/.lock` while it owns the directory, so another game instance's
+ * startup recovery and folder cap leave a live recording alone.
  *
  * Part files carry a `.part` suffix until they are closed and forced to disk; startup recovery
  * ([RecorderFiles.recover]) cuts any left behind back to their last indexed member.
@@ -71,6 +78,8 @@ class RecorderSession(
         private set
     @Volatile var label: String? = null
         private set
+    /** The name [confirm] asked for (kept in the manifest even when the rename failed, for recovery). */
+    @Volatile private var finalName: String? = null
 
     /** Accepting lines: false once closing, abandoned or stopped. */
     @Volatile var running = true
@@ -78,6 +87,9 @@ class RecorderSession(
     @Volatile var stoppedReason: String? = null
         private set
     @Volatile private var abandoned = false
+
+    /** Abandoned: everything it wrote is being deleted (side writers such as thumbnails stop). */
+    val isAbandoned: Boolean get() = abandoned
 
     // ------------------------------------------------------------------ queue
 
@@ -91,6 +103,12 @@ class RecorderSession(
 
     private val queue = LinkedBlockingQueue<Job>()
     private val pendingBytes = AtomicLong()
+    /** Producers inside [offer] right now: the writer waits for them before its last pass. */
+    private val inFlight = AtomicInteger()
+    /** The final manifest is on its way: a line offered now belongs to no recording and is not counted. */
+    @Volatile private var finalized = false
+    private val queueCap = queueCapFor(Runtime.getRuntime().maxMemory())
+    private val ioCap = ioCapFor(Runtime.getRuntime().maxMemory())
 
     /** Lines that could not be queued, per reason, until the writer writes their gap line. */
     private class Gap(val why: String) {
@@ -100,33 +118,44 @@ class RecorderSession(
     private val gapLock = Any()
     private val gaps = HashMap<String, Gap>()
     private val gapTotal = AtomicLong()
-    private val gapHistory = ConcurrentLinkedQueue<String>()
+    /** Every gap so far (writer thread), merged per overload episode and capped: see [addHistory]. */
+    private val gapHistory = GapHistory()
+    private var lastGapFlushMs = 0L
     @Volatile private var gapWarned = false
 
-    private fun recordGap(job: Job, why: String) {
+    private fun recordGap(job: Job, why: String) = recordGap(why, job.seq, job.seq, job.ms, job.ms, 1, mapOf(job.typeTag to 1L))
+
+    private fun recordGap(why: String, seqA: Long, seqB: Long, msA: Long, msB: Long, lines: Long, types: Map<String, Long>) {
+        if (finalized) return
         synchronized(gapLock) {
             val g = gaps.getOrPut(why) { Gap(why) }
-            g.lines++; g.seqA = minOf(g.seqA, job.seq); g.seqB = maxOf(g.seqB, job.seq); g.msA = minOf(g.msA, job.ms); g.msB = maxOf(g.msB, job.ms)
-            g.types.merge(job.typeTag, 1L, Long::plus)
+            g.lines += lines; g.seqA = minOf(g.seqA, seqA); g.seqB = maxOf(g.seqB, seqB); g.msA = minOf(g.msA, msA); g.msB = maxOf(g.msB, msB)
+            types.forEach { (k, v) -> g.types.merge(k, v, Long::plus) }
         }
-        gapTotal.incrementAndGet()
+        gapTotal.addAndGet(lines)
     }
 
+    /**
+     * Queues [job], or counts it as a gap. Never blocks: not the game thread (a stall per line adds
+     * up to whole frames) and not a network thread.
+     */
     private fun offer(job: Job): Boolean {
-        if (!running) { recordGap(job, "after_close"); return false }
-        val cost = 64L + job.est
-        if (pendingBytes.get() + cost > QUEUE_BYTES) {
-            // The game thread may wait a moment for the writer; network threads never block.
-            if (Thread.currentThread() === Rec.gameThread) LockSupport.parkNanos(2_000_000)
-            if (pendingBytes.get() + cost > QUEUE_BYTES) { recordGap(job, "queue_full"); return false }
+        inFlight.incrementAndGet()
+        try {
+            if (!running) { recordGap(job, "after_close"); return false }
+            val cost = 64L + job.est
+            if (pendingBytes.get() + cost > queueCap) { recordGap(job, "queue_full"); return false }
+            pendingBytes.addAndGet(cost)
+            queue.offer(job)
+            return true
+        } finally {
+            inFlight.decrementAndGet()
         }
-        pendingBytes.addAndGet(cost)
-        queue.offer(job)
-        return true
     }
 
-    fun line(seq: Long, typeTag: String, ms: Long, text: String, kf: Long = -1) =
-        offer(LineJob(seq, text.length, typeTag, ms, Rec.tick, Rec.serverTicks, kf, text, null))
+    /** [t] and [n] are the line's own (a replayed line keeps those it was taken with). */
+    fun line(seq: Long, typeTag: String, ms: Long, text: String, kf: Long = -1, t: Int = Rec.tick, n: Int = Rec.serverTicks) =
+        offer(LineJob(seq, text.length, typeTag, ms, t, n, kf, text, null))
 
     fun lazyLine(seq: Long, est: Int, typeTag: String, ms: Long, build: () -> String) =
         offer(LineJob(seq, est, typeTag, ms, Rec.tick, Rec.serverTicks, -1, null, build))
@@ -149,15 +178,19 @@ class RecorderSession(
     /** The world turned out to be one to keep: the directory gets its final name (label fixed here). */
     fun confirm(label: String) {
         if (this.label != null || abandoned) return
+        val name = RecorderFiles.finalName(stamp, label, hex)
+        finalName = name
         this.label = RecorderFiles.sanitizeLabel(label)
-        io(IoOp.Confirm(RecorderFiles.finalName(stamp, label, hex)))
+        io(IoOp.Confirm(name))
     }
 
-    /** Stops and deletes everything written so far (the world was not one to record). */
+    /**
+     * Stops and deletes everything written so far (the world was not one to record). It stays in
+     * [OPEN] until its IO thread has deleted the directory, so [shutdownAll] waits for that too.
+     */
     fun abandon() {
         abandoned = true
         running = false
-        OPEN.remove(this)
         queue.offer(Wake)
     }
 
@@ -220,6 +253,8 @@ class RecorderSession(
     private var lastTelemetryLines = 0L
     private var lastManifestMs = 0L
     private var partSeqA = -1L; private var partTA = 0; private var partNA = 0; private var partMsA = 0L
+    /** The seq range of the lines actually written to the part (lines may arrive slightly out of order). */
+    private var partSeqMin = Long.MAX_VALUE; private var partSeqMax = Long.MIN_VALUE
     private var partLines = 0L; private var partGz = 0L; private var partRawGz = 0L
 
     private val writer = Thread(::writerLoop, "ec-recorder-writer").apply { priority = Thread.NORM_PRIORITY - 1; isDaemon = false }
@@ -239,6 +274,9 @@ class RecorderSession(
 
     private val ioQueue = LinkedBlockingQueue<IoOp>()
     private val ioBytes = AtomicLong()
+    private var lock: RecorderFiles.DirLock? = null
+    /** The IO thread's current part was closed (renamed): a late `stopped` line must not reopen it. */
+    private var ioPartClosed = false
     @Volatile private var ioFailed: String? = null
     @Volatile private var guardStop: String? = null
     @Volatile private var freeDisk = -1L
@@ -259,13 +297,21 @@ class RecorderSession(
     init {
         installHooks()
         OPEN += this
-        writer.start()
+        // The IO thread first: the writer treats a dead IO thread as a failed disk.
         ioThread.start()
+        writer.start()
     }
 
-    private fun io(op: IoOp) {
+    /** False once nothing will consume [ioQueue] any more (the IO thread died) or the disk failed for good. */
+    private fun ioAccepting() = ioFailed == null && ioThread.isAlive
+
+    /** Hands [op] to the IO thread. Data ops are refused once [ioAccepting] is false (the caller counts them). */
+    private fun io(op: IoOp): Boolean {
+        if (!ioThread.isAlive) return false
+        if (ioFailed != null && (op is IoOp.Member || op is IoOp.EntTail)) return false
         ioBytes.addAndGet(op.bytes)
         ioQueue.offer(op)
+        return true
     }
 
     // ------------------------------------------------------------------ writer
@@ -280,25 +326,47 @@ class RecorderSession(
                     handle(job)
                 }
                 val now = System.currentTimeMillis()
-                writeGaps(now)
+                writeGaps(now, !running)
                 guardStop?.let { stopFromGuard(it) }
-                if (ioFailed != null) { failDrain(); break }
+                if (!ioAccepting()) {
+                    // A disk error, or an IO thread that died: nothing more reaches the disk.
+                    if (ioFailed == null) ioFailed = "io thread stopped"
+                    if (stoppedReason == null) stoppedReason = "io_error"
+                    failDrain("io_error"); break
+                }
                 if (mLines + mEntLines > 0 && (memberBuf.size() >= MEMBER_RAW || now - mStartMs >= MEMBER_MS)) closeMember()
                 else if (mLines == 0 && (rawBuf.size() > 0 || indexBufs.isNotEmpty()) && now - mStartMs >= MEMBER_MS) closeMember()
                 if (part > 0 && now - lastTelemetryMs >= TELEMETRY_MS) telemetry(now)
                 if (part > 0 && now - lastManifestMs >= MANIFEST_MS) { lastManifestMs = now; io(IoOp.Manifest(manifest(false), false)) }
-                if (!running && queue.isEmpty()) break
+                if (!running && queue.isEmpty()) {
+                    // A producer that saw running=true just before close() may still be queueing: wait
+                    // for it (briefly), then go round again if it did.
+                    val deadline = System.nanoTime() + 50_000_000L
+                    while (inFlight.get() > 0 && System.nanoTime() < deadline) LockSupport.parkNanos(100_000)
+                    if (queue.isEmpty()) break
+                }
             }
             if (!abandoned) {
-                if (ioFailed == null) {
-                    writeGaps(System.currentTimeMillis())
+                // Anything that still slipped in is counted, then the last gaps go in the file.
+                drainToGap("after_close")
+                if (ioAccepting()) {
                     if (part > 0) { closeMember(); closePart() }
                 }
+                finalized = true
                 io(IoOp.Manifest(manifest(true), true))
             }
         } catch (t: Throwable) {
-            log.error("[ec] recorder writer stopped", t)
+            // Out of memory, or a bug outside one line's build: stop the session properly (a dead
+            // writer must never leave it "running", queueing into a queue nothing drains).
+            runCatching { memberBuf.reset(); rawBuf.reset(); entBuf.reset(); indexBufs.clear() }
+            runCatching { log.error("[ec] recorder writer stopped", t) }
             ioFailed = ioFailed ?: "writer: $t"
+            if (stoppedReason == null) stoppedReason = "writer_error"
+            running = false
+            runCatching { failDrain("writer_error") }
+            finalized = true
+            runCatching { io(IoOp.Manifest(manifest(true), true)) }
+            runCatching { notify("§cDungeon Recorder stopped: internal error (${t.javaClass.simpleName}). What was written so far is kept.") }
         } finally {
             io(IoOp.Finish)
             runCatching { xz?.close() }
@@ -328,17 +396,22 @@ class RecorderSession(
             openPart(job.seq)
         }
         val t0 = System.nanoTime()
+        var failed = false
         val text = if (job.text != null) job.text else try {
             job.build!!()
         } catch (t: Throwable) {
+            if (t is OutOfMemoryError) throw t
+            failed = true
             errors.merge(job.typeTag, 1L, Long::plus)
             RecorderFiles.envelope("error", job.seq, job.t, job.n, job.ms, System.nanoTime() - startNs) +
                 ",\"p\":${RecorderFiles.q(job.typeTag)},\"err\":${RecorderFiles.q(t.toString())}}"
         }
         serNs += System.nanoTime() - t0
         if (job.kf >= 0) mKf = job.kf
-        val toEnt = job.typeTag == "ent" && config().compactEntities
-        append(text, job.typeTag, job.seq, job.t, job.n, job.ms, toEnt)
+        // A failed build is an `error` line, and is counted as one (idx types, manifest counts).
+        val type = if (failed) "error" else job.typeTag
+        val toEnt = !failed && job.typeTag == "ent" && config().compactEntities
+        append(text, type, job.seq, job.t, job.n, job.ms, toEnt)
     }
 
     /** Puts one finished line into the current member (or the entity xz stream). */
@@ -354,6 +427,7 @@ class RecorderSession(
         counts.merge(type, 1L, Long::plus)
         mTypes.merge(type, 1, Int::plus)
         if (seq < mSeqA) mSeqA = seq; if (seq > mSeqB) mSeqB = seq
+        if (seq < partSeqMin) partSeqMin = seq; if (seq > partSeqMax) partSeqMax = seq
         if (t < mTA) mTA = t; if (t > mTB) mTB = t
         if (n < mNA) mNA = n; if (n > mNB) mNB = n
         if (ms < mMsA) mMsA = ms; if (ms > mMsB) mMsB = ms
@@ -370,6 +444,7 @@ class RecorderSession(
         partOpenMs = System.currentTimeMillis()
         partRaw = 0; jsonOff = 0; rawOff = 0; entOff = 0
         partSeqA = firstSeq; partTA = Rec.tick; partNA = Rec.serverTicks; partMsA = partOpenMs
+        partSeqMin = Long.MAX_VALUE; partSeqMax = Long.MIN_VALUE
         partLines = 0; partGz = 0; partRawGz = 0
         val name = RecorderFiles.partName(part, "jsonl.gz")
         val body = StringBuilder()
@@ -416,8 +491,11 @@ class RecorderSession(
         idx.append("}}")
         val index = indexBufs.mapValues { it.value.toString() }
         // Back-pressure: the writer (never a game or network thread) waits while the disk catches up.
-        while (ioBytes.get() > IO_QUEUE_BYTES && ioFailed == null && ioThread.isAlive) Thread.sleep(5)
-        io(IoOp.Member(part, json, raw, ent, idx.toString(), index, mSeqB, jsonOff, rawOff, entOff))
+        while (ioBytes.get() > ioCap && ioAccepting()) Thread.sleep(5)
+        if (!io(IoOp.Member(part, json, raw, ent, idx.toString(), index, mSeqB, jsonOff, rawOff, entOff)) && mSeqA != Long.MAX_VALUE) {
+            // Nothing will write it: its lines are a gap, not a silent loss.
+            recordGap("io_error", mSeqA, mSeqB, mMsA, mMsB, (mLines + mEntLines).toLong(), mTypes.mapValues { it.value.toLong() })
+        }
         jsonOff += json.size; rawOff += raw?.size ?: 0; entOff += ent?.size ?: 0
         gzTotal += json.size + (raw?.size ?: 0) + (ent?.size ?: 0)
         partGz += json.size; partRawGz += raw?.size ?: 0
@@ -434,7 +512,9 @@ class RecorderSession(
             if (tail.isNotEmpty()) { io(IoOp.EntTail(part, tail, entOff)); entOff += tail.size }
         }
         xz = null; xzSink = null
-        partsDone += "{\"name\":${RecorderFiles.q(RecorderFiles.partName(part, "jsonl.gz"))},\"seq\":[$partSeqA,${Rec.nextSeqPeek()}]," +
+        val seqA = if (partSeqMin != Long.MAX_VALUE) partSeqMin else partSeqA
+        val seqB = if (partSeqMax != Long.MIN_VALUE) partSeqMax else partSeqA
+        partsDone += "{\"name\":${RecorderFiles.q(RecorderFiles.partName(part, "jsonl.gz"))},\"seq\":[$seqA,$seqB]," +
             "\"t\":[$partTA,${Rec.tick}],\"n\":[$partNA,${Rec.serverTicks}],\"ms\":[$partMsA,${System.currentTimeMillis()}]," +
             "\"bytes\":$partGz,\"rawBytes\":$partRawGz,\"lines\":$partLines}"
         io(IoOp.ClosePart(part))
@@ -449,14 +529,18 @@ class RecorderSession(
     /** gzip at level 6 (the JDK's constructor has no level; `def` is DeflaterOutputStream's protected deflater). */
     private class Gz6(out: OutputStream) : GZIPOutputStream(out, 1 shl 16, false) { init { def.setLevel(6) } }
 
-    private fun writeGaps(now: Long) {
+    /**
+     * Writes the gaps gathered since the last call: at most once a second unless [force]d, so one
+     * gap line per reason covers a whole second of an overload rather than one line per job.
+     */
+    private fun writeGaps(now: Long, force: Boolean = true) {
+        if (!force && now - lastGapFlushMs < GAP_FLUSH_MS) return
+        lastGapFlushMs = now
         val pending: List<Gap> = synchronized(gapLock) { if (gaps.isEmpty()) return; gaps.values.toList().also { gaps.clear() } }
         if (part == 0 && running) openPart(Rec.nextSeqPeek())
         for (g in pending) {
-            val types = g.types.entries.joinToString(",") { "${RecorderFiles.q(it.key)}:${it.value}" }
-            val body = "\"range\":[${g.seqA},${g.seqB}],\"lines\":${g.lines},\"msRange\":[${g.msA},${g.msB}],\"why\":${RecorderFiles.q(g.why)},\"types\":{$types}"
-            gapHistory += "{$body}"
-            if (part > 0) selfLine("gap", body)
+            gapHistory.add(g.why, g.seqA, g.seqB, g.msA, g.msB, g.lines, g.types)
+            if (part > 0) selfLine("gap", gapBody(g))
         }
         if (!gapWarned && pending.any { it.why == "queue_full" }) {
             gapWarned = true
@@ -493,14 +577,28 @@ class RecorderSession(
         writeGaps(System.currentTimeMillis())
     }
 
-    /** The disk failed for good: nothing more can be written, so the rest is only counted. */
-    private fun failDrain() {
+    /**
+     * Nothing more can be written (the disk failed for good, or the writer broke): the rest is only
+     * counted, into the manifest's gaps. Producers still holding the session see running=false.
+     */
+    private fun failDrain(why: String) {
         running = false
+        // A producer mid-offer may still queue one more: wait for them briefly.
+        val deadline = System.nanoTime() + 50_000_000L
+        while (inFlight.get() > 0 && System.nanoTime() < deadline) LockSupport.parkNanos(100_000)
         while (true) {
             val j = queue.poll() ?: break
-            if (j !== Wake) recordGap(j, "io_error")
+            if (j === Wake) continue
+            pendingBytes.addAndGet(-(64L + j.est))
+            recordGap(j, why)
         }
-        synchronized(gapLock) { gaps.values.forEach { g -> gapHistory += "{\"range\":[${g.seqA},${g.seqB}],\"lines\":${g.lines},\"why\":\"${g.why}\"}" }; gaps.clear() }
+        val pending = synchronized(gapLock) { gaps.values.toList().also { gaps.clear() } }
+        pending.forEach { g -> gapHistory.add(g.why, g.seqA, g.seqB, g.msA, g.msB, g.lines, g.types) }
+    }
+
+    private fun gapBody(g: Gap): String {
+        val types = g.types.entries.joinToString(",") { "${RecorderFiles.q(it.key)}:${it.value}" }
+        return "\"range\":[${g.seqA},${g.seqB}],\"lines\":${g.lines},\"msRange\":[${g.msA},${g.msB}],\"why\":${RecorderFiles.q(g.why)},\"types\":{$types}"
     }
 
     private fun manifest(final: Boolean): String {
@@ -522,7 +620,7 @@ class RecorderSession(
         if (!final && part > 0) m.add("openPart", JsonParser.parseString("{\"name\":${RecorderFiles.q(RecorderFiles.partName(part, "jsonl.gz"))},\"lines\":$partLines,\"bytes\":$jsonOff}"))
         m.add("counts", JsonObject().also { o -> counts.toSortedMap().forEach { (k, v) -> o.addProperty(k, v) } })
         m.add("errors", JsonObject().also { o -> errors.toSortedMap().forEach { (k, v) -> o.addProperty(k, v) } })
-        m.add("gaps", JsonArray().also { a -> gapHistory.forEach { a.add(JsonParser.parseString(it)) } })
+        gapHistory.toJson(m)
         m.add("marks", JsonArray().also { a -> marks.forEach { a.add(JsonParser.parseString(it)) } })
         m.addProperty("lines", lines)
         m.addProperty("gzBytes", gzTotal)
@@ -533,18 +631,28 @@ class RecorderSession(
     // ------------------------------------------------------------------ IO thread
 
     private fun ioLoop() {
+        var finished = false
         try {
-            Files.createDirectories(dir)
+            // A folder that cannot be made (read-only, Controlled Folder Access, a file in the way)
+            // is a disk error like any other: the session stops and says so.
+            try {
+                Files.createDirectories(dir)
+                lock = RecorderFiles.lockDir(dir, create = true)
+            } catch (e: Throwable) { fail(e, writeLine = false) }
             while (true) {
                 val op = ioQueue.poll(1, TimeUnit.SECONDS)
                 val now = System.currentTimeMillis()
                 if (op != null) {
                     ioBytes.addAndGet(-op.bytes)
-                    if (op is IoOp.Finish) break
+                    if (op is IoOp.Finish) { finished = true; break }
                     if (abandoned) continue
                     if (ioFailed == null || op is IoOp.Manifest) {
                         val t0 = System.nanoTime()
-                        try { perform(op) } catch (e: Throwable) { if (op is IoOp.Manifest) log.warn("[ec] recorder manifest", e) else fail(e) }
+                        try { perform(op) } catch (e: Throwable) {
+                            if (op is IoOp.Manifest) log.warn("[ec] recorder manifest", e)
+                            // A part's close renames its files: no stopped line can be added to it afterwards.
+                            else fail(e, writeLine = op !is IoOp.ClosePart)
+                        }
                         ioNs += System.nanoTime() - t0
                     }
                 }
@@ -554,12 +662,39 @@ class RecorderSession(
             }
         } catch (t: Throwable) {
             log.error("[ec] recorder io stopped", t)
+            // Never leave the session running with nobody to write it.
+            if (ioFailed == null) runCatching { fail(t, writeLine = false) }
         } finally {
             closeChannels()
-            if (abandoned) runCatching { RecorderFiles.deleteRecursively(dir) }
+            if (abandoned) {
+                runCatching { lock?.release() }; lock = null
+                runCatching { RecorderFiles.deleteRecursively(dir) }
+            } else {
+                // A confirmed recording whose rename kept failing: one more try now that nothing is open.
+                if (finished && finalName != null && dir.fileName.toString().startsWith(".")) runCatching { renameTo(finalName!!, 1) }
+                runCatching { lock?.release(delete = true) }; lock = null
+            }
             OPEN.remove(this)
-            if (!abandoned) summary()
+            if (!abandoned) runCatching { summary() }
         }
+    }
+
+    /** Moves the directory to [name] (the lock is let go for the move and taken again after). */
+    private fun renameTo(name: String, attempts: Int): Boolean {
+        val target = dir.resolveSibling(name)
+        runCatching { lock?.release() }; lock = null
+        var moved = false
+        for (attempt in 0 until attempts) {
+            try {
+                try { Files.move(dir, target, StandardCopyOption.ATOMIC_MOVE) } catch (_: java.nio.file.AtomicMoveNotSupportedException) { Files.move(dir, target) }
+                moved = true; break
+            } catch (e: IOException) {
+                if (attempt + 1 < attempts) Thread.sleep(minOf(5000L, 100L shl minOf(attempt, 6)))
+            }
+        }
+        if (moved) dir = target
+        lock = runCatching { RecorderFiles.lockDir(dir, create = true) }.getOrNull()
+        return moved
     }
 
     private fun perform(op: IoOp) {
@@ -581,6 +716,7 @@ class RecorderSession(
                 writeAt("${p}idx.jsonl", idx, idxOff)
                 idxOff += idx.size
                 ioPart = op.part
+                ioPartClosed = false
                 ioJsonEnd = op.jsonOff + op.json.size
                 if (op.lastSeq > lastGoodSeq) lastGoodSeq = op.lastSeq
             }
@@ -588,29 +724,24 @@ class RecorderSession(
             is IoOp.ClosePart -> {
                 val p = RecorderFiles.partName(op.part, "")
                 idxOff = 0; ioJsonEnd = 0
+                ioPartClosed = true
                 for (ext in listOf("jsonl.gz", "raw.gz", "ent.xz", "idx.jsonl")) {
                     val name = if (ext == "idx.jsonl") "$p$ext" else "$p$ext.part"
-                    val ch = channels.remove(name) ?: continue
-                    try { ch.force(true); ch.close() } catch (e: IOException) { anyCloseFailed = true; runCatching { ch.close() }; throw e }
+                    // From what is on disk, not from the open channels: a confirm closed them all, and
+                    // a stream not written since (often the raw sidecar) must still lose its .part.
+                    channels.remove(name)?.let { ch ->
+                        try { ch.force(true); ch.close() } catch (e: IOException) { anyCloseFailed = true; runCatching { ch.close() }; throw e }
+                    }
                     // Never rename a part whose close failed: recovery will check it against the index.
-                    if (name.endsWith(".part")) Files.move(dir.resolve(name), dir.resolve(name.removeSuffix(".part")))
+                    val path = dir.resolve(name)
+                    if (name.endsWith(".part") && Files.exists(path)) Files.move(path, dir.resolve(name.removeSuffix(".part")))
                 }
             }
             is IoOp.Confirm -> {
                 closeChannels()
-                val target = dir.resolveSibling(op.finalName)
                 // Written first, so a crash mid-rename (or a rename that keeps failing) still keeps it.
-                runCatching { RecorderFiles.writeAtomically(dir.resolve("manifest.json"), "{\"format\":\"${RecorderFiles.FORMAT}\",\"id\":${RecorderFiles.q(id)},\"confirmed\":true,\"finalName\":${RecorderFiles.q(op.finalName)},\"complete\":false}") }
-                var moved = false
-                for (attempt in 0 until 20) {
-                    try {
-                        try { Files.move(dir, target, StandardCopyOption.ATOMIC_MOVE) } catch (_: java.nio.file.AtomicMoveNotSupportedException) { Files.move(dir, target) }
-                        moved = true; break
-                    } catch (e: IOException) {
-                        Thread.sleep(minOf(5000L, 100L shl minOf(attempt, 6)))
-                    }
-                }
-                if (moved) dir = target else log.warn("[ec] recorder could not rename $dir to ${op.finalName}; recovery will on next start")
+                runCatching { RecorderFiles.writeAtomically(dir.resolve("manifest.json"), "{\"format\":\"${RecorderFiles.FORMAT}\",\"id\":${RecorderFiles.q(id)},\"label\":${RecorderFiles.q(label)},\"confirmed\":true,\"finalName\":${RecorderFiles.q(op.finalName)},\"complete\":false}") }
+                if (!renameTo(op.finalName, 20)) log.warn("[ec] recorder could not rename $dir to ${op.finalName}; recovery will on next start")
                 lastSchema = -1
             }
             is IoOp.Manifest -> {
@@ -638,7 +769,8 @@ class RecorderSession(
         m.addProperty("crashed", false)
         m.addProperty("closed", final)
         m.addProperty("lastGoodSeq", lastGoodSeq)
-        label?.let { m.addProperty("confirmed", true); m.addProperty("finalName", dir.fileName.toString()) }
+        // The name asked for, not the directory's: a rename that failed is finished by recovery.
+        finalName?.let { m.addProperty("confirmed", true); m.addProperty("finalName", it) }
         RecorderFiles.writeAtomically(dir.resolve("manifest.json"), GSON.toJson(m))
     }
 
@@ -673,30 +805,50 @@ class RecorderSession(
         }
     }
 
-    /** A persistent IO error: try to leave a `stopped` line, keep the .part names, warn, stop. */
-    private fun fail(e: Throwable) {
+    /**
+     * A persistent IO error: try to leave a `stopped` line (when [writeLine] and the disk still takes
+     * one), keep the .part names, warn, stop. The manifest always says io_error.
+     */
+    private fun fail(e: Throwable, writeLine: Boolean = true) {
         if (ioFailed != null) return
         log.error("[ec] recorder io error in $dir", e)
         ioFailed = e.toString()
         stoppedReason = "io_error"
         running = false
-        runCatching {
-            val seq = Rec.nextSeq()
-            val line = envelope("stopped", seq) + ",\"why\":\"io_error\",\"error\":${RecorderFiles.q(e.toString())}}\n"
-            val out = ByteArrayOutputStream()
-            Gz6(out).use { it.write(line.toByteArray(Charsets.UTF_8)) }
-            // Its own member, indexed like any other, so recovery keeps it.
-            val gz = out.toByteArray()
-            val p = RecorderFiles.partName(ioPart, "")
-            channels["${p}jsonl.gz.part"]?.let { ch ->
-                var pos = ioJsonEnd
-                val b = ByteBuffer.wrap(gz)
-                while (b.hasRemaining()) pos += ch.write(b, pos)
-                val idx = "{\"off\":$ioJsonEnd,\"len\":${gz.size},\"raw\":${line.length},\"lines\":1,\"seq\":[$seq,$seq],\"kf\":null,\"types\":{\"stopped\":1}}\n"
-                channels["${p}idx.jsonl"]?.let { ic -> ic.write(ByteBuffer.wrap(idx.toByteArray(Charsets.UTF_8)), idxOff) }
-            }
-        }
+        if (writeLine && !ioPartClosed) runCatching { stoppedLine(e) }
         notify("§cDungeon Recorder stopped: could not write to disk (${e.javaClass.simpleName}). What was written so far is kept.")
+    }
+
+    /**
+     * The `stopped` line as its own member, indexed like any other so recovery keeps it. The failed
+     * write already closed its channel, so the part's files are opened again by name; the member goes
+     * at the end of the last whole one, over anything torn.
+     */
+    private fun stoppedLine(e: Throwable) {
+        val p = RecorderFiles.partName(ioPart, "")
+        val jPath = dir.resolve("${p}jsonl.gz.part")
+        if (!Files.isDirectory(dir)) return
+        val seq = Rec.nextSeq()
+        val ms = System.currentTimeMillis()
+        val t = Rec.tick; val n = Rec.serverTicks
+        val lb = (RecorderFiles.envelope("stopped", seq, t, n, ms, System.nanoTime() - startNs) +
+            ",\"why\":\"io_error\",\"error\":${RecorderFiles.q(e.toString())}}\n").toByteArray(Charsets.UTF_8)
+        val out = ByteArrayOutputStream()
+        Gz6(out).use { it.write(lb) }
+        val gz = out.toByteArray()
+        val idx = "{\"off\":$ioJsonEnd,\"len\":${gz.size},\"raw\":${lb.size},\"lines\":1,\"seq\":[$seq,$seq],\"t\":[$t,$t],\"n\":[$n,$n],\"ms\":[$ms,$ms],\"kf\":null,\"types\":{\"stopped\":1}}\n"
+        fun put(name: String, path: Path, bytes: ByteArray, at: Long) {
+            val held = channels[name]
+            val ch = held ?: FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+            try {
+                val b = ByteBuffer.wrap(bytes)
+                var pos = at
+                while (b.hasRemaining()) pos += ch.write(b, pos)
+                ch.force(true)
+            } finally { if (held == null) runCatching { ch.close() } }
+        }
+        put("${p}jsonl.gz.part", jPath, gz, ioJsonEnd)
+        put("${p}idx.jsonl", dir.resolve("${p}idx.jsonl"), idx.toByteArray(Charsets.UTF_8), idxOff)
     }
 
     /** Free space and folder size, every 10 s. */
@@ -709,7 +861,10 @@ class RecorderSession(
         if (c.maxFolderGb > 0) {
             val cap = (c.maxFolderGb * RecorderFiles.GIB).toLong()
             var size = RecorderFiles.folderSize(root)
-            if (size > cap && c.deleteOldest) { size -= RecorderFiles.deleteOldest(root, dir, size - cap) }
+            if (size > cap && c.deleteOldest) {
+                RecorderFiles.deleteOldest(root, liveDirs() + dir, size - cap)
+                size = RecorderFiles.folderSize(root)
+            }
             if (size > cap) { guardStop = "folder_cap:\"why\":\"folder_cap\",\"freeBytes\":$free,\"folderBytes\":$size,\"limitBytes\":$cap"; queue.offer(Wake) }
         }
     }
@@ -734,6 +889,11 @@ class RecorderSession(
 
         const val QUEUE_BYTES = 512L * 1024 * 1024
         const val IO_QUEUE_BYTES = 256L * 1024 * 1024
+        /** The writer queue's byte cap for a heap of [maxMemory]: never more than an eighth of it. */
+        fun queueCapFor(maxMemory: Long) = minOf(QUEUE_BYTES, maxMemory / 8)
+        /** The IO queue's (finished members waiting for the disk): never more than a sixteenth of the heap. */
+        fun ioCapFor(maxMemory: Long) = minOf(IO_QUEUE_BYTES, maxMemory / 16)
+        const val GAP_FLUSH_MS = 1000L
         const val MEMBER_RAW = 1 shl 20
         const val MEMBER_MS = 1000L
         const val PART_MS = 60 * 60 * 1000L
@@ -746,6 +906,9 @@ class RecorderSession(
         /** Every session not yet finished (closing ones included), for [shutdownAll]. */
         private val OPEN: MutableSet<RecorderSession> = ConcurrentHashMap.newKeySet()
         private val hooked = AtomicBoolean()
+
+        /** The directories of every session still writing (closing ones included): never deleted by the folder cap. */
+        fun liveDirs(): Set<Path> = OPEN.mapTo(HashSet()) { it.dir }
 
         private fun installHooks() {
             if (!hooked.compareAndSet(false, true)) return
@@ -765,5 +928,60 @@ class RecorderSession(
         private fun chat(text: String) {
             runCatching { com.engineerclient.EngineerClient.msg(text) }
         }
+    }
+}
+
+/**
+ * A session's gaps for the manifest, merged per overload episode: a gap with the same reason that
+ * starts within [MERGE_MS] of the last one ends widens it. Past [CAP] entries the oldest are folded
+ * into per-reason totals (`gapsOverflow`), so the list stays small and nothing is lost from the count.
+ * Writer thread only.
+ */
+internal class GapHistory {
+    class Entry(val why: String, var seqA: Long, var seqB: Long, var msA: Long, var msB: Long, var lines: Long, val types: HashMap<String, Long>)
+    class Overflow(var entries: Long = 0, var lines: Long = 0, var seqA: Long = Long.MAX_VALUE, var seqB: Long = Long.MIN_VALUE)
+
+    val entries = ArrayDeque<Entry>()
+    val overflow = LinkedHashMap<String, Overflow>()
+
+    fun add(why: String, seqA: Long, seqB: Long, msA: Long, msB: Long, lines: Long, types: Map<String, Long>) {
+        val last = entries.lastOrNull()
+        if (last != null && last.why == why && msA - last.msB <= MERGE_MS) {
+            last.seqA = minOf(last.seqA, seqA); last.seqB = maxOf(last.seqB, seqB)
+            last.msA = minOf(last.msA, msA); last.msB = maxOf(last.msB, msB)
+            last.lines += lines
+            types.forEach { (k, v) -> last.types.merge(k, v, Long::plus) }
+            return
+        }
+        entries.addLast(Entry(why, seqA, seqB, msA, msB, lines, HashMap(types)))
+        while (entries.size > CAP) {
+            val o = entries.removeFirst()
+            val f = overflow.getOrPut(o.why) { Overflow() }
+            f.entries++; f.lines += o.lines; f.seqA = minOf(f.seqA, o.seqA); f.seqB = maxOf(f.seqB, o.seqB)
+        }
+    }
+
+    /** Adds `gaps` (and `gapsOverflow` when anything was folded) to the manifest [m]. */
+    fun toJson(m: JsonObject) {
+        m.add("gaps", JsonArray().also { a ->
+            for (e in entries) a.add(JsonObject().also { o ->
+                o.add("range", JsonArray().also { it.add(e.seqA); it.add(e.seqB) })
+                o.addProperty("lines", e.lines)
+                o.add("msRange", JsonArray().also { it.add(e.msA); it.add(e.msB) })
+                o.addProperty("why", e.why)
+                o.add("types", JsonObject().also { t -> e.types.toSortedMap().forEach { (k, v) -> t.addProperty(k, v) } })
+            })
+        })
+        if (overflow.isNotEmpty()) m.add("gapsOverflow", JsonObject().also { o ->
+            overflow.forEach { (why, f) -> o.add(why, JsonObject().also { x ->
+                x.addProperty("entries", f.entries); x.addProperty("lines", f.lines)
+                x.add("range", JsonArray().also { it.add(f.seqA); it.add(f.seqB) })
+            }) }
+        })
+    }
+
+    companion object {
+        const val MERGE_MS = 2000L
+        const val CAP = 1000
     }
 }

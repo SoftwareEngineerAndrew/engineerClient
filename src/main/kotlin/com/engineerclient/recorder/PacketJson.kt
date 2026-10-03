@@ -90,7 +90,8 @@ object PacketJson {
         val dec = try { PacketDecode.capture(p) } catch (t: Throwable) { PacketDecode.failed(t) }
         if (freezes(p)) {
             val s = body(p, dec)
-            return { s }
+            // A finished string held in the queue: the memory cap must count all of it.
+            return Sized(2 * s.length) { s }
         }
         return { body(p, dec) }
     }
