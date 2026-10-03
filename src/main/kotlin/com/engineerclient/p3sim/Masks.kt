@@ -32,7 +32,7 @@ object Masks {
         val item = items.firstOrNull { it.readyAt <= now }
         if (item != null) {
             item.readyAt = now + item.cooldown
-            safeUntil = now + 60
+            safeUntil = now + if (item.name == "Phoenix") 80 else 60
             Sim.chat(item.line)
             Sim.sound(SoundEvents.TOTEM_USE, 0.4f, 1.4f)
             return

@@ -7,24 +7,46 @@ import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LightningBolt
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal
 import net.minecraft.world.entity.boss.wither.WitherBoss
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.server.level.ServerBossEvent
+import net.minecraft.world.BossEvent
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import kotlin.math.min
 import kotlin.random.Random
 import net.minecraft.world.level.block.Blocks as B
 
-/** A boss wither: no AI, moved by the phase; named as Hypixel names them. */
-class BossWither(name: String, at: Vec3) {
+/**
+ * A boss as Hypixel shows it: a plain wither (no name of its own; [inv] invulnerable ticks, 200 for
+ * Maxor's smaller pale look), its blue armour driven by fake health (1 = on, 1000 = off), and its
+ * name on a separate marker stand 3.7 above it. Moved by the phase; no AI.
+ */
+class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = true) {
     val e: WitherBoss = WitherBoss(EntityType.WITHER, Sim.level).also { w ->
         w.setNoAi(true); w.isSilent = true; w.isInvulnerable = true; w.setNoGravity(true)
-        w.invulnerableTicks = 0
-        w.setCustomName(Component.literal("§c§l$name"))
-        w.isCustomNameVisible = true
+        w.invulnerableTicks = inv
+        w.health = if (armoured) 1f else w.maxHealth
         w.snapTo(at.x, at.y, at.z, 0f, 0f)
+        BossBar.hideOwn(w)
         Sim.spawn(w)
+    }
+    private val tag: ArmorStand = ArmorStand(EntityType.ARMOR_STAND, Sim.level).also { s ->
+        s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
+        Station.setMarker(s)
+        s.setCustomName(Sim.legacy("§c§l﴾  $name ﴿"))
+        s.isCustomNameVisible = true
+        s.snapTo(at.x, at.y + TAG_Y, at.z, 0f, 0f)
+        Sim.spawn(s)
     }
     var pos: Vec3 = at
         private set
+
+    /** Blue armour on (health 1) or off (health above half). */
+    fun armour(on: Boolean) { if (e.health > 0f) e.health = if (on) 1f else e.maxHealth }
+    val armoured get() = e.health > 0f && e.health <= e.maxHealth / 2
+
+    /** The vanilla death animation (health 0); remove it ~20 ticks later. */
+    fun dieAnim() { e.health = 0f; tag.discard() }
 
     fun moveTo(p: Vec3, faceTo: Vec3? = null) {
         pos = p
@@ -32,6 +54,7 @@ class BossWither(name: String, at: Vec3) {
         val yaw = if (faceTo != null) Math.toDegrees(Math.atan2(-(f.x - p.x), f.z - p.z)).toFloat() else e.yRot
         e.snapTo(p.x, p.y, p.z, yaw, 0f)
         e.yHeadRot = yaw; e.yBodyRot = yaw
+        tag.snapTo(p.x, p.y + TAG_Y, p.z, 0f, 0f)
     }
 
     /** One step toward [target] of at most [speed]; true when there. */
@@ -43,7 +66,38 @@ class BossWither(name: String, at: Vec3) {
         return false
     }
 
-    fun remove() = e.discard()
+    fun remove() { e.discard(); tag.discard() }
+
+    companion object { const val TAG_Y = 3.7 }
+}
+
+/**
+ * The fight's one boss bar (Hypixel's: `§c§lMaxor`... with its own progress). The withers' own
+ * bars are hidden.
+ */
+object BossBar {
+    private var bar: ServerBossEvent? = null
+
+    fun show(name: String, progress: Float = 1f) {
+        val b = bar ?: ServerBossEvent(java.util.UUID.randomUUID(), Sim.legacy(name),
+            BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.PROGRESS).also { bar = it }
+        b.name = Sim.legacy(name)
+        b.progress = progress.coerceIn(0f, 1f)
+        val p = Sim.player
+        if (p != null && p !in b.players) { b.removeAllPlayers(); b.addPlayer(p) }
+    }
+
+    fun progress(f: Float) { bar?.progress = f.coerceIn(0f, 1f) }
+    val progress: Float get() = bar?.progress ?: 0f
+
+    fun hide() { bar?.removeAllPlayers(); bar = null }
+
+    private val ownField by lazy {
+        WitherBoss::class.java.declaredFields.firstOrNull { ServerBossEvent::class.java.isAssignableFrom(it.type) }?.apply { isAccessible = true }
+    }
+
+    /** A wither's own boss bar, never shown (the fight's bar is [show]'s). */
+    fun hideOwn(w: WitherBoss) { runCatching { (ownField?.get(w) as? ServerBossEvent)?.isVisible = false } }
 }
 
 /** The 3D-closest player to [p] (you, or a bot standing in for one). */
@@ -119,6 +173,7 @@ class P1Maxor : Fight.Phase("P1") {
         val s = Spots.P1
         Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
         SimItems.giveHotbar(p, p3 = false)
+        BossBar.show("§c§lMaxor", 1f)
         Sim.boss("Maxor", "WELL! WELL! WELL! LOOK WHO'S HERE!")
         Blocks.play("p1strip")
         Party.standAt(listOf(Vec3(71.5, 221.0, 16.5), Vec3(75.5, 221.0, 16.5), Vec3(69.5, 221.0, 18.5), Vec3(77.5, 221.0, 18.5)))
@@ -130,7 +185,7 @@ class P1Maxor : Fight.Phase("P1") {
 
     override fun tick() {
         when (t) {
-            5 -> { maxor = BossWither("Maxor", Vec3(73.0, 226.0, 53.0)); TOPS.forEach { tops += spawnCrystal(it) } }
+            5 -> { maxor = BossWither("Maxor", Vec3(73.0, 226.0, 53.0), inv = 200); TOPS.forEach { tops += spawnCrystal(it) } }
             62 -> Sim.boss("Maxor", "I'VE BEEN TOLD I COULD HAVE A BIT OF FUN WITH YOU.")
             124 -> Sim.boss("Maxor", "DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.")
             166 -> {
@@ -162,6 +217,10 @@ class P1Maxor : Fight.Phase("P1") {
         if (t == 205 && tauntAt < 0) tauntAt = 206 + 161
         // Moving: from 170, chasing the closest player; frozen facing south while stunned; the head on the closest before.
         val target = closest(maxor.pos).add(0.0, 1.0, 0.0)
+        if (stunned) {
+            maxor.armour(t % 2 == 0)
+            if (BossBar.progress > barFloor) BossBar.progress(maxOf(barFloor, BossBar.progress - 0.04f))
+        } else if (!maxor.armoured) maxor.armour(true)
         if (stunned) maxor.moveTo(maxor.pos, maxor.pos.add(0.0, 0.0, 1.0))
         else if (t >= moveAt) { val d = maxor.pos.distanceTo(target); if (d > 3.0) maxor.step(target, min(0.9, 0.24 + 0.02 * d)) else maxor.moveTo(maxor.pos, target) }
         else maxor.moveTo(maxor.pos, target)
@@ -240,8 +299,12 @@ class P1Maxor : Fight.Phase("P1") {
         } else stunLine(freeze = true)
     }
 
+    /** Where the bar stops falling in this stun (Hypixel: ~0.25 after the first, 0 after the second). */
+    private var barFloor = 1f
+
     private fun stunLine(freeze: Boolean) {
         stunLines++
+        if (stunLines == 1) { BossBar.progress(0.85f); barFloor = 0.25f } else { BossBar.progress(0.1f); barFloor = 0.02f }
         Sim.boss("Maxor", if (Random.nextBoolean()) "THAT BEAM! IT HURTS! IT HURTS!!" else "YOU TRICKED ME!")
         if (stunLines == 2 || hits >= 2) Fight.later(82, "too young") { if (Fight.phase === this && (killAt < 0 || t < killAt + 80)) Sim.boss("Maxor", "I'M TOO YOUNG TO DIE AGAIN!") }
         if (!freeze) return
@@ -263,9 +326,11 @@ class P1Maxor : Fight.Phase("P1") {
     private fun killed() {
         val since = t - killAt
         if (since == 0) {
+            BossBar.progress(0f)
             Blocks.set(BlockPos(73, 221, 73), B.BEDROCK.defaultBlockState())
             onPylon.forEach { it?.discard() }; onPylon.fill(null)
         }
+        if (since == 60) maxor.dieAnim()
         if (since == 78) Blocks.play("p1end", skip = -24)
         if (since == 80) maxor.remove()
         if (since == 102) Fight.begin(P2Storm())

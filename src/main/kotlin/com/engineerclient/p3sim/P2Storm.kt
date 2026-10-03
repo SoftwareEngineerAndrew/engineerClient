@@ -101,6 +101,7 @@ class P2Storm : Fight.Phase("P2") {
         }
         storm = BossWither("Storm", Vec3(103.0, 188.0, 53.0))
         Sim.boss("Storm", "Pathetic Maxor, just like expected.")
+        BossBar.show("§c§lStorm", 1f)
         // Storm.md §2 opening drop: Yellow and Purple pads held through the t 19 and 39 checks.
         Party.standAt(listOf(Vec3(32.5, 170.0, 94.5), Vec3(114.5, 170.0, 94.5), Vec3(73.5, 169.0, 60.5), Vec3(73.5, 169.0, 45.5)))
         val r = Random.nextDouble()
@@ -128,7 +129,8 @@ class P2Storm : Fight.Phase("P2") {
         pillars.forEach { tickPillar(it) }
         if (deadAt >= 0 && t >= deadAt) {
             when (t - deadAt) {
-                0 -> Sim.boss("Storm", "I should have known that I stood no chance.")
+                0 -> { Sim.boss("Storm", "I should have known that I stood no chance."); BossBar.progress(0f) }
+                20 -> storm.dieAnim()
                 62 -> Sim.boss("Storm", "At least my son died by your hands.")
                 40 -> storm.remove()
                 102 -> Fight.begin(GoldorPhase(1, arrived = true))
@@ -234,6 +236,8 @@ class P2Storm : Fight.Phase("P2") {
     private fun crush(pl: Pillar) {
         crushes++
         Sim.boss("Storm", if (Random.nextBoolean()) "Ouch, that hurt!" else "Oof")
+        storm.armour(false)
+        BossBar.progress(if (crushes >= 2) 0.05f else 0.55f)
         pl.resetAt = t + 20
         pl.spent = true
         pl.steps = 0; pl.nextStep = -1
@@ -257,6 +261,8 @@ class P2Storm : Fight.Phase("P2") {
     /** Only Purple -> Yellow is a flight; after Yellow/Green he just chases (storm.md §4). */
     private fun takeoff() {
         pinnedUntilBeam = false
+        storm.armour(true)
+        BossBar.progress(0.45f)
         takeoffAt = -1; enrageAt = -1
         chasing = false
         if (lastCrush?.name == "Purple") { flyingToYellow = true; laterChase = false } else laterChase = true

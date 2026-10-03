@@ -65,8 +65,9 @@ class Station(
     fun refreshStands() {
         fun name(s: ArmorStand?, n: String) {
             s ?: return
-            if (s.customName?.string != Component.literal(n).string || s.customName == null) {
-                s.setCustomName(Component.literal(n)); s.isCustomNameVisible = n.isNotEmpty()
+            val c = Sim.legacy(n)
+            if (s.customName?.string != c.string || s.customName == null) {
+                s.setCustomName(c); s.isCustomNameVisible = n.isNotEmpty()
             }
         }
         when (kind) {

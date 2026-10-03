@@ -160,7 +160,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (by == Sim.me) Stats.done(st, n)
         // Taunts ride the 62-tick grid (goldor.md, other lines).
         if (by == Sim.me && st.kind == Station.Kind.TERMINAL && pendingTaunt == null) pendingTaunt = "Stop touching those terminals!"
-        if (st.kind == Station.Kind.TERMINAL || st.kind == Station.Kind.LEVER) Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 0.6f, 2f, st.at)
+        if (st.kind == Station.Kind.TERMINAL || st.kind == Station.Kind.LEVER) Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, st.at)
+        // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it).
+        Sim.title("", "${nameColour(by)}$by§r§a $what (§r§c$k§r§a/${Station.total(shown)})", 0, 30, 5)
         if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
     }
 
@@ -262,6 +264,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.chat("§aThe Core entrance is opening!")
         if (from != 5) Stats.section(4, n - sectionStart[4], n)
         Blocks.play("core")
+        goldor.coreOpened()
         Stats.p3(n)
     }
 
@@ -288,6 +291,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 Fight.later(124, "goldor arrived 2") { Sim.boss("Goldor", "YOU ARE FACE TO FACE WITH GOLDOR!") }
                 Fight.later(186, "goldor arrived 3") { Sim.boss("Goldor", "....") }
             }
+            goldor.barTick(n)
             if (n >= goldor.killAt) die()
         }
         // Frenzy: every ~10 ticks while you're 2-14 blocks from him (goldor.md, damage).
@@ -328,10 +332,14 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     // ------------------------------------------------------------------ Goldor
 
-    /** Goldor on his track (a giant you see, an invisible wither for the boss bar). */
+    /**
+     * Goldor on his track: a plain wither like the others (no armour on the track, armoured once
+     * the core opens), his name on its stand. Hypixel's invisible giants with golden swords stand
+     * at the S4/S1 corner (floating greatswords).
+     */
     class Goldor {
-        private var giant: Giant? = null
-        private var wither: WitherBoss? = null
+        private var boss: BossWither? = null
+        private val giants = ArrayList<Giant>()
         /** Distance along the track from the S4/S1 corner. */
         var s = START_S
         private var speed = WALK
@@ -339,6 +347,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         var flying = false
             private set
         private var flyFrom = Vec3.ZERO
+        private var flyAt = 0
         private var pos = Vec3.ZERO
         var killAt = Int.MAX_VALUE
             private set
@@ -348,25 +357,21 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         fun spawn(n: Int) {
             s = (START_S + WALK * n) % LOOP
             pos = trackPos(s)
-            val level = Sim.level
-            val g = Giant(EntityType.GIANT, level)
-            g.setNoAi(true); g.isSilent = true; g.isInvulnerable = true; g.setNoGravity(true)
-            g.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.GOLDEN_SWORD))
-            g.setItemSlot(EquipmentSlot.HEAD, ItemStack(Items.GOLDEN_HELMET))
-            g.setItemSlot(EquipmentSlot.CHEST, ItemStack(Items.GOLDEN_CHESTPLATE))
-            g.setItemSlot(EquipmentSlot.LEGS, ItemStack(Items.GOLDEN_LEGGINGS))
-            g.setItemSlot(EquipmentSlot.FEET, ItemStack(Items.GOLDEN_BOOTS))
-            g.snapTo(pos.x, pos.y - 8, pos.z, yaw(), 0f)
-            giant = Sim.spawn(g)
-            val w = WitherBoss(EntityType.WITHER, level)
-            w.setNoAi(true); w.isSilent = true; w.isInvulnerable = true; w.setNoGravity(true); w.isInvisible = true
-            w.invulnerableTicks = 0
-            w.setCustomName(Component.literal("§c§lGoldor"))
-            w.snapTo(pos.x, pos.y, pos.z, yaw(), 0f)
-            wither = Sim.spawn(w)
+            boss = BossWither("Goldor", pos, inv = 0, armoured = false)
+            BossBar.show("§c§lGoldor", 1f)
+            for (g in GIANTS) {
+                val e = Giant(EntityType.GIANT, Sim.level)
+                e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
+                e.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.GOLDEN_SWORD))
+                e.snapTo(g.x, g.y, g.z, 0f, 0f)
+                giants += Sim.spawn(e)
+            }
         }
 
-        fun remove() { giant?.discard(); wither?.discard(); giant = null; wither = null }
+        fun remove() { boss?.remove(); boss = null; giants.forEach { it.discard() }; giants.clear() }
+
+        /** The core opened: his armour comes on. */
+        fun coreOpened() { boss?.armour(true) }
 
         /** Section [sec] ended (its door opened): if he is still in its segment, he sprints to the next one's start. */
         fun sectionEnded(sec: Int) {
@@ -379,17 +384,23 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if (flying) return
             flying = true
             flyFrom = pos
+            flyAt = n
+            BossBar.progress(0.4f)
             // Killed in flight 55 ticks after leaving (median; 15-113): the setting.
             killAt = n + P3Sim.goldorKill.toInt()
         }
 
-        fun die() {
-            wither?.discard(); wither = null
-            giant?.let { g -> Fight.later(40, "goldor body") { g.discard() } }
+        /** Killed in flight: his bar runs out; the wither stays (armoured) until Necron's first line. */
+        fun die() { BossBar.progress(0f) }
+
+        /** The bar falls from the core to the kill (Hypixel: ~0.4 -> 0 as the party hits him). */
+        fun barTick(n: Int) {
+            if (!flying || n >= killAt) return
+            BossBar.progress(0.4f * (killAt - n) / (killAt - flyAt).coerceAtLeast(1))
         }
 
         fun tick(phase: GoldorPhase) {
-            if (giant == null) return
+            val boss = boss ?: return
             if (flying) {
                 val to = CORE_POINT.subtract(pos)
                 val d = to.horizontalDistance()
@@ -408,8 +419,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 pos = trackPos(s)
             }
             val yaw = if (flying) Math.toDegrees(Math.atan2(-(CORE_POINT.x - pos.x), CORE_POINT.z - pos.z)).toFloat() else yaw()
-            giant?.let { it.snapTo(pos.x, pos.y - 8, pos.z, yaw, 0f); it.yHeadRot = yaw; it.yBodyRot = yaw }
-            wither?.let { it.snapTo(pos.x, pos.y, pos.z, yaw, 0f) }
+            boss.moveTo(pos, pos.add(-Math.sin(Math.toRadians(yaw.toDouble())), 0.0, Math.cos(Math.toRadians(yaw.toDouble()))))
         }
 
         private fun yaw(): Float {
@@ -418,6 +428,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
 
         companion object {
+            /** Hypixel's four greatsword giants, spawned with him at the S4/S1 corner (bosses.md). */
+            val GIANTS = listOf(Vec3(81.5, 111.0, 33.5), Vec3(87.5, 111.0, 33.5), Vec3(81.5, 111.0, 40.5), Vec3(87.5, 111.0, 40.5))
             const val WALK = 0.06
             const val SPRINT = 0.60
             const val FLY = 0.80

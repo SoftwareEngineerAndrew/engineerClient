@@ -64,6 +64,8 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
         }
         necron = BossWither("Necron", MID)
         Sim.boss("Necron", "You went further than any human before, congratulations.")
+        // Hypixel's bar: empty through the intro, ~0.82 when he starts, down at each ARGH.
+        BossBar.show("§c§lNecron", 0f)
         // Frames are timed from "Let's make some space!": the lava fall from ~167, the platform at +45.
         Blocks.play("p4", skip = -SPACE)
     }
@@ -74,13 +76,14 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
         when (t) {
             62 -> Sim.boss("Necron", "I'm afraid, your journey ends now.")
             124 -> Sim.boss("Necron", "Goodbye.")
-            186 -> Sim.boss("Necron", "That's a very impressive trick. I guess I'll have to handle this myself.")
+            186 -> { Sim.boss("Necron", "That's a very impressive trick. I guess I'll have to handle this myself."); BossBar.progress(0.82f) }
             TAUNT1 -> Sim.boss("Necron", taunt1)
-            ARGH1 -> Sim.boss("Necron", "ARGH!")
+            ARGH1 -> { Sim.boss("Necron", "ARGH!"); BossBar.progress(0.25f) }
             SPACE -> Sim.boss("Necron", "Let's make some space!")
             TAUNT2 -> Sim.boss("Necron", taunt2)
-            ARGH2 -> Sim.boss("Necron", "ARGH!")
-            END -> Sim.boss("Necron", "All this, for nothing...")
+            ARGH2 -> { Sim.boss("Necron", "ARGH!"); BossBar.progress(0.06f) }
+            END -> { Sim.boss("Necron", "All this, for nothing..."); BossBar.progress(0f) }
+            GONE - 20 -> necron.dieAnim()
             GONE -> necron.remove()
             GONE + 1 -> if (master) Sim.boss("Necron", "I understand your words now, my master.")
             END + 86 -> end()

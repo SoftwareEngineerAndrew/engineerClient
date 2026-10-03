@@ -530,7 +530,7 @@ object SimItems {
             for (i in 0 until 36) container.setItem(i, Terminals.FILLER)
             bots.sortedBy { it.clazz.ordinal }.forEachIndexed { i, b ->
                 val h = ItemStack(Items.PLAYER_HEAD)
-                h.set(DataComponents.CUSTOM_NAME, Component.literal("§a${b.name}").withStyle { it.withItalic(false) })
+                h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.GREEN) })
                 h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Class: §e${b.clazz.name}").withStyle { it.withItalic(false) })))
                 container.setItem(11 + i, h)
             }

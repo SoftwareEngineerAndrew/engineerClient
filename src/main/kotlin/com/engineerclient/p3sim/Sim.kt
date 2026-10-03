@@ -32,13 +32,37 @@ object Sim {
     /** A line from the sim itself (not something Hypixel says): marked so it can't be mistaken. */
     fun note(text: String) = chat("§8[§6P3 Sim§8] §7$text")
 
+    /** `§` text as a styled component (no codes left in its string), as Hypixel's names come. */
+    fun legacy(text: String): Component {
+        val out = Component.empty()
+        var style = net.minecraft.network.chat.Style.EMPTY
+        val sb = StringBuilder()
+        var i = 0
+        fun flush() { if (sb.isNotEmpty()) { out.append(Component.literal(sb.toString()).withStyle(style)); sb.clear() } }
+        while (i < text.length) {
+            val c = text[i]
+            if (c == '§' && i + 1 < text.length) {
+                val f = net.minecraft.ChatFormatting.getByCode(text[i + 1])
+                if (f != null) {
+                    flush()
+                    style = if (f == net.minecraft.ChatFormatting.RESET) net.minecraft.network.chat.Style.EMPTY
+                        else if (f.isColor) net.minecraft.network.chat.Style.EMPTY.withColor(f) else style.applyFormat(f)
+                    i += 2; continue
+                }
+            }
+            sb.append(c); i++
+        }
+        flush()
+        return out
+    }
+
     fun boss(name: String, line: String) = chat("§4[BOSS] $name§r§c: $line")
 
     fun title(title: String, sub: String = "", fadeIn: Int = 0, stay: Int = 30, fadeOut: Int = 5) {
         val p = player ?: return
         p.connection.send(ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut))
-        p.connection.send(ClientboundSetSubtitleTextPacket(Component.literal(sub)))
-        p.connection.send(ClientboundSetTitleTextPacket(Component.literal(title)))
+        p.connection.send(ClientboundSetSubtitleTextPacket(legacy(sub)))
+        p.connection.send(ClientboundSetTitleTextPacket(legacy(title)))
     }
 
     fun sound(sound: SoundEvent, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null) {

@@ -71,6 +71,7 @@ object Fight {
         Terminals.closeAll()
         SimItems.reset()
         phase = null
+        BossBar.hide()
         Sim.clearEntities()
         Sim.command("time set noon")
         Sim.command("weather clear")
@@ -83,6 +84,7 @@ object Fight {
         epoch++
         later.clear()
         Terminals.closeAll()
+        BossBar.hide()
     }
 
     fun join(player: ServerPlayer) {
@@ -121,8 +123,11 @@ object Fight {
         Blocks.restoreAll()
         setup(player)
         Masks.reset()
+        Lava.reset()
         Stats.runStart = if (what == Start.P1) serverTick else -1
         previous = null
+        // Odin's Splits start on the dungeon's countdown line.
+        Sim.chat("§aStarting in 1 second.")
         val p: Phase = when (what) {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()
@@ -166,6 +171,7 @@ object Fight {
         Blocks.tick()
         Terminals.tick()
         SimItems.tick()
+        Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase ?: return
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++
