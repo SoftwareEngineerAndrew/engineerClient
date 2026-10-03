@@ -172,16 +172,21 @@ object DungeonSplits : Module(
 
     /**
      * The P3 Sim starting a fight at [label]'s phase (client thread, before its lines arrive): a
-     * fresh run whose earlier phases are their Pace times. [termsDone]: sections already done when
-     * starting partway through the terminals (now, as no Goldor line comes then).
+     * fresh run, in Odin's Splits ([SimOdinSplits]) and here (the scorecard), whose earlier phases
+     * are your Pace targets. [termsDone]: sections already done when starting partway through the
+     * terminals (now, as no Goldor line comes then).
      */
     fun simStart(label: String, termsDone: Int = 0) {
         resetRun()
-        val before = { l: String -> SplitPace.ref(l).let { SplitTracker.Clock(it?.ms ?: 0, (it?.ticks ?: 0).toInt()) } }
-        if (termsDone > 0) {
-            val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
-            tracker.startAt(label, before, now(), SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt()))
-        } else tracker.startAt(label, before)
+        val before = { l: String ->
+            val ms = SimOdinSplits.odinName(l)?.let { SimOdinSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
+            SplitTracker.Clock(ms, (ms / 50).toInt())
+        }
+        val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
+        val headClock = SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt())
+        SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headClock.ms) }
+        if (termsDone > 0) tracker.startAt(label, before, now(), headClock)
+        else tracker.startAt(label, before)
     }
 
     init {
@@ -254,6 +259,7 @@ object DungeonSplits : Module(
         }
 
         on<TickEvent.End> {
+            EngineerClient.safely("sim odin splits") { SimOdinSplits.tick() }
             if (!DungeonUtils.inDungeons) return@on
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers, "start") { at, a, b -> blood.onDoorStart(at, a, b) }
             if (cleared.size >= DoorBlocks.DOOR_BLOCKS) door(cleared, "down") { at, a, b -> blood.onDoorDown(at, a, b) }

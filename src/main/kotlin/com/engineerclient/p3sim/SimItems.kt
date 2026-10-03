@@ -64,7 +64,7 @@ import kotlin.math.sin
  * way the items do on Hypixel:
  *
  * 1 Superboom TNT (Hyperion outside P3) · 2 ⚚ Bonzo's Staff · 3 Spirit Shortbow · 4 Dungeonbreaker
- * · 5 Ender Pearls · 6 Infinileap · 7 Jerry-chine Gun · 8 Wither Cloak Sword · 9 SkyBlock Menu
+ * · 5 Pet Rod · 6 Infinileap · 7 Jerry-chine Gun · 8 Wither Cloak Sword · 9 SkyBlock Menu
  * (opens the sim menu); in the inventory Hyperion, an Aspect of the Void (etherwarp merged) and a
  * Terminator.
  *
@@ -122,9 +122,9 @@ object SimItems {
     fun giveHotbar(p: ServerPlayer, p3: Boolean = true) {
         val inv = p.inventory
         inv.clearContent()
-        val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PEARLS, LEAP, JERRY, CLOAK, MENU)
+        val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         bar.forEachIndexed { i, s -> inv.setItem(i, s) }
-        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW); inv.setItem(12, PET_ROD)
+        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW); inv.setItem(12, PEARLS)
         Masks.equip(p)
         inv.selectedSlot = 3
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))

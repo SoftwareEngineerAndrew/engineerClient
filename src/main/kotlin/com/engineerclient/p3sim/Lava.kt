@@ -8,9 +8,8 @@ import kotlin.random.Random
 
 /**
  * Hypixel's lava bounce (tools/p3sim/research/physics.md §1): 1-6 ticks after your box first
- * touches lava (mostly 2-3) the server sets your motion to straight up, vy 2.25 (3.038 sometimes
- * in the P3 lava, likelier the further you fell into it: [highChance]). The client's own physics
- * carries it (+2.25 on the first tick, apex +18.5; 3.038: apex +30.5). No health lost, but the hurt
+ * touches lava (mostly 2-3) the server sets your motion to straight up, vy 2.25 (3.038 in the P3
+ * lava when you're looking up: [HIGH_PITCH]). The client's own physics carries it (+2.25 on the first tick, apex +18.5; 3.038: apex +30.5). No health lost, but the hurt
  * sound and tilt, and you burn for 100-125 ticks. Again each time you come back down into it; never
  * while you're still rising out.
  */
@@ -19,11 +18,8 @@ object Lava {
     private var bounceAt = -1
     private var bouncedAt = -1000
     private var fireTicks = 0
-    /** Your highest y since you last stood on something (or were bounced), and so how far you fell in. */
-    private var peakY = Double.NaN
-    private var fell = 0.0
 
-    fun reset() { touchedAt = -1; bounceAt = -1; bouncedAt = -1000; peakY = Double.NaN; fell = 0.0 }
+    fun reset() { touchedAt = -1; bounceAt = -1; bouncedAt = -1000 }
 
     fun tick(p: ServerPlayer) {
         if (p.isSpectator || p.isCreative) { reset(); return }
@@ -31,16 +27,12 @@ object Lava {
         // Burning: Hypixel's 100-125 ticks, not vanilla lava's 15 s.
         if (now - bouncedAt in 1..3) p.remainingFireTicks = fireTicks - (now - bouncedAt)
         val inLava = touches(p)
-        if (!inLava) {
-            touchedAt = -1; bounceAt = -1
-            peakY = if (p.onGround() || peakY.isNaN()) p.y else maxOf(peakY, p.y)
-            return
-        }
+        if (!inLava) { touchedAt = -1; bounceAt = -1; return }
         if (touchedAt < 0) {
             // Rising out of the last bounce: no second one in the air.
             if (now - bouncedAt < 4) return
             touchedAt = now
-            fell = if (peakY.isNaN()) 0.0 else peakY - p.y
+            bounceAt = now + delay()
         }
         if (now < bounceAt) return
         bounce(p, now)
@@ -74,20 +66,14 @@ object Lava {
     }
 
     /**
-     * Chance of the 3.038 bounce by how far you fell into the P3 lava (Boss Recorder: 32 high of 310
-     * P3 bounces with a clean fall): under 12 blocks 6%, 12-17 11%, 17-21 (a normal bounce's fall)
-     * 21%, over 21 (a high bounce's fall) 60%, so high bounces tend to chain.
+     * The 3.038 bounce is the one you get looking up (Boss Recorder: all 33 high bounces at pitch -37
+     * to -90 as they came, the 470 normal ones nearly all above -45): pitch at or above 43 degrees up.
      */
-    private fun highChance(fell: Double) = when {
-        fell < 12.0 -> 0.06
-        fell < 17.0 -> 0.11
-        fell < 21.0 -> 0.21
-        else -> 0.6
-    }
+    private const val HIGH_PITCH = -43f
 
     private fun bounce(p: ServerPlayer, now: Int) {
         val p3Lava = p.y < 108.5 && p.y > 104.0
-        val vy = if (p3Lava && Random.nextDouble() < highChance(fell)) 3.038 else 2.25
+        val vy = if (p3Lava && p.xRot <= HIGH_PITCH) 3.038 else 2.25
         p.deltaMovement = Vec3(0.0, vy, 0.0)
         p.hurtMarked = true
         p.fallDistance = 0.0
@@ -97,6 +83,5 @@ object Lava {
         p.remainingFireTicks = fireTicks
         bouncedAt = now
         touchedAt = -1; bounceAt = -1
-        peakY = p.y
     }
 }

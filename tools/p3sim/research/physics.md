@@ -21,7 +21,7 @@ python3 scripts/bounce_sounds.py bossrecorder/*.jsonl.gz
 |---|---|---|
 | count | 579 bounces in 77 files: P3 y106 lava 356, P4 lava 190, P2 27, other 6 | M |
 | packet | `ClientboundSetEntityMotion` on yourself, **vx = vz = 0 exactly** (541/579; the 38 others are bounces merged with some other knockback) | M |
-| vy | **2.25** (532) or **3.038** (47; 45 of them in the P3 y106 lava, spread over 27 files, no position/phase/fall-speed pattern found) | M; what picks 3.038 unknown |
+| vy | **2.25** (532) or **3.038** (47; 45 of them in the P3 y106 lava, spread over 27 files). **3.038 = looking up**: all 33 clean ones had pitch −37…−90 at the bounce, the 470 normal ones nearly all above −45 (threshold ≈ −43°). It also looked like "longer falls" only because you look up after a bounce | M |
 | trigger | your box in lava; you usually have already **landed on the lava's floor** (P3 lava is 1 block deep: feet y=106.000 onGround=true on the tick(s) before, 497/579 "slow/ground"); falling through deep P4 lava (y55–58) is bounced while still sinking | M |
 | delay | first tick your sent position overlaps a lava cell's fluid → packet: 0–1 t: 57, **2 t: 157, 3: 130, 4: 98, 5: 42, 6: 26**, 7–15: ~70 (approach ticks where the model counts an edge touch). Mode 2–3 server ticks; reads like a server check every few ticks (C: ~every 2–5 ticks, not on the contact tick) | M (distribution), C (mechanism) |
 | repeat | stay in → bounced again every time you come back down: consecutive gaps 4–12 t (25 at 12) when re-touching immediately, ~38–52 t for a full up-and-down. Never a second packet while airborne | M |

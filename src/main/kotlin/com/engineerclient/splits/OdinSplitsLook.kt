@@ -137,6 +137,12 @@ object OdinSplitsLook {
         }
     }
 
+    /** Your F7 Pace target for the Odin split named [name] (seconds; a blank box your PB), null with neither. */
+    fun f7Target(name: String): Double? {
+        val i = PB_NAMES.indexOf(name).takeIf { it >= 0 } ?: return null
+        return targets(EngineerLook.Place.FLOOR7, false)?.getOrNull(i)
+    }
+
     /** Odin keys a PB by the split's name as it has it, colour codes included. */
     private val PB_NAMES by lazy { listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name } }
 

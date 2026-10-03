@@ -420,14 +420,14 @@ object Party {
 
     /** Where a player stands to do each job (median from the recordings, terminal-roles.md). */
     val STANDS: Map<String, Vec3> = mapOf(
-        "S1 T1" to Vec3(110.3, 113.0, 73.8), "S1 T2" to Vec3(109.1, 118.8, 79.6), "S1 T3" to Vec3(92.1, 112.0, 92.7), "S1 T4" to Vec3(92.3, 121.0, 99.7),
-        "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.1, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),
-        "S2 T1" to Vec3(69.0, 109.0, 124.7), "S2 T2" to Vec3(59.7, 120.0, 125.3), "S2 T3" to Vec3(46.4, 109.0, 122.6), "S2 T4" to Vec3(39.2, 109.0, 140.5), "S2 T5" to Vec3(40.2, 124.0, 124.7),
-        "S2 low lever" to Vec3(28.3, 124.0, 128.7), "S2 high lever" to Vec3(25.6, 132.2, 137.5), "S2 Lights" to Vec3(60.6, 134.0, 139.0),
+        "S1 T1" to Vec3(110.3, 113.0, 73.8), "S1 T2" to Vec3(109.1, 119.0, 79.6), "S1 T3" to Vec3(92.1, 112.0, 92.7), "S1 T4" to Vec3(92.5, 121.5, 100.5),
+        "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.0625, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),
+        "S2 T1" to Vec3(69.0, 109.0, 124.7), "S2 T2" to Vec3(59.7, 120.0, 125.3), "S2 T3" to Vec3(46.4, 109.0, 122.6), "S2 T4" to Vec3(39.2, 109.0, 140.5), "S2 T5" to Vec3(40.5, 124.0, 125.5),
+        "S2 low lever" to Vec3(28.3, 123.0625, 128.7), "S2 high lever" to Vec3(24.5, 131.0625, 137.5), "S2 Lights" to Vec3(60.6, 132.0, 139.0),
         "S3 T1" to Vec3(0.0, 109.0, 112.2), "S3 T2" to Vec3(1.0, 119.0, 93.6), "S3 T3" to Vec3(16.5, 123.0, 93.7), "S3 T4" to Vec3(0.8, 109.0, 77.5),
-        "S3 west lever" to Vec3(4.3, 123.1, 55.4), "S3 east lever" to Vec3(13.0, 122.4, 55.7), "S3 Arrows" to Vec3(0.5, 120.0, 77.5),
-        "S4 T1" to Vec3(41.3, 109.0, 32.6), "S4 T2" to Vec3(45.1, 121.6, 31.2), "S4 T3" to Vec3(67.1, 109.0, 33.1), "S4 T4" to Vec3(72.6, 115.0, 45.5),
-        "S4 low lever" to Vec3(84.4, 122.5, 34.9), "S4 high lever" to Vec3(85.5, 124.6, 43.6), "S4 Target" to Vec3(63.5, 127.0, 35.5),
+        "S3 west lever" to Vec3(2.5, 122.0, 55.5), "S3 east lever" to Vec3(13.0, 121.0625, 55.7), "S3 Arrows" to Vec3(0.5, 120.0, 77.5),
+        "S4 T1" to Vec3(41.3, 109.0, 32.6), "S4 T2" to Vec3(45.1, 121.0, 31.2), "S4 T3" to Vec3(67.1, 109.0, 33.1), "S4 T4" to Vec3(72.6, 115.0, 45.5),
+        "S4 low lever" to Vec3(84.4, 121.0, 34.9), "S4 high lever" to Vec3(85.5, 127.0, 45.5), "S4 Target" to Vec3(63.5, 127.0, 35.5),
     )
     val GATES = arrayOf(Vec3.ZERO, Vec3(95.8, 123.9, 121.0), Vec3(19.3, 123.6, 127.9), Vec3(12.4, 116.8, 52.7))
     val STRIP = Vec3(54.6, 115.0, 51.5)
