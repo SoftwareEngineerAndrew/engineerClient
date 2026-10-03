@@ -1,0 +1,161 @@
+package com.engineerclient.p3sim
+
+import com.engineerclient.EngineerClient
+import net.minecraft.network.protocol.common.ClientboundPingPacket
+import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.effect.MobEffectInstance
+import net.minecraft.world.effect.MobEffects
+import net.minecraft.world.entity.ai.attributes.Attributes
+import net.minecraft.world.level.GameType
+
+/**
+ * The fight: which phase runs, the server tick, delayed actions, and the player's setup. Server
+ * thread only; [SimServer] calls in here only for the sim's own server.
+ */
+object Fight {
+    /** One phase of the boss (or a part of one, like a P3 section). */
+    abstract class Phase(val name: String) {
+        /** Server ticks since this phase started. */
+        var t = 0
+        open fun start() {}
+        open fun tick() {}
+        open fun stop() {}
+        /** Where "Restart" puts you back to. */
+        abstract val restart: Start
+    }
+
+    /** What the menu can start. */
+    enum class Start(val label: String) {
+        P1("P1 Maxor"), P2("P2 Storm"), P3("P3 Goldor"), S1("S1"), S2("S2"), S3("S3"), S4("S4"), CORE("Core"), P4("P4 Necron"),
+    }
+
+    var phase: Phase? = null
+        private set
+
+    /** The phase before this one, when the fight went on by itself (P1 -> P2 ...); null after a menu start. */
+    var previous: Phase? = null
+        private set
+
+    /** Every terminal opens as this type (the menu's "Terminals: ..."), or random when null. */
+    val forcedTerminal: Terminals.Type? get() = P3Sim.forcedTerminal
+
+    /** Server ticks since the sim started (the ping ids Odin counts as server ticks). */
+    var serverTick = 0
+        private set
+
+    private class Later(val at: Int, val what: String, val run: () -> Unit)
+    private val later = ArrayList<Later>()
+
+    /** Runs [run] [ticks] server ticks from now (0 = later this tick). Cleared when a phase starts. */
+    fun later(ticks: Int, what: String = "later", run: () -> Unit) {
+        later += Later(serverTick + ticks.coerceAtLeast(0), what, run)
+    }
+
+    /** The player's ping, in server ticks: what their clicks and items wait before the server acts. */
+    val pingTicks: Int get() = (P3Sim.ping.toInt() + 25) / 50
+
+    /** Runs [run] after the simulated ping (at once with none). */
+    fun afterPing(what: String, run: () -> Unit) {
+        val n = pingTicks
+        if (n == 0) run() else later(n, what, run)
+    }
+
+    fun reset(server: MinecraftServer) {
+        serverTick = 0
+        later.clear()
+        phase = null
+        Sim.clearEntities()
+        Sim.command("time set noon")
+        Sim.command("weather clear")
+        Blocks.restoreAll()
+    }
+
+    fun stop() {
+        phase?.let { EngineerClient.safely("p3sim stop ${it.name}") { it.stop() } }
+        phase = null
+        later.clear()
+    }
+
+    fun join(player: ServerPlayer) {
+        setup(player)
+        if (phase == null) {
+            Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)
+            later(20, "welcome") {
+                Sim.note("Welcome to P3 Sim. §fRight click the Nether Star§7 (or /p3sim) for the menu.")
+                if (P3Sim.autoStart) start(Start.P3)
+            }
+        }
+    }
+
+    /** Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. */
+    fun setup(player: ServerPlayer) {
+        if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.ADVENTURE)
+        player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = P3Sim.speed.toDouble() / 1000.0
+        player.getAttribute(Attributes.KNOCKBACK_RESISTANCE)?.baseValue = 1.0
+        player.getAttribute(Attributes.STEP_HEIGHT)?.baseValue = 0.6
+        player.isInvulnerable = true
+        player.addEffect(MobEffectInstance(MobEffects.SATURATION, -1, 0, false, false, false))
+        SimItems.giveHotbar(player)
+    }
+
+    /** Starts [what] from its beginning (stopping whatever ran). */
+    fun start(what: Start) {
+        val player = Sim.player ?: return
+        stop()
+        later.clear()
+        Sim.clearEntities()
+        Blocks.restoreAll()
+        setup(player)
+        Masks.reset()
+        Stats.runStart = if (what == Start.P1) serverTick else -1
+        previous = null
+        val p: Phase = when (what) {
+            Start.P1 -> P1Maxor()
+            Start.P2 -> P2Storm()
+            Start.P3, Start.S1 -> GoldorPhase(1)
+            Start.S2 -> GoldorPhase(2)
+            Start.S3 -> GoldorPhase(3)
+            Start.S4 -> GoldorPhase(4)
+            Start.CORE -> GoldorPhase(5)
+            Start.P4 -> P4Necron()
+        }
+        begin(p)
+    }
+
+    /** Hands over to the next phase (the fight going on by itself: P1 -> P2 -> ...). */
+    fun begin(p: Phase) {
+        phase?.let { if (it !== p) EngineerClient.safely("p3sim stop ${it.name}") { it.stop() } }
+        previous = phase
+        phase = p
+        p.t = 0
+        p.start()
+    }
+
+    /** Ends the fight (the menu's Stop): everything back to how it was built. */
+    fun end() {
+        stop()
+        Sim.clearEntities()
+        Blocks.restoreAll()
+        Party.clear()
+    }
+
+    fun tick(server: MinecraftServer) {
+        serverTick++
+        // Hypixel pings every client each server tick; Odin (and this mod) count those as server
+        // ticks: Simon Says, terminal first-click protection, splits all run on them.
+        server.playerList.players.forEach { it.connection.send(ClientboundPingPacket(serverTick)) }
+        if (later.isNotEmpty()) {
+            val due = later.filter { it.at <= serverTick }
+            later.removeAll(due.toSet())
+            due.forEach { EngineerClient.safely("p3sim ${it.what}") { it.run() } }
+        }
+        Blocks.tick()
+        Terminals.tick()
+        SimItems.tick()
+        val p = phase ?: return
+        EngineerClient.safely("p3sim ${p.name}") { p.tick() }
+        p.t++
+        Party.tick()
+    }
+}

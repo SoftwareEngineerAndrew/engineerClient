@@ -1,0 +1,520 @@
+package com.engineerclient.p3sim
+
+import com.engineerclient.EngineerClient
+import com.engineerclient.EngineerClient.mc
+import com.google.common.collect.ImmutableMultimap
+import com.mojang.authlib.GameProfile
+import com.mojang.authlib.properties.Property
+import com.mojang.authlib.properties.PropertyMap
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback
+import net.fabricmc.fabric.api.event.player.UseBlockCallback
+import net.fabricmc.fabric.api.event.player.UseEntityCallback
+import net.fabricmc.fabric.api.event.player.UseItemCallback
+import net.minecraft.core.BlockPos
+import net.minecraft.core.component.DataComponents
+import net.minecraft.core.particles.ParticleTypes
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.sounds.SoundEvents
+import net.minecraft.world.InteractionHand
+import net.minecraft.world.InteractionResult
+import net.minecraft.world.SimpleContainer
+import net.minecraft.world.SimpleMenuProvider
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.decoration.ItemFrame
+import net.minecraft.world.entity.player.Inventory
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow
+import net.minecraft.world.entity.projectile.arrow.Arrow
+import net.minecraft.world.inventory.ChestMenu
+import net.minecraft.world.inventory.ContainerInput
+import net.minecraft.world.inventory.MenuType
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
+import net.minecraft.world.item.component.CustomData
+import net.minecraft.world.item.component.ItemLore
+import net.minecraft.world.item.component.ResolvableProfile
+import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.AbstractBannerBlock
+import net.minecraft.world.level.block.ButtonBlock
+import net.minecraft.world.level.block.FlowerPotBlock
+import net.minecraft.world.level.block.LadderBlock
+import net.minecraft.world.level.block.LeverBlock
+import net.minecraft.world.level.block.SignBlock
+import net.minecraft.world.level.block.SkullBlock
+import net.minecraft.world.level.block.TripWireHookBlock
+import net.minecraft.world.level.block.WallSkullBlock
+import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
+import net.minecraft.world.phys.shapes.CollisionContext
+import java.util.UUID
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.sign
+import kotlin.math.sin
+
+/**
+ * The boss hotbar most Better PF recordings show (tools/p3sim/research/hotbars.md), working the
+ * way the items do on Hypixel:
+ *
+ * 1 Superboom TNT (Hyperion outside P3) · 2 ⚚ Bonzo's Staff · 3 Spirit Shortbow · 4 Dungeonbreaker
+ * · 5 Ender Pearls · 6 Infinileap · 7 Jerry-chine Gun · 8 Wither Cloak Sword · 9 SkyBlock Menu
+ * (opens the sim menu); in the inventory Hyperion, an Aspect of the Void (etherwarp merged) and a
+ * Terminator.
+ *
+ * Teleports follow PrecisionSnipes' measured rules (item-mechanics.md): etherwarp is a voxel DDA
+ * from the sneak eye over 61 blocks onto a block with room above (+0.5, +1.05, +0.5), blinks step
+ * whole blocks (AOTV 12, Hyperion 10) checking every quarter; look kept, velocity zeroed.
+ */
+object SimItems {
+    // ------------------------------------------------------------------ the items
+
+    private fun item(base: Item, id: String, name: String, lore: List<String> = emptyList(), glint: Boolean = false, extra: (CompoundTag) -> Unit = {}): ItemStack {
+        val s = ItemStack(base)
+        s.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { it.withItalic(false) })
+        if (lore.isNotEmpty()) s.set(DataComponents.LORE, ItemLore(lore.map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
+        if (glint) s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
+        s.set(DataComponents.UNBREAKABLE, net.minecraft.util.Unit.INSTANCE)
+        val tag = CompoundTag()
+        tag.putString("id", id)
+        tag.putBoolean("p3sim", true)
+        extra(tag)
+        s.set(DataComponents.CUSTOM_DATA, CustomData.of(tag))
+        return s
+    }
+
+    fun idOf(s: ItemStack): String? = s.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getStringOr("id", "")?.takeIf { it.isNotEmpty() }
+
+    private const val LEAP_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY1MjE0NjYxMjc0MiwKICAicHJvZmlsZUlkIiA6ICI5ZWU3NTUxOGQyZWE0Y2Q4OGJiNGI1YTZkNmVhNTFjYyIsCiAgInByb2ZpbGVOYW1lIiA6ICJNaWNyb3MxMTgyIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzM3N2Q0YTIwNmQ3NzU3ZjQ3OWYzMzJlYzFhMmJiYmVlNTdjZWY5NzU2OGRkODhkZjgxZjQ4NjRhZWU3ZDNkOTgiLAogICAgICAibWV0YWRhdGEiIDogewogICAgICAgICJtb2RlbCIgOiAic2xpbSIKICAgICAgfQogICAgfQogIH0KfQ=="
+
+    fun head(tex: String, name: String): ItemStack {
+        val s = ItemStack(Items.PLAYER_HEAD)
+        val profile = GameProfile(UUID.nameUUIDFromBytes(tex.toByteArray()), "p3sim", PropertyMap(ImmutableMultimap.of("textures", Property("textures", tex))))
+        s.set(DataComponents.PROFILE, ResolvableProfile.createResolved(profile))
+        s.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { it.withItalic(false) })
+        return s
+    }
+
+    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Right-click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
+    val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
+    val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§9⚚ Bonzo's Staff §6✪✪✪✪✪", listOf("§6Ability: Showtime §e§lRIGHT CLICK", "§7Shoots balloons that knock you back."))
+    val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
+    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§6Dungeonbreaker", listOf("§7Mines any dungeon block instantly", "§7(not gates, doors or the arena's shell)."), glint = true)
+    val PEARLS get() = item(Items.ENDER_PEARL, "ENDER_PEARL", "§fEnder Pearl").also { it.count = 16 }
+    val LEAP get() = head(LEAP_TEX, "§5Infinileap").also { s ->
+        s.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Right-click to leap to a teammate.").withStyle { it.withItalic(false) })))
+        s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", "INFINITE_SPIRIT_LEAP"); it.putBoolean("p3sim", true) }))
+    }
+    val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", "§6Jerry-chine Gun", listOf("§6Ability: Rapid-fire §e§lRIGHT CLICK", "§7Jerries that knock you up."))
+    val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", "§5Wither Cloak Sword", listOf("§6Ability: Creeper Veil §e§lRIGHT CLICK", "§7Immune to damage (death ticks) while on."))
+    val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", "§aP3 Sim Menu §7(Right Click)", listOf("§7Start any phase or section,", "§7teleport, change settings."))
+    val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", "§5Heroic Aspect of the Void", listOf("§6Ability: Instant Transmission §e§lRIGHT CLICK", "§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK"), glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }
+    val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
+
+    /** The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory. */
+    fun giveHotbar(p: ServerPlayer, p3: Boolean = true) {
+        val inv = p.inventory
+        inv.clearContent()
+        val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, SPIRIT_BOW, DUNGEONBREAKER, PEARLS, LEAP, JERRY, CLOAK, MENU)
+        bar.forEachIndexed { i, s -> inv.setItem(i, s) }
+        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, TERMINATOR)
+        inv.setItem(17, ItemStack(Items.ARROW, 64))
+        inv.selectedSlot = 3
+        p.containerMenu.broadcastChanges()
+        p.inventoryMenu.broadcastChanges()
+    }
+
+    // ------------------------------------------------------------------ hooks
+
+    private fun simServer(level: Level) = !level.isClientSide && level is ServerLevel && level.server === SimServer.server && SimServer.server != null
+    private fun simClient(level: Level) = level.isClientSide && P3Sim.inSim
+
+    fun register() {
+        UseItemCallback.EVENT.register { player, level, hand ->
+            if (hand != InteractionHand.MAIN_HAND) return@register InteractionResult.PASS
+            val stack = player.getItemInHand(hand)
+            val id = idOf(stack) ?: return@register InteractionResult.PASS
+            if (simClient(level)) {
+                // The menu opens here (client side); everything else is the server's.
+                if (id == "SKYBLOCK_MENU") { mc.execute { mc.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
+                return@register InteractionResult.PASS
+            }
+            if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
+            var result: InteractionResult = InteractionResult.PASS
+            EngineerClient.safely("p3sim use $id") { result = use(player, id) }
+            result
+        }
+        UseBlockCallback.EVENT.register { player, level, hand, hit ->
+            if (hand != InteractionHand.MAIN_HAND) return@register InteractionResult.PASS
+            val id = idOf(player.getItemInHand(hand))
+            if (simClient(level)) {
+                if (id == "SKYBLOCK_MENU") { mc.execute { mc.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
+                return@register InteractionResult.PASS
+            }
+            if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
+            var result: InteractionResult = InteractionResult.PASS
+            EngineerClient.safely("p3sim use block") { result = useBlock(player, hit.blockPos, id) }
+            result
+        }
+        UseEntityCallback.EVENT.register { player, level, hand, entity, _ ->
+            if (hand != InteractionHand.MAIN_HAND || !simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
+            var result: InteractionResult = InteractionResult.PASS
+            EngineerClient.safely("p3sim use entity") { result = useEntity(player, entity) }
+            result
+        }
+        AttackEntityCallback.EVENT.register { player, level, _, entity, _ ->
+            if (simClient(level)) return@register if (entity is ItemFrame) InteractionResult.FAIL else InteractionResult.PASS
+            if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
+            var result: InteractionResult = InteractionResult.PASS
+            EngineerClient.safely("p3sim hit entity") { result = useEntity(player, entity, left = true) }
+            result
+        }
+        // Adventure mode never sends a block hit to the server: the Dungeonbreaker's is passed on from here.
+        AttackBlockCallback.EVENT.register { player, level, _, pos, _ ->
+            if (!simClient(level)) return@register InteractionResult.PASS
+            if (idOf(player.mainHandItem) == "DUNGEONBREAKER") {
+                val at = pos.immutable()
+                SimServer.run("dungeonbreaker") { mine(at) }
+            }
+            InteractionResult.PASS
+        }
+    }
+
+    /** A right click with [id] in the air (or on a block that isn't the sim's). */
+    private fun use(p: ServerPlayer, id: String): InteractionResult {
+        (Fight.phase as? P1Maxor)?.let { if (it.usePylon(p.position())) return InteractionResult.SUCCESS }
+        if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
+        when (id) {
+            "ASPECT_OF_THE_VOID" -> Fight.afterPing("aotv") { if (p.isShiftKeyDown) etherwarp(p) else blink(p, 12) }
+            "HYPERION" -> Fight.afterPing("hype") { blink(p, 10); implode(p) }
+            "STARRED_BONZO_STAFF" -> Fight.afterPing("bonzo") { bonzo(p) }
+            "JERRY_STAFF" -> Fight.afterPing("jerry") { jerry(p) }
+            "WITHER_CLOAK" -> Fight.afterPing("cloak") { cloak(p) }
+            "INFINITE_SPIRIT_LEAP" -> openLeap(p)
+            "SUPERBOOM_TNT" -> Fight.afterPing("superboom") { superboom(p, null) }
+            "TERMINATOR" -> Fight.afterPing("term") { shoot(p, 3) }
+            "ITEM_SPIRIT_BOW" -> Fight.afterPing("spirit bow") { shoot(p, 1) }
+            else -> return InteractionResult.PASS
+        }
+        // Keep the client's copy of the stack (some of these are block items it may think it placed).
+        p.containerMenu.broadcastChanges()
+        return InteractionResult.SUCCESS
+    }
+
+    private fun useBlock(p: ServerPlayer, pos: BlockPos, id: String?): InteractionResult {
+        val phase = Fight.phase
+        if (phase is P1Maxor && phase.usePylon(Vec3.atCenterOf(pos))) return InteractionResult.SUCCESS
+        if (phase is GoldorPhase) {
+            phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me) }; return InteractionResult.SUCCESS }
+            if (phase.devices.use(pos)) return InteractionResult.SUCCESS
+            if (id == "SUPERBOOM_TNT") { Fight.afterPing("superboom") { superboom(p, pos) }; p.containerMenu.broadcastChanges(); return InteractionResult.SUCCESS }
+        }
+        val state = Sim.level.getBlockState(pos)
+        // Anything else interactable (a stray lever or button) stays as built.
+        if (state.block is LeverBlock || state.block is ButtonBlock) return InteractionResult.SUCCESS
+        if (id != null) return use(p, id)
+        return InteractionResult.SUCCESS
+    }
+
+    private fun useEntity(p: ServerPlayer, e: net.minecraft.world.entity.Entity, left: Boolean = false): InteractionResult {
+        if (e is net.minecraft.world.entity.boss.enderdragon.EndCrystal) { (Fight.phase as? P1Maxor)?.useCrystal(e); return InteractionResult.SUCCESS }
+        if (left && idOf(p.mainHandItem) == "HYPERION") (Fight.phase as? P2Storm)?.beam()
+        val phase = Fight.phase as? GoldorPhase
+        if (phase != null) {
+            if (e is ItemFrame && phase.devices.arrows.owns(e)) { if (!left) phase.devices.arrows.use(e); return InteractionResult.SUCCESS }
+            if (e is ArmorStand) {
+                val st = phase.stations.firstOrNull { it.owns(e) }
+                    ?: phase.stations.filter { it.kind == Station.Kind.TERMINAL }.minByOrNull { it.at.distanceToSqr(e.position()) }?.takeIf { it.at.distanceToSqr(e.position()) < 4.0 }
+                if (st != null && st.kind == Station.Kind.TERMINAL) { Fight.afterPing("terminal") { phase.useTerminal(st) }; return InteractionResult.SUCCESS }
+                return InteractionResult.SUCCESS
+            }
+        }
+        if (e is ItemFrame || e is ArmorStand) return InteractionResult.SUCCESS
+        if (e.entityTags().contains(Sim.TAG)) return InteractionResult.SUCCESS
+        return InteractionResult.PASS
+    }
+
+    // ------------------------------------------------------------------ teleports
+
+    private fun look(p: Player): Vec3 {
+        val yaw = Math.toRadians(p.yRot.toDouble()); val pitch = Math.toRadians(p.xRot.toDouble())
+        return Vec3(-sin(yaw) * cos(pitch), -sin(pitch), cos(yaw) * cos(pitch))
+    }
+
+    private fun state(x: Int, y: Int, z: Int): BlockState = Sim.level.getBlockState(BlockPos(x, y, z))
+
+    private fun collides(s: BlockState, pos: BlockPos) = !s.getCollisionShape(Sim.level, pos, CollisionContext.empty()).isEmpty
+
+    /** The top of a cell's collision under its centre (0 = none). */
+    private fun top(x: Int, y: Int, z: Int): Double {
+        val pos = BlockPos(x, y, z)
+        val shape = state(x, y, z).getCollisionShape(Sim.level, pos, CollisionContext.empty())
+        if (shape.isEmpty) return 0.0
+        var best = 0.0
+        for (b in shape.toAabbs()) if (b.minX <= 0.5 && b.maxX >= 0.5 && b.minZ <= 0.5 && b.maxZ >= 0.5) best = maxOf(best, b.maxY)
+        return if (best > 0) best else shape.max(net.minecraft.core.Direction.Axis.Y)
+    }
+
+    private fun passThrough(s: BlockState) = s.block is SkullBlock || s.block is WallSkullBlock || s.block is LadderBlock || s.block is FlowerPotBlock || s.block is ButtonBlock || s.block is LeverBlock
+    private fun stopsAnyway(s: BlockState) = s.block is SignBlock || s.block is AbstractBannerBlock || s.block is TripWireHookBlock
+
+    /** Etherwarp's ray stops at this cell. */
+    private fun rayStops(x: Int, y: Int, z: Int): Boolean {
+        val s = state(x, y, z)
+        if (passThrough(s)) return false
+        if (stopsAnyway(s)) return true
+        return collides(s, BlockPos(x, y, z))
+    }
+
+    /** A body fits in this cell. */
+    private fun bodyPasses(x: Int, y: Int, z: Int): Boolean {
+        val s = state(x, y, z)
+        if (stopsAnyway(s)) return true
+        if (s.block is SkullBlock || s.block is WallSkullBlock || s.block is LadderBlock || s.block is FlowerPotBlock) return false
+        return !collides(s, BlockPos(x, y, z))
+    }
+
+    fun etherwarp(p: ServerPlayer, range: Double = 61.0) {
+        val eye = Vec3(p.x, p.y + 1.27, p.z)
+        val dir = look(p)
+        val hit = dda(eye, dir, range)
+        if (hit == null) { return }
+        val (x, y, z) = hit
+        val s = state(x, y, z)
+        val above = state(x, y + 1, z)
+        val bad = stopsAnyway(s) || s.block is SkullBlock || s.block is LadderBlock || s.block is FlowerPotBlock ||
+            above.block is SkullBlock || above.block is WallSkullBlock || above.block is LadderBlock || above.block is FlowerPotBlock || top(x, y, z) < 0.03
+        val need = if (top(x, y, z) > 1.0) 3 else 2
+        if (bad || (1..need).any { !bodyPasses(x, y + it, z) } || rayStops(floor(eye.x).toInt(), floor(eye.y).toInt(), floor(eye.z).toInt())) {
+            Sim.chat("§cThere are blocks in the way!")
+            return
+        }
+        Sim.tp(p, x + 0.5, y + 1.05, z + 0.5)
+        Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.53f, p.position())
+    }
+
+    /** Amanatides-Woo DDA with the corner guard; the cell the ray stops in, or null. */
+    private fun dda(eye: Vec3, dir: Vec3, range: Double): Triple<Int, Int, Int>? {
+        var bx = floor(eye.x).toInt(); var by = floor(eye.y).toInt(); var bz = floor(eye.z).toInt()
+        val sx = sign(dir.x).toInt(); val sy = sign(dir.y).toInt(); val sz = sign(dir.z).toInt()
+        val dx = if (dir.x != 0.0) abs(1 / dir.x) else Double.MAX_VALUE
+        val dy = if (dir.y != 0.0) abs(1 / dir.y) else Double.MAX_VALUE
+        val dz = if (dir.z != 0.0) abs(1 / dir.z) else Double.MAX_VALUE
+        fun first(o: Double, b: Int, s: Int, d: Double) = if (s > 0) (b + 1 - o) * d else if (s < 0) (o - b) * d else Double.MAX_VALUE
+        var tx = first(eye.x, bx, sx, dx); var ty = first(eye.y, by, sy, dy); var tz = first(eye.z, bz, sz, dz)
+        repeat(250) {
+            val t = minOf(tx, ty, tz)
+            if (t > range) return null
+            val cx = tx <= t + 1e-4; val cy = ty <= t + 1e-4; val cz = tz <= t + 1e-4
+            if ((if (cx) 1 else 0) + (if (cy) 1 else 0) + (if (cz) 1 else 0) >= 2) {
+                if (cx && rayStops(bx + sx, by, bz)) return Triple(bx + sx, by, bz)
+                if (cy && rayStops(bx, by + sy, bz)) return Triple(bx, by + sy, bz)
+                if (cz && rayStops(bx, by, bz + sz)) return Triple(bx, by, bz + sz)
+            }
+            if (cx) { bx += sx; tx += dx }
+            if (cy) { by += sy; ty += dy }
+            if (cz) { bz += sz; tz += dz }
+            if (rayStops(bx, by, bz)) return Triple(bx, by, bz)
+        }
+        return null
+    }
+
+    private fun blinkBlocks(x: Int, y: Int, z: Int): Boolean {
+        val s = state(x, y, z)
+        if (s.block is SignBlock || s.block is AbstractBannerBlock) return false
+        if (rayStops(x, y, z) && top(x, y, z) >= 0.5) return true
+        return top(x, y - 1, z) > 1.0
+    }
+
+    private fun feetPass(x: Int, y: Int, z: Int) = (bodyPasses(x, y, z) || top(x, y, z) < 0.5) && top(x, y - 1, z) <= 1.0
+
+    /** AOTV (12) / Hyperion (10): whole-block steps, every quarter checked; "There are blocks in the way!" when cut short. */
+    fun blink(p: ServerPlayer, range: Int) {
+        val eye = p.eyePosition
+        val dir = look(p)
+        var last = 0
+        var px = floor(eye.x).toInt(); var pz = floor(eye.z).toInt()
+        var cut = false
+        loop@ for (i in 1..range) {
+            for (k in 1..4) {
+                val q = eye.add(dir.scale((i - 1) + k * 0.25))
+                if (blinkBlocks(floor(q.x).toInt(), floor(q.y).toInt(), floor(q.z).toInt())) { cut = true; break@loop }
+            }
+            val c = eye.add(dir.scale(i.toDouble()))
+            val cx = floor(c.x).toInt(); val cy = floor(c.y).toInt(); val cz = floor(c.z).toInt()
+            if (cx != px && cz != pz && blinkBlocks(px, cy, cz) && blinkBlocks(cx, cy, pz)) { cut = true; break }
+            last = i; px = cx; pz = cz
+        }
+        if (last == 0) { Sim.chat("§cThere are blocks in the way!"); return }
+        val c = eye.add(dir.scale(last.toDouble()))
+        val cx = floor(c.x).toInt(); val cy = floor(c.y).toInt(); val cz = floor(c.z).toInt()
+        val feetY = if (feetPass(cx, cy - 1, cz)) cy - 1 else cy
+        if (cx == floor(p.x).toInt() && cz == floor(p.z).toInt() && (feetY == floor(p.y + 0.05).toInt() || Vec3(cx + 0.5, feetY.toDouble(), cz + 0.5).distanceTo(p.position()) < 1.5)) {
+            Sim.chat("§cThere are blocks in the way!"); return
+        }
+        if (cut) Sim.chat("§cThere are blocks in the way!")
+        Sim.tp(p, cx + 0.5, feetY.toDouble(), cz + 0.5)
+        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position())
+    }
+
+    private fun implode(p: ServerPlayer) {
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION, p.x, p.eyeY, p.z, 1, 0.0, 0.0, 0.0, 0.0)
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.6f, 1f, p.position())
+    }
+
+    // ------------------------------------------------------------------ movement items
+
+    private fun push(p: ServerPlayer, v: Vec3) {
+        p.deltaMovement = v
+        p.hurtMarked = true
+    }
+
+    /** Bonzo's Staff: the balloon pops where it hits (within 4 blocks) and knocks you away from it, 1.5 a tick and 0.5 up. */
+    private fun bonzo(p: ServerPlayer) {
+        Sim.sound(SoundEvents.GHAST_SHOOT, 0.5f, 1.4f, p.position())
+        val eye = p.eyePosition
+        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(4.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
+        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) return
+        val away = p.position().subtract(hit.location).multiply(1.0, 0.0, 1.0)
+        val h = if (away.lengthSqr() < 1e-4) look(p).multiply(-1.0, 0.0, -1.0).normalize() else away.normalize()
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION, hit.location.x, hit.location.y, hit.location.z, 1, 0.0, 0.0, 0.0, 0.0)
+        push(p, Vec3(h.x * 1.5, 0.5, h.z * 1.5))
+    }
+
+    /** Jerry-chine Gun: a Jerry that pops under you knocks you straight up. */
+    private fun jerry(p: ServerPlayer) {
+        Sim.sound(SoundEvents.VILLAGER_YES, 0.6f, 1.2f, p.position())
+        val eye = p.eyePosition
+        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(5.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
+        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS || hit.location.distanceTo(p.position()) > 3.5) return
+        push(p, Vec3(p.deltaMovement.x, 0.9, p.deltaMovement.z))
+    }
+
+    /** Creeper Veil: on until used again (or 10 s), then 10 s of cooldown; death ticks don't hit while it's on. */
+    var cloakUntil = 0
+        private set
+    private var cloakReady = 0
+    val cloaked get() = Fight.serverTick < cloakUntil
+
+    private fun cloak(p: ServerPlayer) {
+        val now = Fight.serverTick
+        if (cloaked) { cloakUntil = now; cloakReady = now + 200; Sim.chat("§cCreeper Veil De-activated!"); return }
+        if (now < cloakReady) { Sim.chat("§cThis ability is on cooldown for ${(cloakReady - now + 19) / 20}s."); return }
+        cloakUntil = now + 200; cloakReady = now + 400
+        Sim.chat("§aCreeper Veil Activated!")
+        Sim.sound(SoundEvents.CREEPER_PRIMED, 0.6f, 1f, p.position())
+    }
+
+    // ------------------------------------------------------------------ Superboom, Dungeonbreaker, bows
+
+    /** Superboom TNT: blows the gate it's used on (or near where you look within 5), once that gate's section has started. */
+    private fun superboom(p: ServerPlayer, on: BlockPos?) {
+        val phase = Fight.phase as? GoldorPhase ?: return
+        val at = on?.let { Vec3.atCenterOf(it) } ?: run {
+            val eye = p.eyePosition
+            Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(5.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p)).location
+        }
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
+        val gate = phase.gateNear(at, 1.5)
+        if (gate > 0) phase.blowGate(gate, Sim.me)
+    }
+
+    /** Blocks the Dungeonbreaker never mines: the shell, gates, doors, the core's gold and anything the fight uses. */
+    private fun unbreakable(pos: BlockPos, s: BlockState): Boolean {
+        if (s.isAir || s.getDestroySpeed(Sim.level, pos) < 0) return true
+        val b = s.block
+        if (b == net.minecraft.world.level.block.Blocks.BARRIER || b == net.minecraft.world.level.block.Blocks.BEDROCK || b == net.minecraft.world.level.block.Blocks.GOLD_BLOCK) return true
+        val phase = Fight.phase as? GoldorPhase
+        if (phase != null && GoldorPhase.GATE_BOXES.drop(1).any { it.inflate(0.5).contains(Vec3.atCenterOf(pos)) }) return true
+        if (b is LeverBlock || b is ButtonBlock) return true
+        return false
+    }
+
+    private fun mine(pos: BlockPos) {
+        val s = Sim.level.getBlockState(pos)
+        if (unbreakable(pos, s)) return
+        Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
+        Sim.sound(s.soundType.breakSound, 0.7f, 1f, Vec3.atCenterOf(pos))
+    }
+
+    /** Shortbows: [n] arrows at once (3 spread 5° for the Terminator), fast and straight. */
+    private fun shoot(p: ServerPlayer, n: Int) {
+        val level = Sim.level
+        val yaws = if (n == 3) listOf(-5f, 0f, 5f) else listOf(0f)
+        for (dy in yaws) {
+            val a = Arrow(level, p, ItemStack(Items.ARROW), null)
+            a.shootFromRotation(p, p.xRot, p.yRot + dy, 0f, 3.0f, 0f)
+            a.pickup = AbstractArrow.Pickup.DISALLOWED
+            Sim.spawn(a)
+            arrows += a
+        }
+        Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 1.2f, p.position())
+    }
+
+    private val arrows = ArrayList<AbstractArrow>()
+    private val lastMotion = HashMap<AbstractArrow, Vec3>()
+
+    /** Arrows that hit something: the target device's blocks count, every arrow goes away after 3 s. */
+    fun tick() {
+        val level = SimServer.level ?: return
+        // Vanilla bow arrows too.
+        level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !in arrows }.forEach { arrows += it }
+        val it = arrows.iterator()
+        while (it.hasNext()) {
+            val a = it.next()
+            if (a.isRemoved) { it.remove(); lastMotion.remove(a); continue }
+            val v = a.deltaMovement
+            if (v.lengthSqr() > 1e-3) { lastMotion[a] = v; if (a.tickCount > 100) { a.discard() }; continue }
+            // Stuck: the block it's in (a bit along its flight).
+            val m = lastMotion[a] ?: continue
+            val hit = BlockPos.containing(a.position().add(m.normalize().scale(0.3)))
+            (Fight.phase as? GoldorPhase)?.devices?.target?.hit(hit)
+            a.discard()
+            it.remove(); lastMotion.remove(a)
+        }
+    }
+
+    // ------------------------------------------------------------------ Spirit Leap
+
+    private fun openLeap(p: ServerPlayer) {
+        val bots = Party.bots().filter { it.entity != null }
+        p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap")))
+    }
+
+    /** Hypixel's Spirit Leap window: teammates' heads in slots 11-15, a click leaps (8 ticks, as measured). */
+    class LeapMenu(id: Int, inv: Inventory, val bots: List<Party.Bot>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
+        init {
+            for (i in 0 until 36) container.setItem(i, Terminals.FILLER)
+            bots.sortedBy { it.clazz.ordinal }.forEachIndexed { i, b ->
+                val h = ItemStack(Items.PLAYER_HEAD)
+                h.set(DataComponents.CUSTOM_NAME, Component.literal("§a${b.name}").withStyle { it.withItalic(false) })
+                h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Class: §e${b.clazz.name}").withStyle { it.withItalic(false) })))
+                container.setItem(11 + i, h)
+            }
+        }
+
+        override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
+            if (slot !in 11..15) return
+            val name = container.getItem(slot).hoverName.string
+            val bot = bots.firstOrNull { it.name == name } ?: return
+            val sp = p as ServerPlayer
+            sp.closeContainer()
+            Fight.afterPing("leap") {
+                val e = bot.pos
+                Sim.tp(sp, e.x, e.y, e.z)
+                Sim.chat("§aYou have teleported to §r§b${bot.name}§r§a!")
+                Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position())
+            }
+        }
+
+        override fun quickMoveStack(p: Player, slot: Int): ItemStack = ItemStack.EMPTY
+        override fun stillValid(p: Player) = true
+    }
+}

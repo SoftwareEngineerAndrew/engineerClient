@@ -44,6 +44,8 @@
     "MinecraftAccessor",
     "MinecraftActionTapMixin",
     "MouseTapMixin",
+    "P3SimFluidMixin",
+    "P3SimWorldMixin",
     "MoveEntityPacketAccessor",
     "NumbersHandlerMixin",
     "PacketApplyTapMixin",

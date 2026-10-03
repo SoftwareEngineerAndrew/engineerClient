@@ -83,6 +83,8 @@ class RunRecorder(
         flushFrames()
         flushMouse()
         tick++
+        // Never the P3 Sim world: Odin is told it is in F7 there, and Better PF would take it for a run.
+        if (!confirmed && com.engineerclient.p3sim.P3Sim.inSim) { abandon(); return }
         if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
             // Area is known a second or two after load; anything that is known and not a dungeon is dropped

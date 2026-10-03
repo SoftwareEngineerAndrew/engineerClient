@@ -257,8 +257,8 @@ object DungeonRecorder : Module(
     // ------------------------------------------------------------------ lifecycle and client state
 
     internal fun wanted(): Boolean = when (where) {
-        0 -> DungeonUtils.inDungeons
-        1 -> DungeonUtils.inDungeons || LocationUtils.isCurrentArea(com.odtheking.odin.utils.skyblock.Island.DungeonHub)
+        0 -> DungeonUtils.inDungeons && !com.engineerclient.p3sim.P3Sim.inSim
+        1 -> (DungeonUtils.inDungeons && !com.engineerclient.p3sim.P3Sim.inSim) || LocationUtils.isCurrentArea(com.odtheking.odin.utils.skyblock.Island.DungeonHub)
         else -> EngineerClient.mc.level != null
     }
 

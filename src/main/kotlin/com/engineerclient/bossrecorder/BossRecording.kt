@@ -60,6 +60,8 @@ class BossRecording(private val dir: Path) {
     fun onTick() {
         flushNet()
         tick++
+        // Never the P3 Sim world: Odin is told it is in F7 there, but nothing of it is real.
+        if (com.engineerclient.p3sim.P3Sim.inSim) { focus = false; return }
         focus = DungeonUtils.inBoss ||
             (BossRecorder.watcherCamp && (DungeonUtils.currentRoomName == "Blood" || (bloodOpen && !watcherDone)))
         if (focus && !open) openFile()

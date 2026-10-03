@@ -9,6 +9,7 @@
     "LeapMenuClickMixin",
     "LeapMenuReleaseMixin",
     "LeapMenuRenderMixin",
+    "PersonalBestSimMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin"
   ],
