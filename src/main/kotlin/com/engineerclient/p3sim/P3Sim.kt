@@ -54,6 +54,7 @@ object P3Sim : Module(
     val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
     val goldorKillS = +NumberSetting("Goldor Kill Time", 57, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of 201 recorded kills: 57).")
     val partyRunS = +NumberSetting("Party Run", 0, 0, 30, 1, desc = "0: the four bots play the scripted fast plan. 1 and up: they replay that real fast P3 from Better PF (1 = the fastest), with the real players' names, skins, paths and stations; you take the place of your role's class.")
+    val paceGhostS = +BooleanSetting("Pace Ghost", true, desc = "With a Party Run: the real player you replace, as a glowing outline where they were at this point of the section. Race them.")
     val p3OnlyS = +BooleanSetting("Stop After P3", true, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStart by BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimes by BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
@@ -66,6 +67,7 @@ object P3Sim : Module(
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
     val partyRun: Int get() = partyRunS.value.toInt()
+    val paceGhost: Boolean get() = paceGhostS.value
     val forcedTerminal: Terminals.Type? get() = terminalS.value.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
 
     /** True only in the p3sim singleplayer world (client side). */

@@ -532,6 +532,11 @@ object SimItems {
                 val h = ItemStack(Items.PLAYER_HEAD)
                 h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.GREEN) })
                 h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Class: §e${b.clazz.name}").withStyle { it.withItalic(false) })))
+                // A ghost's own face.
+                b.ghost?.skin?.takeIf { it.isNotEmpty() }?.let { tex ->
+                    val props = com.mojang.authlib.properties.PropertyMap(com.google.common.collect.ImmutableMultimap.of("textures", com.mojang.authlib.properties.Property("textures", tex)))
+                    h.set(DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(com.mojang.authlib.GameProfile(java.util.UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name, props)))
+                }
                 container.setItem(11 + i, h)
             }
         }

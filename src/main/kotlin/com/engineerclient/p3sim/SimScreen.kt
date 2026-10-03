@@ -37,20 +37,25 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         }
 
         label("§eSettings")
+        val runs = Ghosts.runs.size + 1
         row(listOf(
             setting("Role: ${Party.myRole.label}", 110) { P3Sim.roleS.value = (P3Sim.roleS.value + 1) % 5 },
             setting("Bots: ${onOff(P3Sim.bots)}", 70) { P3Sim.botsS.value = !P3Sim.bots },
-            setting("Party: ${Ghosts.label(P3Sim.partyRun)}", 150) { P3Sim.partyRunS.value = ((P3Sim.partyRun + 1) % (Ghosts.runs.size + 1)) },
-            setting("Death ticks: ${listOf("Off", "Warn", "Masks")[P3Sim.deathTicks]}", 120) { P3Sim.deathTicksS.value = (P3Sim.deathTicks + 1) % 3 },
-            setting("Stop after P3: ${onOff(P3Sim.p3Only)}", 110) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
+            setting("<", 16) { P3Sim.partyRunS.value = (P3Sim.partyRun - 1).mod(runs) },
+            setting("Party: ${Ghosts.label(P3Sim.partyRun)}", 150) { P3Sim.partyRunS.value = (P3Sim.partyRun + 1) % runs },
+            setting("Pace: ${onOff(P3Sim.paceGhost)}", 70) { P3Sim.paceGhostS.value = !P3Sim.paceGhost },
         ))
         row(listOf(
+            setting("Death ticks: ${listOf("Off", "Warn", "Masks")[P3Sim.deathTicks]}", 120) { P3Sim.deathTicksS.value = (P3Sim.deathTicks + 1) % 3 },
+            setting("Stop after P3: ${onOff(P3Sim.p3Only)}", 110) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
             setting("Terminals: ${P3Sim.forcedTerminal?.name?.lowercase() ?: "random"}", 130) { P3Sim.terminalS.value = (P3Sim.terminalS.value + 1) % 7 },
             setting("Ping: ${P3Sim.ping}ms", 80) { P3Sim.pingS.value = PINGS[(PINGS.indexOf(P3Sim.ping) + 1).mod(PINGS.size)] },
+        ))
+        row(listOf(
             button("Reset Items", 80) { server { Sim.player?.let { SimItems.giveHotbar(it, Fight.phase !is P1Maxor && Fight.phase !is P2Storm) } } },
             button("§7Leave", 60) { SimWorld.leave() },
         ))
-        layout.addChild(StringWidget(Component.literal("§8Role changes apply from the next start."), font))
+        layout.addChild(StringWidget(Component.literal("§8Role and party changes apply from the next start."), font))
 
         layout.visitWidgets(this::addRenderableWidget)
         repositionElements()

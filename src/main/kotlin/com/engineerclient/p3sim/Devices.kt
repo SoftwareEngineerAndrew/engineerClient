@@ -182,41 +182,43 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ Lights
 
     /**
-     * Lights (S2): 20 levers (x58-62, y133-136, z142) over 20 lamps (z143). The six right ones on
-     * and the rest off is the device done; each lever lights its own lamp.
+     * Lights: 20 levers (x58-62, y133-136, z142) over 20 lamps (z143), all off at the start
+     * (devices.md §3). A lamp is lit while any lever in its plus (itself and the four next to it)
+     * is on: an OR, not a toggle. Levers flick any time (players pre-do it in Maxor); a click in S2
+     * with all 20 lamps lit is the device done, even one that turns a lever off. Odin's six are
+     * the solution from all off.
      */
     inner class Lights {
         private val right = setOf(58 to 133, 58 to 136, 60 to 134, 60 to 135, 62 to 133, 62 to 136)
         private val levers = (58..62).flatMap { x -> (133..136).map { y -> x to y } }
         private val on = HashSet<Pair<Int, Int>>()
 
-        fun place() {
-            on.clear()
-            // Some on at random, as Hypixel starts it (never already done).
-            do { on.clear(); levers.forEach { if (Random.nextInt(4) == 0) on += it } } while (on == right)
-            draw()
-        }
+        fun place() { on.clear(); draw() }
 
         fun solve() { on.clear(); on += right; draw() }
+
+        private fun lamp(x: Int, y: Int) = (x to y) in on || (x - 1 to y) in on || (x + 1 to y) in on || (x to y - 1) in on || (x to y + 1) in on
+        private fun allLit() = levers.all { (x, y) -> lamp(x, y) }
 
         private fun draw() = levers.forEach { (x, y) ->
             val lever = BlockPos(x, y, 142)
             val st = Blocks.get(lever)
             if (st != null && st.hasProperty(LeverBlock.POWERED)) Blocks.set(lever, st.setValue(LeverBlock.POWERED, (x to y) in on))
-            val lamp = BlockPos(x, y, 143)
-            Blocks.set(lamp, B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, (x to y) in on))
+            Blocks.set(BlockPos(x, y, 143), B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lamp(x, y)))
         }
 
         fun use(pos: BlockPos): Boolean {
             if (pos.z != 142 || (pos.x to pos.y) !in levers) return false
             Fight.afterPing("lights lever") {
                 val st = station("Lights")
-                if (st.done || phase.section != 2) return@afterPing
+                if (st.done) return@afterPing
+                // Checked before the toggle: a completing click that turns a lever off still counts (the lamp lags).
+                val wasLit = allLit()
                 val k = pos.x to pos.y
                 if (!on.remove(k)) on += k
                 draw()
-                Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.6f else 0.5f, Vec3.atCenterOf(pos))
-                if (on == right) st.complete(Sim.me)
+                Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
+                if (phase.section == 2 && (wasLit || allLit())) st.complete(Sim.me)
             }
             return true
         }
@@ -225,9 +227,10 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ Arrow Align
 
     /**
-     * Arrow Align (S3): 25 item frames at x=-2, y120-124, z75-79 (index (y-120) + (z-75)*5), the
-     * path's arrows in one of Odin's nine layouts, each turned at random; a click turns one 1/8.
-     * All pointing their layout's way is the device done.
+     * Arrow Align (S3): item frames at x=-2, y120-124, z75-79 (index (y-120) + (z-75)*5), only on
+     * one of Odin's nine layouts' arrow cells plus its few extra (non-arrow) frames, never on the
+     * other cells (devices.md §2). Start rotations uniform 0-7; a click turns one +1. Frames turn
+     * any time (pre-dev); the device line comes in the same tick as the solving click in S3.
      */
     inner class Arrows {
         private val frames = HashMap<Int, ItemFrame>()
@@ -235,18 +238,21 @@ class Devices(val phase: GoldorPhase) {
 
         fun place() {
             remove()
-            solution = SOLUTIONS.random()
+            val layout = SOLUTIONS.indices.random()
+            solution = SOLUTIONS[layout]
             for (i in 0 until 25) {
+                if (solution[i] < 0 && i !in EXTRAS[layout]) continue
                 val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
                 val f = ItemFrame(EntityType.ITEM_FRAME, Sim.level, pos, Direction.EAST)
                 f.isInvulnerable = true
                 if (solution[i] >= 0) {
                     f.setItem(ItemStack(Items.ARROW), false)
-                    var r: Int; do r = Random.nextInt(8) while (r == solution[i] && Random.nextInt(3) != 0)
-                    f.setRotation(r)
+                    f.setRotation(Random.nextInt(8))
                 }
                 frames[i] = Sim.spawn(f)
             }
+            // Never already solved.
+            if (frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) frames.entries.first { solution[it.key] >= 0 }.value.let { it.setRotation((it.rotation + 1) % 8) }
         }
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }
@@ -272,18 +278,26 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ the target
 
     /**
-     * The target (S4): stand on the plate (63, 127, 35) and shoot the lit (emerald) block of the 3x3
-     * at x64-68, y126-130, z50; each hit lights another, nine is the device done. Off the plate the
-     * board goes dark.
+     * The target ("i4"): stand on the plate (63, 127, 35) and shoot the lit (emerald) block of the
+     * 3x3 at x64-68, y126-130, z50 (devices.md §1). Live from P3's start, not only in S4 (an early
+     * finish counts in S4 via GoldorPhase.complete). Each run lights a random permutation of the 9
+     * cells, one each; a new one lights on a per-run 10-tick grid while someone is on the plate and
+     * none is lit. Off the plate, on the grid: the lit one goes blue and progress resets. Done, the
+     * board stays all blue terracotta (all emerald would read as 9 new targets to Odin).
      */
     inner class Target {
         val PLATE = BlockPos(63, 127, 35)
         private val blocks = (0 until 9).map { BlockPos(64 + (it % 3) * 2, 126 + (it / 3) * 2, 50) }
         private var lit = -1
         private var hits = 0
+        private var order = (0 until 9).shuffled()
+        /** This run's grid phase: lights land on t ≡ grid (mod 10). */
+        private var grid = Random.nextInt(10)
 
-        fun place() { lit = -1; hits = 0; blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
-        fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.EMERALD_BLOCK.defaultBlockState()) } }
+        fun place() { reset(); grid = Random.nextInt(10); blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
+        fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
+
+        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled() }
 
         fun onPlate(): Boolean {
             val p = Sim.player ?: return false
@@ -292,28 +306,28 @@ class Devices(val phase: GoldorPhase) {
 
         fun tick() {
             val st = station("Target")
-            if (st.done) return
-            if (onPlate() && phase.section >= 4) {
+            if (st.done || phase.section > 4 || (phase.t - grid) % 10 != 0) return
+            if (onPlate()) {
                 if (lit < 0) light()
-            } else if (lit >= 0) {
-                Blocks.set(blocks[lit], B.BLUE_TERRACOTTA.defaultBlockState()); lit = -1
+            } else if (lit >= 0 || hits > 0) {
+                if (lit >= 0) Blocks.set(blocks[lit], B.BLUE_TERRACOTTA.defaultBlockState())
+                reset()
             }
         }
 
         private fun light() {
-            var i: Int; do i = Random.nextInt(9) while (i == lit)
-            lit = i
-            Blocks.set(blocks[i], B.EMERALD_BLOCK.defaultBlockState())
+            lit = order[hits]
+            Blocks.set(blocks[lit], B.EMERALD_BLOCK.defaultBlockState())
         }
 
-        /** An arrow (or a bow's shot) hit block [pos]. */
+        /** An arrow (or a bow's shot) hit block [pos]. The arrow's own vanilla `entity.arrow.hit` is the only sound. */
         fun hit(pos: BlockPos) {
             if (lit < 0 || pos != blocks[lit]) return
             val st = station("Target")
             Blocks.set(pos, B.BLUE_TERRACOTTA.defaultBlockState())
-            Sim.sound(SoundEvents.ARROW_HIT_PLAYER, 0.5f, 1f)
+            lit = -1
             hits++
-            if (hits >= 9) { lit = -1; clear(); st.complete(Sim.me) } else light()
+            if (hits >= 9) { clear(); st.complete(Sim.me) }
         }
 
         val targets get() = blocks
@@ -331,6 +345,15 @@ class Devices(val phase: GoldorPhase) {
             listOf(-1, -1, -1, -1, -1, 1, -1, 1, -1, 1, 1, -1, 1, -1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, -1),
             listOf(-1, -1, -1, -1, -1, 1, 3, 3, 3, 3, -1, -1, -1, -1, 1, 7, 7, 7, 7, 1, -1, -1, -1, -1, -1),
             listOf(-1, -1, -1, -1, -1, -1, 1, -1, 1, -1, 7, 1, 7, 1, 3, 1, -1, 1, -1, 1, -1, -1, -1, -1, -1),
+        )
+
+        /**
+         * Each layout's extra (non-arrow) frames, Odin index (devices.md §2). Layout 2 was never
+         * seen; it borrows layout 0's, whose shape it shares (C).
+         */
+        val EXTRAS = listOf(
+            setOf(2, 22), setOf(5, 14, 15), setOf(2, 22), setOf(4, 12, 24), setOf(12, 20),
+            setOf(4, 20), setOf(0, 2, 4, 20, 22, 24), setOf(0, 20), setOf(1, 3, 20, 22, 24),
         )
     }
 }

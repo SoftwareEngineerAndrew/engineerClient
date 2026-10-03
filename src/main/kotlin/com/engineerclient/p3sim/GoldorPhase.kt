@@ -107,6 +107,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     override fun stop() {
+        P3Traps.clear()
         Terminals.closeAll()
         devices.stop()
         goldor.remove()
@@ -130,7 +131,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             pendingTaunt = null
         }
         // Stand names refresh on a 20-tick grid.
-        if (n % 20 == 0) stations.forEach { it.refreshStands() }
+        // Lever stands rename on their own, 1-3 ticks after the pull (pullLever).
+        if (n % 20 == 0) stations.forEach { if (it.kind != Station.Kind.LEVER) it.refreshStands() }
         // Gates that open by themselves 5 s after their section ended.
         for (s in 1..3) if (autoGateAt[s] >= 0 && n >= autoGateAt[s] && !gateDown[s]) blowGate(s, null)
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
@@ -277,6 +279,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val (xs, ys, zs) = TNT_CUBES[i]
         val air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()
         for (x in xs..xs + 2) for (y in ys..ys + 2) for (z in zs..zs + 2) Blocks.set(BlockPos(x, y, z), air)
+        P3Traps.arm(xs, ys, zs)
     }
 
     // ------------------------------------------------------------------ the core
@@ -496,8 +499,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (st.done) { if (by == Sim.me) Sim.chat("§cSomeone has already activated this lever!"); return }
         if (st.section != section) { if (by == Sim.me) Sim.chat("§cThis lever doesn't seem to be responsive at the moment."); return }
         Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, true)) }
-        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, 0.6f, Vec3.atCenterOf(lever))
+        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, 0.59f, Vec3.atCenterOf(lever))
         complete(st, by)
+        // The lever's stand renames 1-3 ticks after the pull, not on the 20-tick grid (devices.md §5).
+        if (st.done) Fight.later(1 + kotlin.random.Random.nextInt(3), "lever stand") { if (Fight.phase === this) st.refreshStands() }
     }
 
     /** A click on a terminal's stand. */

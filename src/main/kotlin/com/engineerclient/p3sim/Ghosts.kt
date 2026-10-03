@@ -123,7 +123,25 @@ object Ghosts {
     private val gated = BooleanArray(4)
     private var lastT = Int.MIN_VALUE
 
-    fun start() { fired.clear(); gated.fill(false); lastT = Int.MIN_VALUE }
+    fun start() { fired.clear(); gated.fill(false); lastT = Int.MIN_VALUE; spawnPace() }
+
+    /** The player you replace, as a glowing outline where they were (race them). */
+    private var pace: net.minecraft.world.entity.decoration.Mannequin? = null
+
+    private fun spawnPace() {
+        pace?.discard(); pace = null
+        if (!P3Sim.paceGhost) return
+        val me = replaced() ?: return
+        val m = net.minecraft.world.entity.decoration.Mannequin(net.minecraft.world.entity.EntityType.MANNEQUIN, Sim.level)
+        m.isInvisible = true
+        m.setGlowingTag(true)
+        m.isInvulnerable = true
+        m.setNoGravity(true)
+        m.noPhysics = true
+        val p = me.pos(0)
+        m.snapTo(p.x, p.y, p.z, 0f, 0f)
+        pace = Sim.spawn(m)
+    }
 
     /** The recorded tick the ghosts are at, for the sim's [phase]. */
     fun time(phase: GoldorPhase, r: Run): Int {
@@ -138,6 +156,7 @@ object Ghosts {
     fun tick(phase: GoldorPhase, r: Run) {
         val t = time(phase, r)
         val me = replaced(r)?.name
+        replaced(r)?.let { g -> pace?.let { m -> val p = g.pos(t); val yaw = g.track.yaw(t); m.snapTo(p.x, p.y, p.z, yaw, g.track.pitch(t)); m.yHeadRot = yaw; m.yBodyRot = yaw } }
         for (b in Party.bots()) {
             val g = b.ghost ?: continue
             val e = b.entity ?: continue
