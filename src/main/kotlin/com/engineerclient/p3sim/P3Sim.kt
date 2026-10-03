@@ -52,7 +52,7 @@ object P3Sim : Module(
     val deathTicksS = +SelectorSetting("Death Ticks", "Masks", arrayListOf("Off", "Warn", "Masks"), desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
     val terminalS = +SelectorSetting("Terminals", "Random", arrayListOf("Random", "Order", "Panes", "Rubix", "Starts With", "Select", "Melody"), desc = "Every terminal as this type, or random as on Hypixel.")
     val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
-    val goldorKillS = +NumberSetting("Goldor Kill Time", 55, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of fast runs: 55).")
+    val goldorKillS = +NumberSetting("Goldor Kill Time", 57, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of 201 recorded kills: 57).")
     val p3OnlyS = +BooleanSetting("Stop After P3", true, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStart by BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimes by BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")

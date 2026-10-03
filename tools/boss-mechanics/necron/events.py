@@ -109,7 +109,8 @@ def row(x):
 def main():
     out_dir = sys.argv[1]
     X = N.load_extracts(out_dir)
-    rows = [row(x) for _, x in sorted(X.items())]
+    # A recording that never saw Necron's wither (left before P4, or a cut-off file) has no row.
+    rows = [row(x) for _, x in sorted(X.items()) if N.necron_ids(x)]
     json.dump(rows, open(os.path.join(out_dir, 'events.json'), 'w'))
     print(len(rows), 'recordings,', sum(r['has_st'] for r in rows), 'with server ticks,',
           len({r['group'] for r in rows}), 'runs')

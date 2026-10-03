@@ -6,8 +6,8 @@ package com.engineerclient.p3sim
  */
 object Stats {
     /** The fast Better PF runs' medians (terminal-roles.md), ticks. */
-    private val FAST = intArrayOf(0, 252, 186, 203, 156)
-    private const val FAST_P3 = 817
+    private val FAST = intArrayOf(0, 252, 185, 191, 150)
+    private const val FAST_P3 = 797
 
     private var from = 1
     private val sections = IntArray(5) { -1 }

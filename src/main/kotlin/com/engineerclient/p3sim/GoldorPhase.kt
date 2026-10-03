@@ -67,7 +67,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         stations.forEach { it.spawnStands() }
         devices.start()
         Stats.reset(from)
-        val startN = when (from) { 2 -> 252; 3 -> 438; 4 -> 641; 5 -> 797; else -> 0 }
+        val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
         nOffset = startN
         // Earlier sections: done, their gates and doors open, as if a party had just done them.
         for (s in 1 until from.coerceAtMost(5)) {
