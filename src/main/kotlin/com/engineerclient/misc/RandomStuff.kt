@@ -38,6 +38,7 @@ import com.odtheking.odin.utils.skyblock.ActionBarListener
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
@@ -49,6 +50,7 @@ import net.minecraft.client.multiplayer.resolver.ServerAddress
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemDisplayContext
 import net.minecraft.world.phys.Vec3
 
@@ -106,6 +108,18 @@ object RandomStuff : Module(
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
     private val hideArmorStands by BooleanSetting("Hide Armor Stands", false, desc = "In dungeons only: hides every armor stand (except terminals, active or inactive) and removes fishing bobbers' extended line.")
+    /**
+     * Odin carried this as Terminal Solver's "Show Numbers" until a settings cleanup dropped it.
+     * With it on the numbers terminal ("Click in order!") is drawn without its 1-14, so the only
+     * thing to go on is the solver's three order colours - you click the colour, not the number.
+     *
+     * Two places draw those numbers, so two read this: [com.engineerclient.mixin.NumbersHandlerMixin]
+     * for the text Odin itself draws (every render type, and the practice sim), and
+     * [com.engineerclient.mixin.TerminalNumberMixin] for the vanilla stack count, which the Normal
+     * render type still shows on the slots Odin hands back to vanilla.
+     */
+    private val hideTermNumbers by BooleanSetting("Hide Terminal Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-14 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
+
     private val muteDing by BooleanSetting("Mute Completion Ding", true, desc = "In P3, mutes the ding that plays every time anyone completes a terminal, lever or device (Hypixel's pling with each \"activated a terminal!\" message). Odin's own Terminal Sounds still play.")
     private val keepGateDing by BooleanSetting("Keep Gate & Core Ding", true, desc = "Still plays the ding for \"The gate has been destroyed!\" and \"The Core entrance is opening!\".").withDependency { muteDing }
     private val ding = CompletionDing()
@@ -226,6 +240,21 @@ object RandomStuff : Module(
         // solvers read the glint component rather than the render, so they are unaffected either way
         // - this is purely so a human can still tell.
         return !(context == ItemDisplayContext.GUI && inTerminal())
+    }
+
+    /** True while the numbers terminal's 1-14 should not be drawn at all. */
+    @JvmStatic
+    fun hidesTerminalNumbers(): Boolean = enabled && hideTermNumbers
+
+    /**
+     * The same question for one slot of the open screen, so the vanilla count is only ever dropped
+     * on the terminal's own slots - your inventory below it keeps its stack sizes.
+     */
+    @JvmStatic
+    fun hidesTerminalNumber(slot: Slot): Boolean {
+        if (!hidesTerminalNumbers()) return false
+        val term = TerminalUtils.currentTerm ?: return false
+        return term.type == TerminalTypes.NUMBERS && slot.index < term.type.windowSize
     }
 
     /** Whether the glint should be dropped for a piece of worn equipment. */
