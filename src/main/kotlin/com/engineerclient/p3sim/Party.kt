@@ -1,6 +1,9 @@
 package com.engineerclient.p3sim
 
+import com.google.common.collect.ImmutableMultimap
 import com.mojang.authlib.GameProfile
+import com.mojang.authlib.properties.Property
+import com.mojang.authlib.properties.PropertyMap
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -34,7 +37,10 @@ object Party {
     val myRole: Role get() = Role.entries[P3Sim.role.coerceIn(0, 4)]
 
     class Bot(val role: Role) {
-        val name get() = role.botName
+        /** Replaying a real run's player (Ghosts), or null for the scripted plan. */
+        var ghost: Ghosts.GhostPlayer? = null
+        var heldIx = -1
+        val name get() = ghost?.name ?: role.botName
         val clazz get() = role.clazz
         var entity: Mannequin? = null
         var pos: Vec3 = Vec3.ZERO
@@ -63,6 +69,8 @@ object Party {
     /** The bots (for Odin's party list), whether or not they're spawned. */
     fun bots(): List<Bot> {
         if (bots.isEmpty() || bots.any { it.role == myRole }) { clear(); bots.clear(); Role.entries.filter { it != myRole }.forEach { bots += Bot(it) } }
+        val run = Ghosts.run
+        bots.forEach { it.ghost = run?.player(it.clazz.name) }
         return bots
     }
 
@@ -87,6 +95,11 @@ object Party {
     fun startP3(phase: GoldorPhase) {
         clear()
         if (!P3Sim.bots) return
+        Ghosts.run?.let { r ->
+            Ghosts.start()
+            for (b in bots()) spawn(b, b.ghost?.pos(r.starts[phase.from.coerceIn(1, 5)]) ?: startPos(b.role, phase.from))
+            return
+        }
         for (b in bots()) {
             spawn(b, startPos(b.role, phase.from))
             // Steps of earlier sections are dropped, except stations still to do (i4's target): those go last, before the core.
@@ -103,6 +116,7 @@ object Party {
 
     fun tickP3(phase: GoldorPhase) {
         if (!P3Sim.bots) return
+        Ghosts.run?.let { Ghosts.tick(phase, it); return }
         if (phase.section != doorOf) { doorOf = phase.section; doorN = phase.n }
         for (b in bots.toList()) {
             if (b.entity == null) continue
@@ -137,7 +151,10 @@ object Party {
 
     private fun spawn(b: Bot, at: Vec3) {
         val m = Mannequin(EntityType.MANNEQUIN, Sim.level)
-        m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(GameProfile(UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name)))
+        val skin = b.ghost?.skin?.takeIf { it.isNotEmpty() }
+        val props = if (skin == null) PropertyMap.EMPTY else PropertyMap(ImmutableMultimap.of("textures", Property("textures", skin)))
+        m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(GameProfile(UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name, props)))
+        b.heldIx = -1
         m.setCustomName(Component.literal("§a${b.name} §7(${b.clazz.name[0]})"))
         m.isCustomNameVisible = true
         m.isInvulnerable = true
@@ -335,7 +352,7 @@ object Party {
     val CORE_SPOT = Vec3(54.5, 115.0, 58.0)
 
     /** Your role's jobs, for the menu. */
-    fun myJobs(): List<String> = when (myRole) {
+    fun myJobs(): List<String> = Ghosts.run?.let { Ghosts.myJobs(it) } ?: when (myRole) {
         Role.SS -> listOf("S1: Simon Says", "S2: T1", "S3: west lever, east lever, then the strip", "S4: in at 481: low lever, high lever, T4")
         Role.I4 -> listOf("S1: the target (S4 device) from the plate, west lever, gate 1/2", "S2: high lever, T5", "S3: T3, leap ee3: Arrow Align, leap core (strip)", "S4: T1")
         Role.EE3 -> listOf("S1: T1, east lever", "S2: T4, then into S3 at T1", "S3: T1, leap gates: T4", "S4: T3")

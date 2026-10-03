@@ -83,11 +83,13 @@ class P2Storm : Fight.Phase("P2") {
     /** Storm.md §3: one roll per run (1,783-18,194, median 9,350), both strikes alike. */
     private var gigaDamage = 9350.0
     private var nextTaunt = -1
-    /** Storm.md §6 pool (the "..." lines as the doc records them). */
+    /** Storm.md §6 pool, full texts from chat-attacks.md §1.1. */
     private val TAUNTS = listOf(
-        "BEGONE PILLAR!", "No more adventurers...", "FINALLY! This took way too long.", "Not just your land...",
+        "BEGONE PILLAR!", "No more adventurers, no more heroes, death and thunder!", "FINALLY! This took way too long.",
+        "Not just your land, but every kingdom will soon be ruled by our army of undead!",
         "This factory is too small for me!", "Slowing me down will be your greatest accomplishment!",
-        "The days are numbered...", "Now that you're a Ghost...", "The Age of Men is over...", "THAT WAS ONLY IN MY WAY!",
+        "The days are numbered until I am finally unleashed again on the world!", "Now that you're a Ghost, can you help me clean up?",
+        "The Age of Men is over, we are creating tens, hundreds of withers!!", "THAT WAS ONLY IN MY WAY!",
     )
 
     override fun start() {

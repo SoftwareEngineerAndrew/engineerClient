@@ -27,7 +27,7 @@ def load(f):
 tpcat = collections.Counter(); tpsnd = collections.defaultdict(collections.Counter); tprot = collections.Counter()
 leapoff = collections.Counter(); chat_tp_dt = collections.defaultdict(collections.Counter)
 vol = collections.Counter(); speeds = []; spread = collections.Counter(); grav = []; drag = []; arrow_sounds = collections.Counter()
-procs = []; cloak = []; tnt = collections.Counter(); tntex = []
+leaprot = collections.Counter(); procs = []; cloak = []; tnt = collections.Counter(); tntex = []
 for f in sorted(glob.glob(DIR)):
     L = load(f)
     if not L or L[0].get('k') != 'meta': continue
@@ -44,7 +44,7 @@ for f in sorted(glob.glob(DIR)):
     if 'tp' in SECT:
         # Boss Recorder 0.6.15 keeps no 'tp' for you: a teleport shows as a jump between consecutive 'me'
         # positions (the client confirms the server's teleport with a move packet the same tick).
-        own_tps = []; pos = None; rot = None
+        own_tps = []; pos = None; rot = (0.0, 0.0); prot = rot
         for e in mes:  # (n, x, y, z, yaw, pitch, onGround)
             if e[4] is not None: prot = rot; rot = (e[4], e[5])
             if e[1] is None: continue
@@ -77,6 +77,15 @@ for f in sorted(glob.glob(DIR)):
                         d = (x - mv[-1][1], y - mv[-1][2], z - mv[-1][3])
                         if best is None or sum(v * v for v in d) < sum(v * v for v in best): best = d
                 if best: leapoff[tuple(round(v, 2) for v in best)] += 1
+                if best and sum(v * v for v in best) < 0.1:
+                    beid = min(set(a[1] for a in log.kind('a') if a[2] == 'minecraft:player') - {me_id},
+                               key=lambda i: min([(x - m_[1]) ** 2 + (z - m_[3]) ** 2 for m_ in log.moves(i) if m_[0] <= n - 1] or [1e9]))
+                    ty = [r for k_ in ('m', 'sy') for r in log.kind(k_) if r[1] == beid and r[0] <= n - 1 and r[5] is not None]
+                    if ty:
+                        ty = max(ty, key=lambda r: r[0])
+                        leaprot[('yaw=target' if abs((yaw - ty[5] + 180) % 360 - 180) < 2 else 'yaw!=target',
+                                 'pitch=target' if abs(pitch - ty[6]) < 2 else 'pitch!=target',
+                                 'yaw=own' if abs((yaw - e[7][4] + 180) % 360 - 180) < 2 else 'yaw!=own')] += 1
     if 'arrows' in SECT:
         ar = [a for a in log.kind('a') if a[2] in ('minecraft:arrow', 'minecraft:spectral_arrow') and a[-1] == me_id or (a[2] == 'minecraft:arrow' and len(a) > 13 and a[13] == me_id)]
         byn = collections.defaultdict(list)
@@ -118,6 +127,7 @@ if 'tp' in SECT:
     for c in tpsnd: print(' sounds at landing', c, tpsnd[c].most_common(10))
     print(' rotation in tp vs last sent:', tprot)
     print(' leap landing - nearest player server pos:', leapoff.most_common(10))
+    print(' leap rotation vs target / own:', leaprot.most_common())
 if 'arrows' in SECT:
     print('arrow volleys (arrows per tick):', vol.most_common())
     print('speeds:', collections.Counter(speeds).most_common(10))

@@ -177,4 +177,22 @@ class P3SimDataTest {
             assertTrue(d in 1.0..2.5, "sprint $i ends $d past its corner")
         }
     }
+
+    @Test
+    fun `ghost runs replay onto the sim's stations`() {
+        val runs = Ghosts.runs
+        assertTrue(runs.size >= 10, "only ${runs.size} ghost runs")
+        val ids = Station.all().map { it.id }.toSet()
+        for (r in runs) {
+            assertEquals(setOf("HEALER", "BERSERK", "ARCHER", "TANK", "MAGE"), r.players.map { it.clazz }.toSet(), r.id)
+            assertTrue((1..4).all { r.starts[it] < r.starts[it + 1] }, "${r.id} sections out of order")
+            assertEquals(29, r.comps.map { it.station }.toSet().size, "${r.id} stations")
+            r.comps.forEach { assertTrue(it.station in ids, "${r.id}: ${it.station}") }
+            for (p in r.players) {
+                assertTrue(p.track.n.size > 100, "${r.id} ${p.name}: ${p.track.n.size} samples")
+                // Seen into S4 (then the core: Ghosts puts anyone last seen outside it in).
+                assertTrue(p.track.n.last() >= r.starts[4], "${r.id} ${p.name} track ends ${p.track.n.last()}")
+            }
+        }
+    }
 }

@@ -40,6 +40,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         row(listOf(
             setting("Role: ${Party.myRole.label}", 110) { P3Sim.roleS.value = (P3Sim.roleS.value + 1) % 5 },
             setting("Bots: ${onOff(P3Sim.bots)}", 70) { P3Sim.botsS.value = !P3Sim.bots },
+            setting("Party: ${Ghosts.label(P3Sim.partyRun)}", 150) { P3Sim.partyRunS.value = ((P3Sim.partyRun + 1) % (Ghosts.runs.size + 1)) },
             setting("Death ticks: ${listOf("Off", "Warn", "Masks")[P3Sim.deathTicks]}", 120) { P3Sim.deathTicksS.value = (P3Sim.deathTicks + 1) % 3 },
             setting("Stop after P3: ${onOff(P3Sim.p3Only)}", 110) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
         ))

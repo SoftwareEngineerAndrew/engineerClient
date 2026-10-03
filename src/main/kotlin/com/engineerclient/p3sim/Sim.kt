@@ -56,7 +56,11 @@ object Sim {
         return out
     }
 
-    fun boss(name: String, line: String) = chat("§4[BOSS] $name§r§c: $line")
+    /** A `[BOSS]` line, with the wither.ambient (5, 1.19) Hypixel plays on every one (chat-attacks.md §2; at you, not the boss). */
+    fun boss(name: String, line: String) {
+        chat("§4[BOSS] $name§r§c: $line")
+        sound(net.minecraft.sounds.SoundEvents.WITHER_AMBIENT, 5f, 1.19f)
+    }
 
     fun title(title: String, sub: String = "", fadeIn: Int = 0, stay: Int = 30, fadeOut: Int = 5) {
         val p = player ?: return

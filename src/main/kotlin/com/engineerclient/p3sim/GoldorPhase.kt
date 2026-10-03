@@ -121,6 +121,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             124 -> Sim.boss("Goldor", "I won't let you break the factory core, I gave my life to my Master.")
             186 -> Sim.boss("Goldor", "No one matches me in close quarters.")
         }
+        tauntAt[n]?.let { if (pendingTaunt == null && section <= 2) pendingTaunt = it }
         if (pendingLine >= 0 && n % 62 == 0) {
             Sim.boss("Goldor", listOf("The little ants have a brain it seems.", "I will replace that gate with a stronger one!", "YOUR END IS NEAR!!")[pendingLine.coerceIn(0, 2)])
             pendingLine = -1
@@ -138,6 +139,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Every 40 ticks Goldor carves an 11x11x11 box around himself; every 200 a TNT cube near the section in progress goes.
         if (n % 40 == 37 && !goldor.flying) carve()
         if (n >= 237 && (n - 237) % 200 == 0 && section <= 4) tnt()
+        P3Traps.tick(this)
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
@@ -156,17 +158,38 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val what = when (st.kind) { Station.Kind.TERMINAL -> "activated a terminal!"; Station.Kind.LEVER -> "activated a lever!"; Station.Kind.DEVICE -> "completed a device!" }
         val shown = section.coerceAtMost(4)
         val k = count(shown)
-        Sim.chat("${nameColour(by)}$by§r§a $what (§r§c$k§r§a/${Station.total(shown)})")
+        val line = progressLine(by, what, k, Station.total(shown))
+        Sim.chat(line)
         if (by == Sim.me) Stats.done(st, n)
         // Taunts ride the 62-tick grid (goldor.md, other lines).
         if (by == Sim.me && st.kind == Station.Kind.TERMINAL && pendingTaunt == null) pendingTaunt = "Stop touching those terminals!"
-        if (st.kind == Station.Kind.TERMINAL || st.kind == Station.Kind.LEVER) Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, st.at)
+        // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
+        // Odin's Terminal Sounds keys on the raw 4.047619) (chat-attacks.md §2).
+        Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
         // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it).
-        Sim.title("", "${nameColour(by)}$by§r§a $what (§r§c$k§r§a/${Station.total(shown)})", 0, 30, 5)
+        Sim.title("", line, 0, 30, 5)
         if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
     }
 
     private fun nameColour(name: String) = if (name == Sim.me) "§b" else "§a"
+
+    /** `<col><P>§r§a activated a terminal! (§r§c4§r§a/7)`; with a green (`§a`) name the `§r§a` is dropped (chat-attacks.md §1.2). */
+    private fun progressLine(by: String, what: String, k: Int, total: Int): String {
+        val col = nameColour(by)
+        return "$col$by${if (col == "§a") "" else "§r§a"} $what (§r§c$k§r§a/$total)"
+    }
+
+    /** Goldor's S1-S2 taunt pool: 1-3 a run at n ~284-416 (1777-1909 since Maxor), on the 62-tick grid (chat-attacks.md §1.1). */
+    private val TAUNT_POOL = listOf(
+        "Do you really think we won't repair everything? Your impact will be minuscule!", "Come closer!",
+        "You are breaking precious materials, unforgivable.", "CLOSER!", "There is no stopping me down there!",
+        "I am the death zone, you are smart to flee.", "You can't damage me, you can barely slow me down!",
+        "Slowing me down only prolongs your pain!", "Closer to me!",
+    )
+    private val tauntAt = HashMap<Int, String>().apply {
+        val picks = TAUNT_POOL.shuffled().take(1 + kotlin.random.Random.nextInt(3))
+        picks.forEach { put(280 + kotlin.random.Random.nextInt(140), it) }
+    }
 
     private fun sectionDone(s: Int) {
         sectionEnd[s] = n
@@ -297,8 +320,12 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Frenzy: every ~10 ticks while you're 2-14 blocks from him (goldor.md, damage).
         if (deadAt < 0 && n % 10 == 0) Sim.player?.let { p ->
             val d = p.position().distanceTo(goldor.position)
-            if (!p.isSpectator && !p.isCreative && d in 2.0..14.0)
-                Sim.chat("§cGoldor's Frenzy hit you for ${"%,d".format(30000 + kotlin.random.Random.nextInt(10001))} damage.")
+            if (!p.isSpectator && !p.isCreative && d in 2.0..14.0) {
+                // Format and sounds as measured: one decimal, explode v0.5 p0.49 + hurt (chat-attacks.md §1.2, §2).
+                Sim.chat("§cGoldor's§r§7 Frenzy hit you for §r§c${"%,.1f".format(java.util.Locale.US, 30000 + kotlin.random.Random.nextDouble(10000.0))}§r§7 damage.")
+                Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49f)
+                Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f)
+            }
         }
         if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 82) {
             necronAt = n
@@ -492,5 +519,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     val deathsTaken get() = deaths
     fun gateIsDown(s: Int) = gateDown.getOrElse(s) { true }
+
+    /** n when section [s] started here. */
+    fun sectionStartN(s: Int) = sectionStart[s]
     fun doorIsOpen(s: Int) = doorOpen.getOrElse(s) { true }
 }

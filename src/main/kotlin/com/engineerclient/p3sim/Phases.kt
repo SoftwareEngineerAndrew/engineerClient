@@ -167,6 +167,9 @@ class P1Maxor : Fight.Phase("P1") {
         "YOUR WEAPONS CAN'T PIERCE THROUGH MY SHIELD!", "YOUR MOBILITY TRICKS DON'T WORK IN MY DOMAIN!",
         "I HOPE YOU LIKE EXPLOSIONS TOO!", "MY MINIONS WILL HAVE TO WIPE THE FLOOR AFTER I'M DONE WITH YOU ALL!",
     )
+    /** The skull-volley taunts: ~11 % of runs, one of them at t 534-572 (chat-attacks.md §1.1). */
+    private val TAUNTS_SKULL = listOf("How about you taste some rapid fire Wither Skulls!", "Time for me to blast you away for good!", "Eat Wither Skulls, scum!")
+    private val skullTauntAt = if (Random.nextInt(100) < 11) 534 + Random.nextInt(39) else -1
 
     override fun start() {
         val p = Sim.player ?: return
@@ -213,6 +216,7 @@ class P1Maxor : Fight.Phase("P1") {
         if (check()) column()
         // Taunt A (an ability: a hit inside it is silent).
         if (t == tauntAt) Sim.boss("Maxor", TAUNTS_A.random())
+        if (t == skullTauntAt && !stunned && !inAbility()) Sim.boss("Maxor", TAUNTS_SKULL.random())
         if (stunned && t == enrageAt) { Sim.chat("§c⚠ Maxor is enraged! ⚠"); stunned = false; moveAt = t + 1 + Random.nextInt(5); tauntAt = t + 161 + Random.nextInt(4) }
         if (t == 205 && tauntAt < 0) tauntAt = 206 + 161
         // Moving: from 170, chasing the closest player; frozen facing south while stunned; the head on the closest before.
@@ -247,7 +251,7 @@ class P1Maxor : Fight.Phase("P1") {
         if (c !in tops && c !in onPylon) return false
         if (c in tops) {
             c.discard(); tops -= c; carrying++
-            Sim.chat("§a${Sim.me} picked up an Energy Crystal!")
+            Sim.chat("§b${Sim.me}§r§a picked up an §r§bEnergy Crystal§r§a!")
         }
         return true
     }
@@ -268,7 +272,8 @@ class P1Maxor : Fight.Phase("P1") {
         onPylon[i] = spawnCrystal(PYLONS[i])
         val x = 1 + placeTimes.count { t >= it + 28 }
         placeTimes += t
-        Sim.chat("§c$x§r§a/2 Energy Crystals are now active!")
+        // The full count is all green (chat-attacks.md §1.2).
+        Sim.chat(if (x >= 2) "§a2/2 Energy Crystals are now active!" else "§c$x§r§a/2 Energy Crystals are now active!")
         if (placed[0] && placed[1] && chargeAt < 0) chargeAt = t + 28
     }
 

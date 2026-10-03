@@ -63,8 +63,8 @@ def main(files):
                         live[i].setdefault('pos', live[i]['spawn'][:3])
             elif k == 'v' and d[2] == me:
                 for p in live.values():
-                    if 'rem' in p and 0 <= n - p['rem'] <= 6:
-                        p.setdefault('selfv', []).append((n - p['rem'], d[3:6], list(lastme)))
+                    if n >= p['n'] and ('rem' not in p or n - p['rem'] <= 6):
+                        p.setdefault('selfv', []).append((n - p['n'], d[3:6], list(lastme)))
             # retire
             for i in [i for i, p in live.items() if 'rem' in p and n - p['rem'] > 6]:
                 p = live.pop(i)

@@ -145,16 +145,21 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private fun frenzy() {
         val p = Sim.player ?: return
         if (p.position().distanceTo(MID) > FRENZY_RANGE || SimItems.cloaked) return
-        Sim.chat("§cNecron's Nuclear Frenzy hit you for 57,600 damage.")
-        Sim.sound(SoundEvents.GENERIC_HURT, 0.6f, 1f)
+        // Line and sounds as measured (chat-attacks.md §1.2, §2: explode v30 p0.49 + wither.ambient v30 p0.70).
+        Sim.chat("§cNecron's§r§7 Nuclear Frenzy hit you for §r§c57,600§r§7 damage.")
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 30f, 0.49f)
+        Sim.sound(SoundEvents.WITHER_AMBIENT, 30f, 0.7f)
     }
 
     private fun end() {
         val total = Stats.runTicks()
         Sim.chat("§a§l▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")
         Sim.chat("§f                        §r§cThe Catacombs §r§8- §r§eFloor VII")
-        Sim.chat("§f                       §r§fTeam Score: §r§a317 §r§f(§r§6S+§r§f)")
+        // Order and padding as measured (chat-attacks.md §1.3).
+        Sim.chat("")
+        Sim.chat("§f                           Team Score: §r§a317 §r§f(§r§b§lS+§r§f)")
         if (total > 0) Sim.chat("§f     §r§c☠ §r§eDefeated §r§cMaxor, Storm, Goldor, and Necron §r§ein §r§a%02dm %02ds".format(total / 1200, total / 20 % 60))
+        Sim.chat("§f                             §6> §e§lEXTRA STATS §6<")
         Sim.chat("§a§l▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")
         Sim.note("Done. §fMenu§7 to go again.")
     }

@@ -13,9 +13,10 @@ object Masks {
     private class Item(val name: String, val cooldown: Int, val line: String) { var readyAt = 0 }
 
     private val items = listOf(
-        Item("Spirit Mask", 600, "§r§6Second Wind Activated!§r§a Your Spirit Mask saved your life!"),
-        Item("Bonzo's Mask", 3600, "§r§aYour §r§9⚚ Bonzo's Mask§r§a saved your life!"),
-        Item("Phoenix", 1200, "§r§aYour Phoenix Pet saved you from certain death!"),
+        // The exact lines (chat-attacks.md §1.2).
+        Item("Spirit Mask", 600, "§6Second Wind Activated§r§a! Your Spirit Mask saved your life!"),
+        Item("Bonzo's Mask", 3600, "§aYour §r§9 Bonzo's Mask §r§asaved your life!"),
+        Item("Phoenix", 1200, "§eYour §r§cPhoenix Pet §r§esaved you from certain death!"),
     )
 
     /** Invincible until (after a proc: 3 s). */
@@ -26,7 +27,8 @@ object Masks {
     /** Ready items, for the menu. */
     fun status(): String = items.joinToString(" ") { val left = it.readyAt - Fight.serverTick; if (left <= 0) "§a${it.name}" else "§c${it.name} ${(left + 19) / 20}s" }
 
-    fun hit(p: ServerPlayer, by: String) {
+    /** [by]: the killer named in the death line, or null for the plain "You died" (chat-attacks.md §1.2). */
+    fun hit(p: ServerPlayer, by: String?) {
         val now = Fight.serverTick
         if (now < safeUntil) return
         val item = items.firstOrNull { it.readyAt <= now }
@@ -34,10 +36,18 @@ object Masks {
             item.readyAt = now + item.cooldown
             safeUntil = now + if (item.name == "Phoenix") 80 else 60
             Sim.chat(item.line)
-            Sim.sound(SoundEvents.TOTEM_USE, 0.4f, 1.4f)
+            // Proc sounds as measured (chat-attacks.md §2): masks cure + wither + eat, Phoenix extinguish + infect + wither.
+            if (item.name == "Phoenix") {
+                Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.49f)
+                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f)
+            } else {
+                Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f)
+                Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f)
+            }
+            Sim.sound(SoundEvents.WITHER_AMBIENT, 1f, 1f)
             return
         }
-        Sim.chat("§r§c ☠ §r§7You were killed by $by§r§7 and became a ghost§r§7.")
+        Sim.chat(if (by == null) "§c ☠ §r§7You died and became a ghost." else "§c ☠ §r§7You were killed by $by and became a ghost.")
         Sim.title("§cYou died", "§7No masks left", 0, 40, 10)
         val phase = Fight.phase as? GoldorPhase
         val spot = phase?.let { Spots.p3Start(it.section.coerceIn(1, 5)) } ?: Spots.LOBBY
