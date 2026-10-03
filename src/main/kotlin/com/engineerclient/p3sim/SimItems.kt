@@ -529,7 +529,6 @@ object SimItems {
         if (b is net.minecraft.world.level.block.CommandBlock) return THAT_BLOCK
         if (b == net.minecraft.world.level.block.Blocks.GOLD_BLOCK && !CORE_DOOR.contains(c)) return THAT_BLOCK
         if (b is LeverBlock || b is ButtonBlock) return THAT_BLOCK
-        if (GoldorPhase.GATE_BOXES.drop(1).any { it.inflate(0.5).contains(c) }) return THAT_BLOCK
         // Out of reach (4.5 from the eyes): the server just puts it back.
         if (p.eyePosition.distanceTo(c) > 5.2) return ""
         return null

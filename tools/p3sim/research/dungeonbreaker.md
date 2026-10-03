@@ -153,7 +153,7 @@ That is the vanilla 4.5-block block-interaction range: whatever the client can s
 3. When out of charges, refuse and resend the block (the client's ghost air comes back in about a ping). Chat `§cYou don't have enough charges to break this block right now!` at most once per 20 t.
 4. Regenerate every broken block to its **exact previous state 220 t later**. Keep at most 20 of your blocks broken: the 21st break restores the oldest at once.
 5. Breakable: ordinary arena blocks (stone, stone bricks and their variants, andesite, nether bricks, sea lantern, cobble, terracotta, carpet, dirt, obsidian) **and the core-door gold blocks (52-56,115-121,54)**. That means removing the blanket `GOLD_BLOCK` exclusion. Keep refusing the core platform's gold/bedrock (y113 x51-57 z111-117).
-6. Refused with `§cA mystical force prevents you from digging that block!`: bedrock, barrier, command_block, levers/buttons/device blocks, gates.
+6. Refused with `§cA mystical force prevents you from digging that block!`: bedrock, barrier, command_block, levers/buttons/device blocks. Gate blocks themselves can be mined (early enters); the barriers behind them can't.
 7. Refused with `§cA mystical force prevents you digging there!`: any position outside the arena interior (x<-3 etc.) and the device blocks (SS panel).
 8. Refused with `§cA mystical force prevents you from leaving the inner chamber!`: while you are inside the core box (x39-69 z99-129, below y113), any block on the core's outer wall. Breaking **into** the core from outside (e.g. x69 y109-110) is allowed.
 9. Refusals restore the block. There is no sound. Successful breaks play the block's break sound locally (as now) plus vanilla break particles.
