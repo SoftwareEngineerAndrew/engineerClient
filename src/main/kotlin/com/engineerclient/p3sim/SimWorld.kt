@@ -22,7 +22,7 @@ import java.util.zip.CRC32
 /**
  * The singleplayer world "p3sim": a void world the generator fills with the F7 boss arena
  * ([Arena.fill]). Opening it from anywhere (title screen button, `/p3sim`, the keybind) leaves the
- * server you are on first. A world made from an older arena is made again.
+ * server you are on first. It is made fresh on every open, so nothing changed ever carries over.
  */
 object SimWorld {
     const val NAME = "p3sim"
@@ -48,18 +48,13 @@ object SimWorld {
         }
     }
 
+    /**
+     * Made fresh every time: a saved world keeps whatever an earlier session (or a crash before
+     * the restore on leaving) left changed, so the arena is always built again from [Arena].
+     */
     private fun openOrCreate() {
         val source = mc.levelSource
-        val dir = source.baseDir.resolve(NAME)
-        if (Files.isDirectory(dir)) {
-            val built = try { Files.readString(dir.resolve(MARKER)).trim() } catch (_: Throwable) { "" }
-            if (built == arenaVersion) {
-                mc.createWorldOpenFlows().openWorld(NAME) { mc.setScreen(TitleScreen()) }
-                return
-            }
-            EngineerClient.logger.info("[p3sim] rebuilding the sim world (arena {} -> {})", built, arenaVersion)
-            source.createAccess(NAME).use { it.deleteLevel() }
-        }
+        if (Files.isDirectory(source.baseDir.resolve(NAME))) source.createAccess(NAME).use { it.deleteLevel() }
         create()
     }
 
