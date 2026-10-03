@@ -87,8 +87,10 @@ object EffectsCapture {
             RichJson.member(sb, "path") { val s = inst.sound ?: return@member false; PacketJson.str(sb, s.path.toString()); true }
             RichJson.member(sb, "src") { PacketJson.str(sb, inst.source.name); true }
             sb.append(",\"pos\":["); PacketJson.num(sb, inst.x); sb.append(','); PacketJson.num(sb, inst.y); sb.append(','); PacketJson.num(sb, inst.z); sb.append(']')
-            sb.append(",\"vol\":"); PacketJson.num(sb, inst.volume)
-            sb.append(",\"pitch\":"); PacketJson.num(sb, inst.pitch)
+            // Volume and pitch read the resolved Sound; plays that return before resolve() (NOT_STARTED:
+            // silent entities, a sound reload, no audio device) have none, so these are left out there.
+            RichJson.member(sb, "vol") { if (inst.sound == null) return@member false; PacketJson.num(sb, inst.volume); true }
+            RichJson.member(sb, "pitch") { if (inst.sound == null) return@member false; PacketJson.num(sb, inst.pitch); true }
             RichJson.member(sb, "att") { PacketJson.str(sb, inst.attenuation.name); true }
             sb.append(",\"rel\":").append(inst.isRelative)
             sb.append(",\"loop\":").append(inst.isLooping)
