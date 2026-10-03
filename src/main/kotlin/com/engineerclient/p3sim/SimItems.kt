@@ -14,6 +14,7 @@ import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.minecraft.core.BlockPos
 import net.minecraft.core.component.DataComponents
 import net.minecraft.core.particles.ParticleTypes
+import kotlin.random.Random
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerLevel
@@ -411,25 +412,57 @@ object SimItems {
         p.hurtMarked = true
     }
 
-    /** Bonzo's Staff: the balloon pops where it hits (within 4 blocks) and knocks you away from it, 1.5 a tick and 0.5 up. */
+    /**
+     * Bonzo's Staff (tools/p3sim/research/knockback.md): an invisible balloon flies along your look,
+     * ~0.9 a tick, no gravity, bursting (a firework) on the first tick it's inside a block, 0.5 into
+     * it; gone after 5 ticks if it hits nothing. On the burst tick (or the next) your motion is
+     * *replaced* by 1.5 flat away from the burst and 0.5 up, from where you are then: ~4 ticks
+     * after the click. Out of ~5 blocks: nothing.
+     */
     private fun bonzo(p: ServerPlayer) {
-        Sim.sound(SoundEvents.GHAST_SHOOT, 0.5f, 1.4f, p.position())
+        Sim.sound(SoundEvents.GHAST_AMBIENT, 0.6f, 1.5f + Random.nextFloat() * 0.25f, p.position())
         val eye = p.eyePosition
-        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(4.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
+        val dir = look(p)
+        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(dir.scale(BONZO_SPEED * BONZO_LIFE)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
         if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) return
-        val away = p.position().subtract(hit.location).multiply(1.0, 0.0, 1.0)
-        val h = if (away.lengthSqr() < 1e-4) look(p).multiply(-1.0, 0.0, -1.0).normalize() else away.normalize()
-        Sim.level.sendParticles(ParticleTypes.EXPLOSION, hit.location.x, hit.location.y, hit.location.z, 1, 0.0, 0.0, 0.0, 0.0)
-        push(p, Vec3(h.x * 1.5, 0.5, h.z * 1.5))
+        val burst = hit.location.add(dir.scale(0.5))
+        // The first whole tick the balloon is inside the block (at least 2: the spawn tick and one move).
+        val ticks = Math.ceil(eye.distanceTo(burst) / BONZO_SPEED).toInt().coerceIn(2, BONZO_LIFE)
+        Fight.later(ticks, "bonzo burst") {
+            Sim.level.sendParticles(ParticleTypes.FIREWORK, burst.x, burst.y, burst.z, 20, 0.1, 0.1, 0.1, 0.15)
+            Sim.sound(SoundEvents.FIREWORK_ROCKET_BLAST, 1f, 1f, burst)
+            Fight.later(if (Random.nextBoolean()) 0 else 1, "bonzo boost") {
+                val away = p.position().subtract(burst).multiply(1.0, 0.0, 1.0)
+                if (away.length() > BONZO_REACH) return@later
+                val h = if (away.lengthSqr() < 1e-4) dir.multiply(-1.0, 0.0, -1.0).normalize() else away.normalize()
+                push(p, Vec3(h.x * 1.5, 0.5, h.z * 1.5))
+            }
+        }
     }
 
-    /** Jerry-chine Gun: a Jerry that pops under you knocks you straight up. */
+    private const val BONZO_SPEED = 0.9
+    private const val BONZO_LIFE = 5
+    private const val BONZO_REACH = 5.0
+
+    /**
+     * Jerry-chine Gun (knockback.md §Jerry): a Jerry lands where you look; 1-3 ticks later (mostly
+     * 2) your motion is replaced by vy 0.6 and a flat push away from it (0.5 x the 3D direction's
+     * flat part), with villager.yes.
+     */
     private fun jerry(p: ServerPlayer) {
-        Sim.sound(SoundEvents.VILLAGER_YES, 0.6f, 1.2f, p.position())
+        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.6f, 1f, p.position())
         val eye = p.eyePosition
         val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(5.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
-        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS || hit.location.distanceTo(p.position()) > 3.5) return
-        push(p, Vec3(p.deltaMovement.x, 0.9, p.deltaMovement.z))
+        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) return
+        val at = hit.location
+        val r = Random.nextDouble()
+        Fight.later(if (r < 0.2) 1 else if (r < 0.8) 2 else 3, "jerry boost") {
+            if (at.distanceTo(p.position()) > 3.5) return@later
+            val d = p.position().subtract(at)
+            val n = if (d.lengthSqr() < 1e-6) Vec3.ZERO else d.normalize()
+            push(p, Vec3(n.x * 0.5, 0.6, n.z * 0.5))
+            Sim.sound(SoundEvents.VILLAGER_YES, 0.6f, 1f, p.position())
+        }
     }
 
     /** Creeper Veil: on until used again (or 10 s), then 10 s of cooldown; death ticks don't hit while it's on. */
