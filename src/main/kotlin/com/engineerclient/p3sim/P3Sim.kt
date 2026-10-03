@@ -101,14 +101,21 @@ object P3Sim : Module(
                     Button.builder(Component.literal("P3 Sim")) { SimWorld.open() }.bounds(w - 64, 4, 60, 16).build()
                 )
             }
-            // In the sim, Esc has the menu too (top left).
+            // In the sim, Esc has the menu too: right under Save and Quit (the bottom button if that isn't found).
             if (screen is net.minecraft.client.gui.screens.PauseScreen && inSim) EngineerClient.safely("p3sim pause button") {
-                Screens.getWidgets(screen).add(
-                    Button.builder(Component.literal("§6P3 Sim Menu")) { mc.setScreen(SimScreen()) }.bounds(4, 4, 90, 20).build()
-                )
+                val widgets = Screens.getWidgets(screen)
+                val buttons = widgets.filterIsInstance<Button>()
+                val quit = buttons.firstOrNull { (it.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key in QUIT_KEYS }
+                    ?: buttons.maxByOrNull { it.y }
+                val b = if (quit != null) Button.builder(Component.literal("§6P3 Sim Menu")) { mc.setScreen(SimScreen()) }.bounds(quit.x, quit.y + quit.height + 4, quit.width, 20)
+                    else Button.builder(Component.literal("§6P3 Sim Menu")) { mc.setScreen(SimScreen()) }.bounds(4, 4, 90, 20)
+                widgets.add(b.build())
             }
         }
     }
+
+    /** The Esc menu's Save and Quit button (Disconnect if it's shown that way). */
+    private val QUIT_KEYS = setOf("menu.returnToMenu", "menu.disconnect")
 
     fun openMenuOrSim() {
         if (inSim) mc.execute { mc.setScreen(SimScreen()) } else SimWorld.open()
