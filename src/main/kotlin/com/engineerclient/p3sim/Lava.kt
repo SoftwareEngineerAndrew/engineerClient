@@ -24,6 +24,7 @@ object Lava {
     fun tick(p: ServerPlayer) {
         if (p.isSpectator || p.isCreative) { reset(); return }
         val now = Fight.serverTick
+        pitches[now.mod(pitches.size)] = p.xRot
         // Burning: Hypixel's 100-125 ticks, not vanilla lava's 15 s.
         if (now - bouncedAt in 1..3) p.remainingFireTicks = fireTicks - (now - bouncedAt)
         val inLava = touches(p)
@@ -66,14 +67,17 @@ object Lava {
     }
 
     /**
-     * The 3.038 bounce is the one you get looking up (Boss Recorder: all 33 high bounces at pitch -37
-     * to -90 as they came, the 470 normal ones nearly all above -45): pitch at or above 43 degrees up.
+     * The 3.038 bounce is the one you get looking up: pitch -41 or further up, as you were 2 ticks
+     * before the bounce (Hypixel decides on the look it has, a round trip behind). Better PF's 217
+     * runs: 2 misses in 515 of the recorder's own bounces at that lag (both flicks across it).
      */
-    private const val HIGH_PITCH = -43f
+    private const val HIGH_PITCH = -41f
+    private const val PITCH_LAG = 2
+    private val pitches = FloatArray(PITCH_LAG + 1)
 
     private fun bounce(p: ServerPlayer, now: Int) {
         val p3Lava = p.y < 108.5 && p.y > 104.0
-        val vy = if (p3Lava && p.xRot <= HIGH_PITCH) 3.038 else 2.25
+        val vy = if (p3Lava && pitches[(now - PITCH_LAG).mod(pitches.size)] <= HIGH_PITCH) 3.038 else 2.25
         p.deltaMovement = Vec3(0.0, vy, 0.0)
         p.hurtMarked = true
         p.fallDistance = 0.0
