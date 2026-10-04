@@ -110,10 +110,12 @@ class Devices(val phase: GoldorPhase) {
         private fun pressStart() {
             Blocks.set(START, BUTTON.setValue(ButtonBlock.POWERED, true))
             Fight.later(2, "ss start up") { if (phase === Fight.phase) Blocks.set(START, BUTTON) }
-            Sim.sound(SoundEvents.STONE_BUTTON_CLICK_ON, 0.3f, 0.6f, Vec3.atCenterOf(START))
             if (done || phase.section != 1) return
             if (starting) { startPresses++; return }
             if (running && phase.t - startedAt < 20) return
+            // Hypixel sends no button click: a start plays entity.enderman.teleport (vol 8, pitch 0) at
+            // the presser, once per start (one per burst of start presses in the runs looked at).
+            Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f)
             // A press mid-run starts it over, as from idle.
             clear()
             starting = true; startPresses = 1; startedAt = phase.t
@@ -156,7 +158,9 @@ class Devices(val phase: GoldorPhase) {
             if (!up[cell] || downUntil[cell] > phase.t) return
             button(cell, true, pressed = true)
             downUntil[cell] = phase.t + 3
-            Sim.sound(SoundEvents.STONE_BUTTON_CLICK_ON, 0.3f, 0.6f, Vec3.atCenterOf(buttonAt(cell)))
+            // Each press: note_block.pling (vol 8, pitch 4.05 as sent) at the presser, never a button
+            // click (a pling 0-4 ticks after each of ~400 own presses that showed a pressed button).
+            Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
             val g = gen
             Fight.later(3, "ss up") { if (g == gen && up[cell]) button(cell, true) }
             if (!accepting) return
@@ -240,17 +244,19 @@ class Devices(val phase: GoldorPhase) {
 
         fun place() {
             remove()
-            val layout = SOLUTIONS.indices.random()
+            // Layouts 1-8 come about equally often (26-43 runs each); Odin's layout 0 never showed up in 280.
+            val layout = (1 until SOLUTIONS.size).random()
             solution = SOLUTIONS[layout]
             for (i in 0 until 25) {
-                if (solution[i] < 0 && i !in EXTRAS[layout]) continue
+                val wool = EXTRAS[layout][i]
+                if (solution[i] < 0 && wool == null) continue
                 val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
                 val f = ItemFrame(EntityType.ITEM_FRAME, Sim.level, pos, Direction.EAST)
                 f.isInvulnerable = true
                 if (solution[i] >= 0) {
                     f.setItem(ItemStack(Items.ARROW), false)
                     f.setRotation(solution[i])
-                }
+                } else f.setItem(ItemStack(if (wool == true) Items.LIME_WOOL else Items.RED_WOOL), false)
                 frames[i] = Sim.spawn(f)
             }
             // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
@@ -353,12 +359,20 @@ class Devices(val phase: GoldorPhase) {
         )
 
         /**
-         * Each layout's extra (non-arrow) frames, Odin index (devices.md §2). Layout 2 was never
-         * seen; it borrows layout 0's, whose shape it shares (C).
+         * Each layout's extra (non-arrow) frames, Odin index to their item: true = lime wool (a
+         * path's start), false = red wool (its end). The same cells and wool in every run of a layout
+         * (devices.md §2). Layout 0 was never seen; it keeps layout 2's, whose shape it shares (C).
          */
-        val EXTRAS = listOf(
-            setOf(2, 22), setOf(5, 14, 15), setOf(2, 22), setOf(4, 12, 24), setOf(12, 20),
-            setOf(4, 20), setOf(0, 2, 4, 20, 22, 24), setOf(0, 20), setOf(1, 3, 20, 22, 24),
+        val EXTRAS: List<Map<Int, Boolean>> = listOf(
+            mapOf(2 to false, 22 to false),
+            mapOf(5 to true, 15 to true, 14 to false),
+            mapOf(12 to true, 2 to false, 22 to false),
+            mapOf(4 to true, 24 to true, 12 to false),
+            mapOf(20 to true, 12 to false),
+            mapOf(20 to true, 4 to false),
+            mapOf(20 to true, 22 to true, 24 to true, 0 to false, 2 to false, 4 to false),
+            mapOf(20 to true, 0 to false),
+            mapOf(20 to true, 22 to true, 24 to true, 1 to false, 3 to false),
         )
     }
 }

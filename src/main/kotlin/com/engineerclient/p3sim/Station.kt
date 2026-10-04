@@ -59,9 +59,14 @@ class Station(
             Kind.DEVICE -> { top = stand(at.y, "§cInactive", false); bottom = stand(at.y - 0.375, "§cDevice", false) }
             Kind.LEVER -> { top = stand(at.y, "§cNot Activated", true) }
         }
+        refreshStands()
     }
 
-    /** The stands' names as they should read now (Hypixel refreshes them on a 20-tick grid). */
+    /**
+     * The stands' names as they should read now (Hypixel refreshes them on a 20-tick grid). A
+     * terminal's or device's pair reads "" while you are 25+ blocks away: of ~4000 renames, the
+     * status names came within 26 blocks only, the blanks from 23 out (`terminals.md`). Levers keep theirs.
+     */
     fun refreshStands() {
         fun name(s: ArmorStand?, n: String) {
             s ?: return
@@ -70,6 +75,8 @@ class Station(
                 s.setCustomName(c); s.isCustomNameVisible = n.isNotEmpty()
             }
         }
+        val far = kind != Kind.LEVER && (Sim.player?.position()?.distanceTo(at) ?: 0.0) >= 25.0
+        if (far) { name(top, ""); name(bottom, ""); return }
         when (kind) {
             Kind.TERMINAL -> if (done) { name(top, "§aTerminal Active"); name(bottom, "") } else { name(top, INACTIVE); name(bottom, CLICK_HERE) }
             Kind.DEVICE -> if (done) { name(top, "§aDevice"); name(bottom, "§aActive") } else { name(top, "§cInactive"); name(bottom, "§cDevice") }
