@@ -152,7 +152,7 @@ object Party {
 
     fun startP3(phase: GoldorPhase) {
         clear()
-        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false); readyAt.fill(-1)
+        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
         planned = 0
         lastLeap = 0
         if (!P3Sim.bots) return
@@ -176,6 +176,16 @@ object Party {
             jobs += Job(job, bot, ts, sec)
         }
         spread(plan)
+        // Helper: bots help on your stacks (both try; whoever's first).
+        if (P3Plan.helper) for (h in P3Plan.preset().helps) {
+            if (h.section < from || !P3Plan.isMine(h.yours) || !h.jobs.all { P3Plan.isMine(it) }) continue
+            val c = P3Plan.doer(h.by)?.takeIf { it != P3Sim.myClass } ?: continue
+            val bot = botOf(c) ?: continue
+            for (j in h.jobs) if (phase.stations.firstOrNull { it.id == j }?.done != true) {
+                jobs += Job(j, bot, h.section, h.at)
+                dbg("helper: §e${bot.name}§7 gets $j by ${h.at}s into S${h.section}")
+            }
+        }
         for (b in bots) {
             b.inSection = from
             val core = plan.ee[5] == b.clazz && from >= 3
@@ -255,6 +265,7 @@ object Party {
         earlyEnterBots(phase)
         preleaps(phase)
         releaseEarlyEnterers(phase)
+        intoCoreWhenRecored(phase)
         for (b in bots) move(b, n)
         // Working: at its terminal for the last 2 s before it's done.
         for (b in bots) b.working = next(b)?.takeIf { it.at >= 0 && it.at - n <= 40 }?.let { j -> phase.stations.firstOrNull { it.id == j.job && it.kind == Station.Kind.TERMINAL } }
@@ -457,9 +468,47 @@ object Party {
         return true
     }
 
-    /** The core: everyone leaps in at once onto whoever's in it (the core early enterer), or walks in. */
+    /** Everyone leapt into the core (onto the recore). */
+    private var coreIn = false
+
+    /** The core early enterer is a bot (null: you, or nobody). */
+    private fun coreBot() = P3Plan.ee(5)?.takeIf { !it.byYou }?.let { botOf(it.owner) }
+
+    /**
+     * The core opened. The core early enterer (a bot) still holding by the core: everyone not on it
+     * leaps onto it first; once all are (you too) it goes in (recore, [releaseEarlyEnterers]) and then
+     * they leap in onto it ([intoCoreWhenRecored]). Else straight in.
+     */
     private fun core(phase: GoldorPhase) {
         val n = phase.n
+        coreIn = false
+        val cb = coreBot()
+        if (cb != null && eeArrived[5] && !released[5]) {
+            var i = 0
+            for (b in bots) {
+                if (b === cb) continue
+                b.hold = false
+                if (b.inSection < 5) { b.inSection = 5; leaps += Leap(b, n + 2 + gapTicks() * i++) { cb.pos } }
+            }
+            dbg("core open: everyone leaps onto §e${cb.name}§7 by the core first, then it recores")
+            return
+        }
+        // Not on its spot yet (straight in onto it), or already in (on the recore): in now; walking in: when it gets there.
+        if (cb == null || !released[5] || cb.to == null) leapIntoCore(phase)
+    }
+
+    /** In the core (section 5): once the core bot has gone in and stands on the recore, everyone leaps onto it. */
+    private fun intoCoreWhenRecored(phase: GoldorPhase) {
+        if (coreIn || phase.section < 5) return
+        val cb = coreBot() ?: return
+        if (released[5] && cb.to == null) leapIntoCore(phase)
+    }
+
+    /** Everyone leaps in at once onto whoever's in the core (the core early enterer), or walks in. */
+    private fun leapIntoCore(phase: GoldorPhase) {
+        coreIn = true
+        val n = phase.n
+        dbg("everyone leaps into the core")
         val ee = P3Plan.ee(5)
         val onto: (() -> Vec3?)? = when {
             ee == null -> null

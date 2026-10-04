@@ -54,6 +54,8 @@ object P3Plan {
     val earlyEnters = defaultEarlyEnters()
     /** Hold a section's last bot job until you're at your early enter for the next one. */
     var waitForYou = true
+    /** Bots help on your stacks (the preset's helps: another's terminal doer gets a lever of yours too). */
+    var helper = false
     /** Seconds between the bots leaping onto you once you're at your early enter (pre moves). */
     var leapGap = 0.5
     /** The four bots' classes, leap menu slot 1 to 4 (your class is left out). */
@@ -127,6 +129,7 @@ object P3Plan {
         val botMin: Double? = null, val botMax: Double? = null,
         val waitForYou: Boolean? = null, val leapGap: Double? = null, val leapOrder: List<String>? = null, val odinSort: Boolean? = null,
         val spots: Map<String, List<Double>>? = null,
+        val helper: Boolean? = null,
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -146,6 +149,7 @@ object P3Plan {
             s.botMin?.let { botMin = it }
             s.botMax?.let { botMax = it }
             s.waitForYou?.let { waitForYou = it }
+            s.helper?.let { helper = it }
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
@@ -163,7 +167,7 @@ object P3Plan {
     fun save() {
         EngineerClient.safely("p3sim plan save") {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
-                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) })
+                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper)
             file.parentFile.mkdirs()
             // The copy before this session's first save, should a save ever lose something (as one did EE3's spot).
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }

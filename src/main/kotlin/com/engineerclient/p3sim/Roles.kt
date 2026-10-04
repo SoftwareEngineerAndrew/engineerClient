@@ -37,7 +37,14 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK
  * Bots that pre-leapt walk on to their next terminals; at the core, everyone leaps in at once.
  */
 object Roles {
-    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>)
+    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList())
+
+    /**
+     * Help on a stack (the menu's Helper): when you're on [yours] (that terminal and the stack's
+     * jobs [jobs]), whoever does [by] gets [jobs] done by [at] s into section [section] too
+     * (whoever's first).
+     */
+    class Help(val section: Int, val yours: String, val by: String, val jobs: List<String>, val at: Double)
 
     val PF = Preset(
         "PF",
@@ -82,10 +89,18 @@ object Roles {
             "ee3 waits 1 2 3 4",
             "", "",
         ),
+        // The stacks' help (undonecoffee): S3 4 bl -> 1st term gets rl, 1 bl -> 4th term gets ll and the
+        // gate (4.8 s); S4 3 bl -> 4th term gets rl, 4 bl -> 3rd term gets ll (4.2 s).
+        helps = listOf(
+            Help(3, "S3 T4", "S3 T1", listOf("S3 east lever"), 4.8),
+            Help(3, "S3 T1", "S3 T4", listOf("S3 west lever", "gate 3"), 4.8),
+            Help(4, "S4 T3", "S4 T4", listOf("S4 low lever"), 4.2),
+            Help(4, "S4 T4", "S4 T3", listOf("S4 high lever"), 4.2),
+        ),
     )
 
     /** For now the same as Quality PF. */
-    val DYNAMIC = Preset("Dynamic", QUALITY_PF.roles, QUALITY_PF.times, QUALITY_PF.moves)
+    val DYNAMIC = Preset("Dynamic", QUALITY_PF.roles, QUALITY_PF.times, QUALITY_PF.moves, QUALITY_PF.helps)
 
     val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC)
 

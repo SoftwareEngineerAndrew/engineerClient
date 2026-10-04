@@ -63,6 +63,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         val extra = mutableListOf<AbstractWidget>(
             change("Reset to my role", 100) { P3Plan.resetMine() },
             change("Bots: ${onOff(P3Sim.bots)}", 64) { P3Sim.botsS.value = !P3Sim.bots },
+            change("Helper: ${onOff(P3Plan.helper)}", 70) { P3Plan.helper = !P3Plan.helper; P3Plan.save() },
         )
         if (P3Plan.skill == P3Plan.RANDOM) extra += listOf(
             label("§eBot times", 56),
