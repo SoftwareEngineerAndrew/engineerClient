@@ -224,8 +224,13 @@ tick N+1:  they launch as two identical pairs with  w = roty(|k·v0| · look, ±
   doesn't model vitality, so Nasty Bite never runs out.
 - **Duplex delay:** what decides 3 vs 4 ticks. The sim draws it at 29% / 71%.
 - **0/4 decay:** not seen; 100 ticks is predicted.
-- **Goldor and Necron:** hits on them grant stacks in the sim, since every boss wither counts. Not measured on
-  Hypixel.
+- **Goldor at P3 start (measured, main):** the stack at P3 start comes from hitting Goldor's wither at his spawn,
+  (80, 119, 40) on the S4 line, from the i4 plate. In all 10 main runs with Terror, the bar goes 9 → 10 at +3..+10
+  ticks after "Who dares trespass". The arrows fired from about (66, 127, 36) between −5 and +8 end within 1.5
+  blocks of (80, 120.7, 40) and are removed there. The ones fired at −8..−10 pass through that point a few ticks
+  before the line, so he appears at the line. After +8 the shots go to the i4 targets. The sim's Goldor spawns
+  there at that line (GoldorPhase, goldor.md) and its arrows hit him.
+- **Necron:** hits on him grant stacks in the sim, since every boss wither counts. Not measured.
 
 ## 11. Scripts (`scripts/terror/`)
 

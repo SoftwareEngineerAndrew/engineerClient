@@ -41,9 +41,23 @@ Scripts in `scripts/` (run with the nix python3 from that dir): `devlib.py` (loa
   same tick as the 9th hit's block change, or one tick before it (45 of 61: blue one tick after the
   line). Nothing changes after completion: **the board stays all blue terracotta**. The stand
   flips to `§aDevice`/`§aActive`, and Odin also treats a stand named "Active" as done.
-- **C** A run needs 9 hits. Some runs show only 7-8 lights. The missing cells are always ones not
-  shown in that run, which fits a cell that lit and was hit in the same tick, so no net change was
-  sent.
+- **M** A run needs 9 hits, but **the next target is the target the moment the last one is hit, before it shows**
+  (main server, 2026-10-03 Dungeon Recorder runs; `scripts/i4/board.py`, `hidden.py`):
+  - **Lights shown before "completed a device!":** 9 lights in 4 of 32 attempts, 8 in 10, 7 in 10, 6 in 4, 5 in 2,
+    4 in 2. A cell that never lit was hit while it was the next target but not yet shown: it counts, and no block
+    changes.
+  - **The light grid:** a hit k ticks after a grid tick shows the next target on the next grid tick (10 − k ticks
+    later). A hit on a grid tick shows it **in that same tick**, in the same `section_blocks_update` as the hit's
+    blue (17 of 17). So the server takes hits before that tick's light.
+  - **No 1-tick delay:** the never-lit cells were hit by arrows of the same volley that hit the lit one. Hydra
+    Strike's ±8° arrows land on the neighbouring cells, and the Terminator's ±5.5° pair on the cells either side of
+    a gap. For 5 of them, arrows in that same tick were the only candidates. In 22-33-03, 4 cells never lit, and
+    the counts only add up to 9 if a target can be hit in the very tick the previous one was. Odin's Show Aim
+    Positions is built on this: it aims so one volley hits the target and unhit cells, which can be next.
+  - **Not the next target:** an arrow into an unhit cell that isn't the next target does nothing; cells get hit
+    many times before they light.
+  - **Arrow → blue:** the block goes blue the tick after the traced arrow reaches the face (96 of 121; 0 or −1 in
+    the rest).
 - **M** Stepping off the plate (power 0) while a target is lit: that target goes blue 3-6 ticks
   later (n=2, which fits the 10-tick grid). **Progress resets.** The next time someone stands on
   the plate, a fresh permutation of 9 lights (00-43-27: 6 hits, step off, then 9 more; 18-20-13:
@@ -51,6 +65,20 @@ Scripts in `scripts/` (run with the nix python3 from that dir): `devlib.py` (loa
 - Arrow → block timing: not measurable (arrows were mostly not tracked). **C** The block changes
   in the tick the arrow hits. No dedicated "target hit" sound was found; the vanilla
   `entity.arrow.hit` (neutral, vol 1, pitch 1.08-1.3) is what plays at the board.
+- **M** The device stand at (63.5, 126, 34.5) / (63.5, 125.625, 34.5) reads `§cInactive` over `§cDevice`, and turns
+  `§aDevice` over `§aActive` 0-19 ticks after the completion line (its 20-tick grid; 42 completions). The line is
+  `<name> completed a device! (n/7)` (`§b` for you, `§a` for others).
+- Engineer Client (all work on Hypixel and in P3 Sim):
+  - **i4 Complete Title:** a title while you're on the plate when your line comes, when the stand turns Active, or
+    when a grid tick after a hit passes with nothing lit. Replayed over 36 main-server completions
+    (`scripts/i4/title_replay.py`):
+    - **Emeralds stopping:** fires 2-12 ticks after the line, and never earlier while someone is on the plate. It
+      fires early 3 times, all with nobody on the plate, which its plate check blocks. A hit on a grid tick sends
+      the new emerald before the old cell's blue, in one packet, so it tracks which cell is lit.
+    - **Device tag:** 3-17 ticks after the line, but only when S4 is already running. For an i4 done early (during
+      S1) the stand only turns Active once S4 starts (312-918 ticks later).
+  - **i4 Bow Aims:** Odin's aim positions for the bow you hold. A Mosquito with Terror at 10 stacks covers a whole
+    row from its middle cell. Aims are raised by the arrows' ~0.6 drop.
 - Odin's expectations (ArrowsDevice.kt):
   - It reacts only to block updates `emerald→blue_terracotta` (marks a hit) and
     `blue_terracotta→emerald` (the new target).

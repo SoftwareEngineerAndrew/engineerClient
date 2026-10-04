@@ -71,4 +71,17 @@ class ShotPlanTest {
         check("side 1", nearest(arrows.subList(1, 3), left), left)
         check("side 2", nearest(arrows.subList(1, 3), right), right)
     }
+    /** The cells one volley hits from the middle of the i4 plate, aimed so its main arrow lands on [spot]. */
+    private fun volley(bow: String, stacks: Int, spot: Vec3): Set<Pair<Int, Int>> =
+        com.engineerclient.practice.I4Geometry.aim(bow, Vec3(63.5, 127.0, 35.5), false, stacks, spot).second.map { it.x to it.y }.toSet()
+
+    /** i4 from the plate: Terror's Hydra arrows make a middle-column aim cover its row; the Terminator covers two between cells. */
+    @Test
+    fun i4Coverage() {
+        for (y in listOf(126, 128, 130)) {
+            assertEquals(setOf(64 to y, 66 to y, 68 to y), volley(Bows.MOSQUITO, 10, Vec3(66.5, y + 0.5, 50.0)), "Mosquito at 10 stacks, row $y")
+            assertEquals(setOf(66 to y), volley(Bows.MOSQUITO, 9, Vec3(66.5, y + 0.5, 50.0)), "Mosquito at 9 stacks, row $y")
+            assertEquals(setOf(64 to y, 66 to y), volley(Bows.TERMINATOR, 0, Vec3(65.5, y + 0.5, 50.0)), "Terminator between cells, row $y")
+        }
+    }
 }

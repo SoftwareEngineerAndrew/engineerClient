@@ -287,16 +287,20 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ the target
 
     /**
-     * The target ("i4"): stand on the plate (63, 127, 35) and shoot the lit (emerald) block of the
-     * 3x3 at x64-68, y126-130, z50 (devices.md §1). Live from P3's start, not only in S4 (an early
-     * finish counts in S4 via GoldorPhase.complete). Each run lights a random permutation of the 9
-     * cells, one each; a new one lights on a per-run 10-tick grid while someone is on the plate and
-     * none is lit. Off the plate, on the grid: the lit one goes blue and progress resets. Done, the
-     * board stays all blue terracotta (all emerald would read as 9 new targets to Odin).
+     * The target ("i4"): stand on the plate (63, 127, 35) and shoot the target block of the 3x3 at x64-68, y126-130,
+     * z50 (devices.md §1). Live from P3's start, not only in S4 (an early finish counts in S4 via
+     * GoldorPhase.complete). Each run is a random order of the 9 cells. As on Hypixel's main server
+     * (tools/p3sim/research/scripts/i4): the next cell is the target the moment the last one is hit, and a later
+     * arrow in that same tick can hit it too; but it only shows (emerald) on a per-run 10-tick grid while someone is
+     * on the plate - in the same tick when the hit lands on a grid tick. A target hit before it showed counts and
+     * changes no block, so the board (and Odin's solver, which only sees blocks) never lights it: 7-8 lights for 9
+     * hits is usual. Off the plate, on the grid: the lit one goes blue and progress resets. Done, the board stays
+     * all blue terracotta (all emerald would read as 9 new targets to Odin).
      */
     inner class Target {
         val PLATE = BlockPos(63, 127, 35)
         private val blocks = (0 until 9).map { BlockPos(64 + (it % 3) * 2, 126 + (it / 3) * 2, 50) }
+        /** The cell showing emerald, or -1. */
         private var lit = -1
         private var hits = 0
         private var order = (0 until 9).shuffled()
@@ -308,6 +312,9 @@ class Devices(val phase: GoldorPhase) {
 
         private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled() }
 
+        /** The cell that is the target now (shown or not), or -1 when done. */
+        private val current get() = if (hits < 9) order[hits] else -1
+
         fun onPlate(): Boolean {
             val p = Sim.player ?: return false
             // A pressure plate: pressed while your box overlaps its block (feet within its lower quarter).
@@ -315,11 +322,12 @@ class Devices(val phase: GoldorPhase) {
             return b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
         }
 
+        /** End of each tick (after the arrows moved, so a hit on a grid tick shows the next target in that tick). */
         fun tick() {
             val st = station("Target")
             if (st.done || phase.section > 4 || (phase.t - grid) % 10 != 0) return
             if (onPlate()) {
-                if (lit < 0) light()
+                if (current >= 0 && lit != current) light()
             } else if (lit >= 0 || hits > 0) {
                 if (lit >= 0) Blocks.set(blocks[lit], B.BLUE_TERRACOTTA.defaultBlockState())
                 reset()
@@ -327,16 +335,20 @@ class Devices(val phase: GoldorPhase) {
         }
 
         private fun light() {
-            lit = order[hits]
+            lit = current
             Blocks.set(blocks[lit], B.EMERALD_BLOCK.defaultBlockState())
         }
 
-        /** An arrow (or a bow's shot) hit block [pos]. The arrow's own vanilla `entity.arrow.hit` is the only sound. */
+        /**
+         * An arrow (or a bow's shot) hit block [pos]: if it is the target - shown or not yet - it counts. Only a shown
+         * one goes back to blue. The arrow's own vanilla `entity.arrow.hit` is the only sound.
+         */
         fun hit(pos: BlockPos) {
-            if (lit < 0 || pos != blocks[lit]) return
             val st = station("Target")
-            Blocks.set(pos, B.BLUE_TERRACOTTA.defaultBlockState())
-            lit = -1
+            if (st.done || current < 0 || pos != blocks[current]) return
+            // The board runs while someone is on the plate (or a target is up or under way).
+            if (lit < 0 && hits == 0 && !onPlate()) return
+            if (lit == current) { Blocks.set(pos, B.BLUE_TERRACOTTA.defaultBlockState()); lit = -1 }
             hits++
             if (hits >= 9) { clear(); st.complete(Sim.me) }
         }

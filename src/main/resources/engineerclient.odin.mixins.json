@@ -13,7 +13,8 @@
     "PersonalBestSimMixin",
     "BlockUpdateServerThreadMixin",
     "SimonSaysBlocksMixin",
-    "SimonSaysTicksMixin"
+    "SimonSaysTicksMixin",
+    "ArrowsDeviceAimMixin"
   ],
   "injectors": {
     "defaultRequire": 0
