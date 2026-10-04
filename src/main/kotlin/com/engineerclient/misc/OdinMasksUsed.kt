@@ -34,6 +34,20 @@ object OdinMasksUsed {
     @JvmStatic
     fun shows(index: Int, setting: Boolean): Boolean = setting && (!onlyUsed.value || used[index])
 
+    /**
+     * P3 Sim restarted its masks and Phoenix (Masks.reset, every start): Odin's timers go back to ready as well, and
+     * nothing counts as used this run. Odin's InvincibilityType enum is package-private, so its public reset()
+     * (cooldown and invincibility to 0) is reached by reflection. Client thread.
+     */
+    fun resetTimers() {
+        used.fill(false)
+        com.engineerclient.EngineerClient.safely("odin invincibility reset") {
+            val type = Class.forName("com.odtheking.odin.features.impl.dungeon.InvincibilityTimer\$InvincibilityType")
+            val reset = type.getMethod("reset").apply { isAccessible = true }
+            type.enumConstants.forEach { reset.invoke(it) }
+        }
+    }
+
     /** Adds the setting to Odin's module; before OdinSplitsLook.install, which re-reads Odin's config for both. */
     fun install() {
         InvincibilityTimer.registerSetting(onlyUsed)

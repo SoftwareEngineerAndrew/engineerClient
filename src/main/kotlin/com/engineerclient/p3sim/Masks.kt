@@ -158,6 +158,8 @@ object Masks {
 
     fun reset() {
         items.forEach { it.readyAt = 0 }; safeUntil = 0
+        // Odin's Invincibility Timer restarts with ours (it only ever hears procs, not a sim restart).
+        com.engineerclient.EngineerClient.mc.execute { com.engineerclient.misc.OdinMasksUsed.resetTimers() }
         reviveGen++
         if (ghost) { ghost = false; saved = null; Sim.player?.let { p -> p.removeEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY); p.abilities.flying = false; p.abilities.mayfly = false; p.onUpdateAbilities() } }
     }
