@@ -29,10 +29,17 @@ object Party {
     /** Hypixel's five classes, in their usual order. */
     val CLASSES by lazy { listOf(DungeonClass.HEALER, DungeonClass.BERSERK, DungeonClass.ARCHER, DungeonClass.TANK, DungeonClass.MAGE) }
 
-    /** Bot walking speed, blocks a tick (sprinting at speed ~400 with turns and climbs). */
-    private const val WALK = 0.95
-    /** The fastest a bot gets anywhere it is late for (etherwarps and leaps), blocks a tick. */
-    private const val FAST = 4.0
+    /**
+     * Bot walking speed, blocks a tick: teammates' sustained 1 s ground speed in P3 is 0.60 / 0.85 /
+     * 1.21 (p10 / median / p90, 30 Better PF runs, analysis party/move.mjs).
+     */
+    private const val WALK = 0.85
+    /**
+     * A Hyperion blink, 10 blocks along the look. The few teleports teammates make in P3 that aren't
+     * leaps are these (Hyperion held, ~10 blocks; party/leapers.mjs): nearly all their distance is
+     * walked or leapt. A bot blinks only where it can't walk (a wall, a climb) or is late.
+     */
+    private const val BLINK = 10.0
 
     class Bot(val clazz: DungeonClass, val slot: Int) {
         val name = Roles.label(clazz)
@@ -53,6 +60,14 @@ object Party {
         var inSection = 0
         /** Stays where it is until its section starts ("hold"). */
         var hold = false
+        /** Vertical speed while falling, blocks a tick. */
+        var vy = 0.0
+        /** The next tick it may blink; when it last blinked and leapt (what it holds follows them). */
+        var blinkReady = 0
+        var blinkAt = -100
+        var leaptAt = -100
+        /** What it holds ([setHeld]'s key): the stack is only replaced when that changes. */
+        var heldKey = ""
     }
 
     private val bots = ArrayList<Bot>()
@@ -112,7 +127,10 @@ object Party {
     fun clear() {
         generation++
         jobs.clear(); leaps.clear()
-        bots.forEach { it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0 }
+        bots.forEach {
+            it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0
+            it.vy = 0.0; it.blinkReady = 0; it.blinkAt = -100; it.leaptAt = -100; it.heldKey = ""
+        }
     }
 
     fun busyAt(st: Station) = bots.any { it.working === st }
@@ -237,7 +255,7 @@ object Party {
             // Onto you at your early enter: only while you're in position.
             if (l.youAt != null && Sim.player?.position()?.let { it.distanceTo(l.youAt) <= 3.0 } != true) return@forEach
             leaps.remove(l)
-            l.onto()?.let { dbg("§e${l.bot.name}§7 leaps (${it.short()})"); l.bot.pos = it; l.bot.to = null; walkOn(l.bot, n) }
+            l.onto()?.let { dbg("§e${l.bot.name}§7 leaps (${it.short()})"); leapTo(l.bot, it, n); walkOn(l.bot, n) }
         }
         // Jobs that are due (a section's last held while you're on your way to your early enter).
         val held = holding(phase)
@@ -254,12 +272,14 @@ object Party {
             if (st != null) {
                 if (st.section == s && held && phase.stations.count { it.section == s && !it.done } == 1) return@removeAll false
                 if (st.kind == Station.Kind.TERMINAL && Terminals.inUse(st)) return@removeAll false
+                // A lever's line comes on the swing that pulls it (1 tick, party/leapers.mjs); a device's last click swings too.
+                if (st.kind != Station.Kind.TERMINAL) swing(j.bot)
                 if (st.kind == Station.Kind.LEVER) phase.pullLever(st, j.bot.name) else st.complete(j.bot.name)
                 if (st.kind == Station.Kind.DEVICE) phase.devices.shownDone(st.label)
                 if (!st.done) return@removeAll false
             } else {
                 val k = sectionOf(j.job)
-                if (!phase.gateIsDown(k) && !phase.blowGate(k, j.bot.name)) return@removeAll false
+                if (!phase.gateIsDown(k)) { swing(j.bot); if (!phase.blowGate(k, j.bot.name)) return@removeAll false }
             }
             dbg("§e${j.bot.name}§7 did ${j.job}")
             j.bot.working = null
@@ -272,8 +292,13 @@ object Party {
         releaseEarlyEnterers(phase)
         intoCoreWhenRecored(phase)
         for (b in bots) move(b, n)
-        // Working: at its terminal for the last 2 s before it's done.
-        for (b in bots) b.working = next(b)?.takeIf { it.at >= 0 && it.at - n <= 40 }?.let { j -> phase.stations.firstOrNull { it.id == j.job && it.kind == Station.Kind.TERMINAL } }
+        // Working: at its terminal for the last 2 s before it's done (opening it swings: a right click on its stand).
+        for (b in bots) {
+            val was = b.working
+            b.working = next(b)?.takeIf { it.at >= 0 && it.at - n <= 40 && b.pos.distanceTo(spotOf(it.job)) <= 2.5 }?.let { j -> phase.stations.firstOrNull { it.id == j.job && it.kind == Station.Kind.TERMINAL } }
+            if (b.working != null && b.working !== was) swing(b)
+            hold(b, n)
+        }
     }
 
     /** Section [s] began: its times start, its moves are set; anyone not in it leaps onto whoever early-entered it, or walks. */
@@ -549,17 +574,174 @@ object Party {
 
     private fun spotOf(job: String): Vec3 = STANDS[job] ?: job.removePrefix("gate ").toIntOrNull()?.let { GATES.getOrNull(it) } ?: CORE_SPOT
 
+    /**
+     * A tick of getting there, as teammates do (party/move.mjs, leapers.mjs): walking on the
+     * blocks at [WALK] (up steps and 1-block climbs, falling off edges), and a Hyperion [BLINK]
+     * toward it where walking can't (a wall, somewhere higher, lava) - every 8 ticks - or won't make
+     * it in time - every 4, every 2 (Hyperion's own limit) once it's due already. P3's floors are
+     * islands over lava that players cross with jumps and Bonzo/Jerry boosts (rises of 1-1.6 a tick,
+     * move.mjs); the blinks stand in for those (no walking path exists between most job spots on the
+     * sim's arena: party/path.mjs).
+     */
     private fun move(b: Bot, n: Int) {
         val to = b.to
         if (to != null && n >= b.goAt) {
             val d = to.subtract(b.pos)
             val len = d.length()
-            // Walking, unless it has to be there sooner (then as fast as that takes, up to etherwarp pace).
-            val step = (if (b.due > n) maxOf(WALK, len / (b.due - n)) else if (b.due >= 0) FAST else WALK).coerceAtMost(FAST)
-            if (Math.abs(d.x) + Math.abs(d.z) > 0.01) { b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat(); b.pitch = 0f }
-            if (len <= step) { b.pos = to; b.to = null; b.face?.let { b.yaw = it.first; b.pitch = it.second } } else b.pos = b.pos.add(d.scale(step / len))
+            val flat = Math.hypot(d.x, d.z)
+            if (flat > 0.01) { b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat(); b.pitch = 0f }
+            val late = b.due >= 0 && (b.due <= n || len / (b.due - n) > WALK * 1.15)
+            if (len <= WALK && Math.abs(d.y) <= 1.25) arrive(b, to)
+            else {
+                // The walk this tick: where it'd stand (null: it can't - a wall, or no floor it should drop to).
+                val step = if (flat > 0.01) d.multiply(1.0, 0.0, 1.0).scale(minOf(WALK, flat) / flat) else Vec3.ZERO
+                val next = b.pos.add(step)
+                val g = ground(next.x, next.z, b.pos.y)
+                // Not: into a wall, under somewhere higher, off a drop it would have to climb back, or nowhere nearer.
+                val walkable = g != null && !(to.y - b.pos.y > 1.25 && flat < 2.0) && !(g < b.pos.y - 4 && to.y > g + 3) &&
+                    (flat > 0.01 || g < b.pos.y - 0.01)
+                when {
+                    (late || !walkable) && n >= b.blinkReady -> blink(b, to, n, if (b.due in 0..n) 2 else if (late) 4 else 8)
+                    walkable -> fall(b, next.x, next.z, g!!)
+                    else -> ground(b.pos.x, b.pos.z, b.pos.y)?.let { fall(b, b.pos.x, b.pos.z, it) }
+                }
+            }
+        } else if (to == null && !b.hold) {
+            // Standing in the air (leapt onto someone mid-jump): it drops, as anyone does.
+            ground(b.pos.x, b.pos.z, b.pos.y)?.takeIf { it < b.pos.y - 0.01 }?.let { fall(b, b.pos.x, b.pos.z, it) }
         }
         place(b)
+    }
+
+    /** To ([x], [z]) on floor [g]: up onto it at once (a step or jump), down to it at vanilla gravity. */
+    private fun fall(b: Bot, x: Double, z: Double, g: Double) {
+        if (g >= b.pos.y - 0.01) { b.pos = Vec3(x, g, z); b.vy = 0.0; return }
+        b.vy = (b.vy - 0.08) * 0.98
+        b.pos = Vec3(x, maxOf(g, b.pos.y + b.vy), z)
+        if (b.pos.y <= g) b.vy = 0.0
+    }
+
+    private fun arrive(b: Bot, to: Vec3) {
+        b.pos = to; b.to = null; b.vy = 0.0
+        b.face?.let { b.yaw = it.first; b.pitch = it.second }
+    }
+
+    /** A Hyperion blink toward [to]: 10 blocks, onto the floor if one's just under where it ends (else it falls from there). */
+    private fun blink(b: Bot, to: Vec3, n: Int, gap: Int) {
+        b.blinkReady = n + gap
+        b.blinkAt = n
+        b.vy = 0.0
+        val d = to.subtract(b.pos)
+        if (d.length() <= BLINK) { arrive(b, to); return }
+        val q = b.pos.add(d.normalize().scale(BLINK))
+        val g = ground(q.x, q.z, q.y)
+        b.pos = if (g != null && g >= q.y - 3) Vec3(q.x, g, q.z) else q
+    }
+
+    /**
+     * The floor a body at height [y] would stand on at ([x], [z]): stepping up to 1.25 (a jump) or
+     * dropping any way down, with 1.8 of room above it, under any part of its feet (a body is 0.6
+     * wide: the terminal spots are on stair edges). Null: a wall (no room at that height) or nothing
+     * to stand on within 40 blocks.
+     */
+    private fun ground(x: Double, z: Double, y: Double): Double? {
+        var best: Double? = null
+        for (cx in setOf(Math.floor(x - 0.29).toInt(), Math.floor(x + 0.29).toInt()))
+            for (cz in setOf(Math.floor(z - 0.29).toInt(), Math.floor(z + 0.29).toInt())) {
+                val g = column(cx, cz, y)
+                if (g == WALL) return null
+                if (g != null && (best == null || g > best)) best = g
+            }
+        return best
+    }
+
+    /** [ground]'s answer for "a wall here". */
+    private const val WALL = Double.MAX_VALUE
+
+    /** One block column's floor for a body at [y] ([WALL]: no room there; null: nothing below). */
+    private fun column(bx: Int, bz: Int, y: Double): Double? {
+        val level = Sim.level
+        var cy = Math.floor(y + 1.25).toInt()
+        val bottom = cy - 40
+        while (cy > bottom) {
+            val pos = net.minecraft.core.BlockPos(bx, cy, bz)
+            val state = level.getBlockState(pos)
+            // Nobody walks into the lava under P3's floors: it's a blink across.
+            if (state.fluidState.`is`(net.minecraft.tags.FluidTags.LAVA)) return WALL
+            val shape = state.getCollisionShape(level, pos)
+            if (!shape.isEmpty) {
+                val top = cy + shape.max(net.minecraft.core.Direction.Axis.Y)
+                if (top > y + 1.25) return WALL
+                // Room for the body above it.
+                for (hy in Math.floor(top + 0.01).toInt()..Math.floor(top + 1.79).toInt()) {
+                    if (hy == cy) continue
+                    val hp = net.minecraft.core.BlockPos(bx, hy, bz)
+                    val hs = level.getBlockState(hp).getCollisionShape(level, hp)
+                    if (!hs.isEmpty && hy + hs.min(net.minecraft.core.Direction.Axis.Y) < top + 1.8) return WALL
+                }
+                return top
+            }
+            cy--
+        }
+        return null
+    }
+
+    /** [b] leaps onto [at]: lands there facing as whoever it leapt to; their mod says so in party chat a tick later. */
+    private fun leapTo(b: Bot, at: Vec3, n: Int) {
+        val p = Sim.player
+        val onto: Pair<String, Float>? = when {
+            p != null && p.position().distanceTo(at) < 1.0 -> Sim.me to p.yRot
+            else -> bots.firstOrNull { it !== b && it.pos.distanceTo(at) < 1.0 }?.let { it.name to it.yaw }
+        }
+        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n
+        onto?.let { b.yaw = it.second }
+        Sim.sound(net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, at)
+        // 103 of 146 teammates' leaps were announced (all 81 in older runs), median 1 tick after the tp (party/leapers.mjs).
+        val name = onto?.first ?: return
+        val gen = generation
+        Fight.later(1, "leap announce") { if (gen == generation) Sim.chat(partyLine(b, "Leaped to $name!")) }
+    }
+
+    /** A bot's party chat line, as Hypixel shows one (the bots are MVP+, as the leap lines colour them). */
+    fun partyLine(b: Bot, text: String) = "§9Party §8> §b[MVP§c+§b] ${b.name}§f: $text"
+
+    private fun swing(b: Bot) { b.entity?.swing(net.minecraft.world.InteractionHand.MAIN_HAND) }
+
+    /**
+     * What a bot holds (party/measure.mjs, leapers.mjs): in P3 the Dungeonbreaker (teammates' rest
+     * slot: 37-67% of P3 by class), the Infinileap from ~0.5 s before a leap to 1 s after (the head
+     * comes out a median 8-19 ticks before), a Hyperion after a blink.
+     */
+    private fun hold(b: Bot, n: Int) {
+        val key = when {
+            leaps.any { it.bot === b && it.at - n in 0..10 } || n - b.leaptAt < 20 -> "leap"
+            n - b.blinkAt < 15 -> "hyperion"
+            else -> "breaker"
+        }
+        setHeld(b, key)
+    }
+
+    private fun setHeld(b: Bot, key: String) {
+        val e = b.entity ?: return
+        if (b.heldKey == key) return
+        b.heldKey = key
+        e.setItemSlot(EquipmentSlot.MAINHAND, when (key) {
+            "leap" -> SimItems.LEAP
+            "hyperion" -> SimItems.HYPERION
+            "terminator" -> SimItems.TERMINATOR
+            else -> SimItems.DUNGEONBREAKER
+        })
+    }
+
+    /**
+     * What each class holds standing about outside P3, its most-held item there (party/measure.mjs,
+     * 40 runs): P1 the Archer's Terminator, the Healer's Dungeonbreaker, everyone else's Hyperion;
+     * P2 the same; P4 Hyperion but the Healer's Dungeonbreaker.
+     */
+    private fun restingItem(c: DungeonClass): String = when {
+        c == DungeonClass.HEALER -> "breaker"
+        c == DungeonClass.ARCHER && Fight.phase !is P4Necron -> "terminator"
+        else -> "hyperion"
     }
 
     // ------------------------------------------------------------------ outside P3
@@ -574,19 +756,75 @@ object Party {
     /** Called every server tick by the fight (outside P3, the bots just stand). */
     fun tick() {}
 
+    /**
+     * P4: where teammates stand once they're down at Necron (party/where.mjs, 30 runs, 10 s in):
+     * on the floor at y 64 around (45-62, 104-120), the Mage often right at (54, 101). From P3 they
+     * drop in from the core over ~3 s (at 3 s most are still at y 69-75), so they land one by one.
+     */
+    fun startP4(fromP3: Boolean) {
+        if (!P3Sim.bots) return
+        leaps.clear(); jobs.clear()
+        val gen = generation
+        bots().forEachIndexed { i, b ->
+            val spot = P4_SPOTS.getValue(b.clazz)
+            val land = {
+                if (gen == generation) {
+                    if (b.entity == null || b.entity!!.isRemoved) spawn(b, spot)
+                    b.pos = spot; b.to = null; b.hold = false; b.yaw = 180f; b.pitch = 0f
+                    b.heldKey = ""; setHeld(b, restingItem(b.clazz))
+                    place(b)
+                }
+            }
+            if (fromP3 && b.entity?.isRemoved == false) Fight.later(40 + 6 * i, "bot into P4") { land() } else land()
+        }
+    }
+
+    private val P4_SPOTS = mapOf(
+        DungeonClass.MAGE to Vec3(54.5, 64.0, 101.5), DungeonClass.HEALER to Vec3(59.5, 64.0, 111.5),
+        DungeonClass.BERSERK to Vec3(50.5, 64.0, 110.5), DungeonClass.ARCHER to Vec3(47.5, 64.0, 107.5),
+        DungeonClass.TANK to Vec3(61.5, 64.0, 117.5),
+    )
+
     private fun spawn(b: Bot, at: Vec3) {
         val m = Mannequin(EntityType.MANNEQUIN, Sim.level)
-        m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(GameProfile(UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name)))
+        m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(profile(b)))
         m.setCustomName(Component.literal("§a${b.name}"))
         m.isCustomNameVisible = true
         m.isInvulnerable = true
         m.setNoGravity(true)
-        m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(if (b.clazz == DungeonClass.ARCHER || b.clazz == DungeonClass.BERSERK) Items.BOW else Items.DIAMOND_PICKAXE))
+        dress(m, b.clazz)
         hideDescription(m)
         b.pos = at
         m.snapTo(at.x, at.y, at.z, 0f, 0f)
         b.entity = Sim.spawn(m)
+        b.heldKey = ""
+        setHeld(b, if (Fight.phase is GoldorPhase || Fight.phase is StormEnd) "breaker" else restingItem(b.clazz))
     }
+
+    /**
+     * Teammates' gear in P3 (party/gear.mjs, gear-sets.mjs: 57 players, 120 runs): a mask on the head
+     * (Spirit Mask 36, Bonzo's Mask 11, other heads 10) and dyed leather - each player's own dyes,
+     * mostly Storm's blues (chest #1793c4 / legs #17a8c4) with #8969c8 or #1cd4e4 boots. Each class
+     * wears one set seen on that class.
+     */
+    private fun dress(m: Mannequin, c: DungeonClass) {
+        m.setItemSlot(EquipmentSlot.HEAD, if (c == DungeonClass.BERSERK) Masks.BONZO_MASK else Masks.SPIRIT_MASK)
+        val (chest, legs, boots) = when (c) {
+            DungeonClass.HEALER -> Triple(0x1793c4, 0x17a8c4, 0x8969c8)
+            DungeonClass.MAGE -> Triple(0x1793c4, 0x17a8c4, 0x1cd4e4)
+            DungeonClass.TANK -> Triple(-1, 0x5d2fb9, 0x8969c8)
+            DungeonClass.ARCHER -> Triple(0xe7413c, 0xe75c3c, 0x8969c8)
+            else -> Triple(0x3e05af, 0x5d23d1, 0x7c44ec)
+        }
+        fun dyed(item: net.minecraft.world.item.Item, rgb: Int) =
+            if (rgb < 0) ItemStack(Items.CHAINMAIL_CHESTPLATE) else ItemStack(item).also { it.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb)) }
+        m.setItemSlot(EquipmentSlot.CHEST, dyed(Items.LEATHER_CHESTPLATE, chest))
+        m.setItemSlot(EquipmentSlot.LEGS, dyed(Items.LEATHER_LEGGINGS, legs))
+        m.setItemSlot(EquipmentSlot.FEET, dyed(Items.LEATHER_BOOTS, boots))
+    }
+
+    /** A bot's profile: its skin (and its head in the leap menu). */
+    fun profile(b: Bot) = GameProfile(UUID.nameUUIDFromBytes("p3sim:${b.name}".toByteArray()), b.name)
 
     private val hideMethod by lazy { Mannequin::class.java.getDeclaredMethod("setHideDescription", Boolean::class.javaPrimitiveType).apply { isAccessible = true } }
     private fun hideDescription(m: Mannequin) { runCatching { hideMethod.invoke(m, true) } }

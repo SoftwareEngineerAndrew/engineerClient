@@ -373,7 +373,9 @@ object SimItems {
             return
         }
         Sim.tp(p, x + 0.5, y + 1.05, z + 0.5)
-        Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.53f, p.position())
+        // Both on the tp tick (items-timing.md §2): enderman.teleport 1/1 and dragon.hurt 1/0.54.
+        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position())
+        Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.54f, p.position())
     }
 
     /** Amanatides-Woo DDA with the corner guard; the cell the ray stops in, or null. */
@@ -450,8 +452,11 @@ object SimItems {
         return true
     }
 
-    /** A Hyperion Implosion's hit, for the chat line (no damage model in the sim). */
-    private const val IMPLOSION_DAMAGE = 1_846_213.4
+    /**
+     * A Hyperion Implosion's hit on a boss wither, for the chat line (no damage model in the sim):
+     * the recorded one-enemy lines are ~30-43M (median ~34M; 2 enemies 64-84M).
+     */
+    private const val IMPLOSION_DAMAGE = 34_000_000.0
 
     /**
      * Implosion (item-mechanics.md §3): at your final position, every mob whose hitbox is within
@@ -463,7 +468,13 @@ object SimItems {
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, p.position())
         val box = net.minecraft.world.phys.AABB(p.x - 6, p.eyeY - 6, p.z - 6, p.x + 6, p.eyeY + 7, p.z + 6)
         val n = Sim.level.getEntitiesOfClass(net.minecraft.world.entity.boss.wither.WitherBoss::class.java, box) { it.isAlive }.size
-        if (n > 0) Sim.chat("§7Your Implosion hit §c$n§7 ${if (n == 1) "enemy" else "enemies"} for §c${"%,.1f".format(n * IMPLOSION_DAMAGE)}§7 damage.")
+        if (n == 0) return
+        // The hit's ding (items-timing.md §2: experience_orb.pickup 1.0/1.492 on the tp tick).
+        Sim.sound(SoundEvents.EXPERIENCE_ORB_PICKUP, 1f, 1.492f, p.position())
+        // Hypixel's exact line (party/grep.mjs, 80 runs): "§7Your Implosion hit §r§c1 §r§7enemy for §r§c32,710,591.3 §r§7damage.", a whole number without ".0".
+        val dmg = (1..n).sumOf { IMPLOSION_DAMAGE * (0.9 + Random.nextDouble() * 0.25) }
+        val shown = "%,.1f".format(java.util.Locale.ROOT, dmg).removeSuffix(".0")
+        Sim.chat("§7Your Implosion hit §r§c$n §r§7${if (n == 1) "enemy" else "enemies"} for §r§c$shown §r§7damage.")
     }
 
     // ------------------------------------------------------------------ movement items
@@ -534,11 +545,11 @@ object SimItems {
 
     private fun cloak(p: ServerPlayer) {
         val now = Fight.serverTick
-        if (cloaked) { cloakUntil = now; cloakReady = now + 200; Sim.chat("§cCreeper Veil De-activated!"); return }
+        if (cloaked) { cloakUntil = now; cloakReady = now + 200; Sim.chat("§dCreeper Veil §r§cDe-activated!"); return }
         if (now < cloakReady) { Sim.chat("§cThis ability is on cooldown for ${(cloakReady - now + 19) / 20}s."); return }
         cloakUntil = now + 200; cloakReady = now + 400
-        Fight.later(200, "cloak expired") { if (cloakUntil == now + 200) Sim.chat("§cCreeper Veil De-activated! (Expired)") }
-        Sim.chat("§aCreeper Veil Activated!")
+        Fight.later(200, "cloak expired") { if (cloakUntil == now + 200) Sim.chat("§dCreeper Veil §r§cDe-activated! (Expired)") }
+        Sim.chat("§dCreeper Veil §r§aActivated!")
         Sim.sound(SoundEvents.CREEPER_PRIMED, 0.6f, 1f, p.position())
     }
 
@@ -710,6 +721,8 @@ object SimItems {
             // In the plan's leap slot order: slots 1-4 = chest slots 11, 12, 14, 15.
             bots.sortedBy { it.slot }.forEachIndexed { i, b ->
                 val h = ItemStack(Items.PLAYER_HEAD)
+                // The teammate's own head (the menu shows each one's skin): the bot's profile.
+                h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(Party.profile(b)))
                 h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.GREEN) })
                 h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Class: §e${b.clazz.name}").withStyle { it.withItalic(false) })))
                 container.setItem(listOf(11, 12, 14, 15).getOrElse(i) { 16 }, h)

@@ -142,6 +142,8 @@ object Fight {
         later.clear()
         Sim.clearEntities()
         Blocks.restoreAll()
+        // The world as the phases before this one leave it.
+        Blocks.prepare(what)
         // Every start (and restart) is with Black Cat out; the Pet Rod or a Phoenix proc swaps it.
         P3Sim.phoenixS.value = false
         setup(player)
@@ -220,10 +222,12 @@ object Fight {
         EngineerClient.safely("p3sim bows") { Bows.tick() }
         if (P3Sim.lava) Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase
-        if (p == null || p is P4Necron) { Recorder.finish(); return }
+        if (p == null) { Recorder.finish(); return }
+        // The run recorder covers P1-P3 and stops at Necron; his phase still has to tick.
+        if (p is P4Necron) Recorder.finish()
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++
         Party.tick()
-        EngineerClient.safely("p3sim recorder") { Recorder.tick(serverTick) }
+        if (p !is P4Necron) EngineerClient.safely("p3sim recorder") { Recorder.tick(serverTick) }
     }
 }
