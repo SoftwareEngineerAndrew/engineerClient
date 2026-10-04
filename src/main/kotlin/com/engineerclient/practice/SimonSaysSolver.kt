@@ -11,7 +11,8 @@ package com.engineerclient.practice
  *  - lights at the front that were on for 2 ticks or less are strays (a flash before the show);
  *  - then, if the buttons came back while the last light was still on - the timing of a skip
  *    (several start presses) - and there are 3 or more lights, the first is a stray too.
- * Nothing can be pressed before that, so there is no guessing.
+ * Nothing can be pressed before that, so there is no guessing. While the show is on, [answer] is
+ * the lights so far (front flashes dropped) to draw the in-between solution.
  */
 class SimonSaysSolver<C> {
 
@@ -20,7 +21,7 @@ class SimonSaysSolver<C> {
     private val shown = ArrayList<Light<C>>()
     private var showing = false
 
-    /** The answer, in order; empty while a show is on or between rounds. */
+    /** The answer, in order: while a show is on, the lights so far; empty between rounds. */
     var answer: List<C> = emptyList()
         private set
 
@@ -31,10 +32,19 @@ class SimonSaysSolver<C> {
     fun lightOn(cell: C, tick: Long) {
         if (!showing) { showing = true; shown.clear(); answer = emptyList(); next = 0 }
         shown += Light(cell, tick)
+        answer = soFar()
     }
 
     fun lightOff(cell: C, tick: Long) {
         shown.lastOrNull { it.cell == cell && it.off < 0 }?.off = tick
+        if (showing) answer = soFar()
+    }
+
+    /** The show so far, flashes at the front dropped (the skip rule needs the show's end). */
+    private fun soFar(): List<C> {
+        val a = shown.toMutableList()
+        while (a.size > 1 && a[0].off >= 0 && a[0].off - a[0].on <= 2) a.removeAt(0)
+        return a.map { it.cell }
     }
 
     /** The grid's buttons are back: the show is over, and its answer settled. */

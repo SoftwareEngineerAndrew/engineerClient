@@ -127,7 +127,8 @@ object Party {
 
     private val jobs = ArrayList<Job>()
     /** Leaps queued: [bot] onto wherever [onto] is at n = [at]. */
-    private class Leap(val bot: Bot, val at: Int, val onto: () -> Vec3?)
+    /** [youAt]: a leap onto you at your early-enter spot, which waits while you're not on it. */
+    private class Leap(val bot: Bot, val at: Int, val youAt: Vec3? = null, val onto: () -> Vec3?)
     private val leaps = ArrayList<Leap>()
     private var planned = 0
     /** Per section entered early (5 = core): you're on your spot; the bot's on its; when the pre-leap is due; the job whose bot holds. */
@@ -231,6 +232,8 @@ object Party {
         youAtEarlyEnter(phase)
         // Leaps that are due.
         leaps.filter { n >= it.at }.forEach { l ->
+            // Onto you at your early enter: only while you're in position.
+            if (l.youAt != null && Sim.player?.position()?.let { it.distanceTo(l.youAt) <= 3.0 } != true) return@forEach
             leaps.remove(l)
             l.onto()?.let { dbg("§e${l.bot.name}§7 leaps (${it.short()})"); l.bot.pos = it; l.bot.to = null; walkOn(l.bot, n) }
         }
@@ -364,7 +367,7 @@ object Party {
             b.inSection = into
             lastLeap = maxOf(n + 1, lastLeap + if (eeBot != null) 2 else gapTicks())
             if (holdJob[into] != null && jobs.any { it.bot === b && it.job == holdJob[into] }) b.hold = true
-            leaps += Leap(b, lastLeap, target)
+            leaps += Leap(b, lastLeap, if (ee.byYou) ee.spot else null, target)
         }
     }
 
@@ -387,10 +390,12 @@ object Party {
             val b = botOf(ee.owner) ?: continue
             if (released[into] || !b.hold || !eeArrived[into] || b.inSection < into) continue
             val waits = waitsFor[into]
+            // You're waited for if you're one who leaps onto it (on SS you leap to the 2nd term instead).
+            val needYou = waits == null || waits.any { whoFor(it, into) == P3Sim.myClass }
             val ok = when {
                 // Never without you (a safety net at 30 s); the bots get 10 s.
                 into == s && n - sectionN[s] >= 600 -> true
-                !leapt(P3Sim.myClass, b, into) -> false
+                needYou && !leapt(P3Sim.myClass, b, into) -> false
                 into == s && n - sectionN[s] >= 200 -> true
                 waits != null -> waits.all { t -> leapt(whoFor(t, into), b, into) }
                 // No list: everyone - every bot (busy ones too, once they're done and leapt) and you.

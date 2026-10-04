@@ -45,10 +45,10 @@ class SimonSaysSolverTest {
     }
 
     @Test
-    fun `presses move on, missed ones are caught up, nothing before buttons`() {
+    fun `presses move on, missed ones are caught up, the lights so far during the show`() {
         val s = SimonSaysSolver<String>()
         s.lightOn("a", 0); s.lightOff("a", 8); s.lightOn("b", 8); s.lightOff("b", 16); s.lightOn("c", 16); s.lightOff("c", 24)
-        assertEquals(emptyList(), s.answer)
+        assertEquals(listOf("a", "b", "c"), s.answer)
         s.buttonsUp()
         s.pressed("a"); assertEquals(1, s.next)
         s.pressed("c"); assertEquals(3, s.next)
