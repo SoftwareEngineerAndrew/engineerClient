@@ -64,7 +64,7 @@ object EngineerClient : ClientModInitializer {
         // Register our own module into Odin's module system: own ClickGUI panel
         // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, RandomStuff, ChatHider, LeapExtras, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor, StormPhase, BossRecorder, EntityDistance, CameraOffset, BetterPFMenu, SimonSaysPractice, com.engineerclient.practice.TermInfo, DungeonRecorder, com.engineerclient.p3sim.P3Sim)
+        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), BrwWaypoints, P3Rotation, PovPreviews, PartyFinderStats, RandomStuff, ChatHider, LeapExtras, AgroLeaderboard, BetterPF, DungeonSplits, BrWaypoints2, SoundEditor, StormPhase, BossRecorder, EntityDistance, CameraOffset, BetterPFMenu, SimonSaysPractice, com.engineerclient.practice.TermInfo, DungeonRecorder, com.engineerclient.p3sim.P3Sim, com.engineerclient.misc.SpeedHud)
 
         // The Engineer Splits look, added to Odin's own Splits module - before anything saves the
         // configs, which would drop saved values for settings that don't exist yet.
@@ -87,6 +87,7 @@ object EngineerClient : ClientModInitializer {
 
         // On by default, existing installs included (once: turning it off sticks).
         safely("boss recorder default") { BossRecorder.enableByDefault() }
+        safely("speed hud default") { com.engineerclient.misc.SpeedHud.enableByDefault() }
 
         // Odin's event bus: floor entry drives profile application, world load resets detection.
         on<FloorEnterEvent> { safely("floorEnter") { ClassDetect.onFloorEnter(floor.name) } }
