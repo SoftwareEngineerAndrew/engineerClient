@@ -129,6 +129,12 @@ object PosMsgEditor {
         if (!editing()) return false
         val (s, face) = target(1f) ?: return false
         val m = s.msg
+        // Sneaking: the whole box (or the radius's centre) moves up or down a block instead.
+        if (mc.player?.isShiftKeyDown == true) {
+            list()[s.i] = m.copy(y = m.y + by, y2 = m.y2?.plus(by))
+            ModuleManager.saveConfigurations()
+            return true
+        }
         val next = if (s.isBox) {
             val c = doubleArrayOf(s.min[0], s.min[1], s.min[2], s.max[0], s.max[1], s.max[2])
             if (!BoxFaces.move(c, face, by)) return true
@@ -171,16 +177,5 @@ object PosMsgEditor {
         list().add(PosMessage(x, y, z, x + 1, y + 1, z + 1, 0, null, com.odtheking.odin.utils.Colors.WHITE, text, false))
         ModuleManager.saveConfigurations()
         com.engineerclient.EngineerClient.msg("§dPosmsg §7added §f\"$text\" §7at ${x.toInt()}, ${y.toInt()}, ${z.toInt()}")
-    }
-
-    /** Moves the most recently added posmsg (the last in Odin's list) by whole blocks, and saves Odin's config. */
-    fun moveLatest(dx: Int, dy: Int, dz: Int) {
-        val l = list()
-        if (l.isEmpty()) { com.engineerclient.EngineerClient.msg("§dPosmsg §7none to move"); return }
-        val m = l.last()
-        l[l.size - 1] = m.copy(x = m.x + dx, y = m.y + dy, z = m.z + dz,
-            x2 = m.x2?.plus(dx), y2 = m.y2?.plus(dy), z2 = m.z2?.plus(dz))
-        ModuleManager.saveConfigurations()
-        com.engineerclient.EngineerClient.msg("§dPosmsg §7moved §f\"${m.message}\" §7by $dx, $dy, $dz to ${(m.x + dx).toInt()}, ${(m.y + dy).toInt()}, ${(m.z + dz).toInt()}")
     }
 }

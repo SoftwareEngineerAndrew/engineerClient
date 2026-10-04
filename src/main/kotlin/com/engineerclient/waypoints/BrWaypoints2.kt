@@ -767,6 +767,8 @@ object BrWaypoints2 : Module(
     private fun move(by: Int): Boolean {
         if (!editing()) return false
         val (box, face) = target(1f) ?: return false
+        // Sneaking: the whole box moves up or down a block instead.
+        if (mc.player?.isShiftKeyDown == true) { box.c[1] += by; box.c[4] += by; save(box.room); return true }
         if (BoxFaces.move(box.c, face, by)) save(box.room)
         return true
     }
