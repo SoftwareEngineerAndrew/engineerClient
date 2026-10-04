@@ -11,8 +11,12 @@ supply the timing and the hit signature. Sim implementation: `p3sim/GoldorPhase.
 At each death tick, a player is hit if their **feet position** is inside one of the four section
 zones (table below) and either
 
-1. the zone's section is **not** the section in progress, or
+1. the zone's section has **not started yet** (it is ahead of the section in progress), or
 2. it is the section in progress **and Goldor has left his track segment for that section**.
+
+A zone goes passive once its section starts (Andrew, 2026-10-04): zones of finished sections are
+never hit. (The probe runs all stayed in S1, where every other zone is still ahead, so they could
+not show this.)
 
 Goldor's start stretch on the S4 line, before the S1 corner (his first lap, from "Who dares
 trespass" until he reaches the S1 corner), counts as being in S1. So at the start of the phase the

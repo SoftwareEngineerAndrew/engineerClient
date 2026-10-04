@@ -375,11 +375,14 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The server's view of you, about one one-way latency late (PING-08).
         val seen = Fight.seenPos(p)
         if (inSafeSpot(seen)) return
-        // Every death-tick zone but the section in progress is lethal; that one too once Goldor has walked out of
+        // Zones of sections not started yet are lethal; the one in progress too once Goldor has walked out of
         // its segment (Andrew's probe runs 2026-10-04: hits all round S1 while S1 was in progress, and inside S1
         // only after Goldor left it). Feet position, edges from the probes (DT_ZONES).
         val at = dtZone(seen)
         if (at < 0) return
+        // A zone goes passive once its section has started (Andrew): only sections not started yet are lethal,
+        // plus the one in progress while Goldor is out of its segment.
+        if (at < section) return
         // On the S4 line from his start he counts as in S1 (the first death ticks inside S1 are safe).
         val goldorIn = if (goldor.firstLap && goldor.s >= GoldorPhase.Goldor.START_S) 1 else GoldorPhase.Goldor.segment(goldor.s) + 1
         if (at == section && goldorIn == section) return
