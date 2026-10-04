@@ -92,6 +92,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         sectionStart[section] = startN
         goldor.spawn(startN)
         Party.startP3(this)
+        GhostCapture.start(this)
         Sim.player?.let { player ->
             if (!arrived) {
                 val spot = Spots.p3Start(from)
@@ -136,6 +137,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     override fun stop() {
+        GhostCapture.stopped(this)
         Terminals.closeAll()
         devices.stop()
         // Handed over to Necron: his body stays where he died until ~290 ticks after Necron's first line
@@ -162,6 +164,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
+        GhostCapture.tick(this)
         if (handOff) { handOff = false; handDialogueOver(); Fight.begin(P4Necron(fromP3 = true)) }
     }
 
@@ -228,7 +231,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (by != Sim.me && st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st)
         // Hypixel's line is a styled component (name, green text, red count), not a § string.
         Sim.chatStyled(line)
-        if (by == Sim.me) Stats.done(st, n)
+        if (by == Sim.me) { Stats.done(st, n); GhostCapture.event("done", st.id) }
         // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
         // Odin's Terminal Sounds keys on the raw 4.047619) (chat-attacks.md §2).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
@@ -293,6 +296,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (by != null && section < s) return false
         gateDown[s] = true
         gateAt[s] = n
+        if (by == Sim.me) GhostCapture.event("gate", k = s)
         Sim.chat("§aThe gate has been destroyed!")
         // The progress pling comes with this line too (164 of 164 with no progress line near; boss recorder).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)

@@ -76,7 +76,23 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("+", 16) { P3Plan.botMax = (P3Plan.botMax + 0.5).coerceAtMost(60.0); P3Plan.save() },
         )
         row(extra)
+        // Your fastest runs (P3 from S1, by class, this skill): a bot can play yours instead of its role.
+        val skill = P3Plan.skillName()
+        row(listOf<AbstractWidget>(label("§dYour best", 56)) + P3Plan.botOrder().map { c ->
+            val best = GhostStore.best(skill, c.name)
+            val text = when {
+                P3Plan.ghostOn(c) && best != null -> "§d${name(c)}: ${secs(best.time)}"
+                P3Plan.ghostOn(c) -> "§d${name(c)}: §8no run"
+                else -> "§7${name(c)}: bot${best?.let { " §8(${secs(it.time)})" } ?: ""}"
+            }
+            change(text, 100) { P3Plan.toggleGhost(c) }
+        })
+        val mine = P3Sim.myClass?.let { GhostStore.best(skill, it.name) }
+        text("§8Click a class: its bot plays your fastest $skill P3 as it (S1 starts). Yours as ${Roles.label(P3Sim.myClass)}: " +
+            (mine?.let { "§7${secs(it.time)}" } ?: "none yet"))
     }
+
+    private fun secs(n: Int) = "%.2fs".format(Locale.ROOT, n / 20.0)
 
     private fun earlyEnterTab() {
         text("§7Who early-enters comes from the roles (Plan tab). The bot goes to the spot after its last job;")
@@ -161,9 +177,9 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
 
     private fun teleportTab() {
         Spots.teleports.chunked(4).forEach { chunk ->
-            row(chunk.map { spot -> button(spot.name, 96) { server { Sim.player?.let { Sim.tp(it, spot.x, spot.y, spot.z, spot.yaw, spot.pitch) } } } })
+            row(chunk.map { spot -> button(spot.name, 96) { server { GhostCapture.invalidate("a menu teleport"); Sim.player?.let { Sim.tp(it, spot.x, spot.y, spot.z, spot.yaw, spot.pitch) } } } })
         }
-        row(P3Plan.earlyEnters.map { ee -> button("${ee.label} spot", 70) { server { Sim.player?.let { Sim.tp(it, ee.spot.x, ee.spot.y, ee.spot.z) } } } })
+        row(P3Plan.earlyEnters.map { ee -> button("${ee.label} spot", 70) { server { GhostCapture.invalidate("a menu teleport"); Sim.player?.let { Sim.tp(it, ee.spot.x, ee.spot.y, ee.spot.z) } } } })
     }
 
     // ------------------------------------------------------------------ pieces

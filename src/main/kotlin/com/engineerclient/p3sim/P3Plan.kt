@@ -60,6 +60,11 @@ object P3Plan {
     var leapGap = 0.5
     /** The four bots' classes, leap menu slot 1 to 4 (your class is left out). */
     val leapOrder = ArrayList<DungeonClass>()
+    /** Classes whose bot plays your best run as that class (P3 from S1, when one is saved: [GhostStore]). */
+    val ghosts = LinkedHashSet<String>()
+
+    fun ghostOn(c: DungeonClass) = c.name in ghosts
+    fun toggleGhost(c: DungeonClass) { if (!ghosts.remove(c.name)) ghosts += c.name; save() }
 
     fun preset(): Roles.Preset = Roles.PRESETS[if (skill == RANDOM) 1 else skill.coerceIn(0, Roles.PRESETS.size - 1)]
     fun plan(): Roles.Plan = Roles.plan(preset())
@@ -130,6 +135,7 @@ object P3Plan {
         val waitForYou: Boolean? = null, val leapGap: Double? = null, val leapOrder: List<String>? = null, val odinSort: Boolean? = null,
         val spots: Map<String, List<Double>>? = null,
         val helper: Boolean? = null,
+        val ghosts: List<String>? = null,
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -150,6 +156,7 @@ object P3Plan {
             s.botMax?.let { botMax = it }
             s.waitForYou?.let { waitForYou = it }
             s.helper?.let { helper = it }
+            s.ghosts?.let { ghosts.clear(); ghosts += it }
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
@@ -167,7 +174,7 @@ object P3Plan {
     fun save() {
         EngineerClient.safely("p3sim plan save") {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
-                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper)
+                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList())
             file.parentFile.mkdirs()
             // The copy before this session's first save, should a save ever lose something (as one did EE3's spot).
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }
