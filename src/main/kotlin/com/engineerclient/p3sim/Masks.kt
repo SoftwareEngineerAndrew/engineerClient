@@ -148,8 +148,10 @@ object Masks {
     /** The Pet Rod: Phoenix (saves you once, no Black Cat bonus) <-> Black Cat (+100 speed); applySpeed does the rest. */
     fun swapPet(p: ServerPlayer) {
         P3Sim.phoenixS.value = !P3Sim.phoenix
-        Fight.applySpeed(p)
-        Sim.sound(SoundEvents.FISHING_BOBBER_THROW, 0.5f, 0.4f)
+        // The speed update lands 2-3 ticks after the Autopet chat (PETS-04: 2 x21, 3 x20 of 47); the swap itself is silent
+        // bar one vol-0 splash at (200,300,400) (PETS-05).
+        Fight.later(2 + kotlin.random.Random.nextInt(2), "pet speed") { Fight.applySpeed(p) }
+        Sim.sound(SoundEvents.PLAYER_SPLASH, 0f, 0f, net.minecraft.world.phys.Vec3(200.0, 300.0, 400.0), net.minecraft.sounds.SoundSource.PLAYERS)
         // A rod cast swaps pets on Hypixel through an Autopet rule: its line 2-3 ticks after the rod comes
         // out (party/autopet.mjs, 60 runs: 74 of these lines with the rod held), exactly as below.
         Sim.chat(if (P3Sim.phoenix) "§cAutopet §eequipped your §7[Lvl 100] §5Phoenix§e! §a§lVIEW RULE"
@@ -184,6 +186,8 @@ object Masks {
         val now = Fight.serverTick
         // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds (MASKS-04, DEATH-10).
         if (ghost || now < safeUntil) { goldor?.invoke(); return }
+        // A named hit meets the Creeper Veil first (death ticks, by == null, go through it: CLOAK-01).
+        if (by != null && SimItems.veilAbsorbs()) return
         val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
             else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
@@ -258,6 +262,7 @@ object Masks {
         // Revived 119-137 ticks on (median ~124); the countdown titles run 5..1 from 100 ticks before (DEATH-01/04).
         val delay = if (kotlin.random.Random.nextInt(10) < 6) kotlin.random.Random.nextInt(120, 126) else kotlin.random.Random.nextInt(119, 138)
         val gen = ++reviveGen
+        Corpse.spawn(p, delay)
         for (k in 0 until 5) Fight.later(delay - 100 + 20 * k, "revive title") {
             if (ghost && gen == reviveGen) Sim.title("§e§lBEING REVIVED", "§aYou will be revived in ${5 - k}s", 0, 30, 0)
         }

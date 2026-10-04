@@ -886,6 +886,9 @@ object SimItems {
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             var result: InteractionResult = InteractionResult.PASS
             EngineerClient.safely("p3sim use block") { result = useBlock(player, hit.blockPos, id) }
+            // The client already placed what it held (an Infinileap is a head) and took it off its hotbar: as on
+            // Hypixel, the server sends the held stack back (vanilla re-sends the blocks itself).
+            player.connection.send(net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket(player.inventory.selectedSlot, player.mainHandItem.copy()))
             result
         }
         UseEntityCallback.EVENT.register { player, level, hand, entity, _ ->
@@ -965,15 +968,16 @@ object SimItems {
     }
 
     /**
-     * The drop key in the sim (ArcherDropSimMixin): never drops an item; as Archer, sneaking, it's the
-     * class ability ([volley]). True: the drop is cancelled.
+     * The drop key in the sim (ArcherDropSimMixin): never drops an item; as Archer, Ctrl+Q (the whole stack, BOWS-01:
+     * recorded standing up) is Explosive Shot ([volley]). Plain Q is the ultimate (Rapid Fire), not in the sim: nothing.
+     * True: the drop is cancelled.
      */
     @JvmStatic
-    fun clientDrop(): Boolean {
+    fun clientDrop(fullStack: Boolean): Boolean {
         val player = mc.player ?: return false
         val level = mc.level ?: return false
         if (!simClient(level)) return false
-        if (player.isShiftKeyDown && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
+        if (fullStack && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
             SimServer.run("archer ability") { Sim.player?.let { p -> asClicked(p, "archer ability") { volley(p) } } }
         return true
     }
@@ -992,7 +996,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; lastCure = -1000; bonzoLast = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -1010,7 +1014,7 @@ object SimItems {
             // A right click in the air does nothing: Hypixel needs a block target (SUPERBOOM-02).
             "SUPERBOOM_TNT" -> {}
             in Bows.SHORTBOWS -> Bows.click(p, id, left = false)
-            "PET_ROD" -> Fight.afterPing("pet rod") { Masks.swapPet(p) }
+            "PET_ROD" -> Fight.afterPing("pet rod") { petBobber(p); Masks.swapPet(p) }
             else -> return InteractionResult.PASS
         }
         // Keep the client's copy of the stack (the Infinileap is a head, a block item it may think it placed).
@@ -1367,20 +1371,99 @@ object SimItems {
             Component.literal("§b-${14 * rapidShots} Mana (§6Rapid-fire§b)")))
     }
 
-    /** Creeper Veil: on until used again (or 10 s), then 10 s of cooldown; death ticks don't hit while it's on. */
+    /**
+     * Creeper Veil as recorded (CLOAK-01..08): it stays up until you right-click again, run out of vitality, or die
+     * (no 10 s expiry: the longest of 59 veils was 76 ticks). It does NOT stop death ticks (GoldorPhase.deathTick).
+     * Vitality: 122, 30 a hit; a hit with under 30 left ends it ("Not enough vitality!"). Cooldown ~5 s from the end.
+     */
     var cloakUntil = 0
         private set
     private var cloakReady = 0
     val cloaked get() = Fight.serverTick < cloakUntil
+    private var vitality = 0
+    private const val VEIL_VITALITY = 122
+    private const val VEIL_HIT = 30
+    private const val VEIL_COOLDOWN = 100
+
+    /** The 6 invisible powered creepers: a hexagon, radius 1.5, ~3 degrees a tick, at your feet (rec2 14-31-38 n=78447..78519). */
+    private val veil = ArrayList<net.minecraft.world.entity.monster.Creeper>()
+    private var veilAngle = 0.0
+
+    /** A creeper that stays in the peaceful sim world and can't be hit, pushed or aimed at. */
+    class VeilCreeper(level: Level) : net.minecraft.world.entity.monster.Creeper(net.minecraft.world.entity.EntityType.CREEPER, level) {
+        override fun checkDespawn() {}
+        override fun isPickable() = false
+        override fun isPushable() = false
+        override fun canBeCollidedWith(other: net.minecraft.world.entity.Entity?) = false
+    }
+
+    private fun veilPos(p: ServerPlayer, i: Int): Vec3 {
+        val a = Math.toRadians(veilAngle + 60.0 * i)
+        return Vec3(p.x + 1.5 * Math.cos(a), p.y, p.z + 1.5 * Math.sin(a))
+    }
+
+    private fun spawnVeil(p: ServerPlayer) {
+        discardVeil()
+        veilAngle = 0.0
+        for (i in 0 until 6) {
+            val e = VeilCreeper(Sim.level)
+            e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
+            // Vanilla clears a mob's invisible flag without the effect: a permanent effect keeps it (no particles).
+            e.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
+            // Powered, as recorded: the lightning hit sets the flag; its fire is put out again.
+            e.thunderHit(Sim.level, net.minecraft.world.entity.LightningBolt(net.minecraft.world.entity.EntityType.LIGHTNING_BOLT, Sim.level))
+            e.clearFire()
+            val g = veilPos(p, i)
+            e.snapTo(g.x, g.y, g.z, 0f, 0f)
+            veil += Sim.spawn(e)
+        }
+    }
+
+    private fun discardVeil() { veil.forEach { it.discard() }; veil.clear() }
+
+    /** The veil's end: the hurt sound at you, the creepers gone 2 ticks after the chat. [chat] null = ended by death (no line). */
+    private fun endVeil(p: ServerPlayer?, chat: String?, soundNow: Boolean = false) {
+        val now = Fight.serverTick
+        cloakUntil = now; cloakReady = now + VEIL_COOLDOWN; vitality = 0
+        if (chat != null) Sim.chat(chat)
+        val sound = { Sim.sound(SoundEvents.SKELETON_HURT, 4f, 1.1904762f, null, net.minecraft.sounds.SoundSource.HOSTILE) }
+        if (soundNow) sound() else Fight.later(1, "veil end sound") { sound() }
+        val gone = ArrayList(veil)
+        veil.clear()
+        Fight.later(2, "veil gone") { gone.forEach { it.discard() } }
+    }
+
+    /** A hit on you ([by] named): true when the veil took it. 30 vitality a hit; too little ends the veil. */
+    fun veilAbsorbs(): Boolean {
+        if (!cloaked) return false
+        if (vitality >= VEIL_HIT) { vitality -= VEIL_HIT; return true }
+        endVeil(Sim.player, "§cNot enough vitality! §r§dCreeper Veil §r§cDe-activated!")
+        return true
+    }
+
+    private fun tickVeil() {
+        if (!cloaked) { if (veil.isNotEmpty() && veil.none { !it.isRemoved }) veil.clear(); return }
+        val p = Sim.player ?: return
+        // Dead (a death tick goes through the veil): it ends a tick later with the sound only.
+        if (Masks.ghost) { endVeil(p, null, soundNow = true); return }
+        veilAngle += 3.0
+        veil.forEachIndexed { i, e -> val g = veilPos(p, i); e.snapTo(g.x, g.y, g.z, 0f, 0f) }
+    }
 
     private fun cloak(p: ServerPlayer) {
         val now = Fight.serverTick
-        if (cloaked) { cloakUntil = now; cloakReady = now + 200; Sim.chat("§dCreeper Veil §r§cDe-activated!"); return }
+        if (cloaked) { endVeil(p, "§dCreeper Veil §r§cDe-activated!"); return }
         if (now < cloakReady) { Sim.chat("§cThis ability is on cooldown for ${(cloakReady - now + 19) / 20}s."); return }
-        cloakUntil = now + 200; cloakReady = now + 400
-        Fight.later(200, "cloak expired") { if (cloakUntil == now + 200) Sim.chat("§dCreeper Veil §r§cDe-activated! (Expired)") }
+        cloakUntil = Int.MAX_VALUE; vitality = VEIL_VITALITY
         Sim.chat("§dCreeper Veil §r§aActivated!")
-        Sim.sound(SoundEvents.CREEPER_PRIMED, 0.6f, 1f, p.position())
+        spawnVeil(p)
+    }
+
+    /** The cast's fishing_bobber (PETS-06): own bobber at the swap, gone ~6 ticks on (2..11 recorded). */
+    private fun petBobber(p: ServerPlayer) {
+        val hook = net.minecraft.world.entity.projectile.FishingHook(p, Sim.level, 0, 0)
+        Sim.spawn(hook)
+        Fight.later(6, "pet bobber gone") { hook.discard() }
     }
 
     // ------------------------------------------------------------------ Superboom, Dungeonbreaker, bows
@@ -1488,15 +1571,15 @@ object SimItems {
     }
 
     /**
-     * The Archer's ability (sneak + drop): three arrows from your middle at the Terminator's +-5.5 deg, every 30 s
+     * The Archer's ability (Ctrl+Q): three arrows from your middle at the Terminator's +-5.5 deg, every 22 s (BOWS-02)
      * (Bows' arrows, so they count for i4 too); they blow up a gate they hit.
      */
     private var volleyReady = 0
 
     private fun volley(p: ServerPlayer) {
         val now = Fight.serverTick
-        if (now < volleyReady) { Sim.chat("§cThis ability is on cooldown for ${(volleyReady - now + 19) / 20}s."); return }
-        volleyReady = now + 600
+        if (now < volleyReady) { Sim.chat("§cYour Regular Ability is currently on cooldown for ${(volleyReady - now + 19) / 20} more seconds."); return }
+        volleyReady = now + 440
         val mid = Vec3(p.x, p.y + p.bbHeight / 2, p.z)
         for (dy in listOf(-5.5f, 0f, 5.5f)) {
             val yaw = Math.toRadians((p.yRot + dy).toDouble()); val pitch = Math.toRadians(p.xRot.toDouble())
@@ -1511,6 +1594,7 @@ object SimItems {
             }?.isCritArrow = true
         }
         Sim.chat("§aUsed §6Explosive Shot§a!")
+        Fight.later(1, "explosive shot summary") { Sim.chat("§7Your Explosive Shot hit §c0 §7enemies for §c0 §7damage.") }
         Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 0.8f, p.position())
     }
 
@@ -1521,6 +1605,7 @@ object SimItems {
     fun tick() {
         val level = SimServer.level ?: return
         tickBreaker()
+        tickVeil()
         // Vanilla bow arrows (anything shot that isn't one of Bows'). Each one's path since last tick (and a
         // little on), traced against the blocks: the first block on it is what it hit.
         level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !is SimArrow && it !in arrows }.forEach { arrows += it }

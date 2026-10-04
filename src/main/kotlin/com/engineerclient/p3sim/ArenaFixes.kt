@@ -27,10 +27,10 @@ import net.minecraft.world.level.block.Blocks as B
  * - the thicker east wall (x128-134) and the NW column ([Arena.Data] patch, `arena-ext.bin`);
  * - the y63 floor layer, rolled per cell from the recorded spread, and the sparse removals before Terms
  *   (lava y162, quartz, dirt, red terracotta, stone bricks), each cell with its recorded frequency;
- * - the Arrow Align back wall (x -3, y120-124, z75-79): one recorded run's pattern, picked per world;
+ * - (the Arrow Align back wall, x -3, y120-124, z75-79, is no longer here: Devices.Arrows draws it, ARENA-04);
  * - player-head textures (ARENA-03);
- * - [Replay]: that same recorded run's block changes from Terms on (TNT cubes, polished granite blobs, the lantern
- *   burst, the S4 plate), so a fight gets the timing of a real one.
+ * - [Replay]: that same recorded run's block changes from Terms on (TNT cubes, polished granite blobs,
+ *   the S4 plate), so a fight gets the timing of a real one.
  * Everything that moves at runtime goes through [Blocks.set], so [Blocks.restoreAll] puts it back.
  */
 object ArenaFixes {
@@ -111,10 +111,8 @@ object ArenaFixes {
                 val x = a[0].asInt; val y = a[1].asInt; val z = a[2].asInt
                 if (at(x, y, z) == st[a[3].asInt] && Random.nextInt(runs) < a[4].asInt) put(x, y, z, air)
             }
-            // ARENA-04: the Arrow Align back wall of one recorded run.
+            // ARENA-04: the run this world's Replay copies. The Arrow Align wall (x -3) is Devices.Arrows' now.
             pick = Random.nextInt(t.runs.size)
-            val init = t.runs[pick].init
-            for (i in init.indices step 4) if (init[i] == -3) put(init[i], init[i + 1], init[i + 2], st[init[i + 3]])
         }
         return Arena.Data(x0, y0, z0, w, h, d, states.toTypedArray(), cells)
     }
@@ -175,6 +173,7 @@ object ArenaFixes {
             val e = run.events
             while (ptr * 5 < e.size && e[ptr * 5] <= n) {
                 val i = ptr * 5; ptr++
+                if (e[i + 1] == -3) continue // the Arrow Align wall: Devices.Arrows draws it
                 val s = e[i + 4]
                 val pos = BlockPos(e[i + 1], e[i + 2], e[i + 3])
                 if (s < 0) {

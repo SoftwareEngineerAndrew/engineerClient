@@ -306,6 +306,7 @@ class Devices(val phase: GoldorPhase) {
                 } else f.setItem(ItemStack(if (wool == true) Items.LIME_WOOL else Items.RED_WOOL), false)
                 frames[i] = Sim.spawn(f)
             }
+            drawWall()
             // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
             frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
                 ?.let { (j, f) -> f.setRotation((solution[j] + 7) % 8) }
@@ -313,8 +314,28 @@ class Devices(val phase: GoldorPhase) {
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }
 
+        /**
+         * ARENA-04, the back wall (x -3, y120-124, z75-79, the board's own y/z): sea lanterns on the layout's frame
+         * cells, blue terracotta elsewhere. Recorded (rec2, 36 P3s): at the start every wool cell is lit, an arrow
+         * cell only about one in eight (51 of ~400; always one that was turned right at first sight, never a wrong
+         * one bar one), no other cell ever; it does not follow clicks (no wall change between the load and
+         * completion in any run). On completion every frame cell goes lantern in one tick (36 of 36), 6-15 cells.
+         */
+        private fun drawWall() {
+            for (i in 0 until 25) {
+                val lit = i in frames && (solution[i] < 0 || Random.nextInt(8) == 0)
+                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.BLUE_TERRACOTTA).defaultBlockState())
+            }
+        }
+
+        /** The device is done (a click of yours, or a teammate): every frame cell of the layout lights. */
+        private fun lightWall() {
+            for (i in frames.keys) Blocks.set(-3, 120 + i % 5, 75 + i / 5, B.SEA_LANTERN.defaultBlockState())
+        }
+
         /** ARROWS-08: a teammate's clicks, one frame per tick, not every frame in one tick. */
         fun solve() {
+            lightWall()
             var delay = 0
             for ((i, f) in frames.entries.sortedBy { it.key }.map { it.key to it.value }) {
                 if (solution[i] < 0 || f.rotation == solution[i]) continue
@@ -334,7 +355,7 @@ class Devices(val phase: GoldorPhase) {
                 if (solution[i] < 0 || st.done) return@afterPing
                 frame.setRotation((frame.rotation + 1) % 8)
                 Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position(), net.minecraft.sounds.SoundSource.PLAYERS)
-                if (phase.section in 1..3 && frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) st.complete(Sim.me)
+                if (phase.section in 1..3 && frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) { lightWall(); st.complete(Sim.me) }
             }
             return true
         }

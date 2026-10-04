@@ -35,7 +35,8 @@ import kotlin.random.Random
  * 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and moves that tick: pos1, v0 = 0.99u - g. On N+1 its
  * velocity is k*v0 (k = 1 + 0.01 x Hydra stacks). At 10 stacks two more launch on N+1 at +-8 deg of that move.
  * The Terminator's side arrows launch on N+1 from 0.5 under pos1 at your clean look +-5.5 deg; the Mosquito's
- * Duplex replays the main arrow's N+1 move 3 or 4 ticks later. Arrows are spawned at the end of a tick in the
+ * Duplex replays the main arrow's N+1 move 3 or 4 ticks later. A Terminator volley is 5 entities (the side arrows
+ * twice each, identical), a Duplex is 2 identical entities, Hydra Strike's two are distinct. Arrows are spawned at the end of a tick in the
  * state that makes their next vanilla tick exactly Hypixel's ([SimArrow]); every one goes on its first hit, and
  * every one counts for the i4 target.
  *
@@ -137,12 +138,16 @@ object Bows {
         val r = java.util.Random()
         val noise = Vec3(r.nextGaussian(), r.nextGaussian(), r.nextGaussian()).scale(0.0075)
         val duplex = if (Random.nextDouble() < 0.29) 3 else 4
-        for (arrow in ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex, 3.0 * power)) {
+        val plan = ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex, 3.0 * power)
+        for (arrow in plan) {
             if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null)?.let { if (arrow.owned && bow == LAST_BREATH && power >= 1f) it.isCritArrow = true }
             else later += Later(now + arrow.delay) { launch(arrow.from, arrow.at, arrow.v) }
         }
-        // Hypixel's two Duplex copies each make a quieter shoot sound the tick they launch.
-        if (bow in ShotPlan.DUPLEX) later += Later(now + duplex + 1) { repeat(2) { sound(SoundEvents.ARROW_SHOOT, SoundSource.MASTER, 0.5f, 0.7f) } }
+        // Hypixel's two Duplex copies each make a quieter shoot sound the tick they launch, at the Duplex arrow (BOWS-08).
+        if (bow in ShotPlan.DUPLEX) {
+            val dupAt = plan.firstOrNull { it.delay > 0 }?.at
+            later += Later(now + duplex + 1) { repeat(2) { sound(SoundEvents.ARROW_SHOOT, SoundSource.MASTER, 0.5f, 0.7f, dupAt) } }
+        }
         sound(SoundEvents.ARROW_SHOOT, SoundSource.NEUTRAL, 1f, 1f / (Random.nextFloat() * 0.4f + 1.2f) + 0.5f * power)
         if (bow !in SHORTBOWS) return
         val stack = p.mainHandItem
@@ -197,10 +202,10 @@ object Bows {
         onHit?.invoke(h)
     }
 
-    /** A sound at you, its pitch on Hypixel's 1/63 steps. */
-    private fun sound(s: SoundEvent, source: SoundSource, volume: Float, pitch: Float) {
+    /** A sound at you (or at [at]), its pitch on Hypixel's 1/63 steps. */
+    private fun sound(s: SoundEvent, source: SoundSource, volume: Float, pitch: Float, at: Vec3? = null) {
         val p = Sim.player ?: return
-        Sim.level.playSound(null, p.x, p.y, p.z, s, source, volume, Mth.floor(pitch * 63f) / 63f)
+        Sim.level.playSound(null, at?.x ?: p.x, at?.y ?: p.y, at?.z ?: p.z, s, source, volume, Mth.floor(pitch * 63f) / 63f)
     }
 
     /**
@@ -311,15 +316,18 @@ object ShotPlan {
         // Hydra Strike at 10 stacks: that move turned +-8 deg.
         if (stacks >= 10) for (s in listOf(8.0, -8.0)) out += Planned(pos1, pos1, roty(move, s), owned = false, delay = 0)
         when (bow) {
-            // The Terminator's side arrows (Hypixel sends each twice, identical): from 0.5 under pos1, your clean
-            // look +-5.5 deg at the main arrow's speed, with the tick's gravity given back.
+            // The Terminator's side arrows: Hypixel spawns each twice, identical (BOWS-07: 1 main + 2 pairs = 5 entities,
+            // 4 of 4 isolated Terminator shots without Terror, 60 of 69 volleys with exactly 4 side entities, never
+            // Terror-dependent): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
+            // tick's gravity given back.
             Bows.TERMINATOR -> {
                 val side = pos1.add(0.0, -0.5, 0.0)
-                for (s in listOf(5.5, -5.5)) out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0)
+                for (s in listOf(5.5, -5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
             }
         }
-        // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later (Hypixel's two copies are identical).
-        if (bow in DUPLEX) out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay)
+        // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities (BOWS-07, 266 of
+        // 272 volleys with Terror at 10 stacks have exactly 2, plus 84 of 86 at 9 stacks).
+        if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay) }
         return out
     }
 }

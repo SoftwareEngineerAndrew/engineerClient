@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import com.engineerclient.EngineerClient
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.EntityType
@@ -44,16 +45,16 @@ class Station(
     fun spawnStands() {
         val level = Sim.level
         fun stand(y: Double, name: String, marker: Boolean): ArmorStand {
-            val s = ArmorStand(EntityType.ARMOR_STAND, level)
+            val s = SimStand(level)
             s.snapTo(at.x, y, at.z, 0f, 0f)
             s.isInvisible = true
-            s.setNoGravity(true)
+            // STANDS-15: gravity is on in Hypixel's packets (noGravity false); SimStand never moves by itself.
             s.isInvulnerable = true
             s.isSilent = true
             // Styled from the start, as Hypixel's names are (TERM-19).
             s.setCustomName(if (name.isEmpty()) null else Sim.legacy(name))
             s.isCustomNameVisible = name.isNotEmpty()
-            if (marker) setMarker(s)
+            if (marker) { setMarker(s); setLeverFlags(s) }
             return Sim.spawn(s)
         }
         when (kind) {
@@ -103,6 +104,9 @@ class Station(
         private val markerMethod by lazy { ArmorStand::class.java.getDeclaredMethod("setMarker", Boolean::class.javaPrimitiveType).apply { isAccessible = true } }
         fun setMarker(s: ArmorStand) { runCatching { markerMethod.invoke(s, true) } }
 
+        /** STANDS-12: Hypixel's lever stands carry armor-stand flags 18 (marker 16 + the unused bit 2) on 288 of 288; terminal and device stands 0. */
+        fun setLeverFlags(s: ArmorStand) { runCatching { s.entityData.set(ArmorStand.DATA_CLIENT_FLAGS, 18.toByte()) } }
+
         private fun t(section: Int, n: Int, x: Double, y: Double, z: Double) = Station(Kind.TERMINAL, section, Vec3(x, y, z), "T$n")
         private fun l(section: Int, label: String, x: Int, y: Int, z: Int) = Station(Kind.LEVER, section, Vec3(x + 0.5, y + 0.688, z + 0.5), label, BlockPos(x, y, z))
         private fun d(section: Int, label: String, x: Double, y: Double, z: Double) = Station(Kind.DEVICE, section, Vec3(x, y, z), label)
@@ -130,5 +134,51 @@ class Station(
 
         /** Each section's count: terminals + levers + device (7, S2 8). */
         fun total(section: Int) = if (section == 2) 8 else 7
+    }
+}
+
+/**
+ * A status stand as Hypixel's: gravity on (STANDS-15: noGravity false in every recorded stand's data) yet
+ * it stays where it is put, as there. Vanilla would let it fall, so its own movement is dropped.
+ */
+class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityType.ARMOR_STAND, level) {
+    override fun travel(travelVector: Vec3) {}
+}
+
+/**
+ * STANDS-06: where you die as a ghost Hypixel leaves your body for about as long as you wait to be revived
+ * (life 119-141 ticks, median 121): a fake player lying down in your armour, a name stand and a red "DEAD"
+ * stand just under it, and a stand with your head on it a block to the side.
+ */
+object Corpse {
+    fun spawn(p: net.minecraft.server.level.ServerPlayer, ticks: Int) {
+        val made = ArrayList<net.minecraft.world.entity.Entity>()
+        EngineerClient.safely("p3sim corpse") {
+            val m = net.minecraft.world.entity.decoration.Mannequin(EntityType.MANNEQUIN, Sim.level)
+            m.setComponent(net.minecraft.core.component.DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(p.gameProfile))
+            m.isInvulnerable = true
+            m.setNoGravity(true)
+            m.isSilent = true
+            for (slot in listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET))
+                m.setItemSlot(slot, p.getItemBySlot(slot).copy())
+            m.pose = net.minecraft.world.entity.Pose.SLEEPING
+            m.snapTo(p.x, p.y, p.z, p.yRot, 0f)
+            made += Sim.spawn(m)
+            fun stand(x: Double, y: Double, name: String?, head: net.minecraft.world.item.ItemStack? = null, invisible: Boolean = true) {
+                val s = SimStand(Sim.level)
+                s.snapTo(x, y, p.z, 0f, 0f)
+                s.isInvisible = invisible
+                s.isInvulnerable = true
+                s.isSilent = true
+                Station.setMarker(s)
+                if (name != null) { s.setCustomName(Sim.legacy(name)); s.isCustomNameVisible = true }
+                if (head != null) s.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, head)
+                made += Sim.spawn(s)
+            }
+            stand(p.x, p.y - 1.28, "§a${Sim.me}")
+            stand(p.x, p.y - 1.66, "§c§lDEAD")
+            stand(p.x - 1.0, p.y, null, net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PLAYER_HEAD), invisible = false)
+        }
+        Fight.later(ticks, "corpse gone") { made.forEach { it.discard() } }
     }
 }

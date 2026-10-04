@@ -184,7 +184,16 @@ object DungeonSplits : Module(
         }
         val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
         val headClock = SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt())
-        SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headClock.ms) }
+        // ODIN-03: a P3 / S1 start comes with Storm's end (5.1 s to Goldor's "Who dares" line), and on
+        // Hypixel Odin's Storm row is running through it: start Odin there, that far into Storm (your
+        // Storm Pace target, or Hypixel's 46.2 s, less the lead-in) so "Storm took" reads a real time.
+        if (label == SplitTracker.TERMS && termsDone == 0) {
+            val storm = SimOdinSplits.odinName(SplitTracker.STORM)
+            if (storm != null) {
+                val whole = SimOdinSplits.target(storm).takeIf { it > 0 } ?: 46_200L
+                SimOdinSplits.start(storm, (whole - 5_100L).coerceAtLeast(0L))
+            }
+        } else SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headClock.ms) }
         if (termsDone > 0) {
             val at = now()
             tracker.startAt(label, before, at, headClock)

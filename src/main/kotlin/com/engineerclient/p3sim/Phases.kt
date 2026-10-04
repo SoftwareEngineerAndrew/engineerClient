@@ -67,17 +67,18 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
     }
 
     /**
-     * A `[BOSS]` line's stand over the wither, from the tick after the line for [SPEECH_TICKS] (all four
-     * bosses: 1 tick after, gone 41-42 later when watched throughout). Said before the name stand is
+     * A `[BOSS]` line's stand over the wither, from the tick of the line for [SPEECH_TICKS] (recordings:
+     * same tick, gone 41-42 later when watched throughout). Said before the name stand is
      * up (Maxor's first line), it comes with the name stand, and goes at the same time.
      */
     fun speak(line: String) {
         if (removed) return
         val text = "§4§l$line"
         speechText = text
-        speechUntil = Fight.serverTick + 1 + if (name == "Goldor") GOLDOR_SPEECH_TICKS else SPEECH_TICKS
+        speechUntil = Fight.serverTick + if (name == "Goldor") GOLDOR_SPEECH_TICKS else SPEECH_TICKS
         speech?.discard(); speech = null
-        Fight.later(1, "$name speech") { if (!removed && tag != null && speechText == text) showSpeech() }
+        // STANDS-05: Hypixel's speech stand spawns in the same tick as the chat line (+0 in 66 of 72 Goldor, 119 of 123 Necron).
+        if (tag != null) showSpeech()
     }
 
     private fun showSpeech() {

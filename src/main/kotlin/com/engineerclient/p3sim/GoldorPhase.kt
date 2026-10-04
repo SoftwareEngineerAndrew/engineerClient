@@ -168,7 +168,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Stand names refresh on a 20-tick grid.
         // Lever stands rename on their own, 1-3 ticks after the pull (pullLever).
         // Recorded renames land 1-2 ticks before each multiple of 20 (TERM-20): set on 18, sent on 19.
-        if (n % 20 == 18) stations.forEach { if (it.kind != Station.Kind.LEVER) it.refreshStands() }
+        // STANDS-14: the grid's phase is 18 or 19 per run (set on 18, sent 19: 21 of 36 runs; set on 17, sent 18: 15 of 36), picked in Fight.begin.
+        if (n % 20 == Fight.refreshPhase) stations.forEach { if (it.kind != Station.Kind.LEVER) it.refreshStands() }
         // Gates that open by themselves 5 s after their section ended.
         for (s in 1..3) if (autoGateAt[s] >= 0 && n >= autoGateAt[s] && !gateDown[s]) blowGate(s, null)
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
@@ -370,7 +371,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     private fun deathTick() {
         val p = Sim.player ?: return
-        if (p.isSpectator || p.isCreative || SimItems.cloaked || Masks.ghost) return
+        if (p.isSpectator || p.isCreative || Masks.ghost) return   // the Creeper Veil does not stop death ticks (CLOAK-01)
         // The server's view of you, about one one-way latency late (PING-08).
         val seen = Fight.seenPos(p)
         if (inSafeSpot(seen)) return

@@ -105,18 +105,30 @@ object Blocks {
     }
 
     /**
-     * FLOW-23: 35 bats at x 52-56, y 114-120, z 54 in the tick the core opens (34 of 36 runs). Their life is not
-     * recorded: they flutter ~3 s. The falling-block clones (door and core) are left out: a falling block that lands
-     * places itself, and the arena must stay as built; the recording has no positions to show them by.
+     * FLOW-23 / STANDS-01: 35 invisible bats at x 52-56, y 114-120, z 54.5 in the tick the core opens (35 of 36
+     * runs), each with a gold block as its passenger (spawned with it, riding from the next tick). They hang
+     * still for 7 ticks, then drop straight down 0.5 a tick, and bat and block go together 31 ticks after
+     * spawning (recordings: life 31 in 1138 of 1225 bats). The block is a [CarriedBlock] (it never ticks, so
+     * it never lands and places itself: the arena stays as built); the bats keep their invisibility effect.
      */
     private fun coreBats() {
+        val gold = B.GOLD_BLOCK.defaultBlockState()
         repeat(35) {
             val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityType.BAT, Sim.level)
             // Invisible, as Hypixel's are (105 of 105 core bats flagged invisible).
             b.isSilent = true; b.isInvulnerable = true; b.isInvisible = true; b.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
-            b.snapTo(52.0 + Random.nextDouble() * 4.0, 114.0 + Random.nextDouble() * 6.0, 54.5, Random.nextFloat() * 360f, 0f)
+            // No flying of its own: it is placed each tick below.
+            b.setNoAi(true); b.setNoGravity(true)
+            val x = 52.0 + Random.nextDouble() * 4.0
+            val y = 114.0 + Random.nextDouble() * 6.0
+            b.snapTo(x, y, 54.5, Random.nextFloat() * 360f, 0f)
             Sim.spawn(b)
-            Fight.later(60, "core bat gone") { b.discard() }
+            val block = CarriedBlock(Sim.level, gold)
+            block.snapTo(x, y, 54.5, 0f, 0f)
+            Sim.spawn(block)
+            Fight.later(1, "core bat carry") { if (!b.isRemoved && !block.isRemoved) block.startRiding(b, true, false) }
+            for (k in 7..30) Fight.later(k, "core bat fall") { if (!b.isRemoved) b.snapTo(x, y - 0.5 * (k - 6), 54.5, b.yRot, 0f) }
+            Fight.later(31, "core bat gone") { block.discard(); b.discard() }
         }
     }
 
@@ -287,4 +299,16 @@ object Blocks {
     private const val CARVE_CHANCE = 0.6f
     /** n of a Core start (GoldorPhase's median fast run): how far Goldor walked before P4. */
     private const val CORE_N = 797
+}
+
+/** A falling block that is only carried (STANDS-01): never ticks, so it never falls, lands or places itself. */
+class CarriedBlock(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
+    net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityType.FALLING_BLOCK, level) {
+    init {
+        runCatching {
+            net.minecraft.world.entity.item.FallingBlockEntity::class.java.getDeclaredField("blockState").apply { isAccessible = true }.set(this, state)
+        }
+        setNoGravity(true)
+    }
+    override fun tick() {}
 }

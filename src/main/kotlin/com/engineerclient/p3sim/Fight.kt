@@ -41,6 +41,10 @@ object Fight {
     /** Every terminal opens as this type (the menu's "Terminals: ..."), or random when null. */
     val forcedTerminal: Terminals.Type? get() = P3Sim.forcedTerminal
 
+    /** STANDS-14: the tick (n % 20) stand names are set on this run: 18 (sent on 19, 21 of 36 runs) or 17 (sent on 18, 15 of 36). */
+    var refreshPhase = 18
+        private set
+
     /** Server ticks since the sim started (the ping ids Odin counts as server ticks). */
     var serverTick = 0
         private set
@@ -220,10 +224,11 @@ object Fight {
         Bows.start()
         Masks.reset()
         Lava.reset()
+        refreshPhase = if (kotlin.random.Random.nextInt(36) < 21) 18 else 17
         Stats.runStart = if (what == Start.P1) serverTick else -1
         previous = null
         // Our splits: a fresh run from this phase, the ones before it at your Pace times. Queued on
-        // the client before any of this fight's lines can reach it.
+        // the client before any of this fight's lines can reach it (it starts Odin's run too).
         val (split, termsDone) = when (what) {
             Start.P1 -> com.engineerclient.splits.SplitTracker.MAXOR to 0
             Start.P2 -> com.engineerclient.splits.SplitTracker.STORM to 0
@@ -239,8 +244,7 @@ object Fight {
             EngineerClient.safely("p3sim arrows device") { resetArrowsDevice() }
         }
         Recorder.begin(what.label)
-        // Odin's Splits start on the dungeon's countdown line.
-        Sim.chat("§aStarting in 1 second.")
+        // ODIN-07: no "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
         val p: Phase = when (what) {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()
