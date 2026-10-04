@@ -338,7 +338,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         maybeTaunt()
         Stats.section(s, sectionEnd[s].coerceAtLeast(gateAt[s]) - sectionStart[s], n)
         // The section ends with its door (max(last completion, gate)): Goldor's catch-up cue.
-        goldor.sectionEnded(s)
+        goldor.sectionEnded(s, n)
         // Stations of the new section that were done early already count.
         if (count(section) >= Station.total(section)) sectionDone(section)
     }
@@ -355,7 +355,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.title("", "§aThe gate has been destroyed!")
         // The progress pling comes with this line too (164 of 164 with no progress line near; boss recorder).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
-        SimItems.gatePuffs(GATE_CENTRES[s])
+        SimItems.gatePuffs(GATE_CENTRES[s], GATE_BOXES[s])
         Blocks.play("gate$s${s + 1}", delay = 1)
         if (sectionEnd[s] >= 0) openDoor(s)
         return true
@@ -488,6 +488,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         var s = START_S
         private var speed = WALK
         private var sprintTo = -1.0
+        /** FLOW-03: the tick the pending catch-up sprint starts (-1: none) and the section whose door it follows. */
+        private var sprintFrom = -1
+        private var sprintSec = 0
         var flying = false
             private set
         /** Reached the core point alive. */
@@ -510,7 +513,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val position: Vec3 get() = pos
 
         fun spawn(n: Int) {
-            s = (START_S + WALK * n) % LOOP
+            s = (START_S + walkDist(n)) % LOOP
             pos = trackPos(s)
             spawnedN = n
             boss = BossWither("Goldor", pos, inv = 0, armoured = false)
@@ -547,17 +550,18 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         fun remove() { boss?.remove(); boss = null; giants.forEach { it.discard() }; giants.clear() }
 
         /** Section [sec] ended (its door opened): if he is still in its segment, he sprints to the next one's start. */
-        fun sectionEnded(sec: Int) {
+        fun sectionEnded(sec: Int, doorN: Int) {
             if (flying || sec !in 1..3) return
             val inIt = if (sec == 1) s >= S1_ENTRY || s < BOUNDS[1] else segment(s) == sec - 1
-            if (inIt) { sprintTo = SPRINT_TO[sec - 1]; speed = SPRINT }
+            // FLOW-03: the sprint starts 48-59 ticks (median ~55) after the door, not at once.
+            if (inIt && sprintFrom < 0) { sprintFrom = doorN + SPRINT_LAG_MIN + kotlin.random.Random.nextInt(SPRINT_LAG_SPREAD); sprintSec = sec }
         }
 
         fun fly(n: Int) {
             if (flying) return
             flying = true
             flyAt = n
-            // Killed [P3Sim.goldorKill] after leaving (the setting; median 57 of 201 recorded kills).
+            // Killed [P3Sim.goldorKill] after leaving (the setting; flight start to the "...." line, median 43, range 17-74, 31 runs; FLOW-05).
             killAt = n + P3Sim.goldorKill.toInt()
             // His armour goes 4-14 ticks before the "...." line (FLOW-17).
             armourOffAt = killAt - 4 - kotlin.random.Random.nextInt(11)
@@ -572,9 +576,15 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
          * 0.86, 0.29, 0.25, 0.21, 0.0; boss recorder, 60 fights).
          */
         fun barTick(n: Int) {
-            if (!flying || n % 20 != 0) return
-            BossBar.progress(if (dead) 0f else (killAt - n).toFloat() / (killAt - flyAt).coerceAtLeast(1))
+            // FLOW-13 (recorder-2, 31 runs): full until ~3 ticks before the "...." (-17..+12), 0 about 9 after it (0..17).
+            if (!flying || killAt == Int.MAX_VALUE) return
+            val dropAt = killAt - 3
+            val zeroAt = killAt + 9
+            if (n < dropAt) return
+            if (n >= zeroAt) { if (!barZeroed) { barZeroed = true; BossBar.progress(0f) }; return }
+            if ((n - dropAt) % 4 == 0) BossBar.progress(0.35f * (zeroAt - n) / (zeroAt - dropAt))
         }
+        private var barZeroed = false
 
         fun tick(phase: GoldorPhase) {
             val boss = boss ?: return
@@ -601,11 +611,18 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                     pos = Vec3(pos.x + (CORE_IN_X - pos.x).coerceIn(-0.1, 0.1), maxOf(116.75, pos.y - 0.006), pos.z + v)
                 }
             } else {
+                if (sprintFrom in 0..n && sprintTo < 0) {
+                    // Only if he is still in the segment (he can have walked on during the lag).
+                    val sec = sprintSec
+                    val inIt = if (sec == 1) s >= S1_ENTRY || s < BOUNDS[1] else segment(s) == sec - 1
+                    if (inIt) { sprintTo = SPRINT_TO[sec - 1]; speed = SPRINT }
+                    sprintFrom = -1
+                }
                 if (sprintTo >= 0) {
                     // Distance left, round the loop's seam (a sprint from the S4 line into S1).
                     val left = ((sprintTo - s) % LOOP + LOOP) % LOOP
                     if (left <= SPRINT) { s = sprintTo; sprintTo = -1.0; speed = WALK } else s += SPRINT
-                } else s += WALK
+                } else s += walkStep(n - spawnedN)
                 s %= LOOP
                 pos = trackPos(s)
             }
@@ -625,6 +642,14 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
         companion object {
                 const val WALK = 0.06
+            /** FLOW-04: he walks 0.048 a tick for the first ~194 ticks (median of 14 runs, 0.034-0.061), then 0.06. */
+            const val SLOW_WALK = 0.048
+            const val SLOW_TICKS = 194
+            fun walkStep(age: Int) = if (age < SLOW_TICKS) SLOW_WALK else WALK
+            fun walkDist(age: Int) = if (age <= SLOW_TICKS) SLOW_WALK * age else SLOW_WALK * SLOW_TICKS + WALK * (age - SLOW_TICKS)
+            /** FLOW-03: a catch-up sprint starts 48-59 ticks after its door opens (5 runs, back-solved). */
+            const val SPRINT_LAG_MIN = 48
+            const val SPRINT_LAG_SPREAD = 12
             const val SPRINT = 0.60
             const val FLY = 0.80
             /** Where the four lines cross (S1 x 99.55, S2 z 131.7, S3 x 8.4, S4 z 40.0; goldor.md, the track). */
@@ -639,8 +664,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             const val START_S = 344.7
             /** Where the S1 segment starts for the catch-up: on the S4 line between x 95.5 (s 360.2) and 98 (362.7). */
             const val S1_ENTRY = 361.5
-            /** Where a catch-up sprint ends, ~1.6 past the corner (S2 92.2-92.4, S3 183.6-183.8, S4 274.3-276.5). */
-            val SPRINT_TO = doubleArrayOf(92.3, 183.7, 275.0)
+            /**
+             * Where a catch-up sprint ends, at the corner (FLOW-03, recorder-2: last sprint-speed sample S2 s 90.1-91.4, S3
+             * 181.8-182.0, one step of 0.6 more at most). S4 is unremeasured (one sample, 273.5; boss recorder 274.3-276.5).
+             */
+            val SPRINT_TO = doubleArrayOf(91.2, 182.3, 275.0)
             val CORE_POINT = Vec3(53.6, 117.0, 40.0)
             /** Reaching it alive he goes on into the core along x ~53.4-53.8, fast until z ~55.8-56.4. */
             const val CORE_IN_X = 53.6
@@ -670,7 +698,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     fun pullLever(st: Station, by: String, left: Boolean = false) {
         val lever = st.lever ?: return
         if (st.done) { if (by == Sim.me) Sim.chat("§cSomeone has already activated this lever!"); return }
-        if (st.section != section) { if (by == Sim.me) Sim.chat("§cThis lever doesn't seem to be responsive at the moment."); return }
+        // LEV-02: another section's lever is vanilla's toggle with the click sound; no chat (never recorded), no credit.
+        if (st.section != section) { if (by == Sim.me && !left) SimItems.vanillaLeverToggle(lever); return }
         // LEV-03: vanilla's toggle: the state flips, and the pitch follows the new state.
         val nowOn = !(Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.getValue(LeverBlock.POWERED) ?: false)
         if (!left) Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, nowOn)) }

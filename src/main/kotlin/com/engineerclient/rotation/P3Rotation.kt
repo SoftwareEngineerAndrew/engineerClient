@@ -6,7 +6,9 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.PacketEvent
+import net.minecraft.network.chat.Component
 import com.odtheking.odin.events.core.EventPriority
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundBundlePacket
@@ -146,6 +148,12 @@ object P3Rotation : Module(
         // in line, read-only. Odin's event stays as a second path; [take] dedupes by identity.
         on<PacketEvent.Receive>(EventPriority.HIGHEST) { handlePacket(packet, "odin") }
 
+        // Re-delivery to Odin (see [Pending]). Odin's own path is watched, not trusted: these two
+        // listeners only run when Odin's dispatcher posted the line, which is exactly "Odin saw it".
+        on<MessageEvent.ModifyChat>(EventPriority.HIGHEST) { pending.firstOrNull { !it.sawModify && it.plain == message }?.sawModify = true }
+        on<MessageEvent.Chat>(EventPriority.HIGHEST) { pending.firstOrNull { !it.sawChat && it.plain == message }?.sawChat = true }
+        on<TickEvent.End> { EngineerClient.safely("odin redeliver") { redeliverDue() } }
+
         on<TickEvent.Server> {
             if (!enabled) return@on
             MaskTracker.tick()
@@ -223,8 +231,46 @@ object P3Rotation : Module(
         EngineerClient.mc.execute {
             EngineerClient.safely("p3 chat") {
                 if (DungeonUtils.inBoss && P3ChatParser.completion(text) != null) EcLog.log("PKT", "completion via $via")
+                if (via.startsWith("tap") && redeliverable(text)) pending.add(Pending(p.content(), odinPlain(text), clientTicks + 2))
                 onChat(text)
             }
+        }
+    }
+
+    /**
+     * A phase-3 line EC saw on the wire that Odin may never get: blade-addons/devonian consume
+     * terminal/lever/device completions and the gate line at channelRead0 ahead of Odin's hook, so
+     * Odin's TerminalTimes (MessageEvent.ModifyChat) and InactiveWaypoints/ArrowsDevice
+     * (MessageEvent.Chat) never fire. Registered on the main thread BEFORE the packet is handled
+     * (tap's mc.execute is queued ahead of the handler's own), so if Odin's path runs, its listeners
+     * above flip the flags first. Two ticks later, whichever event Odin did not see is posted on
+     * Odin's bus once. Main thread only. Nothing swallowed (no blade-addons, the P3 Sim) = nothing sent.
+     */
+    private class Pending(val component: Component, val plain: String, val dueTick: Long) {
+        var sawModify = false
+        var sawChat = false
+    }
+    private val pending = ArrayList<Pending>()
+    private var clientTicks = 0L
+
+    /** Odin's event message: the component text with legacy section codes removed. */
+    private fun odinPlain(text: String): String = text.replace(Regex("§."), "")
+
+    private fun redeliverable(text: String): Boolean =
+        P3ChatParser.completion(text) != null || P3ChatParser.isGateDestroyed(text) ||
+            P3ChatParser.isPhaseStart(text) || P3ChatParser.isPhaseEnd(text)
+
+    private fun redeliverDue() {
+        clientTicks++
+        if (pending.isEmpty()) return
+        val due = pending.filter { it.dueTick <= clientTicks }
+        if (due.isEmpty()) return
+        pending.removeAll(due.toSet())
+        for (d in due) {
+            if (d.sawModify && d.sawChat) continue
+            EcLog.log("PKT", "re-delivered to Odin (modify=${!d.sawModify}, chat=${!d.sawChat}): ${d.plain}")
+            if (!d.sawModify) MessageEvent.ModifyChat(d.plain, d.component).postAndCatch()
+            if (!d.sawChat) MessageEvent.Chat(d.plain, d.component).postAndCatch()
         }
     }
 

@@ -352,7 +352,13 @@ class Devices(val phase: GoldorPhase) {
             val i = frames.entries.firstOrNull { it.value === frame }?.key ?: return false
             Fight.afterPing("arrow") {
                 val st = station("Arrows")
-                if (solution[i] < 0 || st.done) return@afterPing
+                if (st.done) return@afterPing
+                // ARROWS-04: an extra (Start/End) frame turns as well (rec2 runs 16, 18); it never counts toward the solution.
+                if (solution[i] < 0) {
+                    frame.setRotation((frame.rotation + 1) % 8)
+                    Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position(), net.minecraft.sounds.SoundSource.PLAYERS)
+                    return@afterPing
+                }
                 frame.setRotation((frame.rotation + 1) % 8)
                 Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position(), net.minecraft.sounds.SoundSource.PLAYERS)
                 if (phase.section in 1..3 && frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) { lightWall(); st.complete(Sim.me) }

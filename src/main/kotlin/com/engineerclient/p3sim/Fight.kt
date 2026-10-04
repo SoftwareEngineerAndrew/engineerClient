@@ -198,7 +198,9 @@ object Fight {
 
     /** Your speed: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out adds nothing. */
     fun applySpeed(player: ServerPlayer) {
-        val speed = P3Sim.speed + if (P3Sim.phoenix) 0 else 100
+        // Black Cat +100; the Racing Helmet +100 more (rec2 loadouts: Cat terms 650, Phoenix terms 550; Terror and Mask terms with Cat 550).
+        val racing = SimItems.idOf(player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "RACING_HELMET"
+        val speed = P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
         player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = speed.coerceAtLeast(100).toDouble() / 1000.0
     }
 

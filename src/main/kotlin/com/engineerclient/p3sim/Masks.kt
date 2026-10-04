@@ -78,7 +78,7 @@ object Masks {
     private const val BELT_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0MzYwMjI5OTA2MSwKICAicHJvZmlsZUlkIiA6ICI0ZTMwZjUwZTdiYWU0M2YzYWZkMmE3NDUyY2ViZTI5YyIsCiAgInByb2ZpbGVOYW1lIiA6ICJfdG9tYXRvel8iLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjFkMmIwMzZkZDY2NGJiOTBjOWQ0NDNjMTk5OGZiNTI2Mzk4YWI0ZGRkZWI3OWI4NDAxYjE2YjlhNGQxMGJhMyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
     private const val GLOVES_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY5MjI5ODIyMjY4MywKICAicHJvZmlsZUlkIiA6ICI4NzE3ZGFhNmM3OTU0NzE2YmJlYWQ0MDRkYzg0NDQzZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJTa3VsbDAwMDAiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTUyMjg2NzcyMTJiZTQzZWFhZDIzZDQ3ZWQ4NDNlMTVmYjFlNjgzODQ1OTRjMDliNThiMjNmODI0MjdlNTQ5YSIKICAgIH0KICB9Cn0="
     private const val BLACK_CAT_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTcwODczNzEyMTIzNSwKICAicHJvZmlsZUlkIiA6ICJmY2ZhYTg0MzA0YjE0NDUxOThkNWYxNzQ3ZjI0Y2Q5MCIsCiAgInByb2ZpbGVOYW1lIiA6ICJTdGV3eVdvbGZ5IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzgyODJiNWE5YmJlMmNkMzIyMzcyNDAyM2NkNGY2YWQ0MTNmNWJiOWUwZWRlZjgxNzAwYjhhZmMzMDcyZDA0YTUiCiAgICB9CiAgfQp9"
-    private const val PHOENIX_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0Mjg2NTc3MTM5MSwKICAicHJvZmlsZUlkIiA6ICJiYjdjY2E3MTA0MzQ0NDEyOGQzMDg5ZTEzYmRmYWI1OSIsCiAgInByb2ZpbGVOYW1lIiA6ICJsYXVyZW5jaW8zMDMiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjZiMWI1OWJjODkwYzljOTc1Mjc3ODdkZGUyMDYwMGM4Yjg2ZjZiOTkxMmQ1MWE2YmZjZGIwZTRjMmFhM2M5NyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
+    const val PHOENIX_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0Mjg2NTc3MTM5MSwKICAicHJvZmlsZUlkIiA6ICJiYjdjY2E3MTA0MzQ0NDEyOGQzMDg5ZTEzYmRmYWI1OSIsCiAgInByb2ZpbGVOYW1lIiA6ICJsYXVyZW5jaW8zMDMiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjZiMWI1OWJjODkwYzljOTc1Mjc3ODdkZGUyMDYwMGM4Yjg2ZjZiOTkxMmQ1MWE2YmZjZGIwZTRjMmFhM2M5NyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
 
     private fun leather(item: net.minecraft.world.item.Item, rgb: Int, name: String): ItemStack =
         Terminals.named(item, name).also { it.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb)) }
@@ -126,13 +126,14 @@ object Masks {
             val index = when (slot) { in 54..80 -> slot - 45; in 81..89 -> slot - 81; else -> -1 }
             val clickedItem = if (index >= 0) sp.inventory.getItem(index) else ItemStack.EMPTY
             val id = SimItems.idOf(clickedItem)
-            if (id != null && id.endsWith("_MASK")) {
+            if (id != null && Loadouts.isHelmet(clickedItem)) {
                 val worn = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
                 sp.setItemSlot(EquipmentSlot.HEAD, clickedItem.copy())
                 sp.inventory.setItem(index, worn)
-                P3Sim.wornMaskS.value = if (id.endsWith("SPIRIT_MASK")) 0 else 1
+                if (id.endsWith("_MASK")) P3Sim.wornMaskS.value = if (id.endsWith("SPIRIT_MASK")) 0 else 1
+                Fight.applySpeed(sp)  // the Racing Helmet adds 100 speed
                 Sim.sound(SoundEvents.ARMOR_EQUIP_GENERIC.value(), 1f, 1f)
-                if (!P3Sim.realMasks) Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
+                if (!P3Sim.realMasks && id.endsWith("_MASK")) Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
             }
             draw()
             broadcastFullState()
@@ -166,7 +167,7 @@ object Masks {
         // Odin's Invincibility Timer restarts with ours (it only ever hears procs, not a sim restart).
         com.engineerclient.EngineerClient.mc.execute { com.engineerclient.misc.OdinMasksUsed.resetTimers() }
         reviveGen++
-        if (ghost) { ghost = false; saved = null; Sim.player?.let { p -> p.removeEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY); p.abilities.flying = false; p.abilities.mayfly = false; p.onUpdateAbilities() } }
+        if (ghost) { ghost = false; saved = null; Sim.player?.let { p -> restoreArmor(p); p.removeEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY); p.abilities.flying = false; p.abilities.mayfly = false; p.onUpdateAbilities() } }
     }
 
     private fun worn(): String? = Sim.player?.let { SimItems.idOf(it.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
@@ -232,7 +233,16 @@ object Masks {
         private set
     private var saved: List<ItemStack>? = null
     private var savedSlot = 0
+    private var savedArmor: Map<net.minecraft.world.entity.EquipmentSlot, ItemStack>? = null
     private var reviveGen = 0
+
+    private val ARMOR_SLOTS = listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET)
+
+    /** Puts the armour you died in back (INV-11: the ghost's armour slots are empty). */
+    private fun restoreArmor(p: ServerPlayer) {
+        savedArmor?.forEach { (slot, st) -> p.setItemSlot(slot, st) }
+        savedArmor = null
+    }
 
     private fun ghostItem(base: net.minecraft.world.item.Item, name: String, count: Int = 1) =
         ItemStack(base, count).also { it.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { s -> s.withItalic(false) }) }
@@ -242,16 +252,21 @@ object Masks {
         val inv = p.inventory
         saved = (0 until 36).map { inv.getItem(it).copy() }
         savedSlot = inv.selectedSlot
-        for (i in 0 until 36) inv.setItem(i, ItemStack.EMPTY)
-        // The ghost kit as recorded (DEATH-05): Haunt in hotbar 1, potions and axe, the map, Ghost Arrows. Inert here
-        // (the potions are class-dependent on Hypixel; the Haunt menu is not modelled).
-        inv.setItem(0, ghostItem(net.minecraft.world.item.Items.PLAYER_HEAD, "§aHaunt"))
-        inv.setItem(3, ghostItem(net.minecraft.world.item.Items.POTION, "§fStrength Potion"))
-        inv.setItem(5, ghostItem(net.minecraft.world.item.Items.IRON_AXE, "§fGhost Axe"))
-        inv.setItem(8, ghostItem(net.minecraft.world.item.Items.MAP, "§fMagical Map"))
-        inv.setItem(9, ghostItem(net.minecraft.world.item.Items.ARROW, "§fGhost Arrow", 10))
-        inv.selectedSlot = 0
-        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(0))
+        // The Hyperion stays where it is (recorded in 7 of 9 ghost kits); the rest of the bar and the main inventory go.
+        for (i in 0 until 36) if (SimItems.idOf(inv.getItem(i)) != "HYPERION") inv.setItem(i, ItemStack.EMPTY)
+        // The ghost kit as recorded (INV-11): Haunt in hotbar 1, the class's two abilities in 4 and 6, the Magical Map in 9, Ghost Arrows
+        // in the first inventory slot. The Haunt opens the "Teleport to Player" menu; the abilities are inert here. The selected slot stays.
+        inv.setItem(0, SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "HAUNT_ABILITY", "§aHaunt"))
+        val (a3, a5) = when (P3Sim.myClass) {
+            com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.MAGE -> SimItems.ghostStack(net.minecraft.world.item.Items.BRICKS, "MAGE_DUNGEON_ABILITY_1", "§aPop-up Wall") to SimItems.ghostStack(net.minecraft.world.item.Items.BLAZE_POWDER, "MAGE_DUNGEON_ABILITY_3", "§aFireball")
+            com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK -> SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "TANK_DUNGEON_ABILITY_1", "§aStun Potion") to SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "TANK_DUNGEON_ABILITY_2", "§aAbsorption Potion")
+            // Berserk is the recorded Warrior kit; Archer and Healer were never recorded, so they get it too.
+            else -> SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "WARRIOR_DUNGEON_ABILITY_1", "§aStrength Potion") to SimItems.ghostStack(net.minecraft.world.item.Items.IRON_AXE, "GHOST_THROWING_AXE", "§aGhost Axe")
+        }
+        inv.setItem(3, a3)
+        inv.setItem(5, a5)
+        inv.setItem(8, SimItems.ghostStack(net.minecraft.world.item.Items.FILLED_MAP, "MAP", "§aMagical Map"))
+        inv.setItem(9, SimItems.ghostStack(net.minecraft.world.item.Items.ARROW, null, "§fGhost Arrow", 10))
         p.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false, false))
         p.abilities.mayfly = true
         p.abilities.flying = true
@@ -263,6 +278,9 @@ object Masks {
         val delay = if (kotlin.random.Random.nextInt(10) < 6) kotlin.random.Random.nextInt(120, 126) else kotlin.random.Random.nextInt(119, 138)
         val gen = ++reviveGen
         Corpse.spawn(p, delay)
+        // The corpse wears what you had on; the ghost's own armour slots are empty (INV-11).
+        savedArmor = ARMOR_SLOTS.associateWith { p.getItemBySlot(it).copy() }
+        ARMOR_SLOTS.forEach { p.setItemSlot(it, ItemStack.EMPTY) }
         for (k in 0 until 5) Fight.later(delay - 100 + 20 * k, "revive title") {
             if (ghost && gen == reviveGen) Sim.title("§e§lBEING REVIVED", "§aYou will be revived in ${5 - k}s", 0, 30, 0)
         }
@@ -286,6 +304,7 @@ object Masks {
         p.abilities.mayfly = false
         p.onUpdateAbilities()
         saved?.let { s -> s.forEachIndexed { i, st -> p.inventory.setItem(i, st) } }
+        restoreArmor(p)
         saved = null
         p.inventory.selectedSlot = savedSlot
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(savedSlot))

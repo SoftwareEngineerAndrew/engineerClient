@@ -715,12 +715,26 @@ object SimItems {
     fun etherPuff(at: Vec3) = Sim.level.sendParticles(ParticleTypes.WITCH, at.x, at.y + 1.0, at.z, 25, 0.25, 1.0, 0.25, 0.0)
 
     /** A destroyed gate: about 15 explosion puffs, each with its own BLOCKS-source sound, at random gate-block corners (GATES-04/10). */
-    fun gatePuffs(centre: Vec3) {
+    fun gatePuffs(centre: Vec3, box: net.minecraft.world.phys.AABB) {
+        // FLOW-30: the blasts sit on random blocks across the whole gate (recorded 5-16 blocks from its centre, y115-134), not within 3 of the middle.
+        val alongX = box.xsize >= box.zsize
         repeat(8 + Random.nextInt(8) + Random.nextInt(8)) {
-            val c = Vec3(Math.floor(centre.x + Random.nextInt(-3, 4)), Math.floor(centre.y - 5 + Random.nextInt(0, 21)), Math.floor(centre.z + Random.nextInt(-3, 4)))
+            val a = if (alongX) Random.nextInt(box.minX.toInt() + 2, box.maxX.toInt() - 2) else Random.nextInt(box.minZ.toInt() + 2, box.maxZ.toInt() - 2)
+            val b = Random.nextInt(-1, 2)
+            val x = if (alongX) a.toDouble() else Math.floor(centre.x) + b
+            val z = if (alongX) Math.floor(centre.z) + b else a.toDouble()
+            val c = Vec3(x, Math.floor(centre.y - 3 + Random.nextInt(0, 19)), z)
             Sim.level.sendParticles(ParticleTypes.EXPLOSION, c.x, c.y, c.z, 3, 1.0, 1.0, 1.0, 0.0)
             Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49206f, c, net.minecraft.sounds.SoundSource.BLOCKS)
         }
+    }
+
+    /** A ghost-kit item (INV-11): [id] is its SkyBlock id, or null for none (the Ghost Arrow). */
+    fun ghostStack(base: Item, id: String?, name: String, count: Int = 1): ItemStack {
+        val s = if (id != null) item(base, id, name) else ItemStack(base).also { it.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { st -> st.withItalic(false) }) }
+        s.remove(DataComponents.UNBREAKABLE)
+        s.count = count
+        return s
     }
 
     fun idOf(s: ItemStack): String? = s.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getStringOr("id", "")?.takeIf { it.isNotEmpty() }
@@ -917,7 +931,8 @@ object SimItems {
         if (!simClient(level)) return false
         val at = pos.immutable()
         // A left click on a lever credits it, toggling nothing (LEV-01, LIGHTS-01).
-        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { SimServer.run("lever left") { ph.devices.leftClick(at) }; return true } }
+        // LIGHTS-08: with the Dungeonbreaker the click also reaches the mining refusal ("digging there" in S4's device).
+        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { SimServer.run("lever left") { ph.devices.leftClick(at) }; if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return true } }
         // Superboom: a left click on a gate blows it too.
         if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
             SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at) } } } }
@@ -1011,6 +1026,7 @@ object SimItems {
             "JERRY_STAFF" -> asClicked(p, "jerry", prior = true) { jerry(p) }
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
             "INFINITE_SPIRIT_LEAP" -> openLeap(p)
+            "HAUNT_ABILITY" -> openHaunt(p)
             // A right click in the air does nothing: Hypixel needs a block target (SUPERBOOM-02).
             "SUPERBOOM_TNT" -> {}
             in Bows.SHORTBOWS -> Bows.click(p, id, left = false)
@@ -1020,6 +1036,14 @@ object SimItems {
         // Keep the client's copy of the stack (the Infinileap is a head, a block item it may think it placed).
         p.containerMenu.broadcastChanges()
         return InteractionResult.SUCCESS
+    }
+
+    /** Vanilla's lever toggle (state flips, click sound, pitch by the new state); no chat, no credit. */
+    fun vanillaLeverToggle(pos: BlockPos) {
+        val st = Blocks.get(pos)?.takeIf { it.hasProperty(LeverBlock.POWERED) } ?: Sim.level.getBlockState(pos).takeIf { it.hasProperty(LeverBlock.POWERED) } ?: return
+        val on = !st.getValue(LeverBlock.POWERED)
+        Blocks.set(pos, st.setValue(LeverBlock.POWERED, on))
+        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
     }
 
     private fun useBlock(p: ServerPlayer, pos: BlockPos, id: String?): InteractionResult {
@@ -1032,7 +1056,9 @@ object SimItems {
         }
         val state = Sim.level.getBlockState(pos)
         // Anything else interactable (a stray lever or button) stays as built.
-        if (state.block is LeverBlock || state.block is ButtonBlock) return InteractionResult.SUCCESS
+        // LEV-02: a lever before its section is vanilla's toggle with the click sound, no chat.
+        if (state.block is LeverBlock) { Fight.afterPing("lever") { vanillaLeverToggle(pos) }; return InteractionResult.SUCCESS }
+        if (state.block is ButtonBlock) return InteractionResult.SUCCESS
         if (id != null) return use(p, id)
         return InteractionResult.SUCCESS
     }
@@ -1230,6 +1256,8 @@ object SimItems {
         Sim.level.sendParticles(ParticleTypes.EXPLOSION, p.x, p.eyeY, p.z, 1, 0.0, 0.0, 0.0, 0.0)
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, p.position())
         witherShield(p)
+        // HYP-13: no P3 cast ever hit Goldor (0 of 67 casts printed the hit line; the nearest wither was 8.7 blocks off).
+        if (Fight.phase is GoldorPhase) return
         val box = net.minecraft.world.phys.AABB(p.x - 6, p.eyeY - 6, p.z - 6, p.x + 6, p.eyeY + 7, p.z + 6)
         val n = Sim.level.getEntitiesOfClass(net.minecraft.world.entity.boss.wither.WitherBoss::class.java, box) { it.isAlive }.size
         if (n == 0) return
@@ -1491,6 +1519,7 @@ object SimItems {
     /** The core entrance's gold door (the only gold you can mine). */
     private val CORE_DOOR = AABB(52.0, 115.0, 54.0, 57.0, 122.0, 55.0)
     /** The inner chamber under the core platform: you can mine into it, not out of it. */
+    private val S4_DEVICE = AABB(55.0, 132.0, 142.0, 65.0, 137.0, 148.0)
     private val INNER = AABB(39.0, 0.0, 99.0, 70.0, 113.0, 130.0)
 
     /** Why Hypixel refuses [pos]: a chat line, "" (silently), or null (it breaks). */
@@ -1498,6 +1527,8 @@ object SimItems {
         val b = s.block
         val c = Vec3.atCenterOf(pos)
         // No mining rule for "leaving the inner chamber": it is a walking boundary on Hypixel (GoldorPhase.innerChamber; BREAKER-03).
+        // BREAKER-04: S4's device area (x55-64, y132-136, z142-147) says "digging there" for its lamps, levers and bedrock; the same levers elsewhere say "that block".
+        if (S4_DEVICE.contains(c) && (b is LeverBlock || b is ButtonBlock || b == net.minecraft.world.level.block.Blocks.REDSTONE_LAMP || b == net.minecraft.world.level.block.Blocks.BEDROCK)) return THERE
         if (s.getDestroySpeed(Sim.level, pos) < 0) return THAT_BLOCK
         if (b == net.minecraft.world.level.block.Blocks.BARRIER || b == net.minecraft.world.level.block.Blocks.BEDROCK) return THAT_BLOCK
         if (b is net.minecraft.world.level.block.CommandBlock) return THAT_BLOCK
@@ -1520,7 +1551,7 @@ object SimItems {
     private val broken = ArrayDeque<Broken>()
     /** The last 20 breaks: the 21st one schedules the oldest of them back. */
     private val window = ArrayDeque<Broken>()
-    private var refusedSaidAt = -100
+    private var refusedSaidAt = -100 // BREAKER-12: one 20-tick throttle shared by the refusal and no-charges lines
     private var noChargesSaidAt = -100
 
     private fun resetBreaker() { charges = MAX_CHARGES; refillAt = 0; refillStep = 0; broken.clear(); window.clear(); refusedSaidAt = -100; noChargesSaidAt = -100 }
@@ -1537,7 +1568,7 @@ object SimItems {
         val why = refusal(p, pos, s)
         if (why != null || charges <= 0) {
             p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos))
-            if (why == null) { if (now - noChargesSaidAt >= 20) { noChargesSaidAt = now; Sim.chat(NO_CHARGES) } }
+            if (why == null) { if (now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(NO_CHARGES) } }
             else if (why.isNotEmpty() && now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(why) }
             return
         }
@@ -1647,6 +1678,43 @@ object SimItems {
         val bots = Party.bots().filter { it.entity != null }
         // The menu opens one RTT after the use (rec2: 1 tick at the recorded ping).
         Fight.afterPing("leapOpen") { p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap"))) }
+    }
+
+    /** The ghost's Haunt: the "Teleport to Player" menu (LEAP-12), opened one RTT after the click. */
+    private fun openHaunt(p: ServerPlayer) {
+        val bots = Party.bots().filter { it.entity != null }
+        Fight.afterPing("hauntOpen") { if (Masks.ghost) p.openMenu(SimpleMenuProvider({ id, inv, _ -> HauntMenu(id, inv, bots) }, Component.literal("Teleport to Player"))) }
+    }
+
+    /** Hypixel's ghost teleport window: teammates' heads in slots 11-15, a click teleports you to them (no cooldown). */
+    class HauntMenu(id: Int, inv: Inventory, val bots: List<Party.Bot>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
+        init {
+            for (i in 0 until 36) container.setItem(i, ItemStack.EMPTY)
+            bots.sortedBy { it.slot }.forEachIndexed { i, b ->
+                val h = ItemStack(Items.PLAYER_HEAD)
+                h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(Party.profile(b)))
+                h.set(DataComponents.CUSTOM_NAME, Component.literal("${rankColour(b.name)}${b.name}").withStyle { it.withItalic(false) })
+                h.set(DataComponents.LORE, ItemLore(listOf("§7Click to teleport to this player!", "", "§7Health: §a100%", "", "§eClick to teleport!").map { Component.literal(it).withStyle { st -> st.withItalic(false) } }))
+                container.setItem(listOf(11, 12, 14, 15).getOrElse(i) { 16 }, h)
+            }
+        }
+
+        override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
+            if (slot !in 11..16) return
+            val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
+            val bot = bots.firstOrNull { it.name == name } ?: return
+            val sp = p as ServerPlayer
+            Fight.afterPing("haunt") {
+                sp.closeContainer()
+                val e = bot.pos
+                Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
+                Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1.095f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
+                Sim.chatStyled("§aTeleported you to ${bot.name}!")
+            }
+        }
+
+        override fun quickMoveStack(p: Player, slot: Int): ItemStack = ItemStack.EMPTY
+        override fun stillValid(p: Player) = true
     }
 
     /** Hypixel's Spirit Leap window: teammates' heads in slots 11-15, a click leaps (8 ticks, as measured). */

@@ -37,8 +37,21 @@ object Spots {
             // Your first S1 terminal as your role lists it (Tank's 21: T2), else your first S1 job in menu order (the Mage's levers).
             val first = if (P3Plan.isMine("S4 Target")) "S4 Target"
                 else P3Plan.mine().firstOrNull { it.startsWith("S1 T") } ?: P3Plan.jobsIn(1).firstOrNull { P3Plan.isMine(it) }
-            first?.let { j -> Party.STANDS[j]?.let { Spot(j, it.x, it.y, it.z, if (j == "S4 Target") 0f else 180f) } } ?: SS
+            first?.let { j -> Party.STANDS[j]?.let { startLook(j).let { l -> Spot(j, it.x, it.y, it.z, l.first, l.second) } } } ?: SS
         }
+    }
+
+    /**
+     * How you face at P3's first tick on each job spot, as recorded (P3START-08): the S1 levers yaw 357-25 / pitch -22..-16, the S4 target 281-286 / 17-21,
+     * T4 about 10-44 / 0-2 (3 runs), T2 -181 / 48 and Simon Says -131 / 1.4 (one teammate each, PF); the rest face 180 / 0 (not measured).
+     */
+    private fun startLook(job: String): Pair<Float, Float> = when (job) {
+        "S1 east lever", "S1 west lever" -> 10f to -19f
+        "S4 Target" -> 283f to 19f
+        "S1 T4" -> 40f to 1f
+        "S1 T2" -> 179f to 48f
+        "S1 SS" -> -131f to 1.4f
+        else -> 180f to 0f
     }
 
     /** The menu's teleports, in order. */

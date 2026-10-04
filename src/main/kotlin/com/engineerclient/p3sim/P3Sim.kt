@@ -52,7 +52,7 @@ object P3Sim : Module(
     val terminalS = +SelectorSetting("Terminals", "Random", arrayListOf("Random", "Order", "Panes", "Rubix", "Starts With", "Select", "Melody"), desc = "Every terminal as this type, or random as on Hypixel.")
     val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
     val jitterS = +BooleanSetting("Ping Jitter", true, desc = "Simulated Ping varies like a real connection: usually a few ms either way, now and then 30+ ms more, rarely a lag spike (spread recorded on Hypixel). Off: a fixed delay.")
-    val goldorKillS = +NumberSetting("Goldor Kill Time", 57, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of 201 recorded kills: 57).")
+    val goldorKillS = +NumberSetting("Goldor Kill Time", 43, 10, 120, 1, unit = " ticks", desc = "How long after Goldor starts flying to the core his \"....\" line comes, i.e. he dies (median of 31 recorded runs: 43, range 17-74).")
     val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at 100% attack speed, on every bow and whatever Terror armor you wear (recordings: Terminator 5, Mosquito 5). A click inside it fires when it ends. Nasty Bite has its own 10.")
     val terrorS = +SelectorSetting("Terror Armor", "3 Pieces", arrayListOf("Off", "3 Pieces", "4 Pieces"), desc = "Hydra Strike: +1 stack per boss hit (every 0.2 s at most), one lost every 8 s (3 pieces, a mask on your head) or 11 s (4 pieces) without a hit; +1% arrow speed a stack and, at 10, two more arrows at ±8°. Off: no stacks.")
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 9, 0, 10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
@@ -128,6 +128,10 @@ object P3Sim : Module(
             dispatcher.register(net.minecraft.commands.Commands.literal("stats")
                 .requires { it.server === SimServer.server }
                 .executes { ctx -> ctx.source.player?.let { p -> Masks.openStats(p) }; 1 })
+            // /loadouts: Hypixel's Loadouts window (recorded: Andrew types /loadouts), same sim-server-only rule.
+            dispatcher.register(net.minecraft.commands.Commands.literal("loadouts")
+                .requires { it.server === SimServer.server }
+                .executes { ctx -> ctx.source.player?.let { p -> Loadouts.open(p) }; 1 })
         }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             val cmd = ClientCommands.literal("p3sim").executes { openMenuOrSim(); 1 }
