@@ -470,25 +470,27 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     companion object {
         /**
-         * Death-tick zones (feet, y 100-160), by section (index 0: the east strip past S1's wall, part of no
-         * section). From Andrew's 2026-10-04 probes: S1/S2 at z 122.0 (safe 121.99, hit 122.30), the north strip
-         * to z 146 and x -6..114, S3's east edge x 18, S4 z 26..50 from x -6, the east strip x 113-114; feet y 106 to 146 (y 145 hit,
-         * 146 never, 105.9 never); S1 x 90..113, z 37..121 (z 121.5-121.7 never hit). All on block edges; S1's south edge only
-         * bounded (no higher than 37.7) and S1 vs the east strip unresolved.
+         * Death-tick zones (feet, y 106 to 146): (section, box) pairs, section 0 for the east strip past S1's wall.
+         * Section boundaries sit on the gates the way the probed S1/S2 one does: gate 1/2's blocks span z 121-124 with
+         * a thin S1-side layer at 121, and S2 starts at z 122, the main gate's S1-side face (safe 121.99, hit 122.30).
+         * So S2/S3 is x 19 (gate 2/3 x 16-19, thin S2-side layer at 19) and S3/S4 is z 51 (gate 3/4 z 48-51, thin
+         * S3-side layer at 51). Probed edges (Andrew, 2026-10-04): north strip to z 146 and x -6..114, S3's inner
+         * edge x 18, S4 z 26..50 east of the corridor, east strip x 113-114, y 145 hit / 146 never / 105.9 never,
+         * S1 x 90..113, z 37..121 (z 121.5-121.7 never hit). All on block edges; S1's south edge only bounded
+         * (no higher than 37.7) and S1 vs the east strip unresolved.
          */
-        val DT_ZONES = arrayOf(
-            AABB(113.0, 106.0, 26.0, 114.0, 146.0, 146.0),
-            AABB(90.0, 106.0, 37.0, 113.0, 146.0, 121.0),
-            AABB(-6.0, 106.0, 122.0, 114.0, 146.0, 146.0),
-            AABB(-6.0, 106.0, 50.0, 18.0, 146.0, 122.0),
-            AABB(-6.0, 106.0, 26.0, 113.0, 146.0, 50.0),
+        val DT_ZONES: List<Pair<Int, AABB>> = listOf(
+            1 to AABB(90.0, 106.0, 37.0, 113.0, 146.0, 121.0),
+            2 to AABB(19.0, 106.0, 122.0, 114.0, 146.0, 146.0),
+            3 to AABB(-6.0, 106.0, 122.0, 19.0, 146.0, 146.0),
+            3 to AABB(-6.0, 106.0, 51.0, 18.0, 146.0, 122.0),
+            4 to AABB(-6.0, 106.0, 26.0, 18.0, 146.0, 51.0),
+            4 to AABB(18.0, 106.0, 26.0, 113.0, 146.0, 50.0),
+            0 to AABB(113.0, 106.0, 26.0, 114.0, 146.0, 146.0),
         )
 
-        /** The zone (1-4, 0 for the east strip) [v] is in, or -1 outside them all. */
-        fun dtZone(v: Vec3): Int {
-            for (i in 1..4) if (DT_ZONES[i].contains(v)) return i
-            return if (DT_ZONES[0].contains(v)) 0 else -1
-        }
+        /** The section (1-4, 0 for the east strip) whose zone [v] is in, or -1 outside them all. */
+        fun dtZone(v: Vec3): Int = DT_ZONES.firstOrNull { it.second.contains(v) }?.first ?: -1
 
         /** Where the core counts as entered (DungeonSplits.everyoneInCore). */
         val CORE_BOX = AABB(39.0, 0.0, 54.0, 71.0, 155.5, 118.0)
