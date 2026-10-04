@@ -120,6 +120,10 @@ object SimItems {
         "§7Shoot an extra arrow dealing §a4%§7 of the", "§7first arrow's damage.", "§9Flame II", "",
         "§6Ability: Nasty Bite  §e§lLEFT CLICK", "§7Shoot an enhanced shot.", "§8Vitality Cost: §410", "", "§7Shortbow: Instantly shoots!", "", "§6§lLEGENDARY BOW"), glint = true)
 
+    /** A vanilla bow (draw it, release it) with Duplex; Hypixel's quiver means it needs no arrows ([quiverArrow]). */
+    val LAST_BREATH get() = item(Items.BOW, Bows.LAST_BREATH, "§6Last Breath", listOf("§9Duplex I", "§7Shoot an extra arrow dealing §a4%§7 of the",
+        "§7first arrow's damage.", "", "§7Draw and release, like a vanilla bow.", "", "§6§lLEGENDARY BOW"), glint = true)
+
     /** Terror armor's chestplate, leggings and boots (Hypixel's dyes); the helmet slot is the masks'. */
     private fun terror(base: Item, id: String, name: String, rgb: Int) = item(base, id, "§6Spiked Terror $name", listOf(
         "§6Tiered Bonus: Hydra Strike (${P3Sim.terrorPieces}/4)", "§7Every 0.2s, arrow attacks grant 1", "§7stack of §6⁑ Hydra Strike§7. Lose 1 stack",
@@ -143,7 +147,7 @@ object SimItems {
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         // 9: the spare mask (Masks.equip, Real Masks).
-        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO)
+        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Masks.equip(p)
@@ -222,6 +226,31 @@ object SimItems {
         // The client breaks it at once (as Hypixel's do); the server keeps it or sends it back.
         if (state.getDestroySpeed(level, at) >= 0) level.destroyBlock(at, false)
         SimServer.run("dungeonbreaker") { Sim.player?.let { p -> Fight.afterPing("dungeonbreaker") { mine(p, at) } } }
+        return true
+    }
+
+    /**
+     * A drawn bow's arrows, in the sim (QuiverSimMixin on Player.getProjectile, client and server): Hypixel draws from your
+     * quiver, so Last Breath draws with no arrows in your inventory. Null everywhere else.
+     */
+    @JvmStatic
+    fun quiverArrow(p: Player, weapon: ItemStack): ItemStack? {
+        if (idOf(weapon) != Bows.LAST_BREATH) return null
+        val level = p.level()
+        val sim = if (level.isClientSide) P3Sim.inSim else SimServer.isSimLevel(level)
+        return if (sim) ItemStack(Items.ARROW) else null
+    }
+
+    /**
+     * Last Breath released, on the sim's server (LastBreathSimMixin on BowItem.releaseUsing): vanilla's power for the time
+     * drawn, then Bows fires Hypixel's arrows (Duplex, Terror) instead of vanilla's one. Null: not ours, vanilla goes on.
+     */
+    @JvmStatic
+    fun releaseBow(stack: ItemStack, level: Level, entity: net.minecraft.world.entity.LivingEntity, remainingTime: Int): Boolean? {
+        if (idOf(stack) != Bows.LAST_BREATH || !simServer(level) || entity !is ServerPlayer) return null
+        val power = net.minecraft.world.item.BowItem.getPowerForTime(stack.getUseDuration(entity) - remainingTime)
+        if (power < 0.1f) return false
+        Bows.release(entity, Bows.LAST_BREATH, power)
         return true
     }
 

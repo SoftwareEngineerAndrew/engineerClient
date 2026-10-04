@@ -10,6 +10,8 @@
     "PortalSimMixin",
     "DungeonbreakerSimMixin",
     "ShortbowSimMixin",
+    "QuiverSimMixin",
+    "LastBreathSimMixin",
     "ArcherDropSimMixin",
     "BlockChangeSourceMixin",
     "BlurRadiusMixin",

@@ -38,7 +38,7 @@ object I4Aims : Module(
         com.odtheking.odin.features.ModuleManager.saveConfigurations()
     }
 
-    private val BOWS = setOf("TERMINATOR", "MOSQUITO_BOW", "ITEM_SPIRIT_BOW", "JUJU_SHORTBOW", "ARTISANAL_SHORTBOW")
+    private val BOWS = setOf("TERMINATOR", "MOSQUITO_BOW", "ITEM_SPIRIT_BOW", "JUJU_SHORTBOW", "ARTISANAL_SHORTBOW", "LAST_BREATH")
     private val STACKS = Regex("(\\d+)⁑")
     private val CODES = Regex("§.")
 

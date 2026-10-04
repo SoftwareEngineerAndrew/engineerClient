@@ -46,6 +46,8 @@ object Bows {
     const val TERMINATOR = "TERMINATOR"
     const val SPIRIT = "ITEM_SPIRIT_BOW"
     const val MOSQUITO = "MOSQUITO_BOW"
+    /** A vanilla bow (drawn and released) with Duplex, legendary. */
+    const val LAST_BREATH = "LAST_BREATH"
     val SHORTBOWS = setOf(TERMINATOR, SPIRIT, MOSQUITO)
 
     private const val NASTY_BITE_COOLDOWN = 10
@@ -55,7 +57,8 @@ object Bows {
 
     private fun aim(p: ServerPlayer) = Aim(p.position(), p.yRot, p.xRot, p.isShiftKeyDown)
 
-    private class Click(val bow: String, val left: Boolean, val aim: Aim)
+    /** A click (or a drawn bow's release, at [power] 0.1-1 of a full draw). */
+    private class Click(val bow: String, val left: Boolean, val aim: Aim, val power: Float = 1f)
     private val clicks = ArrayList<Click>()
     private class Later(val at: Int, val run: () -> Unit)
     private val later = ArrayList<Later>()
@@ -89,6 +92,15 @@ object Bows {
         Fight.afterPing("shortbow") { if (Sim.player === p && !p.isRemoved) clicks += Click(bow, left, a) }
     }
 
+    /**
+     * A drawn bow released at [power] (vanilla's: 0.1-1 by how long it was drawn): it fires then, at power x 3.0, a
+     * crit at full draw, with no cooldown of its own. It lands after the simulated ping like a click.
+     */
+    fun release(p: ServerPlayer, bow: String, power: Float) {
+        val a = aim(p)
+        Fight.afterPing("bow") { if (Sim.player === p && !p.isRemoved) clicks += Click(bow, false, a, power) }
+    }
+
     /** End of every server tick (after entities moved): clicks, buffered clicks, Duplex releases, Hydra Strike. */
     fun tick() {
         val p = Sim.player ?: return
@@ -98,6 +110,7 @@ object Bows {
         pendingShot?.let { bow -> if (now >= shotReady) { pendingShot = null; if (held == bow) fire(p, bow, false, past(p)) } }
         if (pendingBite && now >= biteReady) { pendingBite = false; if (held == MOSQUITO) fire(p, MOSQUITO, true, past(p)) }
         for (c in clicks) {
+            if (c.bow !in SHORTBOWS) { fire(p, c.bow, false, c.aim, c.power); continue }
             if (c.bow == MOSQUITO && c.left) { if (now >= biteReady) fire(p, MOSQUITO, true, c.aim) else pendingBite = true }
             else if (now >= shotReady) fire(p, c.bow, false, c.aim) else pendingShot = c.bow
         }
@@ -119,18 +132,19 @@ object Bows {
         return if (d <= 0 || history.isEmpty()) aim(p) else history[(history.size - d).coerceAtLeast(0)]
     }
 
-    private fun fire(p: ServerPlayer, bow: String, nasty: Boolean, a: Aim) {
+    private fun fire(p: ServerPlayer, bow: String, nasty: Boolean, a: Aim, power: Float = 1f) {
         val now = Fight.serverTick
         val r = java.util.Random()
         val noise = Vec3(r.nextGaussian(), r.nextGaussian(), r.nextGaussian()).scale(0.0075)
         val duplex = if (Random.nextDouble() < 0.29) 3 else 4
-        for (arrow in ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex)) {
-            if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null)
+        for (arrow in ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex, 3.0 * power)) {
+            if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null)?.let { if (arrow.owned && bow == LAST_BREATH && power >= 1f) it.isCritArrow = true }
             else later += Later(now + arrow.delay) { launch(arrow.from, arrow.at, arrow.v) }
         }
         // Hypixel's two Duplex copies each make a quieter shoot sound the tick they launch.
-        if (bow == MOSQUITO) later += Later(now + duplex + 1) { repeat(2) { sound(SoundEvents.ARROW_SHOOT, SoundSource.MASTER, 0.5f, 0.7f) } }
-        sound(SoundEvents.ARROW_SHOOT, SoundSource.NEUTRAL, 1f, 1f / (Random.nextFloat() * 0.4f + 1.2f) + 0.5f)
+        if (bow in ShotPlan.DUPLEX) later += Later(now + duplex + 1) { repeat(2) { sound(SoundEvents.ARROW_SHOOT, SoundSource.MASTER, 0.5f, 0.7f) } }
+        sound(SoundEvents.ARROW_SHOOT, SoundSource.NEUTRAL, 1f, 1f / (Random.nextFloat() * 0.4f + 1.2f) + 0.5f * power)
+        if (bow !in SHORTBOWS) return
         val stack = p.mainHandItem
         if (nasty) { biteReady = now + NASTY_BITE_COOLDOWN; p.cooldowns.addCooldown(stack, NASTY_BITE_COOLDOWN) }
         else { shotReady = now + P3Sim.shortbowCooldown; p.cooldowns.addCooldown(stack, P3Sim.shortbowCooldown) }
@@ -278,13 +292,17 @@ object ShotPlan {
         return Vec3(v.x * c - v.z * s, v.y, v.x * s + v.z * c)
     }
 
-    fun plan(bow: String, pos: Vec3, yaw: Float, pitch: Float, crouch: Boolean, stacks: Int, noise: Vec3, duplexDelay: Int): List<Planned> {
+    /** Bows with Duplex: an extra arrow replaying the main one's tick-2 move 3-4 ticks later. */
+    val DUPLEX = setOf(Bows.MOSQUITO, Bows.LAST_BREATH)
+
+    /** [speed]: the launch speed (3.0; a drawn bow's power x 3.0). */
+    fun plan(bow: String, pos: Vec3, yaw: Float, pitch: Float, crouch: Boolean, stacks: Int, noise: Vec3, duplexDelay: Int, speed: Double = 3.0): List<Planned> {
         val k = 1 + 0.01 * stacks
         val y = Math.toRadians(yaw.toDouble())
         val dir = look(yaw, pitch)
         // The main arrow: from your eye - 0.1, a hair to your right, at 3 x (look + noise); it moves that tick (pos1,
         // v0 = 0.99u - g), and on the next its velocity is k*v0.
-        val u = dir.add(noise).scale(3.0)
+        val u = dir.add(noise).scale(speed)
         val from = pos.add(-cos(y) * RIGHT, (if (crouch) 1.27 else 1.62) - 0.1, -sin(y) * RIGHT)
         val pos1 = from.add(u)
         val move = Vec3(0.99 * u.x, 0.99 * u.y - G, 0.99 * u.z).scale(k)
@@ -298,9 +316,9 @@ object ShotPlan {
                 val side = pos1.add(0.0, -0.5, 0.0)
                 for (s in listOf(5.5, -5.5)) out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0)
             }
-            // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later (Hypixel's two copies are identical).
-            Bows.MOSQUITO -> out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay)
         }
+        // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later (Hypixel's two copies are identical).
+        if (bow in DUPLEX) out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay)
         return out
     }
 }
