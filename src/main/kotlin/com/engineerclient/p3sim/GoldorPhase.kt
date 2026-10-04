@@ -433,7 +433,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             boss = BossWither("Goldor", pos, inv = 0, armoured = false)
             BossBar.show("§c§lGoldor", 1f)
             for (g in GIANTS) {
-                val e = Giant(EntityType.GIANT, Sim.level)
+                val e = SimGiant(Sim.level)
                 e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
                 e.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.GOLDEN_SWORD))
                 e.snapTo(g.x, g.y, g.z, 0f, 0f)
@@ -549,6 +549,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 return Vec3(a.x + (b.x - a.x) * f, Y_FROM[i] + (Y_TO[i] - Y_FROM[i]) * f, a.z + (b.z - a.z) * f)
             }
         }
+    }
+
+    /** A greatsword giant that stays in the peaceful sim world (vanilla deletes monsters there, as it does [SimWither]s). */
+    class SimGiant(level: net.minecraft.world.level.Level) : Giant(EntityType.GIANT, level) {
+        override fun checkDespawn() {}
     }
 
     /** Lever blocks: our own, so the click is ours (no redstone). */

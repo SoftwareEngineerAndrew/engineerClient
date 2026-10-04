@@ -31,7 +31,7 @@ import net.minecraft.world.level.block.Blocks as B
  * the phase; no AI.
  */
 class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = true, tagDelay: Int = 0) {
-    val e: WitherBoss = WitherBoss(EntityType.WITHER, Sim.level).also { w ->
+    val e: WitherBoss = SimWither(Sim.level).also { w ->
         w.setNoAi(true); w.isSilent = true; w.isInvulnerable = true; w.setNoGravity(true)
         w.invulnerableTicks = inv
         w.health = if (armoured) 1f else w.maxHealth
@@ -128,6 +128,14 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
         /** From [Sim.boss]: the line's stand over that boss, while it is up. */
         fun speak(name: String, line: String) { live[name]?.takeIf { !it.removed && !it.e.isRemoved }?.speak(line) }
     }
+}
+
+/**
+ * A boss's wither. The sim world is peaceful (no mobs of its own), and vanilla deletes every wither in a peaceful
+ * world each tick; this one stays. With no AI it never charges up, shoots or breaks blocks.
+ */
+class SimWither(level: net.minecraft.world.level.Level) : WitherBoss(EntityType.WITHER, level) {
+    override fun checkDespawn() {}
 }
 
 /**
