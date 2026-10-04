@@ -33,7 +33,8 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
     private val tag: ArmorStand = ArmorStand(EntityType.ARMOR_STAND, Sim.level).also { s ->
         s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         Station.setMarker(s)
-        s.setCustomName(Sim.legacy("§c§l﴾  $name ﴿"))
+        // Exactly as sent for Maxor, Storm and Goldor (p2storm/stormvis.mjs, Better PF `c`).
+        s.setCustomName(Sim.legacy("§e\uFD3E §r§8\uE085§r§5\uE073 §r§c§l$name§r §e\uFD3F"))
         s.isCustomNameVisible = true
         s.snapTo(at.x, at.y + TAG_Y, at.z, 0f, 0f)
         Sim.spawn(s)
