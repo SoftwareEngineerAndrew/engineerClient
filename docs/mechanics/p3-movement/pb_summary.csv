@@ -1,0 +1,248 @@
+leg_from,leg_to,count,n_onfoot,n_settled,foot_pb_method,foot_pb_path_blocks,foot_pb_run,foot_pb_seconds,foot_pb_server,foot_pb_start_kind,foot_pb_start_n,foot_pb_ticks,foot_settled_pb_method,foot_settled_pb_path_blocks,foot_settled_pb_run,foot_settled_pb_seconds,foot_settled_pb_server,foot_settled_pb_start_kind,foot_settled_pb_start_n,foot_settled_pb_ticks,any_pb_method,any_pb_path_blocks,any_pb_run,any_pb_seconds,any_pb_server,any_pb_start_kind,any_pb_start_n,any_pb_ticks
+at arrows,at s3 left lever,1,1,0,walk+lava-contact,69.6,1a6c46,8.35,alpha.hypixel.net,pt,21033,167,,,,,,,,,walk+lava-contact,69.6,1a6c46,8.35,alpha.hypixel.net,pt,21033,167
+at arrows,at s3 t3,3,0,0,,,,,,,,,,,,,,,,,walk+leap,5.2,edfebd,0.5,alpha.hypixel.net,pt,82643,10
+at ee2,at s1 left lever,1,1,0,sprint+bonzox4+lava-contact,190.0,7130bd,14.3,alpha.hypixel.net,pt,5705,286,,,,,,,,,sprint+bonzox4+lava-contact,190.0,7130bd,14.3,alpha.hypixel.net,pt,5705,286
+at ee2,at s2 high path,23,18,4,sprint+bonzo,24.2,edfebd,1.1,alpha.hypixel.net,pt,61291,22,sprint+bonzo,25.0,207123,1.2,alpha.hypixel.net,settled,10575,24,sprint+bonzo,24.2,edfebd,1.1,alpha.hypixel.net,pt,61291,22
+at ee2,at s2 left lever,1,0,0,,,,,,,,,,,,,,,,,sprint+leap,15.5,3e7a14,0.9,stuck.hypixel.net,pt,33144,18
+at ee2,at s2 mid high,4,4,1,sprint,13.5,edfebd,0.7,alpha.hypixel.net,pt,61602,14,sprint,16.7,edfebd,1.0,alpha.hypixel.net,settled,62327,20,sprint,13.5,edfebd,0.7,alpha.hypixel.net,pt,61602,14
+at ee2,at s2 mid low,1,1,0,sprint+lava-contact,56.5,ed1c25,2.75,None,pt,66206,55,,,,,,,,,sprint+lava-contact,56.5,ed1c25,2.75,None,pt,66206,55
+at ee2,at s2 right lever,3,3,0,sprint+bonzo,34.0,edfebd,1.95,alpha.hypixel.net,pt,61911,39,,,,,,,,,sprint+bonzo,34.0,edfebd,1.95,alpha.hypixel.net,pt,61911,39
+at ee2,at s2 t1,2,2,0,sprint,30.3,edfebd,1.4,alpha.hypixel.net,pt,61134,28,,,,,,,,,sprint,30.3,edfebd,1.4,alpha.hypixel.net,pt,61134,28
+at ee2,at s2 t2,18,18,0,sprint,16.1,edfebd,0.85,alpha.hypixel.net,pt,60922,17,,,,,,,,,sprint,16.1,edfebd,0.85,alpha.hypixel.net,pt,60922,17
+at ee2,at s2 t3,2,1,0,sprint+bonzo+jerry,55.9,1762cc,3.1,stuck.hypixel.net,pt,25356,62,,,,,,,,,sprint+bonzo+jerry,55.9,1762cc,3.1,stuck.hypixel.net,pt,25356,62
+at ee2,at s2 t4,2,2,1,sprint,36.9,edfebd,1.85,alpha.hypixel.net,settled,62173,37,sprint,36.9,edfebd,1.85,alpha.hypixel.net,settled,62173,37,sprint,36.9,edfebd,1.85,alpha.hypixel.net,settled,62173,37
+at ee2,at s2 t5,12,10,0,sprint,26.1,2b8212,1.25,stuck.hypixel.net,pt,13534,25,,,,,,,,,sprint,26.1,2b8212,1.25,stuck.hypixel.net,pt,13534,25
+at ee2,at ss,2,1,0,sprint+lava-contact,55.4,db7289,3.4,stuck.hypixel.net,pt,106286,68,,,,,,,,,sprint+lava-contact,55.4,db7289,3.4,stuck.hypixel.net,pt,106286,68
+at ee3,at ee4,5,0,1,,,,,,,,,,,,,,,,,sprint+leap+lava-contact,27.2,afb98f,1.7,stuck.hypixel.net,pt,67332,34
+at ee3,at s2 left lever,3,1,0,walk+bonzox7+jerryx9+lava-contact,572.6,7130bd,56.4,alpha.hypixel.net,pt,3755,1128,,,,,,,,,leap,2.6,edfebd,0.15,alpha.hypixel.net,pt,80689,3
+at ee3,at s2 t2,1,0,0,,,,,,,,,,,,,,,,,sprint+leap,21.6,edfebd,2.25,alpha.hypixel.net,pt,75143,45
+at ee3,at s3 t1,4,4,0,sprint,4.1,ae3d84,0.2,stuck.hypixel.net,pt,402077,4,,,,,,,,,sprint,4.1,ae3d84,0.2,stuck.hypixel.net,pt,402077,4
+at ee3,at s3 t3,2,2,0,sprint+bonzo+lava-contact,41.3,afb98f,2.25,stuck.hypixel.net,pt,67187,45,,,,,,,,,sprint+bonzo+lava-contact,41.3,afb98f,2.25,stuck.hypixel.net,pt,67187,45
+at ee3,at s3 t4,3,2,1,sprint+lava-contact,34.5,1a6c46,2.2,alpha.hypixel.net,pt,22037,44,sprint+lava-contact,37.9,ed1c25,2.35,None,settled,66382,47,sprint+lava-contact,34.5,1a6c46,2.2,alpha.hypixel.net,pt,22037,44
+at ee3,at s4 t1,1,0,0,,,,,,,,,,,,,,,,,walk+leap+bonzox6+lava-contact,157.7,3d6f29,9.75,stuck.hypixel.net,pt,77345,195
+at ee4,at s2 t2,1,0,0,,,,,,,,,,,,,,,,,leap,0.3,edfebd,0.55,alpha.hypixel.net,pt,85279,11
+at ee4,at s2 t3,1,0,1,,,,,,,,,,,,,,,,,walk+leap+lava-contact,35.3,207123,3.85,alpha.hypixel.net,settled,12209,77
+at ee4,at s4 left lever,1,1,1,walk+lava-contact,65.7,edfebd,4.75,alpha.hypixel.net,settled,32033,95,walk+lava-contact,65.7,edfebd,4.75,alpha.hypixel.net,settled,32033,95,walk+lava-contact,65.7,edfebd,4.75,alpha.hypixel.net,settled,32033,95
+at ee4,at s4 t1,11,11,5,sprint,18.5,207123,0.8,alpha.hypixel.net,pt,15909,16,sprint,20.0,207123,0.85,alpha.hypixel.net,settled,16008,17,sprint,18.5,207123,0.8,alpha.hypixel.net,pt,15909,16
+at ee4,at s4 t2,1,0,0,,,,,,,,,,,,,,,,,sprint+teleport(DUNGEONBREAKER)+lava-contact,38.3,ed1c25,1.55,None,pt,66609,31
+at ee4,at s4 t3,12,12,4,sprint,23.8,207123,0.85,alpha.hypixel.net,settled,16727,17,sprint,23.8,207123,0.85,alpha.hypixel.net,settled,16727,17,sprint,23.8,207123,0.85,alpha.hypixel.net,settled,16727,17
+at ee4,in core,66,62,3,sprint,1.8,3066a9,0.05,stuck.hypixel.net,pt,122062,1,walk,3.4,3066a9,0.15,stuck.hypixel.net,settled,122008,3,sprint,1.8,3066a9,0.05,stuck.hypixel.net,pt,122062,1
+at s1 left lever,at ee2,16,1,0,sprint+lava-contact,93.1,edfebd,5.4,alpha.hypixel.net,pt,60529,108,,,,,,,,,sprint+teleport(DUNGEONBREAKER)+lava-contact,85.0,238cdb,5.1,stuck.hypixel.net,pt,380610,102
+at s1 left lever,at s1 right lever,9,9,0,sprint,8.7,edfebd,0.45,alpha.hypixel.net,pt,58299,9,,,,,,,,,sprint,8.7,edfebd,0.45,alpha.hypixel.net,pt,58299,9
+at s1 left lever,at s1 right path,7,3,0,sprint,12.2,edfebd,0.55,alpha.hypixel.net,pt,58678,11,,,,,,,,,leap,0.4,edfebd,0.45,alpha.hypixel.net,pt,57514,9
+at s1 left lever,at s1 t1,3,2,1,sprint+bonzo,45.2,edfebd,2.35,alpha.hypixel.net,pt,59140,47,,,,,,,,,leap,2.6,edfebd,0.3,alpha.hypixel.net,settled,21841,6
+at s1 left lever,at s1 t2,3,2,0,sprint+bonzo,35.9,edfebd,1.8,alpha.hypixel.net,pt,58604,36,,,,,,,,,leap,0.5,7130bd,0.4,alpha.hypixel.net,pt,13549,8
+at s1 left lever,at s1 t3,1,1,0,sprint,32.1,edfebd,1.6,alpha.hypixel.net,pt,59272,32,,,,,,,,,sprint,32.1,edfebd,1.6,alpha.hypixel.net,pt,59272,32
+at s1 left lever,at s1 t4,11,10,1,sprint,9.8,edfebd,0.4,alpha.hypixel.net,pt,58511,8,walk+jerry+bonzo,36.8,ed1c25,4.0,None,settled,65960,80,sprint,9.8,edfebd,0.4,alpha.hypixel.net,pt,58511,8
+at s1 left lever,at s2 mid high,1,1,0,sprint+bonzo+lava-contact,109.6,edfebd,6.5,alpha.hypixel.net,pt,24825,130,,,,,,,,,sprint+bonzo+lava-contact,109.6,edfebd,6.5,alpha.hypixel.net,pt,24825,130
+at s1 left lever,at s2 t1,2,2,0,sprint,63.4,15c4ae,3.95,stuck.hypixel.net,pt,98671,79,,,,,,,,,sprint,63.4,15c4ae,3.95,stuck.hypixel.net,pt,98671,79
+at s1 left lever,at s2 t3,1,0,0,,,,,,,,,,,,,,,,,sprint+leap+jerryx3+bonzox9+lava-contact,364.6,207123,26.15,alpha.hypixel.net,pt,20840,523
+at s1 left lever,at s3 t3,1,1,0,walk+lava-contact,225.9,a000ad,76.45,stuck.hypixel.net,pt,19524,1529,,,,,,,,,walk+lava-contact,225.9,a000ad,76.45,stuck.hypixel.net,pt,19524,1529
+at s1 left lever,at ss,13,3,1,sprint,20.5,edfebd,1.0,alpha.hypixel.net,pt,58563,20,,,,,,,,,leap,2.5,7130bd,0.25,alpha.hypixel.net,pt,10602,5
+at s1 left lever,in core,1,1,0,sprint+bonzo+lava-contact,154.9,edfebd,8.05,alpha.hypixel.net,pt,29281,161,,,,,,,,,sprint+bonzo+lava-contact,154.9,edfebd,8.05,alpha.hypixel.net,pt,29281,161
+at s1 right lever,at ee2,3,1,0,walk+bonzo+jerryx5+lava-contact,205.4,207123,15.1,alpha.hypixel.net,pt,10268,302,,,,,,,,,sprint+teleport(DUNGEONBREAKER)+lava-contact,97.3,0c720f,6.0,stuck.hypixel.net,pt,78944,120
+at s1 right lever,at s1 left lever,28,28,0,sprint,8.3,4007fd,0.4,stuck.hypixel.net,pt,21463,8,,,,,,,,,sprint,8.3,4007fd,0.4,stuck.hypixel.net,pt,21463,8
+at s1 right lever,at s1 right path,9,7,0,sprint,6.5,edfebd,0.25,alpha.hypixel.net,pt,60136,5,,,,,,,,,sprint,6.5,edfebd,0.25,alpha.hypixel.net,pt,60136,5
+at s1 right lever,at s1 t3,5,3,0,sprint,26.1,edfebd,1.35,alpha.hypixel.net,pt,59962,27,,,,,,,,,sprint,26.1,edfebd,1.35,alpha.hypixel.net,pt,59962,27
+at s1 right lever,at s1 t4,1,1,0,sprint,17.0,edfebd,0.8,alpha.hypixel.net,pt,60030,16,,,,,,,,,sprint,17.0,edfebd,0.8,alpha.hypixel.net,pt,60030,16
+at s1 right lever,at ss,5,4,0,sprint,16.4,0300d7,0.75,alpha.hypixel.net,pt,3380,15,,,,,,,,,sprint,16.4,0300d7,0.75,alpha.hypixel.net,pt,3380,15
+at s1 right path,at s1 left lever,14,14,0,sprint,9.7,edfebd,0.4,alpha.hypixel.net,pt,57451,8,,,,,,,,,sprint,9.7,edfebd,0.4,alpha.hypixel.net,pt,57451,8
+at s1 right path,at s1 right lever,33,31,0,sprint,5.2,7130bd,0.2,alpha.hypixel.net,pt,9043,4,,,,,,,,,sprint,5.2,7130bd,0.2,alpha.hypixel.net,pt,9043,4
+at s1 right path,at s1 t1,1,1,0,sprint,29.7,edfebd,1.5,alpha.hypixel.net,pt,56648,30,,,,,,,,,sprint,29.7,edfebd,1.5,alpha.hypixel.net,pt,56648,30
+at s1 right path,at s1 t2,5,3,0,sprint,24.2,edfebd,1.25,alpha.hypixel.net,pt,56465,25,,,,,,,,,walk+leap,11.7,7130bd,0.85,alpha.hypixel.net,pt,12975,17
+at s1 right path,at s1 t3,3,1,0,sprint,17.3,edfebd,0.9,alpha.hypixel.net,pt,56701,18,,,,,,,,,walk+leap,4.0,edfebd,0.45,alpha.hypixel.net,pt,35577,9
+at s1 right path,at s1 t4,2,2,0,sprint,10.8,edfebd,0.4,alpha.hypixel.net,pt,56739,8,,,,,,,,,sprint,10.8,edfebd,0.4,alpha.hypixel.net,pt,56739,8
+at s1 right path,at s2 t1,1,1,0,walk+bonzo+lava-contact,100.6,1a6c46,25.45,alpha.hypixel.net,pt,12050,509,,,,,,,,,walk+bonzo+lava-contact,100.6,1a6c46,25.45,alpha.hypixel.net,pt,12050,509
+at s1 right path,at s2 t2,1,1,0,sprint+bonzox2+lava-contact,151.5,db7289,8.7,stuck.hypixel.net,pt,106370,174,,,,,,,,,sprint+bonzox2+lava-contact,151.5,db7289,8.7,stuck.hypixel.net,pt,106370,174
+at s1 right path,at ss,11,9,0,sprint,6.0,1a6c46,0.3,alpha.hypixel.net,pt,7313,6,,,,,,,,,sprint,6.0,1a6c46,0.3,alpha.hypixel.net,pt,7313,6
+at s1 t1,at ee2,2,0,1,,,,,,,,,,,,,,,,,walk+leap,8.0,4d4157,1.5,stuck.hypixel.net,settled,37942,30
+at s1 t1,at s1 left lever,3,1,2,sprint+lava-contact,78.1,edfebd,3.8,alpha.hypixel.net,pt,21750,76,,,,,,,,,leap,0.1,edfebd,0.3,alpha.hypixel.net,settled,58658,6
+at s1 t1,at s1 right lever,3,2,0,sprint+jerryx2+bonzo,40.6,7130bd,2.8,alpha.hypixel.net,pt,15106,56,,,,,,,,,leap,0.1,edfebd,0.2,alpha.hypixel.net,pt,60368,4
+at s1 t1,at s1 t2,7,6,2,sprint+jerryx2,6.6,7130bd,0.8,alpha.hypixel.net,pt,14994,16,walk+lava-contact,29.4,1a6c46,2.45,alpha.hypixel.net,settled,6325,49,leap,0.0,7130bd,0.05,alpha.hypixel.net,settled,10944,1
+at s1 t1,at s1 t3,6,6,0,sprint,25.8,3066a9,1.05,stuck.hypixel.net,pt,120091,21,,,,,,,,,sprint,25.8,3066a9,1.05,stuck.hypixel.net,pt,120091,21
+at s1 t1,at s1 t4,4,4,0,sprint+bonzo+lava-contact,61.6,edfebd,2.35,alpha.hypixel.net,pt,21128,47,,,,,,,,,sprint+bonzo+lava-contact,61.6,edfebd,2.35,alpha.hypixel.net,pt,21128,47
+at s1 t1,at s2 mid low,1,0,0,,,,,,,,,,,,,,,,,walk+leap+bonzo,40.9,408abb,3.6,stuck.hypixel.net,pt,15091,72
+at s1 t1,at ss,4,3,0,sprint+jerryx4,24.0,7130bd,2.0,alpha.hypixel.net,pt,15036,40,,,,,,,,,sprint+jerryx4,24.0,7130bd,2.0,alpha.hypixel.net,pt,15036,40
+at s1 t2,at s1 left lever,2,2,0,sprint+bonzo+jerry,37.4,7130bd,2.2,alpha.hypixel.net,pt,13501,44,,,,,,,,,sprint+bonzo+jerry,37.4,7130bd,2.2,alpha.hypixel.net,pt,13501,44
+at s1 t2,at s1 right lever,1,0,1,,,,,,,,,,,,,,,,,walk+leap,3.5,edfebd,0.45,alpha.hypixel.net,settled,60296,9
+at s1 t2,at s1 right path,7,5,0,sprint+bonzo,21.9,7130bd,1.1,alpha.hypixel.net,pt,13350,22,,,,,,,,,walk+leap,4.0,edfebd,0.45,alpha.hypixel.net,pt,56625,9
+at s1 t2,at s1 t1,12,12,2,walk,6.5,0300d7,0.4,alpha.hypixel.net,pt,3048,8,walk,6.8,7130bd,0.5,alpha.hypixel.net,settled,10930,10,walk,6.5,0300d7,0.4,alpha.hypixel.net,pt,3048,8
+at s1 t2,at s1 t3,8,8,2,sprint,23.5,7130bd,1.0,alpha.hypixel.net,settled,11045,20,sprint,23.5,7130bd,1.0,alpha.hypixel.net,settled,11045,20,sprint,23.5,7130bd,1.0,alpha.hypixel.net,settled,11045,20
+at s1 t2,at s1 t4,6,5,0,sprint+bonzo,31.5,7130bd,1.65,alpha.hypixel.net,pt,11781,33,,,,,,,,,leap,0.4,edfebd,0.3,alpha.hypixel.net,pt,54340,6
+at s1 t2,at ss,4,4,0,sprint,12.7,7130bd,0.75,alpha.hypixel.net,pt,11991,15,,,,,,,,,sprint,12.7,7130bd,0.75,alpha.hypixel.net,pt,11991,15
+at s1 t3,at ee2,9,0,0,,,,,,,,,,,,,,,,,walk+leap+lava-contact,8.9,ed1c25,0.95,None,pt,66179,19
+at s1 t3,at s1 left lever,4,3,1,sprint+lava-contact,33.7,edfebd,2.15,alpha.hypixel.net,pt,35828,43,,,,,,,,,sprint+lava-contact,33.7,edfebd,2.15,alpha.hypixel.net,pt,35828,43
+at s1 t3,at s1 right lever,4,3,0,sprint+lava-contact,39.7,edfebd,2.35,alpha.hypixel.net,pt,24051,47,,,,,,,,,walk+leap+bonzo+lava-contact,17.3,edfebd,1.3,alpha.hypixel.net,pt,59991,26
+at s1 t3,at s1 right path,3,2,0,sprint+lava-contact,28.1,edfebd,1.5,alpha.hypixel.net,pt,35539,30,,,,,,,,,leap,0.1,edfebd,0.2,alpha.hypixel.net,pt,56725,4
+at s1 t3,at s1 t1,4,3,1,sprint+bonzox2,26.9,edfebd,1.3,alpha.hypixel.net,settled,33470,26,sprint+bonzox2,26.9,edfebd,1.3,alpha.hypixel.net,settled,33470,26,leap,0.5,edfebd,0.55,alpha.hypixel.net,pt,20922,11
+at s1 t3,at s1 t2,4,2,0,sprint+jerryx6,26.0,edfebd,1.5,alpha.hypixel.net,pt,22313,30,,,,,,,,,leap,2.7,7130bd,0.25,alpha.hypixel.net,pt,12711,5
+at s1 t3,at s1 t4,11,11,0,walk+lava-contact,25.1,edfebd,1.0,alpha.hypixel.net,pt,23868,20,,,,,,,,,walk+lava-contact,25.1,edfebd,1.0,alpha.hypixel.net,pt,23868,20
+at s1 t3,at s2 high path,1,0,0,,,,,,,,,,,,,,,,,sprint+teleport(STARRED_BONZO_STAFF)+teleport(JERRY_STAFF)+bonzox3+lava-contact,211.0,3066a9,11.35,stuck.hypixel.net,pt,120128,227
+at s1 t3,at s2 mid high,1,0,0,,,,,,,,,,,,,,,,,walk+leap+teleport(INFINITE_SPIRIT_LEAP)+bonzo+lava-contact,64.2,23d334,6.9,stuck.hypixel.net,pt,45264,138
+at s1 t3,at ss,2,2,0,sprint+lava-contact,30.0,edfebd,1.75,alpha.hypixel.net,pt,22846,35,,,,,,,,,sprint+lava-contact,30.0,edfebd,1.75,alpha.hypixel.net,pt,22846,35
+at s1 t4,at ee2,1,0,1,,,,,,,,,,,,,,,,,no-input+leap,9.5,ae3d84,1.8,stuck.hypixel.net,settled,401829,36
+at s1 t4,at s1 left lever,7,7,0,sprint,8.7,edfebd,0.65,alpha.hypixel.net,pt,29264,13,,,,,,,,,sprint,8.7,edfebd,0.65,alpha.hypixel.net,pt,29264,13
+at s1 t4,at s1 right lever,6,6,1,sprint,15.3,edfebd,0.7,alpha.hypixel.net,pt,54617,14,sprint+bonzo,20.6,edfebd,1.25,alpha.hypixel.net,settled,54834,25,sprint,15.3,edfebd,0.7,alpha.hypixel.net,pt,54617,14
+at s1 t4,at s1 right path,2,1,0,sprint+bonzo,19.0,edfebd,1.55,alpha.hypixel.net,pt,56250,31,,,,,,,,,leap,0.3,edfebd,0.75,alpha.hypixel.net,pt,56752,15
+at s1 t4,at s1 t1,2,2,0,sprint,38.2,edfebd,1.7,alpha.hypixel.net,pt,54356,34,,,,,,,,,sprint,38.2,edfebd,1.7,alpha.hypixel.net,pt,54356,34
+at s1 t4,at s1 t2,3,1,1,sprint,25.8,edfebd,1.2,alpha.hypixel.net,pt,54307,24,,,,,,,,,leap,0.0,7130bd,0.05,alpha.hypixel.net,settled,11951,1
+at s1 t4,at s1 t3,22,15,5,sprint,12.1,edfebd,0.7,alpha.hypixel.net,pt,58521,14,walk,12.6,1a6c46,0.85,alpha.hypixel.net,settled,6095,17,leap,1.1,edfebd,0.25,alpha.hypixel.net,settled,23723,5
+at s1 t4,at s2 high path,1,0,0,,,,,,,,,,,,,,,,,walk+etherwarp/AOTVx8+bonzo+jerry,76.8,b3d41a,11.35,None,pt,70149,227
+at s1 t4,at ss,7,7,0,sprint,15.5,edfebd,0.85,alpha.hypixel.net,pt,53900,17,,,,,,,,,sprint,15.5,edfebd,0.85,alpha.hypixel.net,pt,53900,17
+at s2 high path,at ee2,8,4,0,sprint+bonzo,24.3,b3d41a,1.15,None,pt,71048,23,,,,,,,,,leap,0.0,edfebd,0.1,alpha.hypixel.net,pt,61277,2
+at s2 high path,at s2 left lever,22,22,1,sprint,7.0,edfebd,0.2,alpha.hypixel.net,pt,76936,4,walk,8.4,b3d41a,2.1,None,settled,70394,42,sprint,7.0,edfebd,0.2,alpha.hypixel.net,pt,76936,4
+at s2 high path,at s2 mid high,1,1,0,walk+jerryx2,41.1,207123,5.8,alpha.hypixel.net,pt,10631,116,,,,,,,,,walk+jerryx2,41.1,207123,5.8,alpha.hypixel.net,pt,10631,116
+at s2 high path,at s2 right lever,2,2,0,sprint,10.1,3066a9,0.55,stuck.hypixel.net,pt,120372,11,,,,,,,,,sprint,10.1,3066a9,0.55,stuck.hypixel.net,pt,120372,11
+at s2 high path,at s2 t1,1,1,0,sprint,50.8,edfebd,2.35,alpha.hypixel.net,pt,77102,47,,,,,,,,,sprint,50.8,edfebd,2.35,alpha.hypixel.net,pt,77102,47
+at s2 high path,at s2 t2,1,1,0,sprint,33.2,edfebd,1.6,alpha.hypixel.net,pt,77049,32,,,,,,,,,sprint,33.2,edfebd,1.6,alpha.hypixel.net,pt,77049,32
+at s2 high path,at s2 t5,1,1,0,sprint,15.5,edfebd,0.8,alpha.hypixel.net,pt,76977,16,,,,,,,,,sprint,15.5,edfebd,0.8,alpha.hypixel.net,pt,76977,16
+at s2 high path,at s3 t1,1,1,0,sprint,59.6,1a6c46,4.55,alpha.hypixel.net,pt,20112,91,,,,,,,,,sprint,59.6,1a6c46,4.55,alpha.hypixel.net,pt,20112,91
+at s2 high path,at s3 t2,1,0,0,,,,,,,,,,,,,,,,,sprint+etherwarp/AOTVx6+jerry+bonzo,57.8,b3d41a,7.05,None,pt,71465,141
+at s2 high path,at s3 t3,1,1,0,sprint+bonzo,61.1,edfebd,3.75,alpha.hypixel.net,pt,77860,75,,,,,,,,,sprint+bonzo,61.1,edfebd,3.75,alpha.hypixel.net,pt,77860,75
+at s2 left lever,at ee2,3,0,0,,,,,,,,,,,,,,,,,walk+leap,5.0,edfebd,0.4,alpha.hypixel.net,pt,75410,8
+at s2 left lever,at ee3,8,8,0,sprint,55.4,edfebd,2.7,alpha.hypixel.net,pt,75526,54,,,,,,,,,sprint,55.4,edfebd,2.7,alpha.hypixel.net,pt,75526,54
+at s2 left lever,at s1 t3,1,0,0,,,,,,,,,,,,,,,,,sprint+leap+lava-contact,53.3,edfebd,2.3,alpha.hypixel.net,pt,29138,46
+at s2 left lever,at s2 high path,9,7,2,sprint,8.0,207123,0.4,alpha.hypixel.net,pt,10620,8,sprint,8.4,1a6c46,0.65,alpha.hypixel.net,settled,16886,13,sprint,8.0,207123,0.4,alpha.hypixel.net,pt,10620,8
+at s2 left lever,at s2 right lever,6,5,2,walk,9.7,1a6c46,0.5,alpha.hypixel.net,settled,19061,10,walk,9.7,1a6c46,0.5,alpha.hypixel.net,settled,19061,10,walk,9.7,1a6c46,0.5,alpha.hypixel.net,settled,19061,10
+at s2 left lever,at s2 t3,1,1,0,sprint+bonzo,47.4,3e7a14,2.55,stuck.hypixel.net,pt,33165,51,,,,,,,,,sprint+bonzo,47.4,3e7a14,2.55,stuck.hypixel.net,pt,33165,51
+at s2 left lever,at s2 t5,5,1,0,sprint,21.3,edfebd,1.05,alpha.hypixel.net,pt,78624,21,,,,,,,,,leap,0.0,edfebd,0.05,alpha.hypixel.net,pt,72396,1
+at s2 left lever,at s3 t3,2,2,0,sprint+bonzo,56.7,edfebd,3.25,alpha.hypixel.net,pt,80245,65,,,,,,,,,sprint+bonzo,56.7,edfebd,3.25,alpha.hypixel.net,pt,80245,65
+at s2 left lever,at s3 t4,1,1,1,sprint+bonzox4+lava-contact,149.9,edfebd,8.4,alpha.hypixel.net,settled,81412,168,sprint+bonzox4+lava-contact,149.9,edfebd,8.4,alpha.hypixel.net,settled,81412,168,sprint+bonzox4+lava-contact,149.9,edfebd,8.4,alpha.hypixel.net,settled,81412,168
+at s2 mid high,at ee2,2,1,0,sprint+jerry,27.0,edfebd,2.8,alpha.hypixel.net,pt,64622,56,,,,,,,,,walk+leap,5.7,edfebd,0.3,alpha.hypixel.net,pt,61617,6
+at s2 mid high,at s2 left lever,1,1,0,sprint+jerryx3+bonzo,26.2,edfebd,2.1,alpha.hypixel.net,pt,64869,42,,,,,,,,,sprint+jerryx3+bonzo,26.2,edfebd,2.1,alpha.hypixel.net,pt,64869,42
+at s2 mid high,at s2 mid low,1,1,0,walk,24.0,1a6c46,2.75,alpha.hypixel.net,pt,19375,55,,,,,,,,,walk,24.0,1a6c46,2.75,alpha.hypixel.net,pt,19375,55
+at s2 mid high,at s2 right lever,1,1,0,walk,20.5,edfebd,1.3,alpha.hypixel.net,pt,64386,26,,,,,,,,,walk,20.5,edfebd,1.3,alpha.hypixel.net,pt,64386,26
+at s2 mid high,at s2 t1,9,9,0,sprint+bonzox2,37.1,edfebd,2.05,alpha.hypixel.net,pt,63678,41,,,,,,,,,sprint+bonzox2,37.1,edfebd,2.05,alpha.hypixel.net,pt,63678,41
+at s2 mid high,at s2 t2,3,3,1,sprint,16.5,edfebd,0.9,alpha.hypixel.net,pt,62817,18,sprint+bonzo,19.4,edfebd,1.2,alpha.hypixel.net,settled,63620,24,sprint,16.5,edfebd,0.9,alpha.hypixel.net,pt,62817,18
+at s2 mid high,at s2 t3,2,1,0,sprint,19.4,edfebd,1.1,alpha.hypixel.net,pt,62625,22,,,,,,,,,sprint,19.4,edfebd,1.1,alpha.hypixel.net,pt,62625,22
+at s2 mid high,at s2 t4,2,1,0,sprint,21.6,edfebd,1.2,alpha.hypixel.net,pt,64181,24,,,,,,,,,sprint,21.6,edfebd,1.2,alpha.hypixel.net,pt,64181,24
+at s2 mid high,at s2 t5,4,3,1,sprint,7.7,edfebd,0.45,alpha.hypixel.net,pt,62563,9,sprint,8.2,207123,0.5,alpha.hypixel.net,settled,11304,10,sprint,7.7,edfebd,0.45,alpha.hypixel.net,pt,62563,9
+at s2 mid low,at s2 right lever,2,2,0,sprint+bonzo,49.1,1a6c46,2.65,alpha.hypixel.net,pt,19579,53,,,,,,,,,sprint+bonzo,49.1,1a6c46,2.65,alpha.hypixel.net,pt,19579,53
+at s2 mid low,at s2 t1,2,2,0,sprint,11.3,edfebd,0.65,alpha.hypixel.net,pt,68937,13,,,,,,,,,sprint,11.3,edfebd,0.65,alpha.hypixel.net,pt,68937,13
+at s2 mid low,at s2 t3,3,3,0,sprint,14.1,3066a9,0.75,stuck.hypixel.net,pt,130538,15,,,,,,,,,sprint,14.1,3066a9,0.75,stuck.hypixel.net,pt,130538,15
+at s2 mid low,at s2 t4,1,1,0,sprint,19.9,ed1c25,1.2,None,pt,66263,24,,,,,,,,,sprint,19.9,ed1c25,1.2,None,pt,66263,24
+at s2 mid low,at s2 t5,1,0,0,,,,,,,,,,,,,,,,,sprint+teleport(DUNGEONBREAKER)x2+lava-contact,83.4,408abb,9.1,stuck.hypixel.net,pt,15161,182
+at s2 mid low,at ss,1,1,0,sprint+bonzox2+lava-contact,158.4,0300d7,12.0,alpha.hypixel.net,pt,740,240,,,,,,,,,sprint+bonzox2+lava-contact,158.4,0300d7,12.0,alpha.hypixel.net,pt,740,240
+at s2 right lever,at ee2,3,2,0,sprint+jerry+lava-contact,73.8,1a6c46,4.75,alpha.hypixel.net,pt,19662,95,,,,,,,,,sprint+jerry+lava-contact,73.8,1a6c46,4.75,alpha.hypixel.net,pt,19662,95
+at s2 right lever,at ee3,1,0,1,,,,,,,,,,,,,,,,,no-input+leap,12.8,23d334,0.7,stuck.hypixel.net,settled,45599,14
+at s2 right lever,at s2 left lever,3,3,0,sprint+jerryx2,9.6,edfebd,0.85,alpha.hypixel.net,pt,70838,17,,,,,,,,,sprint+jerryx2,9.6,edfebd,0.85,alpha.hypixel.net,pt,70838,17
+at s2 right lever,at s2 mid low,2,2,0,walk+bonzo,1.0,edfebd,2.45,alpha.hypixel.net,pt,68818,49,,,,,,,,,walk+bonzo,1.0,edfebd,2.45,alpha.hypixel.net,pt,68818,49
+at s2 right lever,at s2 t2,2,1,0,walk,46.8,1a6c46,6.6,alpha.hypixel.net,pt,19143,132,,,,,,,,,no-input+leap,5.4,edfebd,0.65,alpha.hypixel.net,pt,74068,13
+at s2 right lever,at s2 t3,4,4,0,walk+bonzo,35.9,fd7887,2.2,stuck.hypixel.net,pt,85554,44,,,,,,,,,walk+bonzo,35.9,fd7887,2.2,stuck.hypixel.net,pt,85554,44
+at s2 right lever,at s2 t5,12,6,0,sprint,9.7,3066a9,0.65,stuck.hypixel.net,pt,147084,13,,,,,,,,,sprint,9.7,3066a9,0.65,stuck.hypixel.net,pt,147084,13
+at s2 right lever,at s4 t4,1,0,0,,,,,,,,,,,,,,,,,sprint+leap+jerryx2+bonzox3+lava-contact,144.4,207123,9.6,alpha.hypixel.net,pt,14804,192
+at s2 t1,at ee2,3,0,0,,,,,,,,,,,,,,,,,sprint+teleport(DUNGEONBREAKER)+lava-contact,43.4,db7289,2.1,stuck.hypixel.net,pt,106121,42
+at s2 t1,at s2 mid high,1,0,0,,,,,,,,,,,,,,,,,leap,0.0,edfebd,0.25,alpha.hypixel.net,pt,64092,5
+at s2 t1,at s2 mid low,1,0,0,,,,,,,,,,,,,,,,,leap+bonzo,2.8,edfebd,1.0,alpha.hypixel.net,pt,68916,20
+at s2 t1,at s2 t2,2,1,1,walk+lava-contact,32.5,1a6c46,3.35,alpha.hypixel.net,pt,12677,67,,,,,,,,,leap,0.0,edfebd,0.05,alpha.hypixel.net,settled,74169,1
+at s2 t1,at s2 t3,1,1,0,sprint+lava-contact,15.9,edfebd,1.7,alpha.hypixel.net,pt,68245,34,,,,,,,,,sprint+lava-contact,15.9,edfebd,1.7,alpha.hypixel.net,pt,68245,34
+at s2 t1,in core,1,0,0,,,,,,,,,,,,,,,,,sprint+teleport(STARRED_BONZO_STAFF)+teleport(DUNGEONBREAKER)+bonzo+lava-contact,129.3,3e7a14,6.5,stuck.hypixel.net,pt,33346,130
+at s2 t2,at ee2,4,1,0,sprint+jerryx7+lava-contact,55.5,edfebd,3.1,alpha.hypixel.net,pt,75206,62,,,,,,,,,leap,0.0,edfebd,0.15,alpha.hypixel.net,pt,60947,3
+at s2 t2,at s2 mid high,1,0,1,,,,,,,,,,,,,,,,,leap,0.0,edfebd,0.05,alpha.hypixel.net,settled,62843,1
+at s2 t2,at s2 right lever,1,1,0,sprint+jerryx2+bonzo,36.6,edfebd,2.5,alpha.hypixel.net,pt,74011,50,,,,,,,,,sprint+jerryx2+bonzo,36.6,edfebd,2.5,alpha.hypixel.net,pt,74011,50
+at s2 t2,at s2 t1,4,4,0,walk,14.1,edfebd,0.8,alpha.hypixel.net,pt,74144,16,,,,,,,,,walk,14.1,edfebd,0.8,alpha.hypixel.net,pt,74144,16
+at s2 t2,at s2 t3,17,16,9,sprint,23.4,6e38dd,1.3,stuck.hypixel.net,settled,391575,26,sprint,23.4,6e38dd,1.3,stuck.hypixel.net,settled,391575,26,sprint,23.4,6e38dd,1.3,stuck.hypixel.net,settled,391575,26
+at s2 t2,at s2 t4,1,1,0,sprint,28.9,edfebd,1.3,alpha.hypixel.net,pt,74183,26,,,,,,,,,sprint,28.9,edfebd,1.3,alpha.hypixel.net,pt,74183,26
+at s2 t2,at s2 t5,5,1,0,sprint+jerryx2+bonzo,25.5,edfebd,1.4,alpha.hypixel.net,pt,73916,28,,,,,,,,,walk+leap,5.4,edfebd,0.65,alpha.hypixel.net,pt,71083,13
+at s2 t2,in core,10,8,0,sprint,65.3,edfebd,2.05,alpha.hypixel.net,pt,85899,41,,,,,,,,,sprint,65.3,edfebd,2.05,alpha.hypixel.net,pt,85899,41
+at s2 t3,at ee2,1,1,0,sprint+bonzox42+jerryx6+lava-contact,1101.8,207123,65.35,alpha.hypixel.net,pt,13343,1307,,,,,,,,,sprint+bonzox42+jerryx6+lava-contact,1101.8,207123,65.35,alpha.hypixel.net,pt,13343,1307
+at s2 t3,at ee3,4,1,1,sprint+bonzo+lava-contact,127.4,edfebd,7.75,alpha.hypixel.net,pt,74987,155,,,,,,,,,walk+leap,18.5,4d4157,2.6,stuck.hypixel.net,pt,38159,52
+at s2 t3,at ee4,1,0,1,,,,,,,,,,,,,,,,,walk+teleport(DUNGEONBREAKER)+teleport(STARRED_BONZO_STAFF)x2+bonzox5+jerryx11+lava-contact,379.4,3066a9,34.8,stuck.hypixel.net,settled,152318,696
+at s2 t3,at s2 mid low,1,1,0,sprint,10.4,207123,0.35,alpha.hypixel.net,pt,21974,7,,,,,,,,,sprint,10.4,207123,0.35,alpha.hypixel.net,pt,21974,7
+at s2 t3,at s2 right lever,9,9,2,sprint+lava-contact,37.5,a72d42,1.85,stuck.hypixel.net,settled,72119,37,sprint+lava-contact,37.5,a72d42,1.85,stuck.hypixel.net,settled,72119,37,sprint+lava-contact,37.5,a72d42,1.85,stuck.hypixel.net,settled,72119,37
+at s2 t3,at s2 t2,5,2,1,sprint+lava-contact,33.7,3e7a14,2.0,stuck.hypixel.net,pt,33217,40,,,,,,,,,walk+leap,3.0,edfebd,0.5,alpha.hypixel.net,settled,74461,10
+at s2 t3,at s2 t4,1,1,1,sprint,28.3,1a6c46,1.95,alpha.hypixel.net,settled,13411,39,sprint,28.3,1a6c46,1.95,alpha.hypixel.net,settled,13411,39,sprint,28.3,1a6c46,1.95,alpha.hypixel.net,settled,13411,39
+at s2 t3,at s2 t5,5,3,0,sprint+lava-contact,32.0,1762cc,1.95,stuck.hypixel.net,pt,25448,39,,,,,,,,,walk+teleport(DUNGEONBREAKER)+lava-contact,29.6,c48518,1.5,stuck.hypixel.net,pt,8603,30
+at s2 t3,at s3 t4,1,0,0,,,,,,,,,,,,,,,,,sprint+leap+jerryx9+bonzox12+lava-contact,345.6,207123,22.55,alpha.hypixel.net,pt,12293,451
+at s2 t3,at s4 t3,1,0,0,,,,,,,,,,,,,,,,,walk+teleport(DUNGEONBREAKER)x3+teleport(STARRED_BONZO_STAFF)x2+teleport(JERRY_STAFF)x3+bonzox7+jerryx84+lava-bounce,1258.3,3066a9,138.85,stuck.hypixel.net,pt,125104,2777
+at s2 t3,at s4 t4,1,0,0,,,,,,,,,,,,,,,,,walk+teleport(DUNGEONBREAKER)+leapx2+bonzo+lava-contact,141.7,6ac481,13.25,stuck.hypixel.net,pt,20035,265
+at s2 t3,in core,26,8,1,sprint+lava-contact,88.1,72e2cd,3.9,stuck.hypixel.net,pt,386259,78,sprint+lava-contact,90.4,6e38dd,4.15,stuck.hypixel.net,settled,391752,83,sprint+teleport(DUNGEONBREAKER)+lava-contact,76.9,3066a9,3.4,stuck.hypixel.net,pt,122219,68
+at s2 t4,at ee3,1,0,0,,,,,,,,,,,,,,,,,sprint+leap+bonzo+lava-contact,47.7,ed1c25,2.5,None,pt,66326,50
+at s2 t4,at s2 left lever,1,0,1,,,,,,,,,,,,,,,,,sprint+teleport(DUNGEONBREAKER)+lava-contact,37.9,3066a9,1.6,stuck.hypixel.net,settled,149377,32
+at s2 t4,at s2 t1,1,1,1,walk+bonzo,16.3,edfebd,2.15,alpha.hypixel.net,settled,68190,43,walk+bonzo,16.3,edfebd,2.15,alpha.hypixel.net,settled,68190,43,walk+bonzo,16.3,edfebd,2.15,alpha.hypixel.net,settled,68190,43
+at s2 t4,at s2 t5,1,1,0,walk+lava-contact,71.7,1a6c46,4.55,alpha.hypixel.net,pt,13493,91,,,,,,,,,walk+lava-contact,71.7,1a6c46,4.55,alpha.hypixel.net,pt,13493,91
+at s2 t5,at ee2,2,1,0,walk+jerryx5+lava-contact,62.6,edfebd,3.25,alpha.hypixel.net,pt,71653,65,,,,,,,,,leap,1.8,edfebd,1.15,alpha.hypixel.net,pt,61660,23
+at s2 t5,at ee3,2,0,1,,,,,,,,,,,,,,,,,leap,0.0,1762cc,3.0,stuck.hypixel.net,settled,25499,60
+at s2 t5,at ee4,1,0,0,,,,,,,,,,,,,,,,,walk+leap,19.9,3d6f29,8.6,stuck.hypixel.net,pt,77116,172
+at s2 t5,at s2 high path,1,0,0,,,,,,,,,,,,,,,,,leap,1.0,edfebd,0.45,alpha.hypixel.net,pt,76995,9
+at s2 t5,at s2 left lever,4,4,0,sprint+jerryx3+bonzo,28.4,edfebd,2.05,alpha.hypixel.net,pt,72269,41,,,,,,,,,sprint+jerryx3+bonzo,28.4,edfebd,2.05,alpha.hypixel.net,pt,72269,41
+at s2 t5,at s2 mid high,3,1,0,sprint,7.7,edfebd,0.65,alpha.hypixel.net,pt,71391,13,,,,,,,,,sprint,7.7,edfebd,0.65,alpha.hypixel.net,pt,71391,13
+at s2 t5,at s2 right lever,14,13,0,sprint,8.8,edfebd,0.4,alpha.hypixel.net,pt,70878,8,,,,,,,,,sprint,8.8,edfebd,0.4,alpha.hypixel.net,pt,70878,8
+at s2 t5,at s2 t2,7,6,0,sprint,17.6,edfebd,0.75,alpha.hypixel.net,pt,71229,15,,,,,,,,,walk+leap,4.7,edfebd,0.5,alpha.hypixel.net,pt,73944,10
+at s2 t5,at s2 t3,17,17,3,walk,17.9,edfebd,0.95,alpha.hypixel.net,pt,78648,19,sprint,19.5,edfebd,1.25,alpha.hypixel.net,settled,70086,25,walk,17.9,edfebd,0.95,alpha.hypixel.net,pt,78648,19
+at s2 t5,at s2 t4,2,2,0,sprint,22.5,edfebd,1.1,alpha.hypixel.net,pt,70272,22,,,,,,,,,sprint,22.5,edfebd,1.1,alpha.hypixel.net,pt,70272,22
+at s2 t5,at s3 left lever,1,1,1,sprint+bonzox4+lava-contact,204.5,c48518,15.65,stuck.hypixel.net,settled,8856,313,sprint+bonzox4+lava-contact,204.5,c48518,15.65,stuck.hypixel.net,settled,8856,313,sprint+bonzox4+lava-contact,204.5,c48518,15.65,stuck.hypixel.net,settled,8856,313
+at s2 t5,in core,3,1,1,sprint,80.5,207123,3.65,alpha.hypixel.net,settled,12120,73,sprint,80.5,207123,3.65,alpha.hypixel.net,settled,12120,73,sprint,80.5,207123,3.65,alpha.hypixel.net,settled,12120,73
+at s3 left lever,at arrows,1,1,1,sprint+lava-contact,109.9,1a6c46,6.7,alpha.hypixel.net,settled,20830,134,sprint+lava-contact,109.9,1a6c46,6.7,alpha.hypixel.net,settled,20830,134,sprint+lava-contact,109.9,1a6c46,6.7,alpha.hypixel.net,settled,20830,134
+at s3 left lever,at ee4,3,0,1,,,,,,,,,,,,,,,,,leap,1.7,c48518,0.5,stuck.hypixel.net,settled,9181,10
+at s3 left lever,at s3 right lever,6,6,0,walk+bonzo,5.4,1a6c46,0.3,alpha.hypixel.net,pt,22166,6,,,,,,,,,walk+bonzo,5.4,1a6c46,0.3,alpha.hypixel.net,pt,22166,6
+at s3 left lever,at s3 t1,1,0,0,,,,,,,,,,,,,,,,,walk+leap+lava-contact,14.0,3ee9c0,0.6,stuck.hypixel.net,pt,55665,12
+at s3 left lever,at s3 t3,1,0,0,,,,,,,,,,,,,,,,,walk+leap+bonzo+jerry,7.2,edfebd,0.8,alpha.hypixel.net,pt,84078,16
+at s3 left lever,at s3 t4,1,1,0,walk+lava-contact,100.3,1a6c46,7.4,alpha.hypixel.net,pt,21203,148,,,,,,,,,walk+lava-contact,100.3,1a6c46,7.4,alpha.hypixel.net,pt,21203,148
+at s3 right lever,at s3 left lever,1,1,0,sprint+bonzox2,14.1,1a6c46,0.85,alpha.hypixel.net,pt,22184,17,,,,,,,,,sprint+bonzox2,14.1,1a6c46,0.85,alpha.hypixel.net,pt,22184,17
+at s3 right lever,at s3 t2,1,0,0,,,,,,,,,,,,,,,,,walk+etherwarp/AOTVx4,13.5,b3d41a,4.05,None,pt,72692,81
+at s3 right lever,at s3 t3,3,1,0,sprint+jerryx2+bonzox6+lava-contact,162.0,207123,9.3,alpha.hypixel.net,pt,12813,186,,,,,,,,,walk+leap,5.6,edfebd,0.3,alpha.hypixel.net,pt,83988,6
+at s3 right lever,at s4 t1,1,1,0,sprint+bonzo+jerryx2,84.3,fe27c6,5.45,stuck.hypixel.net,pt,364672,109,,,,,,,,,sprint+bonzo+jerryx2,84.3,fe27c6,5.45,stuck.hypixel.net,pt,364672,109
+at s3 right lever,in core,1,0,0,,,,,,,,,,,,,,,,,walk+leap+bonzo+lava-contact,137.2,1a6c46,19.6,alpha.hypixel.net,pt,22996,392
+at s3 t1,at ee3,1,1,0,sprint,5.6,afb98f,0.3,stuck.hypixel.net,pt,67325,6,,,,,,,,,sprint,5.6,afb98f,0.3,stuck.hypixel.net,pt,67325,6
+at s3 t1,at ee4,1,0,0,,,,,,,,,,,,,,,,,walk+leap+lava-contact,30.5,3ee9c0,2.3,stuck.hypixel.net,pt,55679,46
+at s3 t1,at s3 left lever,1,0,0,,,,,,,,,,,,,,,,,no-input+leap+lava-contact,39.4,6c45a1,2.55,stuck.hypixel.net,pt,412228,51
+at s3 t1,at s3 right lever,1,0,0,,,,,,,,,,,,,,,,,walk+leap+lava-contact,65.9,ae3d84,4.15,stuck.hypixel.net,pt,402087,83
+at s3 t1,at s3 t3,1,1,0,walk+bonzo+jerryx2+lava-contact,59.1,1a6c46,7.1,alpha.hypixel.net,pt,20264,142,,,,,,,,,walk+bonzo+jerryx2+lava-contact,59.1,1a6c46,7.1,alpha.hypixel.net,pt,20264,142
+at s3 t2,at s3 right lever,2,1,0,sprint+bonzox2+lava-contact,115.7,92d73f,7.35,stuck.hypixel.net,pt,43605,147,,,,,,,,,sprint+bonzox2+lava-contact,115.7,92d73f,7.35,stuck.hypixel.net,pt,43605,147
+at s3 t2,at s3 t3,3,0,1,,,,,,,,,,,,,,,,,etherwarp/AOTV,0.1,b3d41a,0.1,None,settled,71633,2
+at s3 t2,at s3 t4,2,2,1,sprint,16.6,b3d41a,1.15,None,settled,72906,23,sprint,16.6,b3d41a,1.15,None,settled,72906,23,sprint,16.6,b3d41a,1.15,None,settled,72906,23
+at s3 t3,at arrows,5,5,0,sprint+bonzo,26.0,edfebd,1.45,alpha.hypixel.net,pt,82560,29,,,,,,,,,sprint+bonzo,26.0,edfebd,1.45,alpha.hypixel.net,pt,82560,29
+at s3 t3,at ee4,1,0,0,,,,,,,,,,,,,,,,,walk+leap+bonzo,26.1,a75187,3.65,stuck.hypixel.net,pt,30917,73
+at s3 t3,at s2 t3,1,1,1,walk+bonzox3+jerryx2+lava-contact,198.8,207123,16.0,alpha.hypixel.net,settled,13022,320,walk+bonzox3+jerryx2+lava-contact,198.8,207123,16.0,alpha.hypixel.net,settled,13022,320,walk+bonzox3+jerryx2+lava-contact,198.8,207123,16.0,alpha.hypixel.net,settled,13022,320
+at s3 t3,at s3 left lever,2,2,1,sprint+bonzox2,56.8,edfebd,3.4,alpha.hypixel.net,settled,84006,68,sprint+bonzox2,56.8,edfebd,3.4,alpha.hypixel.net,settled,84006,68,sprint+bonzox2,56.8,edfebd,3.4,alpha.hypixel.net,settled,84006,68
+at s3 t3,at s3 right lever,1,1,1,walk+bonzox3+lava-contact,74.0,edfebd,4.55,alpha.hypixel.net,settled,84279,91,walk+bonzox3+lava-contact,74.0,edfebd,4.55,alpha.hypixel.net,settled,84279,91,walk+bonzox3+lava-contact,74.0,edfebd,4.55,alpha.hypixel.net,settled,84279,91
+at s3 t3,at s3 t1,2,1,0,sprint,32.0,edfebd,1.3,alpha.hypixel.net,pt,83133,26,,,,,,,,,leap,1.5,afb98f,0.6,stuck.hypixel.net,pt,67302,12
+at s3 t3,at s3 t2,5,5,1,sprint,16.7,b3d41a,0.8,None,settled,72053,16,sprint,16.7,b3d41a,0.8,None,settled,72053,16,sprint,16.7,b3d41a,0.8,None,settled,72053,16
+at s3 t3,at s3 t4,5,4,3,sprint+bonzo,30.5,edfebd,1.6,alpha.hypixel.net,pt,83324,32,sprint+bonzo,33.9,edfebd,1.8,alpha.hypixel.net,settled,84403,36,sprint+bonzo,30.5,edfebd,1.6,alpha.hypixel.net,pt,83324,32
+at s3 t3,at s4 t3,1,1,0,sprint+bonzox5+lava-contact,196.2,edfebd,10.35,alpha.hypixel.net,pt,50956,207,,,,,,,,,sprint+bonzox5+lava-contact,196.2,edfebd,10.35,alpha.hypixel.net,pt,50956,207
+at s3 t4,at ee4,1,0,0,,,,,,,,,,,,,,,,,walk+leap+bonzo+lava-contact,81.6,408abb,4.55,stuck.hypixel.net,pt,15623,91
+at s3 t4,at s3 left lever,7,7,0,sprint+lava-contact,34.2,ed1c25,1.55,None,pt,66469,31,,,,,,,,,sprint+lava-contact,34.2,ed1c25,1.55,None,pt,66469,31
+at s3 t4,at s3 t3,2,1,0,walk+lava-contact,79.1,edfebd,4.85,alpha.hypixel.net,pt,81581,97,,,,,,,,,leap,1.1,edfebd,0.35,alpha.hypixel.net,pt,83359,7
+at s3 t4,at s4 t1,1,1,0,sprint+lava-contact,142.9,edfebd,8.6,alpha.hypixel.net,pt,84535,172,,,,,,,,,sprint+lava-contact,142.9,edfebd,8.6,alpha.hypixel.net,pt,84535,172
+at s4 left lever,at s1 t3,1,1,0,sprint+bonzo,68.1,edfebd,4.65,alpha.hypixel.net,pt,51217,93,,,,,,,,,sprint+bonzo,68.1,edfebd,4.65,alpha.hypixel.net,pt,51217,93
+at s4 left lever,at s4 t1,1,1,0,sprint+bonzox19+lava-contact,540.4,1a6c46,32.35,alpha.hypixel.net,pt,28990,647,,,,,,,,,sprint+bonzox19+lava-contact,540.4,1a6c46,32.35,alpha.hypixel.net,pt,28990,647
+at s4 left lever,in core,5,0,0,,,,,,,,,,,,,,,,,walk+leap,4.6,3ee9c0,0.4,stuck.hypixel.net,pt,55909,8
+at s4 right lever,at ee3,1,1,0,walk+jerryx2+bonzox3+lava-contact,708.0,7130bd,52.6,alpha.hypixel.net,pt,2652,1052,,,,,,,,,walk+jerryx2+bonzox3+lava-contact,708.0,7130bd,52.6,alpha.hypixel.net,pt,2652,1052
+at s4 right lever,at ee4,1,1,0,sprint+bonzox2,46.2,207123,2.4,alpha.hypixel.net,pt,16827,48,,,,,,,,,sprint+bonzox2,46.2,207123,2.4,alpha.hypixel.net,pt,16827,48
+at s4 right lever,at s4 left lever,7,7,0,sprint,7.1,1a6c46,0.3,alpha.hypixel.net,pt,32529,6,,,,,,,,,sprint,7.1,1a6c46,0.3,alpha.hypixel.net,pt,32529,6
+at s4 right lever,in core,4,0,1,,,,,,,,,,,,,,,,,leap,0.0,a75187,0.05,stuck.hypixel.net,settled,31180,1
+at s4 t1,at ee4,8,8,0,sprint+jerry+bonzo,31.3,207123,1.25,alpha.hypixel.net,pt,16071,25,,,,,,,,,sprint+jerry+bonzo,31.3,207123,1.25,alpha.hypixel.net,pt,16071,25
+at s4 t1,at s4 t2,4,4,0,sprint,9.3,3d6f29,0.45,stuck.hypixel.net,pt,77557,9,,,,,,,,,sprint,9.3,3d6f29,0.45,stuck.hypixel.net,pt,77557,9
+at s4 t1,at s4 t3,4,2,0,walk+bonzo+lava-contact,77.4,1a6c46,11.25,alpha.hypixel.net,pt,30257,225,,,,,,,,,no-input+leap+lava-contact,25.5,6c45a1,1.8,stuck.hypixel.net,pt,412354,36
+at s4 t1,at s4 t4,1,0,0,,,,,,,,,,,,,,,,,walk+leap+lava-contact,19.7,2b8212,1.25,stuck.hypixel.net,pt,14293,25
+at s4 t2,at ee4,1,1,0,walk,27.7,207123,2.4,alpha.hypixel.net,pt,16537,48,,,,,,,,,walk,27.7,207123,2.4,alpha.hypixel.net,pt,16537,48
+at s4 t2,at s4 t1,2,2,0,walk,36.2,1a6c46,2.55,alpha.hypixel.net,pt,30040,51,,,,,,,,,walk,36.2,1a6c46,2.55,alpha.hypixel.net,pt,30040,51
+at s4 t2,at s4 t3,1,0,1,,,,,,,,,,,,,,,,,sprint+leap+bonzo+lava-contact,78.6,3d6f29,4.75,stuck.hypixel.net,settled,77582,95
+at s4 t2,at s4 t4,1,1,1,walk+jerry+lava-contact,75.0,7130bd,4.55,alpha.hypixel.net,settled,2094,91,walk+jerry+lava-contact,75.0,7130bd,4.55,alpha.hypixel.net,settled,2094,91,walk+jerry+lava-contact,75.0,7130bd,4.55,alpha.hypixel.net,settled,2094,91
+at s4 t2,in core,1,0,1,,,,,,,,,,,,,,,,,no-input+leap+lava-contact,28.7,ed1c25,1.25,None,settled,66654,25
+at s4 t3,at s1 t3,1,0,0,,,,,,,,,,,,,,,,,walk+teleport(STARRED_BONZO_STAFF)+leap+lava-contact,73.9,1762cc,15.8,stuck.hypixel.net,pt,24994,316
+at s4 t3,at s4 right lever,12,11,0,sprint+lava-contact,30.5,edfebd,1.15,alpha.hypixel.net,pt,51165,23,,,,,,,,,sprint+lava-contact,30.5,edfebd,1.15,alpha.hypixel.net,pt,51165,23
+at s4 t3,at s4 t1,1,1,0,walk+bonzo+lava-contact,89.4,1a6c46,7.3,alpha.hypixel.net,pt,30519,146,,,,,,,,,walk+bonzo+lava-contact,89.4,1a6c46,7.3,alpha.hypixel.net,pt,30519,146
+at s4 t3,at s4 t4,1,1,0,walk+lava-contact,393.8,1a6c46,36.45,alpha.hypixel.net,pt,31459,729,,,,,,,,,walk+lava-contact,393.8,1a6c46,36.45,alpha.hypixel.net,pt,31459,729
+at s4 t3,in core,4,0,0,,,,,,,,,,,,,,,,,leap,1.0,a72d42,0.2,stuck.hypixel.net,pt,72549,4
+at s4 t4,at ee4,1,1,0,sprint,35.6,207123,1.55,alpha.hypixel.net,pt,15023,31,,,,,,,,,sprint,35.6,207123,1.55,alpha.hypixel.net,pt,15023,31
+at s4 t4,at s4 right lever,1,1,0,sprint+lava-contact,92.1,1a6c46,8.6,alpha.hypixel.net,pt,32235,172,,,,,,,,,sprint+lava-contact,92.1,1a6c46,8.6,alpha.hypixel.net,pt,32235,172
+at s4 t4,at s4 t3,3,3,0,sprint,16.6,2b8212,1.05,stuck.hypixel.net,pt,14327,21,,,,,,,,,sprint,16.6,2b8212,1.05,stuck.hypixel.net,pt,14327,21
+at s4 t4,in core,5,5,0,sprint,5.7,1a6c46,0.15,alpha.hypixel.net,pt,25202,3,,,,,,,,,sprint,5.7,1a6c46,0.15,alpha.hypixel.net,pt,25202,3
+at ss,at ee2,3,0,0,,,,,,,,,,,,,,,,,walk+leap+lava-contact,45.6,6ac481,3.4,stuck.hypixel.net,pt,19802,68
+at ss,at s1 left lever,4,2,1,sprint+bonzo,20.5,7130bd,0.95,alpha.hypixel.net,settled,10527,19,sprint+bonzo,20.5,7130bd,0.95,alpha.hypixel.net,settled,10527,19,sprint+bonzo,20.5,7130bd,0.95,alpha.hypixel.net,settled,10527,19
+at ss,at s1 right lever,15,13,0,sprint+bonzo,15.9,7130bd,0.65,alpha.hypixel.net,pt,9408,13,,,,,,,,,walk+leap,4.3,edfebd,0.6,alpha.hypixel.net,pt,60195,12
+at ss,at s1 right path,40,40,7,sprint+bonzo,5.2,7130bd,0.2,alpha.hypixel.net,pt,9740,4,sprint+bonzo,6.1,f493f7,0.3,stuck.hypixel.net,settled,341269,6,sprint+bonzo,5.2,7130bd,0.2,alpha.hypixel.net,pt,9740,4
+at ss,at s1 t1,3,3,1,sprint,21.3,7130bd,0.85,alpha.hypixel.net,pt,7690,17,sprint,28.1,7130bd,1.15,alpha.hypixel.net,settled,6975,23,sprint,21.3,7130bd,0.85,alpha.hypixel.net,pt,7690,17
+at ss,at s1 t2,8,8,1,sprint,12.0,7130bd,0.35,alpha.hypixel.net,pt,7097,7,sprint,14.7,7130bd,1.15,alpha.hypixel.net,settled,10778,23,sprint,12.0,7130bd,0.35,alpha.hypixel.net,pt,7097,7
+at ss,at s1 t3,6,4,2,sprint,17.0,7130bd,0.85,alpha.hypixel.net,settled,7635,17,sprint,17.0,7130bd,0.85,alpha.hypixel.net,settled,7635,17,sprint,17.0,7130bd,0.85,alpha.hypixel.net,settled,7635,17
+at ss,at s1 t4,13,12,0,sprint,15.3,7130bd,0.7,alpha.hypixel.net,pt,8381,14,,,,,,,,,sprint,15.3,7130bd,0.7,alpha.hypixel.net,pt,8381,14
+in core,at ee2,1,1,0,sprint+bonzox5+jerryx3+lava-contact,149.8,ed1c25,9.55,None,pt,66968,191,,,,,,,,,sprint+bonzox5+jerryx3+lava-contact,149.8,ed1c25,9.55,None,pt,66968,191
+in core,at ee4,75,75,3,sprint,1.1,182db7,0.05,stuck.hypixel.net,pt,50709,1,sprint,4.5,23d334,0.15,stuck.hypixel.net,settled,46043,3,sprint,1.1,182db7,0.05,stuck.hypixel.net,pt,50709,1
+in core,at s1 t4,1,1,0,sprint+bonzox6+jerryx3+lava-contact,232.4,207123,15.0,alpha.hypixel.net,pt,17074,300,,,,,,,,,sprint+bonzox6+jerryx3+lava-contact,232.4,207123,15.0,alpha.hypixel.net,pt,17074,300
+in core,at s2 mid low,3,3,0,sprint,68.6,3066a9,2.65,stuck.hypixel.net,pt,130486,53,,,,,,,,,sprint,68.6,3066a9,2.65,stuck.hypixel.net,pt,130486,53
+in core,at s2 t2,1,1,0,sprint+lava-contact,135.9,edfebd,6.75,alpha.hypixel.net,pt,84968,135,,,,,,,,,sprint+lava-contact,135.9,edfebd,6.75,alpha.hypixel.net,pt,84968,135
+in core,at s2 t3,16,15,0,sprint,77.6,3066a9,2.65,stuck.hypixel.net,pt,141518,53,,,,,,,,,sprint,77.6,3066a9,2.65,stuck.hypixel.net,pt,141518,53
+in core,at s4 left lever,1,1,0,walk+bonzo+lava-contact,264.4,1a6c46,21.45,alpha.hypixel.net,pt,27495,429,,,,,,,,,walk+bonzo+lava-contact,264.4,1a6c46,21.45,alpha.hypixel.net,pt,27495,429
+in core,at s4 t4,5,5,1,sprint,6.7,1a6c46,0.2,alpha.hypixel.net,settled,24843,4,sprint,6.7,1a6c46,0.2,alpha.hypixel.net,settled,24843,4,sprint,6.7,1a6c46,0.2,alpha.hypixel.net,settled,24843,4

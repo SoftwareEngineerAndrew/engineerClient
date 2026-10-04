@@ -12,6 +12,7 @@ report says what is measured and what is conjecture; the scripts that print ever
 | Storm (P2) | [storm.md](storm.md) | [../maxor-storm-movement.md](../maxor-storm-movement.md), [../storm-crush.md](../storm-crush.md) |
 | Goldor (P3) | [goldor.md](goldor.md), strategy: [terminals-strategy.md](terminals-strategy.md), roles: [terminal-roles.md](terminal-roles.md), S1 device: [simon-says.md](simon-says.md) | |
 | Goldor's death ticks (P3) | [death-ticks.md](death-ticks.md), probe data: [death-ticks-probes.csv](death-ticks-probes.csv) | |
+| P3 movement PBs between spots | [p3-movement/](p3-movement/README.md): PBs per pair, every leg, the spots | |
 | Necron (P4) | [necron.md](necron.md) | |
 | Sub splits (all) | [sub-splits.md](sub-splits.md) | |
 
