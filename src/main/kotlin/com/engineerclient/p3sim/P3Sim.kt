@@ -55,6 +55,7 @@ object P3Sim : Module(
     val termCooldownS = +NumberSetting("Terminator Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between Terminator shots (Better PF recordings: volleys ~5 ticks apart at full attack speed).")
     val termSpreadS = +NumberSetting("Terminator Arrow Spread", 4.0, 0.0, 15.0, 0.5, unit = "°", desc = "Degrees between the middle arrow and each side arrow.")
     val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
+    val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1, 10, 1, unit = "/s", desc = "Charges back each second (20 max). Recordings: ~3 a second; the wiki says 2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest at once).")
     val realMasksS = +BooleanSetting("Real Masks", false, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
@@ -78,6 +79,7 @@ object P3Sim : Module(
     val termSpread: Float get() = termSpreadS.value.toFloat()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
+    val debugBots: Boolean get() = debugBotsS.value
 
     /** Hide Players is Odin's own (its module and its Hide All / Distance settings); in the sim its rule hides the bots too. */
     val hidePlayers: Boolean get() = com.odtheking.odin.features.impl.render.HidePlayers.enabled
