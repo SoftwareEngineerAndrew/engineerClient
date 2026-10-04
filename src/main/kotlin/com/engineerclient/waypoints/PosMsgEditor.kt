@@ -56,7 +56,29 @@ object PosMsgEditor {
         if (editMode && !BrWaypoints2.wandInHand()) EngineerClient.msg("§7Set the wand first: BR Roles > Edit Mode > Make Held Item Wand.")
     }
 
-    fun tick() { if (!mc.options.keyUse.isDown) useHeld = false }
+    fun tick() {
+        if (!mc.options.keyUse.isDown) useHeld = false
+        if (BrWaypoints2.posmsgRetrigger) rearm()
+    }
+
+    /** Odin's private once-per-world set of sent posmsgs (cleared only on a world load). */
+    private val sentField by lazy {
+        runCatching { PositionalMessages::class.java.getDeclaredField("sentMessages").apply { isAccessible = true } }.getOrNull()
+    }
+
+    /** Re-arms every sent posmsg you are no longer in (Odin's own tests: box contains your position, radius by 3D distance). */
+    private fun rearm() {
+        val p = mc.player ?: return
+        @Suppress("UNCHECKED_CAST")
+        val sent = sentField?.get(null) as? MutableSet<PosMessage> ?: return
+        if (sent.isEmpty()) return
+        val pos = p.position()
+        sent.removeIf { m ->
+            val box = m.box
+            if (box != null) !box.contains(pos)
+            else { val r2 = m.radiusSquared; r2 != null && p.distanceToSqr(m.x, m.y, m.z) > r2 }
+        }
+    }
 
     private fun editing() = editMode && mc.screen == null && BrWaypoints2.wandInHand()
 

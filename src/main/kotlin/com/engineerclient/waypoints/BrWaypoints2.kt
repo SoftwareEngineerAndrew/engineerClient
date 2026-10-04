@@ -92,6 +92,9 @@ object BrWaypoints2 : Module(
         EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
     }
 
+    /** Read by PosMsgEditor every tick. */
+    val posmsgRetrigger by BooleanSetting("Posmsg Re-trigger", false, desc = "Odin sends each /posmsg once per world. On: leaving a box (or its radius) re-arms it, so walking back in sends it again. Only your own client.")
+
     private val posmsgKey by KeybindSetting("Posmsg Here Keybind", GLFW.GLFW_KEY_UNKNOWN, "Adds an Odin /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
         PosMsgEditor.addHere("entered box")
     }
