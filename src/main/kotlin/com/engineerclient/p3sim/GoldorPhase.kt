@@ -393,7 +393,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
         when (P3Sim.deathTicks) {
             0 -> line()
-            1 -> { line(); Sim.title("", "§cDeath tick §7(${if (at == 0) "east strip" else "S$at"} during S$section)", 0, 25, 5) }
+            1 -> { line(); Sim.title("", "§cDeath tick §7(S$at during S$section)", 0, 25, 5) }
             else -> Masks.hit(p, null, line)   // the plain "You died and became a ghost." (MASKS-03)
         }
     }
@@ -470,33 +470,21 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     companion object {
         /**
-         * Death-tick zones (feet, y 106 to 146): (section, box) pairs, section 0 for the east strip past S1's wall.
-         * Each zone is a plain rectangle and the gates' own blocks are a gap between sections ([DT_GAPS], Andrew):
-         * gate 1/2 x 93-107 z 121-124, gate 2/3 x 16-19 (S2 from x 20, S3 to x 16), gate 3/4 z 48-51 (S3 from z 52,
-         * S4 to z 48 in the west corridor). Probed edges (Andrew, 2026-10-04): north strip to z 146 and x -6..114, S3's inner
-         * edge x 18, S4 z 26..50 east of the corridor, east strip x 113-114, y 145 hit / 146 never / 105.9 never,
-         * S1 x 90..113, z 37..121 (z 121.5-121.7 never hit). All on block edges; S1's south edge only bounded
-         * (no higher than 37.7) and S1 vs the east strip unresolved.
+         * Death-tick zones (feet, y 106 to 146): four plain rectangles, one per section, with block-wide gaps between
+         * them at the gates (Andrew). From the 2026-10-04 probes: S1 x 90..114 z 26..121 (it takes the east strip and
+         * the S4/S1 corner; z 121.5 never hit, x 89.3 and 114.3 safe), S2 x 20..114 z 122..146 (hit 122.30, safe
+         * 146.3), S3 x -6..18 z 51..146 (the north strip west of gate 2/3 is S3; x 17.7 hit, 18.45 safe, -6.7 safe),
+         * S4 x -6..90 z 26..50 (hit 49.70, safe 50.33; z 26.3 hit). y 145 hit, 146 never, 105.9 never.
          */
         val DT_ZONES: List<Pair<Int, AABB>> = listOf(
-            1 to AABB(90.0, 106.0, 37.0, 113.0, 146.0, 121.0),
+            1 to AABB(90.0, 106.0, 26.0, 114.0, 146.0, 121.0),
             2 to AABB(20.0, 106.0, 122.0, 114.0, 146.0, 146.0),
-            3 to AABB(-6.0, 106.0, 122.0, 16.0, 146.0, 146.0),
-            3 to AABB(-6.0, 106.0, 52.0, 18.0, 146.0, 122.0),
-            4 to AABB(-6.0, 106.0, 26.0, 18.0, 146.0, 48.0),
-            4 to AABB(18.0, 106.0, 26.0, 113.0, 146.0, 50.0),
-            0 to AABB(113.0, 106.0, 26.0, 114.0, 146.0, 146.0),
+            3 to AABB(-6.0, 106.0, 51.0, 18.0, 146.0, 146.0),
+            4 to AABB(-6.0, 106.0, 26.0, 90.0, 146.0, 50.0),
         )
 
-        /** The gates' own blocks (anims-p3.json gate12/23/34): part of no section, never hit. */
-        val DT_GAPS = listOf(
-            AABB(93.0, 106.0, 121.0, 108.0, 146.0, 125.0),
-            AABB(16.0, 106.0, 122.0, 20.0, 146.0, 146.0),
-            AABB(-6.0, 106.0, 48.0, 18.0, 146.0, 52.0),
-        )
-
-        /** The section (1-4, 0 for the east strip) whose zone [v] is in, or -1 outside them all or on a gate. */
-        fun dtZone(v: Vec3): Int = if (DT_GAPS.any { it.contains(v) }) -1 else DT_ZONES.firstOrNull { it.second.contains(v) }?.first ?: -1
+        /** The section (1-4) whose zone [v] is in, or -1 outside them all (the gaps between them, the core, the middle). */
+        fun dtZone(v: Vec3): Int = DT_ZONES.firstOrNull { it.second.contains(v) }?.first ?: -1
 
         /** Where the core counts as entered (DungeonSplits.everyoneInCore). */
         val CORE_BOX = AABB(39.0, 0.0, 54.0, 71.0, 155.5, 118.0)
