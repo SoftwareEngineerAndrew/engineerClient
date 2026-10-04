@@ -76,6 +76,15 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("+", 16) { P3Plan.botMax = (P3Plan.botMax + 0.5).coerceAtMost(60.0); P3Plan.save() },
         )
         row(extra)
+        // A P3 start part way through: everything the plan has done by then done.
+        fun at(d: Double) { P3Sim.termsAtS.value = (P3Sim.termsAt + d).coerceIn(0.0, 120.0) }
+        row(listOf(
+            label("§eStart at", 50),
+            change("-5", 20) { at(-5.0) }, change("-", 16) { at(-0.5) },
+            label("§f${sec(P3Sim.termsAt)}", 36),
+            change("+", 16) { at(0.5) }, change("+5", 20) { at(5.0) },
+            button("§aStart", 40) { server { Fight.start(Fight.Start.TIME) } },
+        ))
     }
 
     private fun earlyEnterTab() {
@@ -124,7 +133,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("Lava bounce: ${onOff(P3Sim.lava)}", 110) { P3Sim.lavaS.value = !P3Sim.lava },
             change("Section times: ${onOff(P3Sim.showTimes)}", 110) { P3Sim.showTimesS.value = !P3Sim.showTimes },
         ))
-        stepper("Speed", "${P3Sim.speed}", { P3Sim.speedS.value = (P3Sim.speed - 10).coerceAtLeast(100) }, { P3Sim.speedS.value = (P3Sim.speed + 10).coerceAtMost(600) })
+        stepper("Speed", "${P3Sim.speed}", { P3Sim.speedS.value = (P3Sim.speed - 10).coerceAtLeast(100) }, { P3Sim.speedS.value = (P3Sim.speed + 10).coerceAtMost(750) })
         stepper("Goldor kill", "${P3Sim.goldorKill} ticks", { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) })
         stepper("Shortbow cooldown", "${P3Sim.shortbowCooldown} ticks", { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown - 1).coerceAtLeast(1) }, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown + 1).coerceAtMost(20) })
         stepper("Hydra stacks at start", "${P3Sim.hydraStart}", { P3Sim.hydraStartS.value = (P3Sim.hydraStart - 1).coerceAtLeast(0) }, { P3Sim.hydraStartS.value = (P3Sim.hydraStart + 1).coerceAtMost(10) })

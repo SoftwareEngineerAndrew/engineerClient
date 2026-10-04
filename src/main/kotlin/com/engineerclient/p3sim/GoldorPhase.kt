@@ -29,10 +29,11 @@ import net.minecraft.world.phys.Vec3
  *    opening!" flies into the core (0.8) once everyone is inside (4 ticks after the opening at the
  *    earliest), and dies; his Frenzy hits you every 10 ticks 2-14 blocks from him there;
  *  - Necron's first line 82 ticks (81-83) after Goldor's death, then P4.
- * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening.
+ * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening. [at]: a start
+ * part way through (the menu's Time), everything the plan has done by then done.
  */
-class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3") {
-    override val restart get() = when (from) { 2 -> Fight.Start.S2; 3 -> Fight.Start.S3; 4 -> Fight.Start.S4; 5 -> Fight.Start.CORE; else -> Fight.Start.P3 }
+class GoldorPhase(val from: Int, val arrived: Boolean = false, val at: TermsAt? = null) : Fight.Phase("P3") {
+    override val restart get() = if (at != null) Fight.Start.TIME else when (from) { 2 -> Fight.Start.S2; 3 -> Fight.Start.S3; 4 -> Fight.Start.S4; 5 -> Fight.Start.CORE; else -> Fight.Start.P3 }
 
     val stations = Station.all()
     /** The section in progress (1-4), 5 once the core is open. */
@@ -67,27 +68,29 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         stations.forEach { it.spawnStands() }
         devices.start()
         Stats.reset(from)
-        val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
-        nOffset = startN
+        val startN = at?.sectionN?.get(from.coerceAtMost(5)) ?: when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
+        nOffset = at?.n ?: startN
         // Earlier sections: done, their gates and doors open, as if a party had just done them.
         for (s in 1 until from.coerceAtMost(5)) {
-            stations.filter { it.section == s }.forEach {
-                it.done = true; it.doneBy = "-"; it.refreshStands()
-                if (it.kind == Station.Kind.DEVICE) devices.shownDone(it.label)
-                it.lever?.let { l -> Blocks.get(l)?.takeIf { b -> b.hasProperty(LeverBlock.POWERED) }?.let { b -> Blocks.set(l, b.setValue(LeverBlock.POWERED, true)) } }
-            }
+            stations.filter { it.section == s }.forEach { doneAlready(it) }
             gateDown[s] = true; doorOpen[s] = true
             if (s <= 3) { Blocks.finish("gate${s}${s + 1}"); Blocks.finish("door$s") }
-            sectionEnd[s] = startN
+            sectionEnd[s] = at?.endN?.get(s) ?: startN
+            if (at != null) gateAt[s] = at.gateN[s]
+        }
+        // Part way through: this section's (and early-entered ones') stations done by then, and its gate.
+        if (at != null) {
+            stations.filter { it.section >= from && it.id in at.done }.forEach { doneAlready(it) }
+            if (from <= 3 && at.gateN[from] >= 0) { gateDown[from] = true; gateAt[from] = at.gateN[from]; Blocks.finish("gate${from}${from + 1}") }
         }
         if (from >= 2) Blocks.finish("p3start")
         section = from.coerceAtMost(5)
         sectionStart[section] = startN
-        goldor.spawn(startN)
+        goldor.spawn(nOffset)
         Party.startP3(this)
         Sim.player?.let { player ->
             if (!arrived) {
-                val spot = Spots.p3Start(from)
+                val spot = at?.yourSpot() ?: Spots.p3Start(from)
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
             } else {
@@ -104,8 +107,18 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             openCore()
         } else {
             com.engineerclient.practice.TermInfo.simStart(from)
-            Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
+            if (at != null) Sim.note("Starting §f${at.label()}§7 into P3: §fS$from§7, ${count(from)}/${Station.total(from)} done${if (from <= 3 && gateDown[from]) ", gate down" else ""}.")
+            else Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
+            // Started with the section's last station done (waiting on its gate): it ends now.
+            if (at != null && count(from) >= Station.total(from)) sectionDone(from)
         }
+    }
+
+    /** [st] counts as done before the start (by the party: no chat, no swing). */
+    private fun doneAlready(st: Station) {
+        st.done = true; st.doneBy = "-"; st.refreshStands()
+        if (st.kind == Station.Kind.DEVICE) devices.shownDone(st.label)
+        st.lever?.let { l -> Blocks.get(l)?.takeIf { b -> b.hasProperty(LeverBlock.POWERED) }?.let { b -> Blocks.set(l, b.setValue(LeverBlock.POWERED, true)) } }
     }
 
     override fun stop() {

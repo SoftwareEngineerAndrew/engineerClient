@@ -46,7 +46,8 @@ object P3Sim : Module(
     }
     // Kept as objects (not delegates) so the sim's own menu can change them.
     val classS = +SelectorSetting("Your Class", "Berserk", arrayListOf("Healer", "Berserk", "Archer", "Tank", "Mage"), desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
-    val speedS = +NumberSetting("Speed", 500, 100, 600, 10, desc = "Your Skyblock speed in the sim. Most players run boss at 500 (the cap): 1.40 blocks a tick sprinting, as measured in Better PF runs.")
+    val speedS = +NumberSetting("Speed", 500, 100, 750, 10, desc = "Your Skyblock speed in the sim. Most players run boss at 500 (the cap): 1.40 blocks a tick sprinting, as measured in Better PF runs.")
+    val termsAtS = +NumberSetting("Terms Start Time", 20.0, 0.0, 120.0, 0.5, unit = "s", desc = "The menu's Time start: P3 from this long after Goldor's first line, with everything your plan has done by then (yours too) already done.")
     val botsS = +BooleanSetting("Party Bots", true, desc = "Four bots do the rest of the party's terminals, levers, devices and gates at the pace of fast Better PF runs. Off: you do everything.")
     val deathTicksS = +SelectorSetting("Death Ticks", "Masks", arrayListOf("Off", "Warn", "Masks"), desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
     val terminalS = +SelectorSetting("Terminals", "Random", arrayListOf("Random", "Order", "Panes", "Rubix", "Starts With", "Select", "Melody"), desc = "Every terminal as this type, or random as on Hypixel.")
@@ -72,6 +73,7 @@ object P3Sim : Module(
     val showTimes: Boolean get() = showTimesS.value
     val myClass: DungeonClass get() = Party.CLASSES[classS.value.coerceIn(0, 4)]
     val speed: Int get() = speedS.value.toInt()
+    val termsAt: Double get() = termsAtS.value.toDouble()
     val bots: Boolean get() = botsS.value
     val deathTicks: Int get() = deathTicksS.value
     val ping: Int get() = pingS.value.toInt()

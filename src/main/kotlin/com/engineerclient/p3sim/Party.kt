@@ -167,6 +167,7 @@ object Party {
             if (P3Plan.isMine(job)) continue
             val st = phase.stations.firstOrNull { it.id == job }
             if (st?.done == true) continue
+            if (st == null && job.startsWith("gate") && phase.gateIsDown(job.removePrefix("gate ").toIntOrNull() ?: 0)) continue
             val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
             if (s < from) continue
             var (ts, sec) = plan.times[job] ?: (s to 5.0)
@@ -226,7 +227,8 @@ object Party {
         val s = phase.section
         dbgN = n; dbgS = s; curPhase = phase
         if (P3Sim.debugBots && n % 40 == 0) dbgHolds(phase)
-        if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = n; dbg("§bsection $s starts"); sectionStarted(phase, s) }
+        // The section you start in began at its own n (a Time start is part way through it).
+        if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = if (s == phase.from) phase.sectionStartN(s) else n; dbg("§bsection $s starts"); sectionStarted(phase, s) }
         // Jobs someone else (you, on a stack) already did.
         jobs.removeAll { j -> phase.stations.firstOrNull { it.id == j.job }?.done == true || (j.job.startsWith("gate") && phase.gateIsDown(sectionOf(j.job))) }
         youAtEarlyEnter(phase)
@@ -276,7 +278,7 @@ object Party {
 
     /** Section [s] began: its times start, its moves are set; anyone not in it leaps onto whoever early-entered it, or walks. */
     private fun sectionStarted(phase: GoldorPhase, s: Int) {
-        val n = phase.n
+        val n = if (s == phase.from) phase.sectionStartN(s) else phase.n
         val plan = P3Plan.plan()
         jobs.filter { it.timeSection == s }.forEach { it.at = n + (it.sec * 20).roundToInt() }
         for (m in plan.moves.filter { it.section == s }) {
@@ -342,11 +344,8 @@ object Party {
                 if (P3Sim.debugBots) dbg("§a${b.name} is on its ${ee.label} spot§7${if (b.hold) ", holding" else ""}") else Sim.note("§e${b.name}§7 is on ${ee.label}.")
                 continue
             }
-            if (b.to != ee.spot) {
-                // On the spot by the preset's time (no earlier than walking there takes).
-                val walk = (b.pos.distanceTo(ee.spot) / WALK).toInt()
-                go(b, ee.spot, if (eeSpotBy[into] >= 0) (eeSpotBy[into] - walk).coerceAtLeast(phase.n) else phase.n, eeSpotBy[into], "its ${ee.label} spot", ee.yaw to ee.pitch)
-            }
+            // Straight there once free, at etherwarp pace: on the spot (ready for leaps) as early as it can be.
+            if (b.to != ee.spot) go(b, ee.spot, phase.n, phase.n, "its ${ee.label} spot", ee.yaw to ee.pitch)
             break
         }
     }

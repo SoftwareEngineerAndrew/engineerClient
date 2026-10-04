@@ -28,6 +28,8 @@ object Fight {
     /** What the menu can start. */
     enum class Start(val label: String) {
         P1("P1 Maxor"), P2("P2 Storm"), P3("P3 Goldor"), S1("S1"), S2("S2"), S3("S3"), S4("S4"), CORE("Core"), P4("P4 Necron"),
+        /** P3 part way through: the menu's Terms Start Time after Goldor's first line. */
+        TIME("Time"),
     }
 
     var phase: Phase? = null
@@ -150,6 +152,7 @@ object Fight {
         previous = null
         // Our splits: a fresh run from this phase, the ones before it at your Pace times. Queued on
         // the client before any of this fight's lines can reach it.
+        val timed = TermsAt((P3Sim.termsAt * 20).toInt())
         val (split, termsDone) = when (what) {
             Start.P1 -> com.engineerclient.splits.SplitTracker.MAXOR to 0
             Start.P2 -> com.engineerclient.splits.SplitTracker.STORM to 0
@@ -159,6 +162,7 @@ object Fight {
             Start.S4 -> com.engineerclient.splits.SplitTracker.TERMS to 3
             Start.CORE -> com.engineerclient.splits.SplitTracker.GOLDOR to 0
             Start.P4 -> com.engineerclient.splits.SplitTracker.NECRON to 0
+            Start.TIME -> if (timed.section >= 5) com.engineerclient.splits.SplitTracker.GOLDOR to 0 else com.engineerclient.splits.SplitTracker.TERMS to timed.section - 1
         }
         EngineerClient.mc.execute {
             EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) }
@@ -177,6 +181,7 @@ object Fight {
             Start.S4 -> GoldorPhase(4)
             Start.CORE -> GoldorPhase(5)
             Start.P4 -> P4Necron()
+            Start.TIME -> GoldorPhase(timed.section, at = timed)
         }
         begin(p)
     }
