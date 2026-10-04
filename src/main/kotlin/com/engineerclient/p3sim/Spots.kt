@@ -1,6 +1,9 @@
 package com.engineerclient.p3sim
 
-/** Named places in the arena (standable, checked against the built arena), for starts and the menu's teleports. */
+/**
+ * Named places in the arena (standable, checked against the built arena), for starts and the menu's
+ * teleports. The section starts stand on the walkway's gray carpet (1/16 high), not in it.
+ */
 object Spots {
     class Spot(val name: String, val x: Double, val y: Double, val z: Double, val yaw: Float, val pitch: Float = 0f)
 
@@ -10,11 +13,11 @@ object Spots {
     val P1 = Spot("P1 start", 73.5, 221.0, 14.5, 0f)
     val P2 = Spot("P2 (Storm floor)", 73.5, 165.0, 40.5, 0f)
     val P3_DROP = LOBBY
-    val S1 = Spot("S1 start", 100.5, 116.0, 40.5, 0f)
+    val S1 = Spot("S1 start", 100.5, 116.0625, 40.5, 0f)
     val SS = Spot("Simon Says", 108.5, 120.0, 94.0, -90f)
-    val S2 = Spot("S2 start", 100.5, 115.0, 128.5, 90f)
-    val S3 = Spot("S3 start", 12.5, 115.0, 131.5, 135f)
-    val S4 = Spot("S4 start", 8.5, 115.0, 44.5, -90f)
+    val S2 = Spot("S2 start", 100.5, 115.0625, 128.5, 90f)
+    val S3 = Spot("S3 start", 12.5, 115.0625, 131.5, 135f)
+    val S4 = Spot("S4 start", 8.5, 115.0625, 44.5, -90f)
     val CORE = Spot("Core (in front)", 54.5, 115.0, 51.5, 0f)
     val P4 = Spot("P4 (Necron)", 54.5, 64.0, 108.5, 180f)
 

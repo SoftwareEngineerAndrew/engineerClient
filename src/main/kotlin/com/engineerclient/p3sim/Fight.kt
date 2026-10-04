@@ -140,6 +140,8 @@ object Fight {
         later.clear()
         Sim.clearEntities()
         Blocks.restoreAll()
+        // The world as the phases before this one leave it.
+        Blocks.prepare(what)
         // Every start (and restart) is with Black Cat out; the Pet Rod or a Phoenix proc swaps it.
         P3Sim.phoenixS.value = false
         setup(player)
