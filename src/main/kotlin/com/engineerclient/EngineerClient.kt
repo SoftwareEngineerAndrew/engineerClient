@@ -316,7 +316,13 @@ object EngineerClient : ClientModInitializer {
                             P3Rotation.announceMyRole()
                             1
                         }))
-                    .then(literal("posmsg").then(literal("edit").executes { mc.execute { com.engineerclient.waypoints.PosMsgEditor.toggle() }; 1 }))
+                    .then(literal("posmsg").then(literal("edit").executes { mc.execute { com.engineerclient.waypoints.PosMsgEditor.toggle() }; 1 })
+                        .then(literal("move").then(argument("dx", com.mojang.brigadier.arguments.IntegerArgumentType.integer()).then(argument("dy", com.mojang.brigadier.arguments.IntegerArgumentType.integer()).then(argument("dz", com.mojang.brigadier.arguments.IntegerArgumentType.integer()).executes { ctx ->
+                            val dx = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "dx")
+                            val dy = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "dy")
+                            val dz = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "dz")
+                            mc.execute { com.engineerclient.waypoints.PosMsgEditor.moveLatest(dx, dy, dz) }; 1
+                        })))))
                     .then(literal("class").then(argument("name", StringArgumentType.word()).executes { ctx ->
                         val arg = StringArgumentType.getString(ctx, "name")
                         if (arg.equals("auto", true)) {

@@ -172,4 +172,15 @@ object PosMsgEditor {
         ModuleManager.saveConfigurations()
         com.engineerclient.EngineerClient.msg("§dPosmsg §7added §f\"$text\" §7at ${x.toInt()}, ${y.toInt()}, ${z.toInt()}")
     }
+
+    /** Moves the most recently added posmsg (the last in Odin's list) by whole blocks, and saves Odin's config. */
+    fun moveLatest(dx: Int, dy: Int, dz: Int) {
+        val l = list()
+        if (l.isEmpty()) { com.engineerclient.EngineerClient.msg("§dPosmsg §7none to move"); return }
+        val m = l.last()
+        l[l.size - 1] = m.copy(x = m.x + dx, y = m.y + dy, z = m.z + dz,
+            x2 = m.x2?.plus(dx), y2 = m.y2?.plus(dy), z2 = m.z2?.plus(dz))
+        ModuleManager.saveConfigurations()
+        com.engineerclient.EngineerClient.msg("§dPosmsg §7moved §f\"${m.message}\" §7by $dx, $dy, $dz to ${(m.x + dx).toInt()}, ${(m.y + dy).toInt()}, ${(m.z + dz).toInt()}")
+    }
 }
