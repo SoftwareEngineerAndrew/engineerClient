@@ -1,6 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.bossrecorder.BossRecorder;
+import com.engineerclient.maxor.MaxorCrystals;
 import com.engineerclient.recorder.DungeonRecorder;
 import com.engineerclient.recorder.PacketFate;
 import com.engineerclient.rotation.P3Rotation;
@@ -30,6 +31,7 @@ public class ConnectionTapMixin {
     private void ec$tap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
         P3Rotation.INSTANCE.tap(packet);
         BossRecorder.INSTANCE.tap(packet);
+        MaxorCrystals.INSTANCE.tap(packet);
         DungeonRecorder.INSTANCE.tap((Connection) (Object) this, packet);
     }
 

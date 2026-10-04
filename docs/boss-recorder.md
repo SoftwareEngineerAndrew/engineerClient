@@ -32,6 +32,16 @@ ends when the world unloads. Stay in until the end of the run for a complete one
 Gzipped JSON Lines, one object a line with `k` (kind); `t` is client ticks since the world loaded,
 `n` the server tick count (one a ping, as Odin and Better PF's `st` count them).
 
+**`n` before 0.6.17 overcounts.** Hypixel's anticheat sends a pair of pings, inside a bundle, around
+every packet that changes your own entity flags (`pg, d(self), pg`). Odin and Better PF count only
+top-level pings; the Boss Recorder before 0.6.17 (the `mod` in `meta`) counted the bundled ones too,
+so in those files `n` runs 9-18% ahead of the server. For them, use the `time` entries (the server's
+`gameTime`, every 20 ticks) as the clock; `tools/boss-mechanics/maxor/bossrec/mlib.py` (`Run.srv`)
+rebuilds a per-tick one. From 0.6.17 bundled pings are written as `pg` with a trailing `1` and are
+not counted. Tell a fixed file by those flagged `pg` entries, not by `mod`: builds up to the 0.6.18
+build-script fix stamped every jar with the version of its last clean build, so files fixed builds
+recorded on 2026-10-03 still say 0.6.16.
+
 | k | fields | meaning |
 |---|---|---|
 | `meta` | `format: "bosses-1", mod, mc, self, selfId, startMs, t, n` | first line: your name and entity id (the id `dmg` and `a` use for you) |
@@ -51,7 +61,7 @@ Positions are absolute (5 decimals), angles in degrees, velocities in blocks a t
 | kind | fields | packet |
 |---|---|---|
 | `time` | `gameTime` | the server's world clock (every second): its own tick count, to tell server lag from a skipped move |
-| `pg` | `id` | a ping, the packet server ticks are counted by (as Odin counts them: one a ping with a non-zero id); `n` includes this one |
+| `pg` | `id, inBundle?` | a ping, the packet server ticks are counted by (as Odin counts them: one a top-level ping with a non-zero id); `n` includes this one. `inBundle` 1: a ping inside a bundle (Hypixel's anticheat pairs), not a tick and not counted (0.6.17+) |
 | `m` | `id, x, y, z, yaw, pitch, onGround` | a relative move; `x, y, z` null when it only turned, `yaw, pitch` null when it only moved |
 | `md` | `id, dx, dy, dz, yaw, pitch, onGround` | a relative move for an entity not in the world yet: the raw delta in 1/4096 blocks |
 | `tp` | `id, x, y, z, yaw, pitch, onGround, unresolved?` | an entity teleport; `unresolved` 1 if parts of it were relative to an entity not in the world |

@@ -76,20 +76,22 @@ object BossLog {
         }
     }
 
-    private fun collect(p: Packet<*>, s: BossRecording, out: MutableList<(BossRecording) -> Unit>) {
-        // Server ticks are counted here, as Odin counts them (one a ping with a non-zero id), so a
-        // packet's tick is exactly the pings that came before it on the wire.
-        if (p is ClientboundPingPacket && p.id != 0) s.serverTicks++
+    private fun collect(p: Packet<*>, s: BossRecording, out: MutableList<(BossRecording) -> Unit>, inBundle: Boolean = false) {
+        // Server ticks are counted here, as Odin counts them (one a top-level ping with a non-zero
+        // id), so a packet's tick is exactly the pings that came before it on the wire. Pings inside a
+        // bundle are not ticks: Hypixel's anticheat sends a pair around every change to your own
+        // entity flags, which counted ran `n` 9-18% ahead of the server.
+        if (p is ClientboundPingPacket && p.id != 0 && !inBundle) s.serverTicks++
         val n = s.serverTicks
         val focus = s.focus
         fun watched(id: Int) = focus || id in s.bossIds
         fun add(entry: String) { out += { it.net(n, entry) } }
 
         when (p) {
-            is ClientboundBundlePacket -> p.subPackets().forEach { collect(it, s, out) }
+            is ClientboundBundlePacket -> p.subPackets().forEach { collect(it, s, out, inBundle = true) }
 
             is ClientboundSetTimePacket -> add("\"time\",${p.gameTime()}")
-            is ClientboundPingPacket -> if (focus) add("\"pg\",${p.id}")
+            is ClientboundPingPacket -> if (focus) add(if (inBundle) "\"pg\",${p.id},1" else "\"pg\",${p.id}")
 
             is ClientboundMoveEntityPacket -> {
                 val id = (p as MoveEntityPacketAccessor).ec_getEntityId()
