@@ -72,6 +72,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private val tauntAt = HashMap<Int, String>()
     private var lastTaunt: String? = null
 
+    /** Whether Goldor has been in each section's segment since it started (death ticks: its zone turns lethal once he walks on). */
+    private val goldorReached = BooleanArray(6)
+    private fun goldorSeg() = GoldorPhase.Goldor.segment(goldor.s) + 1
+
     val devices = Devices(this)
     private val arenaReplay = ArenaFixes.replay()
     val goldor = Goldor()
@@ -175,6 +179,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
         if (section <= 4 && n % 60 == 59) deathTick()
         goldor.tick(this)
+        if (section in 1..4 && goldorSeg() == section) goldorReached[section] = true
         // His carving of the walkway is Blocks' (carveTick). The TNT cubes (one 27-block cube per 200-tick slot in about
         // half the runs), the granite blobs, the lantern burst and the S4 plate follow one recorded run (ARENA-01/02/04/08).
         arenaReplay?.tick(n)
@@ -383,9 +388,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // A zone goes passive once its section has started (Andrew): only sections not started yet are lethal,
         // plus the one in progress while Goldor is out of its segment.
         if (at < section) return
-        // On the S4 line from his start he counts as in S1 (the first death ticks inside S1 are safe).
-        val goldorIn = if (goldor.firstLap && goldor.s >= GoldorPhase.Goldor.START_S) 1 else GoldorPhase.Goldor.segment(goldor.s) + 1
-        if (at == section && goldorIn == section) return
+        // The section in progress: lethal only once Goldor has reached its segment and walked on out of it. Behind it
+        // (his start stretch on the S4 line, or still on the last section's line before his catch-up sprint) it is safe.
+        if (at == section && !(goldorReached[section] && goldorSeg() != section)) return
         deaths++
         Stats.deathTick(n)
         // FLOW-14: no line stand for death ticks (0/98). Quiet wither.ambient 1/1 HOSTILE at you, not the loud boss sound (DEATH-09);

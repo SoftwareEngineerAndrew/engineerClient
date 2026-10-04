@@ -12,7 +12,9 @@ At each death tick, a player is hit if their **feet position** is inside one of 
 zones (table below) and either
 
 1. the zone's section has **not started yet** (it is ahead of the section in progress), or
-2. it is the section in progress **and Goldor has left his track segment for that section**.
+2. it is the section in progress **and Goldor has left his track segment for that section**: he has
+   reached that segment and walked on past it. While he is still behind it (his start stretch on the
+   S4 line, or on the previous section's line before his catch-up sprint) the zone is safe.
 
 A zone goes passive once its section starts (Andrew, 2026-10-04): zones of finished sections are
 never hit. (The probe runs all stayed in S1, where every other zone is still ahead, so they could
