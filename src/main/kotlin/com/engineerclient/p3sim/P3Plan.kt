@@ -27,8 +27,7 @@ object P3Plan {
     }
 
     fun defaultEarlyEnters() = listOf(
-        // At S2's 2nd terminal (the upper one), where the EE2 player stands and does it.
-        EarlyEnter("ee2", "EE2", 2, Vec3(59.7, 120.0, 125.3)),
+        EarlyEnter("ee2", "EE2", 2, Vec3(69.0, 109.0, 124.7)),
         EarlyEnter("ee3", "EE3", 3, Vec3(0.0, 109.0, 112.2)),
         EarlyEnter("ee4", "EE4", 4, Vec3(41.3, 109.0, 32.6)),
         EarlyEnter("core", "Core", 5, Vec3(54.6, 115.0, 51.5)),
@@ -141,8 +140,7 @@ object P3Plan {
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
-            // EE2 used to default to the 1st terminal (69, 109, 124.7): a saved copy of that goes to the new default.
-            s.spots?.forEach { (k, v) -> earlyEnters.firstOrNull { it.key == k }?.let { if (v.size == 3 && !(k == "ee2" && v == listOf(69.0, 109.0, 124.7))) it.spot = Vec3(v[0], v[1], v[2]) } }
+            s.spots?.forEach { (k, v) -> earlyEnters.firstOrNull { it.key == k }?.let { if (v.size == 3) it.spot = Vec3(v[0], v[1], v[2]) } }
         }
     }
 

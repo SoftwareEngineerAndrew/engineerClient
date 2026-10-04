@@ -137,12 +137,14 @@ object Party {
     /** You've been on the early enterer (leapt onto it). */
     private val youOn = BooleanArray(6)
     private val holdNoted = BooleanArray(6)
+    /** The early enterer into each section has moved on (everyone it waited for leapt). */
+    private val released = BooleanArray(6)
     private var lastLeap = 0
     private val sectionN = IntArray(6)
 
     fun startP3(phase: GoldorPhase) {
         clear()
-        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false)
+        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false)
         planned = 0
         lastLeap = 0
         if (!P3Sim.bots) return
@@ -278,7 +280,8 @@ object Party {
         for (b in bots) {
             if (b.hold && b !== onto) dbg("§e${b.name}§7 stops holding (section $s started)")
             b.hold = false
-            if (b === onto) { b.hold = eeArrived[s]; continue }
+            // Holding (or on its way) unless it already moved on in the section before.
+            if (b === onto) { b.hold = eeArrived[s] && !released[s]; continue }
             if (b.inSection >= s) { walkOn(b, n); continue }
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.pos }
@@ -349,11 +352,11 @@ object Party {
     private fun releaseEarlyEnterers(phase: GoldorPhase) {
         val n = phase.n
         val s = phase.section
-        // You're on an early enterer once you've been within 3 blocks of it (by position: a leap
-        // lands you on it), wherever it is; not in the first 3 s, when everyone starts together.
+        // You're on an early enterer once you're within 3 blocks of it (by position: a leap lands
+        // you on it) while it holds on its spot; on it before it got there doesn't count.
         for (into in s..(s + 1).coerceAtMost(4)) {
             val b = P3Plan.ee(into)?.takeIf { !it.byYou }?.let { botOf(it.owner) } ?: continue
-            if (youOn[into] || (s == phase.from && n - sectionN[s] < 60)) continue
+            if (youOn[into] || !b.hold || !eeArrived[into] || released[into]) continue
             if (Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) { youOn[into] = true; dbg("§ayou're on ${b.name}§7 (EE$into)") }
         }
         for (into in s..(s + 1).coerceAtMost(4)) {
@@ -371,7 +374,7 @@ object Party {
                 else -> (into == s || preleapOpen(into, n)) &&
                     bots.all { it === b || leapt(it.clazz, b, into) } && leapt(P3Sim.myClass, b, into)
             }
-            if (ok) { dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}"); b.hold = false; walkOn(b, n) }
+            if (ok) { released[into] = true; dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}"); b.hold = false; walkOn(b, n) }
         }
     }
 
