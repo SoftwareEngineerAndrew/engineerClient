@@ -190,10 +190,12 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun innerChamber() {
         val p = Sim.player ?: return
         val pz = lastInZ; lastInZ = p.z
-        if (coreAt >= 0 || pz.isNaN() || pz < 54.0 || p.z >= 54.0 || p.x < 52.0 || p.x > 57.0 || p.y < 113.0 || p.y > 123.0) return
+        // Only from S4's start (until the core opens); every try is sent back, the line and sound at most once per 20 ticks.
+        if (section < 4 || coreAt >= 0 || pz.isNaN() || pz < 54.0 || p.z >= 54.0 || p.x < 52.0 || p.x > 57.0 || p.y < 113.0 || p.y > 123.0) return
+        Sim.tp(p, 54.5, 115.0, 58.3)
+        lastInZ = 58.3
         if (n - innerAt < 20) return
         innerAt = n
-        Sim.tp(p, 54.5, 115.0, 58.3)
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, Vec3(436.0, 920.0, 436.0))
         Sim.chat("§cA mystical force prevents you from leaving the inner chamber!")
     }
