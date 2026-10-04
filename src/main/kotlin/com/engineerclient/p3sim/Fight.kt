@@ -161,6 +161,7 @@ object Fight {
             EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) }
             EngineerClient.safely("p3sim arrows device") { resetArrowsDevice() }
         }
+        Recorder.begin(what.label)
         // Odin's Splits start on the dungeon's countdown line.
         Sim.chat("§aStarting in 1 second.")
         val p: Phase = when (what) {
@@ -188,6 +189,7 @@ object Fight {
 
     /** Ends the fight (the menu's Stop): everything back to how it was built. */
     fun end() {
+        Recorder.finish()
         stop()
         Sim.clearEntities()
         Blocks.restoreAll()
@@ -208,9 +210,11 @@ object Fight {
         Terminals.tick()
         SimItems.tick()
         if (P3Sim.lava) Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
-        val p = phase ?: return
+        val p = phase
+        if (p == null || p is P4Necron) { Recorder.finish(); return }
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++
         Party.tick()
+        EngineerClient.safely("p3sim recorder") { Recorder.tick(serverTick) }
     }
 }

@@ -26,6 +26,7 @@ object Sim {
 
     /** A chat line as Hypixel sends it: plain system chat, `§` codes and all (Odin reads these). */
     fun chat(text: String) {
+        Recorder.event(text)
         player?.sendSystemMessage(Component.literal(text))
     }
 
@@ -63,6 +64,7 @@ object Sim {
     }
 
     fun title(title: String, sub: String = "", fadeIn: Int = 0, stay: Int = 30, fadeOut: Int = 5) {
+        Recorder.event("title: $title | $sub")
         val p = player ?: return
         p.connection.send(ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut))
         p.connection.send(ClientboundSetSubtitleTextPacket(legacy(sub)))

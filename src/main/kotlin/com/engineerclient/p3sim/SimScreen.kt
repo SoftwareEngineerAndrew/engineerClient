@@ -130,6 +130,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("Start on join: ${onOff(P3Sim.autoStart)}", 110) { P3Sim.autoStartS.value = !P3Sim.autoStart },
             change("Hide players: ${onOff(P3Sim.hidePlayers)}", 100) { P3Sim.toggleHidePlayers() },
             change("Debug bots: ${onOff(P3Sim.debugBots)}", 100) { P3Sim.debugBotsS.value = !P3Sim.debugBots },
+            change("Record: ${onOff(P3Sim.record)}", 80) { P3Sim.recordS.value = !P3Sim.record },
             button("Reset Items", 80) { server { Sim.player?.let { SimItems.giveHotbar(it, Fight.phase !is P1Maxor && Fight.phase !is P2Storm) } } },
             button("§7Leave", 60) { SimWorld.leave() },
         ))

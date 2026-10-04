@@ -57,12 +57,31 @@ object Party {
     /** The tick of the section in progress, for debug lines. */
     private var dbgN = 0
     private var dbgS = 0
+    private var curPhase: GoldorPhase? = null
 
     /** A debug line (the menu's Debug bots): section and seconds into it first. */
     private fun dbg(text: String) {
-        if (!P3Sim.debugBots) return
         val sec = (dbgN - sectionN[dbgS.coerceIn(0, 5)]) / 20.0
-        Sim.chat("§8[bots S$dbgS %.2f] §7$text".format(sec))
+        val line = "§8[bots S$dbgS %.2f] §7$text".format(sec)
+        if (P3Sim.debugBots) Sim.chat(line) else Recorder.event(line)
+    }
+
+    /** The bots' state for [Recorder]. */
+    fun record(o: com.google.gson.JsonObject) {
+        fun v(p: Vec3?) = p?.let { com.google.gson.JsonArray().apply { add(Recorder.r(it.x)); add(Recorder.r(it.y)); add(Recorder.r(it.z)) } }
+        o.add("bots", com.google.gson.JsonArray().apply {
+            for (b in bots) add(com.google.gson.JsonObject().apply {
+                addProperty("name", b.name)
+                add("pos", v(b.pos))
+                b.to?.let { add("to", v(it)); addProperty("goAt", b.goAt); addProperty("due", b.due) }
+                addProperty("in", b.inSection)
+                if (b.hold) addProperty("hold", true)
+                b.working?.let { addProperty("working", it.id) }
+                add("jobs", com.google.gson.JsonArray().apply { jobs.filter { it.bot === b }.forEach { j -> add("${j.job}@${j.at}") } })
+            })
+        })
+        o.addProperty("ee", "arrived=${eeArrived.toList()} youOn=${youOn.toList()} preleapAt=${preleapAt.toList()} spotBy=${eeSpotBy.toList()}")
+        if (leaps.isNotEmpty()) o.addProperty("leaps", leaps.joinToString { "${it.bot.name}@${it.at}" })
     }
 
     private fun Vec3.short() = "%.1f %.1f %.1f".format(x, y, z)
@@ -183,7 +202,7 @@ object Party {
         if (!P3Sim.bots) return
         val n = phase.n
         val s = phase.section
-        dbgN = n; dbgS = s
+        dbgN = n; dbgS = s; curPhase = phase
         if (P3Sim.debugBots && n % 40 == 0) dbgHolds(phase)
         if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = n; dbg("§bsection $s starts"); sectionStarted(phase, s) }
         // Jobs someone else (you, on a stack) already did.
@@ -385,8 +404,22 @@ object Party {
     /** [c] has leapt onto [onto] (you: been within 3 blocks of it). */
     private fun leapt(c: DungeonClass?, onto: Bot, into: Int): Boolean = when {
         c == null || c == onto.clazz -> true
-        c == P3Sim.myClass -> youOn[into]
+        // You: been on it, or already through that section (your jobs in it done).
+        c == P3Sim.myClass -> youOn[into] || youDone(into)
         else -> botOf(c)?.let { it.inSection >= into && leaps.none { l -> l.bot === it } } ?: true
+    }
+
+    /** Section [into] has started and every job of yours in it is done (none: false). */
+    private fun youDone(into: Int): Boolean {
+        val phase = curPhase ?: return false
+        if (phase.section < into) return false
+        val mine = phase.stations.filter { it.section == into && P3Plan.isMine(it.id) }
+        return mine.isNotEmpty() && mine.all { it.done }
+    }
+
+    /** You leapt onto [b]: you're on it for whatever it early-enters (on its way there or not). */
+    fun youLeaptOnto(b: Bot) {
+        for (into in 2..4) if (P3Plan.ee(into)?.owner == b.clazz && !youOn[into]) { youOn[into] = true; dbg("§ayou leapt onto ${b.name}§7 (EE$into)") }
     }
 
     private fun preleapOpen(into: Int, n: Int) = n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
