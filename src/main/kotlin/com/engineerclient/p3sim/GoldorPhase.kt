@@ -157,7 +157,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
         if (section <= 4 && n % 60 == 59) deathTick()
         goldor.tick(this)
-        // Goldor's carving and the TNT cubes are left out: the arena stays whole (practice, not scenery).
+        // His carving of the walkway is Blocks' (carveTick); the TNT cubes are left out.
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
@@ -377,7 +377,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 82) {
             necronAt = n
             Stats.goldorDone(n)
-            if (P3Sim.p3Only) { Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
+            // Stopping here, the run's recording ends here too (else it grows until the next start).
+            if (P3Sim.p3Only) { Recorder.finish(); Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
             handOff = true
         }
     }
