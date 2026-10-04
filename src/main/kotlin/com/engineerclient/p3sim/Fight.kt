@@ -84,6 +84,9 @@ object Fight {
         epoch++
         later.clear()
         Terminals.closeAll()
+        // The Dungeonbreaker's broken blocks would grow back into the next start's world (a gate a
+        // later start has open); cooldowns start fresh, as the masks' do.
+        SimItems.reset()
         BossBar.hide()
     }
 
@@ -139,6 +142,8 @@ object Fight {
         stop()
         later.clear()
         Sim.clearEntities()
+        // The bots too: a start that spawns none (P2, P4 with Party Bots off) must not see the last run's.
+        Party.clear()
         Blocks.restoreAll()
         // The world as the phases before this one leave it.
         Blocks.prepare(what)

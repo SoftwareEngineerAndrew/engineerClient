@@ -98,8 +98,15 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
             } else {
-                // From Storm: the Superboom goes back in slot 1.
-                player.inventory.setItem(0, SimItems.SUPERBOOM)
+                // From Storm: the Superboom onto the bar where the Hyperion was (a swap: with a saved
+                // layout slot 1 holds something else, and after StormEnd the P3 bar is already given).
+                val inv = player.inventory
+                val hype = (0..8).firstOrNull { SimItems.idOf(inv.getItem(it)) == "HYPERION" }
+                val boom = (9 until inv.containerSize).firstOrNull { SimItems.idOf(inv.getItem(it)) == "SUPERBOOM_TNT" }
+                if (hype != null && boom != null) {
+                    val h = inv.getItem(hype); inv.setItem(hype, inv.getItem(boom)); inv.setItem(boom, h)
+                    player.inventoryMenu.broadcastChanges()
+                }
             }
         }
         if (from == 1) {
