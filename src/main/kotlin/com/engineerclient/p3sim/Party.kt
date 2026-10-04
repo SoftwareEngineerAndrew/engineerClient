@@ -270,7 +270,6 @@ object Party {
             val st = phase.stations.firstOrNull { it.id == j.job }
             if (st != null) {
                 if (st.section == s && held && phase.stations.count { it.section == s && !it.done } == 1) return@removeAll false
-                if (st.kind == Station.Kind.TERMINAL && Terminals.inUse(st)) return@removeAll false
                 // A lever's line comes on the swing that pulls it (1 tick, party/leapers.mjs); a device's last click swings too.
                 if (st.kind != Station.Kind.TERMINAL) swing(j.bot)
                 if (st.kind == Station.Kind.LEVER) phase.pullLever(st, j.bot.name) else st.complete(j.bot.name)

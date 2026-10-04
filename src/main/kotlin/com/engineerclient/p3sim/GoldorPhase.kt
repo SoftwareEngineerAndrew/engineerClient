@@ -151,7 +151,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         dialogue()
         // Stand names refresh on a 20-tick grid.
         // Lever stands rename on their own, 1-3 ticks after the pull (pullLever).
-        if (n % 20 == 0) stations.forEach { if (it.kind != Station.Kind.LEVER) it.refreshStands() }
+        // Recorded renames land 1-2 ticks before each multiple of 20 (TERM-20): set on 18, sent on 19.
+        if (n % 20 == 18) stations.forEach { if (it.kind != Station.Kind.LEVER) it.refreshStands() }
         // Gates that open by themselves 5 s after their section ended.
         for (s in 1..3) if (autoGateAt[s] >= 0 && n >= autoGateAt[s] && !gateDown[s]) blowGate(s, null)
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
@@ -223,13 +224,17 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val shown = section.coerceAtMost(4)
         val k = count(shown)
         val line = progressLine(by, what, k, Station.total(shown))
-        Sim.chat(line)
+        // Someone else finishing the terminal you're in closes your window first, in the same tick (terminals audit TERM-06).
+        if (by != Sim.me && st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st)
+        // Hypixel's line is a styled component (name, green text, red count), not a § string.
+        Sim.chatStyled(line)
         if (by == Sim.me) Stats.done(st, n)
         // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
         // Odin's Terminal Sounds keys on the raw 4.047619) (chat-attacks.md §2).
-        Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
-        // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it).
-        Sim.title("", line, 0, 30, 5)
+        Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
+        // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it): 0/40/0, the
+        // subtitle a legacy string without the §r's ("§bp3wr§a activated a terminal! (§c3§a/8)").
+        Sim.title("", line.replace("§r", ""), 0, 40, 0)
         if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
     }
 
@@ -573,9 +578,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** A click on a terminal's stand. */
     fun useTerminal(st: Station) {
         val p = Sim.player ?: return
-        if (st.done) { Sim.chat("§cThis Terminal has already been completed!"); return }
-        if (st.section != section) { Sim.chat("§cThis Terminal doesn't seem to be responsive at the moment."); return }
-        if (Party.busyAt(st)) { Sim.chat("§cSomeone is already using this terminal!"); return }
+        // Red components, a tick after the click (TERM-17). No "already using" lock on Hypixel (TERM-06).
+        if (st.done) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal has already been completed!") }; return }
+        if (st.section != section) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal doesn't seem to be responsive at the moment.") }; return }
         Terminals.open(p, st)
     }
 

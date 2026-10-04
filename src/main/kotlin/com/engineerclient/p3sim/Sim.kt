@@ -30,6 +30,12 @@ object Sim {
         player?.sendSystemMessage(Component.literal(text))
     }
 
+    /** A chat line as a styled component (no `§` left in its text), the way Hypixel sends most of its lines. */
+    fun chatStyled(text: String) {
+        Recorder.event(text)
+        player?.sendSystemMessage(legacy(text))
+    }
+
     /** A line from the sim itself (not something Hypixel says): marked so it can't be mistaken. */
     fun note(text: String) = chat("§8[§6P3 Sim§8] §7$text")
 
@@ -67,18 +73,19 @@ object Sim {
     fun title(title: String, sub: String = "", fadeIn: Int = 0, stay: Int = 30, fadeOut: Int = 5) {
         Recorder.event("title: $title | $sub")
         val p = player ?: return
+        // Hypixel's order: times, title, subtitle.
         p.connection.send(ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut))
-        p.connection.send(ClientboundSetSubtitleTextPacket(legacy(sub)))
         p.connection.send(ClientboundSetTitleTextPacket(legacy(title)))
+        p.connection.send(ClientboundSetSubtitleTextPacket(legacy(sub)))
     }
 
-    fun sound(sound: SoundEvent, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null) {
+    fun sound(sound: SoundEvent, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null, source: SoundSource = SoundSource.MASTER) {
         val p = player ?: return
         val pos = at ?: p.position()
-        level.playSound(null, pos.x, pos.y, pos.z, sound, SoundSource.MASTER, volume, pitch)
+        level.playSound(null, pos.x, pos.y, pos.z, sound, source, volume, pitch)
     }
 
-    fun sound(sound: Holder<SoundEvent>, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null) = sound(sound.value(), volume, pitch, at)
+    fun sound(sound: Holder<SoundEvent>, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null, source: SoundSource = SoundSource.MASTER) = sound(sound.value(), volume, pitch, at, source)
 
     fun <T : Entity> spawn(e: T): T {
         e.addTag(TAG)

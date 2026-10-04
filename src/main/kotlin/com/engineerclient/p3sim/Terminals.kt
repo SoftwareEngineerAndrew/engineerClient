@@ -18,14 +18,16 @@ import net.minecraft.world.item.Items
 import kotlin.random.Random
 
 /**
- * F7's six terminals as Hypixel serves them (measured from Better PF recordings, see
- * `tools/p3sim/research/terminals.md`): the same titles, window sizes, items, names and counts, so
- * Odin's solver and custom GUI take them for the real thing.
+ * F7's six terminals as Hypixel serves them (measured from Better PF and Dungeon Recorder runs, see
+ * `tools/p3sim/research/terminals.md` and the terminals audit): the same titles, window sizes, items,
+ * names and counts, so Odin's solver and custom GUI take them for the real thing.
  *
- * As on Hypixel: the window opens empty and its items follow a tick later, one slot update each
- * (Odin only solves on those); the window is never reopened, clicks change single slots; left,
- * right and middle clicks all count (Odin sends middle); a wrong click does nothing; the finishing
- * click closes the window in the same tick as the chat line.
+ * As on Hypixel: the items come in the same tick as the window, one slot update each (no full
+ * refill; Odin only solves on those), and one full refill ~5 ticks later; a click is answered by a
+ * pling at once and its slot update the tick after; at most 5 clicks count in any 10 ticks (the
+ * rest get no answer at all); left, right and middle clicks all count (Odin sends middle); a wrong
+ * Melody lock stalls it 20 ticks; every open is a fresh puzzle of the terminal's type; the
+ * finishing click closes the window (then the chat line, then a close of window 0) in one tick.
  */
 object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
@@ -47,7 +49,10 @@ object Terminals {
         return s
     }
 
-    val FILLER: ItemStack get() = named(Items.BLACK_STAINED_GLASS_PANE, "")
+    /** Hypixel's filler: a nameless black pane whose tooltip is hidden (TERM-10). */
+    val FILLER: ItemStack get() = named(Items.BLACK_STAINED_GLASS_PANE, "").also {
+        it.set(DataComponents.TOOLTIP_DISPLAY, net.minecraft.world.item.component.TooltipDisplay(true, java.util.LinkedHashSet()))
+    }
 
     private fun item(id: String): Item = BuiltInRegistries.ITEM.getValue(Identifier.withDefaultNamespace(id))
 
@@ -60,6 +65,8 @@ object Terminals {
         val keep = station.term?.type?.takeIf { Fight.forcedTerminal == null && Random.nextInt(68) >= 3 }
         val term = Term.create(type ?: keep ?: station.nextType()).also { station.term = it }
         player.openMenu(SimpleMenuProvider({ id, inv, _ -> TerminalMenu(id, inv, term, station) }, Component.literal(term.title)))
+        // A lever click at you as the window opens (vol 0.5, pitch 1, blocks; TERM-08).
+        Sim.sound(net.minecraft.sounds.SoundEvents.LEVER_CLICK, 0.5f, 1f, source = net.minecraft.sounds.SoundSource.BLOCKS)
     }
 
     // ------------------------------------------------------------------ the puzzles
@@ -132,7 +139,10 @@ object Terminals {
         private val cycle = listOf(Items.RED_STAINED_GLASS_PANE to "Red", Items.ORANGE_STAINED_GLASS_PANE to "Orange", Items.YELLOW_STAINED_GLASS_PANE to "Yellow", Items.GREEN_STAINED_GLASS_PANE to "Green", Items.BLUE_STAINED_GLASS_PANE to "Blue")
         private val colour = IntArray(45)
         init {
-            do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved())
+            // Boards drawn to main's fewest-clicks spread (n = 33: 4:3 5:4 6:4 7:6 8:7 9:7 10:2; mean
+            // 7.2, easier than 9 free draws' 8.1): free draws until one needs the drawn count.
+            val want = weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2))
+            do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
             slots.forEach { set(it) }
         }
         private fun set(slot: Int) { val (i, n) = cycle[colour[slot]]; items[slot] = named(i, n) }
@@ -143,6 +153,8 @@ object Terminals {
             return true
         }
         override fun solved() = slots.all { colour[it] == colour[slots[0]] }
+        /** Fewest clicks to one colour: each pane forward (left) or back (right), the best target. */
+        fun minClicks() = (0 until 5).minOf { t -> slots.sumOf { val f = (t - colour[it] + 5) % 5; minOf(f, 5 - f) } }
     }
 
     /** "What starts with: 'X'?": 21 items (1.8 names); click every one starting with X (it glints). */
@@ -225,6 +237,8 @@ object Terminals {
         init { draw() }
         private fun draw() {
             for (i in items.indices) items[i] = FILLER
+            // The black panes the magenta moves along (rows 0 and 5, columns 1-5) keep their tooltip.
+            for (c in 1..5) { items[c] = named(Items.BLACK_STAINED_GLASS_PANE, ""); items[45 + c] = named(Items.BLACK_STAINED_GLASS_PANE, "") }
             items[target] = named(Items.MAGENTA_STAINED_GLASS_PANE, "")
             items[45 + target] = named(Items.MAGENTA_STAINED_GLASS_PANE, "")
             for (r in 0 until 4) {
@@ -272,40 +286,74 @@ object Terminals {
     class TerminalMenu(id: Int, inv: Inventory, val term: Term, val station: Station) :
         ChestMenu(menuType(term.type.rows), id, inv, SimpleContainer(term.size), term.type.rows) {
         private val player = inv.player as ServerPlayer
-        private var opened = Fight.serverTick
-        private var filled = false
+        private val opened = Fight.serverTick
+        /** The server tick a click was answered on: its slot updates go out the tick after (TERM-04). */
+        private var answeredAt = -1
+        /** Ticks of the clicks that counted, for the 5-per-10-ticks limit (TERM-01). */
+        private val counted = ArrayDeque<Int>()
+        private var sync: net.minecraft.world.inventory.ContainerSynchronizer? = null
+        private var refilled = false
 
-        init { Terminals.open += this }
+        init {
+            Terminals.open += this
+            // The puzzle is in the window from the start: its items go out with the window (TERM-03).
+            for (i in 0 until term.size) container.setItem(i, term.items[i].copy())
+        }
+
+        /**
+         * Hypixel opens a window with one slot update per slot (stateId from 1), the player's
+         * inventory slots included, never a full content packet; that follows ~5 ticks later (TERM-14).
+         */
+        override fun setSynchronizer(s: net.minecraft.world.inventory.ContainerSynchronizer) {
+            sync = s
+            super.setSynchronizer(object : net.minecraft.world.inventory.ContainerSynchronizer by s {
+                override fun sendInitialData(menu: net.minecraft.world.inventory.AbstractContainerMenu, items: List<ItemStack>, carried: ItemStack, data: IntArray) {
+                    items.forEachIndexed { i, it -> s.sendSlotChange(menu, i, it) }
+                }
+            })
+        }
 
         /** Called every server tick while open. */
         fun tick() {
             if (player.containerMenu !== this) { open -= this; return }
             val age = Fight.serverTick - opened
-            // Hypixel fills the window a tick after opening it.
-            if (!filled && age >= 1) { filled = true; sync() }
-            if (filled) {
-                term.tick(age - 1)
-                sync()
+            term.tick(age)
+            if (Fight.serverTick > answeredAt) { copyIn(); broadcastChanges() }
+            if (!refilled && age >= 5) {
+                refilled = true
+                sync?.sendInitialData(this, slots.map { it.item }, carried, IntArray(0))
+                player.connection.send(net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket(ItemStack.EMPTY))
             }
         }
 
-        /** Copies the puzzle into the container; the game sends the changed slots one by one. */
-        private fun sync() {
+        /** Copies the puzzle into the container (sent as single slot changes). */
+        private fun copyIn() {
             for (i in 0 until term.size) {
                 if (!ItemStack.matches(container.getItem(i), term.items[i])) container.setItem(i, term.items[i].copy())
             }
         }
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
-            if (!filled || term.done || slot !in 0 until term.size) { undo(slot); return }
+            if (term.done || slot !in 0 until term.size) { undo(slot); return }
             Fight.afterPing("terminal click") {
                 if (player.containerMenu !== this || term.done) return@afterPing
+                val now = Fight.serverTick
+                // Past 5 in the last 10 ticks: dropped, no answer of any kind.
+                if (P3Sim.clickLimit) {
+                    while (counted.isNotEmpty() && counted.first() <= now - 10) counted.removeFirst()
+                    if (counted.size >= 5) return@afterPing
+                    counted.addLast(now)
+                }
                 if (!term.click(slot, button, input)) { undo(slot); return@afterPing }
-                sync()
+                // A counted click: a pling at you at once (TERM-07), the slot change next tick.
+                Sim.sound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
+                answeredAt = now
                 if (term.solved()) {
                     term.done = true
-                    station.complete(Sim.me)
+                    // One tick: close the window, the chat line (titles, pling), close window 0 (TERM-15).
                     player.closeContainer()
+                    station.complete(Sim.me)
+                    player.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))
                 }
             }
         }
@@ -337,6 +385,12 @@ object Terminals {
     fun closeAll() {
         Sim.player?.let { if (it.containerMenu is TerminalMenu) it.closeContainer() }
         open.clear()
+    }
+
+    /** Someone else finished [station]: your window on it closes (Hypixel has no terminal lock). */
+    fun closeFor(station: Station) {
+        val p = Sim.player ?: return
+        if ((p.containerMenu as? TerminalMenu)?.station === station) p.closeContainer()
     }
 
     /** Is the player in [station]'s terminal right now. */

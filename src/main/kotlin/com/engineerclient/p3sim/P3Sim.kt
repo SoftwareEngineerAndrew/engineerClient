@@ -55,6 +55,7 @@ object P3Sim : Module(
     val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at full attack speed (recordings: Terminator 5, Mosquito 5 with Terror on, 7 without). A click inside it fires when it ends. Nasty Bite has its own 10.")
     val terrorS = +SelectorSetting("Terror Armor", "3 Pieces", arrayListOf("Off", "3 Pieces", "4 Pieces"), desc = "Hydra Strike: +1 stack per boss hit (every 0.2 s at most), one lost every 8 s (3 pieces, a mask on your head) or 11 s (4 pieces) without a hit; +1% arrow speed a stack and, at 10, two more arrows at ±8°. Off: no stacks.")
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0, 10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
+    val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer (measured from 82 recorded windows).")
     val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
     val recordS = +BooleanSetting("Record Runs", true, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
@@ -83,6 +84,7 @@ object P3Sim : Module(
     val hydraStart: Int get() = hydraStartS.value.toInt()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
+    val clickLimit: Boolean get() = clickLimitS.value
     val debugBots: Boolean get() = debugBotsS.value
     val record: Boolean get() = recordS.value
 

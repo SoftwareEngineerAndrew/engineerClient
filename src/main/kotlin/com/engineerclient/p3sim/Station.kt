@@ -49,7 +49,9 @@ class Station(
             s.isInvisible = true
             s.setNoGravity(true)
             s.isInvulnerable = true
-            s.setCustomName(Component.literal(name))
+            s.isSilent = true
+            // Styled from the start, as Hypixel's names are (TERM-19).
+            s.setCustomName(if (name.isEmpty()) null else Sim.legacy(name))
             s.isCustomNameVisible = name.isNotEmpty()
             if (marker) setMarker(s)
             return Sim.spawn(s)
@@ -70,15 +72,19 @@ class Station(
     fun refreshStands() {
         fun name(s: ArmorStand?, n: String) {
             s ?: return
-            val c = Sim.legacy(n)
-            if (s.customName?.string != c.string || s.customName == null) {
-                s.setCustomName(c); s.isCustomNameVisible = n.isNotEmpty()
+            val c = if (n.isEmpty()) null else Sim.legacy(n)
+            if (s.customName?.string != c?.string || (s.customName == null) != (c == null)) {
+                s.setCustomName(c); s.isCustomNameVisible = c != null
             }
         }
         val far = kind != Kind.LEVER && (Sim.player?.position()?.distanceTo(at) ?: 0.0) >= 25.0
         if (far) { name(top, ""); name(bottom, ""); return }
         when (kind) {
-            Kind.TERMINAL -> if (done) { name(top, "§aTerminal Active"); name(bottom, "") } else { name(top, INACTIVE); name(bottom, CLICK_HERE) }
+            Kind.TERMINAL -> if (done) {
+                // Done: the top stand moves down 0.375, onto the bottom one's height (TERM-11).
+                top?.let { if (it.y > at.y - 0.375 + 1e-3) it.snapTo(at.x, at.y - 0.375, at.z, 0f, 0f) }
+                name(top, "§aTerminal Active"); name(bottom, "")
+            } else { top?.let { if (it.y < at.y - 1e-3) it.snapTo(at.x, at.y, at.z, 0f, 0f) }; name(top, INACTIVE); name(bottom, CLICK_HERE) }
             Kind.DEVICE -> if (done) { name(top, "§aDevice"); name(bottom, "§aActive") } else { name(top, "§cInactive"); name(bottom, "§cDevice") }
             Kind.LEVER -> name(top, if (done) "§aActivated" else "§cNot Activated")
         }
