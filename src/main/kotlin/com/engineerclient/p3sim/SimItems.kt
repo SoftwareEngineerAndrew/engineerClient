@@ -215,6 +215,8 @@ object SimItems {
         val level = mc.level ?: return false
         if (!simClient(level)) return false
         val at = pos.immutable()
+        // A left click on a lever credits it, toggling nothing (LEV-01, LIGHTS-01).
+        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { SimServer.run("lever left") { ph.devices.leftClick(at) }; return true } }
         // Superboom: a left click on a gate blows it too.
         if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
             SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { superboom(p, at) } } }
@@ -616,8 +618,7 @@ object SimItems {
     private fun refusal(p: ServerPlayer, pos: BlockPos, s: BlockState): String? {
         val b = s.block
         val c = Vec3.atCenterOf(pos)
-        // Out of the core (into it is fine).
-        if (INNER.contains(p.position()) && !INNER.contains(c)) return INNER_CHAMBER
+        // No mining rule for "leaving the inner chamber": it is a walking boundary on Hypixel (GoldorPhase.innerChamber; BREAKER-03).
         if (s.getDestroySpeed(Sim.level, pos) < 0) return THAT_BLOCK
         if (b == net.minecraft.world.level.block.Blocks.BARRIER || b == net.minecraft.world.level.block.Blocks.BEDROCK) return THAT_BLOCK
         if (b is net.minecraft.world.level.block.CommandBlock) return THAT_BLOCK
@@ -631,12 +632,16 @@ object SimItems {
     /** Charges (max 20), refilled in a batch every second; blocks broken, oldest first, and when. */
     var charges = MAX_CHARGES; private set
     private var refillAt = 0
-    private class Broken(val pos: BlockPos, val state: BlockState, val at: Int)
+    private var refillStep = 0 // main: irregular +2 steps (rec2 refill episodes), not a batch per second
+    private val refillRng = java.util.Random()
+    private class Broken(val pos: BlockPos, val state: BlockState, val at: Int) { var restoreAt = Int.MAX_VALUE }
     private val broken = ArrayDeque<Broken>()
+    /** The last 20 breaks: the 21st one schedules the oldest of them back. */
+    private val window = ArrayDeque<Broken>()
     private var refusedSaidAt = -100
     private var noChargesSaidAt = -100
 
-    private fun resetBreaker() { charges = MAX_CHARGES; refillAt = 0; broken.clear(); refusedSaidAt = -100; noChargesSaidAt = -100 }
+    private fun resetBreaker() { charges = MAX_CHARGES; refillAt = 0; refillStep = 0; broken.clear(); window.clear(); refusedSaidAt = -100; noChargesSaidAt = -100 }
 
     /**
      * A hit with the Dungeonbreaker reaching the server (after the ping): breaks that one block for
@@ -657,8 +662,10 @@ object SimItems {
         charges--
         Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
         broken.addLast(Broken(pos, s, now))
-        // The 21st block broken brings the first back.
-        while (broken.size > MAX_CHARGES) restore(broken.removeFirst())
+        // The 21st block broken brings the oldest back 41 ticks later, never past the regen timer (rec2: 689 of 694 breaks within 2 ticks).
+        val b = broken.last()
+        window.addLast(b)
+        if (window.size > MAX_CHARGES) { val o = window.removeFirst(); o.restoreAt = minOf(o.restoreAt, now + 41) }
     }
 
     private fun restore(b: Broken) {
@@ -667,10 +674,18 @@ object SimItems {
 
     private fun tickBreaker() {
         val now = Fight.serverTick
-        if (charges < MAX_CHARGES && now >= refillAt) { charges = (charges + P3Sim.breakerRefill).coerceAtMost(MAX_CHARGES); refillAt = now + 20 }
-        else if (charges >= MAX_CHARGES) refillAt = now + 20
-        val regen = (P3Sim.breakerRegen * 20).toInt()
-        while (broken.isNotEmpty() && now - broken.first().at >= regen) restore(broken.removeFirst())
+        // Main refills ~6/s as +2 steps (sometimes +1) at irregular 1-20 tick gaps (rec2: 206 episodes); the rate setting scales the gap.
+        if (charges >= MAX_CHARGES) refillStep = 0
+        else {
+            if (refillStep == 0) refillStep = now + 1 + refillRng.nextInt(2 * Math.max(1, (36 / P3Sim.breakerRefill)) - 1)
+            if (now >= refillStep) {
+                charges = (charges + (if (refillRng.nextInt(5) == 0) 1 else 2)).coerceAtMost(MAX_CHARGES)
+                refillStep = 0
+            }
+        }
+        // 221 ticks as the client sees it (rec2 mode); ping is added on top by the delayed block update.
+        val regen = Math.round(P3Sim.breakerRegen * 20).toInt()
+        broken.removeAll { if (now - it.at >= regen || now >= it.restoreAt) { restore(it); true } else false }
     }
 
     /**
@@ -740,9 +755,14 @@ object SimItems {
 
     private fun openLeap(p: ServerPlayer) {
         val now = Fight.serverTick
-        if (now < leapReady) { Sim.chat("§cThis ability is on cooldown for ${(leapReady - now + 19) / 20}s."); return }
+        if (now < leapReady) {
+            // Cooldown: enderman.teleport HOSTILE vol 8.0 pitch 0.0 at you, then the chat line (35 of 35 rejections).
+            Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
+            Sim.chat("§cThis ability is on cooldown for ${(leapReady - now + 19) / 20}s."); return
+        }
         val bots = Party.bots().filter { it.entity != null }
-        p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap")))
+        // The menu opens one RTT after the use (rec2: 1 tick at the recorded ping).
+        Fight.afterPing("leapOpen") { p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap"))) }
     }
 
     /** Hypixel's Spirit Leap window: teammates' heads in slots 11-15, a click leaps (8 ticks, as measured). */
@@ -765,15 +785,16 @@ object SimItems {
             val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
             val bot = bots.firstOrNull { it.name == name } ?: return
             val sp = p as ServerPlayer
-            sp.closeContainer()
             Fight.afterPing("leap") {
+                // The close arrives with the teleport (same tick, rec2 99/99).
+                sp.closeContainer()
                 val e = bot.pos
                 leapReady = Fight.serverTick + 40
                 // You land on them exactly, facing as they face.
                 Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
                 Sim.chat("§aYou have teleported to §r§b${bot.name}§r§a!")
                 GhostCapture.event("leap", bot.clazz.name)
-                Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position())
+                Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             }
         }
 

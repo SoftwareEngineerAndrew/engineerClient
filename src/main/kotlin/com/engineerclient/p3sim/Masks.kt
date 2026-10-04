@@ -202,6 +202,6 @@ object Masks {
         val phase = Fight.phase as? GoldorPhase
         val spot = phase?.let { Spots.p3Start(it.section.coerceIn(1, 5)) } ?: Spots.LOBBY
         Sim.tp(p, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
-        safeUntil = now + 60
+        // No immunity after dying or a revive (rec2 14-01-12: killed again on the next death tick).
     }
 }

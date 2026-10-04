@@ -46,7 +46,8 @@ class StormEnd : Fight.Phase("Storm end") {
     override fun tick() {
         when (t) {
             62 -> StormFx.line(body, "At least my son died by your hands.")
-            LEAD -> Fight.begin(GoldorPhase(1, arrived = true))
+            // 3 ticks early: the first lever credit can land 1-2 ticks before "Who dares" (LEV-06); the line itself still lands at LEAD.
+            LEAD - 3 -> Fight.begin(GoldorPhase(1, arrived = true))
         }
     }
 

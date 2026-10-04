@@ -49,9 +49,9 @@ class Devices(val phase: GoldorPhase) {
     /**
      * Simon Says (S1), as measured in docs/mechanics/simon-says.md (the same timings as SS
      * Practice): the start button; lights one every 8 ticks; the buttons back 10 ticks after the
-     * last light goes out (5 after it comes on after a stray light, the lit one 18); a press stays
+     * last light goes out (18 after the stray lamp, the lit one's 18 after its own); a press stays
      * down 3 ticks; the next round 6 ticks after a round's last press; five rounds. A wrong press:
-     * buttons gone 3 ticks later and a new sequence shown, the skip's way, 25 ticks after it.
+     * buttons gone 3 ticks later and a new sequence shown 26-34 ticks after that.
      */
     inner class SimonSays {
         private val START = BlockPos(110, 121, 91)
@@ -139,18 +139,37 @@ class Devices(val phase: GoldorPhase) {
         /** The stray light: not part of the sequence, so a cell outside it. */
         private fun stray(): Int = ((0 until 16) - sequence.toSet()).random()
 
-        private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean) {
+        /** The cell whose lamp is on now, or -1. */
+        private var litCell = -1
+
+        /**
+         * A show. Lamps every 8 ticks, except the stray's gap to the next, 4-8 (median 6, SS-02). The first lamp
+         * is in the call's own tick, as the buttons vanish (SS-04). After a stray the 15 buttons are back 18 ticks
+         * after the stray lit and the lit one's 18 after its own lamp (SS-01); a plain show brings all 16 back 10
+         * after the last lamp goes out. [stale]: a restart after a wrong press, where Hypixel's old button timer
+         * fires 1-4 ticks in, so the buttons stay clickable, and a lit lamp's button vanishes (SS-09).
+         */
+        private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean, stale: Boolean = false) {
             accepting = false
             for (c in 0 until 16) button(c, false)
             expected = expect; next = 0
             val n = cells.size
-            for (i in 0 until n) after(8 * i) { if (i > 0) light(cells[i - 1], false); light(cells[i], true) }
-            after(8 * n) { light(cells[n - 1], false) }
+            val gap = if (stray) listOf(4, 5, 5, 6, 6, 6, 6, 7, 7, 8).random() else 8
+            val at = IntArray(n) { if (it == 0) 0 else if (it == 1) gap else gap + 8 * (it - 1) }
+            for (i in 0 until n) {
+                val lamp: () -> Unit = {
+                    if (i > 0) light(cells[i - 1], false); light(cells[i], true); litCell = cells[i]
+                    if (stale) button(cells[i], false)
+                }
+                if (at[i] == 0) lamp() else after(at[i]) { lamp() }
+            }
+            after(at[n - 1] + 8) { light(cells[n - 1], false); litCell = -1 }
+            if (stale) after(1 + Random.nextInt(4)) { for (c in 0 until 16) if (c != litCell) button(c, true) }
             if (stray) {
-                after(8 * (n - 1) + 5) { for (c in 0 until 16) if (c != cells.last()) button(c, true); accepting = true }
-                after(8 * (n - 1) + 18) { button(cells.last(), true) }
+                after(18) { for (c in 0 until 16) if (c != cells.last()) button(c, true); accepting = true }
+                after(at[n - 1] + 18) { button(cells.last(), true) }
             } else {
-                after(8 * n + 10) { for (c in 0 until 16) button(c, true); accepting = true }
+                after(at[n - 1] + 18) { for (c in 0 until 16) button(c, true); accepting = true }
             }
         }
 
@@ -174,10 +193,13 @@ class Devices(val phase: GoldorPhase) {
             } else {
                 accepting = false
                 after(3) { for (c in 0 until 16) button(c, false) }
-                // A new sequence, shown the skip's way.
-                after(25) {
+                // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26,
+                // run 25) or stray + [a, b] (34, run 15); buttons stale-clickable through it (SS-08, SS-09).
+                val plain = Random.nextBoolean()
+                after(3 + if (plain) 26 else 34) {
                     sequence = newSequence()
-                    show(listOf(stray(), sequence[0], sequence[1]), listOf(sequence[0], sequence[1]), stray = true)
+                    val ex = listOf(sequence[0], sequence[1])
+                    show(if (plain) ex else listOf(stray()) + ex, ex, stray = !plain, stale = true)
                 }
             }
         }
@@ -212,22 +234,41 @@ class Devices(val phase: GoldorPhase) {
             Blocks.set(BlockPos(x, y, 143), B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lamp(x, y)))
         }
 
-        fun use(pos: BlockPos): Boolean {
-            if (pos.z != 142 || (pos.x to pos.y) !in levers) return false
+        fun isLever(pos: BlockPos) = pos.z == 142 && (pos.x to pos.y) in levers
+
+        /**
+         * A click on a lever, 1 tick after the click the lever changes (sound with it), the credit line 2 after it (LIGHTS-04).
+         * A LEFT click toggles nothing but completes the device the same way (LIGHTS-01, 7 of 36 runs).
+         */
+        fun use(pos: BlockPos, left: Boolean = false): Boolean {
+            if (!isLever(pos)) return false
             Fight.afterPing("lights lever") {
                 val st = station("Lights")
                 if (st.done) return@afterPing
-                // Checked before the toggle: a completing click that turns a lever off still counts (the lamp lags).
-                val wasLit = allLit()
-                val k = pos.x to pos.y
-                if (!on.remove(k)) on += k
-                draw()
-                Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
-                // In S2, or pre-done from S1 (as the bots do it, Quality PF's "lights" in S1's times).
-                if (phase.section in 1..2 && (wasLit || allLit())) st.complete(Sim.me)
+                var credit = false
+                Fight.later(1, "lights lever") {
+                    if (phase !== Fight.phase || st.done) return@later
+                    // Checked before the toggle: a completing click that turns a lever off still counts (the lamp lags).
+                    val wasLit = allLit()
+                    val k = pos.x to pos.y
+                    if (!left) {
+                        if (!on.remove(k)) on += k
+                        draw()
+                        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
+                    }
+                    // In S2, or pre-done from S1 (as the bots do it, Quality PF's "lights" in S1's times).
+                    credit = phase.section in 1..2 && (wasLit || (!left && allLit()))
+                }
+                Fight.later(2, "lights credit") { if (credit && phase === Fight.phase && !st.done) st.complete(Sim.me) }
             }
             return true
         }
+    }
+
+    /** A LEFT click on a lever (SimItems.clientHitBlock): true if it is one of the P3 levers. */
+    fun leftClick(pos: BlockPos): Boolean {
+        phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me) }; return true }
+        return lights.use(pos, left = true)
     }
 
     // ------------------------------------------------------------------ Arrow Align
@@ -236,7 +277,7 @@ class Devices(val phase: GoldorPhase) {
      * Arrow Align (S3): item frames at x=-2, y120-124, z75-79 (index (y-120) + (z-75)*5), only on
      * one of Odin's nine layouts' arrow cells plus its few extra (non-arrow) frames, never on the
      * other cells (devices.md §2). It starts solved but for the arrow nearest the bottom left; a click turns one +1. Frames turn
-     * any time (pre-dev); the device line comes in the same tick as the solving click in S3.
+     * any time (pre-dev); the device line comes in the same tick as the solving click, before S3 too (ARROWS-01).
      */
     inner class Arrows {
         private val frames = HashMap<Int, ItemFrame>()
@@ -276,7 +317,7 @@ class Devices(val phase: GoldorPhase) {
                 if (solution[i] < 0 || st.done) return@afterPing
                 frame.setRotation((frame.rotation + 1) % 8)
                 Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position())
-                if (phase.section == 3 && frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) st.complete(Sim.me)
+                if (phase.section in 1..3 && frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) st.complete(Sim.me)
             }
             return true
         }
@@ -315,7 +356,20 @@ class Devices(val phase: GoldorPhase) {
         /** The cell that is the target now (shown or not), or -1 when done. */
         private val current get() = if (hits < 9) order[hits] else -1
 
+        private var held = false
+        private var offAt = -1
+
+        /** The plate's power: it releases 1-10 ticks after you step off (0-10 measured, TARGET-01). */
         fun onPlate(): Boolean {
+            if (rawOnPlate()) { held = true; offAt = -1 }
+            else if (held) {
+                if (offAt < 0) offAt = phase.t + 1 + Random.nextInt(10)
+                if (phase.t >= offAt) { held = false; offAt = -1 }
+            }
+            return held
+        }
+
+        private fun rawOnPlate(): Boolean {
             val p = Sim.player ?: return false
             // A pressure plate: pressed while your box overlaps its block (feet within its lower quarter).
             val b = p.boundingBox
@@ -325,6 +379,7 @@ class Devices(val phase: GoldorPhase) {
         /** End of each tick (after the arrows moved, so a hit on a grid tick shows the next target in that tick). */
         fun tick() {
             val st = station("Target")
+            onPlate()
             if (st.done || phase.section > 4 || (phase.t - grid) % 10 != 0) return
             if (onPlate()) {
                 if (current >= 0 && lit != current) light()

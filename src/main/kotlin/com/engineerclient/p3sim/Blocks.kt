@@ -90,12 +90,13 @@ object Blocks {
 
     /**
      * Starts [name] now (its frame 0 this tick). [skip]: start that many ticks in (catching up).
+     * [delay]: ticks before frame 0 (Hypixel changes gate, door and core blocks 1 tick after their chat line).
      * [exclude]: positions the phase drives itself, left out of the recording's frames (P1's beacon column).
      */
-    fun play(name: String, skip: Int = 0, exclude: Set<BlockPos> = emptySet()) {
+    fun play(name: String, skip: Int = 0, exclude: Set<BlockPos> = emptySet(), delay: Int = 0) {
         val a = library[name] ?: run { EngineerClient.logger.warn("[p3sim] no animation {}", name); return }
         done += name
-        val p = Playing(a, Fight.serverTick - skip)
+        val p = Playing(a, Fight.serverTick - skip + delay)
         if (exclude.isNotEmpty()) a.frames.forEachIndexed { i, f -> if (f.pos in exclude) p.skip[i] = true }
         anims += p
         advance(p)
