@@ -92,6 +92,10 @@ object BrWaypoints2 : Module(
         EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
     }
 
+    private val posmsgKey by KeybindSetting("Posmsg Here Keybind", GLFW.GLFW_KEY_UNKNOWN, "Adds an Odin /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
+        PosMsgEditor.addHere("entered box")
+    }
+
     private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
         val held = mc.player?.mainHandItem
         if (held == null || held.isEmpty) return@ActionSetting EngineerClient.msg("§cHold the item you want as the wand first.")
