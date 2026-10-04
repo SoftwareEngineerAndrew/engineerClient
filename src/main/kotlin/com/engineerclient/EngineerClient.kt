@@ -316,6 +316,7 @@ object EngineerClient : ClientModInitializer {
                             P3Rotation.announceMyRole()
                             1
                         }))
+                    .then(literal("posmsg").then(literal("edit").executes { mc.execute { com.engineerclient.waypoints.PosMsgEditor.toggle() }; 1 }))
                     .then(literal("class").then(argument("name", StringArgumentType.word()).executes { ctx ->
                         val arg = StringArgumentType.getString(ctx, "name")
                         if (arg.equals("auto", true)) {

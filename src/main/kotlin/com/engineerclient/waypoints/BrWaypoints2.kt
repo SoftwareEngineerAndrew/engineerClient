@@ -221,6 +221,7 @@ object BrWaypoints2 : Module(
         on<TickEvent.End> {
             BrRoles.settingKilling = killers + 2
             BrRoles.settingRole = when (myRole) { 0 -> null; 1 -> 0; else -> myRole - 1 }
+            PosMsgEditor.tick()
             if (!DungeonUtils.inDungeons) return@on
             wasInDungeon = true
             ticks++
@@ -718,6 +719,7 @@ object BrWaypoints2 : Module(
     /** Drop: delete the box you are looking at, or place one. True means the drop must not happen. */
     @JvmStatic
     fun onDrop(): Boolean {
+        if (PosMsgEditor.onDrop()) return true
         if (!editing()) return false
         val player = mc.player ?: return false
         target(1f)?.let { (box, _) ->
@@ -736,15 +738,16 @@ object BrWaypoints2 : Module(
 
     /** Left click: push the selected face out. True cancels the swing. */
     @JvmStatic
-    fun onAttack(): Boolean = move(+1)
+    fun onAttack(): Boolean = PosMsgEditor.onMove(+1) || move(+1)
 
     /** Holding left click: swallowed while a face is selected, so the block behind is not mined. */
     @JvmStatic
-    fun blocksContinueAttack(): Boolean = editing() && target(1f) != null
+    fun blocksContinueAttack(): Boolean = PosMsgEditor.blocksContinueAttack() || (editing() && target(1f) != null)
 
     /** Right click: pull the selected face in, once per press. True cancels using the wand. */
     @JvmStatic
     fun onUse(): Boolean {
+        if (PosMsgEditor.onUse()) return true
         if (!editing() || target(1f) == null) return false
         if (!useHeld) { useHeld = true; move(-1) }
         return true
@@ -752,7 +755,7 @@ object BrWaypoints2 : Module(
 
     /** Scroll: up pushes out, down pulls in. True keeps the hotbar from switching off the wand. */
     @JvmStatic
-    fun onScroll(y: Double): Boolean = if (y == 0.0) false else move(if (y > 0) +1 else -1)
+    fun onScroll(y: Double): Boolean = if (y == 0.0) false else PosMsgEditor.onMove(if (y > 0) +1 else -1) || move(if (y > 0) +1 else -1)
 
     private fun move(by: Int): Boolean {
         if (!editing()) return false
@@ -798,7 +801,7 @@ object BrWaypoints2 : Module(
     }
 
     /** A thin slab lying on one face of a box, to show which face is selected. */
-    private fun faceSlab(bb: AABB, face: Face): AABB {
+    internal fun faceSlab(bb: AABB, face: Face): AABB {
         val e = 0.02
         return when (face) {
             Face.EAST -> AABB(bb.maxX - e, bb.minY, bb.minZ, bb.maxX + e, bb.maxY, bb.maxZ)
@@ -935,6 +938,9 @@ object BrWaypoints2 : Module(
      * What makes an item this item: a Skyblock item's own uuid when it has one (that exact item),
      * else its Skyblock id, else the vanilla item and its name.
      */
+    /** Whether the wand is in hand, for [PosMsgEditor], which shares it. */
+    internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand
+
     private fun identity(stack: ItemStack): String = when {
         stack.isEmpty -> ""
         stack.itemUUID.isNotEmpty() -> "uuid:" + stack.itemUUID
