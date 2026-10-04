@@ -189,15 +189,18 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
      * enderman.teleport (far off, vol 8, pitch 0) and the chat line, every 20 ticks while you keep going
      * (14 recorded; back at about (54.5, 115, 58.3)).
      */
-    private var lastInZ = Double.NaN
+    private var lastIn: Vec3? = null
     private var innerAt = -100
     private fun innerChamber() {
         val p = Sim.player ?: return
-        val pz = lastInZ; lastInZ = p.z
+        val was = lastIn; val now = p.position(); lastIn = now
         // Only from S4's start (until the core opens); every try is sent back, the line and sound at most once per 20 ticks.
-        if (section < 4 || coreAt >= 0 || pz.isNaN() || pz < 54.0 || p.z >= 54.0 || p.x < 52.0 || p.x > 57.0 || p.y < 113.0 || p.y > 123.0) return
+        if (section < 4 || coreAt >= 0 || was == null || now.z >= 54.0 || p.x < 52.0 || p.x > 57.0 || p.y < 113.0 || p.y > 123.0) return
+        // Walking out: last tick just inside the door hole, one step away. A leap or teleport onto the spot in front of
+        // the door (a teammate standing there at S4's start) comes from far off and is not leaving the chamber.
+        if (was.z < 54.0 || was.z > 57.0 || was.x < 52.0 || was.x > 57.0 || was.y < 113.0 || was.y > 123.0 || was.distanceTo(now) > 3.0) return
         Sim.tp(p, 54.5, 115.0, 58.3)
-        lastInZ = 58.3
+        lastIn = Vec3(54.5, 115.0, 58.3)
         if (n - innerAt < 20) return
         innerAt = n
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, Vec3(436.0, 920.0, 436.0))
