@@ -4,7 +4,7 @@ engineerandrew's [Odin](https://github.com/odtheking/Odin) addon for Hypixel Cat
 Fabric, MC 26.1.2, client-only, Kotlin. Built for one team whose clients are all set up the
 same way; `/ec setup` reads the live Odin config and says what is wrong.
 
-**Odin (>= 0.3.2) is a required dependency.** Sodium and EntityCulling are expected on every
+**Odin (>= 0.3.4) is a required dependency** - on GitHub, the `Odin-0.3.4-26.1.jar` asset of the release tagged 0.3.3. Sodium and EntityCulling are expected on every
 client (the POV previews drive Sodium's terrain pass directly) but the mod runs without them.
 
 Modules, all under the "Engineer Client" panel in Odin's ClickGUI:
