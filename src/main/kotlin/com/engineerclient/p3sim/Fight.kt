@@ -215,7 +215,9 @@ object Fight {
         EngineerClient.safely("p3sim bows") { Bows.tick() }
         if (P3Sim.lava) Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase
-        if (p == null || p is P4Necron) { Recorder.finish(); return }
+        // The run recorder stops at P4 (the fight itself goes on: Necron ticks like any phase).
+        if (p == null || p is P4Necron) Recorder.finish()
+        if (p == null) return
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++
         Party.tick()
