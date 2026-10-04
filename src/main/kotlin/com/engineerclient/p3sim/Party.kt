@@ -298,6 +298,8 @@ object Party {
         val onto = eeBot
         var i = 0
         for (b in bots) {
+            // Holding for a later early enter (the core bot by the core through S4): it keeps holding.
+            if (b.hold && b.inSection > s && eeArrived[b.inSection.coerceAtMost(5)] && !released[b.inSection.coerceAtMost(5)]) continue
             if (b.hold && b !== onto) dbg("§e${b.name}§7 stops holding (section $s started)")
             b.hold = false
             // Holding (or on its way) unless it already moved on in the section before.
