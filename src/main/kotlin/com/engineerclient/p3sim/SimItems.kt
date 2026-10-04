@@ -117,7 +117,15 @@ object SimItems {
 
     val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
-    val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§9⚚ Bonzo's Staff §6✪✪✪✪✪", listOf("§6Ability: Showtime §e§lRIGHT CLICK", "§7Shoots balloons that knock you back."))
+    /** Bonzo's Staff as Hypixel sends it (BONZO-10): glyph + "Heroic" name, epic tooltip, fragged model, glint. Lore stats are one recorded player's. */
+    val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§5\uE068 Heroic Bonzo's Staff §6✪✪✪✪✪", listOf(
+        "§7Gear Score: §d845 §8(1,213)", "§7Damage: §c+250 §8(+1,350)", "§7Strength: §c+185 §8(+550)", "§7Intelligence: §a+300 §8(+700)", "",
+        "§9Ferocity: §a+10", "", "§7§8This item can be reforged!", "",
+        "§6Ability: Showtime  §e§lRIGHT CLICK", "§7Shoots balloons that create a large explosion", "§7on impact, dealing up to §c16,956.3 §7damage.", "§8Mana Cost: §341", "",
+        "§5§lEPIC DUNGEON SWORD"), glint = true).also {
+        it.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse("hypixel_skyblock:item/island_relevant/dungeons/bonzos_staff_fragged"))
+        it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:epic"))
+    }
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
     val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also { it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:special")) }
 
@@ -322,7 +330,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; bonzoLast = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -551,36 +559,85 @@ object SimItems {
     }
 
     /**
-     * Bonzo's Staff (tools/p3sim/research/knockback.md): an invisible balloon flies along your look,
-     * ~0.9 a tick, no gravity, bursting (a firework) on the first tick it's inside a block, 0.5 into
-     * it; gone after 5 ticks if it hits nothing. On the burst tick (or the next) your motion is
-     * *replaced* by 1.5 flat away from the burst and 0.5 up, from where you are then: ~4 ticks
-     * after the click. Out of ~5 blocks: nothing.
+     * Bonzo's Staff (tools/p3sim/research/knockback.md, p3audit BONZO-01..12): an invisible, silent armor stand
+     * wearing a random balloon head flies along your look (~0.75 a tick, no range limit), the firework bursts
+     * on the first tick it is inside a block (a random 0..~1 past the surface), and in that same tick your
+     * motion is *replaced* by 1.5 flat away from the burst and 0.5 up, with a chance that falls off with the
+     * distance. Clicks under 3 ticks after the last make no balloon. The burst's sound is the client's own.
      */
     private fun bonzo(p: ServerPlayer) {
-        Sim.sound(SoundEvents.GHAST_AMBIENT, 0.6f, 1.5f + Random.nextFloat() * 0.25f, p.position())
+        // Clicks too soon after the last make nothing (BONZO-02): never 1-2 ticks apart, 3 about half the time.
+        val gap = Fight.serverTick - bonzoLast
+        if (gap < 3 || (gap == 3 && Random.nextBoolean())) return
+        bonzoLast = Fight.serverTick
+        Sim.sound(SoundEvents.GHAST_AMBIENT, 1f, (88 + Random.nextInt(26)) / 63f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
+        // Hypixel sends the held item again on every click (BONZO-11).
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0, p.inventoryMenu.incrementStateId(), 36 + p.inventory.selectedSlot, p.getItemInHand(InteractionHand.MAIN_HAND).copy()))
         val eye = p.eyePosition
         val dir = look(p)
-        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(dir.scale(BONZO_SPEED * BONZO_LIFE)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
-        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) return
-        val burst = hit.location.add(dir.scale(0.5))
-        // The first whole tick the balloon is inside the block (at least 2: the spawn tick and one move).
-        val ticks = Math.ceil(eye.distanceTo(burst) / BONZO_SPEED).toInt().coerceIn(2, BONZO_LIFE)
+        // 0.2 forward along the horizontal look (0 looking straight up or down), 0.66 below the feet.
+        val stand = ArmorStand(Sim.level, p.x + dir.x * 0.2, p.y - 0.66, p.z + dir.z * 0.2)
+        stand.isInvisible = true
+        stand.isSilent = true
+        stand.setNoGravity(true)
+        stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, balloonHead())
+        Sim.spawn(stand)
+        // No range limit (BONZO-03): it flies until it hits something.
+        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(dir.scale(BONZO_FAR)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
+        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) { Fight.later((BONZO_FAR / BONZO_SPEED).toInt(), "bonzo stand") { stand.discard() }; return }
+        val past = (0.3 + 0.5 * java.util.Random().nextGaussian()).coerceIn(0.0, 1.2)
+        val burst = hit.location.add(dir.scale(past))
+        val ticks = Math.round(eye.distanceTo(burst) / BONZO_SPEED).toInt().coerceAtLeast(2)
         Fight.later(ticks, "bonzo burst") {
-            Sim.level.sendParticles(ParticleTypes.FIREWORK, burst.x, burst.y, burst.z, 20, 0.1, 0.1, 0.1, 0.15)
-            Sim.sound(SoundEvents.FIREWORK_ROCKET_BLAST, 1f, 1f, burst)
-            Fight.later(if (Random.nextBoolean()) 0 else 1, "bonzo boost") {
+            // The firework entity + entity event 17: the client draws the burst and plays the blast itself (BONZO-07/09).
+            val colours = { Random.nextInt(0x1000000) }
+            val rocket = ItemStack(Items.FIREWORK_ROCKET)
+            rocket.set(DataComponents.FIREWORKS, net.minecraft.world.item.component.Fireworks(1, listOf(net.minecraft.world.item.component.FireworkExplosion(
+                net.minecraft.world.item.component.FireworkExplosion.Shape.SMALL_BALL, it.unimi.dsi.fastutil.ints.IntArrayList(intArrayOf(colours(), colours())), it.unimi.dsi.fastutil.ints.IntArrayList(), false, false))))
+            val fw = net.minecraft.world.entity.projectile.FireworkRocketEntity(Sim.level, burst.x, burst.y, burst.z, rocket)
+            fw.deltaMovement = Vec3.ZERO
+            Sim.spawn(fw)
+            Sim.level.broadcastEntityEvent(fw, 17.toByte())
+            Fight.later(1, "bonzo cleanup") { fw.discard(); stand.discard() }
+            // The boost lands in the same tick (BONZO-01), softly falling off with distance (BONZO-05).
+            val d = p.position().distanceTo(burst)
+            if (Random.nextDouble() < boostChance(d)) {
                 val away = p.position().subtract(burst).multiply(1.0, 0.0, 1.0)
-                if (away.length() > BONZO_REACH) return@later
                 val h = if (away.lengthSqr() < 1e-4) dir.multiply(-1.0, 0.0, -1.0).normalize() else away.normalize()
                 push(p, Vec3(h.x * 1.5, 0.5, h.z * 1.5))
             }
         }
     }
 
-    private const val BONZO_SPEED = 0.9
-    private const val BONZO_LIFE = 5
-    private const val BONZO_REACH = 5.0
+    /** The share of recorded bursts that boosted, by 3D distance from the player to the burst (BONZO-05). */
+    private fun boostChance(d: Double): Double {
+        val pts = doubleArrayOf(0.0, 1.0, 2.0, 1.0, 3.0, 0.92, 4.0, 0.9, 5.0, 0.72, 6.0, 0.55, 7.0, 0.2, 8.0, 0.05, 9.0, 0.0)
+        if (d >= 9.0) return 0.0
+        var i = 0
+        while (i + 2 < pts.size && d > pts[i + 2]) i += 2
+        val t = (d - pts[i]) / (pts[i + 2] - pts[i])
+        return pts[i + 1] + (pts[i + 3] - pts[i + 1]) * t
+    }
+
+    /** One of the 11 balloon heads Hypixel picks from at random (BONZO-06); the 11th (41b830eb, 2 of ~300) was not recoverable in full. */
+    private val BALLOON_HASHES = listOf(
+        "f1f99e7c394e13d199d1d22cb082d209068cd7a4de6ca09edff3fc61660ae5cf", "52dd11da04252f76b6934bc26612f54f264f30eed74df89941209e191bebc0a2",
+        "7c6cc5aed49056977d89348978c0aaaaa54c968a3b411bbaba5c9970b405297", "7399ff9c40fdfb7b115addddff59c344eaa11acb0c64c6839b5f8407e36d239d",
+        "a2dd1389a97fd4c86b11a1a2abad61389404d837d2caf097c91d27768363dc5a", "ac96d34a3cced4e4bba25119f74ea31f50f43f90cca2fbcbc6bae8625d60dede",
+        "28c544b288f899d494f953ace7743a15fdb22d24f58f9ca298f35429fdc27b63", "cc5ec2dfbf2cf4e21bd011c784d9fc4ad7a88182bed27afd91b53b4513ce0aba",
+        "3491c8fb426979da2d6327b3705a4cb9c91c2d5536223233addde21d5f58c940", "2f24ed6875304fa4a1f0c785b2cb6a6a72563e9f3e24ea55e18178452119aa66")
+
+    private fun balloonHead(): ItemStack {
+        val hash = BALLOON_HASHES[Random.nextInt(BALLOON_HASHES.size)]
+        val json = "{\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/texture/$hash\"}}}"
+        val s = head(java.util.Base64.getEncoder().encodeToString(json.toByteArray()), "Player Head")
+        s.remove(DataComponents.CUSTOM_NAME)
+        return s
+    }
+
+    private var bonzoLast = -100
+    private const val BONZO_SPEED = 0.75
+    private const val BONZO_FAR = 128.0
 
     /**
      * Jerry-chine Gun (knockback.md §Jerry): a Jerry lands where you look; 1-3 ticks later (mostly
