@@ -152,6 +152,22 @@ These are as in terminals.md, which this data confirms.
 - `block.note_block.pling` (block source, vol 8, pitch 4.05) plays thousands of times, not tied to
   progress lines. The sim's 0.6/2.0 pling on terminal/lever completion is unverified.
 
+## Update 2026-10-04 (404 runs; scripts in `/home/cam/backups/2026-10-03/analysis/terminals-devices/`)
+
+- **Arrow Align extra frames hold wool**: lime wool = a path's start, red wool = its end, the same
+  cells in every run of a layout (newer recordings carry frame items). Layouts seen (of 280 runs
+  identified): 1:26 2:40 3:30 4:32 5:28 6:43 7:42 8:39, **layout 0 never**. What §2 called layout 0
+  with extras (2,22) is layout 2 (cell 12 is its lime wool, not an arrow). Extras, Odin index:
+  L1 lime 5,15 red 14 · L2 lime 12 red 2,22 · L3 lime 4,24 red 12 · L4 lime 20 red 12 ·
+  L5 lime 20 red 4 · L6 lime 20,22,24 red 0,2,4 · L7 lime 20 red 0 · L8 lime 20,22,24 red 1,3.
+- **Simon Says sounds** (`sspling.mjs`): Hypixel sends no button click at all. Each grid press is
+  answered with `block.note_block.pling` vol 8 pitch 4.05 at the presser (all ~400 own presses that
+  showed a pressed button), and a start with `entity.enderman.teleport` vol 8 pitch 0 at the
+  presser, once per burst of start presses. `entity.experience_orb.pickup` (vol 1, pitch 1) also
+  plays at SS now and then; what triggers it is not established.
+- SS blocks confirmed: `stone_button[face=wall,facing=west]` on x=110, `sea_lantern`/`obsidian` on
+  x=111.
+
 ## Mismatches vs the sim
 
 1. **Target only runs in `section >= 4`** (Devices.Target.tick). It should run from P3's start; an
