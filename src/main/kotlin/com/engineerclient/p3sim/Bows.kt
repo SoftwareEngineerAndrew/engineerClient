@@ -137,16 +137,25 @@ object Bows {
         val now = Fight.serverTick
         val r = java.util.Random()
         val noise = Vec3(r.nextGaussian(), r.nextGaussian(), r.nextGaussian()).scale(0.0075)
-        val duplex = if (Random.nextDouble() < 0.29) 3 else 4
+        // Duplex delay after the main arrow, recorded (island 2026-10-04): 39% 3 ticks, 51% 4, 9% 5 (rest folded into 4).
+        val duplexRoll = Random.nextDouble()
+        val duplex = if (duplexRoll < 0.39) 3 else if (duplexRoll < 0.91) 4 else 5
+        // The two Duplex entities spawn on the same tick 42 of 64 times, otherwise one is +-1 tick off.
+        var dupIdx = 0
+        val dupShift = if (Random.nextDouble() < 42.0 / 64.0) 0 else if (Random.nextBoolean()) 1 else -1
         val plan = ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex, 3.0 * power)
         for (arrow in plan) {
             if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null)?.let { if (arrow.owned && bow == LAST_BREATH && power >= 1f) it.isCritArrow = true }
-            else later += Later(now + arrow.delay) { launch(arrow.from, arrow.at, arrow.v) }
-        }
-        // Hypixel's two Duplex copies each make a quieter shoot sound the tick they launch, at the Duplex arrow (BOWS-08).
-        if (bow in ShotPlan.DUPLEX) {
-            val dupAt = plan.firstOrNull { it.delay > 0 }?.at
-            later += Later(now + duplex + 1) { repeat(2) { sound(SoundEvents.ARROW_SHOOT, SoundSource.MASTER, 0.5f, 0.7f, dupAt) } }
+            else {
+                // Hypixel's Duplex entities each make a quieter shoot sound on the tick they spawn, at the centre of the
+                // block holding that entity's spawn position (island recording: master, vol 0.5, pitch 0.698).
+                val delay = arrow.delay + (if (bow in ShotPlan.DUPLEX && dupIdx++ == 1) dupShift else 0)
+                later += Later(now + delay) {
+                    launch(arrow.from, arrow.at, arrow.v)
+                    if (bow in ShotPlan.DUPLEX) sound(SoundEvents.ARROW_SHOOT, SoundSource.MASTER, 0.5f, 0.7f,
+                        Vec3(Mth.floor(arrow.at.x) + 0.5, Mth.floor(arrow.at.y) + 0.5, Mth.floor(arrow.at.z) + 0.5))
+                }
+            }
         }
         sound(SoundEvents.ARROW_SHOOT, SoundSource.NEUTRAL, 1f, 1f / (Random.nextFloat() * 0.4f + 1.2f) + 0.5f * power)
         if (bow !in SHORTBOWS) return
@@ -165,6 +174,7 @@ object Bows {
             val block = level.clip(ClipContext(from, at, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, owner ?: Sim.player!!))
             val end = if (block.type == HitResult.Type.MISS) at else block.location
             val boss = level.getEntitiesOfClass(WitherBoss::class.java, net.minecraft.world.phys.AABB(from, end).inflate(1.0)) { isBoss(it) }
+                .filter { !immune(it) }
                 .mapNotNull { w -> w.boundingBox.inflate(0.3).clip(from, end).map { w to it }.orElse(null) }
                 .minByOrNull { it.second.distanceToSqr(from) }
             if (boss != null) { hit(EntityHitResult(boss.first, boss.second), onHit); return null }
@@ -177,6 +187,7 @@ object Bows {
             }
         }
         val a = SimArrow(level, at.x, at.y, at.z) { _, h -> hit(h, onHit) }
+        a.immune = ::immune
         if (owner != null) a.setOwner(owner)
         a.pickup = AbstractArrow.Pickup.DISALLOWED
         a.deltaMovement = v
@@ -187,6 +198,12 @@ object Bows {
         live += a
         return a
     }
+
+    /**
+     * Damage immunity of an arrow's target: vanilla's hurt window (invulnerableTime over half of 20). The sim's boss
+     * withers are never damaged, so this never holds for them today; the rebound path in [SimArrow] is generic.
+     */
+    fun immune(e: Entity): Boolean = e is net.minecraft.world.entity.LivingEntity && e.invulnerableTime > 10
 
     private fun isBoss(e: Entity) = e is WitherBoss && e.isAlive && e.entityTags().contains(Sim.TAG)
 
@@ -211,33 +228,35 @@ object Bows {
     /**
      * Terror armor's Hydra Strike (terror-mosquito.md §5): +1 stack (max 10) when an arrow hits a boss, at most every
      * 4 ticks (a hit at 10 still counts). A once-a-second task, on its own grid, counts seconds without a gain and
-     * takes a stack off when the count passes 7 (3 pieces) or 10 (4 pieces): one lost every 8 / 11 s. +1% arrow
+     * (replaced: a stack is lost every (T+1)*20 ticks after the last gain, see [periodNow]). +1% arrow
      * speed a stack; at 10, +2 arrows. Shown as Hypixel's action bar does: `§6N⁑`, bold at 10, every 10 ticks.
      */
     object Hydra {
         var stacks = 0
             private set
         private var lastGain = -100
-        private var count = 0
+        private var nextLoss = Int.MAX_VALUE
+        private var period = 0
         private var grid = 0
         private var shown = 0
         private val pieces: Int get() = P3Sim.terrorPieces
-        private val loseAfter: Int get() = if (pieces >= 4) 10 else 7
+        /** Ticks per lost stack: (T+1)*20, T = 4 s (1-2 pieces), 7 s (3), 10 s (4); sampled at the last gain (island recording). */
+        private fun periodNow(): Int = ((if (pieces >= 4) 10 else if (pieces == 3) 7 else 4) + 1) * 20
 
-        fun reset() { stacks = 0; lastGain = -100; count = 0; shown = 0; grid = Random.nextInt(20); start() }
+        fun reset() { stacks = 0; lastGain = -100; nextLoss = Int.MAX_VALUE; shown = 0; grid = Random.nextInt(20); start() }
 
-        fun start() { stacks = if (pieces > 0) P3Sim.hydraStart else 0; count = 0 }
+        fun start() { stacks = if (pieces > 0) P3Sim.hydraStart else 0; period = periodNow(); nextLoss = Fight.serverTick + period }
 
         fun hit(now: Int) {
             if (pieces == 0 || now - lastGain < 4) return
-            lastGain = now; count = 0
+            lastGain = now; period = periodNow(); nextLoss = now + period
             if (stacks < 10) stacks++
         }
 
         fun tick(p: ServerPlayer, now: Int) {
             if (pieces == 0) stacks = 0
             val phase = (now - grid).mod(20)
-            if (phase == 0 && pieces > 0) { count++; if (count > loseAfter) { count = 0; if (stacks > 0) stacks-- } }
+            if (pieces > 0 && stacks > 0 && now >= nextLoss) { stacks--; nextLoss += period }
             if (phase % 10 != 0) return
             if (stacks > 0) p.sendSystemMessage(Component.literal(if (stacks >= 10) "§6§l10⁑§r" else "§6$stacks⁑"), true)
             else if (shown > 0) p.sendSystemMessage(Component.empty(), true)
@@ -253,15 +272,36 @@ object Bows {
 class SimArrow(level: Level, x: Double, y: Double, z: Double, private val whenHit: (SimArrow, HitResult) -> Unit) :
     Arrow(level, x, y, z, ItemStack(Items.ARROW), null) {
 
-    override fun canHitEntity(entity: Entity): Boolean = entity is WitherBoss && entity.isAlive && entity.entityTags().contains(Sim.TAG)
+    /** Damage immunity of a target; an arrow that hits an immune one rebounds instead of dealing damage. */
+    var immune: (Entity) -> Boolean = { false }
+    private var removeAt = -1
+
+    override fun tick() {
+        if (removeAt >= 0 && tickCount >= removeAt) { discard(); return }
+        super.tick()
+    }
+
+    override fun canHitEntity(entity: Entity): Boolean = removeAt < 0 && entity is WitherBoss && entity.isAlive && entity.entityTags().contains(Sim.TAG)
 
     override fun findHitEntities(from: Vec3, to: Vec3): Collection<EntityHitResult> =
         ProjectileUtil.getManyEntityHitResult(level(), this, from, to, boundingBox.expandTowards(deltaMovement).inflate(1.0), { canHitEntity(it) }, 0.3f, ClipContext.Block.COLLIDER, false)
 
     override fun hitTargetOrDeflectSelf(hitResult: HitResult): ProjectileDeflection {
+        if (removeAt >= 0) return ProjectileDeflection.NONE   // already spent: ignore anything it still touches
         if (hitResult.type == HitResult.Type.ENTITY) {
+            setNoGravity(true)
+            if (immune((hitResult as EntityHitResult).entity)) {
+                // Hypixel: no damage, no hit_player sound; flies back (yaw ~+-172 deg) at 0.29-0.32 b/t, gone 9-10 ticks later.
+                val speed = 0.29 + Random.nextDouble() * 0.03
+                val yaw = Math.toRadians(yRot.toDouble() + (if (Random.nextBoolean()) 172.0 else -172.0))
+                deltaMovement = Vec3(Math.sin(yaw) * speed, 0.0, Math.cos(yaw) * speed)
+                yRot = Math.toDegrees(yaw).toFloat(); yRotO = yRot
+                removeAt = tickCount + 9 + Random.nextInt(2)
+                return ProjectileDeflection.NONE
+            }
             EngineerClient.safely("p3sim arrow hit") { whenHit(this, hitResult) }
-            discard()
+            deltaMovement = Vec3.ZERO
+            removeAt = tickCount + 1 + Random.nextInt(2)   // a damaging hit lingers 1-2 ticks
             return ProjectileDeflection.NONE
         }
         val d = super.hitTargetOrDeflectSelf(hitResult)   // a block: vanilla's hit sound

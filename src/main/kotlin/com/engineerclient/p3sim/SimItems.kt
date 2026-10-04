@@ -413,7 +413,7 @@ object SimItems {
 §7stack of §6⁑ Hydra Strike§7. §8Lose 1 stack
 §8after {SEC}s of not gaining a stack.
 §7
-§7Each stack grants §c+4% Damage§7 and §b+1%
+§7Each stack grants §c+{DMG}% Damage§7 and §b+1%
 §bArrow Speed§7.
 §7
 §7At §c10§7 stacks shoot §a+2§7 arrows that deal §c20%
@@ -440,7 +440,7 @@ object SimItems {
 §7stack of §6⁑ Hydra Strike§7. §8Lose 1 stack
 §8after {SEC}s of not gaining a stack.
 §7
-§7Each stack grants §c+4% Damage§7 and §b+1%
+§7Each stack grants §c+{DMG}% Damage§7 and §b+1%
 §bArrow Speed§7.
 §7
 §7At §c10§7 stacks shoot §a+2§7 arrows that deal §c20%
@@ -467,7 +467,7 @@ object SimItems {
 §7stack of §6⁑ Hydra Strike§7. §8Lose 1 stack
 §8after {SEC}s of not gaining a stack.
 §7
-§7Each stack grants §c+4% Damage§7 and §b+1%
+§7Each stack grants §c+{DMG}% Damage§7 and §b+1%
 §bArrow Speed§7.
 §7
 §7At §c10§7 stacks shoot §a+2§7 arrows that deal §c20%
@@ -807,20 +807,27 @@ object SimItems {
         }
 
     private fun terror(base: Item, id: String, rgb: Int): ItemStack {
-        val n = 3  // as recorded (3/4, a mask on the head); the Terror Helmet loadout shows 4/4 on its own piece
+        val n = 3 + (if (terrorHelmet) 1 else 0)  // worn pieces at equip time: chest+legs+boots, plus a Terror Helmet on the head (4/4); a mask head is 3/4
+        val sec = when { n >= 4 -> 10; n == 3 -> 7; else -> 4 }
+        val dmg = when { n >= 4 -> 6; n == 3 -> 4; else -> 2 }
         val lore = (when (id) { "TERROR_CHESTPLATE" -> Lore.TERROR_CHESTPLATE; "TERROR_LEGGINGS" -> Lore.TERROR_LEGGINGS; else -> Lore.TERROR_BOOTS })
-            .map { it.replace("{T}", n.toString()).replace("{SEC}", if (n >= 4) "10" else "7") }
+            .map { it.replace("{T}", n.toString()).replace("{SEC}", sec.toString()).replace("{DMG}", dmg.toString()) }
         val name = when (id) { "TERROR_CHESTPLATE" -> Lore.TERROR_CHESTPLATE_NAME; "TERROR_LEGGINGS" -> Lore.TERROR_LEGGINGS_NAME; else -> Lore.TERROR_BOOTS_NAME }
         return piece(base, id, name, lore, rgb, "legendary")
     }
 
     /** Chest, legs and boots of [set]; the helmet slot stays the masks' ([Masks.equip]) unless [equipHelmet]. */
-    fun equipArmor(p: ServerPlayer, set: ArmorSet? = null) {
+    fun equipArmor(p: ServerPlayer, set: ArmorSet? = null, terrorHelm: Boolean? = null) {
+        terrorHelmet = terrorHelm ?: (idOf(p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "TERROR_HELMET")
         val (chest, legs, feet) = armorStacks(set)
         p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, chest)
         p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, legs)
         p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, feet)
+        terrorHelmet = false
     }
+
+    /** Whether the Terror Helmet is (about to be) worn with the pieces [equipArmor] is building: Hydra Strike's lore shows 4/4. */
+    private var terrorHelmet = false
 
     /** One armour piece (chest / legs / boots) by its SkyBlock id, from any of the [ArmorSet]s; null for an id the sim doesn't know. */
     fun armorPiece(id: String): ItemStack? =

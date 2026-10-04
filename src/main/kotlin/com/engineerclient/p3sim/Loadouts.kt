@@ -237,7 +237,7 @@ object Loadouts {
     private fun equip(p: ServerPlayer, d: Def) {
         if (matches(p, d)) { Sim.chatStyled("§c${d.name} is already equipped!"); return }
         Fight.later(1, "loadout ${d.name}") {
-            SimItems.equipArmor(p, d.set)
+            SimItems.equipArmor(p, d.set, d.helm == Helm.TERROR)
             wearHelmet(p, d.helm)
             P3Sim.phoenixS.value = d.phoenix
             Fight.applySpeed(p)
