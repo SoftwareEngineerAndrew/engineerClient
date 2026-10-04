@@ -1000,7 +1000,7 @@ object SimItems {
         if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         when (id) {
             "ASPECT_OF_THE_VOID" -> { val sneak = p.isShiftKeyDown; asClicked(p, "aotv") { if (sneak) etherwarp(p) else blink(p, 12) } }
-            "HYPERION" -> asClicked(p, "hype") { if (hypeReady()) { if (Fight.phase !is GoldorPhase) blink(p, 10) /* HYP-01/02: no tp, chat or enderman in P3 */; implode(p) } }
+            "HYPERION" -> asClicked(p, "hype") { if (hypeReady()) { /* No Hyperion teleport anywhere in the boss (HYP-01/02); the AOTV keeps its blink as the sim's movement item. */ implode(p) } }
             // PEARLS-01: the boss room refuses a pearl: one off the stack, red line, no entity.
             "ENDER_PEARL" -> { p.mainHandItem.shrink(1); Sim.chat("§cA mystical force in this room prevents you from doing that!") }
             "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }

@@ -17,16 +17,14 @@ object Lava {
     private var touchedAt = -1
     private var bounceAt = -1
     private var bouncedAt = -1000
-    private var fireTicks = 0
-
     fun reset() { touchedAt = -1; bounceAt = -1; bouncedAt = -1000 }
 
     fun tick(p: ServerPlayer) {
         if (p.isSpectator || p.isCreative) { reset(); return }
         val now = Fight.serverTick
         pitches[now.mod(pitches.size)] = p.xRot
-        // Burning: Hypixel's 100-125 ticks, not vanilla lava's 15 s.
-        if (now - bouncedAt in 1..3) p.remainingFireTicks = fireTicks - (now - bouncedAt)
+        // Never on fire in the sim (vanilla lava lights you every tick you touch it).
+        if (p.remainingFireTicks > 0) p.clearFire()
         val inLava = touches(p)
         if (!inLava) { touchedAt = -1; bounceAt = -1; return }
         if (touchedAt < 0) {
@@ -87,8 +85,8 @@ object Lava {
         p.fallDistance = 0.0
         p.connection.send(ClientboundHurtAnimationPacket(p))
         Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.PLAYERS)
-        fireTicks = 100 + Random.nextInt(26)
-        p.remainingFireTicks = fireTicks
+        // No fire after a bounce (Andrew's call): put out anything the lava itself lit.
+        p.clearFire()
         bouncedAt = now
         touchedAt = -1; bounceAt = -1
     }
