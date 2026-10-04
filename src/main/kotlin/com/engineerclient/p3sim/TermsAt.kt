@@ -21,6 +21,9 @@ class TermsAt(val n: Int) {
     val section: Int
     /** The jobs done by [n] ("S2 T3", "gate 2"...). */
     val done: Set<String>
+    /** The section in progress has its gate down / every station done (waiting on the gate). */
+    val gateDown: Boolean
+    val lastIn: Boolean
 
     init {
         val times = P3Plan.plan().times
@@ -45,6 +48,8 @@ class TermsAt(val n: Int) {
         section = (1..5).last { sectionN[it] <= n }
         done = doneAt.filter { (job, at) -> at <= n || sectionOf(job) < section }.keys
         for (s in 1..3) if (gateN[s] > n && s >= section) gateN[s] = -1
+        gateDown = section <= 3 && gateN[section] >= 0
+        lastIn = section <= 4 && P3Plan.jobsIn(section).filter { !it.startsWith("gate") }.all { it in done }
     }
 
     /** Where you are at [n]: on your next job if it's in this section, else your early enter, else the section's door. */

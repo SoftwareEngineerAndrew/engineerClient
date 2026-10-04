@@ -185,9 +185,41 @@ object DungeonSplits : Module(
         val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
         val headClock = SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt())
         SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headClock.ms) }
-        if (termsDone > 0) tracker.startAt(label, before, now(), headClock)
-        else tracker.startAt(label, before)
+        if (termsDone > 0) {
+            val at = now()
+            tracker.startAt(label, before, at, headClock)
+            // The sections before at your Pace times, so the section steps run too.
+            if (head.size == termsDone) {
+                val back = IntArray(termsDone + 1)
+                for (s in termsDone downTo 1) back[s - 1] = back[s] + head[s - 1].ticks.toInt()
+                subs.startTerms(termsDone + 1, back.map { at.minus(it) }, gate = false, lastIn = false)
+            }
+        } else tracker.startAt(label, before)
     }
+
+    /**
+     * The P3 Sim's Time start: [n] server ticks after Goldor's first line, [section] in progress (5:
+     * the core), each section having begun at [sectionN] (n). The terminals split, its sections and
+     * Odin's run are back-dated to those real times, not your Pace targets.
+     */
+    fun simStartAt(n: Int, section: Int, sectionN: IntArray, gate: Boolean, lastIn: Boolean) {
+        resetRun()
+        val core = section >= 5
+        val label = if (core) SplitTracker.GOLDOR else SplitTracker.TERMS
+        val before = { l: String ->
+            // The terminals before the core: as long as they really took.
+            val ms = if (core && l == SplitTracker.TERMS) sectionN[5] * 50L
+                else SimOdinSplits.odinName(l)?.let { SimOdinSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
+            SplitTracker.Clock(ms, (ms / 50).toInt())
+        }
+        val headTicks = if (core) n - sectionN[5] else n
+        val at = now()
+        SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headTicks * 50L) }
+        tracker.startAt(label, before, at, SplitTracker.Clock(headTicks * 50L, headTicks))
+        subs.startTerms(section, (1..section.coerceAtMost(5)).map { at.minus(n - sectionN[it]) }, gate, lastIn)
+    }
+
+    private fun Stamp.minus(ticks: Int) = Stamp(realMs - ticks * 50L, tick - ticks)
 
     init {
         on<LevelEvent.Load> {

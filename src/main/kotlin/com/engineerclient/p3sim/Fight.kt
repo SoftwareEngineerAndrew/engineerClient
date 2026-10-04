@@ -167,7 +167,10 @@ object Fight {
             Start.TIME -> if (timed.section >= 5) com.engineerclient.splits.SplitTracker.GOLDOR to 0 else com.engineerclient.splits.SplitTracker.TERMS to timed.section - 1
         }
         EngineerClient.mc.execute {
-            EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) }
+            EngineerClient.safely("p3sim splits") {
+                if (what == Start.TIME) com.engineerclient.splits.DungeonSplits.simStartAt(timed.n, timed.section, timed.sectionN.copyOf(), timed.gateDown, timed.lastIn)
+                else com.engineerclient.splits.DungeonSplits.simStart(split, termsDone)
+            }
             EngineerClient.safely("p3sim arrows device") { resetArrowsDevice() }
         }
         Recorder.begin(what.label)
