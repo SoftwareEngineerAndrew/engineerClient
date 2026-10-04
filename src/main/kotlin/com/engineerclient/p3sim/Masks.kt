@@ -26,7 +26,8 @@ object Masks {
         // The exact lines (chat-attacks.md §1.2; Bonzo's with Hypixel's glyph, dungeonbreaker.md).
         Item("SPIRIT_MASK", "Spirit Mask", 600, 60, "§6Second Wind Activated§r§a! Your Spirit Mask saved your life!"),
         Item("BONZO_MASK", "Bonzo's Mask", 3600, 60, "§aYour §r§9 Bonzo's Mask §r§asaved your life!"),
-        Item("PHOENIX", "Phoenix", 1200, 80, "§eYour §r§cPhoenix Pet §r§esaved you from certain death!"),
+        // Phoenix covers no longer than a mask (3 s, not its lore's 4 s): on Hypixel the next death tick, 60 ticks on, still hits (analysis/masks).
+        Item("PHOENIX", "Phoenix", 1200, 60, "§eYour §r§cPhoenix Pet §r§esaved you from certain death!"),
     )
 
     // Skins as on Hypixel (dungeonbreaker.md).

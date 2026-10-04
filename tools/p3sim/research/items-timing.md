@@ -84,6 +84,7 @@ Sounds on the proc tick [M, BR, all cases]:
 - Phoenix: `block.lava.extinguish` p1.49 + `entity.zombie.infect` p1.19 + `entity.wither.ambient` p1.0 + `ghast.affectionate_scream` p1.52.
 
 Invulnerability and cooldowns are **not measured** (`hp` is always 20 from scaled health, so it can't show them).
+[M, analysis/masks] Nearly every proc (1016 of 1031) is on a P3 Goldor death tick, so procs come 60 server ticks apart. After a proc the next death tick at +60 takes the next item or kills you: Spirit 168×, Bonzo 136×, Phoenix 140× (+120 only after a leap out of the zone). That includes Phoenix with the pet kept out and no leap (46×), so Phoenix covers you **3 s, not the 4 s** its Lvl 100 lore says. Spirit cooldown: own Spirit repeat procs are 600–601 server ticks apart at the least (12 repeats) = 30 s. Lore (the user's items as skyblockapi cached them): Spirit `Cooldown: 30s`; ⚚ Bonzo `Cooldown: 180s` (base 360 s, "improves based on your Dungeoneering Skill level", so the line shows your own value). Damage chat lines still print while you are immune, so they do not bound it.
 [C] Hypixel values: Spirit Mask Second Wind = 3 s invincibility (the mod line `Spirit Mask activated! (3s)` agrees), cooldown 30 s;
 Bonzo's Mask = 3 s invincibility, cooldown 360 s (180 s when ⚚ fragged); Phoenix = revives at full HP with ~4 s invulnerability, cooldown 60 s.
 All three can proc in one run (`(3/3)`), each once.
