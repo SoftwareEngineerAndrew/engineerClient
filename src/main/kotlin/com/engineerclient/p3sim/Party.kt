@@ -245,8 +245,7 @@ object Party {
         val s = phase.section
         dbgN = n; dbgS = s; curPhase = phase
         if (P3Sim.debugBots && n % 40 == 0) dbgHolds(phase)
-        // The section you start in began at its own n (a Time start is part way through it).
-        if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = if (s == phase.from) phase.sectionStartN(s) else n; dbg("§bsection $s starts"); sectionStarted(phase, s) }
+        if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = n; dbg("§bsection $s starts"); sectionStarted(phase, s) }
         // Jobs someone else (you, on a stack) already did.
         jobs.removeAll { j -> phase.stations.firstOrNull { it.id == j.job }?.done == true || (j.job.startsWith("gate") && phase.gateIsDown(sectionOf(j.job))) }
         youAtEarlyEnter(phase)
@@ -303,7 +302,7 @@ object Party {
 
     /** Section [s] began: its times start, its moves are set; anyone not in it leaps onto whoever early-entered it, or walks. */
     private fun sectionStarted(phase: GoldorPhase, s: Int) {
-        val n = if (s == phase.from) phase.sectionStartN(s) else phase.n
+        val n = phase.n
         val plan = P3Plan.plan()
         jobs.filter { it.timeSection == s }.forEach { it.at = n + (it.sec * 20).roundToInt() }
         for (m in plan.moves.filter { it.section == s }) {

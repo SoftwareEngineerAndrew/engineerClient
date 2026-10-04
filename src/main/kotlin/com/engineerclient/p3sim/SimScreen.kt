@@ -76,15 +76,6 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("+", 16) { P3Plan.botMax = (P3Plan.botMax + 0.5).coerceAtMost(60.0); P3Plan.save() },
         )
         row(extra)
-        // A P3 start part way through: everything the plan has done by then done.
-        fun at(d: Double) { P3Sim.termsAtS.value = (P3Sim.termsAt + d).coerceIn(0.0, 120.0) }
-        row(listOf(
-            label("§eStart at", 50),
-            change("-5", 20) { at(-5.0) }, change("-", 16) { at(-0.5) },
-            label("§f${sec(P3Sim.termsAt)}", 36),
-            change("+", 16) { at(0.5) }, change("+5", 20) { at(5.0) },
-            button("§aStart", 40) { server { Fight.start(Fight.Start.TIME) } },
-        ))
     }
 
     private fun earlyEnterTab() {

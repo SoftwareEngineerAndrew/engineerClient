@@ -186,16 +186,12 @@ class SubSplitTracker {
     }
 
     /**
-     * A start part way through the terminals (the P3 Sim's S2-S4, Core and Time starts): no Goldor
-     * line comes, so sections 1..[section] (5: the core) are started back at [starts] (each one's
-     * start), the one in progress told whether its gate is down and its last completion in.
+     * A start part way through the terminals (the P3 Sim's S2-S4 starts): no Goldor line comes, so
+     * sections 1..[section] are started back at [starts] (each one's start).
      */
-    fun startTerms(section: Int, starts: List<Stamp>, gate: Boolean, lastIn: Boolean) {
+    fun startTerms(section: Int, starts: List<Stamp>) {
         reset()
         for (s in 1..section.coerceAtMost(4)) jumpTo(T_S1 + s - 1, starts[s - 1], "the sim's start")
-        if (section >= 5) { jumpTo(G_LEAPS, starts[4], "the sim's start"); watchingCore = true; return }
-        gateBlown = gate && !lastIn
-        gateWaiting = lastIn && !gate
     }
 
     /** The party is all inside the core ([how] it was told): the leap is over and Goldor's kill begins. */

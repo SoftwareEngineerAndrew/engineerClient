@@ -33,11 +33,10 @@ import net.minecraft.world.phys.Vec3
  *  - Necron's first line 82 ticks (81-83) after Goldor's death, then P4; "Necron, forgive me." 82
  *    after "...." (with Necron's line when he died in flight, later when he reached the core).
  * Measured: tools/p3sim/research/goldor-flow.md.
- * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening. [at]: a start
- * part way through (the menu's Time), everything the plan has done by then done.
+ * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening.
  */
-class GoldorPhase(val from: Int, val arrived: Boolean = false, val at: TermsAt? = null) : Fight.Phase("P3") {
-    override val restart get() = if (at != null) Fight.Start.TIME else when (from) { 2 -> Fight.Start.S2; 3 -> Fight.Start.S3; 4 -> Fight.Start.S4; 5 -> Fight.Start.CORE; else -> Fight.Start.P3 }
+class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3") {
+    override val restart get() = when (from) { 2 -> Fight.Start.S2; 3 -> Fight.Start.S3; 4 -> Fight.Start.S4; 5 -> Fight.Start.CORE; else -> Fight.Start.P3 }
 
     val stations = Station.all()
     /** The section in progress (1-4), 5 once the core is open. */
@@ -79,29 +78,23 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false, val at: TermsAt? 
         stations.forEach { it.spawnStands() }
         devices.start()
         Stats.reset(from)
-        val startN = at?.sectionN?.get(from.coerceAtMost(5)) ?: when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
-        nOffset = at?.n ?: startN
+        val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
+        nOffset = startN
         // Earlier sections: done, their gates and doors open, as if a party had just done them.
         for (s in 1 until from.coerceAtMost(5)) {
             stations.filter { it.section == s }.forEach { doneAlready(it) }
             gateDown[s] = true; doorOpen[s] = true
             if (s <= 3) { Blocks.finish("gate${s}${s + 1}"); Blocks.finish("door$s") }
-            sectionEnd[s] = at?.endN?.get(s) ?: startN
-            if (at != null) gateAt[s] = at.gateN[s]
-        }
-        // Part way through: this section's (and early-entered ones') stations done by then, and its gate.
-        if (at != null) {
-            stations.filter { it.section >= from && it.id in at.done }.forEach { doneAlready(it) }
-            if (from <= 3 && at.gateN[from] >= 0) { gateDown[from] = true; gateAt[from] = at.gateN[from]; Blocks.finish("gate${from}${from + 1}") }
+            sectionEnd[s] = startN
         }
         if (from >= 2) Blocks.finish("p3start")
         section = from.coerceAtMost(5)
         sectionStart[section] = startN
-        goldor.spawn(nOffset)
+        goldor.spawn(startN)
         Party.startP3(this)
         Sim.player?.let { player ->
             if (!arrived) {
-                val spot = at?.yourSpot() ?: Spots.p3Start(from)
+                val spot = Spots.p3Start(from)
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
             } else {
@@ -124,10 +117,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false, val at: TermsAt? 
         } else {
             com.engineerclient.practice.TermInfo.simStart(from)
             maybeTaunt()
-            if (at != null) Sim.note("Starting §f${at.label()}§7 into P3: §fS$from§7, ${count(from)}/${Station.total(from)} done${if (from <= 3 && gateDown[from]) ", gate down" else ""}.")
-            else Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
-            // Started with the section's last station done (waiting on its gate): it ends now.
-            if (at != null && count(from) >= Station.total(from)) sectionDone(from)
+            Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
         }
     }
 
