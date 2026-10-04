@@ -28,7 +28,11 @@ import net.minecraft.world.phys.Vec3
  *    (0.6) when he is still in the one whose door just opened, and after "The Core entrance is
  *    opening!" flies into the core (0.8) once everyone is inside (4 ticks after the opening at the
  *    earliest), and dies; his Frenzy hits you every 10 ticks 2-14 blocks from him there;
- *  - Necron's first line 82 ticks (81-83) after Goldor's death, then P4.
+ *  - his lines go one at a time, each at least 62 ticks after the one before (a queue: intro,
+ *    taunts, a random section line per door, the arrival script, "....");
+ *  - Necron's first line 82 ticks (81-83) after Goldor's death, then P4; "Necron, forgive me." 82
+ *    after "...." (with Necron's line when he died in flight, later when he reached the core).
+ * Measured: tools/p3sim/research/goldor-flow.md.
  * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening.
  */
 class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3") {
@@ -52,10 +56,17 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private var deadAt = -1
     private var arrivedAt = -1
     private var necronAt = -1
+    private var p3endAt = -1
+    private var handOff = false
     private var deaths = 0
-    private var pendingLine = -1
-    /** A taunt for the next 62-tick slot (after a terminal of yours), or null. */
-    private var pendingTaunt: String? = null
+    /** Goldor's lines waiting their turn (FIFO), and n of the last one said. */
+    private val lines = ArrayDeque<String>()
+    private var lastLine = -1000
+    /** n of "Necron, forgive me." (82 after "...."), or -1. */
+    private var forgiveAt = -1
+    /** Taunts by the n they are queued at. */
+    private val tauntAt = HashMap<Int, String>()
+    private var lastTaunt: String? = null
 
     val devices = Devices(this)
     val goldor = Goldor()
@@ -96,7 +107,12 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             }
         }
         if (from == 1) {
-            Sim.boss("Goldor", "Who dares trespass into my domain?")
+            say("Who dares trespass into my domain?")
+            // The intro, then the taunts that queue up behind it (they start at 248 in 112 of 114 runs).
+            lines += listOf("Little ants, plotting and scheming, thinking they are invincible...",
+                "I won't let you break the factory core, I gave my life to my Master.", "No one matches me in close quarters.")
+            val k = kotlin.random.Random.nextInt(100).let { if (it < 2) 0 else if (it < 43) 1 else if (it < 93) 2 else 3 }
+            repeat(k) { tauntAt[20 + kotlin.random.Random.nextInt(220)] = taunt() }
             // The red pad's drop hole: its frames run 24-30 ticks after this line.
             Blocks.play("p3start")
         } else if (from == 5) {
@@ -104,6 +120,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             openCore()
         } else {
             com.engineerclient.practice.TermInfo.simStart(from)
+            maybeTaunt()
             Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
         }
     }
@@ -111,26 +128,17 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     override fun stop() {
         Terminals.closeAll()
         devices.stop()
-        goldor.remove()
+        // Handed over to Necron: his body stays where he died until ~290 ticks after Necron's first line
+        // (boss recorder: 279-307 in the 9 fights that kept him in range); else gone with the phase.
+        val g = goldor
+        if (necronAt >= 0) Fight.later(290, "goldor body") { g.remove() } else g.remove()
     }
 
     override fun tick() {
         val n = n
         devices.tick()
-        // Goldor's intro, on its 62-tick grid.
-        if (from == 1) when (t) {
-            62 -> Sim.boss("Goldor", "Little ants, plotting and scheming, thinking they are invincible...")
-            124 -> Sim.boss("Goldor", "I won't let you break the factory core, I gave my life to my Master.")
-            186 -> Sim.boss("Goldor", "No one matches me in close quarters.")
-        }
-        tauntAt[n]?.let { if (pendingTaunt == null && section <= 2) pendingTaunt = it }
-        if (pendingLine >= 0 && n % 62 == 0) {
-            Sim.boss("Goldor", listOf("The little ants have a brain it seems.", "I will replace that gate with a stronger one!", "YOUR END IS NEAR!!")[pendingLine.coerceIn(0, 2)])
-            pendingLine = -1
-        } else if (pendingTaunt != null && n % 62 == 0) {
-            Sim.boss("Goldor", pendingTaunt!!)
-            pendingTaunt = null
-        }
+        tauntAt.remove(n)?.let { if (section <= 4) say(it) }
+        dialogue()
         // Stand names refresh on a 20-tick grid.
         // Lever stands rename on their own, 1-3 ticks after the pull (pullLever).
         if (n % 20 == 0) stations.forEach { if (it.kind != Station.Kind.LEVER) it.refreshStands() }
@@ -143,6 +151,52 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
+        if (handOff) { handOff = false; handDialogueOver(); Fight.begin(P4Necron(fromP3 = true)) }
+    }
+
+    // ------------------------------------------------------------------ Goldor's lines
+
+    /**
+     * Goldor says one line at a time, each at least 62 ticks after the one before (705 of 932 gaps
+     * exactly 62, none shorter; the rest waited for a trigger): a FIFO, so a section line queues
+     * behind taunts (S1's comes a median 79 ticks after the door, S2's and S3's 1). The death-tick
+     * line is not in it.
+     */
+    private fun say(line: String) {
+        if (lines.isEmpty() && n >= lastLine + 62) speak(line) else lines += line
+    }
+
+    private fun speak(line: String) {
+        Sim.boss("Goldor", line)
+        lastLine = n
+        // "Necron, forgive me." 82 after "...." (FLIGHT: 120/120 runs; REACH: 82-88).
+        if (line == "....") forgiveAt = n + 82
+    }
+
+    private fun dialogue() {
+        if (lines.isNotEmpty() && n >= lastLine + 62) speak(lines.removeFirst())
+        if (forgiveAt in 0..n) { forgiveAt = -1; Sim.boss("Goldor", "Necron, forgive me.") }
+    }
+
+    /** P4 starts: what Goldor still has to say runs on through Necron's intro, at the times it would have here. */
+    private fun handDialogueOver() {
+        var at = lastLine
+        for (line in lines) {
+            at = maxOf(at + 62, n)
+            val dt = at - n
+            Fight.later(dt, "goldor line") { Sim.boss("Goldor", line) }
+            if (line == "....") forgiveAt = at + 82
+        }
+        lines.clear()
+        if (forgiveAt >= 0) { val dt = forgiveAt - n; forgiveAt = -1; Fight.later(dt, "goldor forgive") { Sim.boss("Goldor", "Necron, forgive me.") } }
+    }
+
+    /** A taunt from the pool (no line twice in a row; the ten come about equally often). */
+    private fun taunt(): String = TAUNT_POOL.filter { it != lastTaunt }.random().also { lastTaunt = it }
+
+    /** S2-S4: a later taunt in 34% of runs (39 of 114), at any point of those sections. */
+    private fun maybeTaunt() {
+        if (section in 2..4 && kotlin.random.Random.nextDouble() < 0.13) tauntAt[n + 20 + kotlin.random.Random.nextInt(180)] = taunt()
     }
 
     // ------------------------------------------------------------------ completions
@@ -161,8 +215,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val line = progressLine(by, what, k, Station.total(shown))
         Sim.chat(line)
         if (by == Sim.me) Stats.done(st, n)
-        // Taunts ride the 62-tick grid (goldor.md, other lines).
-        if (by == Sim.me && st.kind == Station.Kind.TERMINAL && pendingTaunt == null) pendingTaunt = "Stop touching those terminals!"
         // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
         // Odin's Terminal Sounds keys on the raw 4.047619) (chat-attacks.md §2).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
@@ -179,21 +231,22 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         return "$col$by${if (col == "§a") "" else "§r§a"} $what (§r§c$k§r§a/$total)"
     }
 
-    /** Goldor's S1-S2 taunt pool: 1-3 a run at n ~284-416 (1777-1909 since Maxor), on the 62-tick grid (chat-attacks.md §1.1). */
+    /**
+     * Goldor's taunts: 1-3 queue up during S1 (0: 2, 1: 47, 2: 57, 3: 8 of 114 runs), so they follow the
+     * intro at 248, 310...; 0-3 more later in 39 of 114 runs. The ten come about equally often
+     * (13-26 each) and don't follow from anything the recordings show (goldor-flow.md, dialogue).
+     */
     private val TAUNT_POOL = listOf(
         "Do you really think we won't repair everything? Your impact will be minuscule!", "Come closer!",
         "You are breaking precious materials, unforgivable.", "CLOSER!", "There is no stopping me down there!",
         "I am the death zone, you are smart to flee.", "You can't damage me, you can barely slow me down!",
-        "Slowing me down only prolongs your pain!", "Closer to me!",
+        "Slowing me down only prolongs your pain!", "Closer to me!", "Stop touching those terminals!",
     )
-    private val tauntAt = HashMap<Int, String>().apply {
-        val picks = TAUNT_POOL.shuffled().take(1 + kotlin.random.Random.nextInt(3))
-        picks.forEach { put(280 + kotlin.random.Random.nextInt(140), it) }
-    }
+    /** One per door (S1-S3), any of the three whatever the section (S1: 34/46/34, S2: 39/27/48, S3: 40/38/36). */
+    private val SECTION_LINES = listOf("The little ants have a brain it seems.", "I will replace that gate with a stronger one!", "YOUR END IS NEAR!!")
 
     private fun sectionDone(s: Int) {
         sectionEnd[s] = n
-        if (s <= 3) pendingLine = s - 1
         if (s == 4) { openCore(); return }
         if (gateDown[s]) openDoor(s)
         else {
@@ -207,8 +260,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         doorOpen[s] = true
         Blocks.play("door$s")
         if (s == 1) Blocks.play("ss_s1done")
+        // His section line is queued with the door (the later of the last completion and the gate).
+        say(SECTION_LINES.random())
         section = s + 1
         sectionStart[section] = n
+        maybeTaunt()
         Stats.section(s, sectionEnd[s].coerceAtLeast(gateAt[s]) - sectionStart[s], n)
         // The section ends with its door (max(last completion, gate)): Goldor's catch-up cue.
         goldor.sectionEnded(s)
@@ -223,6 +279,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         gateDown[s] = true
         gateAt[s] = n
         Sim.chat("§aThe gate has been destroyed!")
+        // The progress pling comes with this line too (164 of 164 with no progress line near; boss recorder).
+        Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49f, GATE_CENTRES[s])
         Blocks.play("gate$s${s + 1}")
         if (sectionEnd[s] >= 0) openDoor(s)
@@ -264,7 +322,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.chat("§aThe Core entrance is opening!")
         if (from != 5) Stats.section(4, n - sectionStart[4], n)
         Blocks.play("core")
-        goldor.coreOpened()
         Stats.p3(n)
     }
 
@@ -282,18 +339,17 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             goldor.fly(n)
         }
         if (deadAt < 0 && goldor.flying) {
-            val arrived = goldor.arrived
-            if (arrived && arrivedAt < 0) {
+            if (goldor.arrived && arrivedAt < 0) {
                 arrivedAt = n
-                Sim.boss("Goldor", "You have done it, you destroyed the factory...")
-                // A script on a 62-tick cadence that runs on past his death and Necron's start.
-                Fight.later(62, "goldor arrived 1") { Sim.boss("Goldor", "But you have nowhere to hide anymore!") }
-                Fight.later(124, "goldor arrived 2") { Sim.boss("Goldor", "YOU ARE FACE TO FACE WITH GOLDOR!") }
-                Fight.later(186, "goldor arrived 3") { Sim.boss("Goldor", "....") }
+                // Reaching the core alive (14 of 114 runs): his script, queued at once, so it runs 62 apart past his
+                // death and Necron's start; his "...." queues behind it.
+                say("You have done it, you destroyed the factory...")
+                say("But you have nowhere to hide anymore!")
+                say("YOU ARE FACE TO FACE WITH GOLDOR!")
             }
-            goldor.barTick(n)
             if (n >= goldor.killAt) die()
         }
+        goldor.barTick(n)
         // Frenzy: every ~10 ticks while you're 2-14 blocks from him (goldor.md, damage).
         if (deadAt < 0 && n % 10 == 0) Sim.player?.let { p ->
             val d = p.position().distanceTo(goldor.position)
@@ -304,20 +360,21 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f)
             }
         }
+        // The floor under the core goes 2 ticks before Necron's first line (anims-p3.json p3end, dt -2).
+        if (deadAt >= 0 && p3endAt < 0 && n >= deadAt + 80 && !P3Sim.p3Only) { p3endAt = n; Blocks.play("p3end") }
+        // Necron's first line 82 ticks after Goldor's death (81-83), whichever ending; "Necron, forgive me." comes
+        // from the dialogue (82 after "....": in the same tick, just before, when he died in flight).
         if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 82) {
             necronAt = n
-            Sim.boss("Goldor", "Necron, forgive me.")
             Stats.goldorDone(n)
             if (P3Sim.p3Only) { Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
-            Blocks.play("p3end")
-            // Necron's first line comes with "Necron, forgive me." (82 ticks after death, 81-83).
-            Fight.later(0, "necron") { Fight.begin(P4Necron(fromP3 = true)) }
+            handOff = true
         }
     }
 
     private fun die() {
         deadAt = n
-        if (arrivedAt < 0) Sim.boss("Goldor", "....")
+        say("....")
         goldor.die()
     }
 
@@ -335,9 +392,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     // ------------------------------------------------------------------ Goldor
 
     /**
-     * Goldor on his track: a plain wither like the others (no armour on the track, armoured once
-     * the core opens), his name on its stand. Hypixel's invisible giants with golden swords stand
-     * at the S4/S1 corner (floating greatswords).
+     * Goldor on his track: a plain wither like the others, unarmoured the whole phase (health
+     * 1000 / 300000 on the track and in the core; boss recorder), his name on its stand. Hypixel's
+     * invisible giants with golden swords stand at the S4/S1 corner (floating greatswords).
      */
     class Goldor {
         private var boss: BossWither? = null
@@ -348,12 +405,15 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         private var sprintTo = -1.0
         var flying = false
             private set
-        private var flyFrom = Vec3.ZERO
+        /** Reached the core point alive. */
+        var arrived = false
+            private set
+        private var dead = false
         private var flyAt = 0
+        private var nextHurt = 0
         private var pos = Vec3.ZERO
         var killAt = Int.MAX_VALUE
             private set
-        val arrived get() = flying && Math.hypot(pos.x - CORE_POINT.x, pos.z - CORE_POINT.z) < 0.5
         val position: Vec3 get() = pos
 
         fun spawn(n: Int) {
@@ -372,9 +432,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
         fun remove() { boss?.remove(); boss = null; giants.forEach { it.discard() }; giants.clear() }
 
-        /** The core opened: his armour comes on. */
-        fun coreOpened() { boss?.armour(true) }
-
         /** Section [sec] ended (its door opened): if he is still in its segment, he sprints to the next one's start. */
         fun sectionEnded(sec: Int) {
             if (flying || sec !in 1..3) return
@@ -385,31 +442,44 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         fun fly(n: Int) {
             if (flying) return
             flying = true
-            flyFrom = pos
             flyAt = n
-            BossBar.progress(0.4f)
-            // Killed in flight 55 ticks after leaving (median; 15-113): the setting.
+            // Killed [P3Sim.goldorKill] after leaving (the setting; median 57 of 201 recorded kills).
             killAt = n + P3Sim.goldorKill.toInt()
         }
 
-        /** Killed in flight: his bar runs out; the wither stays (armoured) until Necron's first line. */
-        fun die() { BossBar.progress(0f) }
+        /** Killed: he stops where he is (no death animation) and stays until well into P4. */
+        fun die() { dead = true }
 
-        /** The bar falls from the core to the kill (Hypixel: ~0.4 -> 0 as the party hits him). */
+        /**
+         * The bar: 1.0 on the track and until he leaves, then down as the party hits him, to 0.0 at the
+         * kill and after. Hypixel resends it about once a second, so it moves in 20-tick steps (e.g. 1.0,
+         * 0.86, 0.29, 0.25, 0.21, 0.0; boss recorder, 60 fights).
+         */
         fun barTick(n: Int) {
-            if (!flying || n >= killAt) return
-            BossBar.progress(0.4f * (killAt - n) / (killAt - flyAt).coerceAtLeast(1))
+            if (!flying || n % 20 != 0) return
+            BossBar.progress(if (dead) 0f else (killAt - n).toFloat() / (killAt - flyAt).coerceAtLeast(1))
         }
 
         fun tick(phase: GoldorPhase) {
             val boss = boss ?: return
+            val n = phase.n
+            if (dead) return
             if (flying) {
-                val to = CORE_POINT.subtract(pos)
-                val d = to.horizontalDistance()
-                if (d > 0.01) {
+                // The party hitting him from the moment he leaves: the red hurt flash every few ticks.
+                if (n >= nextHurt) {
+                    nextHurt = n + 2 + kotlin.random.Random.nextInt(11)
+                    Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket(boss.e))
+                }
+                if (!arrived) {
+                    val to = CORE_POINT.subtract(pos)
+                    val d = to.horizontalDistance()
                     val step = minOf(FLY, d)
-                    pos = pos.add(to.x / d * step, -0.03, to.z / d * step)
-                    if (pos.y < CORE_POINT.y) pos = Vec3(pos.x, CORE_POINT.y, pos.z)
+                    pos = Vec3(pos.x + to.x / d.coerceAtLeast(1e-6) * step, maxOf(CORE_POINT.y, pos.y - 0.03), pos.z + to.z / d.coerceAtLeast(1e-6) * step)
+                    if (d <= FLY) arrived = true
+                } else {
+                    // Then into the core through its door: 0.4/tick to just inside it, then a 0.07 walk (boss recorder, 4 fights).
+                    val v = if (pos.z < CORE_IN_Z) 0.4 else 0.07
+                    pos = Vec3(pos.x + (CORE_IN_X - pos.x).coerceIn(-0.1, 0.1), maxOf(116.75, pos.y - 0.006), pos.z + v)
                 }
             } else {
                 if (sprintTo >= 0) {
@@ -420,7 +490,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 s %= LOOP
                 pos = trackPos(s)
             }
-            val yaw = if (flying) Math.toDegrees(Math.atan2(-(CORE_POINT.x - pos.x), CORE_POINT.z - pos.z)).toFloat() else yaw()
+            val yaw = when {
+                arrived -> 0f
+                flying -> Math.toDegrees(Math.atan2(-(CORE_POINT.x - pos.x), CORE_POINT.z - pos.z)).toFloat()
+                else -> yaw()
+            }
             boss.moveTo(pos, pos.add(-Math.sin(Math.toRadians(yaw.toDouble())), 0.0, Math.cos(Math.toRadians(yaw.toDouble()))))
         }
 
@@ -450,6 +524,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             /** Where a catch-up sprint ends, ~1.6 past the corner (S2 92.2-92.4, S3 183.6-183.8, S4 274.3-276.5). */
             val SPRINT_TO = doubleArrayOf(92.3, 183.7, 275.0)
             val CORE_POINT = Vec3(54.5, 117.0, 40.5)
+            /** Reaching it alive he goes on into the core along x ~53.4-53.8, fast until z ~55.8-56.4. */
+            const val CORE_IN_X = 53.6
+            const val CORE_IN_Z = 56.0
 
             /** The segment (0-3: S1-S4) [s] is in. */
             fun segment(s: Double): Int { var i = 0; while (i < 3 && s >= BOUNDS[i + 1]) i++; return i }

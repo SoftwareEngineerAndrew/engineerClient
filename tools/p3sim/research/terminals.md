@@ -301,6 +301,42 @@ before almost all of them.
   ticks after the pull, e.g. (94.5, 124.688, 113.5). A second pull says
   `§cThis lever has already been used.`.
 
+## Update 2026-10-04 (404 complete F7 runs, 1287 windows)
+
+Scripts: `/home/cam/backups/2026-10-03/analysis/terminals-devices/*.mjs` (on the window cache of
+`analysis/terminals/`). These supersede the numbers above where they differ.
+
+- **Type odds**: first open per station and run, n = 1164: order 182, melody 193, colours 181,
+  starts 211, panes 199, select 198. Equal odds.
+- **Reopening a terminal closed unsolved deals a new puzzle** (`reopen2.mjs`, 68 non-melody-trivial
+  reopens): new items and no progress kept in 65, same type; another type in 3 (gaps 2-11 ticks).
+  Never the state it was left in, never the same start (except melody, whose start differs only in
+  the random magenta column).
+- **Starts with**: the letter is a random pool item's initial. Over 186 windows the letter odds
+  follow the pool's names per letter (S 23 for 20 names, C 22/16, G 20/19, B 17/16, R 19/14, I 13/14,
+  P 12/9, M 12/10, D 10/11, E 9/6, W 9/11, L 7/7, F 6/9, N 3/5, A 2/4, O 2/1; T and J never). Items
+  with the letter per window: 2:1 3:5 4:14 5:21 6:32 7:43 8:27 9:20 10:16 11:3 12:4. Leather armour
+  is named **Leather Chestplate / Helmet / Leggings / Boots** (not Tunic/Cap/Pants). Every item with
+  the letter must be clicked, pre-glinted ones too (4 windows finished on clicking an Enchanted
+  Book or Bottle o' Enchanting; a click on one shows no update).
+- **Select all**: all 175 windows have 5 colours split **6-6-6-5-5**: every colour 5 items, 3 of
+  them one more. The target has 6 in 110, 5 in 65 (3 in 5 odds). Kinds even (glass 1239, clay 1224,
+  wool 1227, dye 1210).
+- **Panes**: starting On, n = 181: 0:8 1:24 2:36 3:44 4:40 5:16 6:5 7:4 8:3 9:1.
+- **Melody**:
+  - a new row's magenta column is **never the previous row's** (409 of 409);
+  - **a wrong lock freezes the lime for two steps.** A lone click on the active Lock In Slot with the
+    lime off target (judged at the server, ~2 ticks after the client's view) was followed by a +30
+    step in 8 of 9 (`melody-wrong.mjs`). A click on another row's Lock In Slot (Odin's solver
+    clicking ahead after a correct lock) makes the row change come without moving the lime (42 of 43
+    such row changes) and the next step +20 (`melody-stall.mjs`); 446 other row changes moved it.
+    This is the "first step after a row change 20 ticks later" and the "29-50 tick stalls" above.
+- **Status stands are distance-gated.** A terminal's or device's pair reads `""` while the player is
+  about 25+ blocks (3D) from it, and its status name (`Inactive Terminal`/`CLICK HERE`, `Terminal
+  Active`/`""`, `Inactive`/`Device`, `Device`/`Active`) when nearer, on the 20-tick refresh. Of ~4000
+  renames, status names came at 16-25 blocks (none past 26) and blanks at 23-35+ (`standdist.mjs`).
+  That is why stands "blank after their section": players leave. Lever stands are not gated.
+
 ## Not measured (decide in p3sim)
 
 - What a real wrong click does in order, starts and select (assumed: ignored).

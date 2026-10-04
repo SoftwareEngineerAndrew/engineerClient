@@ -146,7 +146,10 @@ object Masks {
         P3Sim.phoenixS.value = !P3Sim.phoenix
         Fight.applySpeed(p)
         Sim.sound(SoundEvents.FISHING_BOBBER_THROW, 0.5f, 0.4f)
-        Sim.chat("§aYou summoned your §6${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}§r§a!")
+        // A rod cast swaps pets on Hypixel through an Autopet rule: its line 2-3 ticks after the rod comes
+        // out (party/autopet.mjs, 60 runs: 74 of these lines with the rod held), exactly as below.
+        Sim.chat(if (P3Sim.phoenix) "§cAutopet §eequipped your §7[Lvl 100] §5Phoenix§e! §a§lVIEW RULE"
+            else "§cAutopet §eequipped your §7[Lvl 100] §6Black Cat§5 ✦§e! §a§lVIEW RULE")
     }
 
     /** Invincible until (after a proc). */
@@ -177,7 +180,7 @@ object Masks {
         if (item != null) {
             item.readyAt = now + item.cooldown
             // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
-            if (item.id == "PHOENIX" && !P3Sim.phoenix) swapPet(p)
+            if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.phoenixS.value = true; Fight.applySpeed(p) }
             safeUntil = now + item.safe
             Sim.chat(item.line)
             // Proc sounds as measured (chat-attacks.md §2): masks cure + wither + eat, Phoenix extinguish + infect + wither.
@@ -187,6 +190,8 @@ object Masks {
             } else {
                 Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f)
                 Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f)
+                // Spirit's Second Wind adds enderman.teleport at pitch 0 (items-timing.md §4; 0.5 is the lowest a client plays).
+                if (item.id == "SPIRIT_MASK") Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 0.5f)
             }
             Sim.sound(SoundEvents.WITHER_AMBIENT, 1f, 1f)
             return

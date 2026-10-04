@@ -144,6 +144,21 @@ class P3SimDataTest {
     }
 
     @Test
+    fun `melody terminal - a wrong lock freezes the lime for two steps`() {
+        val t = Terminals.Melody()
+        val lime = { (1..5).first { t.items[9 + it].item == Items.LIME_STAINED_GLASS_PANE } }
+        val target = (1..5).first { t.items[it].item == Items.MAGENTA_STAINED_GLASS_PANE }
+        // Step until the lime is off target, then lock: refused, and the next two steps keep it still.
+        var tick = 0
+        do { tick += 10; t.tick(tick) } while (lime() == target)
+        val at = lime()
+        assertFalse(t.click(16, 0, ContainerInput.PICKUP))
+        t.tick(tick + 10); assertEquals(at, lime())
+        t.tick(tick + 20); assertEquals(at, lime())
+        t.tick(tick + 30); assertTrue(lime() != at)
+    }
+
+    @Test
     fun `stations - 29, counted 7 8 7 7, labels unique per section`() {
         val all = Station.all()
         assertEquals(29, all.size)

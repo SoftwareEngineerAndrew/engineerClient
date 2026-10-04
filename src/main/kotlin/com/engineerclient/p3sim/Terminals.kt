@@ -30,8 +30,8 @@ import kotlin.random.Random
 object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
 
-    /** A random draw, weighted as the first opens of each stand came (terminals.md, n = 156). */
-    fun randomType(): Type = weighted(listOf(Type.ORDER to 29, Type.STARTS to 30, Type.PANES to 27, Type.SELECT to 26, Type.MELODY to 25, Type.RUBIX to 19).filter { it.first != Type.MELODY || !P3Sim.noMelodies })
+    /** A random draw: the six are equally likely (first opens per station, n = 1164: 182-211 each). */
+    fun randomType(): Type = Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random()
 
     fun <T> weighted(w: List<Pair<T, Int>>): T {
         var r = kotlin.random.Random.nextInt(w.sumOf { it.second })
@@ -52,11 +52,13 @@ object Terminals {
     private fun item(id: String): Item = BuiltInRegistries.ITEM.getValue(Identifier.withDefaultNamespace(id))
 
     /**
-     * Opens [station]'s terminal for [player]. Each terminal's puzzle is made the first time it's
-     * opened and kept until solved: the same type, layout and progress every time you open it.
+     * Opens [station]'s terminal for [player]. As on Hypixel, every open deals a fresh puzzle: a
+     * terminal closed unsolved comes back with new items and no progress (65 of 68 reopens), of the
+     * same type, but now and then of another (3 of 68).
      */
     fun open(player: ServerPlayer, station: Station, type: Type? = null) {
-        val term = station.term?.takeIf { !it.done } ?: Term.create(type ?: station.nextType()).also { station.term = it }
+        val keep = station.term?.type?.takeIf { Fight.forcedTerminal == null && Random.nextInt(68) >= 3 }
+        val term = Term.create(type ?: keep ?: station.nextType()).also { station.term = it }
         player.openMenu(SimpleMenuProvider({ id, inv, _ -> TerminalMenu(id, inv, term, station) }, Component.literal(term.title)))
     }
 
@@ -108,8 +110,8 @@ object Terminals {
         override val title = "Correct all the panes!"
         private val slots = (11..15) + (20..24) + (29..33)
         init {
-            // 0-8 start On, median 3 (measured, n = 54: 0:2 1:7 2:12 3:14 4:12 5:4 6-8:1 each).
-            val on = weighted(listOf(0 to 2, 1 to 7, 2 to 12, 3 to 14, 4 to 12, 5 to 4, 6 to 1, 7 to 1, 8 to 1))
+            // 0-9 start On, median 3 (measured, n = 181).
+            val on = weighted(listOf(0 to 8, 1 to 24, 2 to 36, 3 to 44, 4 to 40, 5 to 16, 6 to 5, 7 to 4, 8 to 3, 9 to 1))
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
@@ -149,13 +151,14 @@ object Terminals {
         private val letter: Char
         override val title: String
         init {
-            // The letters seen on Hypixel (items repeat, so one name with the letter is enough).
-            val letters = "IGRSCEPMLBFWDATN".filter { c -> STARTS_POOL.any { it.second[0] == c } }.toList()
-            letter = letters.random()
+            // The letter is a random pool item's initial: seen about as often as the pool has names
+            // with it (186 windows: S 23 for 20 names, C 22/16, G 20/19, B 17/16 ... A 2/4, O 2/1).
+            letter = STARTS_POOL.random().second[0]
             title = "What starts with: '$letter'?"
             val right = STARTS_POOL.filter { it.second[0] == letter }
             val wrong = STARTS_POOL.filter { it.second[0] != letter }
-            val n = listOf(2, 3, 4, 5, 5, 6, 6, 7, 7, 7, 8, 8, 9, 10, 11, 12).random()
+            // Items with the letter per window, as measured (n = 186); each slot's item is uniform.
+            val n = weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4))
             val picks = (List(n) { right.random() } + List(slots.size - n) { wrong.random() }).shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name) }
         }
@@ -172,15 +175,19 @@ object Terminals {
         override fun solved() = slots.all { !want(items[it]) || it in picked }
     }
 
-    /** "Select all the X items!": 28 items of 5 colours, 5-6 of X; click them all (they glint). */
+    /**
+     * "Select all the X items!": 28 items of 5 colours; click every X one (it glints). Each colour
+     * has 5 items and 3 of the 5 one more: all 175 windows split 6-6-6-5-5, the target taking a 6
+     * in 110 (the 3 in 5 odds) and a 5 in 65.
+     */
     class Select : Term(Type.SELECT) {
         private val slots = (10..16) + (19..25) + (28..34) + (37..43)
         private val target = COLOURS.random()
         override val title = "Select all the ${target.title} items!"
         init {
-            val others = (COLOURS - target).shuffled().take(4)
-            val n = if (Random.nextInt(56) < 29) 5 else 6
-            val picks = (List(n) { target.items.random() } + List(slots.size - n) { others.random().items.random() }).shuffled()
+            val families = listOf(target) + (COLOURS - target).shuffled().take(4)
+            val sixes = families.shuffled().take(3).toSet()
+            val picks = families.flatMap { c -> List(if (c in sixes) 6 else 5) { c.items.random() } }.shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name) }
         }
         private val wanted = target.items.map { item(it.first) }.toSet()
@@ -200,7 +207,10 @@ object Terminals {
     /**
      * "Click the button on time!": a lime pane bounces along the active row (one column every 10
      * ticks); Lock In Slot while it is in the magenta column. The row moves on at the next step;
-     * the 4th lock finishes at once.
+     * the 4th lock finishes at once. Each new row's magenta column differs from the last (409 of
+     * 409). A wrong lock (the lime off target, or another row's Lock In Slot, e.g. clicked ahead)
+     * freezes the lime for two steps: lone wrong clicks were followed by a +30 step in 8 of 9, and a
+     * row change after a click ahead did not move the lime (42 of 43), its next step +20.
      */
     class Melody : Term(Type.MELODY) {
         override val title = "Click the button on time!"
@@ -210,6 +220,8 @@ object Terminals {
         private var dir = 1
         private var locked = false
         private var lastStep = -1
+        /** Steps the lime still sits out after a wrong click. */
+        private var frozen = 0
         init { draw() }
         private fun draw() {
             for (i in items.indices) items[i] = FILLER
@@ -232,13 +244,22 @@ object Terminals {
             if (t <= 0) lastStep = -1
             if (t <= 0 || t % 10 != 0 || t == lastStep) return
             lastStep = t
-            if (lime + dir !in 1..5) dir = -dir
-            lime += dir
-            if (locked) { locked = false; row++; target = Random.nextInt(1, 6) }
+            if (frozen > 0) frozen--
+            else {
+                if (lime + dir !in 1..5) dir = -dir
+                lime += dir
+            }
+            if (locked) { locked = false; row++; target = ((1..5) - target).random() }
             draw()
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
-            if (slot != (row + 1) * 9 + 7 || locked || lime != target) return false
+            val lock = slot % 9 == 7 && slot / 9 in 1..4
+            if (!lock) return false
+            if (slot != (row + 1) * 9 + 7 || locked || lime != target) {
+                // Hypixel shows nothing for it, but the lime sits out its next two steps.
+                if (!(locked && slot == (row + 1) * 9 + 7)) frozen = 2
+                return false
+            }
             if (row == 3) { row = 4; return true }
             locked = true
             return true
@@ -367,7 +388,7 @@ object Terminals {
         gunpowder=Gunpowder|hopper_minecart=Minecart with Hopper|ink_sac=Ink Sac|iron_axe=Iron Axe|iron_boots=Iron Boots|iron_chestplate=Iron Chestplate
         iron_helmet=Iron Helmet|iron_hoe=Iron Hoe|iron_leggings=Iron Leggings|iron_pickaxe=Iron Pickaxe|iron_shovel=Iron Shovel|iron_sword=Iron Sword
         iron_door=Iron Door|iron_horse_armor=Iron Horse Armor|iron_ingot=Iron Ingot|item_frame=Item Frame|jungle_door=Jungle Door|lava_bucket=Lava Bucket
-        lead=Lead|leather=Leather|leather_boots=Leather Boots|leather_chestplate=Leather Tunic|leather_helmet=Leather Cap|leather_leggings=Leather Pants
+        lead=Lead|leather=Leather|leather_boots=Leather Boots|leather_chestplate=Leather Chestplate|leather_helmet=Leather Helmet|leather_leggings=Leather Leggings
         magma_cream=Magma Cream|map=Empty Map|melon_seeds=Melon Seeds|melon_slice=Melon|milk_bucket=Milk Bucket|minecart=Minecart|mushroom_stew=Mushroom Stew
         mutton=Raw Mutton|name_tag=Name Tag|nether_brick=Nether Brick|nether_star=Nether Star|nether_wart=Nether Wart|oak_boat=Boat|oak_door=Wooden Door
         oak_sign=Oak Sign|painting=Painting|paper=Paper|poisonous_potato=Poisonous Potato|polar_bear_spawn_egg=Spawn Egg|porkchop=Raw Porkchop|potato=Potato

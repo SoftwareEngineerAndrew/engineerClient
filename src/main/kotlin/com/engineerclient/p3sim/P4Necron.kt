@@ -93,6 +93,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
             val s = Spots.P4
             Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
         }
+        Party.startP4(fromP3)
         necron = BossWither("Necron", MID)
         Sim.boss("Necron", "You went further than any human before, congratulations.")
         // The same bar as Goldor's, renamed; 0 through the intro (bosses.md).
