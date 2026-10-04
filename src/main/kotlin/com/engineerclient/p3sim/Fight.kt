@@ -94,9 +94,20 @@ object Fight {
         else timed += Timed(System.nanoTime() + (ms * 1e6).toLong(), what, epoch) { if (phase === p) run() }
     }
 
-    /** (xRot, yRot) as of the end of the last server tick: the rotation of the movement packet before a click's (JERRY-03). */
+    /**
+     * (xRot, yRot) at the head of the last handleUseItem, before it snaps the player to the packet's rotation: the
+     * last movement packet's rotation, which Hypixel aims a use_item's Jerry-chine with (JERRY-03). UseItemRotSimMixin.
+     */
     var lastRot: Pair<Float, Float> = 0f to 0f
         private set
+
+    /** UseItemRotSimMixin: a use_item reached [p]'s handler (server thread of the sim's server only). */
+    @JvmStatic
+    fun noteUseItem(p: ServerPlayer) {
+        val s = p.level().server
+        if (s !== SimServer.server || !s.isSameThread) return
+        lastRot = p.xRot to p.yRot
+    }
     private val posHistory = java.util.ArrayDeque<Pair<Long, net.minecraft.world.phys.Vec3>>()
 
     /**
@@ -296,7 +307,6 @@ object Fight {
             due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.run() } }
         }
         Sim.player?.let { pl ->
-            lastRot = pl.xRot to pl.yRot
             posHistory.addLast(System.nanoTime() to pl.position())
             while (posHistory.size > 40) posHistory.removeFirst()
         }
@@ -306,12 +316,14 @@ object Fight {
         EngineerClient.safely("p3sim bows") { Bows.tick() }
         if (P3Sim.lava) Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase
-        if (p == null) { Recorder.finish(); return }
+        if (p == null) { Recorder.finish(); SimItems.flushMotion(); return }
         // The run recorder covers P1-P3 and stops at Necron; his phase still has to tick.
         if (p is P4Necron) Recorder.finish()
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++
         Party.tick()
         if (p !is P4Necron) EngineerClient.safely("p3sim recorder") { Recorder.tick(serverTick) }
+        // This tick's knockback, straight to the player in the burst's own tick (SimItems.push).
+        SimItems.flushMotion()
     }
 }

@@ -901,6 +901,9 @@ object SimItems {
                 return@register InteractionResult.PASS
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
+            // Hypixel's click model: a block-aimed click fired from use_item_on; the client's own MAIN-hand use_item
+            // for the same item, in the same or the next server tick, is that click's follow-up and does nothing.
+            blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick - t <= 1) { blockFired = null; return@register InteractionResult.SUCCESS } }
             var result: InteractionResult = InteractionResult.PASS
             EngineerClient.safely("p3sim use $id") { result = use(player, id) }
             result
@@ -1013,24 +1016,36 @@ object SimItems {
         return true
     }
 
-    /** Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets). */
+    /**
+     * Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets),
+     * with [clickPos] = where they stood then.
+     */
     private fun asClicked(p: ServerPlayer, what: String, prior: Boolean = false, run: () -> Unit) {
-        // [prior]: the rotation of the last movement packet, not the click's own (Jerry-chine, JERRY-03).
+        // [prior]: the rotation of the last movement packet, not the use_item's own (Jerry-chine, JERRY-03): what the
+        // player had at the head of handleUseItem ([Fight.lastRot]). A block click (use_item_on carries no rotation)
+        // already has it as the player's own, so it never passes [prior].
         val xRot = if (prior) Fight.lastRot.first else p.xRot
         val yRot = if (prior) Fight.lastRot.second else p.yRot
+        val pos = p.position()
         Fight.afterPing(what) {
             if (p.isRemoved || Sim.player !== p) return@afterPing
             val nowX = p.xRot; val nowY = p.yRot
             p.xRot = xRot; p.yRot = yRot
-            try { run() } finally { p.xRot = nowX; p.yRot = nowY }
+            clickPos = pos
+            try { run() } finally { p.xRot = nowX; p.yRot = nowY; clickPos = null }
         }
     }
 
-    /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
+    /** While an [asClicked] action runs: the player's position at the click (the last move packet's). */
+    private var clickPos: Vec3? = null
 
-    /** A right click with [id] in the air (or on a block that isn't the sim's). */
-    private fun use(p: ServerPlayer, id: String): InteractionResult {
+    /** The cloak and the arrows: nothing carries over from an earlier sim server. */
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; Bows.reset()
+        if (liveRockets.isNotEmpty()) { Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(it.unimi.dsi.fastutil.ints.IntArrayList(liveRockets))); liveRockets.clear() }
+    }
+
+    /** A right click with [id] in the air, or on a block that isn't the sim's ([fromBlock]: from use_item_on). */
+    private fun use(p: ServerPlayer, id: String, fromBlock: Boolean = false): InteractionResult {
         (Fight.phase as? P1Maxor)?.let { if (it.usePylon(p.position())) return InteractionResult.SUCCESS }
         if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         when (id) {
@@ -1039,7 +1054,7 @@ object SimItems {
             // PEARLS-01: the boss room refuses a pearl: one off the stack, red line, no entity.
             "ENDER_PEARL" -> { p.mainHandItem.shrink(1); Sim.chat("§cA mystical force in this room prevents you from doing that!") }
             "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }
-            "JERRY_STAFF" -> asClicked(p, "jerry", prior = true) { jerry(p) }
+            "JERRY_STAFF" -> asClicked(p, "jerry", prior = !fromBlock) { jerry(p) }
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
             "INFINITE_SPIRIT_LEAP" -> openLeap(p)
             "HAUNT_ABILITY" -> openHaunt(p)
@@ -1075,24 +1090,20 @@ object SimItems {
         // LEV-02: a lever before its section is vanilla's toggle with the click sound, no chat.
         if (state.block is LeverBlock) { Fight.afterPing("lever") { vanillaLeverToggle(pos) }; return InteractionResult.SUCCESS }
         if (state.block is ButtonBlock) return InteractionResult.SUCCESS
-        if (id != null && firesOnUseItem(p, id)) return InteractionResult.SUCCESS
-        if (id != null) return use(p, id)
-        return InteractionResult.SUCCESS
+        if (id == null) return InteractionResult.SUCCESS
+        // Every item fires here, from use_item_on (Hypixel's model): the client sends no use_item at all after a click
+        // its own useItemOn took (a dispenser, hopper, anvil, beacon or sign opens/answers on the client; a sneaking
+        // AOTV makes a path on dirt), so firing on use_item alone fired nothing there. The client's follow-up
+        // use_item, when it sends one, is swallowed by [blockFired] (p3audit J1: one Jerry trade per block click, not 2).
+        // The block items (Infinileap/Haunt heads, Superboom) are as before: the client places them, so no follow-up.
+        val r = use(p, id, fromBlock = true)
+        if (r != InteractionResult.PASS && p.mainHandItem.item !is net.minecraft.world.item.BlockItem) blockFired = id to Fight.serverTick
+        // Its SUCCESS keeps vanilla's block use off (the world stays as built); the client's flow doesn't read it.
+        return r
     }
 
-    /**
-     * True when the client's own use_item after this block click fires [id] (p3audit J1: firing here too made every
-     * block-aimed Jerry 2 trades, 123/123; Hypixel 1). Vanilla's Minecraft.startUseItem sends use_item unless the
-     * client's own useItemOn returned Success/Fail (our client callback passes), so only a placed block item stops it:
-     * the Infinileap/Haunt heads and Superboom stay here. Bonzo stays here too: a block-aimed balloon flies along the
-     * last move packet's rotation (486/486), which use_item overwrites, and its 4-tick gate refuses the follow-up.
-     * The SUCCESS keeps vanilla's block use off (the world stays as built); the client's flow doesn't read it.
-     */
-    private fun firesOnUseItem(p: ServerPlayer, id: String) =
-        id != "STARRED_BONZO_STAFF" && p.mainHandItem.item !is net.minecraft.world.item.BlockItem && (id in USE_ITEM_IDS || id in Bows.SHORTBOWS)
-
-    /** The non-block ids [use] fires (AOTV, Hyperion, pearl, Jerry, cloak, pet rod); the shortbows are [Bows.SHORTBOWS]. */
-    private val USE_ITEM_IDS = setOf("ASPECT_OF_THE_VOID", "HYPERION", "ENDER_PEARL", "JERRY_STAFF", "WITHER_CLOAK", "PET_ROD")
+    /** The item a block click just fired and its server tick: the client's use_item for it in that tick or the next is skipped. */
+    private var blockFired: Pair<String, Int>? = null
 
     /** The server tick of each terminal's last accepted click (same-tick dedupe). */
     private val termClickTick = java.util.WeakHashMap<Station, Int>()
@@ -1311,9 +1322,23 @@ object SimItems {
 
     // ------------------------------------------------------------------ movement items
 
+    /**
+     * Sets [p]'s motion to [v] (a SET, as Hypixel's). The packet goes straight to the player at the end of this
+     * [Fight.tick], the burst's own tick: hurtMarked would wait for the next tick's entity tracker. Several pushes in
+     * one tick are one packet carrying the last vector (J5: 16 of 16). hurtMarked stays off, so no duplicate.
+     */
     private fun push(p: ServerPlayer, v: Vec3) {
         p.deltaMovement = v
-        p.hurtMarked = true
+        pendingMotion[p] = v
+    }
+
+    private val pendingMotion = LinkedHashMap<ServerPlayer, Vec3>()
+
+    /** Sends this tick's [push]es (Fight.tick's last step). */
+    fun flushMotion() {
+        if (pendingMotion.isEmpty()) return
+        pendingMotion.forEach { (p, v) -> if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket(p.id, v)) }
+        pendingMotion.clear()
     }
 
     /**
@@ -1327,37 +1352,48 @@ object SimItems {
         // Hard 4-tick gate (B4): spacing 4:177 and never 1-3; a refused click sets nothing.
         val gap = Fight.serverTick - bonzoLast
         if (gap < 4) return
+        // The held item is sent again on 76.7% of accepted clicks (B8: 1,333/1,738), by idle time: ~50% under 8 ticks
+        // since the last balloon, ~81% over 10. First, before the stand bundle (spec 3).
+        val resend = when { gap < 8 -> 0.5; gap > 10 -> 0.81; else -> 0.65 }
         bonzoLast = Fight.serverTick
-        Sim.sound(SoundEvents.GHAST_AMBIENT, 1f, (88 + Random.nextInt(26)) / 63f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
-        // The held item is sent again on 76.7% of accepted clicks (B8: 1,333/1,738).
-        if (Random.nextDouble() < 0.767) p.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0, p.inventoryMenu.incrementStateId(), 36 + p.inventory.selectedSlot, p.getItemInHand(InteractionHand.MAIN_HAND).copy()))
-        // P = the last move packet's position (the server's at the click), d = the look the click aims with.
-        val pos = p.position()
+        if (Random.nextDouble() < resend) p.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0, p.inventoryMenu.incrementStateId(), 36 + p.inventory.selectedSlot, p.getItemInHand(InteractionHand.MAIN_HAND).copy()))
+        // P = the last move packet's position (the server's at the click, asClicked), d = the look the click aims with:
+        // a block click's is the last move packet's (use_item_on has none), an air click's the use_item's (spec 3.2).
+        val pos = clickPos ?: p.position()
         val dir = look(p)
         // Projectile pos(k) = P + (0,1,0) + 0.2d + 0.75k d, feet+1.0 sneaking too (B2, 112/112 crouched).
         val o = pos.add(0.0, 1.0, 0.0).add(dir.scale(0.2))
-        // Stand S0 = floor32(P + 0.2d - 0.5y) = pos(0) - 1.5y, a marker (flags 32/18; exact on 1,740/1,740, B7).
+        // Stand S0 = floor32(P + 0.2d - 0.5y) = pos(0) - 1.5y, a marker (flags 32/18; exact on 1,740/1,740, B7),
+        // rotated to the look the server used (spec 3.1).
         val s0 = floor32(pos.add(dir.scale(0.2)).add(0.0, -0.5, 0.0))
         val stand = ArmorStand(Sim.level, s0.x, s0.y, s0.z)
         stand.isInvisible = true
         stand.isSilent = true
         stand.setNoGravity(true)
         Station.setMarker(stand)
+        Station.setLeverFlags(stand)
+        stand.yRot = p.yRot; stand.xRot = p.xRot
         stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, balloonHead())
         Sim.spawn(stand)
+        // Then the ghast sound, at P (spec 3: after the bundle, same tick).
+        Sim.sound(SoundEvents.GHAST_AMBIENT, 1f, (88 + Random.nextInt(26)) / 63f, pos, net.minecraft.sounds.SoundSource.HOSTILE)
         // The burst lattice index k (B2/B3: cell rule exact on 98.2%): first k >= 1 whose cell isn't passable;
         // k = 2 when pos(0)'s cell is already solid (25 of 27 off a ghost block). Overshoot is the lattice, 0..0.75.
-        var k = if (bonzoSolid(o)) 2 else 1
-        if (k == 1) while (k <= BONZO_STEPS && !bonzoSolid(o.add(dir.scale(BONZO_SPEED * k)))) k++
-        // No block within ~128 (3 of 1,740 never burst): the stand flies on and goes with no burst.
-        val bursts = k <= BONZO_STEPS
+        // Each cell is tested in its own flight tick, so a block that changes mid-flight counts (a gate, a Dungeonbreaker
+        // hole); on a still world it's the same k as testing them all at the click.
+        val startsInside = bonzoSolid(o)
         fun fly(j: Int) {
             Fight.later(1, "bonzo flight") {
                 if (stand.isRemoved) return@later
-                // Burst k+1 ticks after the stand (n-gap 1,718/1,731; no clamp).
-                if (bursts && j == k + 1) { bonzoBurst(p, o.add(dir.scale(BONZO_SPEED * k)), stand); return@later }
-                if (!bursts && j > BONZO_STEPS) { stand.discard(); return@later }
-                // Drawn 1.5 below the projectile (1,357 flight updates; the tracker sends them on its own cadence).
+                // Step k = j - 1 bursts in tick j: k+1 ticks after the stand (n-gap 1,718/1,731; no clamp).
+                val k = j - 1
+                if (k >= 1 && k <= BONZO_STEPS && (if (startsInside) k == 2 else bonzoSolid(o.add(dir.scale(BONZO_SPEED * k))))) {
+                    bonzoBurst(p, o.add(dir.scale(BONZO_SPEED * k)), stand); return@later
+                }
+                // No block within ~128 (3 of 1,740 never burst): the stand flies on and goes with no burst.
+                if (j > BONZO_STEPS) { stand.discard(); return@later }
+                // Drawn 1.5 below the projectile (1,357 flight updates; the vanilla tracker sends them on its 3-tick
+                // cadence, the first about spawn+4, as Hypixel's).
                 val q = o.add(dir.scale(BONZO_SPEED * j))
                 stand.setPos(q.x, q.y - 1.5, q.z)
                 fly(j + 1)
@@ -1373,28 +1409,28 @@ object SimItems {
     private fun bonzoBurst(p: ServerPlayer, bTrue: Vec3, stand: ArmorStand) {
         val colours = { Random.nextInt(0x1000000) }
         val rocket = ItemStack(Items.FIREWORK_ROCKET)
-        rocket.set(DataComponents.FIREWORKS, net.minecraft.world.item.component.Fireworks(1, listOf(net.minecraft.world.item.component.FireworkExplosion(
+        rocket.set(DataComponents.FIREWORKS, net.minecraft.world.item.component.Fireworks(0, listOf(net.minecraft.world.item.component.FireworkExplosion(
             net.minecraft.world.item.component.FireworkExplosion.Shape.SMALL_BALL, it.unimi.dsi.fastutil.ints.IntArrayList(intArrayOf(colours(), colours())), it.unimi.dsi.fastutil.ints.IntArrayList(), false, false))))
         val b32 = floor32(bTrue)
-        val fw = InertFirework(Sim.level, b32.x, b32.y, b32.z, rocket)
-        fw.deltaMovement = Vec3.ZERO
-        Sim.spawn(fw)
-        // Event 17 exactly once (1,735/1,735): the client draws the burst and plays the blast itself.
-        Sim.level.broadcastEntityEvent(fw, 17.toByte())
-        Fight.later(1, "bonzo cleanup") { fw.discard(); stand.discard() }
-        val pos = p.position()
+        // The rocket is packets to you only, never a level entity: a firework's tracking range (64) dropped far
+        // bursts, and a ticking one launches and explodes by itself. Add (zero motion), its item, event 17 exactly once
+        // (1,735/1,735: the client draws the burst and plays the blast itself), and gone with the stand at burst+1.
+        val fw = net.minecraft.world.entity.projectile.FireworkRocketEntity(Sim.level, b32.x, b32.y, b32.z, rocket)
+        val conn = p.connection
+        conn.send(net.minecraft.network.protocol.game.ClientboundAddEntityPacket(fw.id, fw.uuid, b32.x, b32.y, b32.z, 0f, 0f,
+            net.minecraft.world.entity.EntityType.FIREWORK_ROCKET, 0, Vec3.ZERO, 0.0))
+        fw.entityData.nonDefaultValues?.let { conn.send(net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket(fw.id, it)) }
+        conn.send(net.minecraft.network.protocol.game.ClientboundEntityEventPacket(fw, 17.toByte()))
+        liveRockets += fw.id
+        Fight.later(1, "bonzo cleanup") { liveRockets.rem(fw.id); conn.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(fw.id)); stand.discard() }
+        // The server's position of you (PING-08; spec 4: P_srv, the move packets that arrived), for the gate and the push.
+        val pos = Fight.seenPos(p)
         // Boost iff the burst is within 3.5 of feet+1.5 (B1: 96.4-96.6% of 1,735 bursts; no random roll).
         if (bTrue.distanceTo(pos.add(0.0, 1.5, 0.0)) > 3.5) return
         // SET 1.5 * unit(P.xz - B.xz), vy 0.5 (|v_xz| 1.5000 in 1,297/1,299); exactly over it: (0, 0.5, 0).
         val dx = pos.x - bTrue.x; val dz = pos.z - bTrue.z
         val h = Math.sqrt(dx * dx + dz * dz)
         push(p, if (h > 0.0) Vec3(1.5 * dx / h, 0.5, 1.5 * dz / h) else Vec3(0.0, 0.5, 0.0))
-    }
-
-    /** A firework that never ticks: no launch sound (vol 3 AMBIENT) and no second, self-made event 17 (B6: 72-76% doubled). */
-    class InertFirework(level: Level, x: Double, y: Double, z: Double, stack: ItemStack) :
-        net.minecraft.world.entity.projectile.FireworkRocketEntity(level, x, y, z, stack) {
-        override fun tick() {}
     }
 
     /** floor(v*32)/32 per axis: the 1/32 grid Hypixel's packets put stand and firework on (B7, spec 3.2). */
@@ -1434,6 +1470,8 @@ object SimItems {
     }
 
     private var bonzoLast = -100
+    /** Packet-only rockets not yet removed (a stop drops their cleanup: [reset] removes them). */
+    private val liveRockets = it.unimi.dsi.fastutil.ints.IntArrayList()
     private const val BONZO_SPEED = 0.75
     /** ~170 lattice steps (127.5 blocks) with no block: no burst (B10). */
     private const val BONZO_STEPS = 170
@@ -1448,24 +1486,28 @@ object SimItems {
         // At most 3 bullets a server tick (8 ticks with 3; a 4-click tick gave 3, 13-10-15 n=19977).
         if (jerryTick != Fight.serverTick) { jerryTick = Fight.serverTick; jerryShots = 0 }
         if (++jerryShots > 3) return
-        // villager.trade NEUTRAL 0.5, pitch k/63 for k = 88..113, at your feet in the click tick (J7, 2283/2283).
-        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.5f, (88 + Random.nextInt(26)) / 63f, p.position(), net.minecraft.sounds.SoundSource.NEUTRAL)
-        rapidFire(p)
-        // F = the last move packet's position, u = its look (asClicked prior; 2194/2284 stands follow it).
-        val f = p.position()
+        // F = the last move packet's position (asClicked's click position), u = its look (asClicked prior on a
+        // use_item, the player's own on a block click; 2194/2284 stands follow it).
+        val f = clickPos ?: p.position()
         val u = look(p)
         val o = f.add(0.0, 1.1, 0.0)
         fun bullet(k: Int) = o.add(u.scale(0.25 + 0.75 * k))
-        // The bullet's visual (J8): invisible silent marker stand, Villager head, head pose = pitch, at F + u - 0.5y = B_1 - 1.6y.
-        val stand = ArmorStand(Sim.level, f.x + u.x, f.y + u.y - 0.5, f.z + u.z)
+        // The bullet's visual (J8): invisible silent marker stand, Villager head, head pose = pitch, at F + u - 0.5y = B_1 - 1.6y;
+        // shared flags 33 (invisible + bit 0) and armor-stand flags 18, as all 4,370 of Hypixel's.
+        val stand = JerryStand(Sim.level, f.x + u.x, f.y + u.y - 0.5, f.z + u.z)
         stand.isInvisible = true
+        stand.setSharedFlagOnFire(true)
         stand.isSilent = true
         stand.setNoGravity(true)
         Station.setMarker(stand)
+        Station.setLeverFlags(stand)
         stand.yRot = p.yRot; stand.xRot = p.xRot
         stand.setHeadPose(net.minecraft.core.Rotations(p.xRot, 0f, 0f))
         stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, villagerHead())
         Sim.spawn(stand)
+        // villager.trade NEUTRAL 0.5, pitch k/63 for k = 88..113, at your feet in the click tick, after the stand bundle (J7, 2283/2283).
+        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.5f, (88 + Random.nextInt(26)) / 63f, f, net.minecraft.sounds.SoundSource.NEUTRAL)
+        rapidFire(p)
         fun fly(k: Int) {
             Fight.later(1, "jerry bullet") {
                 if (p.isRemoved || Sim.player !== p) { stand.discard(); return@later }
@@ -1485,10 +1527,13 @@ object SimItems {
 
     /** A bullet bursts at [b] (J3/J4/J6/J9): yes, then the push iff in range, then one poof; the last burst of a tick wins. */
     private fun jerryBurst(p: ServerPlayer, b: Vec3) {
-        // villager.yes MASTER 0.35 pitch 1 at floor(B)+0.5, out of range too (J6: 1,357/1,392; 92 of 98).
-        Sim.sound(SoundEvents.VILLAGER_YES, 0.35f, 1f, Vec3(floor(b.x) + 0.5, floor(b.y) + 0.5, floor(b.z) + 0.5))
+        // villager.yes MASTER 0.35 pitch 1 at floor(B)+0.5, out of range too (J6: 1,357/1,392; 92 of 98): straight to you,
+        // as a level sound at volume 0.35 reaches only 5.6 blocks and far bursts were silent.
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSoundPacket(net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.VILLAGER_YES),
+            net.minecraft.sounds.SoundSource.MASTER, floor(b.x) + 0.5, floor(b.y) + 0.5, floor(b.z) + 0.5, 0.35f, 1f, Random.nextLong()))
         // d = (feet + 1.62) - B, the eye constant sneaking too (J4: 1.62 best, 0.0016 vs 0.0076); boost iff |d| <= 4.0 (J3: 97.1-98.3%).
-        val d = p.position().add(0.0, 1.62, 0.0).subtract(b)
+        // Feet = the server's position of you at the burst (PING-08).
+        val d = Fight.seenPos(p).add(0.0, 1.62, 0.0).subtract(b)
         val len = d.length()
         if (len <= 4.0 && len > 0.0) push(p, Vec3(0.5 * d.x / len, 0.6, 0.5 * d.z / len))
         // One poof, count 1, at the exact burst point (spec 4: 1392 of 1434).
@@ -1522,8 +1567,14 @@ object SimItems {
         val now = Fight.serverTick
         if (now - rapidLast > 80) rapidShots = 0
         rapidShots++; rapidLast = now
-        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(
-            Component.literal("§b-${14 * rapidShots} Mana (§6Rapid-fire§b)")))
+        // A system_chat overlay, as Hypixel sends it (JERRY-08), not a set_action_bar_text.
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSystemChatPacket(
+            Component.literal("§b-${14 * rapidShots} Mana (§6Rapid-fire§b)"), true))
+    }
+
+    /** The Jerry bullet's stand: Hypixel's carries shared flag bit 0 (33 = invisible + 1) for its whole life; vanilla's baseTick would clear it. */
+    class JerryStand(level: Level, x: Double, y: Double, z: Double) : ArmorStand(level, x, y, z) {
+        override fun setSharedFlagOnFire(onFire: Boolean) = super.setSharedFlagOnFire(true)
     }
 
     /**
