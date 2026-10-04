@@ -244,6 +244,42 @@ the fast runs had:
 instant kills and the proven check right after the last death. A realistic "everything went right"
 run is ~1110-1155 (55.5-57.7 s), which is where the recorded best (1137, 1147) sit.
 
+## What the party's kills trigger
+
+From all Better PF recordings to 2026-10-03: 959 recordings, 571 runs with server ticks in every
+recording, 565 of them with the door line (`triggers.py`; times after D as above).
+
+**Measured.**
+- **The slow flight is decided at his departure.** A leg in the fetch phase is slow (0.44 b/t, with
+  waits) when a blood mob is alive on the tick the Watcher leaves for his next head, and fast
+  (0.61 b/t) when none is. That holds for 1526 of 1701 legs (0.90). The tick before departure
+  (0.89) and every earlier tick do worse: alive at any time in the 10 ticks before is 0.79, alive
+  since he arrived is 0.61. A mob killed a tick before he leaves costs nothing. Of the 29 fast legs
+  with a mob "alive", 19 had it die 0-5 ticks after departure, within the death-time error.
+- **The Giant and the mini-boss count.** Legs whose only living mobs were those: 13 slow, 1 fast.
+- **Deadline.** He leaves on the first D+40k tick after reaching a niche, and a head lands ~50
+  ticks after he reaches its niche (launch +7-11, 41-tick flight). So the time from a landing to
+  his next departure is short: median 36 ticks, p10 10, n = 1935 lone regulars. Of those, killed
+  before he left: 1689 fast / 168 slow; still alive: 23 fast / 55 slow.
+- **What a slow leg costs:** about 11.5 ticks each (last landing - move against the number of slow
+  legs, n = 130 complete runs), or 0.22 ticks per tick a mob is alive. Head-order luck still
+  outweighs it (see "Fastest possible").
+- **The four dialogue-phase mobs** don't change "handle this" (median D+443-480 whether 0 or 4 are
+  alive at it) or the move tick (move - max(D+480, H+42): median +50 with none alive, +6..+29 with
+  1-4). But if they are alive when he moves, that first leg is slow (0.44 b/t median, against 0.61).
+- **Kill taunts** are said 0-3 ticks after a death only some of the time: 167 of 876 deaths when
+  his speech queue was free (19%), 126 of 3550 (4%) when it wasn't. They almost never hold "handle this"
+  back (2 of 108 runs; the line before it is a spawn line in 101). "Proven" came a median 6 ticks
+  after the last death (n = 80); a taunt delayed it past +12 in 6 of 70.
+
+**So, to kill as fast as the Watcher allows:**
+1. Stand in the middle: heads land 2.3 blocks from it (median, p90 4.3), at y 72.7-74.8.
+2. The mob exists from its head's landing. Kill it before his next D+40k departure: under half a
+   second in most cases, and a whole 40-tick step at most.
+3. The Giant, mini-boss and two regulars of the dialogue phase can wait, but all four must be dead
+   by the move (D+480 at the earliest, 24 s after the door), or his first leg is slow.
+4. Kill the 19th mob the moment it lands: "proven" is the next D+10k tick (0-8 later).
+
 ## Measured vs conjecture
 
 | Measured (spread in the text) | Conjecture |

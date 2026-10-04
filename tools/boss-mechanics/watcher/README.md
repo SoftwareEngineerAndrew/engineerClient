@@ -22,6 +22,7 @@ python3 extract.py DATA_DIR OUT_DIR [--jobs N] [--force]   # 1. blood-room windo
 python3 runs.py DATA_DIR OUT_DIR                          # 2. one server-tick timeline per run -> OUT_DIR/runs.json
 python3 analyze.py OUT_DIR [data dialogue mobs watcher end fastest]   # 3. the report's numbers
 python3 sim.py [--runs N] [--move T] [--pdouble P]         # 4. Monte Carlo of the split floor
+python3 triggers.py OUT_DIR [slow deadline taunt proven dialogue mism cost window handle]   # 5. what kills trigger
 ```
 
 ## Files
@@ -31,7 +32,7 @@ python3 sim.py [--runs N] [--move T] [--pdouble P]         # 4. Monte Carlo of t
 - `extract.py`, `runs.py` - steps 1-2. `runs.py` merges siblings: chat lines align the timelines,
   entity ids (the server's) merge the wall skulls, names merge the blood mobs.
 - `model.py` - per-run events: the Watcher's legs, skull launches, blood mob spawns and deaths.
-- `analyze.py`, `sim.py` - steps 3-4.
+- `analyze.py`, `sim.py` - steps 3-4; `triggers.py` - step 5, what the party's kills set off (slow flight, taunts, proven).
 
 ## Caveats
 
