@@ -73,6 +73,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private var lastTaunt: String? = null
 
     val devices = Devices(this)
+    private val arenaReplay = ArenaFixes.replay()
     val goldor = Goldor()
 
     fun station(section: Int, label: String) = stations.first { it.section == section && it.label == label }
@@ -84,6 +85,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Stats.reset(from)
         val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
         nOffset = startN
+        arenaReplay?.begin(startN)
         // Earlier sections: done, their gates and doors open, as if a party had just done them.
         for (s in 1 until from.coerceAtMost(5)) {
             stations.filter { it.section == s }.forEach { doneAlready(it) }
@@ -172,7 +174,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death ticks: the chat line lands at n = 60k-1 (goldor.md, death ticks).
         if (section <= 4 && n % 60 == 59) deathTick()
         goldor.tick(this)
-        // His carving of the walkway is Blocks' (carveTick); the TNT cubes are left out.
+        // His carving of the walkway is Blocks' (carveTick). The TNT cubes (one 27-block cube per 200-tick slot in about
+        // half the runs), the granite blobs, the lantern burst and the S4 plate follow one recorded run (ARENA-01/02/04/08).
+        arenaReplay?.tick(n)
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
@@ -463,7 +467,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val STRIP = AABB(45.0, 100.0, 50.0, 65.0, 160.0, 54.5)
         /** Gate i/i+1, by i. */
         val GATE_BOXES = arrayOf(AABB.ofSize(Vec3.ZERO, 0.0, 0.0, 0.0), AABB(93.0, 113.0, 121.0, 108.0, 138.0, 125.0), AABB(16.0, 113.0, 125.0, 20.0, 138.0, 140.0), AABB(1.0, 113.0, 48.0, 16.0, 138.0, 52.0))
-        /** TNT cubes (min corner) along the track, and the ones each section's timer takes. */
+        /** Where each gate blows (centres), by i. */
         val GATE_CENTRES = arrayOf(Vec3.ZERO, Vec3(100.0, 118.0, 122.5), Vec3(17.5, 118.0, 132.0), Vec3(8.0, 118.0, 49.5))
     }
 
@@ -515,6 +519,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             for (i in 0 until 4) {
                 val e = SimGiant(Sim.level)
                 e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
+                // Vanilla clears a mob's invisible flag without the effect: the effect keeps it (no particles).
+                e.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
                 e.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.GOLDEN_SWORD))
                 val g = giantPos(i)
                 e.snapTo(g.x, g.y, g.z, 0f, 0f)

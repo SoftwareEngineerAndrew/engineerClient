@@ -29,12 +29,12 @@ object SimWorld {
     /** Written into the world folder: which arena it was built from. */
     private const val MARKER = "p3sim-arena.txt"
     /** Bump when the world itself must be made again (not just the arena data). */
-    private const val WORLD_VERSION = 1
+    private const val WORLD_VERSION = 2
 
     /** The arena build the jar carries (a world made from another one is rebuilt). */
     val arenaVersion: String by lazy {
         val crc = CRC32()
-        Arena::class.java.getResourceAsStream("/assets/engineerclient/p3sim/arena.bin")?.use { crc.update(it.readAllBytes()) }
+        for (f in listOf("arena.bin", "arena-ext.bin", "arena-fixes.json")) Arena::class.java.getResourceAsStream("/assets/engineerclient/p3sim/$f")?.use { crc.update(it.readAllBytes()) }
         java.lang.Long.toHexString(crc.value) + "-" + WORLD_VERSION
     }
 

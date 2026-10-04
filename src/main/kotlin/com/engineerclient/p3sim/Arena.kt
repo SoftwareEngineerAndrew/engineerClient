@@ -32,12 +32,12 @@ object Arena {
 
     /** The arena, read once from the mod jar (about 13 MB in memory; dropped with [unload]). */
     val data: Data
-        get() = loaded ?: synchronized(this) { loaded ?: read().also { loaded = it } }
+        get() = loaded ?: synchronized(this) { loaded ?: ArenaFixes.patch(readBin("arena.bin")).also { loaded = it } }
 
     fun unload() { loaded = null }
 
-    private fun read(): Data {
-        val stream = Arena::class.java.getResourceAsStream("/assets/engineerclient/p3sim/arena.bin") ?: error("arena.bin missing from the jar")
+    internal fun readBin(name: String): Data {
+        val stream = Arena::class.java.getResourceAsStream("/assets/engineerclient/p3sim/$name") ?: error("$name missing from the jar")
         DataInputStream(GZIPInputStream(stream.buffered(), 1 shl 16).buffered()).use { inp ->
             val magic = ByteArray(4).also { inp.readFully(it) }
             require(String(magic) == "P3A1") { "bad arena.bin" }
@@ -92,6 +92,7 @@ object Arena {
                 if (s !== air) section.setBlockState(x, y and 15, z, s, false)
             }
         }
+        ArenaFixes.skulls(chunk)
         Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG))
     }
 

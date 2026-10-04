@@ -34,14 +34,17 @@ object Masks {
     private const val BONZO_TEX = "eyJ0aW1lc3RhbXAiOjE1ODc5MDgzMDU4MjYsInByb2ZpbGVJZCI6IjJkYzc3YWU3OTQ2MzQ4MDI5NDI4MGM4NDIyNzRiNTY3IiwicHJvZmlsZU5hbWUiOiJzYWR5MDYxMCIsInNpZ25hdHVyZVJlcXVpcmVkIjp0cnVlLCJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTI3MTZlY2JmNWI4ZGEwMGIwNWYzMTZlYzZhZjYxZThiZDAyODA1YjIxZWI4ZTQ0MDE1MTQ2OGRjNjU2NTQ5YyJ9fX0="
     private const val SPIRIT_TEX = "eyJ0aW1lc3RhbXAiOjE1MDUyMjI5OTg3MzQsInByb2ZpbGVJZCI6IjBiZTU2MmUxNzIyODQ3YmQ5MDY3MWYxNzNjNjA5NmNhIiwicHJvZmlsZU5hbWUiOiJ4Y29vbHgzIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsibWV0YWRhdGEiOnsibW9kZWwiOiJzbGltIn0sInVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWJiZTcyMWQ3YWQ4YWI5NjVmMDhjYmVjMGI4MzRmNzc5YjUxOTdmNzlkYTRhZWEzZDEzZDI1M2VjZTlkZWMyIn19fQ=="
 
-    val SPIRIT_MASK get() = mask(SPIRIT_TEX, "STARRED_SPIRIT_MASK", "§d\ue068 Necrotic Spirit Mask §6✪✪✪✪✪", listOf("§6Ability: Second Wind", "§7Instead of dying, gain §a+50 Speed§7 and", "§7damage immunity for §a3§7 seconds. Also heals you", "§7for §a10%§7 of your max health.", "§8Cooldown: §a30s"))
+    // Names and lore as Hypixel sends them (recorder-2 inv lines); the "Cooldown: Ns" line stays for Odin's timer.
+    val SPIRIT_MASK get() = mask(SPIRIT_TEX, "STARRED_SPIRIT_MASK", SimItems.Lore.STARRED_SPIRIT_MASK_NAME, SimItems.Lore.STARRED_SPIRIT_MASK, "mythic")
     // Odin's invincibility timer reads Bonzo's cooldown from "Cooldown: Ns".
-    val BONZO_MASK get() = mask(BONZO_TEX, "STARRED_BONZO_MASK", "§5\ue068 Sunny Bonzo's Mask §6✪✪✪✪✪", listOf("§6Ability: Clownin' Around", "§7Gain §c+40 Strength§7 and fully heal when you", "§7would die, then §a3§7 seconds of immunity.", "§8Cooldown: §a180s"))
+    val BONZO_MASK get() = mask(BONZO_TEX, "STARRED_BONZO_MASK", SimItems.Lore.STARRED_BONZO_MASK_NAME, SimItems.Lore.STARRED_BONZO_MASK, "epic")
 
-    private fun mask(tex: String, id: String, name: String, lore: List<String>): ItemStack {
+    private fun mask(tex: String, id: String, name: String, lore: List<String>, style: String): ItemStack {
         val s = SimItems.head(tex, name)
         s.set(DataComponents.LORE, ItemLore(lore.map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", id); it.putBoolean("p3sim", true) }))
+        s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
+        SimItems.hy(s, null, style)
         return s
     }
 

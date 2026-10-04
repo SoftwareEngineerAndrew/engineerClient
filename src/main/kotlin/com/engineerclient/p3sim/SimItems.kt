@@ -88,6 +88,626 @@ object SimItems {
         return s
     }
 
+    /** Hypixel's recorded item text (recorder-2 inv lines, P3AUDIT INV-05/06); {UXXXX} stands for a private-use glyph, {T}/{SEC} for Terror's piece count and stack seconds. */
+    object Lore {
+        private val GLYPH = Regex("\\{U([0-9A-F]{4})\\}")
+        fun u(t: String) = GLYPH.replace(t) { it.groupValues[1].toInt(16).toChar().toString() }
+        private fun lines(raw: String) = raw.trim('\n').split('\n').map { u(it) }
+        /** The component-hiding list Hypixel sends on every item (the Dungeonbreaker's has 14). */
+        val HIDDEN = listOf("minecraft:jukebox_playable", "minecraft:painting/variant", "minecraft:map_id", "minecraft:fireworks", "minecraft:attribute_modifiers", "minecraft:unbreakable",
+            "minecraft:written_book_content", "minecraft:banner_patterns", "minecraft:trim", "minecraft:potion_contents", "minecraft:dyed_color", "minecraft:charged_projectiles")
+        val HIDDEN_BREAKER = listOf("minecraft:painting/variant", "minecraft:fireworks", "minecraft:attribute_modifiers", "minecraft:enchantments", "minecraft:stored_enchantments", "minecraft:trim",
+            "minecraft:charged_projectiles", "minecraft:jukebox_playable", "minecraft:map_id", "minecraft:unbreakable", "minecraft:written_book_content", "minecraft:banner_patterns", "minecraft:potion_contents", "minecraft:dyed_color")
+        val SUPERBOOM_TNT_NAME = u("§9Superboom TNT")
+        val SUPERBOOM_TNT = lines("""
+§7Blows up cracked brick walls and
+§7crypts, which are typically found in
+§cDungeons §7and the §5Crystal Hollows§7.
+
+§9§lRARE
+""")
+        val HYPERION_NAME = u("§dHeroic Hyperion §6✪✪✪✪✪")
+        val HYPERION = lines("""
+§7Gear Score: §d5000
+§7Damage: §c+2,195.2 §e(+30)
+§7Strength: §c+1,472 §e(+30) §9(+50)
+§7Crit Damage: §9+448%
+§7Attack Speed: §e+10.85% §9(+7%)
+§7Ferocity: §c+46.5
+§7Intelligence: §b+4,064 §9(+125) §d(+60)
+§7Gemstones: §6[§b{UE003}§6] §6[§b⚔§6]
+
+§d§lSwarm V, §9Bane of Arthropods VI, §9Champion X
+§9Cleave V, §9Critical VI, §9Cubism V
+§9Ender Slayer VI, §9Experience IV, §9Fire Aspect III
+§9First Strike IV, §9Giant Killer VII, §9Impaling III
+§9Lethality VI, §9Life Steal V, §9Looting IV
+§9Luck VI, §9Prosecute VI, §9Scavenger V
+§9Smite VII, §9Tabasco III, §9Thunderlord VI
+§9Vampirism VI, §9Venomous V
+
+§7Deals §c+50% §7damage to §8{UE085} Wither §7mobs.
+§7Grants §c+1 §c{UE050} Damage §7and §a+2 §b{UE003}
+§bIntelligence §7per §cCatacombs §7level.
+
+§aScroll Abilities:
+§b§l⦾ §6Ability: Wither Impact  §e§lRIGHT CLICK
+§7Teleport §a10 blocks§7 ahead of you
+§7dealing §c1,798,815.7 §7damage to nearby
+§7enemies. Also reduces your damage
+§7taken and grants an absorption
+§7shield for §e5 seconds§7.
+§8Mana Cost: §b270{UE003}
+
+§fKills: §61,304,218
+
+§d§la §d§lMYTHIC DUNGEON SWORD §d§la
+""")
+        val TERMINATOR_NAME = u("§dPrecise Terminator §6✪✪✪✪✪§c➎")
+        val TERMINATOR = lines("""
+§7Gear Score: §d4947
+§7Damage: §c+2,195.2 §e(+30)
+§7Strength: §c+761.6 §e(+30) §6[+5] §9(+34)
+§7Crit Chance: §9+46.5% §9(+15%)
+§7Crit Damage: §9+2,080% §9(+70%)
+§7Attack Speed: §e+62%
+§7Shot Cooldown: §a0.5s
+
+§d§lSoul Eater V, §9Chance V, §9Cubism V
+§9Flame II, §9Gravity VI, §9Impaling V
+§9Infinite Quiver X, §9Overload V, §9Piercing I
+§9Power VII, §9Snipe IV, §9Tabasco III
+§9Toxophilite X
+
+§7Shoots §b3 §7arrows at once.
+§7Can damage endermen.
+
+§cDivides your §9{UE02C} Crit Chance §cby 4!
+
+§6Ability: Salvation  §e§lLEFT CLICK
+§7Can be cast after landing §63 §7hits.
+§7Shoot a beam, penetrating up to §e5
+§7enemies.
+§7The beam always crits.
+§8Soulflow Cost: §31⸎
+
+§dShortbow: Instantly shoots!
+
+§fKills: §6157,045
+
+§9Precise Bonus
+§7Deal §a+10% §7extra damage when
+§7arrows hit the head of a mob.
+
+§8§l* §8Co-op Soulbound §8§l*
+§d§la §d§lMYTHIC DUNGEON BOW §d§la
+""")
+        val WITHER_CLOAK_NAME = u("§6Odd Wither Cloak Sword")
+        val WITHER_CLOAK = lines("""
+§7Gear Score: §d4964
+§7Defense: §a+1,475
+§7Damage: §c+1,121
+§7Strength: §c+796.5
+§7Crit Chance: §9+26.25% §9(+25%)
+§7Crit Damage: §9+177% §9(+30%)
+§7Intelligence: §b-295 §9(-50)
+
+§c§l⦾ §6Ability: Creeper Veil  §e§lRIGHT CLICK
+§7Spawns a layered veil that negates
+§7damage for §a10s§7, as follows:
+
+§8➤ §7Lose a layer on hit, consuming
+§430§4{UE028} Vitality §7and block up to §c5,850
+§7damage.
+§8➤ §7The damage blocked scales with
+§7your §5Dungeon Stat Boost §7while in §cThe
+§cCatacombs§7.
+§8➤ §7When the damage exceeds a
+§7layer's limit, another layer is
+§7consumed, until all damage is
+§7accounted for.
+§8➤ §7When you run out of §4{UE028} Vitality§7,
+§7consume all §4{UE028} Vitality §7and take slight
+§7knockback.
+§8➤ §7You cannot attack or regenerate
+§4{UE028} Vitality §7while the veil is up.
+
+§e§lRIGHT CLICK §7while active to
+§7deactivate. Cooldown is halved on
+§7deactivation.
+§8Vitality Cost: §430{UE028}
+§8Cooldown: §a10s
+
+§cThis item can be reclaimed! Use
+§e/reclaim §cto take back what's
+§crightfully yours!
+§6§la §6§lLEGENDARY DUNGEON SWORD §6§la
+""")
+        val ASPECT_OF_THE_VOID_NAME = u("§6Heroic Aspect of the Void")
+        val ASPECT_OF_THE_VOID = lines("""
+§7Damage: §c+120
+§7Strength: §c+140 §9(+40)
+§7Attack Speed: §e+5% §9(+5%)
+§7Intelligence: §b+100 §9(+100)
+§7Gemstones: §8[§7{UE003}§8]
+
+§d§lUltimate Wise V
+§7Reduces the ability mana cost of this
+§7item by §a50%§7.
+
+§b§l⦾ §6Ability: Instant Transmission  §e§lRIGHT CLICK
+§7Teleport §a12 blocks§7 ahead of you and
+§7gain §a+50 §f{UE022} Speed§7 for §a3 seconds§7.
+§8Mana Cost: §b18{UE003}
+
+§6Ability: Ether Transmission  §e§lSNEAK RIGHT CLICK
+§7Teleport to your targeted block up
+§7to §a61 blocks §7away.
+§8Soulflow Cost: §31
+§8Mana Cost: §b73{UE003}
+
+§6§la §6§lLEGENDARY SWORD §6§la
+""")
+        val JERRY_STAFF_NAME = u("§6Heroic Jerry-chine Gun §6✪✪✪✪✪")
+        val JERRY_STAFF = lines("""
+§7Damage: §c+88
+§7Strength: §c+40 §9(+40)
+§7Attack Speed: §e+5% §9(+5%)
+§7Intelligence: §b+320 §9(+100)
+
+§d§lUltimate Wise V
+§7Reduces the ability mana cost of this
+§7item by §a50%§7.
+
+§c§l⦾ §6Ability: Rapid-fire  §e§lRIGHT CLICK
+§7Shoots a Jerry bullet, dealing
+§c29,733.7 §7damage on impact and
+§7knocking you back.
+
+§7Each shot costs §3+14 mana §7more than
+§7the previous, resetting after §a4s §7of
+§7not firing.
+
+§8§l* §8Co-op Soulbound §8§l*
+§6§la §6§lLEGENDARY SWORD §6§la
+""")
+        val MOSQUITO_BOW_NAME = u("§6Mosquito Shortbow")
+        val MOSQUITO_BOW = lines("""
+§7Damage: §c+319
+§7Strength: §c+151
+§7Crit Damage: §9+39%
+§7Vitality: §4+20
+§7Shot Cooldown: §a0.25s
+
+§d§lDuplex I
+§7Shoot an extra arrow dealing §c4% §7of the
+§7first arrow's damage.
+§7Targets hit take §c1.1x §7fire damage
+§7for §a60s§7.
+§9Flame II
+§7Arrows ignite your enemies for §a4s§7,
+§7dealing §a6% §7of your damage per
+§7second.
+
+§6Ability: Eggsecute 
+§7Arrows fired from this weapon deal
+§c3x §7damage to §aEgg Sacs §7spawned by
+§7the §cTarantula Broodfather§7!
+
+§6Ability: Nasty Bite  §e§lLEFT CLICK
+§7Shoot an enhanced shot, healing you
+§7for §c189❤ Health §7on hit.
+§8Vitality Cost: §410{UE028}
+
+§6Shortbow: Instantly shoots!
+
+§8This item can be reforged!
+§6§lLEGENDARY BOW
+""")
+        val ENDER_PEARL_NAME = u("§fEnder Pearl")
+        val ENDER_PEARL = lines("""
+§8Collection Item
+
+§f§lCOMMON
+""")
+        val SKYBLOCK_MENU_NAME = u("§aSkyBlock Menu §7(Click)")
+        val SKYBLOCK_MENU = lines("""
+§7View all of your SkyBlock progress,
+§7including your Skills, Collections,
+§7Recipes, and more!
+
+§eClick to open!
+""")
+        val INFINITE_SPIRIT_LEAP_NAME = u("§5Infinileap")
+        val INFINITE_SPIRIT_LEAP = lines("""
+§c§l⦾ §6Ability: Spirit Leap  §e§lRIGHT CLICK
+§7Allows you to teleport to any teammate! Grants
+§a1 §7second of immunity after teleporting,
+§7immunity is cancelled upon dealing damage.
+§8Cooldown: §a2s
+
+§cDungeons only!
+
+§5§lEPIC DUNGEON ITEM
+""")
+        val FISHING_ROD_NAME = u("§fFishing Rod")
+        val FISHING_ROD = lines("""
+§7Damage: §c+15
+§7Strength: §c+15
+§7Fishing Speed: §b+5
+§7Sea Creature Chance: §3+1%
+
+§9ථ Hook §8§lNONE
+§9ꨃ Line §8§lNONE
+§9࿉ Sinker §8§lNONE
+
+§7Talk to §2Roddy §7in the §2Backwater
+§2Bayou §7to apply parts to this rod.
+
+§8This item can be reforged!
+§f§lCOMMON FISHING ROD
+""")
+        val STARRED_SPIRIT_MASK_NAME = u("§d{UE068} Necrotic Spirit Mask §6✪✪✪✪✪")
+        val STARRED_SPIRIT_MASK = lines("""
+§7Gear Score: §d2569
+§7Health: §c+857.6
+§7Defense: §a+480
+§7Intelligence: §b+1,440 §9(+200)
+§7Health Regen: §c+15.75
+§7Speed: §f+160
+§7Respiration: §3+384
+
+§d§lWisdom V, §9Hecatomb VIII, §9Respiration IV
+§9Respite V, §9Transylvanian V, §9Vampiric Vitality X
+
+§6Ability: Second Wind 
+§7Instead of dying, gain §f+50{UE022} Speed
+§7and damage immunity for §a3 §7seconds.
+§7Also heals you for §a10% §7of your §c❤
+§cHealth §7over §a5 §7seconds.
+§8Cooldown: §a30s
+
+§d§la §d§lMYTHIC DUNGEON HELMET §d§la
+""")
+        val STARRED_BONZO_MASK_NAME = u("§5{UE068} Sunny Bonzo's Mask §6✪✪✪✪✪")
+        val STARRED_BONZO_MASK = lines("""
+§7Gear Score: §d2730
+§7Health: §c+960
+§7Defense: §a+640
+§7Intelligence: §b+960
+§7Health Regen: §c+15.75
+§7Speed: §f+38.4 §9(+6)
+§7Farming Wisdom: §3+6.2 §9(+4)
+
+§d§lWisdom V, §9Hecatomb V, §9Respite V
+§9Transylvanian V, §9Vampiric Vitality X
+
+§6Ability: Clownin' Around 
+§7Instead of dying, gain damage
+§7immunity and §a+40 §c{UE00D} Strength §7for §a3s
+§7and fully replenish your health. The
+§7cooldown and Strength bonus you
+§7receive improve based on your
+§aDungeoneering Skill §7level. This ability
+§7only works while in §cThe Catacombs§7!
+§8Cooldown: §a180s
+
+§5§la §5§lEPIC DUNGEON HELMET §5§la
+""")
+        val TERROR_CHESTPLATE_NAME = u("§6Spiked Terror Chestplate")
+        val TERROR_CHESTPLATE = lines("""
+§7Health: §c+238 §9(+8)
+§7Defense: §a+73 §9(+8)
+§7Strength: §c+10 §9(+10)
+§7Crit Chance: §9+10% §9(+10%)
+§7Crit Damage: §9+60% §9(+10%)
+§7Attack Speed: §e+14% §9(+14%)
+§7Intelligence: §b+15 §9(+10)
+§7Speed: §f+13 §9(+1)
+§7Gemstones: §8[§8⚔§8] §8[§8⚔§8]
+
+§7Mana Regeneration II§7, §7Vitality II
+
+§6Tiered Bonus: Hydra Strike ({T}/4)
+§7Every §a0.2s§7, arrow attacks grant §c1§7
+§7stack of §6⁑ Hydra Strike§7. §8Lose 1 stack
+§8after {SEC}s of not gaining a stack.
+§7
+§7Each stack grants §c+4% Damage§7 and §b+1%
+§bArrow Speed§7.
+§7
+§7At §c10§7 stacks shoot §a+2§7 arrows that deal §c20%
+§cArrow Damage§8.
+
+§6§lLEGENDARY CHESTPLATE
+""")
+        val TERROR_LEGGINGS_NAME = u("§6Spiked Terror Leggings")
+        val TERROR_LEGGINGS = lines("""
+§7Health: §c+213 §9(+8)
+§7Defense: §a+63 §9(+8)
+§7Strength: §c+10 §9(+10)
+§7Crit Chance: §9+10% §9(+10%)
+§7Crit Damage: §9+60% §9(+10%)
+§7Attack Speed: §e+14% §9(+14%)
+§7Intelligence: §b+15 §9(+10)
+§7Speed: §f+13 §9(+1)
+§7Gemstones: §8[§8⚔§8] §8[§8⚔§8]
+
+§7Breeze II§7, §7Speed I
+
+§6Tiered Bonus: Hydra Strike ({T}/4)
+§7Every §a0.2s§7, arrow attacks grant §c1§7
+§7stack of §6⁑ Hydra Strike§7. §8Lose 1 stack
+§8after {SEC}s of not gaining a stack.
+§7
+§7Each stack grants §c+4% Damage§7 and §b+1%
+§bArrow Speed§7.
+§7
+§7At §c10§7 stacks shoot §a+2§7 arrows that deal §c20%
+§cArrow Damage§8.
+
+§6§lLEGENDARY LEGGINGS
+""")
+        val TERROR_BOOTS_NAME = u("§6Spiked Terror Boots")
+        val TERROR_BOOTS = lines("""
+§7Health: §c+138 §9(+8)
+§7Defense: §a+48 §9(+8)
+§7Strength: §c+10 §9(+10)
+§7Crit Chance: §9+10% §9(+10%)
+§7Crit Damage: §9+60% §9(+10%)
+§7Attack Speed: §e+14% §9(+14%)
+§7Intelligence: §b+15 §9(+10)
+§7Speed: §f+13 §9(+1)
+§7Gemstones: §8[§8⚔§8] §8[§8⚔§8]
+
+§7Blazing Resistance I§7, §7Experience I
+
+§6Tiered Bonus: Hydra Strike ({T}/4)
+§7Every §a0.2s§7, arrow attacks grant §c1§7
+§7stack of §6⁑ Hydra Strike§7. §8Lose 1 stack
+§8after {SEC}s of not gaining a stack.
+§7
+§7Each stack grants §c+4% Damage§7 and §b+1%
+§bArrow Speed§7.
+§7
+§7At §c10§7 stacks shoot §a+2§7 arrows that deal §c20%
+§cArrow Damage§8.
+
+§6§lLEGENDARY BOOTS
+""")
+        val SPEED_WITHER_BOOTS_NAME = u("§dAncient Maxor's Boots §6✪✪✪✪✪§c➎")
+        val SPEED_WITHER_BOOTS = lines("""
+§7Gear Score: §d4935
+§7Health: §c+2,188.8 §e(+60) §c[+40] §9(+7)
+§7Defense: §a+812.8 §e(+30) §9(+7)
+§7Strength: §c+428.8 §9(+35) §d(+32)
+§7Crit Chance: §9+23.25% §9(+15%)
+§7Crit Damage: §9+608% §9(+50%)
+§7Intelligence: §b+224 §9(+25)
+§7Health Regen: §c+15.75
+§7Speed: §f+230.4
+§7Gemstones: §6[§d⚔§6] §6[§d⚔§6]
+
+§d§lLegion V, §9Depth Strider III, §9Feather Falling X
+§9Growth VI, §9Protection VI, §9Respite V
+§9Sugar Rush III, §9Vivacious Vitality VIII
+
+§7Reduces the damage you take from
+§7withers by §c10% §7and increases your
+§7arrow damage by §c5%§7.
+
+§6Full Set Bonus: Witherborn §7(0/4)
+§7Spawns a wither minion every §e30
+§7seconds up to a maximum §a1 §7wither.
+§7Your withers will travel to and
+§7explode on nearby enemies.
+
+§9Ancient Bonus
+§7Grants §a+1 §9{UE007} Crit Damage §7per
+§cCatacombs §7level.
+
+§d§la §d§lMYTHIC DUNGEON BOOTS §d§la
+""")
+        val SPEED_WITHER_LEGGINGS_NAME = u("§dNecrotic Maxor's Leggings §6✪✪✪✪✪")
+        val SPEED_WITHER_LEGGINGS = lines("""
+§7Gear Score: §d4015
+§7Health: §c+1,472
+§7Defense: §a+672
+§7Crit Damage: §9+288%
+§7Intelligence: §b+1,888 §9(+200) §d(+60)
+§7Health Regen: §c+15.75
+§7Speed: §f+192
+§7Gemstones: §6[§b⚔§6] §6[§b⚔§6]
+
+§d§lWisdom V, §9Respite V, §9Smarty Pants V
+§9Vampiric Vitality V
+
+§7Reduces the damage you take from
+§7withers by §c10% §7and increases your
+§7arrow damage by §c5%§7.
+
+§6Full Set Bonus: Witherborn §7(0/4)
+§7Spawns a wither minion every §e30
+§7seconds up to a maximum §a1 §7wither.
+§7Your withers will travel to and
+§7explode on nearby enemies.
+
+§d§la §d§lMYTHIC DUNGEON LEGGINGS §d§la
+""")
+        val MITHRIL_COAT_NAME = u("§6Necrotic Mithril Coat")
+        val MITHRIL_COAT = lines("""
+§7Defense: §a+125
+§7Intelligence: §b+150 §9(+150)
+§7Speed: §f+15
+
+§6Ability: Mithril's Protection 
+§7Any damage taken is max §a40% §7of the wearer's
+§c❤ Health§7. Gain §cRegeneration §7when this ability
+§7activates.
+
+§6§la §6§lLEGENDARY CHESTPLATE §6§la
+""")
+        val WISE_WITHER_BOOTS_NAME = u("§dNecrotic Storm's Boots §6✪✪✪✪✪")
+        val WISE_WITHER_BOOTS = lines("""
+§7Gear Score: §d4175
+§7Health: §c+1,408
+§7Defense: §a+544
+§7Intelligence: §b+3,264 §9(+200) §d(+60)
+§7Health Regen: §c+15.75
+§7Speed: §f+38.4
+§7Gemstones: §6[§b{UE003}§6] §6[§b⚔§6]
+
+§d§lWisdom V, §9Depth Strider III, §9Feather Falling X
+§9Growth V, §9Protection V, §9Respite V
+§9Sugar Rush III, §9Vampiric Vitality V
+
+§7Reduces the damage you take from
+§7withers by §c10%§7.
+
+§6Full Set Bonus: Witherborn §7(3/4)
+§7Spawns a wither minion every §e30
+§7seconds up to a maximum §a1 §7wither.
+§7Your withers will travel to and
+§7explode on nearby enemies.
+
+§d§la §d§lMYTHIC DUNGEON BOOTS §d§la
+""")
+        val WISE_WITHER_LEGGINGS_NAME = u("§dNecrotic Storm's Leggings §6✪✪✪✪✪")
+        val WISE_WITHER_LEGGINGS = lines("""
+§7Gear Score: §d5000
+§7Health: §c+2,336 §e(+60)
+§7Defense: §a+992 §e(+30)
+§7Intelligence: §b+3,424 §9(+200) §d(+60)
+§7Health Regen: §c+15.75
+§7Gemstones: §6[§b{UE003}§6] §6[§b⚔§6]
+
+§d§lWisdom V, §9Growth V, §9Protection V
+§9Respite V, §9Smarty Pants V
+
+§7Reduces the damage you take from
+§7withers by §c10%§7.
+
+§6Full Set Bonus: Witherborn §7(3/4)
+§7Spawns a wither minion every §e30
+§7seconds up to a maximum §a1 §7wither.
+§7Your withers will travel to and
+§7explode on nearby enemies.
+
+§d§la §d§lMYTHIC DUNGEON LEGGINGS §d§la
+""")
+        val WISE_WITHER_CHESTPLATE_NAME = u("§dLoving Storm's Chestplate §6✪✪✪✪✪")
+        val WISE_WITHER_CHESTPLATE = lines("""
+§7Gear Score: §d5000
+§7Health: §c+2,617.6 §e(+60) §9(+14)
+§7Defense: §a+1,177.6 §e(+30) §9(+14)
+§7True Defense: §f+15.5
+§7Intelligence: §b+2,816 §9(+120) §d(+60)
+§7Health Regen: §c+15.75
+§7Gemstones: §6[§b{UE003}§6] §6[§b⚔§6]
+
+§d§lWisdom V, §9Growth V, §9Protection V
+§9Reflection V, §9Respite V, §9True Protection I
+
+§7Reduces the damage you take from
+§7withers by §c10%§7.
+
+§6Full Set Bonus: Witherborn §7(3/4)
+§7Spawns a wither minion every §e30
+§7seconds up to a maximum §a1 §7wither.
+§7Your withers will travel to and
+§7explode on nearby enemies.
+
+§9Loving Bonus
+§7Increases ability damage by §a5%§7.
+
+§d§la §d§lMYTHIC DUNGEON CHESTPLATE §d§la
+""")
+        val WISE_WITHER_HELMET_NAME = u("§dShiny Ancient Storm's Helmet §6✪✪✪✪✪§c➊")
+        val WISE_WITHER_HELMET = lines("""
+§7Gear Score: §d5000
+§7Health: §c+1,932.8 §9(+7)
+§7Defense: §a+684.8 §9(+7)
+§7Strength: §c+224 §9(+35)
+§7Crit Chance: §9+23.25% §9(+15%)
+§7Crit Damage: §9+396.8% §9(+50%) §d(+12%)
+§7Intelligence: §b+3,072 §9(+25) §d(+30)
+§7Health Regen: §c+5.25
+§7Gemstones: §6[§b{UE003}§6] §6[§8⚔§6]
+
+§d§lLegion V, §9Big Brain V, §9Growth V
+§9Hecatomb X, §9Protection V, §9Rejuvenate V
+§9Strong Vitality V
+
+§7Reduces the damage you take from
+§7withers by §c10%§7.
+
+§6Full Set Bonus: Witherborn §7(3/4)
+§7Spawns a wither minion every §e30
+§7seconds up to a maximum §a1 §7wither.
+§7Your withers will travel to and
+§7explode on nearby enemies.
+
+§9Ancient Bonus
+§7Grants §a+1 §9{UE007} Crit Damage §7per
+§cCatacombs §7level.
+
+§d§la §d§lSHINY MYTHIC DUNGEON HELMET §d§la
+""")
+        val RACING_HELMET_NAME = u("§dRenowned Racing Helmet")
+        val RACING_HELMET = lines("""
+§7Health: §c+47 §9(+10)
+§7Defense: §a+10 §9(+10)
+§7Strength: §c+12 §9(+12)
+§7Crit Chance: §9+12% §9(+12%)
+§7Crit Damage: §9+12% §9(+12%)
+§7Attack Speed: §e+15% §9(+15%)
+§7Intelligence: §b+12 §9(+12)
+§7Speed: §f+400 §9(+1)
+
+§d§lWisdom V
+§7Gain §b5 §7Intelligence for every §b5
+§7levels of exp you have on you.
+§7Capped at §b100 §7Intelligence.
+§9Hecatomb IX §894
+§7Gain §a+0.92% §cCatacombs §7XP & §a+1.84% §3Class §7XP,
+§7doubled §7on §b§lS+ §7runs.
+§7Grants §c+7.4{UE010} §7per 10 §cCatacombs §7levels.
+§8100 S runs to tier up!
+
+§7Grants §f+100{UE022} Speed Cap§7.
+
+§8When horses are not fast enough,
+§8use a Racing Helmet instead.
+
+§7Purchased by: §6[MVP§9++§6] Jamie_x§f
+§7Purchased for: §64,545,454,545 Coins
+
+§8Auction #18
+§8Bid #2
+§8September 2025
+
+§9Renowned Bonus
+§7Increases all §cCombat §7stats and §b{UE01A}
+§bMagic Find §7by §a+1%§7.
+
+§d§la §d§lMYTHIC HELMET §d§la
+""")
+    }
+
+    /**
+     * The components Hypixel adds to every stack (INV-07): item model (when [model] is given, under hypixel_skyblock:item/),
+     * tooltip style, the hidden-components list; and no unbreakable where Hypixel sends none.
+     */
+    fun hy(s: ItemStack, model: String?, style: String, unbreakable: Boolean = true, hidden: List<String> = Lore.HIDDEN): ItemStack {
+        if (model != null) s.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse("hypixel_skyblock:item/$model"))
+        s.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:$style"))
+        val types = java.util.LinkedHashSet<net.minecraft.core.component.DataComponentType<*>>()
+        for (h in hidden) net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getValue(net.minecraft.resources.Identifier.parse(h))?.let { types.add(it) }
+        s.set(DataComponents.TOOLTIP_DISPLAY, net.minecraft.world.item.component.TooltipDisplay(false, types))
+        if (!unbreakable) s.remove(DataComponents.UNBREAKABLE)
+        return s
+    }
+
     /** A teammate's name colour by rank (LEAP-06: green 63%, aqua 33%, gold 4% on Hypixel); fixed per name. */
     fun rankColour(name: String): String { val h = Math.floorMod(name.hashCode(), 100); return if (h < 63) "§a" else if (h < 96) "§b" else "§6" }
 
@@ -115,8 +735,9 @@ object SimItems {
         return s
     }
 
-    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", "§9Superboom TNT", listOf("§7Click a gate (or a crack) to", "§7blow it up.")).also { it.count = 64 }
-    val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
+    // Superboom stays TNT and infinite for now (Andrew); Hypixel's is paper, so no item_model here.
+    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", Lore.SUPERBOOM_TNT_NAME, Lore.SUPERBOOM_TNT, glint = true).also { it.count = 64; hy(it, null, "rare", unbreakable = false) }
+    val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", Lore.HYPERION_NAME, Lore.HYPERION, glint = true).also { hy(it, "uncategorized/hyperion", "mythic") }
     /** Bonzo's Staff as Hypixel sends it (BONZO-10): glyph + "Heroic" name, epic tooltip, fragged model, glint. Lore stats are one recorded player's. */
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§5\uE068 Heroic Bonzo's Staff §6✪✪✪✪✪", listOf(
         "§7Gear Score: §d845 §8(1,213)", "§7Damage: §c+250 §8(+1,350)", "§7Strength: §c+185 §8(+550)", "§7Intelligence: §a+300 §8(+700)", "",
@@ -127,7 +748,7 @@ object SimItems {
         it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:epic"))
     }
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
-    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also { it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:special")) }
+    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also { hy(it, null, "special", unbreakable = false, hidden = Lore.HIDDEN_BREAKER) }
 
     /** The Dungeonbreaker's lore as Hypixel sends it (BREAKER-05); the "Charges" line changes with every charge. */
     private fun breakerLore(n: Int) = listOf("§7Speed: §f+20", "", "§6Ability: Dungeon Breaker §e§lDIG",
@@ -140,38 +761,79 @@ object SimItems {
         val lore = ItemLore(breakerLore(charges).map { l -> Component.literal(l).withStyle { it.withItalic(false) } })
         for (i in 0 until inv.containerSize) { val st = inv.getItem(i); if (!st.isEmpty && idOf(st) == "DUNGEONBREAKER") st.set(DataComponents.LORE, lore) }
     }
-    val PEARLS get() = item(Items.ENDER_PEARL, "ENDER_PEARL", "§fEnder Pearl").also { it.count = 16 }
+    val PEARLS get() = item(Items.ENDER_PEARL, "ENDER_PEARL", Lore.ENDER_PEARL_NAME, Lore.ENDER_PEARL).also { it.count = 12; hy(it, null, "common", unbreakable = false) }
     val LEAP get() = head(LEAP_TEX, "§5Infinileap").also { s ->
-        s.set(DataComponents.LORE, ItemLore(listOf("§6Ability: Spirit Leap  §e§lRIGHT CLICK", "§7Allows you to teleport to any teammate! Grants", "§71 second of immunity after teleporting,", "§7immunity is cancelled upon dealing damage.", "§8Cooldown: §a2s", "§8Dungeons only!", "§5§lEPIC DUNGEON ITEM").map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
-        s.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:epic"))
+        s.set(DataComponents.LORE, ItemLore(Lore.INFINITE_SPIRIT_LEAP.map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
+        hy(s, null, "epic", unbreakable = false)
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", "INFINITE_SPIRIT_LEAP"); it.putBoolean("p3sim", true) }))
     }
-    val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", "§6Jerry-chine Gun", listOf("§6Ability: Rapid-fire §e§lRIGHT CLICK", "§7Jerries that knock you up."))
-    val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", "§5Wither Cloak Sword", listOf("§6Ability: Creeper Veil §e§lRIGHT CLICK", "§7Immune to damage (death ticks) while on."))
-    val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", "§aSkyBlock Menu §7(Click)", listOf("§7Opens the §aP3 Sim§7 menu: start any", "§7phase or section, teleport, change", "§7settings.", "", "§eClick to open!"))
-    val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", "§5Heroic Aspect of the Void", listOf("§6Ability: Instant Transmission §e§lRIGHT CLICK", "§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK"), glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }
-    val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", "§aPet Rod", listOf("§7Cast it to swap your pet:", "§6Phoenix §7(saves you, ${P3Sim.speed} speed) and", "§6Black Cat §7(${P3Sim.speed + 100} speed)."))
-    val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
-    val MOSQUITO get() = item(Items.BOW, "MOSQUITO_BOW", "§6Mosquito Shortbow", listOf("§7Shot Cooldown: §a0.5s", "", "§9Duplex I",
-        "§7Shoot an extra arrow dealing §a4%§7 of the", "§7first arrow's damage.", "§9Flame II", "",
-        "§6Ability: Nasty Bite  §e§lLEFT CLICK", "§7Shoot an enhanced shot.", "§8Vitality Cost: §410", "", "§7Shortbow: Instantly shoots!", "", "§6§lLEGENDARY BOW"), glint = true)
+    val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", Lore.JERRY_STAFF_NAME, Lore.JERRY_STAFF, glint = true).also { hy(it, "community_center/mayor/jerry/jerrychine_gun", "legendary", unbreakable = false) }
+    val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", Lore.WITHER_CLOAK_NAME, Lore.WITHER_CLOAK).also { hy(it, "uncategorized/wither_cloak_sword", "legendary") }
+    val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", Lore.SKYBLOCK_MENU_NAME, Lore.SKYBLOCK_MENU).also { hy(it, null, "common", unbreakable = false) }
+    val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", Lore.ASPECT_OF_THE_VOID_NAME, Lore.ASPECT_OF_THE_VOID, glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }.also { hy(it, "slayer/enderman/aspect_of_the_void", "legendary") }
+    val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", Lore.FISHING_ROD_NAME, Lore.FISHING_ROD).also { hy(it, null, "common") }
+    val TERMINATOR get() = item(Items.BOW, "TERMINATOR", Lore.TERMINATOR_NAME, Lore.TERMINATOR, glint = true).also { hy(it, "slayer/enderman/weapons/terminator", "mythic") }
+    val MOSQUITO get() = item(Items.BOW, "MOSQUITO_BOW", Lore.MOSQUITO_BOW_NAME, Lore.MOSQUITO_BOW, glint = true).also { hy(it, "slayer/spider/weapons/mosquito_shortbow", "legendary") }
 
     /** A vanilla bow (draw it, release it) with Duplex; Hypixel's quiver means it needs no arrows ([quiverArrow]). */
     val LAST_BREATH get() = item(Items.BOW, Bows.LAST_BREATH, "§6Last Breath", listOf("§9Duplex I", "§7Shoot an extra arrow dealing §a4%§7 of the",
         "§7first arrow's damage.", "", "§7Draw and release, like a vanilla bow.", "", "§6§lLEGENDARY BOW"), glint = true)
 
-    /** Terror armor's chestplate, leggings and boots (Hypixel's dyes); the helmet slot is the masks'. */
-    private fun terror(base: Item, id: String, name: String, rgb: Int) = item(base, id, "§6Spiked Terror $name", listOf(
-        "§6Tiered Bonus: Hydra Strike (${P3Sim.terrorPieces}/4)", "§7Every 0.2s, arrow attacks grant 1", "§7stack of §6⁑ Hydra Strike§7. Lose 1 stack",
-        "§7after §a${if (P3Sim.terrorPieces >= 4) 10 else 7}s§7 of not gaining a stack.", "", "§7Each stack grants §a+1%§7 Arrow Speed.", "",
-        "§7At §a10§7 stacks shoot §a+2§7 arrows.")).also { it.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb)) }
+    /** The armour sets Andrew was recorded wearing on Hypixel (INV-01/02): Maxor + Mithril at P3 start (23 of 37), Terror (13), Wise Wither (the usual mid-P3 swap, 31 of 37). */
+    enum class ArmorSet { MAXOR, TERROR, WISE }
 
-    /** Terror armor on (P3Sim's Terror Armor setting) or off; the helmet stays your mask. */
-    fun equipArmor(p: ServerPlayer) {
-        val on = P3Sim.terrorPieces > 0
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, if (on) terror(Items.LEATHER_CHESTPLATE, "TERROR_CHESTPLATE", "Chestplate", 4064687) else ItemStack.EMPTY)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, if (on) terror(Items.LEATHER_LEGGINGS, "TERROR_LEGGINGS", "Leggings", 6104017) else ItemStack.EMPTY)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, if (on) terror(Items.LEATHER_BOOTS, "TERROR_BOOTS", "Boots", 8144108) else ItemStack.EMPTY)
+    private const val RACING_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY1NTg2ODcxMjQwMCwKICAicHJvZmlsZUlkIiA6ICJmZTYxY2RiMjUyMTA0ODYzYTljY2E2ODAwZDRiMzgzZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJNeVNoYWRvd3MiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMmNlMDc0NmIxMmVlNDA1Mzk1OGUxNDBiYTI5NTkzMjcyYmQ4NGNhMzRiYWY1MGQwZDgwYjViYzNjNjE1ZTljNiIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
+    private const val WISE_HELM_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTYwNTYyMzMzMzU2MSwKICAicHJvZmlsZUlkIiA6ICJjZGM5MzQ0NDAzODM0ZDdkYmRmOWUyMmVjZmM5MzBiZiIsCiAgInByb2ZpbGVOYW1lIiA6ICJSYXdMb2JzdGVycyIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS85Y2E2YWM4Mzk2YmEyZmE2NGIwZjI3MTFkY2EyMDIzMmM3YTUyOTEyNmI5NmRiNmVmYWE4ZDdmMmUxODQwZDEiCiAgICB9CiAgfQp9"
+
+    /** One armour piece as Hypixel sends it: recorded name, lore and dye, tooltip style. [rgb] null = undyed. */
+    private fun piece(base: Item, id: String, name: String, lore: List<String>, rgb: Int?, style: String): ItemStack =
+        item(base, id, name, lore).also { s ->
+            if (rgb != null) s.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb))
+            hy(s, null, style)
+        }
+
+    private fun terror(base: Item, id: String, rgb: Int): ItemStack {
+        val n = P3Sim.terrorPieces
+        val lore = (when (id) { "TERROR_CHESTPLATE" -> Lore.TERROR_CHESTPLATE; "TERROR_LEGGINGS" -> Lore.TERROR_LEGGINGS; else -> Lore.TERROR_BOOTS })
+            .map { it.replace("{T}", n.toString()).replace("{SEC}", if (n >= 4) "10" else "7") }
+        val name = when (id) { "TERROR_CHESTPLATE" -> Lore.TERROR_CHESTPLATE_NAME; "TERROR_LEGGINGS" -> Lore.TERROR_LEGGINGS_NAME; else -> Lore.TERROR_BOOTS_NAME }
+        return piece(base, id, name, lore, rgb, "legendary")
+    }
+
+    /** Chest, legs and boots of [set]; the helmet slot stays the masks' ([Masks.equip]) unless [equipHelmet]. */
+    fun equipArmor(p: ServerPlayer, set: ArmorSet? = null) {
+        val which = set ?: if (P3Sim.terrorPieces > 0) ArmorSet.TERROR else ArmorSet.MAXOR
+        val chest: ItemStack; val legs: ItemStack; val feet: ItemStack
+        when (which) {
+            ArmorSet.TERROR -> {
+                chest = terror(Items.LEATHER_CHESTPLATE, "TERROR_CHESTPLATE", 4064687)
+                legs = terror(Items.LEATHER_LEGGINGS, "TERROR_LEGGINGS", 6104017)
+                feet = terror(Items.LEATHER_BOOTS, "TERROR_BOOTS", 8144108)
+            }
+            ArmorSet.MAXOR -> {
+                chest = piece(Items.CHAINMAIL_CHESTPLATE, "MITHRIL_COAT", Lore.MITHRIL_COAT_NAME, Lore.MITHRIL_COAT, null, "legendary")
+                legs = piece(Items.LEATHER_LEGGINGS, "SPEED_WITHER_LEGGINGS", Lore.SPEED_WITHER_LEGGINGS_NAME, Lore.SPEED_WITHER_LEGGINGS, 6107065, "mythic")
+                feet = piece(Items.LEATHER_BOOTS, "SPEED_WITHER_BOOTS", Lore.SPEED_WITHER_BOOTS_NAME, Lore.SPEED_WITHER_BOOTS, 9005512, "mythic")
+            }
+            ArmorSet.WISE -> {
+                chest = piece(Items.LEATHER_CHESTPLATE, "WISE_WITHER_CHESTPLATE", Lore.WISE_WITHER_CHESTPLATE_NAME, Lore.WISE_WITHER_CHESTPLATE, 1545156, "mythic")
+                legs = piece(Items.LEATHER_LEGGINGS, "WISE_WITHER_LEGGINGS", Lore.WISE_WITHER_LEGGINGS_NAME, Lore.WISE_WITHER_LEGGINGS, 1550532, "mythic")
+                feet = piece(Items.LEATHER_BOOTS, "WISE_WITHER_BOOTS", Lore.WISE_WITHER_BOOTS_NAME, Lore.WISE_WITHER_BOOTS, 1889508, "mythic")
+            }
+        }
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, chest)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, legs)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, feet)
+    }
+
+    /** The two recorded non-mask helmets (INV-01): the Racing Helmet and the Wise Wither (Storm's) helmet. Masks come back with [Masks.equip]. */
+    fun equipHelmet(p: ServerPlayer, wise: Boolean) {
+        val h = if (wise) head(WISE_HELM_TEX, Lore.WISE_WITHER_HELMET_NAME) else head(RACING_TEX, Lore.RACING_HELMET_NAME)
+        h.set(DataComponents.LORE, ItemLore((if (wise) Lore.WISE_WITHER_HELMET else Lore.RACING_HELMET).map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
+        h.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
+        h.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", if (wise) "WISE_WITHER_HELMET" else "RACING_HELMET"); it.putBoolean("p3sim", true) }))
+        hy(h, null, "mythic")
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, h)
     }
 
     /**
@@ -187,7 +849,7 @@ object SimItems {
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Masks.equip(p)
-        equipArmor(p)
+        equipArmor(p, ArmorSet.MAXOR)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
@@ -330,7 +992,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; bonzoLast = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; lastCure = -1000; bonzoLast = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -338,7 +1000,9 @@ object SimItems {
         if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         when (id) {
             "ASPECT_OF_THE_VOID" -> { val sneak = p.isShiftKeyDown; asClicked(p, "aotv") { if (sneak) etherwarp(p) else blink(p, 12) } }
-            "HYPERION" -> asClicked(p, "hype") { if (hypeReady()) { blink(p, 10); implode(p) } }
+            "HYPERION" -> asClicked(p, "hype") { if (hypeReady()) { if (Fight.phase !is GoldorPhase) blink(p, 10) /* HYP-01/02: no tp, chat or enderman in P3 */; implode(p) } }
+            // PEARLS-01: the boss room refuses a pearl: one off the stack, red line, no entity.
+            "ENDER_PEARL" -> { p.mainHandItem.shrink(1); Sim.chat("§cA mystical force in this room prevents you from doing that!") }
             "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }
             "JERRY_STAFF" -> asClicked(p, "jerry", prior = true) { jerry(p) }
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
@@ -532,6 +1196,27 @@ object SimItems {
      */
     private const val IMPLOSION_DAMAGE = 34_000_000.0
 
+    private var lastCure = -1000
+
+    /** Wither Shield (HYP-03/04/05): absorption back to 16 two ticks on; every ~5 s the cure sound and a ring of 16 witch particles. */
+    private fun witherShield(p: ServerPlayer) {
+        Fight.later(2, "wither shield") { if (!p.isRemoved) p.absorptionAmount = 16f }
+        val now = Fight.serverTick
+        if (now - lastCure < 100) return
+        lastCure = now
+        Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 0.6984127f, p.position())
+        val look = p.lookAngle
+        var right = Vec3(-look.z, 0.0, look.x)
+        right = if (right.lengthSqr() < 1e-6) Vec3(1.0, 0.0, 0.0) else right.normalize()
+        val up = look.cross(right).normalize()
+        val c = Vec3(p.x, p.y + 1.5, p.z).add(look.scale(0.5))
+        for (i in 0 until 16) {
+            val a = i * Math.PI * 2 / 16
+            val q = c.add(right.scale(0.7 * Math.cos(a))).add(up.scale(0.7 * Math.sin(a)))
+            Fight.later(Random.nextInt(0, 5), "shield ring") { Sim.level.sendParticles(ParticleTypes.WITCH, q.x, q.y, q.z, 1, 0.0, 0.0, 0.0, 0.0) }
+        }
+    }
+
     /**
      * Implosion (item-mechanics.md §3): at your final position, every mob whose hitbox is within
      * ±6 x/z, +7 up and -6 down of your eye, through walls, full damage each. The boss withers are
@@ -540,6 +1225,7 @@ object SimItems {
     private fun implode(p: ServerPlayer) {
         Sim.level.sendParticles(ParticleTypes.EXPLOSION, p.x, p.eyeY, p.z, 1, 0.0, 0.0, 0.0, 0.0)
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, p.position())
+        witherShield(p)
         val box = net.minecraft.world.phys.AABB(p.x - 6, p.eyeY - 6, p.z - 6, p.x + 6, p.eyeY + 7, p.z + 6)
         val n = Sim.level.getEntitiesOfClass(net.minecraft.world.entity.boss.wither.WitherBoss::class.java, box) { it.isAlive }.size
         if (n == 0) return

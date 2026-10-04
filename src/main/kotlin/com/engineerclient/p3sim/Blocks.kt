@@ -112,7 +112,8 @@ object Blocks {
     private fun coreBats() {
         repeat(35) {
             val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityType.BAT, Sim.level)
-            b.isSilent = true; b.isInvulnerable = true
+            // Invisible, as Hypixel's are (105 of 105 core bats flagged invisible).
+            b.isSilent = true; b.isInvulnerable = true; b.isInvisible = true; b.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
             b.snapTo(52.0 + Random.nextDouble() * 4.0, 114.0 + Random.nextDouble() * 6.0, 54.5, Random.nextFloat() * 360f, 0f)
             Sim.spawn(b)
             Fight.later(60, "core bat gone") { b.discard() }
@@ -237,7 +238,7 @@ object Blocks {
      * every 40 server ticks from n 37 (n = 37 + 40k, ±1), every block in the 11x11x11 box round
      * his block (x, z ±5, y ±5) goes with a 60% chance, rolled again each pass, so the walls and
      * floor along his path thin out over a few passes. Barriers (the walkway's invisible walls) and
-     * gold blocks always stay; the cobblestone portcullis at the S1 entrance (cobblestone, walls,
+     * gold blocks always stay; TNT cubes are never carved (ArenaFixes.Replay takes them whole); the cobblestone portcullis at the S1 entrance (cobblestone, walls,
      * nether brick fences) always goes. Levers, buttons and blocks with a block entity are left for
      * the devices (never seen carved).
      */
@@ -271,7 +272,7 @@ object Blocks {
         val pos = BlockPos.MutableBlockPos()
         for (dx in -CARVE_R..CARVE_R) for (dy in -CARVE_R..CARVE_R) for (dz in -CARVE_R..CARVE_R) {
             val s = level.getBlockState(pos.set(cx + dx, cy + dy, cz + dz))
-            if (s.isAir || !s.fluidState.isEmpty || s.hasBlockEntity() || s.`is`(B.BARRIER) || s.`is`(B.GOLD_BLOCK) || s.block is LeverBlock || s.block is ButtonBlock) continue
+            if (s.isAir || !s.fluidState.isEmpty || s.hasBlockEntity() || s.`is`(B.BARRIER) || s.`is`(B.GOLD_BLOCK) || s.`is`(B.TNT) || s.block is LeverBlock || s.block is ButtonBlock) continue
             val sure = s.`is`(B.COBBLESTONE) || s.`is`(B.COBBLESTONE_WALL) || s.`is`(B.NETHER_BRICK_FENCE)
             if (sure || Random.nextFloat() < CARVE_CHANCE) set(pos.immutable(), B.AIR.defaultBlockState())
         }
