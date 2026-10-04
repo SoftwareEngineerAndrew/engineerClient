@@ -6,3 +6,4 @@ run/
 logs/
 .kotlin/
 __pycache__/
+tools/p3sim/research/scripts/terror/out/

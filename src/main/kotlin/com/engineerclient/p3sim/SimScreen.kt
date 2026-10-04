@@ -126,8 +126,8 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         ))
         stepper("Speed", "${P3Sim.speed}", { P3Sim.speedS.value = (P3Sim.speed - 10).coerceAtLeast(100) }, { P3Sim.speedS.value = (P3Sim.speed + 10).coerceAtMost(600) })
         stepper("Goldor kill", "${P3Sim.goldorKill} ticks", { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) })
-        stepper("Terminator cooldown", "${P3Sim.termCooldown} ticks", { P3Sim.termCooldownS.value = (P3Sim.termCooldown - 1).coerceAtLeast(1) }, { P3Sim.termCooldownS.value = (P3Sim.termCooldown + 1).coerceAtMost(20) })
-        stepper("Terminator spread", "±${P3Sim.termSpread}°", { P3Sim.termSpreadS.value = (P3Sim.termSpread - 0.5).coerceAtLeast(0.0) }, { P3Sim.termSpreadS.value = (P3Sim.termSpread + 0.5).coerceAtMost(15.0) })
+        stepper("Shortbow cooldown", "${P3Sim.shortbowCooldown} ticks", { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown - 1).coerceAtLeast(1) }, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown + 1).coerceAtMost(20) })
+        stepper("Hydra stacks at start", "${P3Sim.hydraStart}", { P3Sim.hydraStartS.value = (P3Sim.hydraStart - 1).coerceAtLeast(0) }, { P3Sim.hydraStartS.value = (P3Sim.hydraStart + 1).coerceAtMost(10) })
         stepper("Breaker refill", "${P3Sim.breakerRefill}/s", { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill - 1).coerceAtLeast(1) }, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill + 1).coerceAtMost(10) })
         stepper("Breaker blocks back", "${P3Sim.breakerRegen}s", { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen - 0.5).coerceAtLeast(1.0) }, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen + 0.5).coerceAtMost(30.0) })
         row(listOf(
@@ -135,6 +135,10 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("Start in: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value; server { Sim.player?.let { Masks.equip(it) } } },
             change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
             change("No melodies: ${onOff(P3Sim.noMelodies)}", 100) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
+            change("Terror: ${listOf("off", "3 pieces", "4 pieces")[P3Sim.terrorS.value.coerceIn(0, 2)]}", 100) {
+                P3Sim.terrorS.value = (P3Sim.terrorS.value + 1) % 3
+                server { Sim.player?.let { SimItems.equipArmor(it) }; Bows.Hydra.start() }
+            },
         ))
         row(listOf(
             change("Start on join: ${onOff(P3Sim.autoStart)}", 110) { P3Sim.autoStartS.value = !P3Sim.autoStart },

@@ -52,8 +52,9 @@ object P3Sim : Module(
     val terminalS = +SelectorSetting("Terminals", "Random", arrayListOf("Random", "Order", "Panes", "Rubix", "Starts With", "Select", "Melody"), desc = "Every terminal as this type, or random as on Hypixel.")
     val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
     val goldorKillS = +NumberSetting("Goldor Kill Time", 57, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of 201 recorded kills: 57).")
-    val termCooldownS = +NumberSetting("Terminator Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between Terminator shots (Better PF recordings: volleys ~5 ticks apart at full attack speed).")
-    val termSpreadS = +NumberSetting("Terminator Arrow Spread", 4.0, 0.0, 15.0, 0.5, unit = "°", desc = "Degrees between the middle arrow and each side arrow.")
+    val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at full attack speed (recordings: Terminator 5, Mosquito 5 with Terror on, 7 without). A click inside it fires when it ends. Nasty Bite has its own 10.")
+    val terrorS = +SelectorSetting("Terror Armor", "3 Pieces", arrayListOf("Off", "3 Pieces", "4 Pieces"), desc = "Hydra Strike: +1 stack per boss hit (every 0.2 s at most), one lost every 8 s (3 pieces, a mask on your head) or 11 s (4 pieces) without a hit; +1% arrow speed a stack and, at 10, two more arrows at ±8°. Off: no stacks.")
+    val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0, 10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
     val recordS = +BooleanSetting("Record Runs", true, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
@@ -76,8 +77,10 @@ object P3Sim : Module(
     val ping: Int get() = pingS.value.toInt()
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
-    val termCooldown: Int get() = termCooldownS.value.toInt()
-    val termSpread: Float get() = termSpreadS.value.toFloat()
+    val shortbowCooldown: Int get() = shortbowCooldownS.value.toInt()
+    /** Terror armor pieces worn: 0 (off), 3 or 4. */
+    val terrorPieces: Int get() = when (terrorS.value) { 1 -> 3; 2 -> 4; else -> 0 }
+    val hydraStart: Int get() = hydraStartS.value.toInt()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
     val debugBots: Boolean get() = debugBotsS.value

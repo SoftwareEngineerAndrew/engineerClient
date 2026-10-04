@@ -28,7 +28,6 @@ import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow
-import net.minecraft.world.entity.projectile.arrow.Arrow
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.inventory.MenuType
@@ -117,6 +116,23 @@ object SimItems {
     val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", "§5Heroic Aspect of the Void", listOf("§6Ability: Instant Transmission §e§lRIGHT CLICK", "§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK"), glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }
     val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", "§aPet Rod", listOf("§7Cast it to swap your pet:", "§6Phoenix §7(saves you, 400 speed) and", "§6Black Cat §7(500 speed)."))
     val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
+    val MOSQUITO get() = item(Items.BOW, "MOSQUITO_BOW", "§6Mosquito Shortbow", listOf("§7Shot Cooldown: §a0.5s", "", "§9Duplex I",
+        "§7Shoot an extra arrow dealing §a4%§7 of the", "§7first arrow's damage.", "§9Flame II", "",
+        "§6Ability: Nasty Bite  §e§lLEFT CLICK", "§7Shoot an enhanced shot.", "§8Vitality Cost: §410", "", "§7Shortbow: Instantly shoots!", "", "§6§lLEGENDARY BOW"), glint = true)
+
+    /** Terror armor's chestplate, leggings and boots (Hypixel's dyes); the helmet slot is the masks'. */
+    private fun terror(base: Item, id: String, name: String, rgb: Int) = item(base, id, "§6Spiked Terror $name", listOf(
+        "§6Tiered Bonus: Hydra Strike (${P3Sim.terrorPieces}/4)", "§7Every 0.2s, arrow attacks grant 1", "§7stack of §6⁑ Hydra Strike§7. Lose 1 stack",
+        "§7after §a${if (P3Sim.terrorPieces >= 4) 10 else 7}s§7 of not gaining a stack.", "", "§7Each stack grants §a+1%§7 Arrow Speed.", "",
+        "§7At §a10§7 stacks shoot §a+2§7 arrows.")).also { it.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb)) }
+
+    /** Terror armor on (P3Sim's Terror Armor setting) or off; the helmet stays your mask. */
+    fun equipArmor(p: ServerPlayer) {
+        val on = P3Sim.terrorPieces > 0
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, if (on) terror(Items.LEATHER_CHESTPLATE, "TERROR_CHESTPLATE", "Chestplate", 4064687) else ItemStack.EMPTY)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, if (on) terror(Items.LEATHER_LEGGINGS, "TERROR_LEGGINGS", "Leggings", 6104017) else ItemStack.EMPTY)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, if (on) terror(Items.LEATHER_BOOTS, "TERROR_BOOTS", "Boots", 8144108) else ItemStack.EMPTY)
+    }
 
     /**
      * The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory -
@@ -127,10 +143,11 @@ object SimItems {
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         // 9: the spare mask (Masks.equip, Real Masks).
-        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS)
+        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Masks.equip(p)
+        equipArmor(p)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
@@ -208,14 +225,14 @@ object SimItems {
         return true
     }
 
-    /** A left click on the client (ShortbowSimMixin): the shortbows shoot on it too, as on Hypixel. */
+    /** A left click on the client (ShortbowSimMixin): the shortbows shoot on it too, as on Hypixel (the Mosquito's is Nasty Bite). */
     @JvmStatic
     fun clientLeftClick() {
         val player = mc.player ?: return
         val level = mc.level ?: return
         if (!simClient(level)) return
-        val n = when (idOf(player.mainHandItem)) { "TERMINATOR" -> 3; "ITEM_SPIRIT_BOW" -> 1; else -> return }
-        SimServer.run("left click") { Sim.player?.let { p -> asClicked(p, "shortbow") { shoot(p, n) } } }
+        val id = idOf(player.mainHandItem)?.takeIf { it in Bows.SHORTBOWS } ?: return
+        SimServer.run("left click") { Sim.player?.let { p -> Bows.click(p, id, left = true) } }
     }
 
     /**
@@ -244,7 +261,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; bowReady = 0; leapReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear() }
+    fun reset() { resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -258,9 +275,8 @@ object SimItems {
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
             "INFINITE_SPIRIT_LEAP" -> openLeap(p)
             "SUPERBOOM_TNT" -> asClicked(p, "superboom") { superboom(p, null) }
-            "TERMINATOR" -> asClicked(p, "term") { shoot(p, 3) }
+            in Bows.SHORTBOWS -> Bows.click(p, id, left = false)
             "PET_ROD" -> Fight.afterPing("pet rod") { Masks.swapPet(p) }
-            "ITEM_SPIRIT_BOW" -> asClicked(p, "spirit bow") { shoot(p, 1) }
             else -> return InteractionResult.PASS
         }
         // Keep the client's copy of the stack (the Infinileap is a head, a block item it may think it placed).
@@ -615,68 +631,47 @@ object SimItems {
         while (broken.isNotEmpty() && now - broken.first().at >= regen) restore(broken.removeFirst())
     }
 
-    /** The next tick a shortbow can fire (P3Sim's Terminator Cooldown apart). */
-    private var bowReady = 0
-
     /**
-     * Shortbows: [n] arrows at once, 3.0 a tick with vanilla gravity. The Terminator's side arrows
-     * are Terminator Spread degrees of yaw off the middle one; a click inside the cooldown does nothing.
+     * The Archer's ability (sneak + drop): three arrows from your middle at the Terminator's +-5.5 deg, every 30 s
+     * (Bows' arrows, so they count for i4 too); they blow up a gate they hit.
      */
-    private fun shoot(p: ServerPlayer, n: Int) {
-        val now = Fight.serverTick
-        if (now < bowReady) return
-        bowReady = now + P3Sim.termCooldown
-        val level = Sim.level
-        val spread = P3Sim.termSpread
-        val yaws = if (n == 3) listOf(-spread, 0f, spread) else listOf(0f)
-        for (dy in yaws) {
-            val a = Arrow(level, p, ItemStack(Items.ARROW), null)
-            a.shootFromRotation(p, p.xRot, p.yRot + dy, 0f, 3.0f, 0f)
-            a.pickup = AbstractArrow.Pickup.DISALLOWED
-            Sim.spawn(a)
-            arrows += a
-        }
-        Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 1.2f, p.position())
-    }
-
-    /** The Archer's ability (sneak + drop): the Terminator's three arrows from your middle, every 30 s; they blow up a gate they hit. */
     private var volleyReady = 0
-    private val explosive = HashSet<AbstractArrow>()
 
     private fun volley(p: ServerPlayer) {
         val now = Fight.serverTick
         if (now < volleyReady) { Sim.chat("§cThis ability is on cooldown for ${(volleyReady - now + 19) / 20}s."); return }
         volleyReady = now + 600
-        val spread = P3Sim.termSpread
-        for (dy in listOf(-spread, 0f, spread)) {
-            val a = Arrow(Sim.level, p, ItemStack(Items.ARROW), null)
-            a.setPos(p.x, p.y + p.bbHeight / 2, p.z)
-            a.shootFromRotation(p, p.xRot, p.yRot + dy, 0f, 3.0f, 0f)
-            a.pickup = AbstractArrow.Pickup.DISALLOWED
-            a.isCritArrow = true
-            Sim.spawn(a)
-            arrows += a
-            explosive += a
+        val mid = Vec3(p.x, p.y + p.bbHeight / 2, p.z)
+        for (dy in listOf(-5.5f, 0f, 5.5f)) {
+            val yaw = Math.toRadians((p.yRot + dy).toDouble()); val pitch = Math.toRadians(p.xRot.toDouble())
+            val v = Vec3(-sin(yaw) * cos(pitch), -sin(pitch), cos(yaw) * cos(pitch)).scale(3.0)
+            Bows.launch(mid, mid, v, owner = p) { h ->
+                if (h is net.minecraft.world.phys.BlockHitResult) {
+                    val at = h.location
+                    Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
+                    Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
+                    (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
+                }
+            }?.isCritArrow = true
         }
         Sim.chat("§aUsed §6Explosive Shot§a!")
         Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 0.8f, p.position())
     }
 
+    /** Arrows that aren't the sim's ([SimArrow]s handle their own hits): traced against the blocks for the i4 target. */
     private val arrows = ArrayList<AbstractArrow>()
     private val lastMotion = HashMap<AbstractArrow, Vec3>()
 
-    /** Arrows that hit something: the target device's blocks count, every arrow goes away after 3 s. */
     fun tick() {
         val level = SimServer.level ?: return
         tickBreaker()
-        // Vanilla bow arrows too.
-        level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !in arrows }.forEach { arrows += it }
-        // Each arrow's path since last tick (and a little on), traced against the blocks: the first
-        // block on it is what it hit, however vanilla left the arrow (stuck, or still moving).
+        // Vanilla bow arrows (anything shot that isn't one of Bows'). Each one's path since last tick (and a
+        // little on), traced against the blocks: the first block on it is what it hit.
+        level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !is SimArrow && it !in arrows }.forEach { arrows += it }
         val it = arrows.iterator()
         while (it.hasNext()) {
             val a = it.next()
-            if (a.isRemoved) { it.remove(); lastMotion.remove(a); lastPos.remove(a); explosive.remove(a); continue }
+            if (a.isRemoved) { it.remove(); lastMotion.remove(a); lastPos.remove(a); continue }
             val v = a.deltaMovement
             if (v.lengthSqr() > 1e-3) lastMotion[a] = v
             val dir = (lastMotion[a] ?: v).let { if (it.lengthSqr() < 1e-6) Vec3.ZERO else it.normalize() }
@@ -686,12 +681,6 @@ object SimItems {
             val hit = level.clip(net.minecraft.world.level.ClipContext(from, to, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, a))
             if (hit.type == net.minecraft.world.phys.HitResult.Type.BLOCK) {
                 (Fight.phase as? GoldorPhase)?.devices?.target?.hit(hit.blockPos)
-                if (explosive.remove(a)) {
-                    val at = hit.location
-                    Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
-                    Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
-                    (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
-                }
                 a.discard()
                 it.remove(); lastMotion.remove(a); lastPos.remove(a)
                 continue

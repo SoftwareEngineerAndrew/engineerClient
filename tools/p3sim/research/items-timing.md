@@ -116,6 +116,7 @@ The recorders used Spirit Shortbow / Artisanal / Juju. **No Terminator data** (T
 - Sound `entity.arrow.shoot` vol 1.0, pitch 1.14–1.21 (vanilla random pitch) [M].
 - Shot spacing: mode 5–6 server ticks between your volleys [M], so ~3–4 shots/s with these bows.
 - [C] Terminator: 3 arrows a shot, ±5° yaw fan, same 3 b/t vanilla arrow, ~0.3 s between shots (Hypixel description). Not verified.
+- Mosquito Shortbow, Terror armor (Hydra Strike) and Terminator volleys are now measured exactly from Dungeon Recorder data: see **terror-mosquito.md** (the Terminator in §8 there).
 
 ## 7. Dungeonbreaker (DUNGEONBREAKER, `minecraft:diamond_pickaxe`)
 
