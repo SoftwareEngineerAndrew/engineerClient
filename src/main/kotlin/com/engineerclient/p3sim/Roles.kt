@@ -94,8 +94,8 @@ object Roles {
         helps = listOf(
             Help(3, "S3 T4", "S3 T1", listOf("S3 east lever"), 4.8),
             Help(3, "S3 T1", "S3 T4", listOf("S3 west lever", "gate 3"), 4.8),
-            Help(4, "S4 T3", "S4 T4", listOf("S4 low lever"), 4.2),
-            Help(4, "S4 T4", "S4 T3", listOf("S4 high lever"), 4.2),
+            Help(4, "S4 T3", "S4 T4", listOf("S4 high lever"), 4.2),
+            Help(4, "S4 T4", "S4 T3", listOf("S4 low lever"), 4.2),
         ),
     )
 
@@ -104,9 +104,9 @@ object Roles {
 
     val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC)
 
-    /** `ll` and `rl` per section (S2: the high lever is on the left coming in, the low one by T4 on the right). */
-    val LEFT = mapOf(1 to "S1 west lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 high lever")
-    val RIGHT = mapOf(1 to "S1 east lever", 2 to "S2 low lever", 3 to "S3 east lever", 4 to "S4 low lever")
+    /** `ll` and `rl` per section coming in along the track (S2: the high lever on the left, the low one by T4 on the right; S4, heading east: the low lever by T3 on the left, the high one by T4 on the right). */
+    val LEFT = mapOf(1 to "S1 west lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
+    val RIGHT = mapOf(1 to "S1 east lever", 2 to "S2 low lever", 3 to "S3 east lever", 4 to "S4 high lever")
 
     // ------------------------------------------------------------------ parsed
 

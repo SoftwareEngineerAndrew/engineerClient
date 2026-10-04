@@ -30,7 +30,7 @@ class RolesTest {
     @Test
     fun `pf - the roles as written`() {
         val plan = Roles.plan(Roles.PF)
-        assertEquals(listOf("S1 SS", "S2 high lever", "S3 T2", "S3 Arrows", "S4 T4", "S4 high lever", "S4 low lever"),
+        assertEquals(listOf("S1 SS", "S2 high lever", "S3 T2", "S3 Arrows", "S4 T4", "S4 low lever", "S4 high lever"),
             plan.jobsOf.getValue(DungeonClass.HEALER).filter { !it.startsWith("gate") })
         assertEquals(listOf("S1 T4", "S1 T3", "S2 T2"), plan.jobsOf.getValue(DungeonClass.MAGE))
         // Stacks.
