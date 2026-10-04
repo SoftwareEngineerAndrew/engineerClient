@@ -31,6 +31,8 @@ object Party {
 
     /** Bot walking speed, blocks a tick (sprinting at speed ~400 with turns and climbs). */
     private const val WALK = 0.95
+    /** The fastest a bot gets anywhere it is late for (etherwarps and leaps), blocks a tick. */
+    private const val FAST = 4.0
 
     class Bot(val clazz: DungeonClass, val slot: Int) {
         val name = Roles.label(clazz)
@@ -40,6 +42,8 @@ object Party {
         /** Where it's walking to (null: standing), from n = [goAt]. */
         var to: Vec3? = null
         var goAt = 0
+        /** When it must be there (n; -1: no hurry): it goes faster to make it, like etherwarping. */
+        var due = -1
         /** At this terminal doing it (others see "already using"). */
         var working: Station? = null
         /** The section it's in (pre-leapt into the next one: that one). */
@@ -66,7 +70,7 @@ object Party {
     fun clear() {
         generation++
         jobs.clear(); leaps.clear()
-        bots.forEach { it.entity?.discard(); it.entity = null; it.to = null; it.working = null; it.hold = false; it.inSection = 0 }
+        bots.forEach { it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0 }
     }
 
     fun busyAt(st: Station) = bots.any { it.working === st }
@@ -175,7 +179,7 @@ object Party {
             // Done where it's done: not while holding (at an early enter, waiting), not before the bot is there.
             if (j.bot.hold) return@removeAll false
             if (j.bot.pos.distanceTo(spotOf(j.job)) > 2.5) {
-                if (j.bot.to == null) { j.bot.to = spotOf(j.job); j.bot.goAt = n }
+                if (j.bot.to == null) { j.bot.to = spotOf(j.job); j.bot.goAt = n; j.bot.due = n }
                 return@removeAll false
             }
             val st = phase.stations.firstOrNull { it.id == j.job }
@@ -255,6 +259,7 @@ object Party {
                 val walk = (b.pos.distanceTo(ee.spot) / WALK).toInt()
                 b.to = ee.spot
                 b.goAt = if (eeSpotBy[into] >= 0) (eeSpotBy[into] - walk).coerceAtLeast(phase.n) else phase.n
+                b.due = eeSpotBy[into]
             }
             break
         }
@@ -287,13 +292,21 @@ object Party {
     private fun releaseEarlyEnterers(phase: GoldorPhase) {
         val n = phase.n
         val s = phase.section
+        // You're on an early enterer once you've been on it after its jobs before (on its way there counts).
+        for (into in s..(s + 1).coerceAtMost(4)) {
+            val b = P3Plan.ee(into)?.takeIf { !it.byYou }?.let { botOf(it.owner) } ?: continue
+            if (youOn[into] || jobs.any { it.bot === b && (sectionOf(it.job) < into || it.timeSection < into) }) continue
+            if (Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) youOn[into] = true
+        }
         for (into in s..(s + 1).coerceAtMost(4)) {
             val ee = P3Plan.ee(into)?.takeIf { !it.byYou } ?: continue
             val b = botOf(ee.owner) ?: continue
             if (!b.hold || !eeArrived[into] || b.inSection < into) continue
-            if (!youOn[into] && Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) youOn[into] = true
             val waits = waitsFor[into]
             val ok = when {
+                // Never without you (a safety net at 30 s); the bots get 10 s.
+                into == s && n - sectionN[s] >= 600 -> true
+                !leapt(P3Sim.myClass, b, into) -> false
                 into == s && n - sectionN[s] >= 200 -> true
                 waits != null -> waits.all { t -> leapt(whoFor(t, into), b, into) }
                 // No list: everyone - every bot (busy ones too, once they're done and leapt) and you.
@@ -356,7 +369,7 @@ object Party {
             val spot = CORE_SPOT.add((i - 1.5) * 1.5, 0.0, 2.0 + Random.nextDouble())
             if (onto != null && botOf(ee?.owner) !== b) leaps += Leap(b, n + 1 + i * 2) { onto() }
             val gen = generation
-            Fight.later(if (onto != null) 12 + i * 2 else 0, "bots into core") { if (gen == generation) { b.to = spot; b.goAt = 0 } }
+            Fight.later(if (onto != null) 12 + i * 2 else 0, "bots into core") { if (gen == generation) { b.to = spot; b.goAt = 0; b.due = -1 } }
         }
     }
 
@@ -371,7 +384,7 @@ object Party {
     private fun walkOn(b: Bot, n: Int) {
         if (b.hold) return
         val j = next(b) ?: return
-        if (j.at >= 0 || sectionOf(j.job) <= b.inSection) { b.to = spotOf(j.job); b.goAt = n }
+        if (j.at >= 0 || sectionOf(j.job) <= b.inSection) { b.to = spotOf(j.job); b.goAt = n; b.due = j.at }
     }
 
     private fun sectionOf(job: String) = job.removePrefix("gate ").toIntOrNull() ?: job.substring(1, 2).toInt()
@@ -383,7 +396,9 @@ object Party {
         if (to != null && n >= b.goAt) {
             val d = to.subtract(b.pos)
             val len = d.length()
-            if (len <= WALK) { b.pos = to; b.to = null } else b.pos = b.pos.add(d.scale(WALK / len))
+            // Walking, unless it has to be there sooner (then as fast as that takes, up to etherwarp pace).
+            val step = (if (b.due > n) maxOf(WALK, len / (b.due - n)) else if (b.due >= 0) FAST else WALK).coerceAtMost(FAST)
+            if (len <= step) { b.pos = to; b.to = null } else b.pos = b.pos.add(d.scale(step / len))
             if (Math.abs(d.x) + Math.abs(d.z) > 0.01) b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat()
         }
         place(b)
