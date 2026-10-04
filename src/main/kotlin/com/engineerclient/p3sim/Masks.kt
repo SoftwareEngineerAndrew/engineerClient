@@ -44,49 +44,94 @@ object Masks {
         return s
     }
 
-    /** Real Masks: the chosen one on your head (/stats swaps it). */
+    /** Where the spare mask is kept: the first inventory slot (as on Hypixel: /stats' slot 54). */
+    const val SPARE_SLOT = 9
+
+    /** Real Masks: the chosen one on your head, the other in [SPARE_SLOT] (/stats swaps them). Off: no masks. */
     fun equip(p: ServerPlayer) {
-        if (!P3Sim.realMasks) { if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) p.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY); return }
-        p.setItemSlot(EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) SPIRIT_MASK else BONZO_MASK)
+        val inv = p.inventory
+        if (!P3Sim.realMasks) {
+            if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) p.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY)
+            if (SimItems.idOf(inv.getItem(SPARE_SLOT))?.endsWith("_MASK") == true) inv.setItem(SPARE_SLOT, ItemStack.EMPTY)
+        } else {
+            val spirit = P3Sim.wornMaskS.value == 0
+            p.setItemSlot(EquipmentSlot.HEAD, if (spirit) SPIRIT_MASK else BONZO_MASK)
+            inv.setItem(SPARE_SLOT, if (spirit) BONZO_MASK else SPIRIT_MASK)
+        }
+        p.inventoryMenu.broadcastChanges()
     }
 
-    // ------------------------------------------------------------------ /stats: swapping masks
+    // ------------------------------------------------------------------ /stats: Stats & Equipment
 
-    /** The /stats window: your masks, a click puts that one on (each keeps its own cooldown). */
+    /** Hypixel's /stats window (as recorded in Better PF runs); click a mask in your inventory below to wear it. */
     fun openStats(p: ServerPlayer) {
-        p.openMenu(net.minecraft.world.SimpleMenuProvider({ id, inv, _ -> StatsMenu(id, inv) }, Component.literal("Your Equipment and Stats")))
+        p.openMenu(net.minecraft.world.SimpleMenuProvider({ id, inv, _ -> StatsMenu(id, inv, p) }, Component.literal("Stats & Equipment")))
     }
 
-    private val SLOTS = mapOf(11 to 0, 15 to 1)
+    // Equipment as in the recordings (the heads' skins; the armour's dyes).
+    private const val NECKLACE_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY5MjI5ODE4Nzc4NiwKICAicHJvZmlsZUlkIiA6ICI1MWIyZGY3NWEyYWM0OTA5YmM4YzlkMzM3Y2EwNDNkYyIsCiAgInByb2ZpbGVOYW1lIiA6ICJMaWNvcm5lQXVCZXVycmUiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWEzNjFhNjdiNjNkMDQ1YTBhNjNiNTI1YzFhNzAxMjhmNjkwOWVmMWFjN2JjYzZlNDYzMWViODk1ZjA3NTAyZCIKICAgIH0KICB9Cn0="
+    private const val CLOAK_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY5MjI5ODIwNzA1MywKICAicHJvZmlsZUlkIiA6ICIzZWUxYWRlMzljZDI0ZjFkOWYwODliYjA2ZTkzNTY5YSIsCiAgInByb2ZpbGVOYW1lIiA6ICJSdXNvR01SIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlL2ZhMjQzMTE0ODU3MmZlZDdiYzFlYWNmMGQyMjlkZGIyMTE1ZDFhMmNhMTgxZDMyM2QzZmNhNTIyNmU1MTZhMWQiCiAgICB9CiAgfQp9"
+    private const val BELT_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0MzYwMjI5OTA2MSwKICAicHJvZmlsZUlkIiA6ICI0ZTMwZjUwZTdiYWU0M2YzYWZkMmE3NDUyY2ViZTI5YyIsCiAgInByb2ZpbGVOYW1lIiA6ICJfdG9tYXRvel8iLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjFkMmIwMzZkZDY2NGJiOTBjOWQ0NDNjMTk5OGZiNTI2Mzk4YWI0ZGRkZWI3OWI4NDAxYjE2YjlhNGQxMGJhMyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
+    private const val GLOVES_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY5MjI5ODIyMjY4MywKICAicHJvZmlsZUlkIiA6ICI4NzE3ZGFhNmM3OTU0NzE2YmJlYWQ0MDRkYzg0NDQzZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJTa3VsbDAwMDAiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTUyMjg2NzcyMTJiZTQzZWFhZDIzZDQ3ZWQ4NDNlMTVmYjFlNjgzODQ1OTRjMDliNThiMjNmODI0MjdlNTQ5YSIKICAgIH0KICB9Cn0="
+    private const val BLACK_CAT_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTcwODczNzEyMTIzNSwKICAicHJvZmlsZUlkIiA6ICJmY2ZhYTg0MzA0YjE0NDUxOThkNWYxNzQ3ZjI0Y2Q5MCIsCiAgInByb2ZpbGVOYW1lIiA6ICJTdGV3eVdvbGZ5IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzgyODJiNWE5YmJlMmNkMzIyMzcyNDAyM2NkNGY2YWQ0MTNmNWJiOWUwZWRlZjgxNzAwYjhhZmMzMDcyZDA0YTUiCiAgICB9CiAgfQp9"
+    private const val PHOENIX_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0Mjg2NTc3MTM5MSwKICAicHJvZmlsZUlkIiA6ICJiYjdjY2E3MTA0MzQ0NDEyOGQzMDg5ZTEzYmRmYWI1OSIsCiAgInByb2ZpbGVOYW1lIiA6ICJsYXVyZW5jaW8zMDMiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjZiMWI1OWJjODkwYzljOTc1Mjc3ODdkZGUyMDYwMGM4Yjg2ZjZiOTkxMmQ1MWE2YmZjZGIwZTRjMmFhM2M5NyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
 
-    class StatsMenu(id: Int, inv: net.minecraft.world.entity.player.Inventory) :
-        net.minecraft.world.inventory.ChestMenu(net.minecraft.world.inventory.MenuType.GENERIC_9x3, id, inv, net.minecraft.world.SimpleContainer(27), 3) {
+    private fun leather(item: net.minecraft.world.item.Item, rgb: Int, name: String): ItemStack =
+        Terminals.named(item, name).also { it.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb)) }
+
+    /**
+     * 9x6 "Stats & Equipment", laid out as Hypixel's (Better PF recordings): black panes; your held
+     * item at 2; necklace, cloak, belt, gloves down column 1 (10/19/28/37); helmet, chestplate,
+     * leggings, boots down column 2 (11/20/29/38); stat categories on the right; pet at 47; Close,
+     * Active Effects, Achievements at 49-51. Your inventory below: click a mask there to wear it
+     * (the one you had on goes where it was).
+     */
+    class StatsMenu(id: Int, inv: net.minecraft.world.entity.player.Inventory, private val sp: ServerPlayer) :
+        net.minecraft.world.inventory.ChestMenu(net.minecraft.world.inventory.MenuType.GENERIC_9x6, id, inv, net.minecraft.world.SimpleContainer(54), 6) {
         init { draw() }
 
         private fun draw() {
-            for (i in 0 until 27) container.setItem(i, Terminals.FILLER)
-            val worn = P3Sim.wornMaskS.value
-            for ((slot, m) in SLOTS) {
-                val s = if (m == 0) SPIRIT_MASK else BONZO_MASK
-                val lore = s.get(DataComponents.LORE)?.lines().orEmpty() + Component.literal("") +
-                    Component.literal(if (m == worn) "§aCurrently wearing" else "§eClick to wear!")
-                s.set(DataComponents.LORE, ItemLore(lore.map { l -> l.copy().withStyle { it.withItalic(false) } }))
-                container.setItem(slot, s)
-            }
-            container.setItem(13, Terminals.named(net.minecraft.world.item.Items.BONE, "§aPet: §6${if (P3Sim.phoenix) "Phoenix" else "Black Cat"} §7(Pet Rod swaps it)"))
+            val c = container
+            for (i in 0 until 54) c.setItem(i, Terminals.FILLER)
+            c.setItem(2, sp.mainHandItem.copy())
+            c.setItem(10, SimItems.head(NECKLACE_TEX, "§6 Strengthened Bone Necklace §6✪✪✪✪✪"))
+            c.setItem(19, SimItems.head(CLOAK_TEX, "§6 Menacing Shadow Assassin Cloak §6✪✪✪✪✪"))
+            c.setItem(28, SimItems.head(BELT_TEX, "§5Implosion Belt"))
+            c.setItem(37, SimItems.head(GLOVES_TEX, "§6Menacing Soulweaver Gloves §6✪✪✪✪✪"))
+            c.setItem(11, sp.getItemBySlot(EquipmentSlot.HEAD).copy().takeUnless { it.isEmpty } ?: Terminals.named(net.minecraft.world.item.Items.GRAY_STAINED_GLASS_PANE, "§7Empty Helmet Slot"))
+            c.setItem(20, leather(net.minecraft.world.item.Items.LEATHER_CHESTPLATE, 0x42c99a, "§d✿ Loving Maxor's Chestplate §6✪✪✪✪✪§c➎"))
+            c.setItem(29, leather(net.minecraft.world.item.Items.LEATHER_LEGGINGS, 0x68fba0, "§d✿ Necrotic Maxor's Leggings §6✪✪✪✪✪§c➎"))
+            c.setItem(38, leather(net.minecraft.world.item.Items.LEATHER_BOOTS, 0x57f6c0, "§d✿ Necrotic Maxor's Boots §6✪✪✪✪✪§c➎"))
+            c.setItem(14, Terminals.named(net.minecraft.world.item.Items.STONE_SWORD, "§cCombat Stats"))
+            c.setItem(15, Terminals.named(net.minecraft.world.item.Items.STONE_PICKAXE, "§6Mining Stats"))
+            c.setItem(16, Terminals.named(net.minecraft.world.item.Items.GOLDEN_HOE, "§eFarming Stats"))
+            c.setItem(23, Terminals.named(net.minecraft.world.item.Items.JUNGLE_SAPLING, "§2Foraging Stats"))
+            c.setItem(24, Terminals.named(net.minecraft.world.item.Items.FISHING_ROD, "§bFishing Stats"))
+            c.setItem(25, Terminals.named(net.minecraft.world.item.Items.CLOCK, "§dMiscellaneous Stats"))
+            c.setItem(32, Terminals.named(net.minecraft.world.item.Items.LEAD, "§aHunting Stats"))
+            c.setItem(34, Terminals.named(net.minecraft.world.item.Items.BOOK, "§3Wisdom Stats"))
+            c.setItem(47, if (P3Sim.phoenix) SimItems.head(PHOENIX_TEX, "§7[Lvl 76] §6Phoenix") else SimItems.head(BLACK_CAT_TEX, "§7[Lvl 100] §6Black Cat"))
+            c.setItem(49, Terminals.named(net.minecraft.world.item.Items.BARRIER, "§cClose"))
+            c.setItem(50, Terminals.named(net.minecraft.world.item.Items.POTION, "§aActive Effects"))
+            c.setItem(51, Terminals.named(net.minecraft.world.item.Items.DIAMOND, "§aSkyBlock Achievements"))
         }
 
         override fun clicked(slot: Int, button: Int, input: net.minecraft.world.inventory.ContainerInput, p: net.minecraft.world.entity.player.Player) {
-            val m = SLOTS[slot] ?: return
-            val sp = p as ServerPlayer
-            if (m != P3Sim.wornMaskS.value) {
-                P3Sim.wornMaskS.value = m
+            if (slot == 49) { sp.closeContainer(); return }
+            // Below the window: your inventory (54-80 = inventory 9-35, 81-89 = the hotbar).
+            val index = when (slot) { in 54..80 -> slot - 45; in 81..89 -> slot - 81; else -> -1 }
+            val clickedItem = if (index >= 0) sp.inventory.getItem(index) else ItemStack.EMPTY
+            val id = SimItems.idOf(clickedItem)
+            if (id != null && id.endsWith("_MASK")) {
+                val worn = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
+                sp.setItemSlot(EquipmentSlot.HEAD, clickedItem.copy())
+                sp.inventory.setItem(index, worn)
+                P3Sim.wornMaskS.value = if (id == "SPIRIT_MASK") 0 else 1
                 Sim.sound(SoundEvents.ARMOR_EQUIP_GENERIC.value(), 1f, 1f)
-                if (P3Sim.realMasks) equip(sp)
-                else Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
+                if (!P3Sim.realMasks) Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
             }
             draw()
-            broadcastChanges()
+            broadcastFullState()
             sp.inventoryMenu.broadcastChanges()
         }
 

@@ -124,7 +124,8 @@ object SimItems {
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         bar.forEachIndexed { i, s -> inv.setItem(i, s) }
-        inv.setItem(9, if (p3) HYPERION else SUPERBOOM); inv.setItem(10, AOTV); inv.setItem(11, SPIRIT_BOW); inv.setItem(12, PEARLS)
+        // 9: the spare mask (Masks.equip, Real Masks).
+        inv.setItem(10, if (p3) HYPERION else SUPERBOOM); inv.setItem(11, AOTV); inv.setItem(12, SPIRIT_BOW); inv.setItem(13, PEARLS)
         Masks.equip(p)
         inv.selectedSlot = 3
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))
