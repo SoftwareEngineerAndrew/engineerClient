@@ -58,6 +58,7 @@ object DungeonSplits : Module(
     private val detail = SplitDetail()
     private val boss = BossDetail(detail)
     private val blood = BloodRunDetail()
+    private val necronCue = NecronHitCue()
 
     private var serverTicks = 0
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
@@ -125,6 +126,11 @@ object DungeonSplits : Module(
     private val huds = HashMap<Section, HUDSetting>()
     private lateinit var totalRow: BooleanSetting
     private lateinit var bloodHideInBoss: BooleanSetting
+    private lateinit var hitCue: BooleanSetting
+
+    /** The Necron hit cue, under his sub splits while his fight is on. */
+    private fun cueLines(s: Section): List<String> =
+        if (s.window != SplitTracker.NECRON || !hitCue.enabled) emptyList() else listOfNotNull(necronCue.line(serverTicks))
 
     /** A section's HUD is on: its detail settings only show then. */
     private fun hudOn(s: Section) = huds[s]?.value?.enabled == true
@@ -137,8 +143,9 @@ object DungeonSplits : Module(
                     if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
                         "§70.52s §8| \t§c1.73s \t§5Hallway: \t§62.31s",
                         "\t§411.73s \t§dDino: \t§622.31s",
-                    ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s"))
-                    draw(this, subLines(s))
+                    ) else listOf("${s.colour}${s.name}: §68.12s §8| §52.28s §8| §c11.52s") +
+                        (if (s.window == SplitTracker.NECRON && hitCue.enabled) listOf("§6§lHIT NOW §e20% §7· §f0.45s §7left") else emptyList()))
+                    draw(this, subLines(s) + cueLines(s))
                 }
             )
             levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
@@ -146,6 +153,9 @@ object DungeonSplits : Module(
             if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
                 BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
             ).withDependency { hudOn(s) && level(s) == BloodRunDetail.Level.COMPACT }
+            if (s.window == SplitTracker.NECRON) hitCue = registerSetting(
+                BooleanSetting("Necron Hit Cue", true, desc = "A line under the Necron sub splits saying when to hit him: his 3 hits that matter (20%, 55%, 20%), each counted down, called while its window is open, and marked on time or late. Other hits don't change the time.")
+            ).withDependency { hudOn(s) }
             if (s.window == SplitTracker.OPEN) bloodHideInBoss = registerSetting(
                 BooleanSetting("Blood Rush Hide In Boss", false, desc = "Hides the blood rush sub splits once you are in the boss.")
             ).withDependency { hudOn(s) }
@@ -163,7 +173,7 @@ object DungeonSplits : Module(
 
     /** Forgets the run (world load, or a P3 Sim restart). */
     private fun resetRun() {
-        tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); pinnedStorm = null
+        tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); necronCue.reset(); pinnedStorm = null
         goldorAt = null; goldorMoved = false; necronAt = null; goldorBar = null
         portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
         maxorAt = null; maxorCheck = null
@@ -231,6 +241,7 @@ object DungeonSplits : Module(
                     tracker.onChat(text, at)
                     card.onChat(text, at)
                     subs.onChat(text, at)
+                    necronCue.onChat(text, at.tick)
                     boss.onChat(text, at)
                     blood.onChat(text, at)
                 }
@@ -299,6 +310,7 @@ object DungeonSplits : Module(
             if (open(SplitTracker.NECRON)) bossWither(level, "Necron")?.positionCodec?.base?.let {
                 EcRec.obsChanged(now(), "necron_from_mid", "server position") { o -> o.num("val", it.distanceTo(NECRON_MID)).nums("pos", listOf(it.x, it.y, it.z)) }
                 subs.onNecronPosition(now(), it.distanceTo(NECRON_MID))
+                necronCue.onPosition(serverTicks, it.distanceTo(NECRON_MID))
             }
 
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
@@ -401,11 +413,15 @@ object DungeonSplits : Module(
                 override fun add(id: java.util.UUID, name: net.minecraft.network.chat.Component, progress: Float, color: net.minecraft.world.BossEvent.BossBarColor,
                                  overlay: net.minecraft.world.BossEvent.BossBarOverlay, darken: Boolean, music: Boolean, fog: Boolean) {
                     if (name.string.contains("Goldor")) goldorBar = id to progress
+                    necronBar(id, name)
                 }
                 override fun updateName(id: java.util.UUID, name: net.minecraft.network.chat.Component) {
                     if (name.string.contains("Goldor") && goldorBar?.first != id) goldorBar = id to 1f
+                    necronBar(id, name)
                 }
                 override fun updateProgress(id: java.util.UUID, progress: Float) {
+                    // Necron's health, for the hit cue: one bar the server renames per boss.
+                    if (id == necronBar) EngineerClient.mc.execute { necronCue.onBar(serverTicks, progress) }
                     val bar = goldorBar ?: return
                     if (bar.first != id) return
                     val dropped = progress < bar.second - 0.0005f
@@ -447,6 +463,13 @@ object DungeonSplits : Module(
 
     /** Goldor's boss bar and its last progress. */
     @Volatile private var goldorBar: Pair<java.util.UUID, Float>? = null
+
+    /** The boss bar while it is Necron's (the same bar is renamed for each boss). */
+    @Volatile private var necronBar: java.util.UUID? = null
+
+    private fun necronBar(id: java.util.UUID, name: net.minecraft.network.chat.Component) {
+        if (name.string.contains("Necron")) necronBar = id else if (necronBar == id) necronBar = null
+    }
 
     /** Storm's wither and where the crush pinned him. */
     private var pinnedStorm: Pair<Int, net.minecraft.world.phys.Vec3>? = null
