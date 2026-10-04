@@ -11,6 +11,7 @@ report says what is measured and what is conjecture; the scripts that print ever
 | Maxor (P1), alpha server, from Boss Recorder files | [maxor-alpha.md](maxor-alpha.md) | |
 | Storm (P2) | [storm.md](storm.md) | [../maxor-storm-movement.md](../maxor-storm-movement.md), [../storm-crush.md](../storm-crush.md) |
 | Goldor (P3) | [goldor.md](goldor.md), strategy: [terminals-strategy.md](terminals-strategy.md), roles: [terminal-roles.md](terminal-roles.md), S1 device: [simon-says.md](simon-says.md) | |
+| Goldor's death ticks (P3) | [death-ticks.md](death-ticks.md), probe data: [death-ticks-probes.csv](death-ticks-probes.csv) | |
 | Necron (P4) | [necron.md](necron.md) | |
 | Sub splits (all) | [sub-splits.md](sub-splits.md) | |
 
@@ -33,7 +34,7 @@ on: in the boss and the Watcher camp every entity, elsewhere the boss withers.
 | **Goldor:** his health and hits, what slows him, the core "everyone in" box | `dmg`/`an` on Goldor, `d` health, other players' `m` when he leaves the track |
 | **Necron:** what gates his return to mid (B), what starts volley 2, the S-platform removal, his target | `bb`/`d`/`dmg`, `a` fireballs (spawn tick, velocity, owner), `b` platform blocks, `h` |
 | **Watcher:** exact mob spawn and death ticks, mini-boss choice, the move's timing | `a` (every head and mob, to the tick, wherever the recorder stands), `ev` 3 / `r` deaths, the Watcher's own `m` |
-| **Death ticks (P3), Nuclear Frenzy (P4):** exact hit ticks | `hp` (your own health), `dmg` on players, `ex` |
+| **Death ticks (P3):** the open edges and the Goldor-segment timing are listed in [death-ticks.md](death-ticks.md); **Nuclear Frenzy (P4):** exact hit ticks | `hp` (your own health), `dmg` on players, `ex` |
 
 The answers need Boss Recorder files: turn the module on and play F7 (every party member recording
 it gives every player's own view too).

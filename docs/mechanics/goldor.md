@@ -85,18 +85,24 @@ Between sections there are two barriers at the same spot on the track
 **So a section ends at the later of its 7th/8th completion and its gate.** This is what
 `SubSplits.kt` already does ("whichever of last device and gate arrives second").
 
-### Death ticks (measured, `deathtick.py`)
+### Death ticks
 
-- Every **60 server ticks** from Goldor's first line (the chat line lands at n = 60k-1 ± 1-2;
-  gaps between consecutive lines: 60 ± 1-2), for the whole phase, not reset by sections.
-- Hit: anyone standing **in a section ahead of the one in progress** - the next section (214 of 230
-  recorder samples hit) and, while S1 is in progress, S4 (78 of 83; S4 is where the target
-  device is done early). Safe: the section in progress (16 hits in 1719, box edges), any
-  earlier section (0/70), the core box (0/210).
+Full rule, zones, per-edge evidence and open questions: [death-ticks.md](death-ticks.md).
+
+- Every **60 server ticks** from Goldor's first line (the chat line lands at n = 60k-1 +- 1-2;
+  gaps between consecutive lines: 60 +- 1-2), for the whole phase, not reset by sections
+  (`deathtick.py`).
+- Hit: anyone whose feet are in one of four block-aligned section rectangles (S1 90,26 to 114,121;
+  S2 20,122 to 114,146; S3 -6,51 to 18,146; S4 -6,26 to 90,50; y 106 to 146) unless that section
+  is the one in progress **and** Goldor is still on its track segment (his start stretch before
+  the S1 corner counts as S1). Gaps between the rectangles, the core and the middle are never hit.
+  The Wither Cloak does not stop it.
 - The hit is lethal: it shows as a mask/pet save (Spirit Mask, Bonzo's Mask, Phoenix) or a death
   in the same tick, and Goldor says "What do you think you are doing there!" (357 times).
-  Pre-entering therefore costs one save per 60 ticks spent ahead, which is why the rotation
-  budgets invincibilities for early entries.
+  Pre-entering therefore costs one save per 60 ticks spent in a lethal zone, which is why the
+  rotation budgets invincibilities for early entries.
+- The earlier "next section ahead, plus S4 during S1" rule (Better PF recall 0.82, precision 0.41)
+  was replaced by the probe-run rule; see the history in death-ticks.md.
 
 ### Goldor's other lines
 
@@ -230,7 +236,7 @@ left on the S1 line (58-80) is more often reached.
 ## Measured vs conjecture
 
 Measured: section contents and positions, counting and early-device credit, gate/door rule and the
-5-second gate, core door timing (19 ticks), the 60-tick death-tick grid and who it hits, the
+5-second gate, core door timing (19 ticks), the 60-tick death-tick grid (who it hits: [death-ticks.md](death-ticks.md)), the
 62-tick dialogue grid, Goldor's start point, track, 0.0600 walk, 0.60 catch-up (always one
 segment behind, ending at the next section's start), 0.80 flight to (54.5, 40.5), departure on
 the last player's entry, the two endings and their timings, "...." -> Necron 81-83.

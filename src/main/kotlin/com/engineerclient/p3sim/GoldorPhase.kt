@@ -741,7 +741,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Red components, a tick after the click (TERM-17). No "already using" lock on Hypixel (TERM-06).
         if (st.done) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal has already been completed!") }; return }
         if (st.section != section) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal doesn't seem to be responsive at the moment.") }; return }
-        Terminals.open(p, st)
+        // The window opens a tick after the click (99 of 114 on Hypixel), on top of the ping.
+        Fight.later(1, "term open") { Terminals.open(p, st) }
     }
 
     /** Player-facing state for the menu's status line. */

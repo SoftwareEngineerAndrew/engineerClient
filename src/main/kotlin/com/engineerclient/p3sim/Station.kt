@@ -58,7 +58,7 @@ class Station(
             return Sim.spawn(s)
         }
         when (kind) {
-            Kind.TERMINAL -> { top = stand(at.y, INACTIVE, false); bottom = stand(at.y - 0.375, CLICK_HERE, false) }
+            Kind.TERMINAL -> { top = stand(at.y + TOP_DY, INACTIVE, false); bottom = stand(at.y + BOTTOM_DY, CLICK_HERE, false) }
             Kind.DEVICE -> { top = stand(at.y, "§cInactive", false); bottom = stand(at.y - 0.375, "§cDevice", false) }
             Kind.LEVER -> { top = stand(at.y, "§cNot Activated", true) }
         }
@@ -83,9 +83,9 @@ class Station(
         when (kind) {
             Kind.TERMINAL -> if (done) {
                 // Done: the top stand moves down 0.375, onto the bottom one's height (TERM-11).
-                top?.let { if (it.y > at.y - 0.375 + 1e-3) it.snapTo(at.x, at.y - 0.375, at.z, 0f, 0f) }
+                top?.let { if (kotlin.math.abs(it.y - (at.y + BOTTOM_DY)) > 1e-3) it.snapTo(at.x, at.y + BOTTOM_DY, at.z, 0f, 0f) }
                 name(top, "§aTerminal Active"); name(bottom, "")
-            } else { top?.let { if (it.y < at.y - 1e-3) it.snapTo(at.x, at.y, at.z, 0f, 0f) }; name(top, INACTIVE); name(bottom, CLICK_HERE) }
+            } else { top?.let { if (kotlin.math.abs(it.y - (at.y + TOP_DY)) > 1e-3) it.snapTo(at.x, at.y + TOP_DY, at.z, 0f, 0f) }; name(top, INACTIVE); name(bottom, CLICK_HERE) }
             Kind.DEVICE -> if (done) { name(top, "§aDevice"); name(bottom, "§aActive") } else { name(top, "§cInactive"); name(bottom, "§cDevice") }
             Kind.LEVER -> name(top, if (done) "§aActivated" else "§cNot Activated")
         }
@@ -98,6 +98,9 @@ class Station(
     fun owns(e: net.minecraft.world.entity.Entity) = e === top || e === bottom
 
     companion object {
+        /** Hypixel's settled stand heights relative to the terminal (after the first position sync). */
+        const val TOP_DY = 0.02
+        const val BOTTOM_DY = -0.355
         const val INACTIVE = "§cInactive Terminal"
         const val CLICK_HERE = "§e§lCLICK HERE"
 

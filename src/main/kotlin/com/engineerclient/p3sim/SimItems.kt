@@ -1078,6 +1078,9 @@ object SimItems {
         return InteractionResult.SUCCESS
     }
 
+    /** The server tick of each terminal's last accepted click (same-tick dedupe). */
+    private val termClickTick = java.util.WeakHashMap<Station, Int>()
+
     private fun useEntity(p: ServerPlayer, e: net.minecraft.world.entity.Entity, left: Boolean = false): InteractionResult {
         if (e is net.minecraft.world.entity.boss.enderdragon.EndCrystal) { (Fight.phase as? P1Maxor)?.useCrystal(e); return InteractionResult.SUCCESS }
         // P1's crystal and pylon stands ("CLICK HERE"): pick up / place.
@@ -1088,8 +1091,14 @@ object SimItems {
             if (e is ItemFrame && phase.devices.arrows.owns(e)) { if (!left) phase.devices.arrows.use(e); return InteractionResult.SUCCESS }
             if (e is ArmorStand) {
                 val st = phase.stations.firstOrNull { it.owns(e) }
-                    ?: phase.stations.filter { it.kind == Station.Kind.TERMINAL }.minByOrNull { it.at.distanceToSqr(e.position()) }?.takeIf { it.at.distanceToSqr(e.position()) < 4.0 }
-                if (st != null && st.kind == Station.Kind.TERMINAL) { Fight.afterPing("terminal") { phase.useTerminal(st) }; return InteractionResult.SUCCESS }
+                if (st != null && st.kind == Station.Kind.TERMINAL) {
+                    // One response per terminal per server tick: attack+interact or repeated interacts in the same tick (28 of 28 on Hypixel).
+                    if (termClickTick[st] != Fight.serverTick) {
+                        termClickTick[st] = Fight.serverTick
+                        Fight.afterPing("terminal") { phase.useTerminal(st) }
+                    }
+                    return InteractionResult.SUCCESS
+                }
                 return InteractionResult.SUCCESS
             }
         }
