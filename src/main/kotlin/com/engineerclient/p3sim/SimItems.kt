@@ -301,6 +301,8 @@ object SimItems {
 
     private fun useEntity(p: ServerPlayer, e: net.minecraft.world.entity.Entity, left: Boolean = false): InteractionResult {
         if (e is net.minecraft.world.entity.boss.enderdragon.EndCrystal) { (Fight.phase as? P1Maxor)?.useCrystal(e); return InteractionResult.SUCCESS }
+        // P1's crystal and pylon stands ("CLICK HERE"): pick up / place.
+        if (e is ArmorStand && (Fight.phase as? P1Maxor)?.useCrystal(e) == true) return InteractionResult.SUCCESS
         if (left && idOf(p.mainHandItem) == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         val phase = Fight.phase as? GoldorPhase
         if (phase != null) {

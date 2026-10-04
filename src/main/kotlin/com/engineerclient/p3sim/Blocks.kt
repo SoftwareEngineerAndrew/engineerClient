@@ -88,11 +88,15 @@ object Blocks {
     /** Animations played or finished this fight: a second [finish] (a phase catching up on one the start already did) is a no-op. */
     private val done = HashSet<String>()
 
-    /** Starts [name] now (its frame 0 this tick). [skip]: start that many ticks in (catching up). */
-    fun play(name: String, skip: Int = 0) {
+    /**
+     * Starts [name] now (its frame 0 this tick). [skip]: start that many ticks in (catching up).
+     * [exclude]: positions the phase drives itself, left out of the recording's frames (P1's beacon column).
+     */
+    fun play(name: String, skip: Int = 0, exclude: Set<BlockPos> = emptySet()) {
         val a = library[name] ?: run { EngineerClient.logger.warn("[p3sim] no animation {}", name); return }
         done += name
         val p = Playing(a, Fight.serverTick - skip)
+        if (exclude.isNotEmpty()) a.frames.forEachIndexed { i, f -> if (f.pos in exclude) p.skip[i] = true }
         anims += p
         advance(p)
         if (name == STRIP) conveyor = Conveyor(p.start + a.length + STRIP_PERIOD)
