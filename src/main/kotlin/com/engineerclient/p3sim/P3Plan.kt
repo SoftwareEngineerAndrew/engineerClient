@@ -19,9 +19,13 @@ object P3Plan {
     val SKILLS = Roles.PRESETS.map { it.name } + "Random"
     const val RANDOM = 3
 
-    /** Where each early enter stands (into: 5 = the core). Who does it comes from the roles. */
-    class EarlyEnter(val key: String, val label: String, val into: Int, var spot: Vec3) {
-        val owner: DungeonClass? get() = plan().ee[into]
+    /**
+     * Where each early enter stands (into: 5 = the core, just outside it in S4; 6 = the recore,
+     * inside the core, where the core player goes once everyone's leapt) and which way they face.
+     * Who does it comes from the roles (the recore: the core's).
+     */
+    class EarlyEnter(val key: String, val label: String, val into: Int, var spot: Vec3, var yaw: Float = 0f, var pitch: Float = 0f) {
+        val owner: DungeonClass? get() = plan().ee[if (into == 6) 5 else into]
         val on get() = owner != null
         val byYou get() = owner != null && owner == P3Sim.myClass
     }
@@ -29,9 +33,12 @@ object P3Plan {
     fun defaultEarlyEnters() = listOf(
         // On S2's device (Lights): the EE2 player does it early and waits there for the leaps.
         EarlyEnter("ee2", "EE2", 2, Vec3(60.6, 132.0, 139.0)),
-        EarlyEnter("ee3", "EE3", 3, Vec3(0.0, 109.0, 112.2)),
+        // Where undonecoffee stands for it.
+        EarlyEnter("ee3", "EE3", 3, Vec3(1.9, 109.0, 104.6)),
         EarlyEnter("ee4", "EE4", 4, Vec3(41.3, 109.0, 32.6)),
-        EarlyEnter("core", "Core", 5, Vec3(54.6, 115.0, 51.5)),
+        // Just outside the core in S4; then inside it.
+        EarlyEnter("core", "Core", 5, Vec3(54.5, 115.06, 50.5)),
+        EarlyEnter("recore", "Recore", 6, Vec3(54.4, 115.0, 57.6)),
     )
 
     // ------------------------------------------------------------------ the plan
@@ -143,14 +150,20 @@ object P3Plan {
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
             // EE2 used to default to S2's 1st terminal (69, 109, 124.7): a saved copy of that goes to the new default.
-            s.spots?.forEach { (k, v) -> earlyEnters.firstOrNull { it.key == k }?.let { if (v.size == 3 && !(k == "ee2" && v == listOf(69.0, 109.0, 124.7))) it.spot = Vec3(v[0], v[1], v[2]) } }
+            // [x, y, z] or [x, y, z, yaw, pitch].
+            s.spots?.forEach { (k, v) ->
+                earlyEnters.firstOrNull { it.key == k }?.let {
+                    if (v.size >= 3 && !(k == "ee2" && v == listOf(69.0, 109.0, 124.7))) it.spot = Vec3(v[0], v[1], v[2])
+                    if (v.size >= 5) { it.yaw = v[3].toFloat(); it.pitch = v[4].toFloat() }
+                }
+            }
         }
     }
 
     fun save() {
         EngineerClient.safely("p3sim plan save") {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
-                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z) })
+                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) })
             file.parentFile.mkdirs()
             // The copy before this session's first save, should a save ever lose something (as one did EE3's spot).
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }

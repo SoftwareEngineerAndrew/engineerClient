@@ -80,7 +80,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         text("§7Who early-enters comes from the roles (Plan tab). The bot goes to the spot after its last job;")
         text("§7the others pre-leap onto it. Yours: get there and they leap onto you, one after another.")
         for (ee in P3Plan.earlyEnters) {
-            val into = if (ee.into == 5) "core" else "S${ee.into}"
+            val into = when (ee.into) { 5 -> "by core"; 6 -> "in core"; else -> "S${ee.into}" }
             val who = ee.owner?.let { if (ee.byYou) "§bYou (${Roles.label(it)})" else "§a${Roles.label(it)}" } ?: "§8nobody"
             row(listOf(
                 label("§f${ee.label} §8→ $into", 60),
@@ -88,11 +88,13 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
                 change("Spot: here", 60) {
                     mc.player?.let {
                         ee.spot = Vec3(round1(it.x), Math.floor(it.y * 100) / 100.0, round1(it.z))
+                        ee.yaw = Math.round(net.minecraft.util.Mth.wrapDegrees(it.yRot) * 10) / 10f
+                        ee.pitch = Math.round(it.xRot * 10) / 10f
                         P3Plan.save()
-                        it.sendSystemMessage(net.minecraft.network.chat.Component.literal("§8[§6P3 Sim§8] §7${ee.label} spot saved: §f${"%.1f, %.2f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)}"))
+                        it.sendSystemMessage(net.minecraft.network.chat.Component.literal("§8[§6P3 Sim§8] §7${ee.label} spot saved: §f${"%.1f, %.2f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)} §7facing §f${"%.1f / %.1f".format(Locale.ROOT, ee.yaw, ee.pitch)}"))
                     }
                 },
-                label("§8${"%.1f, %.1f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)}", 110),
+                label("§8${"%.1f, %.1f, %.1f §7%.0f°".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z, ee.yaw)}", 130),
             ))
         }
         row(listOf(

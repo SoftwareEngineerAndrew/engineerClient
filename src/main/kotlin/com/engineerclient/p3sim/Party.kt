@@ -39,6 +39,9 @@ object Party {
         var entity: Mannequin? = null
         var pos: Vec3 = Vec3.ZERO
         var yaw = 0f
+        var pitch = 0f
+        /** Which way it turns once it's where it's going (an early-enter spot's), or null: as it walked. */
+        var face: Pair<Float, Float>? = null
         /** Where it's walking to (null: standing), from n = [goAt]. */
         var to: Vec3? = null
         var goAt = 0
@@ -87,7 +90,8 @@ object Party {
     private fun Vec3.short() = "%.1f %.1f %.1f".format(x, y, z)
 
     /** Off to [to] (from n = [at], there by [due]; -1: walking pace), for [why]. */
-    private fun go(b: Bot, to: Vec3, at: Int, due: Int, why: String) {
+    private fun go(b: Bot, to: Vec3, at: Int, due: Int, why: String, face: Pair<Float, Float>? = null) {
+        b.face = face
         if (b.to != to) dbg("§e${b.name}§7 -> $why (${to.short()}, ${"%.0f".format(b.pos.distanceTo(to))} blocks${if (due >= 0) ", due in ${(due - dbgN) / 20.0}s" else ""}${if (at > dbgN) ", leaves in ${(at - dbgN) / 20.0}s" else ""})")
         b.to = to; b.goAt = at; b.due = due
     }
@@ -175,10 +179,11 @@ object Party {
         for (b in bots) {
             b.inSection = from
             val core = plan.ee[5] == b.clazz && from >= 3
-            if (core) b.inSection = 5
+            // Starting from S3/S4: the core early enterer is already on its spot (by the core), holding.
+            if (core) { b.inSection = 5; eeArrived[5] = true; b.hold = from < 5; P3Plan.ee(5)?.let { b.yaw = it.yaw; b.pitch = it.pitch } }
             val first = next(b)?.takeIf { sectionOf(it.job) == from }
             spawn(b, when {
-                core -> CORE_EE.add(Random.nextDouble(-1.0, 1.0), 0.0, 0.0)
+                core -> CORE_EE
                 from == 1 -> startPos(1)
                 first != null -> spotOf(first.job)
                 else -> P3Plan.ee(from)?.spot ?: startPos(from)
@@ -316,14 +321,15 @@ object Party {
             // Not before its jobs in the sections before (the EE3 bot does its S2 ones first, not straight from S1).
             if (jobs.any { it.bot === b && (sectionOf(it.job) < into || it.timeSection < into) }) continue
             if (b.pos.distanceTo(ee.spot) < 0.5) {
-                b.inSection = into; eeArrived[into] = true; b.hold = into <= 4
+                b.inSection = into; eeArrived[into] = true; b.hold = true
+                b.yaw = ee.yaw; b.pitch = ee.pitch
                 if (P3Sim.debugBots) dbg("§a${b.name} is on its ${ee.label} spot§7${if (b.hold) ", holding" else ""}") else Sim.note("§e${b.name}§7 is on ${ee.label}.")
                 continue
             }
             if (b.to != ee.spot) {
                 // On the spot by the preset's time (no earlier than walking there takes).
                 val walk = (b.pos.distanceTo(ee.spot) / WALK).toInt()
-                go(b, ee.spot, if (eeSpotBy[into] >= 0) (eeSpotBy[into] - walk).coerceAtLeast(phase.n) else phase.n, eeSpotBy[into], "its ${ee.label} spot")
+                go(b, ee.spot, if (eeSpotBy[into] >= 0) (eeSpotBy[into] - walk).coerceAtLeast(phase.n) else phase.n, eeSpotBy[into], "its ${ee.label} spot", ee.yaw to ee.pitch)
             }
             break
         }
@@ -333,7 +339,7 @@ object Party {
     private fun preleaps(phase: GoldorPhase) {
         val n = phase.n
         val into = phase.section + 1
-        if (into > 4) return
+        if (into > 5) return
         val ee = P3Plan.ee(into) ?: return
         val eeBot = if (ee.byYou) null else botOf(ee.owner)
         val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] &&
@@ -358,15 +364,15 @@ object Party {
         val s = phase.section
         // You're on an early enterer once you're within 3 blocks of it (by position: a leap lands
         // you on it) while it holds on its spot; on it before it got there doesn't count.
-        for (into in s..(s + 1).coerceAtMost(4)) {
+        for (into in s..(s + 1).coerceAtMost(5)) {
             val b = P3Plan.ee(into)?.takeIf { !it.byYou }?.let { botOf(it.owner) } ?: continue
             if (youOn[into] || !b.hold || !eeArrived[into] || released[into]) continue
             if (Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) { youOn[into] = true; dbg("§ayou're on ${b.name}§7 (EE$into)") }
         }
-        for (into in s..(s + 1).coerceAtMost(4)) {
+        for (into in s..(s + 1).coerceAtMost(5)) {
             val ee = P3Plan.ee(into)?.takeIf { !it.byYou } ?: continue
             val b = botOf(ee.owner) ?: continue
-            if (!b.hold || !eeArrived[into] || b.inSection < into) continue
+            if (released[into] || !b.hold || !eeArrived[into] || b.inSection < into) continue
             val waits = waitsFor[into]
             val ok = when {
                 // Never without you (a safety net at 30 s); the bots get 10 s.
@@ -382,7 +388,12 @@ object Party {
             if (!ok) { readyAt[into] = -1; continue }
             if (readyAt[into] < 0) { readyAt[into] = n; dbg("§e${b.name}§7: everyone's on EE$into, moving in ${RELEASE_DELAY / 20.0}s") }
             if (n - readyAt[into] < RELEASE_DELAY) continue
-            run { released[into] = true; dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}"); b.hold = false; walkOn(b, n) }
+            released[into] = true
+            dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}")
+            // The core early enterer goes into the core (recore) and waits there: everyone leaps onto it in.
+            val recore = if (into == 5) P3Plan.ee(6) else null
+            if (recore != null) go(b, recore.spot, n, -1, "the recore (in the core)", recore.yaw to recore.pitch)
+            else { b.hold = false; walkOn(b, n) }
         }
     }
 
@@ -490,8 +501,8 @@ object Party {
             val len = d.length()
             // Walking, unless it has to be there sooner (then as fast as that takes, up to etherwarp pace).
             val step = (if (b.due > n) maxOf(WALK, len / (b.due - n)) else if (b.due >= 0) FAST else WALK).coerceAtMost(FAST)
-            if (len <= step) { b.pos = to; b.to = null } else b.pos = b.pos.add(d.scale(step / len))
-            if (Math.abs(d.x) + Math.abs(d.z) > 0.01) b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat()
+            if (Math.abs(d.x) + Math.abs(d.z) > 0.01) { b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat(); b.pitch = 0f }
+            if (len <= step) { b.pos = to; b.to = null; b.face?.let { b.yaw = it.first; b.pitch = it.second } } else b.pos = b.pos.add(d.scale(step / len))
         }
         place(b)
     }
@@ -527,7 +538,7 @@ object Party {
 
     private fun place(b: Bot) {
         val e = b.entity ?: return
-        e.snapTo(b.pos.x, b.pos.y, b.pos.z, b.yaw, 0f)
+        e.snapTo(b.pos.x, b.pos.y, b.pos.z, b.yaw, b.pitch)
         e.yHeadRot = b.yaw; e.yBodyRot = b.yaw
     }
 
