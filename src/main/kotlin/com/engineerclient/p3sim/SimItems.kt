@@ -118,17 +118,21 @@ object SimItems {
     val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", "§aPet Rod", listOf("§7Cast it to swap your pet:", "§6Phoenix §7(saves you, 400 speed) and", "§6Black Cat §7(500 speed)."))
     val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
 
-    /** The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory. */
+    /**
+     * The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory -
+     * laid out as your saved layout for that part has them ([HotbarLayout]), else as below.
+     */
     fun giveHotbar(p: ServerPlayer, p3: Boolean = true) {
         val inv = p.inventory
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
-        bar.forEachIndexed { i, s -> inv.setItem(i, s) }
         // 9: the spare mask (Masks.equip, Real Masks).
-        inv.setItem(10, if (p3) HYPERION else SUPERBOOM); inv.setItem(11, AOTV); inv.setItem(12, SPIRIT_BOW); inv.setItem(13, PEARLS)
+        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS)
+        val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
+        items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Masks.equip(p)
-        inv.selectedSlot = 3
-        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(3))
+        inv.selectedSlot = held
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
         p.inventoryMenu.broadcastChanges()
     }

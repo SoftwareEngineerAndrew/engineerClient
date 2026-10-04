@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.odtheking.odin.features.ModuleManager
 import net.minecraft.client.gui.components.AbstractWidget
@@ -143,6 +144,14 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             button("Reset Items", 80) { server { Sim.player?.let { SimItems.giveHotbar(it, Fight.phase !is P1Maxor && Fight.phase !is P2Storm) } } },
             button("§7Leave", 60) { SimWorld.leave() },
         ))
+        // Your item layout for hotbar resets, P1/P2's or P3's (whichever part you are in): HotbarLayout.
+        val p3Part = Fight.phase !is P1Maxor && Fight.phase !is P2Storm
+        val part = if (p3Part) "P3" else "P1/P2"
+        row(listOf(
+            button("Save $part Hotbar", 110) { server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } } },
+            button("Default $part Hotbar", 120) { server { EngineerClient.msg(HotbarLayout.reset(p3Part)) } },
+        ))
+        text("§8Arrange your items, then Save: every hotbar reset in ${part} lays them out that way" + if (HotbarLayout.has(p3Part)) " §7(saved)" else ".")
         text("§8These are also in Odin's click GUI (Engineer Client > P3 Sim).")
     }
 
