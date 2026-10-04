@@ -46,11 +46,12 @@ object P3Sim : Module(
     }
     // Kept as objects (not delegates) so the sim's own menu can change them.
     val classS = +SelectorSetting("Your Class", "Berserk", arrayListOf("Healer", "Berserk", "Archer", "Tank", "Mage"), desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
-    val speedS = +NumberSetting("Speed", 500, 100, 750, 10, desc = "Your Skyblock speed in the sim. Most players run boss at 500 (the cap): 1.40 blocks a tick sprinting, as measured in Better PF runs.")
+    val speedS = +NumberSetting("Speed", 450, 100, 750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
     val botsS = +BooleanSetting("Party Bots", true, desc = "Four bots do the rest of the party's terminals, levers, devices and gates at the pace of fast Better PF runs. Off: you do everything.")
     val deathTicksS = +SelectorSetting("Death Ticks", "Masks", arrayListOf("Off", "Warn", "Masks"), desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
     val terminalS = +SelectorSetting("Terminals", "Random", arrayListOf("Random", "Order", "Panes", "Rubix", "Starts With", "Select", "Melody"), desc = "Every terminal as this type, or random as on Hypixel.")
     val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
+    val jitterS = +BooleanSetting("Ping Jitter", true, desc = "Simulated Ping varies like a real connection: usually a few ms either way, now and then 30+ ms more, rarely a lag spike (spread recorded on Hypixel). Off: a fixed delay.")
     val goldorKillS = +NumberSetting("Goldor Kill Time", 57, 10, 120, 1, unit = " ticks", desc = "How long after Goldor leaves for the core he dies (median of 201 recorded kills: 57).")
     val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at full attack speed (recordings: Terminator 5, Mosquito 5 with Terror on, 7 without). A click inside it fires when it ends. Nasty Bite has its own 10.")
     val terrorS = +SelectorSetting("Terror Armor", "3 Pieces", arrayListOf("Off", "3 Pieces", "4 Pieces"), desc = "Hydra Strike: +1 stack per boss hit (every 0.2 s at most), one lost every 8 s (3 pieces, a mask on your head) or 11 s (4 pieces) without a hit; +1% arrow speed a stack and, at 10, two more arrows at ±8°. Off: no stacks.")
@@ -63,7 +64,7 @@ object P3Sim : Module(
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.05, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")
     val realMasksS = +BooleanSetting("Real Masks", true, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
     val wornMaskS = +SelectorSetting("Starting Mask", "Spirit", arrayListOf("Spirit", "Bonzo"), desc = "Real Masks: the mask you wear (/stats swaps it).")
-    val phoenixS = +BooleanSetting("Phoenix Pet", true, desc = "Your pet: Phoenix (saves you from a death, 100 less speed) or Black Cat (your full speed). The Pet Rod swaps them.")
+    val phoenixS = +BooleanSetting("Phoenix Pet", true, desc = "Your pet: Phoenix (saves you from a death, no Black Cat speed bonus) or Black Cat (+100 speed). The Pet Rod swaps them.")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
     val p3OnlyS = +BooleanSetting("Stop After P3", true, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
@@ -76,6 +77,7 @@ object P3Sim : Module(
     val bots: Boolean get() = botsS.value
     val deathTicks: Int get() = deathTicksS.value
     val ping: Int get() = pingS.value.toInt()
+    val jitter: Boolean get() = jitterS.value
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
     val shortbowCooldown: Int get() = shortbowCooldownS.value.toInt()

@@ -33,7 +33,8 @@ object Lava {
             // Rising out of the last bounce: no second one in the air.
             if (now - bouncedAt < 4) return
             touchedAt = now
-            bounceAt = now + delay()
+            // Necron-start lava (y~55): re-bounces 4 ticks after the last one, no delay (LAVA-10).
+            bounceAt = now + (if (now - bouncedAt <= 4 && necronLava(p)) 0 else delay())
         }
         if (now < bounceAt) return
         bounce(p, now)
@@ -53,30 +54,33 @@ object Lava {
         return false
     }
 
-    /** Contact -> bounce: mode 2, mostly 1-6. */
+    /** Contact -> bounce as recorded (LAVA-02, 181 bounces): 0 5%, 1 39%, 2 42%, 3 13%, 4 1%; never 5+. */
     private fun delay(): Int {
         val r = Random.nextDouble()
         return when {
-            r < 0.12 -> 1
-            r < 0.52 -> 2
-            r < 0.80 -> 3
-            r < 0.90 -> 4
-            r < 0.96 -> 5
-            else -> 6
+            r < 0.05 -> 0
+            r < 0.44 -> 1
+            r < 0.86 -> 2
+            r < 0.99 -> 3
+            else -> 4
         }
     }
 
+    /** The lava under Necron's start (y 54-62). */
+    private fun necronLava(p: ServerPlayer) = p.y in 54.0..62.0
+
     /**
-     * The 3.038 bounce is the one you get looking up: pitch -41 or further up, as you were 2 ticks
+     * The 3.038 bounce is the one you get looking up: pitch -40.7 or further up, as you were 2 ticks
      * before the bounce (Hypixel decides on the look it has, a round trip behind). Better PF's 217
      * runs: 2 misses in 515 of the recorder's own bounces at that lag (both flicks across it).
      */
-    private const val HIGH_PITCH = -41f
+    private const val HIGH_PITCH = -40.7f
     private const val PITCH_LAG = 2
     private val pitches = FloatArray(PITCH_LAG + 1)
 
     private fun bounce(p: ServerPlayer, now: Int) {
-        val p3Lava = p.y < 108.5 && p.y > 104.0
+        // The 3.038 variant exists in the P3 lava and the Necron-start lava (LAVA-10).
+        val p3Lava = (p.y < 108.5 && p.y > 104.0) || necronLava(p)
         val vy = if (p3Lava && pitches[(now - PITCH_LAG).mod(pitches.size)] <= HIGH_PITCH) 3.038 else 2.25
         p.deltaMovement = Vec3(0.0, vy, 0.0)
         p.hurtMarked = true

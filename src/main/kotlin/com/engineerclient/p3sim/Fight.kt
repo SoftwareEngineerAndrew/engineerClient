@@ -8,6 +8,7 @@ import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.entity.ai.attributes.Attributes
 import net.minecraft.world.level.GameType
+import kotlin.random.Random
 
 /**
  * The fight: which phase runs, the server tick, delayed actions, and the player's setup. Server
@@ -57,17 +58,71 @@ object Fight {
     /** The player's ping, in server ticks: what their clicks and items wait before the server acts. */
     val pingTicks: Int get() = (P3Sim.ping.toInt() + 25) / 50
 
-    /** Runs [run] after the simulated ping (at once with none). */
+    private class Timed(val dueNs: Long, val what: String, val epoch: Int, val run: () -> Unit)
+    private val timed = ArrayList<Timed>()
+
+    /**
+     * One simulated delay in real ms, sub-tick: the setting, plus (Ping Jitter) the spread recorded on
+     * Hypixel (PING-03: round trip p10 30 / median 33 / p90 63 / p99 73 ms, with rare 150 ms+ spikes), as an
+     * offset from the 33 ms median so it doesn't scale with the setting. 0 with no ping.
+     */
+    fun pingMs(): Double {
+        val base = P3Sim.ping.toDouble()
+        if (base <= 0.0) return 0.0
+        if (!P3Sim.jitter) return base
+        val u = Random.nextDouble()
+        // Quantile table of RTT / median: (cumulative probability, factor).
+        val q = JITTER_Q
+        var f = q.last()[1]
+        for (i in 1 until q.size) if (u <= q[i][0]) { val a = q[i - 1]; val b = q[i]; f = a[1] + (b[1] - a[1]) * (u - a[0]) / (b[0] - a[0]); break }
+        return (base + (f - 1.0) * 33.0).coerceAtLeast(base * 0.5)
+    }
+    private val JITTER_Q = arrayOf(
+        doubleArrayOf(0.0, 0.85), doubleArrayOf(0.10, 0.91), doubleArrayOf(0.50, 1.0), doubleArrayOf(0.90, 1.9),
+        doubleArrayOf(0.99, 2.2), doubleArrayOf(0.998, 3.5), doubleArrayOf(1.0, 8.0),
+    )
+
+    /** Runs [run] after the simulated ping, in real time: at the first server tick on or after the delay (at once with none). */
     fun afterPing(what: String, run: () -> Unit) {
-        val n = pingTicks
+        val ms = pingMs()
         val p = phase
-        if (n == 0) run() else later(n, what) { if (phase === p) run() }
+        if (ms <= 0.0) run()
+        else timed += Timed(System.nanoTime() + (ms * 1e6).toLong(), what, epoch) { if (phase === p) run() }
+    }
+
+    /** (xRot, yRot) as of the end of the last server tick: the rotation of the movement packet before a click's (JERRY-03). */
+    var lastRot: Pair<Float, Float> = 0f to 0f
+        private set
+    private val posHistory = java.util.ArrayDeque<Pair<Long, net.minecraft.world.phys.Vec3>>()
+
+    /**
+     * Where the server sees [p]: where they were one one-way latency ago (PING-08: its checks run on the
+     * position packets that arrived, so about ping/2 late). Live position with no ping.
+     */
+    fun seenPos(p: ServerPlayer): net.minecraft.world.phys.Vec3 {
+        val live = p.position()
+        val ms = P3Sim.ping / 2.0
+        if (ms <= 0.0 || posHistory.isEmpty()) return live
+        val target = System.nanoTime() - (ms * 1e6).toLong()
+        var prev: Pair<Long, net.minecraft.world.phys.Vec3>? = null
+        for (e in posHistory) {
+            if (e.first >= target) {
+                val a = prev ?: return e.second
+                val t = (target - a.first).toDouble() / (e.first - a.first).coerceAtLeast(1)
+                return a.second.lerp(e.second, t.coerceIn(0.0, 1.0))
+            }
+            prev = e
+        }
+        val a = prev ?: return live
+        val t = (target - a.first).toDouble() / (System.nanoTime() - a.first).coerceAtLeast(1)
+        return a.second.lerp(live, t.coerceIn(0.0, 1.0))
     }
 
     fun reset(server: MinecraftServer) {
         serverTick = 0
         epoch++
         later.clear()
+        timed.clear(); posHistory.clear()
         Terminals.closeAll()
         SimItems.reset()
         phase = null
@@ -83,6 +138,7 @@ object Fight {
         phase = null
         epoch++
         later.clear()
+        timed.clear()
         Terminals.closeAll()
         // The Dungeonbreaker's broken blocks would grow back into the next start's world (a gate a
         // later start has open); cooldowns start fresh, as the masks' do.
@@ -110,6 +166,10 @@ object Fight {
         player.getAttribute(Attributes.KNOCKBACK_RESISTANCE)?.baseValue = 1.0
         player.getAttribute(Attributes.STEP_HEIGHT)?.baseValue = 0.6
         player.isInvulnerable = true
+        // Hypixel main: 40 hp with 16 absorption (MOVE-05).
+        player.getAttribute(Attributes.MAX_HEALTH)?.baseValue = 40.0
+        player.health = 40f
+        player.absorptionAmount = 16f
         player.removeEffect(MobEffects.SATURATION)
         // Invulnerable players are never hungry or hurt; the effects are Hypixel's (night vision 1, or with haste 0 + mining fatigue 255).
         player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 0, false, false, false))
@@ -132,9 +192,9 @@ object Fight {
         field("optimalAimPositions").set(null, emptyList<Any>())
     }
 
-    /** Your speed: the setting with Black Cat out, 100 less with Phoenix. */
+    /** Your speed: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out adds nothing. */
     fun applySpeed(player: ServerPlayer) {
-        val speed = P3Sim.speed - if (P3Sim.phoenix) 100 else 0
+        val speed = P3Sim.speed + if (P3Sim.phoenix) 0 else 100
         player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = speed.coerceAtLeast(100).toDouble() / 1000.0
     }
 
@@ -222,6 +282,17 @@ object Fight {
             val due = later.filter { it.at <= serverTick }
             later.removeAll(due.toSet())
             due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.run() } }
+        }
+        if (timed.isNotEmpty()) {
+            val nowNs = System.nanoTime()
+            val due = timed.filter { it.dueNs <= nowNs }.sortedBy { it.dueNs }
+            timed.removeAll(due.toSet())
+            due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.run() } }
+        }
+        Sim.player?.let { pl ->
+            lastRot = pl.xRot to pl.yRot
+            posHistory.addLast(System.nanoTime() to pl.position())
+            while (posHistory.size > 40) posHistory.removeFirst()
         }
         Blocks.tick()
         Terminals.tick()

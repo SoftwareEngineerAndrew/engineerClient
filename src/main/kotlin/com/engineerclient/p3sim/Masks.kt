@@ -142,7 +142,7 @@ object Masks {
 
     // ------------------------------------------------------------------ the pet rod
 
-    /** The Pet Rod: Phoenix (saves you once, 400 speed) <-> Black Cat (your full speed). */
+    /** The Pet Rod: Phoenix (saves you once, no Black Cat bonus) <-> Black Cat (+100 speed); applySpeed does the rest. */
     fun swapPet(p: ServerPlayer) {
         P3Sim.phoenixS.value = !P3Sim.phoenix
         Fight.applySpeed(p)
@@ -156,7 +156,11 @@ object Masks {
     /** Invincible until (after a proc). */
     private var safeUntil = 0
 
-    fun reset() { items.forEach { it.readyAt = 0 }; safeUntil = 0 }
+    fun reset() {
+        items.forEach { it.readyAt = 0 }; safeUntil = 0
+        reviveGen++
+        if (ghost) { ghost = false; saved = null; Sim.player?.let { p -> p.removeEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY); p.abilities.flying = false; p.abilities.mayfly = false; p.onUpdateAbilities() } }
+    }
 
     private fun worn(): String? = Sim.player?.let { SimItems.idOf(it.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
 
@@ -171,9 +175,10 @@ object Masks {
     }
 
     /** [by]: the killer named in the death line, or null for the plain "You died" (chat-attacks.md §1.2). */
-    fun hit(p: ServerPlayer, by: String?) {
+    fun hit(p: ServerPlayer, by: String?, goldor: (() -> Unit)? = null) {
         val now = Fight.serverTick
-        if (now < safeUntil) return
+        // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds (MASKS-04, DEATH-10).
+        if (ghost || now < safeUntil) { goldor?.invoke(); return }
         val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
             else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
@@ -186,25 +191,95 @@ object Masks {
             // Proc particles as recorded (MASKS-08): explosion x3 at your feet, Phoenix adds lava x18.
             Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
             if (item.id == "PHOENIX") Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA, p.x, p.y, p.z, 18, 0.1, 0.1, 0.1, 0.08)
-            Sim.chat(item.line)
-            // Proc sounds as measured (chat-attacks.md §2): masks cure + wither + eat, Phoenix extinguish + infect + wither.
+            // Proc order as recorded (MASKS-04/06/07): masks eat + cure then the proc chat; Phoenix chat, then
+            // extinguish, two infects and the ghast scream; then Goldor's line. No enderman sound on Spirit.
             if (item.id == "PHOENIX") {
-                Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.49f)
+                Sim.chat(item.line)
+                Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.49f, null, net.minecraft.sounds.SoundSource.BLOCKS)
                 Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f)
+                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f)
+                Sim.sound(SoundEvents.GHAST_SCREAM, 1f, 1.41f + kotlin.random.Random.nextFloat() * 0.15f)
             } else {
-                Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f)
                 Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f)
-                // Spirit's Second Wind adds enderman.teleport at pitch 0 (items-timing.md §4; 0.5 is the lowest a client plays).
-                if (item.id == "SPIRIT_MASK") Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 0.5f)
+                Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f)
+                Sim.chat(item.line)
             }
-            Sim.sound(SoundEvents.WITHER_AMBIENT, 1f, 1f)
+            goldor?.invoke()
             return
         }
         Sim.chat(if (by == null) "§c ☠ §r§7You died and became a ghost." else "§c ☠ §r§7You were killed by $by and became a ghost.")
-        Sim.title("§cYou died", "§7No masks left", 0, 40, 10)
-        val phase = Fight.phase as? GoldorPhase
-        val spot = phase?.let { Spots.p3Start(it.section.coerceIn(1, 5)) } ?: Spots.LOBBY
-        Sim.tp(p, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
+        // The Revive Stone line shows in about half of the deaths on main (DEATH-15); it changes nothing.
+        if (kotlin.random.Random.nextBoolean()) Sim.chat("§aYour Revive Stone revived you and broke!")
+        becomeGhost(p)
+        Sim.sound(SoundEvents.GENERIC_HURT, 1f, 0.889f, null, net.minecraft.sounds.SoundSource.NEUTRAL)
+        goldor?.invoke()
         // No immunity after dying or a revive (rec2 14-01-12: killed again on the next death tick).
+    }
+
+    // ------------------------------------------------------------------ the ghost
+
+    /** Dead and waiting for a revive: invisible, flying where you died, with the ghost kit. */
+    var ghost = false
+        private set
+    private var saved: List<ItemStack>? = null
+    private var savedSlot = 0
+    private var reviveGen = 0
+
+    private fun ghostItem(base: net.minecraft.world.item.Item, name: String, count: Int = 1) =
+        ItemStack(base, count).also { it.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { s -> s.withItalic(false) }) }
+
+    private fun becomeGhost(p: ServerPlayer) {
+        ghost = true
+        val inv = p.inventory
+        saved = (0 until 36).map { inv.getItem(it).copy() }
+        savedSlot = inv.selectedSlot
+        for (i in 0 until 36) inv.setItem(i, ItemStack.EMPTY)
+        // The ghost kit as recorded (DEATH-05): Haunt in hotbar 1, potions and axe, the map, Ghost Arrows. Inert here
+        // (the potions are class-dependent on Hypixel; the Haunt menu is not modelled).
+        inv.setItem(0, ghostItem(net.minecraft.world.item.Items.PLAYER_HEAD, "§aHaunt"))
+        inv.setItem(3, ghostItem(net.minecraft.world.item.Items.POTION, "§fStrength Potion"))
+        inv.setItem(5, ghostItem(net.minecraft.world.item.Items.IRON_AXE, "§fGhost Axe"))
+        inv.setItem(8, ghostItem(net.minecraft.world.item.Items.MAP, "§fMagical Map"))
+        inv.setItem(9, ghostItem(net.minecraft.world.item.Items.ARROW, "§fGhost Arrow", 10))
+        inv.selectedSlot = 0
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(0))
+        p.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false, false))
+        p.abilities.mayfly = true
+        p.abilities.flying = true
+        p.onUpdateAbilities()
+        p.containerMenu.broadcastChanges()
+        p.inventoryMenu.broadcastChanges()
+        Sim.title("§eYou became a ghost!", "§7Hopefully your teammates will be able to revive you!", 0, 100, 5)
+        // Revived 119-137 ticks on (median ~124); the countdown titles run 5..1 from 100 ticks before (DEATH-01/04).
+        val delay = if (kotlin.random.Random.nextInt(10) < 6) kotlin.random.Random.nextInt(120, 126) else kotlin.random.Random.nextInt(119, 138)
+        val gen = ++reviveGen
+        for (k in 0 until 5) Fight.later(delay - 100 + 20 * k, "revive title") {
+            if (ghost && gen == reviveGen) Sim.title("§e§lBEING REVIVED", "§aYou will be revived in ${5 - k}s", 0, 30, 0)
+        }
+        Fight.later(delay, "revive") { if (ghost && gen == reviveGen) revive(p) }
+    }
+
+    private fun revive(p: ServerPlayer) {
+        // The reviver: the nearest bot (reviver choice isn't known; bots never die). No bots: a self-revive in place.
+        val bot = Party.bots().filter { it.entity != null }.minByOrNull { it.pos.distanceToSqr(p.position()) }
+        endGhost(p)
+        Sim.chat("§a ❣ §r§b${Sim.me}§r§a was revived by §r§b${bot?.name ?: Sim.me}§r§a!")
+        Sim.chat("§cAutopet rule triggered but couldn't find your pet!")
+        if (bot != null) Sim.tp(p, bot.pos.x, bot.pos.y, bot.pos.z, p.yRot, p.xRot)
+    }
+
+    /** Back to normal: abilities, visibility and the inventory you had. */
+    private fun endGhost(p: ServerPlayer) {
+        ghost = false
+        p.removeEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY)
+        p.abilities.flying = false
+        p.abilities.mayfly = false
+        p.onUpdateAbilities()
+        saved?.let { s -> s.forEachIndexed { i, st -> p.inventory.setItem(i, st) } }
+        saved = null
+        p.inventory.selectedSlot = savedSlot
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(savedSlot))
+        p.containerMenu.broadcastChanges()
+        p.inventoryMenu.broadcastChanges()
     }
 }

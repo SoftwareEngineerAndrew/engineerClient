@@ -56,6 +56,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private var coreAt = -1
     private var everyoneInAt = -1
     private var deadAt = -1
+    /** Frenzy hits in a row (DEATH-08: the third one killed you, 2,849 then 44k then 54k; on alpha the second). */
+    private var frenzyHits = 0
     private var arrivedAt = -1
     private var necronAt = -1
     private var p3endAt = -1
@@ -340,6 +342,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         gateAt[s] = n
         if (by == Sim.me) GhostCapture.event("gate", k = s)
         Sim.chat("§aThe gate has been destroyed!")
+        // Hypixel: an empty title and the subtitle on the same tick (SUPERBOOM-04).
+        Sim.title("", "§aThe gate has been destroyed!")
         // The progress pling comes with this line too (164 of 164 with no progress line near; boss recorder).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
         SimItems.gatePuffs(GATE_CENTRES[s])
@@ -358,18 +362,25 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     private fun deathTick() {
         val p = Sim.player ?: return
-        if (p.isSpectator || p.isCreative || SimItems.cloaked) return
-        if (inSafeSpot(p.position())) return
+        if (p.isSpectator || p.isCreative || SimItems.cloaked || Masks.ghost) return
+        // The server's view of you, about one one-way latency late (PING-08).
+        val seen = Fight.seenPos(p)
+        if (inSafeSpot(seen)) return
         // Only the next section ahead, and S4 while S1 is in progress (goldor.md, death ticks).
-        val at = P3Sections.sectionAt(p.x, p.y, p.z)
+        val at = P3Sections.sectionAt(seen.x, seen.y, seen.z)
         if (at != section + 1 && !(section == 1 && at == 4)) return
         deaths++
         Stats.deathTick(n)
-        gsay("What do you think you are doing there!", stand = false)   // FLOW-14: no line stand for death ticks (0/98)
+        // FLOW-14: no line stand for death ticks (0/98). Quiet wither.ambient 1/1 HOSTILE at you, not the loud boss sound (DEATH-09);
+        // after the death/proc chat and sounds (DEATH-10).
+        val line = {
+            Sim.chat("§4[BOSS] Goldor§r§c: What do you think you are doing there!")
+            Sim.sound(SoundEvents.WITHER_AMBIENT, 1f, 1f, null, net.minecraft.sounds.SoundSource.HOSTILE)
+        }
         when (P3Sim.deathTicks) {
-            0 -> {}
-            1 -> Sim.title("", "§cDeath tick §7(S$at ahead of S$section)", 0, 25, 5)
-            else -> Masks.hit(p, "Goldor")
+            0 -> line()
+            1 -> { line(); Sim.title("", "§cDeath tick §7(S$at ahead of S$section)", 0, 25, 5) }
+            else -> Masks.hit(p, null, line)   // the plain "You died and became a ghost." (MASKS-03)
         }
     }
 
@@ -389,7 +400,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** True when everyone (you and the bots) is in the core. */
     private fun everyoneIn(): Boolean {
         val p = Sim.player ?: return false
-        if (!CORE_BOX.contains(p.position())) return false
+        if (!CORE_BOX.contains(Fight.seenPos(p))) return false
         return Party.allIn(CORE_BOX)
     }
 
@@ -414,7 +425,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Frenzy: every ~10 ticks while you're 2-14 blocks from him (goldor.md, damage).
         if (deadAt < 0 && n % 10 == 0) Sim.player?.let { p ->
             val d = p.position().distanceTo(goldor.position)
-            if (!p.isSpectator && !p.isCreative && d in 2.0..14.0) {
+            if (Masks.ghost || p.isSpectator || p.isCreative || d !in 2.0..14.0) frenzyHits = 0
+            else {
+                // The kill's death line comes before that tick's Frenzy line, killer named Goldor (DEATH-07/08); a mask can save it.
+                if (++frenzyHits >= 3) { Masks.hit(p, "Goldor"); frenzyHits = 0 }
                 // Format and sounds as measured: one decimal, explode v0.5 p0.49 + hurt (chat-attacks.md §1.2, §2).
                 Sim.chat("§cGoldor's§r§7 Frenzy hit you for §r§c${"%,.1f".format(java.util.Locale.US, 30000 + kotlin.random.Random.nextDouble(10000.0))}§r§7 damage.")
                 Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49f)

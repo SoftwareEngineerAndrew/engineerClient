@@ -142,7 +142,7 @@ object SimItems {
     val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", "§5Wither Cloak Sword", listOf("§6Ability: Creeper Veil §e§lRIGHT CLICK", "§7Immune to damage (death ticks) while on."))
     val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", "§aSkyBlock Menu §7(Click)", listOf("§7Opens the §aP3 Sim§7 menu: start any", "§7phase or section, teleport, change", "§7settings.", "", "§eClick to open!"))
     val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", "§5Heroic Aspect of the Void", listOf("§6Ability: Instant Transmission §e§lRIGHT CLICK", "§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK"), glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }
-    val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", "§aPet Rod", listOf("§7Cast it to swap your pet:", "§6Phoenix §7(saves you, 400 speed) and", "§6Black Cat §7(500 speed)."))
+    val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", "§aPet Rod", listOf("§7Cast it to swap your pet:", "§6Phoenix §7(saves you, ${P3Sim.speed} speed) and", "§6Black Cat §7(${P3Sim.speed + 100} speed)."))
     val TERMINATOR get() = item(Items.BOW, "TERMINATOR", "§dTerminator §6✪✪✪✪✪", listOf("§7Shortbow: instantly shoots 3 arrows!"), glint = true)
     val MOSQUITO get() = item(Items.BOW, "MOSQUITO_BOW", "§6Mosquito Shortbow", listOf("§7Shot Cooldown: §a0.5s", "", "§9Duplex I",
         "§7Shoot an extra arrow dealing §a4%§7 of the", "§7first arrow's damage.", "§9Flame II", "",
@@ -247,7 +247,7 @@ object SimItems {
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { SimServer.run("lever left") { ph.devices.leftClick(at) }; return true } }
         // Superboom: a left click on a gate blows it too.
         if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
-            SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { superboom(p, at) } } }
+            SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at) } } } }
             return true
         }
         if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
@@ -309,8 +309,10 @@ object SimItems {
     }
 
     /** Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets). */
-    private fun asClicked(p: ServerPlayer, what: String, run: () -> Unit) {
-        val xRot = p.xRot; val yRot = p.yRot
+    private fun asClicked(p: ServerPlayer, what: String, prior: Boolean = false, run: () -> Unit) {
+        // [prior]: the rotation of the last movement packet, not the click's own (Jerry-chine, JERRY-03).
+        val xRot = if (prior) Fight.lastRot.first else p.xRot
+        val yRot = if (prior) Fight.lastRot.second else p.yRot
         Fight.afterPing(what) {
             if (p.isRemoved || Sim.player !== p) return@afterPing
             val nowX = p.xRot; val nowY = p.yRot
@@ -320,7 +322,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; lastHype = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -330,10 +332,11 @@ object SimItems {
             "ASPECT_OF_THE_VOID" -> { val sneak = p.isShiftKeyDown; asClicked(p, "aotv") { if (sneak) etherwarp(p) else blink(p, 12) } }
             "HYPERION" -> asClicked(p, "hype") { if (hypeReady()) { blink(p, 10); implode(p) } }
             "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }
-            "JERRY_STAFF" -> asClicked(p, "jerry") { jerry(p) }
+            "JERRY_STAFF" -> asClicked(p, "jerry", prior = true) { jerry(p) }
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
             "INFINITE_SPIRIT_LEAP" -> openLeap(p)
-            "SUPERBOOM_TNT" -> asClicked(p, "superboom") { superboom(p, null) }
+            // A right click in the air does nothing: Hypixel needs a block target (SUPERBOOM-02).
+            "SUPERBOOM_TNT" -> {}
             in Bows.SHORTBOWS -> Bows.click(p, id, left = false)
             "PET_ROD" -> Fight.afterPing("pet rod") { Masks.swapPet(p) }
             else -> return InteractionResult.PASS
@@ -349,7 +352,7 @@ object SimItems {
         if (phase is GoldorPhase) {
             phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me) }; return InteractionResult.SUCCESS }
             if (phase.devices.use(pos)) return InteractionResult.SUCCESS
-            if (id == "SUPERBOOM_TNT") { Fight.afterPing("superboom") { superboom(p, pos) }; return InteractionResult.SUCCESS }
+            if (id == "SUPERBOOM_TNT") { Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, pos) } }; return InteractionResult.SUCCESS }
         }
         val state = Sim.level.getBlockState(pos)
         // Anything else interactable (a stray lever or button) stays as built.
@@ -419,7 +422,9 @@ object SimItems {
     }
 
     fun etherwarp(p: ServerPlayer, range: Double = 61.0) {
-        val eye = Vec3(p.x, p.y + 1.27, p.z)
+        // Cast from where the server saw you (about one one-way latency ago, ETH-07).
+        val seen = Fight.seenPos(p)
+        val eye = Vec3(seen.x, seen.y + 1.27, seen.z)
         val dir = look(p)
         val hit = dda(eye, dir, range)
         if (hit == null) { return }
@@ -435,9 +440,8 @@ object SimItems {
         }
         etherPuff(p.position())
         Sim.tp(p, x + 0.5, y + 1.05, z + 0.5)
-        // Both on the tp tick (items-timing.md §2): enderman.teleport 1/1 and dragon.hurt 1/0.54.
-        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position())
-        Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.54f, p.position())
+        // Etherwarp is ender_dragon.hurt 1/0.54 only, HOSTILE (ETH-02, ETH-06); enderman.teleport is the blink's.
+        Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.54f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
     }
 
     /** Amanatides-Woo DDA with the corner guard; the cell the ray stops in, or null. */
@@ -501,7 +505,7 @@ object SimItems {
         }
         if (cut) Sim.chat("§cThere are blocks in the way!")
         Sim.tp(p, cx + 0.5, feetY.toDouble(), cz + 0.5)
-        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position())
+        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
     }
 
     /** Wither Impact's server cooldown: a second cast within 2 server ticks is discarded, blink and Implosion both (item-mechanics.md §3, SRV-Q15/16). */
@@ -584,19 +588,40 @@ object SimItems {
      * flat part), with villager.yes.
      */
     private fun jerry(p: ServerPlayer) {
-        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.6f, 1f, p.position())
-        val eye = p.eyePosition
-        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(5.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
-        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) return
-        val at = hit.location
+        // villager.trade NEUTRAL 0.5, pitch 1.40-1.78, on the click (JERRY-04).
+        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.5f, 1.4f + Random.nextFloat() * 0.38f, p.position(), net.minecraft.sounds.SoundSource.NEUTRAL)
+        rapidFire(p)
+        // The invisible stand: one block along the look from your feet, 0.5 down; needs no block (JERRY-01).
+        val at = p.position().add(look(p)).subtract(0.0, 0.5, 0.0)
+        // Click -> boost: +1 28%, +2 53%, +3 5%, +4..7 8%, none 6% (JERRY-02).
         val r = Random.nextDouble()
-        Fight.later(if (r < 0.2) 1 else if (r < 0.8) 2 else 3, "jerry boost") {
-            if (at.distanceTo(p.position()) > 3.5) return@later
-            val d = p.position().subtract(at)
-            val n = if (d.lengthSqr() < 1e-6) Vec3.ZERO else d.normalize()
-            push(p, Vec3(n.x * 0.5, 0.6, n.z * 0.5))
-            Sim.sound(SoundEvents.VILLAGER_YES, 0.6f, 1f, p.position())
+        val delay = when {
+            r < 0.28 -> 1
+            r < 0.81 -> 2
+            r < 0.86 -> 3
+            r < 0.94 -> 4 + Random.nextInt(4)
+            else -> return
         }
+        Fight.later(delay, "jerry boost") {
+            val d = p.position().subtract(at)
+            val len = d.length()
+            val k = if (len < 1e-6) 0.0 else 0.5 / len
+            push(p, Vec3(d.x * k, 0.6, d.z * k))
+            // villager.yes 0.35 at the landing point (JERRY-05).
+            Sim.sound(SoundEvents.VILLAGER_YES, 0.35f, 1f, at)
+        }
+    }
+
+    private var rapidShots = 0
+    private var rapidLast = -1000
+
+    /** The Rapid-fire action bar: 14 x the shot in the burst, reset after 4 s idle (JERRY-08). */
+    private fun rapidFire(p: ServerPlayer) {
+        val now = Fight.serverTick
+        if (now - rapidLast > 80) rapidShots = 0
+        rapidShots++; rapidLast = now
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(
+            Component.literal("§b-${14 * rapidShots} Mana (§6Rapid-fire§b)")))
     }
 
     /** Creeper Veil: on until used again (or 10 s), then 10 s of cooldown; death ticks don't hit while it's on. */
@@ -620,10 +645,8 @@ object SimItems {
     /** Superboom TNT: blows the gate it's used on (or near where you look within 5), once that gate's section has started. */
     private fun superboom(p: ServerPlayer, on: BlockPos?) {
         val phase = Fight.phase as? GoldorPhase ?: return
-        val at = on?.let { Vec3.atCenterOf(it) } ?: run {
-            val eye = p.eyePosition
-            Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(look(p).scale(5.0)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p)).location
-        }
+        // Infinite (never consumed), and no gate or explosion without a block target (SUPERBOOM-02).
+        val at = on?.let { Vec3.atCenterOf(it) } ?: return
         Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
         val gate = phase.gateNear(at, 1.5)
