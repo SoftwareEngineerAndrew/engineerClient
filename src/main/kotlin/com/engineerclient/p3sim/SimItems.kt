@@ -734,7 +734,6 @@ object SimItems {
                 // You land on them exactly, facing as they face.
                 Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
                 Sim.chat("§aYou have teleported to §r§b${bot.name}§r§a!")
-                if (Fight.phase is GoldorPhase) Party.youLeaptOnto(bot)
                 Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position())
             }
         }

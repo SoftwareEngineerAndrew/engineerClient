@@ -349,10 +349,11 @@ object Party {
     private fun releaseEarlyEnterers(phase: GoldorPhase) {
         val n = phase.n
         val s = phase.section
-        // You're on an early enterer once you've been on it after its jobs before (on its way there counts).
+        // You're on an early enterer once you've been within 3 blocks of it (by position: a leap
+        // lands you on it), wherever it is; not in the first 3 s, when everyone starts together.
         for (into in s..(s + 1).coerceAtMost(4)) {
             val b = P3Plan.ee(into)?.takeIf { !it.byYou }?.let { botOf(it.owner) } ?: continue
-            if (youOn[into] || jobs.any { it.bot === b && (sectionOf(it.job) < into || it.timeSection < into) }) continue
+            if (youOn[into] || (s == phase.from && n - sectionN[s] < 60)) continue
             if (Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) { youOn[into] = true; dbg("§ayou're on ${b.name}§7 (EE$into)") }
         }
         for (into in s..(s + 1).coerceAtMost(4)) {
@@ -404,22 +405,8 @@ object Party {
     /** [c] has leapt onto [onto] (you: been within 3 blocks of it). */
     private fun leapt(c: DungeonClass?, onto: Bot, into: Int): Boolean = when {
         c == null || c == onto.clazz -> true
-        // You: been on it, or already through that section (your jobs in it done).
-        c == P3Sim.myClass -> youOn[into] || youDone(into)
+        c == P3Sim.myClass -> youOn[into]
         else -> botOf(c)?.let { it.inSection >= into && leaps.none { l -> l.bot === it } } ?: true
-    }
-
-    /** Section [into] has started and every job of yours in it is done (none: false). */
-    private fun youDone(into: Int): Boolean {
-        val phase = curPhase ?: return false
-        if (phase.section < into) return false
-        val mine = phase.stations.filter { it.section == into && P3Plan.isMine(it.id) }
-        return mine.isNotEmpty() && mine.all { it.done }
-    }
-
-    /** You leapt onto [b]: you're on it for whatever it early-enters (on its way there or not). */
-    fun youLeaptOnto(b: Bot) {
-        for (into in 2..4) if (P3Plan.ee(into)?.owner == b.clazz && !youOn[into]) { youOn[into] = true; dbg("§ayou leapt onto ${b.name}§7 (EE$into)") }
     }
 
     private fun preleapOpen(into: Int, n: Int) = n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
