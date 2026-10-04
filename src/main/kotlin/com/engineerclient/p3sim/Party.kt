@@ -139,12 +139,16 @@ object Party {
     private val holdNoted = BooleanArray(6)
     /** The early enterer into each section has moved on (everyone it waited for leapt). */
     private val released = BooleanArray(6)
+    /** When everyone was first on each early enterer (-1: not yet). */
+    private val readyAt = IntArray(6) { -1 }
+    /** Ticks an early enterer waits after the last leap before moving on (0.3 s). */
+    private const val RELEASE_DELAY = 6
     private var lastLeap = 0
     private val sectionN = IntArray(6)
 
     fun startP3(phase: GoldorPhase) {
         clear()
-        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false)
+        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false); readyAt.fill(-1)
         planned = 0
         lastLeap = 0
         if (!P3Sim.bots) return
@@ -374,7 +378,11 @@ object Party {
                 else -> (into == s || preleapOpen(into, n)) &&
                     bots.all { it === b || leapt(it.clazz, b, into) } && leapt(P3Sim.myClass, b, into)
             }
-            if (ok) { released[into] = true; dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}"); b.hold = false; walkOn(b, n) }
+            // Everyone's on: it moves 0.3 s later (as a player reacts).
+            if (!ok) { readyAt[into] = -1; continue }
+            if (readyAt[into] < 0) { readyAt[into] = n; dbg("§e${b.name}§7: everyone's on EE$into, moving in ${RELEASE_DELAY / 20.0}s") }
+            if (n - readyAt[into] < RELEASE_DELAY) continue
+            run { released[into] = true; dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}"); b.hold = false; walkOn(b, n) }
         }
     }
 
