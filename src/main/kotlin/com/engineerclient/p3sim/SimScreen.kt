@@ -85,7 +85,13 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             row(listOf(
                 label("§f${ee.label} §8→ $into", 60),
                 label(who, 100),
-                change("Spot: here", 60) { mc.player?.let { ee.spot = Vec3(round1(it.x), Math.floor(it.y * 100) / 100.0, round1(it.z)) }; P3Plan.save() },
+                change("Spot: here", 60) {
+                    mc.player?.let {
+                        ee.spot = Vec3(round1(it.x), Math.floor(it.y * 100) / 100.0, round1(it.z))
+                        P3Plan.save()
+                        it.displayClientMessage(net.minecraft.network.chat.Component.literal("§8[§6P3 Sim§8] §7${ee.label} spot saved: §f${"%.1f, %.2f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)}"), false)
+                    }
+                },
                 label("§8${"%.1f, %.1f, %.1f".format(Locale.ROOT, ee.spot.x, ee.spot.y, ee.spot.z)}", 110),
             ))
         }

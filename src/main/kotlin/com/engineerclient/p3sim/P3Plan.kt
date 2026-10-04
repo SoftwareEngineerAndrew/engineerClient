@@ -125,6 +125,7 @@ object P3Plan {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-plan.json")
     private var loaded = false
+    private var backedUp = false
 
     fun load() {
         if (loaded) return
@@ -151,6 +152,8 @@ object P3Plan {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
                 earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z) })
             file.parentFile.mkdirs()
+            // The copy before this session's first save, should a save ever lose something (as one did EE3's spot).
+            if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }
             file.writeText(gson.toJson(s))
         }
     }
