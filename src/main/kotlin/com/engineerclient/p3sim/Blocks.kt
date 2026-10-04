@@ -96,11 +96,27 @@ object Blocks {
     fun play(name: String, skip: Int = 0, exclude: Set<BlockPos> = emptySet(), delay: Int = 0) {
         val a = library[name] ?: run { EngineerClient.logger.warn("[p3sim] no animation {}", name); return }
         done += name
+        if (name == "core") Fight.later(maxOf(delay, 1), "core bats") { coreBats() }
         val p = Playing(a, Fight.serverTick - skip + delay)
         if (exclude.isNotEmpty()) a.frames.forEachIndexed { i, f -> if (f.pos in exclude) p.skip[i] = true }
         anims += p
         advance(p)
         if (name == STRIP) conveyor = Conveyor(p.start + a.length + STRIP_PERIOD)
+    }
+
+    /**
+     * FLOW-23: 35 bats at x 52-56, y 114-120, z 54 in the tick the core opens (34 of 36 runs). Their life is not
+     * recorded: they flutter ~3 s. The falling-block clones (door and core) are left out: a falling block that lands
+     * places itself, and the arena must stay as built; the recording has no positions to show them by.
+     */
+    private fun coreBats() {
+        repeat(35) {
+            val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityType.BAT, Sim.level)
+            b.isSilent = true; b.isInvulnerable = true
+            b.snapTo(52.0 + Random.nextDouble() * 4.0, 114.0 + Random.nextDouble() * 6.0, 54.5, Random.nextFloat() * 360f, 0f)
+            Sim.spawn(b)
+            Fight.later(60, "core bat gone") { b.discard() }
+        }
     }
 
     /** Jumps [name] to its end state at once (starting a phase past it); once per fight. */

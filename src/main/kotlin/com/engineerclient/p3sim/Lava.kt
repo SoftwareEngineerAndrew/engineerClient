@@ -82,7 +82,7 @@ object Lava {
         p.hurtMarked = true
         p.fallDistance = 0.0
         p.connection.send(ClientboundHurtAnimationPacket(p))
-        Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f, p.position())
+        Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.PLAYERS)
         fireTicks = 100 + Random.nextInt(26)
         p.remainingFireTicks = fireTicks
         bouncedAt = now

@@ -34,9 +34,9 @@ object Masks {
     private const val BONZO_TEX = "eyJ0aW1lc3RhbXAiOjE1ODc5MDgzMDU4MjYsInByb2ZpbGVJZCI6IjJkYzc3YWU3OTQ2MzQ4MDI5NDI4MGM4NDIyNzRiNTY3IiwicHJvZmlsZU5hbWUiOiJzYWR5MDYxMCIsInNpZ25hdHVyZVJlcXVpcmVkIjp0cnVlLCJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTI3MTZlY2JmNWI4ZGEwMGIwNWYzMTZlYzZhZjYxZThiZDAyODA1YjIxZWI4ZTQ0MDE1MTQ2OGRjNjU2NTQ5YyJ9fX0="
     private const val SPIRIT_TEX = "eyJ0aW1lc3RhbXAiOjE1MDUyMjI5OTg3MzQsInByb2ZpbGVJZCI6IjBiZTU2MmUxNzIyODQ3YmQ5MDY3MWYxNzNjNjA5NmNhIiwicHJvZmlsZU5hbWUiOiJ4Y29vbHgzIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsibWV0YWRhdGEiOnsibW9kZWwiOiJzbGltIn0sInVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWJiZTcyMWQ3YWQ4YWI5NjVmMDhjYmVjMGI4MzRmNzc5YjUxOTdmNzlkYTRhZWEzZDEzZDI1M2VjZTlkZWMyIn19fQ=="
 
-    val SPIRIT_MASK get() = mask(SPIRIT_TEX, "SPIRIT_MASK", "§5Spirit Mask §6✪", listOf("§6Ability: Second Wind", "§7Saves you from a death once, then", "§73s of invincibility.", "§8Cooldown: §a30s"))
+    val SPIRIT_MASK get() = mask(SPIRIT_TEX, "STARRED_SPIRIT_MASK", "§d\ue068 Necrotic Spirit Mask §6✪✪✪✪✪", listOf("§6Ability: Second Wind", "§7Instead of dying, gain §a+50 Speed§7 and", "§7damage immunity for §a3§7 seconds. Also heals you", "§7for §a10%§7 of your max health.", "§8Cooldown: §a30s"))
     // Odin's invincibility timer reads Bonzo's cooldown from "Cooldown: Ns".
-    val BONZO_MASK get() = mask(BONZO_TEX, "BONZO_MASK", "§9 Bonzo's Mask", listOf("§6Ability: Clownin' Around", "§7Saves you from a death once, then", "§73s of invincibility.", "§8Cooldown: §a180s"))
+    val BONZO_MASK get() = mask(BONZO_TEX, "STARRED_BONZO_MASK", "§5\ue068 Sunny Bonzo's Mask §6✪✪✪✪✪", listOf("§6Ability: Clownin' Around", "§7Gain §c+40 Strength§7 and fully heal when you", "§7would die, then §a3§7 seconds of immunity.", "§8Cooldown: §a180s"))
 
     private fun mask(tex: String, id: String, name: String, lore: List<String>): ItemStack {
         val s = SimItems.head(tex, name)
@@ -127,7 +127,7 @@ object Masks {
                 val worn = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
                 sp.setItemSlot(EquipmentSlot.HEAD, clickedItem.copy())
                 sp.inventory.setItem(index, worn)
-                P3Sim.wornMaskS.value = if (id == "SPIRIT_MASK") 0 else 1
+                P3Sim.wornMaskS.value = if (id.endsWith("SPIRIT_MASK")) 0 else 1
                 Sim.sound(SoundEvents.ARMOR_EQUIP_GENERIC.value(), 1f, 1f)
                 if (!P3Sim.realMasks) Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
             }
@@ -158,7 +158,7 @@ object Masks {
 
     fun reset() { items.forEach { it.readyAt = 0 }; safeUntil = 0 }
 
-    private fun worn(): String? = Sim.player?.let { SimItems.idOf(it.getItemBySlot(EquipmentSlot.HEAD)) }
+    private fun worn(): String? = Sim.player?.let { SimItems.idOf(it.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
 
     /** For the menu: each one's cooldown (and which you're wearing). */
     fun status(): String {
@@ -176,13 +176,16 @@ object Masks {
         if (now < safeUntil) return
         val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
-            else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD)) }
+            else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
                 ?: ready.firstOrNull { it.id == "PHOENIX" }
         if (item != null) {
             item.readyAt = now + item.cooldown
             // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
             if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.phoenixS.value = true; Fight.applySpeed(p) }
             safeUntil = now + item.safe
+            // Proc particles as recorded (MASKS-08): explosion x3 at your feet, Phoenix adds lava x18.
+            Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
+            if (item.id == "PHOENIX") Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA, p.x, p.y, p.z, 18, 0.1, 0.1, 0.1, 0.08)
             Sim.chat(item.line)
             // Proc sounds as measured (chat-attacks.md §2): masks cure + wither + eat, Phoenix extinguish + infect + wither.
             if (item.id == "PHOENIX") {

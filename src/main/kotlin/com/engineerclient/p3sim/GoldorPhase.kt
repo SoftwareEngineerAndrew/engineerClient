@@ -155,6 +155,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     override fun tick() {
         val n = n
+        if (n == -1) goldor.tick(this)   // FLOW-25: he moves from n=-1
         if (n < 0) return
         devices.tick()
         innerChamber()
@@ -208,7 +209,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     /** Goldor's voice plays at him (FLOW-07). */
-    private fun gsay(line: String) = Sim.boss("Goldor", line, goldor.position)
+    private fun gsay(line: String, stand: Boolean = true) = Sim.boss("Goldor", line, goldor.position, stand)
 
     private fun speak(line: String) {
         gsay(line)
@@ -219,7 +220,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     private fun dialogue() {
         if (lines.isNotEmpty() && n >= lastLine + 62) speak(lines.removeFirst())
-        if (forgiveAt in 0..n) { forgiveAt = -1; gsay("Necron, forgive me.") }
+        if (forgiveAt in 0..n) { forgiveAt = -1; gsay("Necron, forgive me."); Fight.later(12, "goldor rearm") { goldor.reArmour() } }
     }
 
     /** P4 starts: what Goldor still has to say runs on through Necron's intro, at the times it would have here. */
@@ -232,7 +233,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if (line == "....") forgiveAt = at + 82
         }
         lines.clear()
-        if (forgiveAt >= 0) { val dt = forgiveAt - n; forgiveAt = -1; Fight.later(dt, "goldor forgive") { gsay("Necron, forgive me.") } }
+        if (forgiveAt >= 0) { val dt = forgiveAt - n; forgiveAt = -1; Fight.later(dt, "goldor forgive") { gsay("Necron, forgive me."); Fight.later(12, "goldor rearm") { goldor.reArmour() } } }
     }
 
     /** A taunt from the pool (no line twice in a row; the ten come about equally often). */
@@ -271,7 +272,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
     }
 
-    private fun nameColour(name: String) = if (name == Sim.me) "§b" else "§a"
+    /** Rank colours (FLOW-27): you and the bots are MVP+ (the leap menu and party lines colour the bots §b). */
+    private fun nameColour(name: String) = "§b"
 
     /** `<col><P>§r§a activated a terminal! (§r§c4§r§a/7)`; with a green (`§a`) name the `§r§a` is dropped (chat-attacks.md §1.2). */
     private fun progressLine(by: String, what: String, k: Int, total: Int): String {
@@ -340,7 +342,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.chat("§aThe gate has been destroyed!")
         // The progress pling comes with this line too (164 of 164 with no progress line near; boss recorder).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
-        Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49f, GATE_CENTRES[s])
+        SimItems.gatePuffs(GATE_CENTRES[s])
         Blocks.play("gate$s${s + 1}", delay = 1)
         if (sectionEnd[s] >= 0) openDoor(s)
         return true
@@ -363,7 +365,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (at != section + 1 && !(section == 1 && at == 4)) return
         deaths++
         Stats.deathTick(n)
-        gsay("What do you think you are doing there!")
+        gsay("What do you think you are doing there!", stand = false)   // FLOW-14: no line stand for death ticks (0/98)
         when (P3Sim.deathTicks) {
             0 -> {}
             1 -> Sim.title("", "§cDeath tick §7(S$at ahead of S$section)", 0, 25, 5)
@@ -472,6 +474,14 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         private var flyAt = 0
         private var nextHurt = 0
         private var pos = Vec3.ZERO
+        /** FLOW-17: armoured (health 1) on the track in 23 of 36 recorded runs, knocked there 1-7 ticks after spawning. */
+        private val armouredRun = kotlin.random.Random.nextInt(36) < 23
+        private val armourAt = 1 + kotlin.random.Random.nextInt(7)
+        private var armourOffAt = Int.MAX_VALUE
+        private var spawnedN = 0
+        /** FLOW-16: the giants appear at n 11-19 and orbit. */
+        private val giantsAt = 11 + kotlin.random.Random.nextInt(9)
+        private var giantAngle = 0.0
         var killAt = Int.MAX_VALUE
             private set
         val position: Vec3 get() = pos
@@ -479,16 +489,35 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         fun spawn(n: Int) {
             s = (START_S + WALK * n) % LOOP
             pos = trackPos(s)
+            spawnedN = n
             boss = BossWither("Goldor", pos, inv = 0, armoured = false)
             BossBar.show("§c§lGoldor", 1f)
-            for (g in GIANTS) {
+        }
+
+        /** FLOW-16: four invisible golden-sword giants 90 degrees apart, radius 3 round Goldor+(2.4,-8,-3.5), ~6 degrees a tick. */
+        private fun spawnGiants() {
+            for (i in 0 until 4) {
                 val e = SimGiant(Sim.level)
                 e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
                 e.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.GOLDEN_SWORD))
+                val g = giantPos(i)
                 e.snapTo(g.x, g.y, g.z, 0f, 0f)
                 giants += Sim.spawn(e)
             }
         }
+
+        private fun giantPos(i: Int): Vec3 {
+            val a = Math.toRadians(giantAngle + 90.0 * i)
+            return Vec3(pos.x + 2.4 + 3.0 * Math.cos(a), pos.y - 8.0, pos.z - 3.5 + 3.0 * Math.sin(a))
+        }
+
+        private fun orbitGiants() {
+            giantAngle += 6.0
+            giants.forEachIndexed { i, e -> val g = giantPos(i); e.snapTo(g.x, g.y, g.z, (giantAngle + 90.0 * i).toFloat(), 0f) }
+        }
+
+        /** Back on after "Necron, forgive me." (FLOW-17). */
+        fun reArmour() { if (armouredRun) boss?.armour(true) }
 
         fun remove() { boss?.remove(); boss = null; giants.forEach { it.discard() }; giants.clear() }
 
@@ -505,6 +534,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             flyAt = n
             // Killed [P3Sim.goldorKill] after leaving (the setting; median 57 of 201 recorded kills).
             killAt = n + P3Sim.goldorKill.toInt()
+            // His armour goes 4-14 ticks before the "...." line (FLOW-17).
+            armourOffAt = killAt - 4 - kotlin.random.Random.nextInt(11)
         }
 
         /** Killed: he stops where he is (no death animation) and stays until well into P4. */
@@ -524,6 +555,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             val boss = boss ?: return
             val n = phase.n
             if (dead) return
+            if (armouredRun && n == spawnedN + armourAt) boss.armour(true)
+            if (n >= armourOffAt) { armourOffAt = Int.MAX_VALUE; boss.armour(false) }
+            if (n >= giantsAt && giants.isEmpty()) spawnGiants()
             if (flying) {
                 // The party hitting him from the moment he leaves: the red hurt flash every few ticks.
                 if (n >= nextHurt) {
@@ -556,6 +590,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 else -> yaw()
             }
             boss.moveTo(pos, pos.add(-Math.sin(Math.toRadians(yaw.toDouble())), 0.0, Math.cos(Math.toRadians(yaw.toDouble()))))
+            if (giants.isNotEmpty()) orbitGiants()
         }
 
         private fun yaw(): Float {
@@ -564,9 +599,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
 
         companion object {
-            /** Hypixel's four greatsword giants, spawned with him at the S4/S1 corner (bosses.md). */
-            val GIANTS = listOf(Vec3(81.5, 111.0, 33.5), Vec3(87.5, 111.0, 33.5), Vec3(81.5, 111.0, 40.5), Vec3(87.5, 111.0, 40.5))
-            const val WALK = 0.06
+                const val WALK = 0.06
             const val SPRINT = 0.60
             const val FLY = 0.80
             /** Where the four lines cross (S1 x 99.55, S2 z 131.7, S3 x 8.4, S4 z 40.0; goldor.md, the track). */
@@ -583,7 +616,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             const val S1_ENTRY = 361.5
             /** Where a catch-up sprint ends, ~1.6 past the corner (S2 92.2-92.4, S3 183.6-183.8, S4 274.3-276.5). */
             val SPRINT_TO = doubleArrayOf(92.3, 183.7, 275.0)
-            val CORE_POINT = Vec3(54.5, 117.0, 40.5)
+            val CORE_POINT = Vec3(53.6, 117.0, 40.0)
             /** Reaching it alive he goes on into the core along x ~53.4-53.8, fast until z ~55.8-56.4. */
             const val CORE_IN_X = 53.6
             const val CORE_IN_Z = 56.0
@@ -608,15 +641,18 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** Lever blocks: our own, so the click is ours (no redstone). */
     fun leverAt(pos: BlockPos): Station? = stations.firstOrNull { it.lever == pos }
 
-    fun pullLever(st: Station, by: String) {
+    /** [left]: a left click credits the lever without moving it or a click sound (LEV-01). */
+    fun pullLever(st: Station, by: String, left: Boolean = false) {
         val lever = st.lever ?: return
         if (st.done) { if (by == Sim.me) Sim.chat("§cSomeone has already activated this lever!"); return }
         if (st.section != section) { if (by == Sim.me) Sim.chat("§cThis lever doesn't seem to be responsive at the moment."); return }
-        Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, true)) }
-        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, 0.59f, Vec3.atCenterOf(lever))
+        // LEV-03: vanilla's toggle: the state flips, and the pitch follows the new state.
+        val nowOn = !(Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.getValue(LeverBlock.POWERED) ?: false)
+        if (!left) Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, nowOn)) }
+        if (!left) Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (nowOn) 0.59f else 0.49f, Vec3.atCenterOf(lever))
         complete(st, by)
         // The lever's stand renames 1-3 ticks after the pull, not on the 20-tick grid (devices.md §5).
-        if (st.done) Fight.later(1 + kotlin.random.Random.nextInt(3), "lever stand") { if (Fight.phase === this) st.refreshStands() }
+        if (st.done) Fight.later(1, "lever stand") { if (Fight.phase === this) st.refreshStands() }
     }
 
     /** A click on a terminal's stand. */

@@ -88,6 +88,21 @@ object SimItems {
         return s
     }
 
+    /** A teammate's name colour by rank (LEAP-06: green 63%, aqua 33%, gold 4% on Hypixel); fixed per name. */
+    fun rankColour(name: String): String { val h = Math.floorMod(name.hashCode(), 100); return if (h < 63) "§a" else if (h < 96) "§b" else "§6" }
+
+    /** Etherwarp's witch puff at the departure point (ETH-03). */
+    fun etherPuff(at: Vec3) = Sim.level.sendParticles(ParticleTypes.WITCH, at.x, at.y + 1.0, at.z, 25, 0.25, 1.0, 0.25, 0.0)
+
+    /** A destroyed gate: about 15 explosion puffs, each with its own BLOCKS-source sound, at random gate-block corners (GATES-04/10). */
+    fun gatePuffs(centre: Vec3) {
+        repeat(8 + Random.nextInt(8) + Random.nextInt(8)) {
+            val c = Vec3(Math.floor(centre.x + Random.nextInt(-3, 4)), Math.floor(centre.y - 5 + Random.nextInt(0, 21)), Math.floor(centre.z + Random.nextInt(-3, 4)))
+            Sim.level.sendParticles(ParticleTypes.EXPLOSION, c.x, c.y, c.z, 3, 1.0, 1.0, 1.0, 0.0)
+            Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 0.49206f, c, net.minecraft.sounds.SoundSource.BLOCKS)
+        }
+    }
+
     fun idOf(s: ItemStack): String? = s.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getStringOr("id", "")?.takeIf { it.isNotEmpty() }
 
     private const val LEAP_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY1MjE0NjYxMjc0MiwKICAicHJvZmlsZUlkIiA6ICI5ZWU3NTUxOGQyZWE0Y2Q4OGJiNGI1YTZkNmVhNTFjYyIsCiAgInByb2ZpbGVOYW1lIiA6ICJNaWNyb3MxMTgyIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzM3N2Q0YTIwNmQ3NzU3ZjQ3OWYzMzJlYzFhMmJiYmVlNTdjZWY5NzU2OGRkODhkZjgxZjQ4NjRhZWU3ZDNkOTgiLAogICAgICAibWV0YWRhdGEiIDogewogICAgICAgICJtb2RlbCIgOiAic2xpbSIKICAgICAgfQogICAgfQogIH0KfQ=="
@@ -104,10 +119,23 @@ object SimItems {
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", "§dHeroic Hyperion §6✪✪✪✪✪", listOf("§6Ability: Wither Impact §e§lRIGHT CLICK", "§7Teleports §a10 blocks§7 ahead and implodes."), glint = true)
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§9⚚ Bonzo's Staff §6✪✪✪✪✪", listOf("§6Ability: Showtime §e§lRIGHT CLICK", "§7Shoots balloons that knock you back."))
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
-    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§6Dungeonbreaker", listOf("§7Breaks most dungeon blocks instantly.", "§7Uses a charge per block (§a${MAX_CHARGES}§7 max,", "§7refills every second); blocks come back."), glint = true)
+    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also { it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:special")) }
+
+    /** The Dungeonbreaker's lore as Hypixel sends it (BREAKER-05); the "Charges" line changes with every charge. */
+    private fun breakerLore(n: Int) = listOf("§7Speed: §f+20", "", "§6Ability: Dungeon Breaker §e§lDIG",
+        "§7While in §cThe Catacombs§7, consume §e1§c\u2e15", "§7charge to break a block. §320§7 blocks can", "§7be broken at a time, and re-appear after", "§a10s§7. §e2§c\u2e15§7 charges are regenerated each", "§7second.", "",
+        "§7Charges: §e$n§7/§e$MAX_CHARGES§c\u2e15", "", "§8§l* §8Co-op Soulbound §8§l*", "§c§lSPECIAL DUNGEON PICKAXE")
+
+    /** Rewrites the lore of every Dungeonbreaker in the player's inventory (the item is sent again on each charge change). */
+    private fun refreshBreakerLore() {
+        val inv = Sim.player?.inventory ?: return
+        val lore = ItemLore(breakerLore(charges).map { l -> Component.literal(l).withStyle { it.withItalic(false) } })
+        for (i in 0 until inv.containerSize) { val st = inv.getItem(i); if (!st.isEmpty && idOf(st) == "DUNGEONBREAKER") st.set(DataComponents.LORE, lore) }
+    }
     val PEARLS get() = item(Items.ENDER_PEARL, "ENDER_PEARL", "§fEnder Pearl").also { it.count = 16 }
     val LEAP get() = head(LEAP_TEX, "§5Infinileap").also { s ->
-        s.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Right-click to leap to a teammate.").withStyle { it.withItalic(false) })))
+        s.set(DataComponents.LORE, ItemLore(listOf("§6Ability: Spirit Leap  §e§lRIGHT CLICK", "§7Allows you to teleport to any teammate! Grants", "§71 second of immunity after teleporting,", "§7immunity is cancelled upon dealing damage.", "§8Cooldown: §a2s", "§8Dungeons only!", "§5§lEPIC DUNGEON ITEM").map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
+        s.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:epic"))
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", "INFINITE_SPIRIT_LEAP"); it.putBoolean("p3sim", true) }))
     }
     val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", "§6Jerry-chine Gun", listOf("§6Ability: Rapid-fire §e§lRIGHT CLICK", "§7Jerries that knock you up."))
@@ -405,6 +433,7 @@ object SimItems {
             Sim.chat("§cThere are blocks in the way!")
             return
         }
+        etherPuff(p.position())
         Sim.tp(p, x + 0.5, y + 1.05, z + 0.5)
         // Both on the tp tick (items-timing.md §2): enderman.teleport 1/1 and dragon.hurt 1/0.54.
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position())
@@ -605,6 +634,7 @@ object SimItems {
     // ------------------------------------------------------------------ Dungeonbreaker (dungeonbreaker.md)
 
     private const val THAT_BLOCK = "§cA mystical force prevents you from digging that block!"
+    private const val THERE = "§cA mystical force prevents you digging there!"
     private const val INNER_CHAMBER = "§cA mystical force prevents you from leaving the inner chamber!"
     private const val NO_CHARGES = "§cYou don't have enough charges to break this block right now!"
     const val MAX_CHARGES = 20
@@ -624,13 +654,16 @@ object SimItems {
         if (b is net.minecraft.world.level.block.CommandBlock) return THAT_BLOCK
         if (b == net.minecraft.world.level.block.Blocks.GOLD_BLOCK && !CORE_DOOR.contains(c)) return THAT_BLOCK
         if (b is LeverBlock || b is ButtonBlock) return THAT_BLOCK
+        // rec2 (36 P3s, slot-4 starts): S4's redstone lamps are always refused with "digging there" (4 of 4 messages, 13 starts); the emerald blocks behind the levers with "that block" (24 starts).
+        if (b == net.minecraft.world.level.block.Blocks.REDSTONE_LAMP) return THERE
+        if (b == net.minecraft.world.level.block.Blocks.EMERALD_BLOCK) return THAT_BLOCK
         // Out of reach (4.5 from the eyes): the server just puts it back.
         if (p.eyePosition.distanceTo(c) > 5.2) return ""
         return null
     }
 
     /** Charges (max 20), refilled in a batch every second; blocks broken, oldest first, and when. */
-    var charges = MAX_CHARGES; private set
+    var charges = MAX_CHARGES; private set(v) { if (field != v) { field = v; refreshBreakerLore() } }
     private var refillAt = 0
     private var refillStep = 0 // main: irregular +2 steps (rec2 refill episodes), not a batch per second
     private val refillRng = java.util.Random()
@@ -669,7 +702,7 @@ object SimItems {
     }
 
     private fun restore(b: Broken) {
-        if (Sim.level.getBlockState(b.pos).isAir) Blocks.set(b.pos, b.state)
+        Blocks.set(b.pos, b.state) // over whatever is there, the core-door barrier too (BREAKER-07)
     }
 
     private fun tickBreaker() {
@@ -792,7 +825,7 @@ object SimItems {
                 leapReady = Fight.serverTick + 40
                 // You land on them exactly, facing as they face.
                 Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
-                Sim.chat("§aYou have teleported to §r§b${bot.name}§r§a!")
+                Sim.chatStyled("§aYou have teleported to §r${rankColour(bot.name)}${bot.name}§r§a!")
                 GhostCapture.event("leap", bot.clazz.name)
                 Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             }

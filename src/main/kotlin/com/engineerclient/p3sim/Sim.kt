@@ -22,6 +22,24 @@ object Sim {
 
     val level: ServerLevel get() = SimServer.level ?: error("sim not running")
     val player: ServerPlayer? get() = SimServer.player
+    private var guarded = false
+
+    /**
+     * Hypixel's "block protection": the server keeps the world as it is and the client may try anything.
+     * A vanilla break or placement goes ahead on the client (its own prediction), the server refuses it
+     * and sends the real block back (vanilla does that for a refused break or use). Only the sim's own
+     * handlers (SimItems: Dungeonbreaker, levers, Superboom, devices) change blocks, through [Blocks].
+     */
+    fun guardBlocks() {
+        if (guarded) return
+        guarded = true
+        net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.BEFORE.register { level, _, _, _, _ -> !SimServer.isSimLevel(level) }
+        // Registered after SimItems' hooks, so it only sees what they passed on (a block item's placement).
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register { _, level, _, _ ->
+            if (SimServer.isSimLevel(level)) net.minecraft.world.InteractionResult.FAIL else net.minecraft.world.InteractionResult.PASS
+        }
+    }
+
     val me: String get() = player?.gameProfile?.name ?: "You"
 
     /** A chat line as Hypixel sends it: plain system chat, `§` codes and all (Odin reads these). */
@@ -64,9 +82,9 @@ object Sim {
     }
 
     /** A `[BOSS]` line, with the wither.ambient (5, 1.19) Hypixel plays on every one (chat-attacks.md §2; at the boss when [at] is given). */
-    fun boss(name: String, line: String, at: Vec3? = null) {
+    fun boss(name: String, line: String, at: Vec3? = null, stand: Boolean = true) {
         chat("§4[BOSS] $name§r§c: $line")
-        BossWither.speak(name, line)
+        if (stand) BossWither.speak(name, line)
         // At the boss (Goldor's 110 of 110 tracked lines within 0.96 blocks of him; median 82 from the player).
         sound(net.minecraft.sounds.SoundEvents.WITHER_AMBIENT, 5f, 1.19f, at)
     }

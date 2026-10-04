@@ -164,8 +164,9 @@ object Bows {
                 .minByOrNull { it.second.distanceToSqr(from) }
             if (boss != null) { hit(EntityHitResult(boss.first, boss.second), onHit); return null }
             if (block.type != HitResult.Type.MISS) {
-                val pitch = 1.2f / (Random.nextFloat() * 0.2f + 0.9f)
-                level.playSound(null, block.location.x, block.location.y, block.location.z, SoundEvents.ARROW_HIT, SoundSource.NEUTRAL, 1f, pitch)
+                // TARGET-04: at the arrow's last position (before this leg), pitch on 1/63 steps.
+                val pitch = Mth.floor(1.2f / (Random.nextFloat() * 0.2f + 0.9f) * 63f) / 63f
+                level.playSound(null, from.x, from.y, from.z, SoundEvents.ARROW_HIT, SoundSource.NEUTRAL, 1f, pitch)
                 hit(block, onHit)
                 return null
             }

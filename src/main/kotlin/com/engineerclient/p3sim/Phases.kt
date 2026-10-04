@@ -75,7 +75,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
         if (removed) return
         val text = "§4§l$line"
         speechText = text
-        speechUntil = Fight.serverTick + 1 + SPEECH_TICKS
+        speechUntil = Fight.serverTick + 1 + if (name == "Goldor") GOLDOR_SPEECH_TICKS else SPEECH_TICKS
         speech?.discard(); speech = null
         Fight.later(1, "$name speech") { if (!removed && tag != null && speechText == text) showSpeech() }
     }
@@ -123,6 +123,8 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
         const val TAG_Y = 3.6875
         const val SPEECH_Y = 4.09375
         const val SPEECH_TICKS = 41
+        /** Goldor's line stands last longer: mode 61 recorded (FLOW-14). */
+        const val GOLDOR_SPEECH_TICKS = 61
         private val live = HashMap<String, BossWither>()
 
         /** From [Sim.boss]: the line's stand over that boss, while it is up. */
@@ -147,7 +149,7 @@ object BossBar {
 
     fun show(name: String, progress: Float = 1f) {
         val b = bar ?: ServerBossEvent(java.util.UUID.randomUUID(), Sim.legacy(name),
-            BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.PROGRESS).also { bar = it }
+            BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS).also { bar = it }
         b.name = Sim.legacy(name)
         b.progress = progress.coerceIn(0f, 1f)
         val p = Sim.player

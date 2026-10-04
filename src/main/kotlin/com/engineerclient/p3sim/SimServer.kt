@@ -88,7 +88,7 @@ object SimServer {
             Commands.literal("pc").then(Commands.argument("message", StringArgumentType.greedyString()).executes { c ->
                 val msg = StringArgumentType.getString(c, "message")
                 val name = c.source.player?.gameProfile?.name ?: "You"
-                Sim.chat("§9Party §8> §b[MVP§6+§b] $name§f: $msg")
+                Sim.chat("§9Party §8> §b[MVP§4+§b] $name§f: $msg")
                 1
             })
         )

@@ -227,11 +227,17 @@ class Devices(val phase: GoldorPhase) {
         private fun lamp(x: Int, y: Int) = (x to y) in on || (x - 1 to y) in on || (x + 1 to y) in on || (x to y - 1) in on || (x to y + 1) in on
         private fun allLit() = levers.all { (x, y) -> lamp(x, y) }
 
-        private fun draw() = levers.forEach { (x, y) ->
+        private fun draw(lampOffDelay: Int = 0) = levers.forEach { (x, y) ->
             val lever = BlockPos(x, y, 142)
             val st = Blocks.get(lever)
             if (st != null && st.hasProperty(LeverBlock.POWERED)) Blocks.set(lever, st.setValue(LeverBlock.POWERED, (x to y) in on))
-            Blocks.set(BlockPos(x, y, 143), B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lamp(x, y)))
+            val lampPos = BlockPos(x, y, 143)
+            val lit = lamp(x, y)
+            // LIGHTS-03: a lamp lights in the lever's tick, goes dark 3 (31 of 37) or 4 ticks after it.
+            if (lit || lampOffDelay <= 0) Blocks.set(lampPos, B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lit))
+            else Fight.later(lampOffDelay, "lamp off") {
+                if (phase === Fight.phase && !lamp(x, y)) Blocks.set(lampPos, B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, false))
+            }
         }
 
         fun isLever(pos: BlockPos) = pos.z == 142 && (pos.x to pos.y) in levers
@@ -253,7 +259,7 @@ class Devices(val phase: GoldorPhase) {
                     val k = pos.x to pos.y
                     if (!left) {
                         if (!on.remove(k)) on += k
-                        draw()
+                        draw(if (Random.nextInt(6) == 0) 4 else 3)
                         Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
                     }
                     // In S2, or pre-done from S1 (as the bots do it, Quality PF's "lights" in S1's times).
@@ -267,7 +273,7 @@ class Devices(val phase: GoldorPhase) {
 
     /** A LEFT click on a lever (SimItems.clientHitBlock): true if it is one of the P3 levers. */
     fun leftClick(pos: BlockPos): Boolean {
-        phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me) }; return true }
+        phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me, left = true) }; return true }
         return lights.use(pos, left = true)
     }
 
@@ -307,7 +313,18 @@ class Devices(val phase: GoldorPhase) {
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }
 
-        fun solve() = frames.forEach { (i, f) -> if (solution[i] >= 0) f.setRotation(solution[i]) }
+        /** ARROWS-08: a teammate's clicks, one frame per tick, not every frame in one tick. */
+        fun solve() {
+            var delay = 0
+            for ((i, f) in frames.entries.sortedBy { it.key }.map { it.key to it.value }) {
+                if (solution[i] < 0 || f.rotation == solution[i]) continue
+                Fight.later(delay++, "arrows solve") {
+                    if (phase !== Fight.phase || !frames.containsValue(f)) return@later
+                    f.setRotation(solution[i])
+                    Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, f.position(), net.minecraft.sounds.SoundSource.PLAYERS)
+                }
+            }
+        }
 
         /** A click on [frame]: true if it is one of ours. */
         fun use(frame: ItemFrame): Boolean {
@@ -316,7 +333,7 @@ class Devices(val phase: GoldorPhase) {
                 val st = station("Arrows")
                 if (solution[i] < 0 || st.done) return@afterPing
                 frame.setRotation((frame.rotation + 1) % 8)
-                Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position())
+                Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position(), net.minecraft.sounds.SoundSource.PLAYERS)
                 if (phase.section in 1..3 && frames.all { (j, f) -> solution[j] < 0 || f.rotation == solution[j] }) st.complete(Sim.me)
             }
             return true

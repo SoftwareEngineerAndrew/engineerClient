@@ -39,12 +39,14 @@ class StormEnd : Fight.Phase("Storm end") {
         val b = BossWither("Storm", DEATH_AT, armoured = false)
         body = b
         StormFx.line(b, "I should have known that I stood no chance.")
-        BossBar.show("§c§lStorm", 0f)
+        // Hypixel: the bar still shows 0.45 at the line (30/37 runs) and drops to 0 about 4 ticks later.
+        BossBar.show("§c§lStorm", 0.45f)
         StormCorpse(b).start()
     }
 
     override fun tick() {
         when (t) {
+            4 -> BossBar.progress(0f)
             62 -> StormFx.line(body, "At least my son died by your hands.")
             // 3 ticks early: the first lever credit can land 1-2 ticks before "Who dares" (LEV-06); the line itself still lands at LEAD.
             LEAD - 3 -> Fight.begin(GoldorPhase(1, arrived = true))

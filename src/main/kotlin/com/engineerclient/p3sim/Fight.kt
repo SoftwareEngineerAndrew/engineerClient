@@ -103,12 +103,19 @@ object Fight {
 
     /** Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. */
     fun setup(player: ServerPlayer) {
-        if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.ADVENTURE)
+        // Hypixel: SURVIVAL (1111/1111 samples). Blocks stay whole through Sim.guardBlocks + DungeonbreakerSimMixin.
+        if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.SURVIVAL)
+        Sim.guardBlocks()
         applySpeed(player)
         player.getAttribute(Attributes.KNOCKBACK_RESISTANCE)?.baseValue = 1.0
         player.getAttribute(Attributes.STEP_HEIGHT)?.baseValue = 0.6
         player.isInvulnerable = true
-        player.addEffect(MobEffectInstance(MobEffects.SATURATION, -1, 0, false, false, false))
+        player.removeEffect(MobEffects.SATURATION)
+        // Invulnerable players are never hungry or hurt; the effects are Hypixel's (night vision 1, or with haste 0 + mining fatigue 255).
+        player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 0, false, false, false))
+        player.addEffect(MobEffectInstance(MobEffects.HASTE, -1, 0, false, false, false))
+        player.addEffect(MobEffectInstance(MobEffects.MINING_FATIGUE, -1, 255, false, false, false))
+        player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
         SimItems.giveHotbar(player)
     }
 
