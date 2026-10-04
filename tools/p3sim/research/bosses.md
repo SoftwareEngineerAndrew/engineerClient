@@ -39,7 +39,7 @@ wither is spawned with health 300 / inv per row below, yaw = headYaw.
 |---|---|---|---|---|
 | Maxor | (73, 226, 53), yaw 0, 3-4 ticks after `[BOSS] Maxor: WELL! WELL! WELL!` (55/55 fights) | **200** | **1.545x**, **invulnerable (white/blue-flash) texture the whole fight** | 1.0 (armoured); flips 1.0<->1000 tick by tick while stunned by the laser ("YOU TRICKED ME!" -> unarmoured windows while hit), ~955-966 just before death, 0.0 at death |
 | Storm | P2, ~30 ticks after `[BOSS] Storm: Pathetic Maxor` (e.g. 94.7,185.2,61.2) | **1** | 1.998x, normal texture | 1.0 armoured; **1000 (armour off) from each "Ouch, that hurt!" pillar crush** until he is back up (e.g. 6507 -> 1.0 at 6553 -> 1000 at 6651 second crush), 0.0 at death |
-| Goldor | P3 start, on his track (e.g. 99.6,119,93.3; ids: wither, then 4 giants, then name stand) | **0** | 2.0x, normal texture | **1000 on the track (no armour)**, sometimes 300000; 1.0 (armoured) / 1000 flicker once the core opens; 1.0 until removed after Necron's first line |
+| Goldor | P3 start, on his track (e.g. 99.6,119,93.3; ids: wither, then 4 giants, then name stand) | **0** | 2.0x, normal texture | **1000 on the track (no armour)**, sometimes 300000; still 1000 in the core, flipping to 1.0 for single ticks on hits (no lasting armour; goldor-flow.md §3); removed ~290 ticks after Necron's first line |
 | Necron | (54, 66, 76) yaw 0, ~0-3 ticks before `[BOSS] Necron: You went further...` (in P3 timing, while Goldor is at the core) | **1** | 1.998x, normal texture | 300 at spawn, 300000 (one fight 1200000) for 1 tick, then **1.0 (armoured) for all of P4**, 0.0 at death (~20 ticks before removal) |
 
 So the sim's `w.invulnerableTicks = 0` is wrong for Maxor (should be 200, giving the smaller, pale
@@ -90,7 +90,7 @@ One bar (same UUID from the Watcher onward; its `add` happens before the recordi
 |---|---|---|
 | P1 | `§c§lMaxor` (set 3 ticks before his first line) | 1.0; drops in steps after each stun (e.g. 0.87 / 0.70 -> 0.25 -> 0.02 -> 0.0) |
 | P2 | `§c§lStorm` (at/after his first line) | 1.0; drops at each crush (0.95/0.55 -> 0.45 -> 0.0) |
-| P3 | `§c§lGoldor` (with his first line) | **1.0 the whole track**; after the core: ~0.35-0.47 -> 0.0 within ~20 ticks |
+| P3 | `§c§lGoldor` (with his first line) | **1.0 the whole track** and until he leaves for the core; then down in ~20-tick steps to 0.0 at the kill (goldor-flow.md §3) |
 | P4 | `§c§lNecron` (at/after his first line) | **0.0 at first**, then ~0.8-0.84 when the fight starts (~"That's a very impressive trick"), 0.25, 0.08/0.05, 0.0 |
 
 ## Props
