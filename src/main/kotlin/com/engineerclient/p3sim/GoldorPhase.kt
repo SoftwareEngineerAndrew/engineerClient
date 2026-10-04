@@ -380,7 +380,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // only after Goldor left it). Feet position, edges from the probes (DT_ZONES).
         val at = dtZone(seen)
         if (at < 0) return
-        val goldorIn = GoldorPhase.Goldor.segment(goldor.s) + 1
+        // On the S4 line from his start he counts as in S1 (the first death ticks inside S1 are safe).
+        val goldorIn = if (goldor.firstLap && goldor.s >= GoldorPhase.Goldor.START_S) 1 else GoldorPhase.Goldor.segment(goldor.s) + 1
         if (at == section && goldorIn == section) return
         deaths++
         Stats.deathTick(n)
@@ -471,14 +472,16 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         /**
          * Death-tick zones (feet, y 100-160), by section (index 0: the east strip past S1's wall, part of no
          * section). From Andrew's 2026-10-04 probes: S1/S2 at z 122.0 (safe 121.99, hit 122.30), the north strip
-         * to z 146 and x -6..114, S3's east edge x 18, S4's north edge z 50, the east strip x 113-114; all on block edges.
+         * to z 146 and x -6..114, S3's east edge x 18, S4 z 26..50 from x -6, the east strip x 113-114; feet y 106 to 146 (y 145 hit,
+         * 146 never, 105.9 never); S1 x 90..113, z 37..121 (z 121.5-121.7 never hit). All on block edges; S1's south edge only
+         * bounded (no higher than 37.7) and S1 vs the east strip unresolved.
          */
         val DT_ZONES = arrayOf(
-            AABB(113.0, 100.0, 27.0, 114.0, 160.0, 146.0),
-            AABB(89.0, 100.0, 48.0, 113.0, 160.0, 122.0),
-            AABB(-6.0, 100.0, 122.0, 114.0, 160.0, 146.0),
-            AABB(-6.0, 100.0, 50.0, 18.0, 160.0, 122.0),
-            AABB(17.0, 100.0, 27.0, 113.0, 160.0, 50.0),
+            AABB(113.0, 106.0, 26.0, 114.0, 146.0, 146.0),
+            AABB(90.0, 106.0, 37.0, 113.0, 146.0, 121.0),
+            AABB(-6.0, 106.0, 122.0, 114.0, 146.0, 146.0),
+            AABB(-6.0, 106.0, 50.0, 18.0, 146.0, 122.0),
+            AABB(-6.0, 106.0, 26.0, 113.0, 146.0, 50.0),
         )
 
         /** The zone (1-4, 0 for the east strip) [v] is in, or -1 outside them all. */
@@ -509,6 +512,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         private val giants = ArrayList<Giant>()
         /** Distance along the track from the S4/S1 corner. */
         var s = START_S
+        /** Still on the S4 line from his start, not yet round the S1 corner: counts as S1 for death ticks (probe runs). */
+        var firstLap = true
         private var speed = WALK
         private var sprintTo = -1.0
         /** FLOW-03: the tick the pending catch-up sprint starts (-1: none) and the section whose door it follows. */
@@ -536,6 +541,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val position: Vec3 get() = pos
 
         fun spawn(n: Int) {
+            firstLap = START_S + walkDist(n) < LOOP
             s = (START_S + walkDist(n)) % LOOP
             pos = trackPos(s)
             spawnedN = n
@@ -646,6 +652,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                     val left = ((sprintTo - s) % LOOP + LOOP) % LOOP
                     if (left <= SPRINT) { s = sprintTo; sprintTo = -1.0; speed = WALK } else s += SPRINT
                 } else s += walkStep(n - spawnedN)
+                if (s >= LOOP) firstLap = false
                 s %= LOOP
                 pos = trackPos(s)
             }
