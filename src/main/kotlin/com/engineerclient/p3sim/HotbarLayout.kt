@@ -23,7 +23,8 @@ import java.io.File
 object HotbarLayout {
 
     private class Layout(val slots: Map<String, Int> = emptyMap(), val selected: Int = 3)
-    private class Saved(val p12: Layout? = null, val p3: Layout? = null)
+    /** [worn]: what you wear and your pet, saved with the hotbar (one for both parts); null in older files = the defaults. */
+    private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-hotbar.json")
@@ -38,6 +39,9 @@ object HotbarLayout {
     }
 
     private fun layout(p3: Boolean): Layout? = if (p3) saved().p3 else saved().p12
+
+    /** The saved worn loadout (armour, helmet, pet), or null: the defaults. */
+    fun worn(): Loadouts.Worn? = saved().worn
 
     /** Whether [p3]'s part has a saved layout. */
     fun has(p3: Boolean) = layout(p3) != null
@@ -75,15 +79,16 @@ object HotbarLayout {
         if (slots.isEmpty()) return "§cnothing to save: no sim items in your inventory"
         val l = Layout(slots, inv.selectedSlot)
         val s = saved()
-        write(if (p3) Saved(s.p12, l) else Saved(l, s.p3))
-        return "§7saved your §f${part(p3)}§7 hotbar (${slots.size} items, holding slot ${l.selected + 1}); every hotbar reset uses it now"
+        write(if (p3) s.copy(p3 = l, worn = Loadouts.capture(p)) else s.copy(p12 = l, worn = Loadouts.capture(p)))
+        return "§7saved your §f${part(p3)}§7 hotbar (${slots.size} items, holding slot ${l.selected + 1}) with your armour, helmet and pet; every hotbar reset uses it now"
     }
 
     /** Forgets [p3]'s part's layout: its resets go back to the sim's default. */
     fun reset(p3: Boolean): String {
         if (!has(p3)) return "§7the ${part(p3)} hotbar is already the default"
         val s = saved()
-        write(if (p3) Saved(s.p12, null) else Saved(null, s.p3))
+        val otherLeft = if (p3) s.p12 != null else s.p3 != null
+        write(if (p3) s.copy(p3 = null, worn = if (otherLeft) s.worn else null) else s.copy(p12 = null, worn = if (otherLeft) s.worn else null))
         return "§7${part(p3)} hotbar back to the default"
     }
 

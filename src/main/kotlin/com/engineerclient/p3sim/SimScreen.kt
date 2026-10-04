@@ -151,10 +151,6 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
             change("Start in: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value; server { Sim.player?.let { Masks.equip(it) } } },
             change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
             change("No melodies: ${onOff(P3Sim.noMelodies)}", 100) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
-            change("Terror: ${listOf("off", "3 pieces", "4 pieces")[P3Sim.terrorS.value.coerceIn(0, 2)]}", 100) {
-                P3Sim.terrorS.value = (P3Sim.terrorS.value + 1) % 3
-                server { Sim.player?.let { SimItems.equipArmor(it) }; Bows.Hydra.start() }
-            },
         ))
         row(listOf(
             change("Start on join: ${onOff(P3Sim.autoStart)}", 110) { P3Sim.autoStartS.value = !P3Sim.autoStart },
@@ -168,10 +164,10 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         val p3Part = Fight.phase !is P1Maxor && Fight.phase !is P2Storm
         val part = if (p3Part) "P3" else "P1/P2"
         row(listOf(
-            button("Save $part Hotbar", 110) { server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } } },
+            button("Save $part Hotbar + gear", 150) { server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } } },
             button("Default $part Hotbar", 120) { server { EngineerClient.msg(HotbarLayout.reset(p3Part)) } },
         ))
-        text("§8Arrange your items, then Save: every hotbar reset in ${part} lays them out that way" + if (HotbarLayout.has(p3Part)) " §7(saved)" else ".")
+        text("§8Arrange your items, then Save: every hotbar reset in ${part} lays them out that way, in what you wear and your pet" + if (HotbarLayout.has(p3Part)) " §7(saved)" else ".")
         text("§8These are also in Odin's click GUI (Engineer Client > P3 Sim).")
     }
 

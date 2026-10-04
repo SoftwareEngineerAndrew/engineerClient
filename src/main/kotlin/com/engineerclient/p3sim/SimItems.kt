@@ -807,7 +807,7 @@ object SimItems {
         }
 
     private fun terror(base: Item, id: String, rgb: Int): ItemStack {
-        val n = P3Sim.terrorPieces
+        val n = 3  // as recorded (3/4, a mask on the head); the Terror Helmet loadout shows 4/4 on its own piece
         val lore = (when (id) { "TERROR_CHESTPLATE" -> Lore.TERROR_CHESTPLATE; "TERROR_LEGGINGS" -> Lore.TERROR_LEGGINGS; else -> Lore.TERROR_BOOTS })
             .map { it.replace("{T}", n.toString()).replace("{SEC}", if (n >= 4) "10" else "7") }
         val name = when (id) { "TERROR_CHESTPLATE" -> Lore.TERROR_CHESTPLATE_NAME; "TERROR_LEGGINGS" -> Lore.TERROR_LEGGINGS_NAME; else -> Lore.TERROR_BOOTS_NAME }
@@ -816,7 +816,18 @@ object SimItems {
 
     /** Chest, legs and boots of [set]; the helmet slot stays the masks' ([Masks.equip]) unless [equipHelmet]. */
     fun equipArmor(p: ServerPlayer, set: ArmorSet? = null) {
-        val which = set ?: if (P3Sim.terrorPieces > 0) ArmorSet.TERROR else ArmorSet.MAXOR
+        val (chest, legs, feet) = armorStacks(set)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, chest)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, legs)
+        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, feet)
+    }
+
+    /** One armour piece (chest / legs / boots) by its SkyBlock id, from any of the [ArmorSet]s; null for an id the sim doesn't know. */
+    fun armorPiece(id: String): ItemStack? =
+        ArmorSet.entries.firstNotNullOfOrNull { set -> armorStacks(set).toList().firstOrNull { idOf(it) == id } }
+
+    private fun armorStacks(set: ArmorSet?): Triple<ItemStack, ItemStack, ItemStack> {
+        val which = set ?: ArmorSet.MAXOR
         val chest: ItemStack; val legs: ItemStack; val feet: ItemStack
         when (which) {
             ArmorSet.TERROR -> {
@@ -835,9 +846,7 @@ object SimItems {
                 feet = piece(Items.LEATHER_BOOTS, "WISE_WITHER_BOOTS", Lore.WISE_WITHER_BOOTS_NAME, Lore.WISE_WITHER_BOOTS, 1889508, "mythic")
             }
         }
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, chest)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, legs)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, feet)
+        return Triple(chest, legs, feet)
     }
 
     /** The two recorded non-mask helmets (INV-01): the Racing Helmet and the Wise Wither (Storm's) helmet. Masks come back with [Masks.equip]. */
@@ -862,8 +871,7 @@ object SimItems {
         val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
-        Masks.equip(p)
-        equipArmor(p, ArmorSet.MAXOR)
+        Loadouts.applySaved(p)  // your saved gear and pet, else the defaults: Maxor + mask (+ Black Cat)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()

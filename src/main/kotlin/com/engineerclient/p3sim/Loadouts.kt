@@ -66,7 +66,7 @@ object Loadouts {
         return Entry(e.slot, e.item, e.name, e.lore.map { it.replace("(3/4)", "(4/4)").replace("after 7s", "after 10s") }, e.tex, e.dye, e.glint, e.style, e.id).stack()
     }
 
-    private enum class Helm { RACING, MASK, TERROR }
+    private enum class Helm { RACING, MASK, TERROR, WISE }
     private class Def(val slot: Int, val name: String, val set: SimItems.ArmorSet, val helm: Helm, val phoenix: Boolean)
 
     // Gear, pet and speed as the recorded loadouts' lore and walking speeds (Cat 0.65, Phoenix 0.55 with the Racing Helmet; Terror and Mask 0.55 with Black Cat).
@@ -76,6 +76,110 @@ object Loadouts {
         Def(34, "Terror", SimItems.ArmorSet.TERROR, Helm.TERROR, false),
         Def(41, "Mask terms", SimItems.ArmorSet.MAXOR, Helm.MASK, false),
     )
+
+    // ------------------------------------------------------------------ worn gear: saved with the hotbar and in custom loadouts
+
+    /** What you wear and your pet, by SkyBlock id (null = nothing / unknown). Saved in p3sim-hotbar.json and p3sim-loadouts.json. */
+    data class Worn(val head: String? = null, val chest: String? = null, val legs: String? = null, val feet: String? = null, val phoenix: Boolean = false)
+
+    fun capture(p: ServerPlayer) = Worn(
+        SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD)), SimItems.idOf(p.getItemBySlot(EquipmentSlot.CHEST)),
+        SimItems.idOf(p.getItemBySlot(EquipmentSlot.LEGS)), SimItems.idOf(p.getItemBySlot(EquipmentSlot.FEET)), P3Sim.phoenix)
+
+    private fun helmFor(id: String?): Helm? = when {
+        id == null -> null
+        id == "RACING_HELMET" -> Helm.RACING
+        id == "TERROR_HELMET" -> Helm.TERROR
+        id == "WISE_WITHER_HELMET" -> Helm.WISE
+        id.endsWith("_MASK") -> Helm.MASK
+        else -> null
+    }
+
+    /** Puts [w] on: armour pieces, the helmet (a mask by Real Masks' rules), the pet and the speed they give. */
+    fun applyWorn(p: ServerPlayer, w: Worn) {
+        listOf(EquipmentSlot.CHEST to w.chest, EquipmentSlot.LEGS to w.legs, EquipmentSlot.FEET to w.feet).forEach { (slot, id) ->
+            id?.let { SimItems.armorPiece(it) }?.let { p.setItemSlot(slot, it) }
+        }
+        val h = helmFor(w.head)
+        if (h == Helm.MASK) {
+            P3Sim.wornMaskS.value = if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1
+            val cur = SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))
+            if (cur?.endsWith("_MASK") == true) {
+                if (P3Sim.realMasks) Masks.equip(p)
+                else p.setItemSlot(EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
+            } else wearHelmet(p, h)
+        } else if (h != null) wearHelmet(p, h)
+        P3Sim.phoenixS.value = w.phoenix
+        Fight.applySpeed(p)
+    }
+
+    /** A hotbar reset's gear: the saved worn loadout ([HotbarLayout.worn]) or, with none, Maxor + mask (the pet stays as it is: Black Cat). */
+    fun applySaved(p: ServerPlayer) {
+        val w = HotbarLayout.worn()
+        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.wornMaskS.value = if (w.head.endsWith("SPIRIT_MASK")) 0 else 1
+        Masks.equip(p)
+        SimItems.equipArmor(p, SimItems.ArmorSet.MAXOR)
+        if (w != null) applyWorn(p, w)
+    }
+
+    private class Custom(val name: String = "", val worn: Worn = Worn())
+
+    private val customFile get() = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-loadouts.json")
+    private val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
+    private var customList: MutableList<Custom>? = null
+
+    private fun customs(): MutableList<Custom> = customList ?: run {
+        val l = runCatching {
+            if (customFile.exists()) gson.fromJson(customFile.readText(), Array<Custom>::class.java)?.toMutableList() else null
+        }.onFailure { EngineerClient.logger.error("[ec] p3sim loadouts load failed", it) }.getOrNull() ?: mutableListOf()
+        customList = l
+        l
+    }
+
+    private fun saveCustoms() {
+        EngineerClient.safely("p3sim loadouts save") {
+            customFile.parentFile.mkdirs()
+            customFile.writeText(gson.toJson(customs().toTypedArray()))
+        }
+    }
+
+    /** Free panes on the recorded screen, used by custom loadouts (the Save button is at [SAVE_SLOT]). */
+    private val CUSTOM_SLOTS = listOf(12, 13, 14, 15, 16, 17, 30, 31, 32, 33, 39, 40, 42, 43)
+    private const val SAVE_SLOT = 47
+
+    private fun pretty(id: String?) = id?.removePrefix("STARRED_")?.lowercase()?.split('_')?.joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } } ?: "none"
+
+    private fun Custom.stack(): ItemStack {
+        val s = worn.chest?.let { SimItems.armorPiece(it) }?.copy() ?: Terminals.named(Items.BOOK, name)
+        s.set(DataComponents.CUSTOM_NAME, Component.literal("§a$name").withStyle { it.withItalic(false) })
+        val lore = listOf("§7Helmet: §f${pretty(worn.head)}", "§7Chestplate: §f${pretty(worn.chest)}", "§7Leggings: §f${pretty(worn.legs)}",
+            "§7Boots: §f${pretty(worn.feet)}", "§7Pet: §f${if (worn.phoenix) "Phoenix" else "Black Cat"}", "", "§eLeft-click to equip!", "§cShift-click to delete!")
+        s.set(DataComponents.LORE, ItemLore(lore.map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
+        return s
+    }
+
+    private fun saveCurrent(p: ServerPlayer) {
+        val w = capture(p)
+        customs().firstOrNull { it.worn == w }?.let { Sim.chatStyled("§cThat is already saved as ${it.name}."); return }
+        if (customs().size >= CUSTOM_SLOTS.size) { Sim.chatStyled("§cNo free loadout slot: shift-click one to delete it."); return }
+        var n = 1
+        while (customs().any { it.name == "Custom $n" }) n++
+        customs() += Custom("Custom $n", w)
+        saveCustoms()
+        Sim.chatStyled("§aSaved your gear and pet as Custom $n.")
+    }
+
+    private fun equipCustom(p: ServerPlayer, c: Custom) {
+        if (capture(p) == c.worn) { Sim.chatStyled("§c${c.name} is already equipped!"); return }
+        Fight.later(1, "loadout ${c.name}") {
+            applyWorn(p, c.worn)
+            sound("minecraft:block.lever.click", 0.5f, 1f, SoundSource.BLOCKS)
+            Sim.chatStyled("§aYou equipped ${c.name}!")
+            sound("minecraft:entity.horse.saddle", 1f, 1f, SoundSource.NEUTRAL)
+            p.inventoryMenu.broadcastChanges()
+            (p.containerMenu as? LoadoutsMenu)?.refresh()
+        }
+    }
 
     fun open(p: ServerPlayer) {
         p.openMenu(SimpleMenuProvider({ id, inv, _ -> LoadoutsMenu(id, inv, p) }, Component.literal("(1/3) Loadouts")))
@@ -89,7 +193,7 @@ object Loadouts {
 
     private fun wearsHelm(h: Helm, s: ItemStack): Boolean {
         val id = SimItems.idOf(s) ?: return false
-        return when (h) { Helm.RACING -> id == "RACING_HELMET"; Helm.TERROR -> id == "TERROR_HELMET"; Helm.MASK -> id.endsWith("_MASK") }
+        return when (h) { Helm.RACING -> id == "RACING_HELMET"; Helm.TERROR -> id == "TERROR_HELMET"; Helm.WISE -> id == "WISE_WITHER_HELMET"; Helm.MASK -> id.endsWith("_MASK") }
     }
 
     private fun chestId(set: SimItems.ArmorSet) = when (set) {
@@ -113,6 +217,7 @@ object Loadouts {
         } else {
             when (h) {
                 Helm.RACING -> SimItems.equipHelmet(p, false)
+                Helm.WISE -> SimItems.equipHelmet(p, true)
                 Helm.TERROR -> p.setItemSlot(EquipmentSlot.HEAD, terrorHelmet())
                 Helm.MASK -> p.setItemSlot(EquipmentSlot.HEAD, if (wantMask == "SPIRIT_MASK") Masks.SPIRIT_MASK else Masks.BONZO_MASK)
             }
@@ -161,13 +266,24 @@ object Loadouts {
                 val s = sp.getItemBySlot(eq).copy()
                 if (!s.isEmpty) c.setItem(slot, s)
             }
+            for ((i, cu) in customs().withIndex()) if (i < CUSTOM_SLOTS.size) c.setItem(CUSTOM_SLOTS[i], cu.stack())
+            c.setItem(SAVE_SLOT, Terminals.named(Items.LIME_DYE, "§aSave current as loadout").also {
+                it.set(DataComponents.LORE, ItemLore(listOf("§7Saves what you wear and your pet", "§7as a new loadout.", "", "§eClick to save!").map { l -> Component.literal(l).withStyle { s -> s.withItalic(false) } }))
+            })
             if (P3Sim.phoenix) c.setItem(21, SimItems.head(Masks.PHOENIX_TEX, "§7[Lvl 100] §5Phoenix"))
         }
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
             if (slot == 49) { sp.closeContainer(); return }
             // Left-click equips ("Left-click to equip!"); right-click would edit, which the sim doesn't have.
-            if (button == 0) defs.firstOrNull { it.slot == slot }?.let { equip(sp, it) }
+            val ci = CUSTOM_SLOTS.indexOf(slot)
+            if (slot == SAVE_SLOT) saveCurrent(sp)
+            else if (ci in customs().indices) {
+                val cu = customs()[ci]
+                if (button == 1 || input == ContainerInput.QUICK_MOVE) {  // right- or shift-click deletes
+                    customs().removeAt(ci); saveCustoms(); Sim.chatStyled("§cDeleted loadout ${cu.name}.")
+                } else if (button == 0) equipCustom(sp, cu)
+            } else if (button == 0) defs.firstOrNull { it.slot == slot }?.let { equip(sp, it) }
             draw()
             broadcastFullState()
         }

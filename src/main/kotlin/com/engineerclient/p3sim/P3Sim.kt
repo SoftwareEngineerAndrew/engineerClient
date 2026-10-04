@@ -54,7 +54,6 @@ object P3Sim : Module(
     val jitterS = +BooleanSetting("Ping Jitter", true, desc = "Simulated Ping varies like a real connection: usually a few ms either way, now and then 30+ ms more, rarely a lag spike (spread recorded on Hypixel). Off: a fixed delay.")
     val goldorKillS = +NumberSetting("Goldor Kill Time", 43, 10, 120, 1, unit = " ticks", desc = "How long after Goldor starts flying to the core his \"....\" line comes, i.e. he dies (median of 31 recorded runs: 43, range 17-74).")
     val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at 100% attack speed, on every bow and whatever Terror armor you wear (recordings: Terminator 5, Mosquito 5). A click inside it fires when it ends. Nasty Bite has its own 10.")
-    val terrorS = +SelectorSetting("Terror Armor", "3 Pieces", arrayListOf("Off", "3 Pieces", "4 Pieces"), desc = "Hydra Strike: +1 stack per boss hit (every 0.2 s at most), one lost every 8 s (3 pieces, a mask on your head) or 11 s (4 pieces) without a hit; +1% arrow speed a stack and, at 10, two more arrows at ±8°. Off: no stacks.")
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 9, 0, 10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer (measured from 82 recorded windows).")
     val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
@@ -81,8 +80,12 @@ object P3Sim : Module(
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
     val shortbowCooldown: Int get() = shortbowCooldownS.value.toInt()
-    /** Terror armor pieces worn: 0 (off), 3 or 4. */
-    val terrorPieces: Int get() = when (terrorS.value) { 1 -> 3; 2 -> 4; else -> 0 }
+    /** Terror armor pieces worn right now (TERROR_* ids in the four armour slots, helmet included): 0 to 4. Hydra Strike follows it. */
+    val terrorPieces: Int get() = Sim.player?.let { p ->
+        listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST,
+            net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET)
+            .count { SimItems.idOf(p.getItemBySlot(it))?.startsWith("TERROR_") == true }
+    } ?: 0
     val hydraStart: Int get() = hydraStartS.value.toInt()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
