@@ -240,6 +240,8 @@ object Party {
             if (ee.byYou) continue
             val b = botOf(ee.owner) ?: continue
             if (b.inSection >= into || busy(b) || b.hold) continue
+            // Not before its jobs in the sections before (the EE3 bot does its S2 ones first, not straight from S1).
+            if (jobs.any { it.bot === b && (sectionOf(it.job) < into || it.timeSection < into) }) continue
             if (b.pos.distanceTo(ee.spot) < 0.5) { b.inSection = into; eeArrived[into] = true; b.hold = into <= 4; continue }
             if (b.to != ee.spot) {
                 // On the spot by the preset's time (no earlier than walking there takes).
@@ -273,7 +275,7 @@ object Party {
 
     /**
      * An early enterer (a bot) moves on from its spot once everyone it waits for has leapt onto it
-     * (the preset's "waits"; else everyone free); at the latest 10 s into the section it entered.
+     * (the preset's "waits"; else everyone, you included); at the latest 10 s into the section it entered.
      */
     private fun releaseEarlyEnterers(phase: GoldorPhase) {
         val n = phase.n
@@ -287,8 +289,9 @@ object Party {
             val ok = when {
                 into == s && n - sectionN[s] >= 200 -> true
                 waits != null -> waits.all { t -> leapt(whoFor(t, into), b, into) }
-                into == s -> leaps.none { it.at > n - 1 }
-                else -> preleapOpen(into, n) && bots.all { it === b || it.inSection >= into || busy(it) } && leaps.none { it.at > n - 1 }
+                // No list: everyone - every bot (busy ones too, once they're done and leapt) and you.
+                else -> (into == s || preleapOpen(into, n)) &&
+                    bots.all { it === b || leapt(it.clazz, b, into) } && leapt(P3Sim.myClass, b, into)
             }
             if (ok) { b.hold = false; walkOn(b, n) }
         }

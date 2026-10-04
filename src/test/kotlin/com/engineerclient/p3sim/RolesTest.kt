@@ -52,6 +52,16 @@ class RolesTest {
     }
 
     @Test
+    fun `s2 - the archer (4th term) gets rl (the low lever), ee3 ll (the high one)`() {
+        val pf = Roles.plan(Roles.PF)
+        assertEquals(listOf(DungeonClass.ARCHER), pf.owners["S2 low lever"])
+        assertEquals(listOf(DungeonClass.HEALER), pf.owners["S2 high lever"])
+        val q = Roles.plan(Roles.QUALITY_PF)
+        assertEquals(listOf(DungeonClass.ARCHER), q.owners["S2 low lever"])
+        assertEquals(listOf(DungeonClass.TANK), q.owners["S2 high lever"])
+    }
+
+    @Test
     fun `quality pf - ee2 by the mage, ee3 by the tank`() {
         val plan = Roles.plan(Roles.QUALITY_PF)
         assertEquals(DungeonClass.MAGE, plan.ee[2])
