@@ -94,12 +94,13 @@ object Party {
     private val waitsFor = arrayOfNulls<List<String>>(6)
     /** You've been on the early enterer (leapt onto it). */
     private val youOn = BooleanArray(6)
+    private val holdNoted = BooleanArray(6)
     private var lastLeap = 0
     private val sectionN = IntArray(6)
 
     fun startP3(phase: GoldorPhase) {
         clear()
-        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false)
+        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false)
         planned = 0
         lastLeap = 0
         if (!P3Sim.bots) return
@@ -171,6 +172,12 @@ object Party {
         val finished = ArrayList<Bot>()
         jobs.removeAll { j ->
             if (j.at < 0 || n < j.at) return@removeAll false
+            // Done where it's done: not while holding (at an early enter, waiting), not before the bot is there.
+            if (j.bot.hold) return@removeAll false
+            if (j.bot.pos.distanceTo(spotOf(j.job)) > 2.5) {
+                if (j.bot.to == null) { j.bot.to = spotOf(j.job); j.bot.goAt = n }
+                return@removeAll false
+            }
             val st = phase.stations.firstOrNull { it.id == j.job }
             if (st != null) {
                 if (st.section == s && held && phase.stations.count { it.section == s && !it.done } == 1) return@removeAll false
@@ -326,7 +333,12 @@ object Party {
     private fun holding(phase: GoldorPhase): Boolean {
         if (!P3Plan.waitForYou) return false
         val ee = P3Plan.ee(phase.section + 1)?.takeIf { it.byYou && it.into <= 4 } ?: return false
-        return !youArrived[ee.into]
+        if (youArrived[ee.into]) return false
+        if (!holdNoted[ee.into] && phase.stations.count { it.section == phase.section && !it.done } == 1) {
+            holdNoted[ee.into] = true
+            Sim.note("§7The party holds S${phase.section}'s last job until you're at your §e${ee.label}§7 spot (Wait for you, in the menu's Early Enters).")
+        }
+        return true
     }
 
     /** The core: everyone leaps in at once onto whoever's in it (the core early enterer), or walks in. */

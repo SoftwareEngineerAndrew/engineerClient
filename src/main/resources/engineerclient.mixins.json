@@ -8,6 +8,7 @@
     "PortalSimMixin",
     "DungeonbreakerSimMixin",
     "ShortbowSimMixin",
+    "ArcherDropSimMixin",
     "BlockChangeSourceMixin",
     "BlurRadiusMixin",
     "CameraAccessor",

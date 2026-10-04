@@ -25,13 +25,15 @@ object Spots {
     val LIGHTS = Spot("Lights device", 60.5, 132.0, 140.0, 0f)
 
     /**
-     * Where a P3 start puts you: [from] 1 = your first S1 job's spot in your role's order (Tank's 21: T2, Archer's 43: T4) (the target plate if it's yours) (fast parties leap into S1 before
+     * Where a P3 start puts you: [from] 1 = your first S1 terminal in your role's order (Tank's 21: T2, Archer's 43: T4), else your first S1 job's spot (the target plate if it's yours) (fast parties leap into S1 before
      * Goldor speaks), 2-4 = that section's door, 5 = the core.
      */
     fun p3Start(from: Int): Spot = when (from) {
         2 -> S2; 3 -> S3; 4 -> S4; 5 -> CORE
         else -> {
-            val first = if (P3Plan.isMine("S4 Target")) "S4 Target" else P3Plan.mine().firstOrNull { it.startsWith("S1 ") && it in Party.STANDS }
+            // Your first S1 terminal as your role lists it (Tank's 21: T2), else your first S1 job in menu order (the Mage's levers).
+            val first = if (P3Plan.isMine("S4 Target")) "S4 Target"
+                else P3Plan.mine().firstOrNull { it.startsWith("S1 T") } ?: P3Plan.jobsIn(1).firstOrNull { P3Plan.isMine(it) }
             first?.let { j -> Party.STANDS[j]?.let { Spot(j, it.x, it.y, it.z, if (j == "S4 Target") 0f else 180f) } } ?: SS
         }
     }

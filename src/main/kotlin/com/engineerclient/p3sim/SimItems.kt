@@ -213,6 +213,20 @@ object SimItems {
         SimServer.run("left click") { Sim.player?.let { p -> asClicked(p, "shortbow") { shoot(p, n) } } }
     }
 
+    /**
+     * The drop key in the sim (ArcherDropSimMixin): never drops an item; as Archer, sneaking, it's the
+     * class ability ([volley]). True: the drop is cancelled.
+     */
+    @JvmStatic
+    fun clientDrop(): Boolean {
+        val player = mc.player ?: return false
+        val level = mc.level ?: return false
+        if (!simClient(level)) return false
+        if (player.isShiftKeyDown && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
+            SimServer.run("archer ability") { Sim.player?.let { p -> asClicked(p, "archer ability") { volley(p) } } }
+        return true
+    }
+
     /** Runs [run] after the ping, aimed where [p] looked when they clicked (as Hypixel gets it from the click's packets). */
     private fun asClicked(p: ServerPlayer, what: String, run: () -> Unit) {
         val xRot = p.xRot; val yRot = p.yRot
@@ -620,6 +634,29 @@ object SimItems {
         Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 1.2f, p.position())
     }
 
+    /** The Archer's ability (sneak + drop): the Terminator's three arrows from your middle, every 30 s; they blow up a gate they hit. */
+    private var volleyReady = 0
+    private val explosive = HashSet<AbstractArrow>()
+
+    private fun volley(p: ServerPlayer) {
+        val now = Fight.serverTick
+        if (now < volleyReady) { Sim.chat("§cThis ability is on cooldown for ${(volleyReady - now + 19) / 20}s."); return }
+        volleyReady = now + 600
+        val spread = P3Sim.termSpread
+        for (dy in listOf(-spread, 0f, spread)) {
+            val a = Arrow(Sim.level, p, ItemStack(Items.ARROW), null)
+            a.setPos(p.x, p.y + p.bbHeight / 2, p.z)
+            a.shootFromRotation(p, p.xRot, p.yRot + dy, 0f, 3.0f, 0f)
+            a.pickup = AbstractArrow.Pickup.DISALLOWED
+            a.isCritArrow = true
+            Sim.spawn(a)
+            arrows += a
+            explosive += a
+        }
+        Sim.chat("§aUsed §6Explosive Shot§a!")
+        Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 0.8f, p.position())
+    }
+
     private val arrows = ArrayList<AbstractArrow>()
     private val lastMotion = HashMap<AbstractArrow, Vec3>()
 
@@ -634,7 +671,7 @@ object SimItems {
         val it = arrows.iterator()
         while (it.hasNext()) {
             val a = it.next()
-            if (a.isRemoved) { it.remove(); lastMotion.remove(a); lastPos.remove(a); continue }
+            if (a.isRemoved) { it.remove(); lastMotion.remove(a); lastPos.remove(a); explosive.remove(a); continue }
             val v = a.deltaMovement
             if (v.lengthSqr() > 1e-3) lastMotion[a] = v
             val dir = (lastMotion[a] ?: v).let { if (it.lengthSqr() < 1e-6) Vec3.ZERO else it.normalize() }
@@ -644,6 +681,12 @@ object SimItems {
             val hit = level.clip(net.minecraft.world.level.ClipContext(from, to, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, a))
             if (hit.type == net.minecraft.world.phys.HitResult.Type.BLOCK) {
                 (Fight.phase as? GoldorPhase)?.devices?.target?.hit(hit.blockPos)
+                if (explosive.remove(a)) {
+                    val at = hit.location
+                    Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
+                    Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
+                    (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
+                }
                 a.discard()
                 it.remove(); lastMotion.remove(a); lastPos.remove(a)
                 continue

@@ -109,6 +109,19 @@ object Fight {
         SimItems.giveHotbar(player)
     }
 
+    /**
+     * Odin's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
+     * a world load; a sim restart is a new P3, so it starts clean too.
+     */
+    private fun resetArrowsDevice() {
+        val c = com.odtheking.odin.features.impl.boss.ArrowsDevice::class.java
+        fun field(name: String) = c.getDeclaredField(name).apply { isAccessible = true }
+        (field("markedPositions").get(null) as? MutableSet<*>)?.clear()
+        field("targetPosition").set(null, null)
+        field("isDeviceComplete").setBoolean(null, false)
+        field("optimalAimPositions").set(null, emptyList<Any>())
+    }
+
     /** Your speed: the setting with Black Cat out, 100 less with Phoenix. */
     fun applySpeed(player: ServerPlayer) {
         val speed = P3Sim.speed - if (P3Sim.phoenix) 100 else 0
@@ -144,7 +157,10 @@ object Fight {
             Start.CORE -> com.engineerclient.splits.SplitTracker.GOLDOR to 0
             Start.P4 -> com.engineerclient.splits.SplitTracker.NECRON to 0
         }
-        EngineerClient.mc.execute { EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) } }
+        EngineerClient.mc.execute {
+            EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) }
+            EngineerClient.safely("p3sim arrows device") { resetArrowsDevice() }
+        }
         // Odin's Splits start on the dungeon's countdown line.
         Sim.chat("§aStarting in 1 second.")
         val p: Phase = when (what) {

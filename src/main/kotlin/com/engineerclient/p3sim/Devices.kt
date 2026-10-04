@@ -219,7 +219,8 @@ class Devices(val phase: GoldorPhase) {
                 if (!on.remove(k)) on += k
                 draw()
                 Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
-                if (phase.section == 2 && (wasLit || allLit())) st.complete(Sim.me)
+                // In S2, or pre-done from S1 (as the bots do it, Quality PF's "lights" in S1's times).
+                if (phase.section in 1..2 && (wasLit || allLit())) st.complete(Sim.me)
             }
             return true
         }
