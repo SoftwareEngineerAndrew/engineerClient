@@ -10,6 +10,7 @@
     "LeapMenuReleaseMixin",
     "LeapMenuRenderMixin",
     "PersonalBestSimMixin",
+    "BlockUpdateServerThreadMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin"
   ],

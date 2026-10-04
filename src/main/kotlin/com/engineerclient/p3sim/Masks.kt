@@ -114,7 +114,7 @@ object Masks {
     /** For the menu: each one's cooldown (and which you're wearing). */
     fun status(): String {
         val worn = worn()
-        return items.filter { it.id != "PHOENIX" || P3Sim.phoenix }.joinToString(" ") {
+        return items.filter { it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks }.joinToString(" ") {
             val left = it.readyAt - Fight.serverTick
             val mark = if (P3Sim.realMasks && it.id == worn) "§e⛑" else ""
             mark + if (left <= 0) "§a${it.name}" else "§c${it.name} ${(left + 19) / 20}s"
@@ -125,12 +125,14 @@ object Masks {
     fun hit(p: ServerPlayer, by: String?) {
         val now = Fight.serverTick
         if (now < safeUntil) return
-        val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix) }
+        val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
             else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD)) }
                 ?: ready.firstOrNull { it.id == "PHOENIX" }
         if (item != null) {
             item.readyAt = now + item.cooldown
+            // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
+            if (item.id == "PHOENIX" && !P3Sim.phoenix) swapPet(p)
             safeUntil = now + item.safe
             Sim.chat(item.line)
             // Proc sounds as measured (chat-attacks.md §2): masks cure + wither + eat, Phoenix extinguish + infect + wither.

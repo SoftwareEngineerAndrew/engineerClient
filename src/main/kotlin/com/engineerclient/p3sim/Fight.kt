@@ -166,7 +166,8 @@ object Fight {
         val p: Phase = when (what) {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()
-            Start.P3, Start.S1 -> GoldorPhase(1)
+            // From Storm's death: 5.1 s to Goldor's line, as in the game.
+            Start.P3, Start.S1 -> StormEnd()
             Start.S2 -> GoldorPhase(2)
             Start.S3 -> GoldorPhase(3)
             Start.S4 -> GoldorPhase(4)

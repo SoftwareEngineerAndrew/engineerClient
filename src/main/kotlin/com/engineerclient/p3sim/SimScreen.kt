@@ -128,6 +128,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         ))
         row(listOf(
             change("Start on join: ${onOff(P3Sim.autoStart)}", 110) { P3Sim.autoStartS.value = !P3Sim.autoStart },
+            change("Hide players: ${onOff(P3Sim.hidePlayers)}", 100) { P3Sim.toggleHidePlayers() },
             button("Reset Items", 80) { server { Sim.player?.let { SimItems.giveHotbar(it, Fight.phase !is P1Maxor && Fight.phase !is P2Storm) } } },
             button("§7Leave", 60) { SimWorld.leave() },
         ))

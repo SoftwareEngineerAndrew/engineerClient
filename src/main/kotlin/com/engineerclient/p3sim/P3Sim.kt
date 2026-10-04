@@ -78,6 +78,21 @@ object P3Sim : Module(
     val termSpread: Float get() = termSpreadS.value.toFloat()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
+
+    /** Hide Players is Odin's own (its module and its Hide All / Distance settings); in the sim its rule hides the bots too. */
+    val hidePlayers: Boolean get() = com.odtheking.odin.features.impl.render.HidePlayers.enabled
+    fun toggleHidePlayers() = com.odtheking.odin.features.impl.render.HidePlayers.toggle()
+
+    /** A bot (a mannequin in the sim) Odin's Hide Players would hide if it were a player. Client thread. */
+    @JvmStatic
+    fun hideBot(e: net.minecraft.world.entity.Entity): Boolean {
+        if (!hidePlayers || !inSim || e !is net.minecraft.world.entity.decoration.Mannequin) return false
+        val hp = com.odtheking.odin.features.impl.render.HidePlayers
+        if ((hp.settings["Hide all"] as? BooleanSetting)?.value == true) return true
+        val d = (hp.settings["Distance"] as? NumberSetting<*>)?.value?.toDouble() ?: 3.0
+        val me = mc.player ?: return false
+        return e.distanceToSqr(me) <= d * d
+    }
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
     val realMasks: Boolean get() = realMasksS.value
