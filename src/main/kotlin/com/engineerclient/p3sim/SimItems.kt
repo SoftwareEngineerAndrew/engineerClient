@@ -261,7 +261,7 @@ object SimItems {
 
 §c§l⦾ §6Ability: Rapid-fire  §e§lRIGHT CLICK
 §7Shoots a Jerry bullet, dealing
-§c29,733.7 §7damage on impact and
+§c1,347.2 §7damage on impact and
 §7knocking you back.
 
 §7Each shot costs §3+14 mana §7more than
@@ -916,8 +916,9 @@ object SimItems {
             var result: InteractionResult = InteractionResult.PASS
             EngineerClient.safely("p3sim use block") { result = useBlock(player, hit.blockPos, id) }
             // The client already placed what it held (an Infinileap is a head) and took it off its hotbar: as on
-            // Hypixel, the server sends the held stack back (vanilla re-sends the blocks itself).
-            player.connection.send(net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket(player.inventory.selectedSlot, player.mainHandItem.copy()))
+            // Hypixel, the server sends the held stack back (vanilla re-sends the blocks itself). Only a block item can have
+            // been placed: the staffs' resend is their own (Bonzo ~77%, p3audit B8).
+            if (player.mainHandItem.item is net.minecraft.world.item.BlockItem) player.connection.send(net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket(player.inventory.selectedSlot, player.mainHandItem.copy()))
             result
         }
         UseEntityCallback.EVENT.register { player, level, hand, entity, _ ->
@@ -1026,7 +1027,7 @@ object SimItems {
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); Bows.reset() }
 
     /** A right click with [id] in the air (or on a block that isn't the sim's). */
     private fun use(p: ServerPlayer, id: String): InteractionResult {
@@ -1074,9 +1075,24 @@ object SimItems {
         // LEV-02: a lever before its section is vanilla's toggle with the click sound, no chat.
         if (state.block is LeverBlock) { Fight.afterPing("lever") { vanillaLeverToggle(pos) }; return InteractionResult.SUCCESS }
         if (state.block is ButtonBlock) return InteractionResult.SUCCESS
+        if (id != null && firesOnUseItem(p, id)) return InteractionResult.SUCCESS
         if (id != null) return use(p, id)
         return InteractionResult.SUCCESS
     }
+
+    /**
+     * True when the client's own use_item after this block click fires [id] (p3audit J1: firing here too made every
+     * block-aimed Jerry 2 trades, 123/123; Hypixel 1). Vanilla's Minecraft.startUseItem sends use_item unless the
+     * client's own useItemOn returned Success/Fail (our client callback passes), so only a placed block item stops it:
+     * the Infinileap/Haunt heads and Superboom stay here. Bonzo stays here too: a block-aimed balloon flies along the
+     * last move packet's rotation (486/486), which use_item overwrites, and its 4-tick gate refuses the follow-up.
+     * The SUCCESS keeps vanilla's block use off (the world stays as built); the client's flow doesn't read it.
+     */
+    private fun firesOnUseItem(p: ServerPlayer, id: String) =
+        id != "STARRED_BONZO_STAFF" && p.mainHandItem.item !is net.minecraft.world.item.BlockItem && (id in USE_ITEM_IDS || id in Bows.SHORTBOWS)
+
+    /** The non-block ids [use] fires (AOTV, Hyperion, pearl, Jerry, cloak, pet rod); the shortbows are [Bows.SHORTBOWS]. */
+    private val USE_ITEM_IDS = setOf("ASPECT_OF_THE_VOID", "HYPERION", "ENDER_PEARL", "JERRY_STAFF", "WITHER_CLOAK", "PET_ROD")
 
     /** The server tick of each terminal's last accepted click (same-tick dedupe). */
     private val termClickTick = java.util.WeakHashMap<Station, Int>()
@@ -1301,73 +1317,113 @@ object SimItems {
     }
 
     /**
-     * Bonzo's Staff (tools/p3sim/research/knockback.md, p3audit BONZO-01..12): an invisible, silent armor stand
-     * wearing a random balloon head flies along your look (~0.75 a tick, no range limit), the firework bursts
-     * on the first tick it is inside a block (a random 0..~1 past the surface), and in that same tick your
-     * motion is *replaced* by 1.5 flat away from the burst and 0.5 up, with a chance that falls off with the
-     * distance. Clicks under 3 ticks after the last make no balloon. The burst's sound is the client's own.
+     * Bonzo's Staff (p3audit bj/hyp-bonzo/spec.md, REPORT B1-B8): a hidden projectile flies from feet+1.0+0.2d
+     * at 0.75 a tick (no gravity), drawn as a marker stand 1.5 below it; the firework bursts on the first 0.75
+     * lattice point whose block cell isn't passable, k+1 ticks after the stand, and in that tick your motion is
+     * *replaced* by 1.5 flat away from it and 0.5 up iff it is within 3.5 of feet+1.5. Hard 4-tick gate.
+     * The burst's sound is the client's own.
      */
     private fun bonzo(p: ServerPlayer) {
-        // Clicks too soon after the last make nothing (BONZO-02): never 1-2 ticks apart, 3 about half the time.
+        // Hard 4-tick gate (B4): spacing 4:177 and never 1-3; a refused click sets nothing.
         val gap = Fight.serverTick - bonzoLast
-        if (gap < 3 || (gap == 3 && Random.nextBoolean())) return
+        if (gap < 4) return
         bonzoLast = Fight.serverTick
         Sim.sound(SoundEvents.GHAST_AMBIENT, 1f, (88 + Random.nextInt(26)) / 63f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
-        // Hypixel sends the held item again on every click (BONZO-11).
-        p.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0, p.inventoryMenu.incrementStateId(), 36 + p.inventory.selectedSlot, p.getItemInHand(InteractionHand.MAIN_HAND).copy()))
-        val eye = p.eyePosition
+        // The held item is sent again on 76.7% of accepted clicks (B8: 1,333/1,738).
+        if (Random.nextDouble() < 0.767) p.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0, p.inventoryMenu.incrementStateId(), 36 + p.inventory.selectedSlot, p.getItemInHand(InteractionHand.MAIN_HAND).copy()))
+        // P = the last move packet's position (the server's at the click), d = the look the click aims with.
+        val pos = p.position()
         val dir = look(p)
-        // 0.2 forward along the horizontal look (0 looking straight up or down), 0.66 below the feet.
-        val stand = ArmorStand(Sim.level, p.x + dir.x * 0.2, p.y - 0.66, p.z + dir.z * 0.2)
+        // Projectile pos(k) = P + (0,1,0) + 0.2d + 0.75k d, feet+1.0 sneaking too (B2, 112/112 crouched).
+        val o = pos.add(0.0, 1.0, 0.0).add(dir.scale(0.2))
+        // Stand S0 = floor32(P + 0.2d - 0.5y) = pos(0) - 1.5y, a marker (flags 32/18; exact on 1,740/1,740, B7).
+        val s0 = floor32(pos.add(dir.scale(0.2)).add(0.0, -0.5, 0.0))
+        val stand = ArmorStand(Sim.level, s0.x, s0.y, s0.z)
         stand.isInvisible = true
         stand.isSilent = true
         stand.setNoGravity(true)
+        Station.setMarker(stand)
         stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, balloonHead())
         Sim.spawn(stand)
-        // No range limit (BONZO-03): it flies until it hits something.
-        val hit = Sim.level.clip(net.minecraft.world.level.ClipContext(eye, eye.add(dir.scale(BONZO_FAR)), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
-        if (hit.type == net.minecraft.world.phys.HitResult.Type.MISS) { Fight.later((BONZO_FAR / BONZO_SPEED).toInt(), "bonzo stand") { stand.discard() }; return }
-        val past = (0.3 + 0.5 * java.util.Random().nextGaussian()).coerceIn(0.0, 1.2)
-        val burst = hit.location.add(dir.scale(past))
-        val ticks = Math.round(eye.distanceTo(burst) / BONZO_SPEED).toInt().coerceAtLeast(2)
-        Fight.later(ticks, "bonzo burst") {
-            // The firework entity + entity event 17: the client draws the burst and plays the blast itself (BONZO-07/09).
-            val colours = { Random.nextInt(0x1000000) }
-            val rocket = ItemStack(Items.FIREWORK_ROCKET)
-            rocket.set(DataComponents.FIREWORKS, net.minecraft.world.item.component.Fireworks(1, listOf(net.minecraft.world.item.component.FireworkExplosion(
-                net.minecraft.world.item.component.FireworkExplosion.Shape.SMALL_BALL, it.unimi.dsi.fastutil.ints.IntArrayList(intArrayOf(colours(), colours())), it.unimi.dsi.fastutil.ints.IntArrayList(), false, false))))
-            val fw = net.minecraft.world.entity.projectile.FireworkRocketEntity(Sim.level, burst.x, burst.y, burst.z, rocket)
-            fw.deltaMovement = Vec3.ZERO
-            Sim.spawn(fw)
-            Sim.level.broadcastEntityEvent(fw, 17.toByte())
-            Fight.later(1, "bonzo cleanup") { fw.discard(); stand.discard() }
-            // The boost lands in the same tick (BONZO-01), softly falling off with distance (BONZO-05).
-            val d = p.position().distanceTo(burst)
-            if (Random.nextDouble() < boostChance(d)) {
-                val away = p.position().subtract(burst).multiply(1.0, 0.0, 1.0)
-                val h = if (away.lengthSqr() < 1e-4) dir.multiply(-1.0, 0.0, -1.0).normalize() else away.normalize()
-                push(p, Vec3(h.x * 1.5, 0.5, h.z * 1.5))
+        // The burst lattice index k (B2/B3: cell rule exact on 98.2%): first k >= 1 whose cell isn't passable;
+        // k = 2 when pos(0)'s cell is already solid (25 of 27 off a ghost block). Overshoot is the lattice, 0..0.75.
+        var k = if (bonzoSolid(o)) 2 else 1
+        if (k == 1) while (k <= BONZO_STEPS && !bonzoSolid(o.add(dir.scale(BONZO_SPEED * k)))) k++
+        // No block within ~128 (3 of 1,740 never burst): the stand flies on and goes with no burst.
+        val bursts = k <= BONZO_STEPS
+        fun fly(j: Int) {
+            Fight.later(1, "bonzo flight") {
+                if (stand.isRemoved) return@later
+                // Burst k+1 ticks after the stand (n-gap 1,718/1,731; no clamp).
+                if (bursts && j == k + 1) { bonzoBurst(p, o.add(dir.scale(BONZO_SPEED * k)), stand); return@later }
+                if (!bursts && j > BONZO_STEPS) { stand.discard(); return@later }
+                // Drawn 1.5 below the projectile (1,357 flight updates; the tracker sends them on its own cadence).
+                val q = o.add(dir.scale(BONZO_SPEED * j))
+                stand.setPos(q.x, q.y - 1.5, q.z)
+                fly(j + 1)
             }
         }
+        fly(1)
     }
 
-    /** The share of recorded bursts that boosted, by 3D distance from the player to the burst (BONZO-05). */
-    private fun boostChance(d: Double): Double {
-        val pts = doubleArrayOf(0.0, 1.0, 2.0, 1.0, 3.0, 0.92, 4.0, 0.9, 5.0, 0.72, 6.0, 0.55, 7.0, 0.2, 8.0, 0.05, 9.0, 0.0)
-        if (d >= 9.0) return 0.0
-        var i = 0
-        while (i + 2 < pts.size && d > pts[i + 2]) i += 2
-        val t = (d - pts[i]) / (pts[i + 2] - pts[i])
-        return pts[i + 1] + (pts[i + 3] - pts[i + 1]) * t
+    /**
+     * The balloon bursts at [bTrue] (B3/B6): firework at floor32(bTrue) with one entity_event 17 and no server sound,
+     * gone with the stand at burst+1; your boost in the same tick from the unquantised point.
+     */
+    private fun bonzoBurst(p: ServerPlayer, bTrue: Vec3, stand: ArmorStand) {
+        val colours = { Random.nextInt(0x1000000) }
+        val rocket = ItemStack(Items.FIREWORK_ROCKET)
+        rocket.set(DataComponents.FIREWORKS, net.minecraft.world.item.component.Fireworks(1, listOf(net.minecraft.world.item.component.FireworkExplosion(
+            net.minecraft.world.item.component.FireworkExplosion.Shape.SMALL_BALL, it.unimi.dsi.fastutil.ints.IntArrayList(intArrayOf(colours(), colours())), it.unimi.dsi.fastutil.ints.IntArrayList(), false, false))))
+        val b32 = floor32(bTrue)
+        val fw = InertFirework(Sim.level, b32.x, b32.y, b32.z, rocket)
+        fw.deltaMovement = Vec3.ZERO
+        Sim.spawn(fw)
+        // Event 17 exactly once (1,735/1,735): the client draws the burst and plays the blast itself.
+        Sim.level.broadcastEntityEvent(fw, 17.toByte())
+        Fight.later(1, "bonzo cleanup") { fw.discard(); stand.discard() }
+        val pos = p.position()
+        // Boost iff the burst is within 3.5 of feet+1.5 (B1: 96.4-96.6% of 1,735 bursts; no random roll).
+        if (bTrue.distanceTo(pos.add(0.0, 1.5, 0.0)) > 3.5) return
+        // SET 1.5 * unit(P.xz - B.xz), vy 0.5 (|v_xz| 1.5000 in 1,297/1,299); exactly over it: (0, 0.5, 0).
+        val dx = pos.x - bTrue.x; val dz = pos.z - bTrue.z
+        val h = Math.sqrt(dx * dx + dz * dz)
+        push(p, if (h > 0.0) Vec3(1.5 * dx / h, 0.5, 1.5 * dz / h) else Vec3(0.0, 0.5, 0.0))
     }
 
-    /** One of the 11 balloon heads Hypixel picks from at random (BONZO-06); the 11th (41b830eb, 2 of ~300) was not recoverable in full. */
+    /** A firework that never ticks: no launch sound (vol 3 AMBIENT) and no second, self-made event 17 (B6: 72-76% doubled). */
+    class InertFirework(level: Level, x: Double, y: Double, z: Double, stack: ItemStack) :
+        net.minecraft.world.entity.projectile.FireworkRocketEntity(level, x, y, z, stack) {
+        override fun tick() {}
+    }
+
+    /** floor(v*32)/32 per axis: the 1/32 grid Hypixel's packets put stand and firework on (B7, spec 3.2). */
+    private fun floor32(v: Vec3) = Vec3(floor(v.x * 32) / 32, floor(v.y * 32) / 32, floor(v.z * 32) / 32)
+
+    /**
+     * A balloon cell that stops it (B2, hyp-bonzo 3.3): cell level, so stairs, slabs and walls are solid. Passable:
+     * air, liquids, fire, levers, buttons, signs, torches, tripwire, pressure plates, carpet, heads, grass, light,
+     * ladders, vines and glass panes (TNT, plants, doors and bars unresolved).
+     */
+    private fun bonzoSolid(at: Vec3): Boolean {
+        val s = state(floor(at.x).toInt(), floor(at.y).toInt(), floor(at.z).toInt())
+        val b = s.block
+        if (s.isAir || b is net.minecraft.world.level.block.LiquidBlock || b is net.minecraft.world.level.block.BaseFireBlock || b is LeverBlock || b is ButtonBlock ||
+            b is SignBlock || b is net.minecraft.world.level.block.BaseTorchBlock || b is net.minecraft.world.level.block.TripWireBlock ||
+            b is TripWireHookBlock || b is net.minecraft.world.level.block.BasePressurePlateBlock || b is net.minecraft.world.level.block.CarpetBlock ||
+            b is net.minecraft.world.level.block.AbstractSkullBlock || b is net.minecraft.world.level.block.TallGrassBlock ||
+            b is net.minecraft.world.level.block.LightBlock || b is LadderBlock || b is net.minecraft.world.level.block.VineBlock) return false
+        if (b is net.minecraft.world.level.block.IronBarsBlock && net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).path.endsWith("glass_pane")) return false
+        return true
+    }
+
+    /** One of the 9 balloon heads, uniformly random (hyp-bonzo 3.1: n=1,746, 173-213 each; 2f24ed68 is not one, B7). */
     private val BALLOON_HASHES = listOf(
         "f1f99e7c394e13d199d1d22cb082d209068cd7a4de6ca09edff3fc61660ae5cf", "52dd11da04252f76b6934bc26612f54f264f30eed74df89941209e191bebc0a2",
         "7c6cc5aed49056977d89348978c0aaaaa54c968a3b411bbaba5c9970b405297", "7399ff9c40fdfb7b115addddff59c344eaa11acb0c64c6839b5f8407e36d239d",
         "a2dd1389a97fd4c86b11a1a2abad61389404d837d2caf097c91d27768363dc5a", "ac96d34a3cced4e4bba25119f74ea31f50f43f90cca2fbcbc6bae8625d60dede",
         "28c544b288f899d494f953ace7743a15fdb22d24f58f9ca298f35429fdc27b63", "cc5ec2dfbf2cf4e21bd011c784d9fc4ad7a88182bed27afd91b53b4513ce0aba",
-        "3491c8fb426979da2d6327b3705a4cb9c91c2d5536223233addde21d5f58c940", "2f24ed6875304fa4a1f0c785b2cb6a6a72563e9f3e24ea55e18178452119aa66")
+        "3491c8fb426979da2d6327b3705a4cb9c91c2d5536223233addde21d5f58c940")
 
     private fun balloonHead(): ItemStack {
         val hash = BALLOON_HASHES[Random.nextInt(BALLOON_HASHES.size)]
@@ -1379,37 +1435,84 @@ object SimItems {
 
     private var bonzoLast = -100
     private const val BONZO_SPEED = 0.75
-    private const val BONZO_FAR = 128.0
+    /** ~170 lattice steps (127.5 blocks) with no block: no burst (B10). */
+    private const val BONZO_STEPS = 170
 
     /**
-     * Jerry-chine Gun (knockback.md §Jerry): a Jerry lands where you look; 1-3 ticks later (mostly
-     * 2) your motion is replaced by vy 0.6 and a flat push away from it (0.5 x the 3D direction's
-     * flat part), with villager.yes.
+     * Jerry-chine Gun (p3audit bj/hyp-jerry/spec.md, REPORT J1-J9): an invisible bullet from F+1.1 along the last
+     * move packet's look, B_k = O + (0.25 + 0.75k)u at tick k, bursts at the first B_k inside a block (or k = 30).
+     * The burst plays villager.yes, then *replaces* your motion with vy 0.6 and 0.5 x the flat part of the unit
+     * vector from it to your eye iff it is within 4.0 of feet+1.62, then a poof. Nothing is random but the pitch.
      */
     private fun jerry(p: ServerPlayer) {
-        // villager.trade NEUTRAL 0.5, pitch 1.40-1.78, on the click (JERRY-04).
-        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.5f, 1.4f + Random.nextFloat() * 0.38f, p.position(), net.minecraft.sounds.SoundSource.NEUTRAL)
+        // At most 3 bullets a server tick (8 ticks with 3; a 4-click tick gave 3, 13-10-15 n=19977).
+        if (jerryTick != Fight.serverTick) { jerryTick = Fight.serverTick; jerryShots = 0 }
+        if (++jerryShots > 3) return
+        // villager.trade NEUTRAL 0.5, pitch k/63 for k = 88..113, at your feet in the click tick (J7, 2283/2283).
+        Sim.sound(SoundEvents.VILLAGER_TRADE, 0.5f, (88 + Random.nextInt(26)) / 63f, p.position(), net.minecraft.sounds.SoundSource.NEUTRAL)
         rapidFire(p)
-        // The invisible stand: one block along the look from your feet, 0.5 down; needs no block (JERRY-01).
-        val at = p.position().add(look(p)).subtract(0.0, 0.5, 0.0)
-        // Click -> boost: +1 28%, +2 53%, +3 5%, +4..7 8%, none 6% (JERRY-02).
-        val r = Random.nextDouble()
-        val delay = when {
-            r < 0.28 -> 1
-            r < 0.81 -> 2
-            r < 0.86 -> 3
-            r < 0.94 -> 4 + Random.nextInt(4)
-            else -> return
+        // F = the last move packet's position, u = its look (asClicked prior; 2194/2284 stands follow it).
+        val f = p.position()
+        val u = look(p)
+        val o = f.add(0.0, 1.1, 0.0)
+        fun bullet(k: Int) = o.add(u.scale(0.25 + 0.75 * k))
+        // The bullet's visual (J8): invisible silent marker stand, Villager head, head pose = pitch, at F + u - 0.5y = B_1 - 1.6y.
+        val stand = ArmorStand(Sim.level, f.x + u.x, f.y + u.y - 0.5, f.z + u.z)
+        stand.isInvisible = true
+        stand.isSilent = true
+        stand.setNoGravity(true)
+        Station.setMarker(stand)
+        stand.yRot = p.yRot; stand.xRot = p.xRot
+        stand.setHeadPose(net.minecraft.core.Rotations(p.xRot, 0f, 0f))
+        stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, villagerHead())
+        Sim.spawn(stand)
+        fun fly(k: Int) {
+            Fight.later(1, "jerry bullet") {
+                if (p.isRemoved || Sim.player !== p) { stand.discard(); return@later }
+                val b = bullet(k)
+                // Check-then-move (J2: 99.2% of 866 bursts on the grid; max life 30, J9).
+                if (k < JERRY_LIFE && !jerrySolid(b)) {
+                    val next = bullet(k + 1)
+                    stand.setPos(next.x, next.y - 1.6, next.z)
+                    fly(k + 1); return@later
+                }
+                jerryBurst(p, b)
+                Fight.later(1, "jerry stand gone") { stand.discard() }
+            }
         }
-        Fight.later(delay, "jerry boost") {
-            val d = p.position().subtract(at)
-            val len = d.length()
-            val k = if (len < 1e-6) 0.0 else 0.5 / len
-            push(p, Vec3(d.x * k, 0.6, d.z * k))
-            // villager.yes 0.35 at the landing point (JERRY-05).
-            Sim.sound(SoundEvents.VILLAGER_YES, 0.35f, 1f, at)
-        }
+        fly(1)
     }
+
+    /** A bullet bursts at [b] (J3/J4/J6/J9): yes, then the push iff in range, then one poof; the last burst of a tick wins. */
+    private fun jerryBurst(p: ServerPlayer, b: Vec3) {
+        // villager.yes MASTER 0.35 pitch 1 at floor(B)+0.5, out of range too (J6: 1,357/1,392; 92 of 98).
+        Sim.sound(SoundEvents.VILLAGER_YES, 0.35f, 1f, Vec3(floor(b.x) + 0.5, floor(b.y) + 0.5, floor(b.z) + 0.5))
+        // d = (feet + 1.62) - B, the eye constant sneaking too (J4: 1.62 best, 0.0016 vs 0.0076); boost iff |d| <= 4.0 (J3: 97.1-98.3%).
+        val d = p.position().add(0.0, 1.62, 0.0).subtract(b)
+        val len = d.length()
+        if (len <= 4.0 && len > 0.0) push(p, Vec3(0.5 * d.x / len, 0.6, 0.5 * d.z / len))
+        // One poof, count 1, at the exact burst point (spec 4: 1392 of 1434).
+        Sim.level.sendParticles(ParticleTypes.POOF, true, true, b.x, b.y, b.z, 1, 0.0, 0.0, 0.0, 0.0)
+    }
+
+    /** A bullet point inside a block's collision shape (J2's rule; Hypixel's solidity is unverified, chunk data was off). */
+    private fun jerrySolid(b: Vec3): Boolean {
+        val pos = BlockPos.containing(b)
+        val shape = Sim.level.getBlockState(pos).getCollisionShape(Sim.level, pos, CollisionContext.empty())
+        return !shape.isEmpty && shape.toAabbs().any { it.move(pos).contains(b) }
+    }
+
+    /** The Jerry stand's head: Hypixel's "Villager" profile skin 41b830eb...5583 (2399/2399 villager stands; hash from p3audit vb/out2). */
+    private fun villagerHead(): ItemStack {
+        val json = "{\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/texture/41b830eb4082acec836bc835e40a11282bb51193315f91184337e8d3555583\"}}}"
+        val s = head(java.util.Base64.getEncoder().encodeToString(json.toByteArray()), "Villager")
+        s.remove(DataComponents.CUSTOM_NAME)
+        return s
+    }
+
+    private var jerryTick = -1
+    private var jerryShots = 0
+    private const val JERRY_LIFE = 30
 
     private var rapidShots = 0
     private var rapidLast = -1000
