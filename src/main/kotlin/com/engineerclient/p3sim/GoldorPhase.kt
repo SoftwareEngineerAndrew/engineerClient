@@ -375,9 +375,13 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The server's view of you, about one one-way latency late (PING-08).
         val seen = Fight.seenPos(p)
         if (inSafeSpot(seen)) return
-        // Only the next section ahead, and S4 while S1 is in progress (goldor.md, death ticks).
-        val at = P3Sections.sectionAt(seen.x, seen.y, seen.z)
-        if (at != section + 1 && !(section == 1 && at == 4)) return
+        // Every death-tick zone but the section in progress is lethal; that one too once Goldor has walked out of
+        // its segment (Andrew's probe runs 2026-10-04: hits all round S1 while S1 was in progress, and inside S1
+        // only after Goldor left it). Feet position, edges from the probes (DT_ZONES).
+        val at = dtZone(seen)
+        if (at < 0) return
+        val goldorIn = GoldorPhase.Goldor.segment(goldor.s) + 1
+        if (at == section && goldorIn == section) return
         deaths++
         Stats.deathTick(n)
         // FLOW-14: no line stand for death ticks (0/98). Quiet wither.ambient 1/1 HOSTILE at you, not the loud boss sound (DEATH-09);
@@ -388,7 +392,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
         when (P3Sim.deathTicks) {
             0 -> line()
-            1 -> { line(); Sim.title("", "§cDeath tick §7(S$at ahead of S$section)", 0, 25, 5) }
+            1 -> { line(); Sim.title("", "§cDeath tick §7(${if (at == 0) "east strip" else "S$at"} during S$section)", 0, 25, 5) }
             else -> Masks.hit(p, null, line)   // the plain "You died and became a ghost." (MASKS-03)
         }
     }
@@ -464,6 +468,25 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     companion object {
+        /**
+         * Death-tick zones (feet, y 100-160), by section (index 0: the east strip past S1's wall, part of no
+         * section). From Andrew's 2026-10-04 probes: S1/S2 at z 122.0 (safe 121.99, hit 122.30), the north strip
+         * to z 146 and x -6..114, S3's east edge x 18, S4's north edge z 50, the east strip x 113-114; all on block edges.
+         */
+        val DT_ZONES = arrayOf(
+            AABB(113.0, 100.0, 27.0, 114.0, 160.0, 146.0),
+            AABB(89.0, 100.0, 48.0, 113.0, 160.0, 122.0),
+            AABB(-6.0, 100.0, 122.0, 114.0, 160.0, 146.0),
+            AABB(-6.0, 100.0, 50.0, 18.0, 160.0, 122.0),
+            AABB(17.0, 100.0, 27.0, 113.0, 160.0, 50.0),
+        )
+
+        /** The zone (1-4, 0 for the east strip) [v] is in, or -1 outside them all. */
+        fun dtZone(v: Vec3): Int {
+            for (i in 1..4) if (DT_ZONES[i].contains(v)) return i
+            return if (DT_ZONES[0].contains(v)) 0 else -1
+        }
+
         /** Where the core counts as entered (DungeonSplits.everyoneInCore). */
         val CORE_BOX = AABB(39.0, 0.0, 54.0, 71.0, 155.5, 118.0)
         /** In front of the core door: outside every section, never hit by a death tick. */
