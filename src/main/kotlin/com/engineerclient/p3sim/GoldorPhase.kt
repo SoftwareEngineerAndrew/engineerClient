@@ -194,11 +194,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun innerChamber() {
         val p = Sim.player ?: return
         val was = lastIn; val now = p.position(); lastIn = now
-        // Only from S4's start (until the core opens); every try is sent back, the line and sound at most once per 20 ticks.
-        if (section < 4 || coreAt >= 0 || was == null || now.z >= 54.0 || p.x < 52.0 || p.x > 57.0 || p.y < 113.0 || p.y > 123.0) return
-        // Walking out: last tick just inside the door hole, one step away. A leap or teleport onto the spot in front of
-        // the door (a teammate standing there at S4's start) comes from far off and is not leaving the chamber.
-        if (was.z < 54.0 || was.z > 57.0 || was.x < 52.0 || was.x > 57.0 || was.y < 113.0 || was.y > 123.0 || was.distanceTo(now) > 3.0) return
+        // From S4's start until the core opens, nothing gets you out of the inner chamber: any move from inside
+        // CORE_BOX to outside it (a step, a leap, a teleport) snaps you back. Coming in from outside is free
+        // (a leap onto a teammate at the door from S3 starts outside, so it never counts).
+        if (section < 4 || coreAt >= 0 || was == null || !CORE_BOX.contains(was) || CORE_BOX.contains(now)) return
         Sim.tp(p, 54.5, 115.0, 58.3)
         lastIn = Vec3(54.5, 115.0, 58.3)
         if (n - innerAt < 20) return
