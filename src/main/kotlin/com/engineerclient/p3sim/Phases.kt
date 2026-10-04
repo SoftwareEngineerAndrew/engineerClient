@@ -53,7 +53,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
     }
 
     private fun showTag() {
-        tag = marker("§e﴾ §r§8§r§5 §r§c§l$name§r §e﴿", TAG_Y)
+        tag = marker("§e\uFD3E §r§8\uE085§r§5\uE073 §r§c§l$name§r §e\uFD3F", TAG_Y)
         if (Fight.serverTick < speechUntil) showSpeech()
     }
 
