@@ -82,6 +82,12 @@ class PreRequeueTest {
     }
 
     @Test
+    fun `the join command's floor names`() {
+        assertEquals("catacombs_floor_seven", PreRequeue.Plan.instance("F7"))
+        assertEquals("master_catacombs_floor_seven", PreRequeue.Plan.instance("M7"))
+    }
+
+    @Test
     fun `a world change resets it`() {
         val p = PreRequeue.Plan().apply { onEndLine(); onTnt(140, 0) }
         p.reset()
