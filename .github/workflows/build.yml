@@ -24,7 +24,7 @@ jobs:
           chmod +x gradlew
           ./gradlew build -x test --console=plain "-Dorg.gradle.java.home=$JAVA_HOME"
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: engineerclient
           path: build/libs/*.jar
