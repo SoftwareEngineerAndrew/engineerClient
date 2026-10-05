@@ -41,10 +41,10 @@ object Terminals {
         return w.last().first
     }
 
-    /** Item with a plain, non-italic name (and [count]). */
-    fun named(item: Item, name: String, count: Int = 1, glint: Boolean = false): ItemStack {
+    /** Item with a non-italic name (in [color] if given, as Hypixel colours most terminal items) and [count]. */
+    fun named(item: Item, name: String, count: Int = 1, glint: Boolean = false, color: net.minecraft.ChatFormatting? = null): ItemStack {
         val s = ItemStack(item, count)
-        s.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { it.withItalic(false) })
+        s.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { st -> st.withItalic(false).let { if (color != null) it.withColor(color) else it } })
         if (glint) s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
         return s
     }
@@ -58,11 +58,11 @@ object Terminals {
 
     /**
      * Opens [station]'s terminal for [player]. As on Hypixel, every open deals a fresh puzzle: a
-     * terminal closed unsolved comes back with new items and no progress (65 of 68 reopens), of the
-     * same type, but now and then of another (3 of 68).
+     * terminal closed unsolved comes back with new items and no progress, always of the same type
+     * (41 of 41 reopens on main).
      */
     fun open(player: ServerPlayer, station: Station, type: Type? = null) {
-        val keep = station.term?.type?.takeIf { Fight.forcedTerminal == null && Random.nextInt(68) >= 3 }
+        val keep = station.term?.type?.takeIf { Fight.forcedTerminal == null }
         val term = Term.create(type ?: keep ?: station.nextType()).also { station.term = it }
         player.openMenu(SimpleMenuProvider({ id, inv, _ -> TerminalMenu(id, inv, term, station) }, Component.literal(term.title)))
         // A lever click at you as the window opens (vol 0.5, pitch 1, blocks; TERM-08).
@@ -100,12 +100,12 @@ object Terminals {
         private val slots = (10..16) + (19..25)
         private var next = 1
         init {
-            slots.shuffled().forEachIndexed { i, s -> items[s] = named(Items.RED_STAINED_GLASS_PANE, "${i + 1}", i + 1) }
+            slots.shuffled().forEachIndexed { i, s -> items[s] = named(Items.RED_STAINED_GLASS_PANE, "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
             val it = items[slot]
             if (it.item != Items.RED_STAINED_GLASS_PANE || it.count != next) return false
-            items[slot] = named(Items.LIME_STAINED_GLASS_PANE, "$next", next)
+            items[slot] = named(Items.LIME_STAINED_GLASS_PANE, "$next", next, color = net.minecraft.ChatFormatting.GREEN)
             next++
             return true
         }
@@ -122,7 +122,7 @@ object Terminals {
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
-        private fun pane(on: Boolean) = if (on) named(Items.LIME_STAINED_GLASS_PANE, "On") else named(Items.RED_STAINED_GLASS_PANE, "Off")
+        private fun pane(on: Boolean) = if (on) named(Items.LIME_STAINED_GLASS_PANE, "On", color = net.minecraft.ChatFormatting.GREEN) else named(Items.RED_STAINED_GLASS_PANE, "Off", color = net.minecraft.ChatFormatting.RED)
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
             if (slot !in slots) return false
             items[slot] = pane(items[slot].item == Items.RED_STAINED_GLASS_PANE)
@@ -145,7 +145,7 @@ object Terminals {
             do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
             slots.forEach { set(it) }
         }
-        private fun set(slot: Int) { val (i, n) = cycle[colour[slot]]; items[slot] = named(i, n) }
+        private fun set(slot: Int) { val (i, n) = cycle[colour[slot]]; items[slot] = named(i, n, color = net.minecraft.ChatFormatting.GREEN) }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
             if (slot !in slots) return false
             colour[slot] = (colour[slot] + if (button == 1 && input == ContainerInput.PICKUP) 4 else 1) % 5
@@ -172,7 +172,7 @@ object Terminals {
             // Items with the letter per window, as measured (n = 186); each slot's item is uniform.
             val n = weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4))
             val picks = (List(n) { right.random() } + List(slots.size - n) { wrong.random() }).shuffled()
-            slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name) }
+            slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
         private fun want(s: ItemStack) = s.hoverName.string.startsWith(letter)
         // By slot: some items glint on their own (Enchanted Book, Bottle o' Enchanting, Nether Star).
@@ -200,7 +200,7 @@ object Terminals {
             val families = listOf(target) + (COLOURS - target).shuffled().take(4)
             val sixes = families.shuffled().take(3).toSet()
             val picks = families.flatMap { c -> List(if (c in sixes) 6 else 5) { c.items.random() } }.shuffled()
-            slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name) }
+            slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
         private val wanted = target.items.map { item(it.first) }.toSet()
         private fun want(s: ItemStack) = s.item in wanted
@@ -250,8 +250,13 @@ object Terminals {
                         else -> named(Items.RED_STAINED_GLASS_PANE, "")
                     }
                 }
-                items[(r + 1) * 9 + 7] = if (r == row) named(Items.LIME_TERRACOTTA, "Lock In Slot") else named(Items.RED_TERRACOTTA, "Row Not Active")
+                items[(r + 1) * 9 + 7] = if (r == row) button(named(Items.LIME_TERRACOTTA, "Lock In Slot", color = net.minecraft.ChatFormatting.GREEN)) else button(named(Items.RED_TERRACOTTA, "Row Not Active", color = net.minecraft.ChatFormatting.RED))
             }
+        }
+        /** Both terracotta buttons carry Hypixel's two gray, non-italic lore lines. */
+        private fun button(s: ItemStack) = s.also {
+            it.set(DataComponents.LORE, net.minecraft.world.item.component.ItemLore(listOf("Click this button when the Green", "lines up with the Purple!")
+                .map { l -> Component.literal(l).withStyle { st -> st.withItalic(false).withColor(net.minecraft.ChatFormatting.GRAY) } as Component }))
         }
         override fun tick(t: Int) {
             // t = ticks since the items appeared: a step every 10.
@@ -308,7 +313,8 @@ object Terminals {
             sync = s
             super.setSynchronizer(object : net.minecraft.world.inventory.ContainerSynchronizer by s {
                 override fun sendInitialData(menu: net.minecraft.world.inventory.AbstractContainerMenu, items: List<ItemStack>, carried: ItemStack, data: IntArray) {
-                    items.forEachIndexed { i, it -> s.sendSlotChange(menu, i, it) }
+                    // Empty player-inventory slots get none (the client's copy of them is empty already).
+                    items.forEachIndexed { i, it -> if (i < term.size || !it.isEmpty) s.sendSlotChange(menu, i, it) }
                 }
             })
         }
@@ -334,7 +340,11 @@ object Terminals {
         }
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
-            if (term.done || slot !in 0 until term.size) { undo(slot); return }
+            // A refused click gets no reply of its own (Hypixel sends no set_slot, no cursor). A vanilla client's guess (the
+            // item on its cursor, the slot emptied) is still put back: handleContainerClick takes the guess as the remote
+            // state and its broadcastChanges right after this sends the real slot and cursor. Odin's clicks guess nothing,
+            // so they get nothing back, as on Hypixel.
+            if (term.done || slot !in 0 until term.size) return
             Fight.afterPing("terminal click") {
                 if (player.containerMenu !== this || term.done) return@afterPing
                 val now = Fight.serverTick
@@ -344,7 +354,7 @@ object Terminals {
                     if (counted.size >= 5) return@afterPing
                     counted.addLast(now)
                 }
-                if (!term.click(slot, button, input)) { undo(slot); return@afterPing }
+                if (!term.click(slot, button, input)) return@afterPing
                 // A counted click: a pling at you at once (TERM-07), the slot change next tick.
                 Sim.sound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
                 answeredAt = now
@@ -356,12 +366,6 @@ object Terminals {
                     player.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))
                 }
             }
-        }
-
-        /** A refused click: the client's guess (the item on its cursor, the slot emptied) is put back. */
-        private fun undo(slot: Int) {
-            player.connection.send(net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket(ItemStack.EMPTY))
-            if (slot in 0 until slots.size) player.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(containerId, incrementStateId(), slot, getSlot(slot).item.copy()))
         }
 
         /** A click from a client a step behind: answer slot by slot, never with a full refill (Odin ignores those). */

@@ -11,6 +11,7 @@
     "DungeonbreakerSimMixin",
     "ShortbowSimMixin",
     "QuiverSimMixin",
+    "PressurePlateSimMixin",
     "LastBreathSimMixin",
     "ArcherDropSimMixin",
     "BlockChangeSourceMixin",

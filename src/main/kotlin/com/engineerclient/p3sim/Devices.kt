@@ -260,12 +260,13 @@ class Devices(val phase: GoldorPhase) {
                     if (!left) {
                         if (!on.remove(k)) on += k
                         draw(if (Random.nextInt(6) == 0) 4 else 3)
-                        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
+                        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.5873016f else 0.4920635f, Vec3.atCenterOf(pos), net.minecraft.sounds.SoundSource.BLOCKS)
                     }
                     // In S2, or pre-done from S1 (as the bots do it, Quality PF's "lights" in S1's times).
                     credit = phase.section in 1..2 && (wasLit || (!left && allLit()))
                 }
-                Fight.later(2, "lights credit") { if (credit && phase === Fight.phase && !st.done) st.complete(Sim.me) }
+                // A left click is processed twice on Hypixel: the completion line goes out twice in one tick, counted once.
+                Fight.later(2, "lights credit") { if (credit && phase === Fight.phase && !st.done) st.complete(Sim.me, twice = left) }
             }
             return true
         }
@@ -303,7 +304,10 @@ class Devices(val phase: GoldorPhase) {
                 if (solution[i] >= 0) {
                     f.setItem(ItemStack(Items.ARROW), false)
                     f.setRotation(solution[i])
-                } else f.setItem(ItemStack(if (wool == true) Items.LIME_WOOL else Items.RED_WOOL), false)
+                } else f.setItem(
+                    // Hypixel names them: "Start" (green) on the lime wool, "End" (red) on the red, non-italic.
+                    if (wool == true) Terminals.named(Items.LIME_WOOL, "Start", color = net.minecraft.ChatFormatting.GREEN)
+                    else Terminals.named(Items.RED_WOOL, "End", color = net.minecraft.ChatFormatting.RED), false)
                 frames[i] = Sim.spawn(f)
             }
             drawWall()

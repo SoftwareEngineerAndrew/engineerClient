@@ -1074,7 +1074,7 @@ object SimItems {
         val st = Blocks.get(pos)?.takeIf { it.hasProperty(LeverBlock.POWERED) } ?: Sim.level.getBlockState(pos).takeIf { it.hasProperty(LeverBlock.POWERED) } ?: return
         val on = !st.getValue(LeverBlock.POWERED)
         Blocks.set(pos, st.setValue(LeverBlock.POWERED, on))
-        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (on) 0.59f else 0.49f, Vec3.atCenterOf(pos))
+        Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (on) 0.5873016f else 0.4920635f, Vec3.atCenterOf(pos), net.minecraft.sounds.SoundSource.BLOCKS)
     }
 
     private fun useBlock(p: ServerPlayer, pos: BlockPos, id: String?): InteractionResult {

@@ -38,8 +38,8 @@ class Station(
     fun nextType(): Terminals.Type = Fight.forcedTerminal ?: Terminals.randomType()
 
     /** Done by [by] (you, or a bot's name): counts it, says so, opens what it opens. */
-    fun complete(by: String) {
-        (Fight.phase as? GoldorPhase)?.complete(this, by)
+    fun complete(by: String, twice: Boolean = false) {
+        (Fight.phase as? GoldorPhase)?.complete(this, by, twice)
     }
 
     fun spawnStands() {

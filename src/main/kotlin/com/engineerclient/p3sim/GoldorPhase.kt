@@ -217,7 +217,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         lastIn = Vec3(54.5, 115.0, 58.3)
         if (n - innerAt < 20) return
         innerAt = n
-        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, Vec3(54.5, 115.0, 58.3))
+        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, Vec3(54.5, 115.0, 58.3), net.minecraft.sounds.SoundSource.HOSTILE)
         Sim.chat("§cA mystical force prevents you from leaving the inner chamber!")
     }
 
@@ -271,7 +271,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     // ------------------------------------------------------------------ completions
 
-    fun complete(st: Station, by: String) {
+    fun complete(st: Station, by: String, twice: Boolean = false) {
         if (st.done) return
         val inProgress = st.section == section
         val early = st.kind == Station.Kind.DEVICE && st.section > section
@@ -285,16 +285,23 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val line = progressLine(by, what, k, Station.total(shown))
         // Someone else finishing the terminal you're in closes your window first, in the same tick (terminals audit TERM-06).
         if (by != Sim.me && st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st)
+        if (by == Sim.me) { Stats.done(st, n); GhostCapture.event("done", st.id) }
+        // [twice]: Hypixel processes a Lights left click twice, so the announcement goes out again in the same tick
+        // (counted once).
+        repeat(if (twice) 2 else 1) { announce(line) }
+        if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
+    }
+
+    /** A progress line as Hypixel sends it, in its order: chat, title/subtitle, pling (devices pass 2). */
+    private fun announce(line: String) {
         // Hypixel's line is a styled component (name, green text, red count), not a § string.
         Sim.chatStyled(line)
-        if (by == Sim.me) { Stats.done(st, n); GhostCapture.event("done", st.id) }
-        // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
-        // Odin's Terminal Sounds keys on the raw 4.047619) (chat-attacks.md §2).
-        Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
         // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it): 0/40/0, the
         // subtitle a legacy string without the §r's ("§bp3wr§a activated a terminal! (§c3§a/8)").
         Sim.title("", line.replace("§r", ""), 0, 40, 0)
-        if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
+        // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
+        // Odin's Terminal Sounds keys on the raw 4.047619) (chat-attacks.md §2).
+        Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
     }
 
     /** Rank colours (FLOW-27): you and the bots are MVP+ (the leap menu and party lines colour the bots §b). */
@@ -748,19 +755,38 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** Lever blocks: our own, so the click is ours (no redstone). */
     fun leverAt(pos: BlockPos): Station? = stations.firstOrNull { it.lever == pos }
 
-    /** [left]: a left click credits the lever without moving it or a click sound (LEV-01). */
+    /**
+     * [left]: a left click credits the lever without moving it or a click sound (LEV-01). Hypixel processes a left
+     * click twice: in one tick the credit, the lever's (unchanged) block, then the refusal of an already-done lever.
+     */
     fun pullLever(st: Station, by: String, left: Boolean = false) {
         val lever = st.lever ?: return
-        if (st.done) { if (by == Sim.me) Sim.chat("§cSomeone has already activated this lever!"); return }
+        if (st.done) { if (by == Sim.me) refuseLever(lever, left); return }
         // LEV-02: another section's lever is vanilla's toggle with the click sound; no chat (never recorded), no credit.
         if (st.section != section) { if (by == Sim.me && !left) SimItems.vanillaLeverToggle(lever); return }
         // LEV-03: vanilla's toggle: the state flips, and the pitch follows the new state.
         val nowOn = !(Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.getValue(LeverBlock.POWERED) ?: false)
         if (!left) Blocks.get(lever)?.takeIf { it.hasProperty(LeverBlock.POWERED) }?.let { Blocks.set(lever, it.setValue(LeverBlock.POWERED, nowOn)) }
-        if (!left) Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (nowOn) 0.59f else 0.49f, Vec3.atCenterOf(lever))
         complete(st, by)
+        // The click comes after the credit (chat, title, pling), blocks source, exact pitches (devices pass 2).
+        if (!left) Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (nowOn) 0.5873016f else 0.4920635f, Vec3.atCenterOf(lever), net.minecraft.sounds.SoundSource.BLOCKS)
+        if (left && st.done && by == Sim.me) { sendBlock(lever); refuseLever(lever, true) }
         // The lever's stand renames 1-3 ticks after the pull, not on the 20-tick grid (devices.md §5).
         if (st.done) Fight.later(1, "lever stand") { if (Fight.phase === this) st.refreshStands() }
+    }
+
+    /**
+     * "Someone has already activated this lever!", then enderman.teleport (hostile, vol 8, pitch 0) at you. A left click
+     * (never seen by the server's use_item_on handler, which resends the block itself) also gets the lever's block back.
+     */
+    private fun refuseLever(lever: net.minecraft.core.BlockPos, left: Boolean) {
+        Sim.chat("§cSomeone has already activated this lever!")
+        Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, source = net.minecraft.sounds.SoundSource.HOSTILE)
+        if (left) sendBlock(lever)
+    }
+
+    private fun sendBlock(pos: net.minecraft.core.BlockPos) {
+        Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, pos))
     }
 
     /** A click on a terminal's stand. */
