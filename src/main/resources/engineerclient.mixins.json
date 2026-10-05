@@ -39,6 +39,7 @@
     "GameRendererInvoker",
     "GameRendererMixin",
     "GuiBlurMixin",
+    "GuiRenderStateAccessor",
     "GuiItemNameMixin",
     "GuiSidebarInvoker",
     "GuiTitleTapMixin",

@@ -27,12 +27,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>Nothing here runs when the HUD is not being extracted (no level, so nothing to blur), which
  * is the other half of the condition {@link RandomStuff#blursGui()} checks.
+ *
+ * <p>Some HUD mods (gnetum's {@code wrapHudRender}) run {@code extractRenderState} more than once a
+ * frame, and something else may already have marked the blur; the marker is only placed while the
+ * frame's blur is still unspent ({@code firstStratumAfterBlur == Integer.MAX_VALUE}), or the game
+ * crashes with "Can only blur once per frame".
  */
 @Mixin(Gui.class)
 public class GuiBlurMixin {
 
     @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"))
     private void ec$blurBehindGui(GuiGraphicsExtractor extractor, DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (RandomStuff.INSTANCE.blursGui()) extractor.blurBeforeThisStratum();
+        if (!RandomStuff.INSTANCE.blursGui()) return;
+        if (((GuiRenderStateAccessor) extractor.guiRenderState).ec$firstStratumAfterBlur() != Integer.MAX_VALUE) return;
+        extractor.blurBeforeThisStratum();
     }
 }
