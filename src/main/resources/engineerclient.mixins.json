@@ -6,6 +6,8 @@
   "client": [
     "ArmorFoilMixin",
     "HideBotsSimMixin",
+    "OwnArrowsHideMixin",
+    "ArrowInGroundInvoker",
     "SimBotsGhostMixin",
     "PortalSimMixin",
     "DungeonbreakerSimMixin",
