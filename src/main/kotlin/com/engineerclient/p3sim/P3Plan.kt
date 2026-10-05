@@ -15,9 +15,12 @@ import java.io.File
  * The roles and their times live in [Roles]; the early-enter spots' defaults are here.
  */
 object P3Plan {
-    /** The skill levels: [Roles.PRESETS], then Random (Quality PF's roles, each bot job at a random time). */
-    val SKILLS = Roles.PRESETS.map { it.name } + "Random"
+    /**
+     * The skill levels: [Roles.PRESETS] with Random (Quality PF's roles, each bot job at a random time) 4th,
+     * where it has always been (saved choices keep their index); later presets after it.
+     */
     const val RANDOM = 3
+    val SKILLS = Roles.PRESETS.take(RANDOM).map { it.name } + "Random" + Roles.PRESETS.drop(RANDOM).map { it.name }
 
     /**
      * Where each early enter stands (into: 5 = the core, just outside it in S4; 6 = the recore,
@@ -66,7 +69,11 @@ object P3Plan {
     fun ghostOn(c: DungeonClass) = c.name in ghosts
     fun toggleGhost(c: DungeonClass) { if (!ghosts.remove(c.name)) ghosts += c.name; save() }
 
-    fun preset(): Roles.Preset = Roles.PRESETS[if (skill == RANDOM) 1 else skill.coerceIn(0, Roles.PRESETS.size - 1)]
+    fun preset(): Roles.Preset = Roles.PRESETS[when {
+        skill == RANDOM -> 1
+        skill > RANDOM -> (skill - 1).coerceAtMost(Roles.PRESETS.size - 1)
+        else -> skill.coerceAtLeast(0)
+    }]
     fun plan(): Roles.Plan = Roles.plan(preset())
     fun skillName() = SKILLS[skill.coerceIn(0, SKILLS.size - 1)]
 
