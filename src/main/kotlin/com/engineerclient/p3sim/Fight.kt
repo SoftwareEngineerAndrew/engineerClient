@@ -184,12 +184,15 @@ object Fight {
         // Hypixel main: 40 hp with 16 absorption (MOVE-05).
         player.getAttribute(Attributes.MAX_HEALTH)?.baseValue = 40.0
         player.health = 40f
+        // 26.1.2 clamps absorption to MAX_ABSORPTION (base 0): raise it first or the 16 comes out as 0.
+        player.getAttribute(Attributes.MAX_ABSORPTION)?.let { if (it.baseValue < 16.0) it.baseValue = 16.0 }
         player.absorptionAmount = 16f
         player.removeEffect(MobEffects.SATURATION)
         // Invulnerable players are never hungry or hurt; the effects are Hypixel's (night vision 1, or with haste 0 + mining fatigue 255).
-        player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 0, false, false, false))
-        player.addEffect(MobEffectInstance(MobEffects.HASTE, -1, 0, false, false, false))
-        player.addEffect(MobEffectInstance(MobEffects.MINING_FATIGUE, -1, 255, false, false, false))
+        // As sent on main: night vision amplifier 1 with flags 7 (ambient, particles, icon); haste and mining fatigue flags 3 (no icon).
+        player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
+        player.addEffect(MobEffectInstance(MobEffects.HASTE, -1, 0, true, true, false))
+        player.addEffect(MobEffectInstance(MobEffects.MINING_FATIGUE, -1, 255, true, true, false))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
         SimItems.giveHotbar(player)
     }
@@ -213,6 +216,9 @@ object Fight {
         val racing = SimItems.idOf(player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "RACING_HELMET"
         val speed = P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
         player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = speed.coerceAtLeast(100).toDouble() / 1000.0
+        // The abilities packet's walk speed (FOV scaling) follows it, as Hypixel's does.
+        player.abilities.setWalkingSpeed(speed.coerceAtLeast(100) / 1000f)
+        player.onUpdateAbilities()
     }
 
     /** What the menu last started (the Restart keybind starts it again). */

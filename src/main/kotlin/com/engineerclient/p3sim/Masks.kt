@@ -218,8 +218,8 @@ object Masks {
             return
         }
         Sim.chat(if (by == null) "§c ☠ §r§7You died and became a ghost." else "§c ☠ §r§7You were killed by $by and became a ghost.")
-        // The Revive Stone line shows in about half of the deaths on main (DEATH-15); it changes nothing.
-        if (kotlin.random.Random.nextBoolean()) Sim.chat("§aYour Revive Stone revived you and broke!")
+        // The Revive Stone line shows in 71% of the deaths on main (DEATH-15); it changes nothing.
+        if (kotlin.random.Random.nextInt(100) < 71) Sim.chat("§aYour Revive Stone revived you and broke!")
         becomeGhost(p)
         Sim.sound(SoundEvents.GENERIC_HURT, 1f, 0.889f, null, net.minecraft.sounds.SoundSource.NEUTRAL)
         goldor?.invoke()

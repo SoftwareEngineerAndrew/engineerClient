@@ -102,15 +102,15 @@ internal class StormCorpse(private val body: BossWither) {
             yaw += 40.0
             val r = Math.toRadians(yaw)
             body.moveTo(at, at.add(-sin(r), 0.0, cos(r)))
-            if (n == nextHurt) { Sim.sound(SoundEvents.WITHER_HURT, 15f, 1f, at); nextHurt += Random.nextInt(10, 14) }
+            if (n == nextHurt) { Sim.sound(SoundEvents.WITHER_HURT, 15f, 1f, at, net.minecraft.sounds.SoundSource.HOSTILE); nextHurt += Random.nextInt(10, 14) }
         }
         when (n) {
-            0, 4 -> Sim.sound(SoundEvents.GENERIC_EXPLODE, 2f, 0.6f, at)
+            0, 4 -> Sim.sound(SoundEvents.GENERIC_EXPLODE, 2f, 0.6f, at, net.minecraft.sounds.SoundSource.BLOCKS)
             12 -> Sim.sound(SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR, 3f, 0.9f, at)
             DEAD -> body.dieAnim()
             GONE -> body.remove()
         }
-        bolts[n]?.forEach { StormFx.bolt(it.x, it.z, it.y) }
+        bolts[n]?.forEach { StormFx.bolt(it.x, it.z, it.y, thunder = true) }
     }
 
     companion object {
@@ -156,12 +156,14 @@ internal object StormFx {
     fun clearSpeech() { speech.forEach { it.first.discard() }; speech.clear() }
 
     /** A visual-only bolt (vanilla's flash and thunder) on the ground at (x, z), looking down from [fromY]. */
-    fun bolt(x: Double, z: Double, fromY: Double): Vec3 {
+    fun bolt(x: Double, z: Double, fromY: Double, thunder: Boolean = false): Vec3 {
         val p = Vec3(x, ground(x, z, fromY), z)
         val b = LightningBolt(EntityType.LIGHTNING_BOLT, Sim.level)
         b.setVisualOnly(true)
         b.snapTo(p.x, p.y, p.z, 0f, 0f)
         Sim.spawn(b)
+        // A visual-only bolt plays no sound of its own here: in the lead-in Hypixel sends the thunder per bolt, at it (vol 10000, pitch 0.8-1.0, WEATHER).
+        if (thunder) Sim.sound(SoundEvents.LIGHTNING_BOLT_THUNDER, 10000f, 0.8f + Random.nextFloat() * 0.2f, p, net.minecraft.sounds.SoundSource.WEATHER)
         return p
     }
 

@@ -1281,7 +1281,12 @@ object SimItems {
 
     /** Wither Shield (HYP-03/04/05): absorption back to 16 two ticks on; every ~5 s the cure sound and a ring of 16 witch particles. */
     private fun witherShield(p: ServerPlayer) {
-        Fight.later(2, "wither shield") { if (!p.isRemoved) p.absorptionAmount = 16f }
+        Fight.later(2, "wither shield") {
+            if (p.isRemoved) return@later
+            // 26.1.2 clamps absorption to MAX_ABSORPTION: make room for the 16 first.
+            p.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_ABSORPTION)?.let { if (it.baseValue < 16.0) it.baseValue = 16.0 }
+            p.absorptionAmount = 16f
+        }
         val now = Fight.serverTick
         if (now - lastCure < 100) return
         lastCure = now
