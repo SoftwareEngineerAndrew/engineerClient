@@ -6,6 +6,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.BERSERK
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.HEALER
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.MAGE
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK
+import net.minecraft.world.phys.Vec3
 
 /**
  * The skill presets: who does what (a role per class) and when each thing is done. Edit them here.
@@ -35,9 +36,11 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK
  *   section's terminals by number, or `ee3` / `core`...: whoever does that); without it, until
  *   everyone free has
  * Bots that pre-leapt walk on to their next terminals; at the core, everyone leaps in at once.
+ *
+ * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `ee4`, `core`).
  */
 object Roles {
-    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList())
+    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap())
 
     /**
      * Help on a stack (the menu's Helper): when you're on [yours] (that terminal and the stack's
@@ -102,7 +105,42 @@ object Roles {
     /** For now the same as Quality PF. */
     val DYNAMIC = Preset("Dynamic", QUALITY_PF.roles, QUALITY_PF.times, QUALITY_PF.moves, QUALITY_PF.helps)
 
-    val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC)
+    /**
+     * The p3sim route planner's prototype roles 1 (tools/p3sim/routes/custom/prototype1.json, 399 ticks), times
+     * from its simulation. The tank pre-does Lights and waits on S2's high path for the archer, mage and bers;
+     * the bers waits on S3 T3 for the healer, tank and archer; the mage waits by the core (EE4) for the S4
+     * leaps. (The planner's bers also leaps onto the archer at T4 for S3's levers: the bots walk it.)
+     */
+    val PROTOTYPE_1 = Preset(
+        "Prototype 1",
+        roles = linkedMapOf(
+            HEALER to "ss (leap archer) / 1 (leap bers) / 1 (leap mage) / 1 recore",
+            MAGE to "bl 43 / 53 / ee4 / 4 recore",
+            BERSERK to "i4 / ee3 / 3 bl / bl",
+            ARCHER to "21 / 2 / dev 4 (leap healer) / 2 recore",
+            TANK to "ee2 / dev bl 4 / 2 / 3 recore",
+        ),
+        times = listOf(
+            "ll 0.1 | lights 0.1 | rl 0.45 | gate 0.6 | 2 2.75 | i4 3.05 | 4 3.35 | 1 4.85 | 3 5.45 | ss 8.1",
+            "ll 0.1 | rl 0.8 | gate 1.0 | 5 2 2.1 | 1 3.0 | arrows 3.6 | 3 4.3 | 4 4.4",
+            "4 2.1 | 3 2.15 | 1 2.45 | 2 2.95 | ll 4.0 | gate 4.2 | rl 4.4",
+            "ll 1.1 | rl 1.75 | terms 2.1",
+        ),
+        moves = listOf(
+            "ee2 waits 2 5 ee3",
+            "ee3 waits 1 2 4",
+            "ee4 waits 1 2 3",
+            "",
+        ),
+        spots = mapOf(
+            "ee2" to Vec3(34.05, 131.0, 139.05),
+            "ee3" to Vec3(16.5, 123.0, 93.7),
+            "ee4" to Vec3(54.55, 115.06, 51.05),
+        ),
+    )
+
+    /** In the skill menu as listed, with Random after the first three ([P3Plan.SKILLS]). */
+    val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC, PROTOTYPE_1)
 
     /** `ll` and `rl` per section coming in along the track (S2: the high lever on the left, the low one by T4 on the right; S4, heading east: the low lever by T3 on the left, the high one by T4 on the right). */
     val LEFT = mapOf(1 to "S1 west lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
