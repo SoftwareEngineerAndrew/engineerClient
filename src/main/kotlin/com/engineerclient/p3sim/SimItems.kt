@@ -277,7 +277,7 @@ object SimItems {
 §7Strength: §c+151
 §7Crit Damage: §9+39%
 §7Vitality: §4+20
-§7Shot Cooldown: §a0.25s
+§7Shot Cooldown: §a0.5s
 
 §d§lDuplex I
 §7Shoot an extra arrow dealing §c4% §7of the
@@ -749,8 +749,9 @@ object SimItems {
         return s
     }
 
-    // Superboom stays TNT and infinite for now (Andrew); Hypixel's is paper, so no item_model here.
-    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", Lore.SUPERBOOM_TNT_NAME, Lore.SUPERBOOM_TNT, glint = true).also { it.count = 64; hy(it, null, "rare", unbreakable = false) }
+    // Superboom is paper with Hypixel's item model (SUPERBOOM click side effects): no BlockItem, so the client never
+    // "places" it (no place sound, swing or resend). Still infinite (never consumed) and needs a block target.
+    val SUPERBOOM get() = item(Items.PAPER, "SUPERBOOM_TNT", Lore.SUPERBOOM_TNT_NAME, Lore.SUPERBOOM_TNT, glint = true).also { it.count = 64; hy(it, "uncategorized/superboom_tnt", "rare", unbreakable = false) }
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", Lore.HYPERION_NAME, Lore.HYPERION, glint = true).also { hy(it, "uncategorized/hyperion", "mythic") }
     /** Bonzo's Staff as Hypixel sends it (BONZO-10): glyph + "Heroic" name, epic tooltip, fragged model, glint. Lore stats are one recorded player's. */
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§5\uE068 Heroic Bonzo's Staff §6✪✪✪✪✪", listOf(
@@ -762,7 +763,18 @@ object SimItems {
         it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:epic"))
     }
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
-    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also { hy(it, null, "special", unbreakable = false, hidden = Lore.HIDDEN_BREAKER) }
+    val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also {
+        hy(it, null, "special", unbreakable = false, hidden = Lore.HIDDEN_BREAKER)
+        // As main sends it (rec2 inv): tool {default_mining_speed:1024, rules:[]} and Efficiency X + Unbreaking X, hidden.
+        // The sim's mining never reads them: a breaker hit is DungeonbreakerSimMixin's (SimItems.clientHitBlock), not vanilla's.
+        it.set(DataComponents.TOOL, net.minecraft.world.item.component.Tool(emptyList(), 1024f, 1, true))
+        SimServer.level?.registryAccess()?.lookup(net.minecraft.core.registries.Registries.ENCHANTMENT)?.orElse(null)?.let { reg ->
+            val e = net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(net.minecraft.world.item.enchantment.ItemEnchantments.EMPTY)
+            reg.get(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY).ifPresent { h -> e.set(h, 10) }
+            reg.get(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING).ifPresent { h -> e.set(h, 10) }
+            it.set(DataComponents.ENCHANTMENTS, e.toImmutable())
+        }
+    }
 
     /** The Dungeonbreaker's lore as Hypixel sends it (BREAKER-05); the "Charges" line changes with every charge. */
     private fun breakerLore(n: Int) = listOf("§7Speed: §f+20", "", "§6Ability: Dungeon Breaker §e§lDIG",
@@ -784,6 +796,90 @@ object SimItems {
     val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", Lore.JERRY_STAFF_NAME, Lore.JERRY_STAFF, glint = true).also { hy(it, "community_center/mayor/jerry/jerrychine_gun", "legendary", unbreakable = false) }
     val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", Lore.WITHER_CLOAK_NAME, Lore.WITHER_CLOAK).also { hy(it, "uncategorized/wither_cloak_sword", "legendary") }
     val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", Lore.SKYBLOCK_MENU_NAME, Lore.SKYBLOCK_MENU).also { hy(it, null, "common", unbreakable = false) }
+
+    // ------------------------------------------------------------------ Haste / Mining Fatigue by held slot
+
+    /** Whether the Dungeonbreaker was held at the last [miningEffects] (null: not applied yet). */
+    private var breakerHeld: Boolean? = null
+
+    /**
+     * Main (census): Haste 0 and Mining Fatigue 255 (flags 3, no icon) while the held slot is not the Dungeonbreaker,
+     * both removed while it is; toggled on a held-slot change. Night vision is Fight.setup's and stays. [force]: apply
+     * whatever the last state was (a setup). Block protection doesn't lean on the fatigue: the server refuses every vanilla
+     * break (Sim.guardBlocks) and a Dungeonbreaker hit never starts a vanilla break (DungeonbreakerSimMixin).
+     */
+    fun miningEffects(p: ServerPlayer, force: Boolean = false) {
+        val held = idOf(p.mainHandItem) == "DUNGEONBREAKER"
+        if (!force && held == breakerHeld) return
+        breakerHeld = held
+        if (held) {
+            p.removeEffect(net.minecraft.world.effect.MobEffects.HASTE)
+            p.removeEffect(net.minecraft.world.effect.MobEffects.MINING_FATIGUE)
+        } else {
+            p.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.HASTE, -1, 0, true, true, false))
+            p.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.MINING_FATIGUE, -1, 255, true, true, false))
+        }
+    }
+
+    // ------------------------------------------------------------------ hotbar slot 9 (index 8)
+
+    /** Arrows left in the quiver: the rec2 preview's count (2,769), one less per shot ([quiverShot]). */
+    private var quiverArrows = QUIVER_START
+    private const val QUIVER_START = 2769
+
+    /** A bow shot from the quiver: one arrow less, the preview follows on the next tick. */
+    fun quiverShot() { if (quiverArrows > 0) quiverArrows-- }
+
+    /** Main's quiver preview (rec2 inv slot 8 while a bow is held): a Flint Arrow feather, custom_data {quiver_arrow:"true"}. */
+    private fun quiverPreview(): ItemStack {
+        val s = ItemStack(Items.FEATHER)
+        s.count = quiverArrows.coerceIn(1, 64)
+        s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
+        s.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse("hypixel_skyblock:item/uncategorized/flint_arrow"))
+        s.set(DataComponents.CUSTOM_NAME, Component.literal("Flint Arrow").withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.WHITE) })
+        val lore = listOf("§7Damage: §c+1", "", "§8Stats added when shot!", "§f§lCOMMON ARROW", "§8§m                                ",
+            "§7Arrows Remaining: §a" + "%,d".format(java.util.Locale.ROOT, quiverArrows), "", "§8This item is a preview of your", "§8currently selected arrow.")
+        s.set(DataComponents.LORE, ItemLore(lore.map { l -> Sim.legacy(l).copy().withStyle { it.withItalic(false) } }))
+        s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("quiver_arrow", "true") }))
+        return s
+    }
+
+    /** Main's Magical Map (rec2 inv slot 8 while the Infinileap is held): map_id 1024, custom_data {id:"MAP",dontSaveToProfile:1,dontUpdateStack:1}. */
+    private fun magicalMap(): ItemStack {
+        val s = ItemStack(Items.FILLED_MAP)
+        s.set(DataComponents.CUSTOM_NAME, Component.literal("Magical Map").withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.AQUA) })
+        s.set(DataComponents.LORE, ItemLore(listOf("Shows the layout of the Dungeon as", "it is explored and completed.").map { l -> Component.literal(l).withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.GRAY) } }))
+        s.set(DataComponents.MAP_ID, net.minecraft.world.level.saveddata.maps.MapId(1024))
+        s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", "MAP"); it.putInt("dontSaveToProfile", 1); it.putInt("dontUpdateStack", 1) }))
+        return s
+    }
+
+    private fun isQuiverPreview(s: ItemStack) = s.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getStringOr("quiver_arrow", "") == "true"
+    private fun isMagicalMap(s: ItemStack) = idOf(s) == "MAP" && s.get(DataComponents.CUSTOM_DATA)?.copyTag()?.contains("dontUpdateStack") == true
+
+    /** Whether [s] is one of slot 9's three faces (the SkyBlock Menu, the quiver preview, the Magical Map): HotbarLayout saves it as the menu. */
+    fun isSlot9(s: ItemStack) = idOf(s) == "SKYBLOCK_MENU" || isQuiverPreview(s) || isMagicalMap(s)
+
+    /**
+     * Slot 9 as main shows it: the quiver preview while a bow is held, the Magical Map while the Infinileap is, the SkyBlock
+     * Menu otherwise. Only when slot 9 holds one of them (a saved layout may have moved the menu), and never in the ghost kit.
+     */
+    private fun tickSlot9() {
+        val p = Sim.player ?: return
+        if (Masks.ghost) return
+        val inv = p.inventory
+        val cur = inv.getItem(8)
+        if (!isSlot9(cur)) return
+        val held = inv.getItem(inv.selectedSlot)
+        val heldId = idOf(held)
+        val want = when {
+            heldId != null && held.item is net.minecraft.world.item.BowItem -> quiverPreview()
+            heldId == "INFINITE_SPIRIT_LEAP" -> magicalMap()
+            else -> if (idOf(cur) == "SKYBLOCK_MENU") return else MENU
+        }
+        if (ItemStack.isSameItemSameComponents(cur, want) && cur.count == want.count) return
+        inv.setItem(8, want)
+    }
     val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", Lore.ASPECT_OF_THE_VOID_NAME, Lore.ASPECT_OF_THE_VOID, glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }.also { hy(it, "slayer/enderman/aspect_of_the_void", "legendary") }
     val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", Lore.FISHING_ROD_NAME, Lore.FISHING_ROD).also { hy(it, null, "common") }
     val TERMINATOR get() = item(Items.BOW, "TERMINATOR", Lore.TERMINATOR_NAME, Lore.TERMINATOR, glint = true).also { hy(it, "slayer/enderman/weapons/terminator", "mythic") }
@@ -820,9 +916,9 @@ object SimItems {
     fun equipArmor(p: ServerPlayer, set: ArmorSet? = null, terrorHelm: Boolean? = null) {
         terrorHelmet = terrorHelm ?: (idOf(p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "TERROR_HELMET")
         val (chest, legs, feet) = armorStacks(set)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, chest)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS, legs)
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, feet)
+        wear(p, net.minecraft.world.entity.EquipmentSlot.CHEST, chest)
+        wear(p, net.minecraft.world.entity.EquipmentSlot.LEGS, legs)
+        wear(p, net.minecraft.world.entity.EquipmentSlot.FEET, feet)
         terrorHelmet = false
     }
 
@@ -863,8 +959,14 @@ object SimItems {
         h.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
         h.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", if (wise) "WISE_WITHER_HELMET" else "RACING_HELMET"); it.putBoolean("p3sim", true) }))
         hy(h, null, "mythic")
-        p.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, h)
+        wear(p, net.minecraft.world.entity.EquipmentSlot.HEAD, h)
     }
+
+    /**
+     * Puts [s] in [p]'s armour [slot] straight through the inventory, without LivingEntity.onEquipItem: Hypixel's
+     * loadout and armour equips play no item.armor.equip_* sound (the client still gets the slot on the next sync).
+     */
+    fun wear(p: ServerPlayer, slot: net.minecraft.world.entity.EquipmentSlot, s: ItemStack) = p.inventory.setItem(slot.getIndex(36), s)
 
     /**
      * The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory -
@@ -917,7 +1019,7 @@ object SimItems {
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             var result: InteractionResult = InteractionResult.PASS
-            EngineerClient.safely("p3sim use block") { result = useBlock(player, hit.blockPos, id) }
+            EngineerClient.safely("p3sim use block") { result = useBlock(player, hit.blockPos, id, hit.direction) }
             // The client already placed what it held (an Infinileap is a head) and took it off its hotbar: as on
             // Hypixel, the server sends the held stack back (vanilla re-sends the blocks itself). Only a block item can have
             // been placed: the staffs' resend is their own (Bonzo ~77%, p3audit B8).
@@ -944,7 +1046,7 @@ object SimItems {
      * callback). In the sim with the Dungeonbreaker: mined on the sim's server; true = handled.
      */
     @JvmStatic
-    fun clientHitBlock(pos: BlockPos): Boolean {
+    fun clientHitBlock(pos: BlockPos, face: net.minecraft.core.Direction): Boolean {
         val player = mc.player ?: return false
         val level = mc.level ?: return false
         if (!simClient(level)) return false
@@ -954,7 +1056,7 @@ object SimItems {
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { SimServer.run("lever left") { ph.devices.leftClick(at) }; if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return true } }
         // Superboom: a left click on a gate blows it too.
         if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
-            SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at) } } } }
+            SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } } } }
             return true
         }
         if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
@@ -1040,7 +1142,7 @@ object SimItems {
     private var clickPos: Vec3? = null
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; Bows.reset()
+    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset()
         if (liveRockets.isNotEmpty()) { Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(it.unimi.dsi.fastutil.ints.IntArrayList(liveRockets))); liveRockets.clear() }
     }
 
@@ -1061,7 +1163,8 @@ object SimItems {
             // A right click in the air does nothing: Hypixel needs a block target (SUPERBOOM-02).
             "SUPERBOOM_TNT" -> {}
             in Bows.SHORTBOWS -> Bows.click(p, id, left = false)
-            "PET_ROD" -> Fight.afterPing("pet rod") { petBobber(p); Masks.swapPet(p) }
+            // Main: the cast lands one tick after the use_item (PETS-04/06), stand, splash, abilities, Autopet line and bobber together.
+            "PET_ROD" -> Fight.afterPing("pet rod") { Fight.later(1, "pet rod cast") { if (!p.isRemoved && Sim.player === p) castRod(p) } }
             else -> return InteractionResult.PASS
         }
         // Keep the client's copy of the stack (the Infinileap is a head, a block item it may think it placed).
@@ -1077,13 +1180,18 @@ object SimItems {
         Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (on) 0.5873016f else 0.4920635f, Vec3.atCenterOf(pos), net.minecraft.sounds.SoundSource.BLOCKS)
     }
 
-    private fun useBlock(p: ServerPlayer, pos: BlockPos, id: String?): InteractionResult {
+    private fun useBlock(p: ServerPlayer, pos: BlockPos, id: String?, hitFace: net.minecraft.core.Direction): InteractionResult {
         val phase = Fight.phase
         if (phase is P1Maxor && phase.usePylon(Vec3.atCenterOf(pos))) return InteractionResult.SUCCESS
         if (phase is GoldorPhase) {
             phase.leverAt(pos)?.let { st -> Fight.afterPing("lever") { phase.pullLever(st, Sim.me) }; return InteractionResult.SUCCESS }
             if (phase.devices.use(pos)) return InteractionResult.SUCCESS
-            if (id == "SUPERBOOM_TNT") { Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, pos) } }; return InteractionResult.SUCCESS }
+            if (id == "SUPERBOOM_TNT") {
+                Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, pos, hitFace) } }
+                // Paper (no BlockItem): the client follows this use_item_on with a use_item, swallowed like the staffs'.
+                blockFired = id to Fight.serverTick
+                return InteractionResult.SUCCESS
+            }
         }
         val state = Sim.level.getBlockState(pos)
         // Anything else interactable (a stray lever or button) stays as built.
@@ -1290,7 +1398,7 @@ object SimItems {
         val now = Fight.serverTick
         if (now - lastCure < 100) return
         lastCure = now
-        Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 0.6984127f, p.position())
+        Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 0.6984127f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
         val look = p.lookAngle
         var right = Vec3(-look.z, 0.0, look.x)
         right = if (right.lengthSqr() < 1e-6) Vec3(1.0, 0.0, 0.0) else right.normalize()
@@ -1309,8 +1417,9 @@ object SimItems {
      * the only mobs here; with none in the box there is no message.
      */
     private fun implode(p: ServerPlayer) {
-        Sim.level.sendParticles(ParticleTypes.EXPLOSION, p.x, p.eyeY, p.z, 1, 0.0, 0.0, 0.0, 0.0)
-        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, p.position())
+        // Main's Implosion puff: 8 explosion at your feet, speed 8, no spread, override limiter + always show.
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION, true, true, p.x, p.y, p.z, 8, 0.0, 0.0, 0.0, 8.0)
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.BLOCKS)
         witherShield(p)
         // HYP-13: no P3 cast ever hit Goldor (0 of 67 casts printed the hit line; the nearest wither was 8.7 blocks off).
         if (Fight.phase is GoldorPhase) return
@@ -1318,7 +1427,7 @@ object SimItems {
         val n = Sim.level.getEntitiesOfClass(net.minecraft.world.entity.boss.wither.WitherBoss::class.java, box) { it.isAlive }.size
         if (n == 0) return
         // The hit's ding (items-timing.md §2: experience_orb.pickup 1.0/1.492 on the tp tick).
-        Sim.sound(SoundEvents.EXPERIENCE_ORB_PICKUP, 1f, 1.492f, p.position())
+        Sim.sound(SoundEvents.EXPERIENCE_ORB_PICKUP, 1f, 1.492f, p.position(), net.minecraft.sounds.SoundSource.PLAYERS)
         // Hypixel's exact line (party/grep.mjs, 80 runs): "§7Your Implosion hit §r§c1 §r§7enemy for §r§c32,710,591.3 §r§7damage.", a whole number without ".0".
         val dmg = (1..n).sumOf { IMPLOSION_DAMAGE * (0.9 + Random.nextDouble() * 0.25) }
         val shown = "%,.1f".format(java.util.Locale.ROOT, dmg).removeSuffix(".0")
@@ -1670,24 +1779,48 @@ object SimItems {
         spawnVeil(p)
     }
 
-    /** The cast's fishing_bobber (PETS-06): own bobber at the swap, gone ~6 ticks on (2..11 recorded). */
-    private fun petBobber(p: ServerPlayer) {
+    /**
+     * A Pet Rod cast as main sends it (rec2): an invisible armour stand where the bobber starts, the silent splash (to you
+     * only), player_abilities with the new pet's walking speed, the Autopet line ([Masks.swapPet]), then your fishing_bobber
+     * thrown at 1.5 along your look (its motion sent with it), gone ~6 ticks on (2..11 recorded).
+     */
+    private fun castRod(p: ServerPlayer) {
         val hook = net.minecraft.world.entity.projectile.FishingHook(p, Sim.level, 0, 0)
+        hook.deltaMovement = p.lookAngle.scale(1.5)
+        val stand = ArmorStand(Sim.level, hook.x, hook.y, hook.z)
+        stand.isInvisible = true
+        stand.isSilent = true
+        stand.setNoGravity(true)
+        Station.setMarker(stand)
+        Sim.spawn(stand)
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSoundPacket(SoundEvents.PLAYER_SPLASH.let { net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.wrapAsHolder(it) },
+            net.minecraft.sounds.SoundSource.PLAYERS, 200.0, 300.0, 400.0, 0f, 0f, Random.nextLong()))
+        Masks.swapPet(p)
         Sim.spawn(hook)
-        Fight.later(6, "pet bobber gone") { hook.discard() }
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket(hook.id, hook.deltaMovement))
+        Fight.later(6, "pet bobber gone") { hook.discard(); stand.discard() }
     }
 
     // ------------------------------------------------------------------ Superboom, Dungeonbreaker, bows
 
     /** Superboom TNT: blows the gate it's used on (or near where you look within 5), once that gate's section has started. */
-    private fun superboom(p: ServerPlayer, on: BlockPos?) {
+    private fun superboom(p: ServerPlayer, on: BlockPos?, face: net.minecraft.core.Direction) {
         val phase = Fight.phase as? GoldorPhase ?: return
         // Infinite (never consumed), and no gate or explosion without a block target (SUPERBOOM-02).
         val at = on?.let { Vec3.atCenterOf(it) } ?: return
-        Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
-        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
+        boomFx(Vec3.atCenterOf(on.relative(face)))
         val gate = phase.gateNear(at, 1.5)
         if (gate > 0) phase.blowGate(gate, Sim.me)
+    }
+
+    /**
+     * A Superboom's (and Explosive Shot's) blast as main sends it, in the block before the face hit: explosion_emitter plus
+     * 3 explosion (spread 1.0), and entity.generic.explode MASTER 1.0 at a pitch of floor((0.81 + r*0.174)*63)/63.
+     */
+    private fun boomFx(at: Vec3) {
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION, at.x, at.y, at.z, 3, 1.0, 1.0, 1.0, 0.0)
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, (floor((0.81 + Random.nextDouble() * 0.174) * 63) / 63).toFloat(), at)
     }
 
     /** Blocks the Dungeonbreaker never mines: the shell, gates, doors, the core's gold and anything the fight uses. */
@@ -1801,8 +1934,7 @@ object SimItems {
             Bows.launch(mid, mid, v, owner = p) { h ->
                 if (h is net.minecraft.world.phys.BlockHitResult) {
                     val at = h.location
-                    Sim.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
-                    Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 1f, at)
+                    boomFx(Vec3.atCenterOf(h.blockPos.relative(h.direction)))
                     (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
                 }
             }?.isCritArrow = true
@@ -1820,6 +1952,8 @@ object SimItems {
         val level = SimServer.level ?: return
         tickBreaker()
         tickVeil()
+        EngineerClient.safely("p3sim slot 9") { tickSlot9() }
+        Sim.player?.let { p -> EngineerClient.safely("p3sim mining effects") { miningEffects(p) } }
         // Vanilla bow arrows (anything shot that isn't one of Bows'). Each one's path since last tick (and a
         // little on), traced against the blocks: the first block on it is what it hit.
         level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !is SimArrow && it !in arrows }.forEach { arrows += it }
@@ -1902,6 +2036,7 @@ object SimItems {
 
     /** Hypixel's Spirit Leap window: teammates' heads in slots 11-15, a click leaps (8 ticks, as measured). */
     class LeapMenu(id: Int, inv: Inventory, val bots: List<Party.Bot>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
+        private val owner = inv.player
         init {
             for (i in 0 until 36) container.setItem(i, Terminals.FILLER)
             // In the plan's leap slot order: slots 1-4 = chest slots 11, 12, 14, 15.
@@ -1909,31 +2044,62 @@ object SimItems {
                 val h = ItemStack(Items.PLAYER_HEAD)
                 // The teammate's own head (the menu shows each one's skin): the bot's profile.
                 h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(Party.profile(b)))
-                h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.GREEN) })
-                h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("§7Class: §e${b.clazz.name}").withStyle { it.withItalic(false) })))
+                // LEAP-04: the name in its rank colour, one yellow "Click to teleport!" line.
+                val colour = net.minecraft.ChatFormatting.getByCode(rankColour(b.name)[1]) ?: net.minecraft.ChatFormatting.GREEN
+                h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(colour) })
+                h.set(DataComponents.LORE, ItemLore(listOf(Component.literal("Click to teleport!").withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.YELLOW) })))
                 container.setItem(listOf(11, 12, 14, 15).getOrElse(i) { 16 }, h)
             }
         }
+
+        /** LEAP-14: the window's contents arrive as one container_set_slot per slot, as main sends them. */
+        override fun setSynchronizer(synchronizer: net.minecraft.world.inventory.ContainerSynchronizer) =
+            super.setSynchronizer((owner as? ServerPlayer)?.let { PerSlotSync(synchronizer, it) } ?: synchronizer)
+
+        private var inClick = false
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
             if (slot !in 11..16) return
             val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
             val bot = bots.firstOrNull { it.name == name } ?: return
             val sp = p as ServerPlayer
-            Fight.afterPing("leap") {
-                // The close arrives with the teleport (same tick, rec2 99/99).
-                sp.closeContainer()
-                val e = bot.pos
-                leapReady = Fight.serverTick + 40
-                // You land on them exactly, facing as they face.
-                Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
-                Sim.chatStyled("§aYou have teleported to §r${rankColour(bot.name)}${bot.name}§r§a!")
-                GhostCapture.event("leap", bot.clazz.name)
-                Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
-            }
+            inClick = true
+            try {
+                Fight.afterPing("leap") {
+                    // At no ping this runs inside the click's own packet handler, which then hands the click's cursor to
+                    // whatever window is open: leaping there would close onto the inventory and draw a set_cursor_item.
+                    // Run it at the head of the next server tick instead (the same tick for the client).
+                    if (inClick) Fight.later(0, "leap") { leap(sp, bot) } else leap(sp, bot)
+                }
+            } finally { inClick = false }
+        }
+
+        /** Main's tail (rec2): container_close(N), player_position, the sound, the chat line, then container_close(0). */
+        private fun leap(sp: ServerPlayer, bot: Party.Bot) {
+            if (sp.isRemoved) return
+            sp.closeContainer()
+            val e = bot.pos
+            leapReady = Fight.serverTick + 40
+            // You land on them exactly, facing as they face.
+            Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
+            Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
+            Sim.chatStyled("§aYou have teleported to §r${rankColour(bot.name)}${bot.name}§r§a!")
+            sp.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))
+            GhostCapture.event("leap", bot.clazz.name)
         }
 
         override fun quickMoveStack(p: Player, slot: Int): ItemStack = ItemStack.EMPTY
         override fun stillValid(p: Player) = true
+    }
+
+    /**
+     * Sends a window's opening (and full re-send) contents as one container_set_slot per slot, stateId counting up, instead
+     * of vanilla's single container_set_content: Hypixel's way for the Spirit Leap and Loadouts windows. The rest is vanilla's.
+     */
+    class PerSlotSync(private val base: net.minecraft.world.inventory.ContainerSynchronizer, private val sp: ServerPlayer) : net.minecraft.world.inventory.ContainerSynchronizer by base {
+        override fun sendInitialData(container: net.minecraft.world.inventory.AbstractContainerMenu, slotItems: List<ItemStack>, carried: ItemStack, dataSlots: IntArray) {
+            for ((i, s) in slotItems.withIndex()) sp.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(container.containerId, container.incrementStateId(), i, s))
+            for ((i, v) in dataSlots.withIndex()) base.sendDataChange(container, i, v)
+        }
     }
 }

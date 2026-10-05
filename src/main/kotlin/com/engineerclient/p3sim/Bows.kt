@@ -158,6 +158,7 @@ object Bows {
             }
         }
         sound(SoundEvents.ARROW_SHOOT, SoundSource.NEUTRAL, 1f, 1f / (Random.nextFloat() * 0.4f + 1.2f) + 0.5f * power)
+        SimItems.quiverShot()  // one arrow off the quiver per shot (the slot-9 preview counts down)
         if (bow !in SHORTBOWS) return
         val stack = p.mainHandItem
         if (nasty) { biteReady = now + NASTY_BITE_COOLDOWN; p.cooldowns.addCooldown(stack, NASTY_BITE_COOLDOWN) }

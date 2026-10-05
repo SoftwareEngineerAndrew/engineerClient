@@ -83,6 +83,9 @@ object Blocks {
     private class Playing(val anim: Anim, val start: Int, var next: Int = 0) {
         /** The chance frames that lost their roll. */
         val skip = BooleanArray(anim.frames.size) { anim.frames[it].chance < 1f && Random.nextFloat() >= anim.frames[it].chance }
+        /** Gates, doors and the core drop [Debris] for the blocks they remove; the next frame to look at for that. */
+        val debris = anim.name.startsWith("gate") || anim.name.startsWith("door") || anim.name == "core"
+        var debrisNext = 0
     }
     private val anims = ArrayList<Playing>()
     /** Animations played or finished this fight: a second [finish] (a phase catching up on one the start already did) is a no-op. */
@@ -160,7 +163,32 @@ object Blocks {
     private fun advance(p: Playing) {
         val now = Fight.serverTick - p.start
         val f = p.anim.frames
+        // A falling_block for each block about to go, one tick before it turns to air (census: main's gate/door/core debris).
+        if (p.debris) while (p.debrisNext < f.size && f[p.debrisNext].dt <= now + 1) {
+            val fr = f[p.debrisNext]
+            if (!p.skip[p.debrisNext] && fr.state.isAir) debris(fr.pos)
+            p.debrisNext++
+        }
         while (p.next < f.size && f[p.next].dt <= now) { if (!p.skip[p.next]) set(f[p.next].pos, f[p.next].state); p.next++ }
+    }
+
+    /** Debris spawned this tick (capped: a whole gate goes in a few ticks). */
+    private var debrisTick = -1
+    private var debrisCount = 0
+    private const val DEBRIS_PER_TICK = 48
+
+    /** A [Debris] block (no motion) where [pos]'s block is now, unless it is air already or this tick's cap is reached. */
+    private fun debris(pos: BlockPos) {
+        val level = SimServer.level ?: return
+        val s = level.getBlockState(pos)
+        if (s.isAir || !s.fluidState.isEmpty) return
+        if (debrisTick != Fight.serverTick) { debrisTick = Fight.serverTick; debrisCount = 0 }
+        if (debrisCount >= DEBRIS_PER_TICK) return
+        debrisCount++
+        val e = Debris(level, s)
+        e.snapTo(pos.x + 0.5, pos.y.toDouble(), pos.z + 0.5, 0f, 0f)
+        e.deltaMovement = net.minecraft.world.phys.Vec3.ZERO
+        Sim.spawn(e)
     }
 
     // ------------------------------------------------------------------ the world at a phase start
@@ -299,6 +327,26 @@ object Blocks {
     private const val CARVE_CHANCE = 0.6f
     /** n of a Core start (GoldorPhase's median fast run): how far Goldor walked before P4. */
     private const val CORE_N = 797
+}
+
+/**
+ * Gate / door / core debris: a falling block that falls as vanilla's does but is discarded where it lands (or after
+ * 10 s), never placing itself or dropping anything, so the arena stays as the animations leave it.
+ */
+class Debris(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
+    net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityType.FALLING_BLOCK, level) {
+    init {
+        runCatching {
+            net.minecraft.world.entity.item.FallingBlockEntity::class.java.getDeclaredField("blockState").apply { isAccessible = true }.set(this, state)
+        }
+    }
+    override fun tick() {
+        if (++time > 200) { discard(); return }
+        applyGravity()
+        move(net.minecraft.world.entity.MoverType.SELF, deltaMovement)
+        if (onGround()) { discard(); return }
+        deltaMovement = deltaMovement.scale(0.98)
+    }
 }
 
 /** A falling block that is only carried (STANDS-01): never ticks, so it never falls, lands or places itself. */

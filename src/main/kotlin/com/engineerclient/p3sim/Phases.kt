@@ -158,6 +158,16 @@ object BossBar {
     }
 
     fun progress(f: Float) { bar?.progress = f.coerceIn(0f, 1f) }
+
+    /** Sends the bar's name, style and progress again (as main does once a second), unchanged. */
+    fun resend() {
+        val b = bar ?: return
+        for (p in b.players) {
+            p.connection.send(net.minecraft.network.protocol.game.ClientboundBossEventPacket.createUpdateNamePacket(b))
+            p.connection.send(net.minecraft.network.protocol.game.ClientboundBossEventPacket.createUpdateStylePacket(b))
+            p.connection.send(net.minecraft.network.protocol.game.ClientboundBossEventPacket.createUpdateProgressPacket(b))
+        }
+    }
     val progress: Float get() = bar?.progress ?: 0f
 
     fun hide() { bar?.removeAllPlayers(); bar = null }

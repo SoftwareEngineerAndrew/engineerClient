@@ -191,10 +191,10 @@ object Fight {
         // Invulnerable players are never hungry or hurt; the effects are Hypixel's (night vision 1, or with haste 0 + mining fatigue 255).
         // As sent on main: night vision amplifier 1 with flags 7 (ambient, particles, icon); haste and mining fatigue flags 3 (no icon).
         player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
-        player.addEffect(MobEffectInstance(MobEffects.HASTE, -1, 0, true, true, false))
-        player.addEffect(MobEffectInstance(MobEffects.MINING_FATIGUE, -1, 255, true, true, false))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
         SimItems.giveHotbar(player)
+        // Haste 0 + Mining Fatigue 255 unless the Dungeonbreaker is in hand (main toggles them with the held slot).
+        SimItems.miningEffects(player, force = true)
     }
 
     /**
@@ -211,10 +211,14 @@ object Fight {
     }
 
     /** Your speed: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out adds nothing. */
-    fun applySpeed(player: ServerPlayer) {
-        // Black Cat +100; the Racing Helmet +100 more (rec2 loadouts: Cat terms 650, Phoenix terms 550; Terror and Mask terms with Cat 550).
+    /** Your speed stat now: Black Cat +100; the Racing Helmet +100 more (rec2 loadouts: Cat terms 650, Phoenix terms 550; Terror and Mask terms with Cat 550). */
+    fun speedStat(player: ServerPlayer): Int {
         val racing = SimItems.idOf(player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "RACING_HELMET"
-        val speed = P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
+        return P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
+    }
+
+    fun applySpeed(player: ServerPlayer) {
+        val speed = speedStat(player)
         player.getAttribute(Attributes.MOVEMENT_SPEED)?.baseValue = speed.coerceAtLeast(100).toDouble() / 1000.0
         // The abilities packet's walk speed (FOV scaling) follows it, as Hypixel's does.
         player.abilities.setWalkingSpeed(speed.coerceAtLeast(100) / 1000f)

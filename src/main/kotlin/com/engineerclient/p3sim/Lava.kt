@@ -83,8 +83,13 @@ object Lava {
         p.deltaMovement = Vec3(0.0, vy, 0.0)
         p.hurtMarked = true
         p.fallDistance = 0.0
-        p.connection.send(ClientboundHurtAnimationPacket(p))
-        Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.PLAYERS)
+        // Main: 16% of bounces are silent (no hurt tilt, no sound); otherwise the hurt sound lands a tick after the
+        // bounce 69% of the time, with it the rest.
+        if (Random.nextDouble() >= 0.16) {
+            p.connection.send(ClientboundHurtAnimationPacket(p))
+            val hurt = { if (!p.isRemoved) Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.PLAYERS) }
+            if (Random.nextDouble() < 0.69) Fight.later(1, "lava hurt sound") { hurt() } else hurt()
+        }
         // No fire after a bounce (Andrew's call): put out anything the lava itself lit.
         p.clearFire()
         bouncedAt = now

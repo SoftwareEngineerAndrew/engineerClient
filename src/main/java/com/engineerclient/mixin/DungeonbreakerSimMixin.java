@@ -20,6 +20,6 @@ public class DungeonbreakerSimMixin {
     private void ec$dungeonbreakerInSim(BlockPos pos, Direction direction, CallbackInfoReturnable<Boolean> cir) {
         // Only the sim's own hits (Dungeonbreaker, levers, Superboom) stop here; any other hit goes on as
         // vanilla and the server refuses it and sends the block back, as Hypixel's does (Sim.guardBlocks).
-        if (SimItems.clientHitBlock(pos)) cir.setReturnValue(false);
+        if (SimItems.clientHitBlock(pos, direction)) cir.setReturnValue(false);
     }
 }

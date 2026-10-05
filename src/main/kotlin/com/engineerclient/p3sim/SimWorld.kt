@@ -82,7 +82,8 @@ object SimWorld {
     private fun create() {
         mc.setScreen(GenericMessageScreen(Component.literal("Building the F7 boss...")))
         val settings = LevelSettings(
-            NAME, GameType.ADVENTURE,
+            // SURVIVAL from the login on, as main (census saw ADVENTURE at login, then SURVIVAL from Fight.setup).
+            NAME, GameType.SURVIVAL,
             LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, true),
             true, WorldDataConfiguration.DEFAULT,
         )

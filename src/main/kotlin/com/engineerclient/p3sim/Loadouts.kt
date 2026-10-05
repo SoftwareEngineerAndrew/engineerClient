@@ -98,7 +98,7 @@ object Loadouts {
     /** Puts [w] on: armour pieces, the helmet (a mask by Real Masks' rules), the pet and the speed they give. */
     fun applyWorn(p: ServerPlayer, w: Worn) {
         listOf(EquipmentSlot.CHEST to w.chest, EquipmentSlot.LEGS to w.legs, EquipmentSlot.FEET to w.feet).forEach { (slot, id) ->
-            id?.let { SimItems.armorPiece(it) }?.let { p.setItemSlot(slot, it) }
+            id?.let { SimItems.armorPiece(it) }?.let { SimItems.wear(p, slot, it) }
         }
         val h = helmFor(w.head)
         if (h == Helm.MASK) {
@@ -106,7 +106,7 @@ object Loadouts {
             val cur = SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))
             if (cur?.endsWith("_MASK") == true) {
                 if (P3Sim.realMasks) Masks.equip(p)
-                else p.setItemSlot(EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
+                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
             } else wearHelmet(p, h)
         } else if (h != null) wearHelmet(p, h)
         P3Sim.phoenixS.value = w.phoenix
@@ -212,14 +212,14 @@ object Loadouts {
         val candidates = (0 until 36).filter { wearsHelm(h, inv.getItem(it)) }
         val from = (if (h == Helm.MASK) candidates.firstOrNull { SimItems.idOf(inv.getItem(it))?.removePrefix("STARRED_") == wantMask } else null) ?: candidates.firstOrNull()
         if (from != null) {
-            p.setItemSlot(EquipmentSlot.HEAD, inv.getItem(from).copy())
+            SimItems.wear(p, EquipmentSlot.HEAD, inv.getItem(from).copy())
             inv.setItem(from, old)
         } else {
             when (h) {
                 Helm.RACING -> SimItems.equipHelmet(p, false)
                 Helm.WISE -> SimItems.equipHelmet(p, true)
-                Helm.TERROR -> p.setItemSlot(EquipmentSlot.HEAD, terrorHelmet())
-                Helm.MASK -> p.setItemSlot(EquipmentSlot.HEAD, if (wantMask == "SPIRIT_MASK") Masks.SPIRIT_MASK else Masks.BONZO_MASK)
+                Helm.TERROR -> SimItems.wear(p, EquipmentSlot.HEAD, terrorHelmet())
+                Helm.MASK -> SimItems.wear(p, EquipmentSlot.HEAD, if (wantMask == "SPIRIT_MASK") Masks.SPIRIT_MASK else Masks.BONZO_MASK)
             }
             if (!old.isEmpty) {
                 val slot = if (inv.getItem(Masks.SPARE_SLOT).isEmpty) Masks.SPARE_SLOT else (9 until 36).firstOrNull { inv.getItem(it).isEmpty }
@@ -253,6 +253,9 @@ object Loadouts {
     class LoadoutsMenu(id: Int, inv: Inventory, private val sp: ServerPlayer) :
         ChestMenu(MenuType.GENERIC_9x6, id, inv, SimpleContainer(54), 6) {
         init { draw() }
+
+        /** As main sends it: one container_set_slot per slot, not one container_set_content. */
+        override fun setSynchronizer(synchronizer: net.minecraft.world.inventory.ContainerSynchronizer) = super.setSynchronizer(SimItems.PerSlotSync(synchronizer, sp))
 
         fun refresh() { draw(); broadcastFullState() }
 

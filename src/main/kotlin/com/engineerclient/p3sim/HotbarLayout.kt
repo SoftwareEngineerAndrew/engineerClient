@@ -72,7 +72,8 @@ object HotbarLayout {
         val inv = p.inventory
         val slots = LinkedHashMap<String, Int>()
         for (i in 0..35) {
-            val id = SimItems.idOf(inv.getItem(i)) ?: continue
+            // Slot 9's quiver preview / Magical Map are the SkyBlock Menu's other faces (SimItems.tickSlot9).
+            val id = (if (SimItems.isSlot9(inv.getItem(i))) "SKYBLOCK_MENU" else SimItems.idOf(inv.getItem(i))) ?: continue
             if (id.endsWith("_MASK")) continue
             slots.putIfAbsent(id, i)
         }

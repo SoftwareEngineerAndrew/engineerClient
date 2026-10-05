@@ -325,7 +325,7 @@ class P2Storm : Fight.Phase("P2") {
     }
 
     /** Piston.mjs: piston.extend / .contract (10, 0.49) at the pillar's west edge, z + 2, the layer that changed. */
-    private fun piston(pl: Pillar, s: SoundEvent, y: Int) = Sim.sound(s, 10f, 0.49f, Vec3(pl.minX + 0.5, y + 0.5, pl.minZ + 2.5))
+    private fun piston(pl: Pillar, s: SoundEvent, y: Int) = Sim.sound(s, 3f, 1f, Vec3(pl.minX + 0.5, y + 0.5, pl.minZ + 2.5), net.minecraft.sounds.SoundSource.BLOCKS)
 
     /** Every footprint column polished diorite: Hypixel never puts the plain diorite edges back (world.md). */
     private fun layer(pl: Pillar, y: Int, solid: Boolean) {

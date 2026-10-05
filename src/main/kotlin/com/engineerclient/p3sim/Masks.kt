@@ -55,11 +55,11 @@ object Masks {
     fun equip(p: ServerPlayer) {
         val inv = p.inventory
         if (!P3Sim.realMasks) {
-            if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) p.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY)
+            if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) SimItems.wear(p, EquipmentSlot.HEAD, ItemStack.EMPTY)
             if (SimItems.idOf(inv.getItem(SPARE_SLOT))?.endsWith("_MASK") == true) inv.setItem(SPARE_SLOT, ItemStack.EMPTY)
         } else {
             val spirit = P3Sim.wornMaskS.value == 0
-            p.setItemSlot(EquipmentSlot.HEAD, if (spirit) SPIRIT_MASK else BONZO_MASK)
+            SimItems.wear(p, EquipmentSlot.HEAD, if (spirit) SPIRIT_MASK else BONZO_MASK)
             inv.setItem(SPARE_SLOT, if (spirit) BONZO_MASK else SPIRIT_MASK)
         }
         p.inventoryMenu.broadcastChanges()
@@ -80,9 +80,6 @@ object Masks {
     private const val BLACK_CAT_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTcwODczNzEyMTIzNSwKICAicHJvZmlsZUlkIiA6ICJmY2ZhYTg0MzA0YjE0NDUxOThkNWYxNzQ3ZjI0Y2Q5MCIsCiAgInByb2ZpbGVOYW1lIiA6ICJTdGV3eVdvbGZ5IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzgyODJiNWE5YmJlMmNkMzIyMzcyNDAyM2NkNGY2YWQ0MTNmNWJiOWUwZWRlZjgxNzAwYjhhZmMzMDcyZDA0YTUiCiAgICB9CiAgfQp9"
     const val PHOENIX_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0Mjg2NTc3MTM5MSwKICAicHJvZmlsZUlkIiA6ICJiYjdjY2E3MTA0MzQ0NDEyOGQzMDg5ZTEzYmRmYWI1OSIsCiAgInByb2ZpbGVOYW1lIiA6ICJsYXVyZW5jaW8zMDMiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjZiMWI1OWJjODkwYzljOTc1Mjc3ODdkZGUyMDYwMGM4Yjg2ZjZiOTkxMmQ1MWE2YmZjZGIwZTRjMmFhM2M5NyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
 
-    private fun leather(item: net.minecraft.world.item.Item, rgb: Int, name: String): ItemStack =
-        Terminals.named(item, name).also { it.set(DataComponents.DYED_COLOR, net.minecraft.world.item.component.DyedItemColor(rgb)) }
-
     /**
      * 9x6 "Stats & Equipment", laid out as Hypixel's (Better PF recordings): black panes; your held
      * item at 2; necklace, cloak, belt, gloves down column 1 (10/19/28/37); helmet, chestplate,
@@ -92,32 +89,64 @@ object Masks {
      */
     class StatsMenu(id: Int, inv: net.minecraft.world.entity.player.Inventory, private val sp: ServerPlayer) :
         net.minecraft.world.inventory.ChestMenu(net.minecraft.world.inventory.MenuType.GENERIC_9x6, id, inv, net.minecraft.world.SimpleContainer(54), 6) {
+        /** The recorded /stats window's names and lore (rec2, pass2 census run34), by slot: equipment heads, stat categories, the pet, the buttons. */
+        private val REC_NAME = mapOf(10 to "§6\ue068 Blooming Bone Necklace §6\u272a\u272a\u272a\u272a\u272a", 19 to "§d\ue068 Blooming Shadow Assassin Cloak §6\u272a\u272a\u272a\u272a\u272a", 28 to "§6Blooming Implosion Belt", 37 to "§6Blooming Soulweaver Gloves §6\u272a\u272a\u272a\u272a\u272a", 47 to "§7[Lvl 100] §6Black Cat§5 \u2726")
+        private val REC_LORE = mapOf(
+            10 to listOf("§7Defense: §a+288", "§7Crit Chance: §9+7.75%", "§7Farming Fortune: §6+32 §9(+5)", "§7Speed: §f+38.4 §9(+6)", "", "§6Ability: Gladiator's Will ", "§7Gain §a+3\ue008 Defense §7for each enemy", "§7within §e10 §7blocks up to §a+30\ue008 Defense§7.", "§7Range increases to §e30 §7blocks and", "§7the cap increases to §a+60\ue008 Defense", "§7when you play as a §aTank §7in dungeons.", "", "§7Increases the range of your", "§aDiversion §7passive by §e15 §7blocks.", "", "§6§l§ka §6§lLEGENDARY DUNGEON NECKLACE §6§l§ka"),
+            19 to listOf("§7Strength: §c+160", "§7Farming Fortune: §6+38.4 §9(+6)", "§7Speed: §f+70.4 §9(+6)", "", "§6Piece Bonus: Bloodrush", "§7On teleport: Your next melee hit", "§7within §a5s §7deals §c10% §7more damage.", "§8Cooldown: §a3s", "", "§d§l§ka §d§lMYTHIC DUNGEON CLOAK §d§l§ka"),
+            28 to listOf("§7Defense: §a+70", "§7Farming Fortune: §6+5 §9(+5)", "§7Speed: §f+6 §9(+6)", "", "§6Ability: Consolidated ", "§7Increases all explosion damage dealt by §a25%§7.", "", "§6§l§ka §6§lLEGENDARY BELT §6§l§ka"),
+            37 to listOf("§7Strength: §c+64", "§7Crit Damage: §9+64%", "§7Farming Fortune: §6+32 §9(+5)", "§7Speed: §f+38.4 §9(+6)", "", "§7While in §cThe Catacombs§7, summon a", "§cHaunted Skull §7that slowly revolves", "§7around you every §a15 §7seconds or", "§7when you kill a mob with melee damage.", "", "§7When an enemy is hit by a §cHaunted", "§cSkull§7, they are stunned for §b2", "§7seconds and deal §c5% §7less damage.", "", "§6§l§ka §6§lLEGENDARY DUNGEON GLOVES §6§l§ka"),
+            14 to listOf("§7Stats that influence how much", "§7damage you take and deal when in", "§7combat.", "", " §c\ue010 Health §f6,870.74", " §a\ue008 Defense §f1,345.4", " §f\ue027 True Defense §f8", " §c\ue00d Strength §f1,301.96", " §9\ue02c Crit Chance §f97.75%", " §9\ue007 Crit Damage §f972.78%", " §e\ue001 Attack Speed §f100%", " §c\ue00b Ferocity §f0", " §e\ue024 Swing Range §f8.38", " §b\ue003 Intelligence §f1,074.56", " §c\ue002 Ability Damage §f36%", " §c\ue011 Health Regen §f284.34", " §4\ue028 Vitality §f122", " §a\ue014 Mending §f110", "", "§eClick for details!"),
+            15 to listOf("§7Stats that influence what you can", "§7break, how quickly you can break it,", "§7and how many drops you receive", "§7when mining.", "", " §2\ue005 Breaking Power §f0", " §6\ue015 Mining Speed §f256", " §e\ue016 Mining Spread §f0", " §e\ue00f Gemstone Spread §f0", " §5\ue01c Pristine §f0", " §6\ue053 Mining Fortune §f232", " §6\ue053 Ore Fortune §f0", " §6\ue053 Block Fortune §f0", " §6\ue053 Dwarven Metal Fortune §f0", " §6\ue053 Gemstone Fortune §f10", "", "§eClick for details!"),
+            16 to listOf("§7Stats that influence how many drops", "§7you receive and how many pests", "§7spawn when farming.", "", " §2\ue019 Bonus Pest Chance §f80%", " §e\ue02b Overbloom §f0", " §6\ue051 Farming Fortune §f455.8", " §6\ue051 Wheat Fortune §f0", " §6\ue051 Carrot Fortune §f0", " §6\ue051 Potato Fortune §f0", " §6\ue051 Pumpkin Fortune §f0", " §6\ue051 Sugar Cane Fortune §f0", " §6\ue051 Melon Slice Fortune §f0", " §6\ue051 Cactus Fortune §f0", " §6\ue051 Cocoa Beans Fortune §f25", " §6\ue051 Mushroom Fortune §f0", " §6\ue051 Nether Wart Fortune §f0", " §6\ue051 Sunflower Fortune §f0", " §6\ue051 Moonflower Fortune §f0", " §6\ue051 Wild Rose Fortune §f0", "", "§eClick for details!"),
+            23 to listOf("§7Stat that includes how many drops", "§7you receive when foraging.", "", " §7§m\ue023 Sweep 0", " §6\ue054 Foraging Fortune §f105", " §6\ue054 Fig Fortune §f15", " §6\ue054 Mangrove Fortune §f15", " §6\ue054 Helix Fortune §f0", " §4\ue02e Timber §f0%", "", "§eClick for details!"),
+            24 to listOf("§7Stats that influence what you catch", "§7and how quickly you catch it while", "§7fishing.", "", " §b\ue00c Fishing Speed §f15", " §3\ue021 Sea Creature Chance §f22.8%", " §9\ue009 Double Hook Chance §f0%", " §6\ue02a Trophy Chance §f1%", " §6\ue025 Treasure Chance §f3.2%", "", "§eClick for details!"),
+            25 to listOf("§7Stats that augment various aspects", "§7of your gameplay.", "", " §f\ue022 Speed §f550", " §b\ue01a Magic Find §f40", " §d\ue013 Pet Luck §f66", " §c\ue012 Heat Resistance §f1", " §b\ue006 Cold Resistance §f1", " §3\ue01d Respiration §f45", " §9\ue01b Pressure Resistance §f30", " §5\ue00a Fear §f6", " §d\ue077 Tracking §f0", "", "§eClick for details!"),
+            32 to listOf("§7Stats that influence how quickly you", "§7hunt mobs and how many shards you", "§7get for doing so.", "", " §b\ue02d Pull §f0", " §d\ue05b Hunting Fortune §f26", " §b\u2763 Charm Chance §f1.54%", "", "§eClick for details!"),
+            34 to listOf("§7Stats that influence how much §3Skill", "§3XP §7you gain.", "", " §3\u262f Combat Wisdom §f65.5", " §3\u262f Farming Wisdom §f26", " §3\u262f Fishing Wisdom §f27", " §3\u262f Mining Wisdom §f85", " §3\u262f Foraging Wisdom §f26", " §3\u262f Enchanting Wisdom §f25", " §3\u262f Alchemy Wisdom §f25", " §3\u262f Carpentry Wisdom §f25", " §3\u262f Runecrafting Wisdom §f29", " §3\u262f Taming Wisdom §f25", " §3\u262f Social Wisdom §f25", " §3\u262f Hunting Wisdom §f25", "", "§eClick for details!"),
+            47 to listOf("§8Combat Pet, Ivory Skin", "", "§7Intelligence: §b+100", "§7Speed: §f+125", "§7Magic Find: §b+15", "§7Pet Luck: §d+15", "", "§6Hunter", "§7Increases your §f\ue022 Speed §7and speed", "§7cap by §a+100§7.", "", "§6Omen", "§7Grants §d+15\ue013 Pet Luck§7.", "", "§6Supernatural", "§7Grants §b+15\ue01a Magic Find§7.", "", "§6Held Item: §5Unalloyed Speed", "§7Grants §f+50 Max Speed Cap§7.", "", "§b§lMAX LEVEL", "§8\u25b8 477,309,419 XP", "", "§8Can be upgraded at Kat in The Hub!", "§6§lLEGENDARY"),
+            50 to listOf("§7View and manage all of your active", "§7potion effects.", "", "§7Drink Potions or splash them on the", "§7ground to buff yourself!", "", "§7Currently Active: §e3", "", "§8Also accessible via /effects.", "", "§eClick to view!"),
+            51 to listOf("§7View the available §eHypixel", "§7achievements for SkyBlock.", "", "§7These achievements reward", "§eAchievement Points§7, which let you", "§7unlock rewards on the Hypixel", "§7Network.", "", "§7Unlocked: §b225§7/§b336 §8(66%§8)", "§7Points: §e2,090§7/§e3,120 §8(66%§8)", "", "§7Legacy Unlocked: §b1", "§7Legacy Points: §e5", "", "§eClick to view achievements!"),
+        )
+
+        /** [s] with the recorded lore for [slot] (if there is one); the stat icons lose their vanilla attribute lines as on main. */
+        private fun rec(slot: Int, s: ItemStack): ItemStack {
+            REC_LORE[slot]?.let { l -> s.set(DataComponents.LORE, net.minecraft.world.item.component.ItemLore(l.map { Component.literal(it).withStyle { st -> st.withItalic(false) } })) }
+            if (slot in 14..16) s.set(DataComponents.ATTRIBUTE_MODIFIERS, net.minecraft.world.item.component.ItemAttributeModifiers.EMPTY)
+            return s
+        }
+
+        /** What you wear in [eq], or main's grey "Empty ... Slot" pane. */
+        private fun worn(eq: EquipmentSlot, empty: String): ItemStack =
+            sp.getItemBySlot(eq).copy().takeUnless { it.isEmpty } ?: Terminals.named(net.minecraft.world.item.Items.GRAY_STAINED_GLASS_PANE, "§7Empty $empty Slot")
+
         init { draw() }
 
         private fun draw() {
             val c = container
             for (i in 0 until 54) c.setItem(i, Terminals.FILLER)
             c.setItem(2, sp.mainHandItem.copy())
-            c.setItem(10, SimItems.head(NECKLACE_TEX, "§6 Strengthened Bone Necklace §6✪✪✪✪✪"))
-            c.setItem(19, SimItems.head(CLOAK_TEX, "§6 Menacing Shadow Assassin Cloak §6✪✪✪✪✪"))
-            c.setItem(28, SimItems.head(BELT_TEX, "§5Implosion Belt"))
-            c.setItem(37, SimItems.head(GLOVES_TEX, "§6Menacing Soulweaver Gloves §6✪✪✪✪✪"))
-            c.setItem(11, sp.getItemBySlot(EquipmentSlot.HEAD).copy().takeUnless { it.isEmpty } ?: Terminals.named(net.minecraft.world.item.Items.GRAY_STAINED_GLASS_PANE, "§7Empty Helmet Slot"))
-            c.setItem(20, leather(net.minecraft.world.item.Items.LEATHER_CHESTPLATE, 0x42c99a, "§d✿ Loving Maxor's Chestplate §6✪✪✪✪✪§c➎"))
-            c.setItem(29, leather(net.minecraft.world.item.Items.LEATHER_LEGGINGS, 0x68fba0, "§d✿ Necrotic Maxor's Leggings §6✪✪✪✪✪§c➎"))
-            c.setItem(38, leather(net.minecraft.world.item.Items.LEATHER_BOOTS, 0x57f6c0, "§d✿ Necrotic Maxor's Boots §6✪✪✪✪✪§c➎"))
-            c.setItem(14, Terminals.named(net.minecraft.world.item.Items.STONE_SWORD, "§cCombat Stats"))
-            c.setItem(15, Terminals.named(net.minecraft.world.item.Items.STONE_PICKAXE, "§6Mining Stats"))
-            c.setItem(16, Terminals.named(net.minecraft.world.item.Items.GOLDEN_HOE, "§eFarming Stats"))
-            c.setItem(23, Terminals.named(net.minecraft.world.item.Items.JUNGLE_SAPLING, "§2Foraging Stats"))
-            c.setItem(24, Terminals.named(net.minecraft.world.item.Items.FISHING_ROD, "§bFishing Stats"))
-            c.setItem(25, Terminals.named(net.minecraft.world.item.Items.CLOCK, "§dMiscellaneous Stats"))
-            c.setItem(32, Terminals.named(net.minecraft.world.item.Items.LEAD, "§aHunting Stats"))
-            c.setItem(34, Terminals.named(net.minecraft.world.item.Items.BOOK, "§3Wisdom Stats"))
-            c.setItem(47, if (P3Sim.phoenix) SimItems.head(PHOENIX_TEX, "§7[Lvl 76] §6Phoenix") else SimItems.head(BLACK_CAT_TEX, "§7[Lvl 100] §6Black Cat"))
+            c.setItem(10, rec(10, SimItems.head(NECKLACE_TEX, REC_NAME.getValue(10))))
+            c.setItem(19, rec(19, SimItems.head(CLOAK_TEX, REC_NAME.getValue(19))))
+            c.setItem(28, rec(28, SimItems.head(BELT_TEX, REC_NAME.getValue(28))))
+            c.setItem(37, rec(37, SimItems.head(GLOVES_TEX, REC_NAME.getValue(37))))
+            // Helmet and armour: what you actually wear (main shows your worn pieces, lore and all).
+            c.setItem(11, worn(EquipmentSlot.HEAD, "Helmet"))
+            c.setItem(20, worn(EquipmentSlot.CHEST, "Chestplate"))
+            c.setItem(29, worn(EquipmentSlot.LEGS, "Leggings"))
+            c.setItem(38, worn(EquipmentSlot.FEET, "Boots"))
+            c.setItem(14, rec(14, Terminals.named(net.minecraft.world.item.Items.STONE_SWORD, "§cCombat Stats")))
+            c.setItem(15, rec(15, Terminals.named(net.minecraft.world.item.Items.STONE_PICKAXE, "§6Mining Stats")))
+            c.setItem(16, rec(16, Terminals.named(net.minecraft.world.item.Items.GOLDEN_HOE, "§aFarming Stats")))
+            c.setItem(23, rec(23, Terminals.named(net.minecraft.world.item.Items.JUNGLE_SAPLING, "§2Foraging Stats")))
+            c.setItem(24, rec(24, Terminals.named(net.minecraft.world.item.Items.FISHING_ROD, "§bFishing Stats")))
+            c.setItem(25, rec(25, Terminals.named(net.minecraft.world.item.Items.CLOCK, "§dMiscellaneous Stats")))
+            c.setItem(32, rec(32, Terminals.named(net.minecraft.world.item.Items.LEAD, "§eHunting Stats")))
+            c.setItem(34, rec(34, Terminals.named(net.minecraft.world.item.Items.BOOK, "§3Wisdom Stats")))
+            c.setItem(47, if (P3Sim.phoenix) SimItems.head(PHOENIX_TEX, "§7[Lvl 76] §6Phoenix") else rec(47, SimItems.head(BLACK_CAT_TEX, REC_NAME.getValue(47))))
             c.setItem(49, Terminals.named(net.minecraft.world.item.Items.BARRIER, "§cClose"))
-            c.setItem(50, Terminals.named(net.minecraft.world.item.Items.POTION, "§aActive Effects"))
-            c.setItem(51, Terminals.named(net.minecraft.world.item.Items.DIAMOND, "§aSkyBlock Achievements"))
+            c.setItem(50, rec(50, Terminals.named(net.minecraft.world.item.Items.POTION, "§aActive Effects")))
+            c.setItem(51, rec(51, Terminals.named(net.minecraft.world.item.Items.DIAMOND, "§aSkyBlock Achievements")))
         }
 
         override fun clicked(slot: Int, button: Int, input: net.minecraft.world.inventory.ContainerInput, p: net.minecraft.world.entity.player.Player) {
@@ -152,7 +181,10 @@ object Masks {
         // The speed update lands 2-3 ticks after the Autopet chat (PETS-04: 2 x21, 3 x20 of 47); the swap itself is silent
         // bar one vol-0 splash at (200,300,400) (PETS-05).
         Fight.later(2 + kotlin.random.Random.nextInt(2), "pet speed") { Fight.applySpeed(p) }
-        Sim.sound(SoundEvents.PLAYER_SPLASH, 0f, 0f, net.minecraft.world.phys.Vec3(200.0, 300.0, 400.0), net.minecraft.sounds.SoundSource.PLAYERS)
+        // The splash goes to you alone (SimItems.castRod); then main's player_abilities with the new pet's walking speed,
+        // ahead of the movement_speed attribute that follows 2-3 ticks on.
+        p.abilities.setWalkingSpeed(Fight.speedStat(p).coerceAtLeast(100) / 1000f)
+        p.onUpdateAbilities()
         // A rod cast swaps pets on Hypixel through an Autopet rule: its line 2-3 ticks after the rod comes
         // out (party/autopet.mjs, 60 runs: 74 of these lines with the rod held), exactly as below.
         Sim.chat(if (P3Sim.phoenix) "§cAutopet §eequipped your §7[Lvl 100] §5Phoenix§e! §a§lVIEW RULE"
@@ -161,6 +193,9 @@ object Masks {
 
     /** Invincible until (after a proc). */
     private var safeUntil = 0
+
+    /** Phoenix's scream as main names it: an unregistered (direct) sound event. */
+    private val PHOENIX_SCREAM = net.minecraft.sounds.SoundEvent.createVariableRangeEvent(net.minecraft.resources.Identifier.parse("minecraft:mob.ghast.affectionate_scream"))
 
     fun reset() {
         items.forEach { it.readyAt = 0 }; safeUntil = 0
@@ -205,13 +240,15 @@ object Masks {
             // extinguish, two infects and the ghast scream; then Goldor's line. No enderman sound on Spirit.
             if (item.id == "PHOENIX") {
                 Sim.chat(item.line)
-                Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.49f, null, net.minecraft.sounds.SoundSource.BLOCKS)
-                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f)
-                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f)
-                Sim.sound(SoundEvents.GHAST_SCREAM, 1f, 1.41f + kotlin.random.Random.nextFloat() * 0.15f)
+                Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.492f, null, net.minecraft.sounds.SoundSource.BLOCKS)
+                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f, null, net.minecraft.sounds.SoundSource.HOSTILE)
+                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f, null, net.minecraft.sounds.SoundSource.HOSTILE)
+                // Main sends the legacy id mob.ghast.affectionate_scream (no such sound in 26.1.2's assets, so the client
+                // plays nothing): sent as the same direct, unregistered sound event.
+                Sim.sound(PHOENIX_SCREAM, 1f, 1.41f + kotlin.random.Random.nextFloat() * 0.15f)
             } else {
-                Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f)
-                Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f)
+                Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f, null, net.minecraft.sounds.SoundSource.PLAYERS)
+                Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f, null, net.minecraft.sounds.SoundSource.HOSTILE)
                 Sim.chat(item.line)
             }
             goldor?.invoke()

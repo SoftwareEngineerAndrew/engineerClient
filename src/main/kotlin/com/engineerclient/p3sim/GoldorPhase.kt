@@ -465,6 +465,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if (n >= goldor.killAt) die()
         }
         goldor.barTick(n)
+        // Main re-sends Goldor's bar (name, style, progress) once a second all P3 long (census: ~50 of each per 1000 ticks).
+        if (n > 0 && n % 20 == 0) BossBar.resend()
         // Frenzy: every 10 ticks (on n % 10 == 7, main) while you're 2-14 blocks from him (goldor.md, damage).
         if (deadAt < 0 && n % 10 == 7) Sim.player?.let { p ->
             val d = p.position().distanceTo(goldor.position)
@@ -627,6 +629,19 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             armourOffAt = killAt - 4 - kotlin.random.Random.nextInt(11)
         }
 
+        /**
+         * Main's aura round Goldor (census: ~1.34 angry_villager a tick, all P3): one or two single particles a tick
+         * (count 1, speed 1.0, no offset) scattered 3-6 blocks off him in x/z, half a block above his feet (~y 119.5).
+         */
+        private fun aura() {
+            val k = if (kotlin.random.Random.nextDouble() < 0.34) 2 else 1
+            repeat(k) {
+                val a = kotlin.random.Random.nextDouble() * Math.PI * 2
+                val r = 3.0 + kotlin.random.Random.nextDouble() * 3.0
+                Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.ANGRY_VILLAGER, pos.x + Math.cos(a) * r, pos.y + 0.5, pos.z + Math.sin(a) * r, 1, 0.0, 0.0, 0.0, 1.0)
+            }
+        }
+
         /** Killed: he stops where he is (no death animation) and stays until well into P4. */
         fun die() { dead = true }
 
@@ -650,6 +665,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             val boss = boss ?: return
             val n = phase.n
             if (dead) return
+            aura()
             if (armouredRun && n == spawnedN + armourAt) boss.armour(true)
             if (n >= armourOffAt) { armourOffAt = Int.MAX_VALUE; boss.armour(false) }
             if (n >= giantsAt && giants.isEmpty()) spawnGiants()

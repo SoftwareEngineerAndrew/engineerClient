@@ -166,8 +166,12 @@ object ArenaFixes {
         fun begin(n0: Int) {
             val a = run.init
             for (i in 0 until a.size step 4) if (a[i] != -3) place(a[i], a[i + 1], a[i + 2], states[a[i + 3]])
-            tick(n0 - 1)
+            catchUp = true
+            try { tick(n0 - 1) } finally { catchUp = false }
         }
+
+        /** While [begin] catches up on changes before the start: no primed TNT for those. */
+        private var catchUp = false
 
         fun tick(n: Int) {
             val e = run.events
@@ -188,7 +192,22 @@ object ArenaFixes {
             val cur = Blocks.get(pos) ?: return
             // Block entities (heads, dispensers) are left alone: replacing one would drop its data.
             if (cur.hasBlockEntity() && !s.isAir) return
+            if (s.isAir && cur.`is`(B.TNT) && !catchUp) { primeCube(pos); return }
             Blocks.set(pos, s)
+        }
+
+        /**
+         * A TNT cube going away as main does it (census): a primed TNT on each block (fuse 80, vanilla's random
+         * (+-0.02, 0.2, +-0.02) hop, entity.tnt.primed BLOCKS 1.0/1.0 each), the block air one tick later, and the
+         * entity gone 21 ticks on, never exploding or hurting anything.
+         */
+        private fun primeCube(pos: BlockPos) {
+            val tnt = net.minecraft.world.entity.item.PrimedTnt(Sim.level, pos.x + 0.5, pos.y.toDouble(), pos.z + 0.5, null)
+            tnt.fuse = 80
+            Sim.spawn(tnt)
+            Sim.sound(net.minecraft.sounds.SoundEvents.TNT_PRIMED, 1f, 1f, tnt.position(), net.minecraft.sounds.SoundSource.BLOCKS)
+            Fight.later(1, "tnt cube block") { if (Blocks.get(pos)?.`is`(B.TNT) == true) Blocks.set(pos, B.AIR.defaultBlockState()) }
+            Fight.later(21, "tnt cube gone") { tnt.discard() }
         }
     }
 

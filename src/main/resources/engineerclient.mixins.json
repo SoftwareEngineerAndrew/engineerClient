@@ -55,6 +55,7 @@
     "MouseTapMixin",
     "P3SimFluidMixin",
     "P3SimWorldMixin",
+    "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
     "MoveEntityPacketAccessor",
     "NumbersHandlerMixin",
