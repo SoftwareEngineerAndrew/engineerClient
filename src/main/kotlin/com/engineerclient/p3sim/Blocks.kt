@@ -335,6 +335,8 @@ object Blocks {
  */
 class Debris(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
     net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityType.FALLING_BLOCK, level) {
+    /** An autosave never writes it (it would come back as a vanilla falling block that lands and places itself). */
+    override fun shouldBeSaved() = false
     init {
         runCatching {
             net.minecraft.world.entity.item.FallingBlockEntity::class.java.getDeclaredField("blockState").apply { isAccessible = true }.set(this, state)
@@ -352,6 +354,8 @@ class Debris(level: net.minecraft.world.level.Level, state: net.minecraft.world.
 /** A falling block that is only carried (STANDS-01): never ticks, so it never falls, lands or places itself. */
 class CarriedBlock(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
     net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityType.FALLING_BLOCK, level) {
+    /** An autosave never writes it (it would come back as a vanilla falling block that lands and places itself). */
+    override fun shouldBeSaved() = false
     init {
         runCatching {
             net.minecraft.world.entity.item.FallingBlockEntity::class.java.getDeclaredField("blockState").apply { isAccessible = true }.set(this, state)

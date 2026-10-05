@@ -810,7 +810,8 @@ object SimItems {
      */
     fun miningEffects(p: ServerPlayer, force: Boolean = false) {
         val held = idOf(p.mainHandItem) == "DUNGEONBREAKER"
-        if (!force && held == breakerHeld) return
+        // The cache alone would miss a fresh ServerPlayer (a void respawn) that has neither effect.
+        if (!force && held == breakerHeld && (held || p.hasEffect(net.minecraft.world.effect.MobEffects.HASTE))) return
         breakerHeld = held
         if (held) {
             p.removeEffect(net.minecraft.world.effect.MobEffects.HASTE)
@@ -1005,7 +1006,7 @@ object SimItems {
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             // Hypixel's click model: a block-aimed click fired from use_item_on; the client's own MAIN-hand use_item
             // for the same item, in the same or the next server tick, is that click's follow-up and does nothing.
-            blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick - t <= 1) { blockFired = null; return@register InteractionResult.SUCCESS } }
+            blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick == t) { blockFired = null; return@register InteractionResult.SUCCESS } }
             var result: InteractionResult = InteractionResult.PASS
             EngineerClient.safely("p3sim use $id") { result = use(player, id) }
             result
@@ -1041,6 +1042,13 @@ object SimItems {
         }
     }
 
+    /** The block the held left click last hit (null once the button is up): [clientHitBlock] handles it once a press. */
+    private var hitHeld: BlockPos? = null
+
+    /** Client tick: a released attack key ends the press. */
+    @JvmStatic
+    fun clientTick() { if (!mc.options.keyAttack.isDown) hitHeld = null }
+
     /**
      * A block hit on the client (DungeonbreakerSimMixin: adventure mode drops it before Fabric's
      * callback). In the sim with the Dungeonbreaker: mined on the sim's server; true = handled.
@@ -1051,11 +1059,16 @@ object SimItems {
         val level = mc.level ?: return false
         if (!simClient(level)) return false
         val at = pos.immutable()
+        // The client hits a block twice in the press tick (startAttack, then continueAttack restarting the cancelled
+        // break) and again every tick the button is held; main sees one start_destroy per press. Once per press, per block.
+        val again = at == hitHeld
+        hitHeld = at
         // A left click on a lever credits it, toggling nothing (LEV-01, LIGHTS-01).
         // LIGHTS-08: with the Dungeonbreaker the click also reaches the mining refusal ("digging there" in S4's device).
-        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { SimServer.run("lever left") { ph.devices.leftClick(at) }; if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return true } }
+        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) SimServer.run("lever left") { ph.devices.leftClick(at) }; if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return true } }
         // Superboom: a left click on a gate blows it too.
         if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
+            if (again) return true
             SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } } } }
             return true
         }

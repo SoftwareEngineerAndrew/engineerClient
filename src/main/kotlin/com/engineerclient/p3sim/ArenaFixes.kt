@@ -202,7 +202,9 @@ object ArenaFixes {
          * entity gone 21 ticks on, never exploding or hurting anything.
          */
         private fun primeCube(pos: BlockPos) {
-            val tnt = net.minecraft.world.entity.item.PrimedTnt(Sim.level, pos.x + 0.5, pos.y.toDouble(), pos.z + 0.5, null)
+            val tnt = object : net.minecraft.world.entity.item.PrimedTnt(Sim.level, pos.x + 0.5, pos.y.toDouble(), pos.z + 0.5, null) {
+                override fun shouldBeSaved() = false
+            }
             tnt.fuse = 80
             Sim.spawn(tnt)
             Sim.sound(net.minecraft.sounds.SoundEvents.TNT_PRIMED, 1f, 1f, tnt.position(), net.minecraft.sounds.SoundSource.BLOCKS)

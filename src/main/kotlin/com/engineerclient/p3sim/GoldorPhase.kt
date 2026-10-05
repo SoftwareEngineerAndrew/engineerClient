@@ -188,6 +188,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if ((n % 60 == 58 && dtEarly) || (n % 60 == 59 && !dtEarly)) deathTick()
         }
         goldor.tick(this)
+        // Main re-sends Goldor's bar (name, style, progress) once a second all P3 long (census: ~50 of each per 1000 ticks).
+        if (n > 0 && n % 20 == 0) BossBar.resend()
         if (section in 1..4 && goldorSeg() == section) goldorReached[section] = true
         // His carving of the walkway is Blocks' (carveTick). The TNT cubes (one 27-block cube per 200-tick slot in about
         // half the runs), the granite blobs, the lantern burst and the S4 plate follow one recorded run (ARENA-01/02/04/08).
@@ -358,6 +360,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         say(SECTION_LINES.random())
         section = s + 1
         sectionStart[section] = n
+        // A slow section: Goldor may already have walked through the next one's segment; it counts as reached and left.
+        if (section in 2..4 && !goldor.firstLap && goldorSeg() > section) goldorReached[section] = true
         maybeTaunt()
         Stats.section(s, sectionEnd[s].coerceAtLeast(gateAt[s]) - sectionStart[s], n)
         // The section ends with its door (max(last completion, gate)): Goldor's catch-up cue.
@@ -465,8 +469,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if (n >= goldor.killAt) die()
         }
         goldor.barTick(n)
-        // Main re-sends Goldor's bar (name, style, progress) once a second all P3 long (census: ~50 of each per 1000 ticks).
-        if (n > 0 && n % 20 == 0) BossBar.resend()
         // Frenzy: every 10 ticks (on n % 10 == 7, main) while you're 2-14 blocks from him (goldor.md, damage).
         if (deadAt < 0 && n % 10 == 7) Sim.player?.let { p ->
             val d = p.position().distanceTo(goldor.position)
@@ -786,7 +788,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         complete(st, by)
         // The click comes after the credit (chat, title, pling), blocks source, exact pitches (devices pass 2).
         if (!left) Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (nowOn) 0.5873016f else 0.4920635f, Vec3.atCenterOf(lever), net.minecraft.sounds.SoundSource.BLOCKS)
-        if (left && st.done && by == Sim.me) { sendBlock(lever); refuseLever(lever, true) }
+        if (left && st.done && by == Sim.me) refuseLever(lever, true)
         // The lever's stand renames 1-3 ticks after the pull, not on the 20-tick grid (devices.md §5).
         if (st.done) Fight.later(1, "lever stand") { if (Fight.phase === this) st.refreshStands() }
     }

@@ -145,7 +145,7 @@ object P3Sim : Module(
             cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
             dispatcher.register(cmd)
         }
-        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge() } }
+        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick() } }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
             if (screen is TitleScreen) EngineerClient.safely("p3sim title button") {
                 Screens.getWidgets(screen).add(
