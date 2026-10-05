@@ -1,6 +1,6 @@
 # Engineer Client
 
-engineerandrew's [Odin](https://github.com/odtheking/Odin) addon for Hypixel Catacombs speedrunning.
+EngineerAndrew's [Odin](https://github.com/odtheking/Odin) addon for Hypixel Catacombs speedrunning.
 Fabric, MC 26.1.2, client-only, Kotlin. Built for one team whose clients are all set up the
 same way; `/ec setup` reads the live Odin config and says what is wrong.
 
