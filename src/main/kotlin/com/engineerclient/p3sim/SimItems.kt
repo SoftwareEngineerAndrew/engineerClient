@@ -1851,6 +1851,40 @@ object SimItems {
     private val S4_DEVICE = AABB(55.0, 132.0, 142.0, 65.0, 137.0, 148.0)
     private val INNER = AABB(39.0, 0.0, 99.0, 70.0, 113.0, 130.0)
 
+    /** Something rests on [pos], hangs on one of its sides or under it: on top a carpet, plate, floor lever or button, torch, fire, head, sign, banner, rail, redstone, snow layer, door or plant; on a side a wall torch, wall lever or button, wall head, sign or banner, ladder, tripwire hook, or fire or vines on that face; under it a ceiling lever or button. */
+    private fun holdsSomething(pos: BlockPos): Boolean {
+        val level = Sim.level
+        if (level.getBlockState(pos).getCollisionShape(level, pos).isEmpty) return false
+        val face = net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock.FACE
+        val facing = net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING
+        val up = level.getBlockState(pos.above())
+        val ub = up.block
+        val onTop = ub is net.minecraft.world.level.block.CarpetBlock || ub is net.minecraft.world.level.block.BasePressurePlateBlock ||
+            (ub is net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock && up.getValue(face) == net.minecraft.world.level.block.state.properties.AttachFace.FLOOR) ||
+            (ub is net.minecraft.world.level.block.BaseTorchBlock && ub !is net.minecraft.world.level.block.WallTorchBlock && ub !is net.minecraft.world.level.block.RedstoneWallTorchBlock) ||
+            ub is net.minecraft.world.level.block.BaseFireBlock || ub is net.minecraft.world.level.block.SkullBlock || ub is net.minecraft.world.level.block.StandingSignBlock ||
+            ub is net.minecraft.world.level.block.BannerBlock || ub is net.minecraft.world.level.block.BaseRailBlock || ub is net.minecraft.world.level.block.RedStoneWireBlock ||
+            ub is net.minecraft.world.level.block.SnowLayerBlock || ub is net.minecraft.world.level.block.DoorBlock || ub is net.minecraft.world.level.block.TripWireBlock ||
+            ub is net.minecraft.world.level.block.VegetationBlock || ub is net.minecraft.world.level.block.FlowerPotBlock
+        if (onTop) return true
+        val down = level.getBlockState(pos.below())
+        if (down.block is net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock && down.getValue(face) == net.minecraft.world.level.block.state.properties.AttachFace.CEILING) return true
+        for (d in net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            val n = level.getBlockState(pos.relative(d))
+            val nb = n.block
+            // Wall things face away from the block holding them.
+            val wall = nb is net.minecraft.world.level.block.WallTorchBlock || nb is net.minecraft.world.level.block.RedstoneWallTorchBlock || nb is net.minecraft.world.level.block.WallSkullBlock ||
+                nb is net.minecraft.world.level.block.WallSignBlock || nb is net.minecraft.world.level.block.WallBannerBlock || nb is net.minecraft.world.level.block.LadderBlock ||
+                nb is net.minecraft.world.level.block.TripWireHookBlock ||
+                (nb is net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock && n.getValue(face) == net.minecraft.world.level.block.state.properties.AttachFace.WALL)
+            if (wall && n.hasProperty(facing) && n.getValue(facing) == d) return true
+            // Fire and vines name the faces they're on.
+            val side = net.minecraft.world.level.block.PipeBlock.PROPERTY_BY_DIRECTION[d.opposite]
+            if ((nb is net.minecraft.world.level.block.FireBlock || nb is net.minecraft.world.level.block.VineBlock) && side != null && n.hasProperty(side) && n.getValue(side)) return true
+        }
+        return false
+    }
+
     /** Why Hypixel refuses [pos]: a chat line, "" (silently), or null (it breaks). */
     private fun refusal(p: ServerPlayer, pos: BlockPos, s: BlockState): String? {
         val b = s.block
@@ -1863,6 +1897,10 @@ object SimItems {
         if (b is net.minecraft.world.level.block.CommandBlock) return THAT_BLOCK
         if (b == net.minecraft.world.level.block.Blocks.GOLD_BLOCK && !CORE_DOOR.contains(c)) return THAT_BLOCK
         if (b is LeverBlock || b is ButtonBlock) return THAT_BLOCK
+        // Pistons and granite never break, nor does any block something is attached to (a carpet, fire, a button, a torch...).
+        if (b is net.minecraft.world.level.block.piston.PistonBaseBlock || b is net.minecraft.world.level.block.piston.PistonHeadBlock || b is net.minecraft.world.level.block.piston.MovingPistonBlock) return THAT_BLOCK
+        if (b == net.minecraft.world.level.block.Blocks.GRANITE || b == net.minecraft.world.level.block.Blocks.POLISHED_GRANITE) return THAT_BLOCK
+        if (holdsSomething(pos)) return THAT_BLOCK
         // rec2 (36 P3s, slot-4 starts): S4's redstone lamps are always refused with "digging there" (4 of 4 messages, 13 starts); the emerald blocks behind the levers with "that block" (24 starts).
         if (b == net.minecraft.world.level.block.Blocks.REDSTONE_LAMP) return THERE
         if (b == net.minecraft.world.level.block.Blocks.EMERALD_BLOCK) return THAT_BLOCK
