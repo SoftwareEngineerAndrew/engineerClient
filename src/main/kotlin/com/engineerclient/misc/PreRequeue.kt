@@ -24,7 +24,7 @@ import net.minecraft.world.entity.item.PrimedTnt
  *
  * From 60 recorded P4 endings: the TNT comes after "All this, for nothing..." and the score
  * follows it 39-50 server ticks later in every one, while the line itself is 79-128 ticks before
- * the score. Sending `/instancerequeue` on the TNT saves ~2.4 s a run over an instant requeue at
+ * the score. Sending `/joininstance` for the same floor (not `/instancerequeue`) on the TNT saves ~2.4 s a run over an instant requeue at
  * the score. The risk is the transfer beating the score, which loses the run: only a server freeze
  * after the send did that (1 of 60). Counting server ticks makes a lagging server requeue later
  * by itself, and the freeze guard holds while no server ticks are arriving.
@@ -35,7 +35,7 @@ import net.minecraft.world.entity.item.PrimedTnt
 object PreRequeue : Module(
     name = "Pre-Requeue",
     category = Category.custom("Engineer Client"),
-    description = "Requeues an F7/M7 run on Necron's death TNT, ~2.4 s before the score (about 1 run in 60 lost to a server freeze after the send).",
+    description = "Joins the next F7/M7 run (/joininstance, same floor) on Necron's death TNT, ~2.4 s before the score (about 1 run in 60 lost to a server freeze after the send).",
 ) {
     private val leaderOnly by BooleanSetting("Leader Only", true, desc = "Only requeue when you lead the party (or are solo): one requeue for everyone.")
     private val delay by NumberSetting("Extra Ticks", 0, 0, 40, 1, desc = "Server ticks to wait after the TNT. Waiting doesn't lower the risk in the recordings, it only gives back the time saved.", unit = "ticks")
@@ -75,11 +75,20 @@ object PreRequeue : Module(
             return why
         }
 
-        companion object { const val FROZEN = 3 }
+        companion object {
+            const val FROZEN = 3
+
+            /** `/joininstance`'s name for F7 / M7, as Odin's `/od f7` sends it. */
+            fun instance(floor: String) = if (floor == "M7") "master_catacombs_floor_seven" else "catacombs_floor_seven"
+        }
     }
 
     private const val END_LINE = "[BOSS] Necron: All this, for nothing..."
     private val CODES = Regex("§.")
+
+    /** The floor the end line came on: the next run is the same one. */
+    private var floor = "F7"
+
 
     private fun inFloor7() = DungeonUtils.inDungeons && DungeonUtils.floor?.name.let { it == "F7" || it == "M7" } &&
         !com.engineerclient.p3sim.P3Sim.inSim
@@ -91,7 +100,7 @@ object PreRequeue : Module(
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CODES, "")
-            if (text == END_LINE) mc.execute { if (inFloor7()) plan.onEndLine() }
+            if (text == END_LINE) mc.execute { if (inFloor7()) { floor = DungeonUtils.floor?.name ?: "F7"; plan.onEndLine() } }
         }
 
         on<EntityEvent.Add> {
@@ -107,8 +116,8 @@ object PreRequeue : Module(
             EngineerClient.safely("pre-requeue") {
                 // Odin's Auto Requeue would send another at the score's stats line.
                 DungeonQueue.disableRequeue = true
-                sendCommand("instancerequeue")
-                if (notify) EngineerClient.msg("§7Requeued on $why.")
+                sendCommand("joininstance " + Plan.instance(floor))
+                if (notify) EngineerClient.msg("§7Sent /joininstance " + Plan.instance(floor) + " on $why.")
             }
         }
     }
