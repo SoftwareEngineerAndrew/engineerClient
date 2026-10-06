@@ -193,8 +193,12 @@ object RandomStuff : Module(
         ScoreboardLines.dump()
     }
 
+    /** Off: the sidebar is the game's own, where the game puts it, whatever the Scoreboard HUD says. */
+    private val movableScoreboard by BooleanSetting("Movable Scoreboard", true, desc = "The sidebar drawn by the Scoreboard HUD, where you put it and at its scale. Off: the normal scoreboard, where the game puts it (the line hider still applies).")
+
     /** The sidebar where you put it: vanilla's own drawing, moved (ScoreboardMove). Off: where vanilla puts it. */
     private val scoreboardHud by HUD("Scoreboard", "Moves and scales the sidebar scoreboard. Off: it stays where the game puts it.", false, 400, 100, 1f) { example ->
+        if (!movableScoreboard) return@HUD 0 to 0
         val size = ScoreboardMove.draw(this)
         if (example && size.first == 0) {
             fill(0, 0, 80, 60, 0x66000000)
@@ -406,7 +410,7 @@ object RandomStuff : Module(
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
-            ScoreboardMove.active = enabled && scoreboardHud.enabled
+            ScoreboardMove.active = enabled && movableScoreboard && scoreboardHud.enabled
         }
 
         // Hide Armor Stands: a stand's name and equipment (what tells a key or a starred mob's tag
