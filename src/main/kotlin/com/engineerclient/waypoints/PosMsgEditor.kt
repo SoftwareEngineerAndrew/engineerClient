@@ -63,7 +63,11 @@ object PosMsgEditor {
         if (!mc.options.keyUse.isDown) useHeld = false
     }
 
-    /** Dungeon proximity waypoints sent this world (by id), cleared on a world load. */
+    /**
+     * Dungeon proximity waypoints sent this world, cleared on a world load. Keyed by box and command,
+     * not Odin's id (which has the area in it), so the same callout set up for two phases (F7
+     * Terminals and Goldor) still sends once, as one /posmsg did.
+     */
     private val sent = HashSet<String>()
 
     /**
@@ -75,7 +79,7 @@ object PosMsgEditor {
     fun allowFire(waypoint: Any): Boolean {
         val wp = waypoint as? Waypoint ?: return true
         if (wp.trigger != Trigger.PROXIMITY || BrWaypoints2.posmsgRetrigger || !isDungeonArea(wp.area)) return true
-        return sent.add(wp.id)
+        return sent.add("${wp.command}@${wp.box}")
     }
 
     /** Odin's dungeon areas: FLOOR_1..5, and F6_/F7_ boss phases. */
