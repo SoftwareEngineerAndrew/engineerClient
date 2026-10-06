@@ -100,6 +100,15 @@ object P3Rotation : Module(
     }
 
     /**
+     * The leap menu before it's open: its four players in Odin's quadrants, your target ringed
+     * (amber on the way, green in place), so you know where to click before the menu appears.
+     */
+    private val leapPreviewHud by HUD("Leap Preview", "A small copy of Odin's leap menu while it's closed: your leap target's quadrant lit up (amber on their way, green in place), so you know where to click before you open it.", true, x = 10, y = 200, scale = 1f) { example ->
+        if (!example && !enabled) return@HUD 0 to 0
+        LeapHighlight.drawPreview(this, example)
+    }
+
+    /**
      * Everything the mod believes, on screen, so a clip of a run is enough to see where it went
      * wrong. Off by default; the same content is in `/brw debug` and in the game log under `[ec]`.
      */

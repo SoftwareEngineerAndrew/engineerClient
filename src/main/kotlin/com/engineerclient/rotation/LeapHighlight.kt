@@ -7,6 +7,7 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.render.roundedFill
+import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.ui.widget.CustomGUIImpl
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -80,6 +81,46 @@ object LeapHighlight {
     }
 
     private val DIM = Color(0, 0, 0, 0.62f)
+
+    private const val PW = 84
+    private const val PH = 16
+    private const val PGAP = 4
+    private val PBOX = Color(0, 0, 0, 0.45f)
+
+    /**
+     * The leap menu while it's closed: the four boxes in Odin's quadrant order (top-left,
+     * top-right, bottom-left, bottom-right), each with its player, and your target's box lit the
+     * way the ring is in the menu. Nothing while the menu is open or there is no target.
+     */
+    fun drawPreview(gfx: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        val names: List<String>
+        val index: Int
+        val color: Color
+        if (example) {
+            names = listOf("Skyyqt", "p3wr", "FO55IL_BL4ZE", "owoskilly")
+            index = 1; color = READY
+        } else {
+            if (leapScreen() != null) return 0 to 0
+            val target = LeapSignal.current() ?: return 0 to 0
+            names = (0 until 4).map { DungeonUtils.leapTeammates.getOrNull(it)?.name ?: "Empty" }
+            index = names.indexOfFirst { it.equals(target.ign, ignoreCase = true) }
+            if (index < 0) return 0 to 0
+            color = if (target.ready) READY else SOFT
+        }
+        val font = EngineerClient.mc.font
+        for (i in 0 until 4) {
+            val x0 = (i % 2) * (PW + PGAP)
+            val y0 = (i / 2) * (PH + PGAP)
+            val name = names[i]
+            if (i == index) outline(gfx, x0, y0, x0 + PW, y0 + PH, color, 4)
+            else gfx.roundedFill(x0, y0, x0 + PW, y0 + PH, PBOX.rgba, 4)
+            if (name == "Empty") continue
+            val shown = if (font.width(name) > PW - 6) font.plainSubstrByWidth(name, PW - 10) + "…" else name
+            val text = (if (i == index) "§f§l" else "§7") + shown
+            gfx.text(text, x0 + (PW - font.width(text)) / 2, y0 + (PH - 8) / 2, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        }
+        return (PW * 2 + PGAP) to (PH * 2 + PGAP)
+    }
 
     /**
      * Odin's box for quadrant [i], on screen, honouring its Render Scale: it translates to the
