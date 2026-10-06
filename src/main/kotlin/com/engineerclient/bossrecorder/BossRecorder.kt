@@ -24,7 +24,7 @@ import java.util.Locale
  */
 object BossRecorder : Module(
     name = "Boss Recorder",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Records the boss fights packet by packet, each stamped with its server tick: bosses' health and damage, every mob's and player's exact movement, projectiles, blocks and sounds. For working out the bosses' mechanics.",
 ) {
     val watcherCamp by BooleanSetting("Watcher Camp", true, desc = "Also records the blood camp, from the blood door opening until the Watcher is done.")

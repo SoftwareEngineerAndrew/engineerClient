@@ -1,11 +1,11 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -38,7 +38,7 @@ import java.util.Locale
  */
 object AgroLeaderboard : Module(
     name = "Agro Leaderboard",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "In F7 P1/P2, lists the party by distance to Maxor/Storm. Closest (who has aggro) is green.",
 ) {
     private class Entry(val name: String, val skin: PlayerSkin?, val distance: Double, val player: Player? = null)
@@ -112,7 +112,7 @@ object AgroLeaderboard : Module(
             }.sortedBy { it.distance }
         }
 
-        on<RenderEvent.Last> {
+        on<RenderExtractEvent> {
             if (!sphereMode) return@on
             val boss = boss?.takeIf { it.isAlive } ?: return@on
             val me = mc.player ?: return@on

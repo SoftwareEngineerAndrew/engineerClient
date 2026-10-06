@@ -1,7 +1,7 @@
 package com.engineerclient.practice
 
 import com.engineerclient.recorder.EcRec
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
@@ -33,13 +33,13 @@ import java.util.Locale
  */
 object TermInfo : Module(
     name = "Term Info",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "F7 terminals: section progress HUD, hides the terminal completion titles, and each section's time when it's done.",
 ) {
     private val simple by BooleanSetting("Simple Mode", true, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
     private val hideTitles by BooleanSetting("Hide Completion Titles", false, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening titles.")
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
-    private val sectionSeconds by NumberSetting("Section Time Seconds", 2.0, 0.5, 10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
+    private val sectionSeconds by NumberSetting("Section Time Seconds", 2.0, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
 
     private val infoHud by HUD("Term Info", "The current terminal section's progress.", true, 10, 80, 1.5f) { example ->
         if (example) return@HUD lines(this, if (simple) listOf("§c2/7") else listOf("§eTerms: 3/4", "§aLevers: 2/2", "§aDevice: §l✔", "§cGate: §l✘"))

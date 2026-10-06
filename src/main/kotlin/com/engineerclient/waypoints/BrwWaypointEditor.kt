@@ -4,7 +4,7 @@ import com.engineerclient.EngineerClient
 import com.odtheking.odin.OdinMod
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.events.InputEvent
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
 import com.odtheking.odin.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.DungeonWaypoint
 import com.odtheking.odin.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.WaypointType
@@ -29,6 +29,7 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
 import org.lwjgl.glfw.GLFW
+import com.odtheking.odin.utils.render.BoxStyle
 
 /**
  * VENDORED from Odin `dungeonwaypoints/DungeonWaypointEditor.kt` +
@@ -38,7 +39,7 @@ import org.lwjgl.glfw.GLFW
  * warning) so a right-click never places into two systems at once.
  */
 
-internal fun BrwWaypoints.renderBrwWaypoints(event: RenderEvent.Extract) {
+internal fun BrwWaypoints.renderBrwWaypoints(event: RenderExtractEvent) {
     if (!DungeonUtils.inClear) return
     if (DungeonUtils.currentRoom == null) return
     val waypoints = roomWaypoints
@@ -53,7 +54,7 @@ internal fun BrwWaypoints.renderBrwWaypoints(event: RenderEvent.Extract) {
     }
 
     brwReachPosition?.takeIf { allowEdits && !odinEditorActive() }?.let { pos ->
-        event.drawStyledBox(relativeAabbAt(pos).move(pos), color.withAlpha(0.3f), style = if (filled) 0 else 1, depthCheck)
+        event.drawStyledBox(relativeAabbAt(pos).move(pos), color.withAlpha(0.3f), style = if (filled) BoxStyle.FILLED else BoxStyle.OUTLINE, depthCheck)
     }
 }
 
@@ -141,7 +142,7 @@ private fun BrwWaypoints.createWaypoint(blockPos: BlockPos, aabb: AABB, title: S
     depth = depthCheck,
     aabb = aabb,
     title = title,
-    type = WaypointType.getByInt(waypointType),
+    type = waypointTypeOf(waypointType),
 )
 
 internal fun BrwWaypoints.relativeAabbAt(pos: BlockPos): AABB =
@@ -180,7 +181,7 @@ private fun GuiGraphicsExtractor.drawEditorHud(title: String, text: String, colo
 }
 
 private fun BrwWaypoints.describeNextWaypoint(): String = buildString {
-    append("§fType: §5${WaypointType.getByInt(waypointType)?.displayName ?: "None"}")
+    append("§fType: §5${waypointTypeOf(waypointType)?.displayName ?: "None"}")
     append("§7, §r#${color.hex()}§7")
     append(", ${if (filled) "§2Filled" else "§3Outline"}")
     append("§7, ${if (depthCheck) "§2Depth Check" else "§cThrough Walls"}")
@@ -195,3 +196,9 @@ private fun DungeonWaypoint.describe(): String = buildString {
     append("§7, ${if (depth) "§2Depth Check" else "§cThrough Walls"}")
     append("§7, §3Size: ${(aabb.maxX - aabb.minX).toFixed(2)}x${(aabb.maxY - aabb.minY).toFixed(2)}x${(aabb.maxZ - aabb.minZ).toFixed(2)}")
 }
+
+/** The type at [index] in [WaypointType.entries], NONE being none (Odin dropped its getByInt in 0.3.6). */
+private fun waypointTypeOf(index: Int): WaypointType? = WaypointType.entries.getOrNull(index)?.takeIf { it != WaypointType.NONE }
+
+/** "Normal", "Secret", ... (Odin dropped its displayName in 0.3.6). */
+private val WaypointType.displayName: String get() = name.lowercase().replaceFirstChar { it.uppercase() }

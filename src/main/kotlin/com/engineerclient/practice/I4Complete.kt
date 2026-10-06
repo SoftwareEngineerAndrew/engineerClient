@@ -30,10 +30,10 @@ import net.minecraft.world.phys.AABB
  */
 object I4Complete : Module(
     name = "i4 Complete Title",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "A title when your 4th device (i4) is done, while you're on its plate: from the chat line, the device tag turning Active, or emeralds no longer lighting.",
 ) {
-    private val title by StringSetting("Title", "§a§li4 Complete!", 40, desc = "The title shown (§ colour codes work).")
+    private val title by StringSetting("Title", "§a§li4 Complete!", 40, desc = "The title shown (§ colour codes work).", placeholder = "")
     private val sound by BooleanSetting("Sound", true, desc = "Odin's alert sound with the title.")
     private val byChat by BooleanSetting("From Chat", true, desc = "\"<you> completed a device!\": the fastest, in the tick of the last hit.")
     private val byTag by BooleanSetting("From Device Tag", true, desc = "The device's tag turning Active (Hypixel renames it on a 20-tick grid: up to a second late).")

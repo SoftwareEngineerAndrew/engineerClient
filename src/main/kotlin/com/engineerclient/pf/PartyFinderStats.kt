@@ -21,6 +21,7 @@ import java.nio.file.Files
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import com.engineerclient.PbTypeChoice
 
 /**
  * Party Finder listings, in-line: every member row of a party's tooltip gets that player's
@@ -51,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object PartyFinderStats : Module(
     name = "Party Finder Stats",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Shows every listed player's Catacombs level, secrets and floor PB in the Party Finder tooltip.",
     toggled = true, // existing installs have no saved state for a new module; on by default
 ) {
@@ -60,7 +61,8 @@ object PartyFinderStats : Module(
     private val showPb by BooleanSetting("Floor PB", true, desc = "Fastest time on the floor the party is listed for, master mode aware.")
     private val showMissing by BooleanSetting("Missing Classes", true, desc = "On the Members line, which of the five classes nobody in the party has taken.")
     private val markMyClass by BooleanSetting("Mark My Class", true, desc = "Bold your own class in that list — your override, else live tab detection, else your last known class.")
-    private val pbType by SelectorSetting("PB Type", "S+", arrayListOf("S+", "S", "Any"), desc = "Which fastest-time the PB column shows. Autokick uses S+.")
+    private val pbTypeChoice by SelectorSetting("PB Type", PbTypeChoice.S_PLUS, desc = "Which fastest-time the PB column shows. Autokick uses S+.")
+    private val pbType: Int get() = pbTypeChoice.ordinal
 
     private sealed interface Entry
     private object Loading : Entry

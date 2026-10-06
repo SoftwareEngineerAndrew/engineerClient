@@ -14,7 +14,8 @@
     "BlockUpdateServerThreadMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
-    "ArrowsDeviceAimMixin"
+    "ArrowsDeviceAimMixin",
+    "WaypointOnceMixin"
   ],
   "injectors": {
     "defaultRequire": 0

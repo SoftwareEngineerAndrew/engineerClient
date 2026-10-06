@@ -18,10 +18,10 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
  */
 object EntityDistance : Module(
     name = "Entity Distance",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Turns Entity Distance down for fps, except in Storm's phase (F7/M7 P2), where it's back to 100%.",
 ) {
-    private val distance by NumberSetting("Entity Distance", 60.0, 50.0, 100.0, 5.0, desc = "Entity Distance (%) outside Storm's phase. Vanilla's own slider goes no lower than 50.")
+    private val distance by NumberSetting("Entity Distance", 60.0, 50.0..100.0, 5.0, desc = "Entity Distance (%) outside Storm's phase. Vanilla's own slider goes no lower than 50.")
 
     private val CONTROL_CODES = Regex("§.")
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."

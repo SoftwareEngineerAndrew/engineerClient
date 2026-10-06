@@ -32,7 +32,7 @@ import java.util.concurrent.Executors
  */
 object BetterPFMenu : Module(
     name = "Better PF Menu",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Shows your Party Finder menu live on undonecoffee.com/betterpf/menu while you have it open. People there can make it auto refresh.",
 ) {
     private val allowAuto by BooleanSetting("Allow Auto Refresh", true, desc = "Lets someone watching your menu on the site make it click Refresh every 7.5-9.5 seconds (random) while it's open.")

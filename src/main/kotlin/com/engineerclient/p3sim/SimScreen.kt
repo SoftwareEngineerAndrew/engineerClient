@@ -12,6 +12,7 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.phys.Vec3
 import java.util.Locale
+import com.engineerclient.index
 
 /**
  * The sim's menu: Esc > P3 Sim Menu, the SkyBlock Menu star (hotbar), `/p3sim` or the keybind.
@@ -48,7 +49,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
     private fun planTab() {
         row(listOf<AbstractWidget>(label("§eSkill", 40)) +
             P3Plan.SKILLS.mapIndexed { i, name -> change(if (i == P3Plan.skill) "§a§n$name" else name, 70) { P3Plan.chooseSkill(i) } } +
-            change("Class: ${Roles.label(P3Sim.myClass)}", 90) { P3Sim.classS.value = (P3Sim.classS.value + 1) % 5 })
+            change("Class: ${Roles.label(P3Sim.myClass)}", 90) { P3Sim.classS.index = (P3Sim.classS.index + 1) % 5 })
         // The roles, by class (yours highlighted).
         val roles = P3Plan.preset().roles
         for ((c, role) in roles) text((if (c == P3Sim.myClass) "§b§l${Roles.label(c)} §b(you)§7: §f" else "§7${Roles.label(c)}: §8") + role)
@@ -129,13 +130,13 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
 
     private fun settingsTab() {
         row(listOf(
-            change("Class: ${CLASS_NAMES[P3Sim.classS.value.coerceIn(0, 4)]}", 100) { P3Sim.classS.value = (P3Sim.classS.value + 1) % 5 },
+            change("Class: ${CLASS_NAMES[P3Sim.classS.index.coerceIn(0, 4)]}", 100) { P3Sim.classS.index = (P3Sim.classS.index + 1) % 5 },
             change("Bots: ${onOff(P3Sim.bots)}", 70) { P3Sim.botsS.value = !P3Sim.bots },
-            change("Death ticks: ${listOf("Off", "Warn", "Masks")[P3Sim.deathTicks]}", 110) { P3Sim.deathTicksS.value = (P3Sim.deathTicks + 1) % 3 },
+            change("Death ticks: ${listOf("Off", "Warn", "Masks")[P3Sim.deathTicks]}", 110) { P3Sim.deathTicksS.index = (P3Sim.deathTicks + 1) % 3 },
             change("Stop after P3: ${onOff(P3Sim.p3Only)}", 110) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
         ))
         row(listOf(
-            change("Terminals: ${P3Sim.forcedTerminal?.name?.lowercase() ?: "random"}", 120) { P3Sim.terminalS.value = (P3Sim.terminalS.value + 1) % 7 },
+            change("Terminals: ${P3Sim.forcedTerminal?.name?.lowercase() ?: "random"}", 120) { P3Sim.terminalS.index = (P3Sim.terminalS.index + 1) % 7 },
             change("Ping: ${P3Sim.ping}ms", 80) { P3Sim.pingS.value = PINGS[(PINGS.indexOf(P3Sim.ping) + 1).mod(PINGS.size)] },
             change("Lava bounce: ${onOff(P3Sim.lava)}", 110) { P3Sim.lavaS.value = !P3Sim.lava },
             change("Section times: ${onOff(P3Sim.showTimes)}", 110) { P3Sim.showTimesS.value = !P3Sim.showTimes },
@@ -148,7 +149,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
         stepper("Breaker blocks back", "${P3Sim.breakerRegen}s", { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen - 0.5).coerceAtLeast(1.0) }, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen + 0.5).coerceAtMost(30.0) })
         row(listOf(
             change("Real masks: ${onOff(P3Sim.realMasks)}", 100) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
-            change("Start in: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value; server { Sim.player?.let { Masks.equip(it) } } },
+            change("Start in: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 90) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index; server { Sim.player?.let { Masks.equip(it) } } },
             change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 100) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
             change("No melodies: ${onOff(P3Sim.noMelodies)}", 100) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
         ))

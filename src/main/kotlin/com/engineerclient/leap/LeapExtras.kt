@@ -17,7 +17,8 @@ import com.odtheking.odin.features.impl.boss.termsim.NumbersSim
 import com.odtheking.odin.features.impl.boss.termsim.StartGUI
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
 import net.minecraft.client.gui.screens.Screen
-import com.odtheking.odin.utils.render.roundedFill
+import com.odtheking.odin.utils.render.roundedRect
+import com.odtheking.odin.utils.render.roundedRectOutlined
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
@@ -36,11 +37,11 @@ import net.minecraft.resources.Identifier
  */
 object LeapExtras : Module(
     name = "Leap Extras",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Adds to Odin's Leap Menu: a click delay when it opens, and an outline of where each person will be.",
     toggled = true,
 ) {
-    private val clickDelay by NumberSetting("Click Delay", 1, 0, 10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
+    private val clickDelay by NumberSetting("Click Delay", 1, 0..10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
 
     private val leapOutline by BooleanSetting("Leap Outline", false, desc = "Draws a very faint rectangle where each person in the leap menu would be, so your mouse can already be on the right one when it opens.")
 
@@ -157,7 +158,7 @@ object LeapExtras : Module(
             g.pose().pushMatrix()
             g.pose().translate((if (col == 0) halfW - 24 else halfW + 24).toFloat(), (if (row == 0) halfH - 24 else halfH + 24).toFloat())
             g.pose().scale(scale, scale)
-            g.roundedFill(localX, localY, localX + LeapMenu.BOX_WIDTH, localY + LeapMenu.BOX_HEIGHT, color.rgba, 9)
+            g.roundedRect(localX, localY, localX + LeapMenu.BOX_WIDTH, localY + LeapMenu.BOX_HEIGHT, color.rgba, 9f)
             g.pose().popMatrix()
         }
     }

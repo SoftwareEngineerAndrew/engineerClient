@@ -14,7 +14,6 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
-import com.odtheking.odin.features.impl.dungeon.MapInfo
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.WorldScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonDoor
@@ -163,7 +162,6 @@ object OdinState {
         j.safe("inBoss") { it.append(DungeonListener.inBoss) }
         j.safe("inClear") { it.append(DungeonUtils.inClear) }
         j.safe("paul") { it.append(DungeonListener.paul) }
-        j.safe("togglePaul") { it.append(MapInfo.togglePaul) }
         j.safe("f7Phase") { OdinJs.str(it, DungeonUtils.getF7Phase().name) }
         // Replaced (not mutated) by Odin on every update: read it once, fresh.
         j.safe("stats") { out ->
@@ -172,7 +170,7 @@ object OdinState {
             o.n("secretsFound", st.secretsFound).n("secretsPercent", st.secretsPercent).n("knownSecrets", st.knownSecrets)
                 .n("crypts", st.crypts).n("openedRooms", st.openedRooms).n("completedRooms", st.completedRooms)
                 .n("deaths", st.deaths).n("percentCleared", st.percentCleared).s("elapsed", st.elapsedTime)
-                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", st.batKilled)
+                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", st.batKilled > 0)
                 .s("doorOpener", st.doorOpener).b("bloodDone", st.bloodDone).n("puzzleCount", st.puzzleCount)
             out.append('{').append(o.sb).append('}')
         }

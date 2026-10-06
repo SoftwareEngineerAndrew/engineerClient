@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.component.ItemLore
+import com.engineerclient.index
 
 /**
  * Hypixel's Loadouts window ("(1/3) Loadouts"), opened with /loadouts (recorder-2: 556 `/loadouts` commands,
@@ -102,11 +103,11 @@ object Loadouts {
         }
         val h = helmFor(w.head)
         if (h == Helm.MASK) {
-            P3Sim.wornMaskS.value = if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1
+            P3Sim.wornMaskS.index = if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1
             val cur = SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))
             if (cur?.endsWith("_MASK") == true) {
                 if (P3Sim.realMasks) Masks.equip(p)
-                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
+                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMaskS.index == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
             } else wearHelmet(p, h)
         } else if (h != null) wearHelmet(p, h)
         P3Sim.phoenixS.value = w.phoenix
@@ -116,7 +117,7 @@ object Loadouts {
     /** A hotbar reset's gear: the saved worn loadout ([HotbarLayout.worn]) or, with none, Maxor + mask (the pet stays as it is: Black Cat). */
     fun applySaved(p: ServerPlayer) {
         val w = HotbarLayout.worn()
-        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.wornMaskS.value = if (w.head.endsWith("SPIRIT_MASK")) 0 else 1
+        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.wornMaskS.index = if (w.head.endsWith("SPIRIT_MASK")) 0 else 1
         Masks.equip(p)
         SimItems.equipArmor(p, SimItems.ArmorSet.MAXOR)
         if (w != null) applyWorn(p, w)
@@ -208,7 +209,7 @@ object Loadouts {
         val inv = p.inventory
         val old = p.getItemBySlot(EquipmentSlot.HEAD).copy()
         if (wearsHelm(h, old)) return
-        val wantMask = if (P3Sim.wornMaskS.value == 0) "SPIRIT_MASK" else "BONZO_MASK"
+        val wantMask = if (P3Sim.wornMaskS.index == 0) "SPIRIT_MASK" else "BONZO_MASK"
         val candidates = (0 until 36).filter { wearsHelm(h, inv.getItem(it)) }
         val from = (if (h == Helm.MASK) candidates.firstOrNull { SimItems.idOf(inv.getItem(it))?.removePrefix("STARRED_") == wantMask } else null) ?: candidates.firstOrNull()
         if (from != null) {
@@ -226,7 +227,7 @@ object Loadouts {
                 if (slot != null) inv.setItem(slot, old)
             }
         }
-        if (h == Helm.MASK) SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.let { P3Sim.wornMaskS.value = if (it.endsWith("SPIRIT_MASK")) 0 else 1 }
+        if (h == Helm.MASK) SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.let { P3Sim.wornMaskS.index = if (it.endsWith("SPIRIT_MASK")) 0 else 1 }
     }
 
     private fun sound(id: String, vol: Float, pitch: Float, src: SoundSource) {

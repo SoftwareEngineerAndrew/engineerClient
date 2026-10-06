@@ -3,7 +3,7 @@ package com.engineerclient.rotation
 import com.engineerclient.EngineerClient
 import com.engineerclient.EcConfig
 import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.features.impl.dungeon.PositionalMessages
+import com.odtheking.odin.features.impl.render.waypoints.Waypoints
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.GraphicsPreset
 
@@ -46,16 +46,16 @@ object SetupCheck {
         moduleOn("Invincibility Timer", "it is what announces your procs")
         settingOn("Invincibility Timer", "Announce Invincibility", "the mask gate needs everyone's procs in party chat")
         moduleOn("Dungeon Waypoints", "EC's waypoints do not render without it")
-        moduleOn("Positional Messages", "the arrival texts come from its boxes")
+        moduleOn("Waypoints", "the arrival texts come from its boxes (Odin's /posmsg since 0.3.6)")
 
         // The exact texts the rotation waits on must exist as boxes.
-        val have = PositionalMessages.posMessageStrings
-            .mapNotNull { it.message?.trim()?.lowercase() }.toSet()
+        val have = Waypoints.waypoints
+            .mapNotNull { it.command?.trim()?.removePrefix("pc ")?.trim()?.lowercase() }.toSet()
         (RotationSpec.graph.roles.map { it.arrived } + RotationSpec.graph.recoreArrived)
             .filter { it.isNotBlank() && it != RotationSpec.ARRIVED_ON_LEAP }.distinct()
             .forEach { text ->
                 items += if (text.trim().lowercase() in have) Item(true, "posmsg \"$text\"")
-                else Item(false, "posmsg \"$text\" missing", "add a /posmsg box with exactly that text")
+                else Item(false, "posmsg \"$text\" missing", "add an Odin waypoint (proximity) with the command \"pc $text\"")
             }
 
         items += if (P3Rotation.enabled) Item(true, "EC Dynamic Term Roles on")

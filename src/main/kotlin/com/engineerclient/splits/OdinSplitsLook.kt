@@ -1,7 +1,7 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
@@ -20,6 +20,9 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import com.odtheking.odin.utils.skyblock.floor7SplitGroup
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import com.engineerclient.PaceFloorChoice
+import com.engineerclient.SplitsLookChoice
+import com.engineerclient.index
 
 /**
  * A "Look" for Odin's own Splits module: Odin's look, or Engineer Splits ([EngineerLook]) - with a
@@ -33,24 +36,24 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  */
 object OdinSplitsLook {
 
-    private val look = SelectorSetting("Look", "Odin Splits", listOf("Odin Splits", "Engineer Splits"),
+    private val look = SelectorSetting("Look", SplitsLookChoice.ODIN,
         desc = "Odin Splits, or Engineer Splits: EngineerSplits' lines (Name > time (ticks)) with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
 
     /** The Engineer look is picked. */
-    val engineer: Boolean get() = look.value == 1
+    val engineer: Boolean get() = look.index == 1
 
     private val enterAfterEntry = BooleanSetting("Enter After Entry", false, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }
 
-    private val paceFloor = SelectorSetting("Pace Targets", "F7", listOf("F7", "M7"),
+    private val paceFloor = SelectorSetting("Pace Targets", PaceFloorChoice.F7,
         desc = "Which floor's targets the boxes below are for. Pace uses the ones for the floor you are on; other floors and Kuudra have no targets, so there Pace is the time so far.")
         .withDependency { engineer && pace.value }
 
     private fun boxes(floor: String, master: Boolean, index: Int) = EngineerLook.targetLabels(master).map { name ->
-        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your Odin PB for it (0 without one).")
-            .withDependency { engineer && pace.value && paceFloor.value == index }
+        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your Odin PB for it (0 without one).", placeholder = "")
+            .withDependency { engineer && pace.value && paceFloor.index == index }
     }
 
     private val f7 = boxes("F7", false, 0)
@@ -71,7 +74,7 @@ object OdinSplitsLook {
     }
 
     private fun fillFromPbs() {
-        val master = paceFloor.value == 1
+        val master = paceFloor.index == 1
         val pbs = Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal]
         val boxes = if (master) m7 else f7
         var filled = 0
@@ -172,7 +175,7 @@ object OdinSplitsLook {
     private const val LINE = 9
 
     private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
-        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.value == 1) else place()
+        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.index == 1) else place()
         val rows = if (example) exampleRows() else rows()
         val opts = options()
         val lines = EngineerLook.lines(rows, opts, place, master, targets(if (example) EngineerLook.Place.FLOOR7 else place, master),

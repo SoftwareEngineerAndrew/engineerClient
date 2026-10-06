@@ -18,7 +18,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes
  */
 object SpeedHud : Module(
     name = "Speed HUD",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Shows your SkyBlock speed (works on Hypixel and in the P3 Sim)."
 ) {
     private val actual by BooleanSetting("Show Actual", false, desc = "Also your measured horizontal speed, blocks a second.")

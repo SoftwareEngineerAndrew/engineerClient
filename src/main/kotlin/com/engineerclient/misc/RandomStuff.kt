@@ -2,7 +2,7 @@ package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
@@ -61,7 +61,7 @@ import net.minecraft.world.phys.Vec3
  */
 object RandomStuff : Module(
     name = "Random Stuff",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "A collection of small unrelated QoL toggles."
 ) {
     /** Read by ChatHider at the chat GUI, so other mods still see every line. */
@@ -69,7 +69,7 @@ object RandomStuff : Module(
     private val hideDamage by BooleanSetting("Hide Damage Indicators", false, desc = "Suppresses the red hurt-flash overlay when you take damage.")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
     private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
-    private val healthManaThreshold by NumberSetting("Threshold", 20, 1, 100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
+    private val healthManaThreshold by NumberSetting("Threshold", 20, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
 
     // --- Health and mana bars ------------------------------------------------------------------
     //
@@ -85,8 +85,8 @@ object RandomStuff : Module(
         }
         statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth, healthBarHeight)
     }
-    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20, 200, 5, desc = "Width of the health bar.")
-    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2, 30, 1, desc = "Height of the health bar.")
+    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
+    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
 
     private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.") { example ->
         val (current, max) = when {
@@ -97,8 +97,8 @@ object RandomStuff : Module(
         }
         statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth, manaBarHeight)
     }
-    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20, 200, 5, desc = "Width of the mana bar.")
-    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2, 30, 1, desc = "Height of the mana bar.")
+    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.")
+    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.")
 
     // --- Lowest BIN ----------------------------------------------------------------------------
     //
@@ -140,7 +140,7 @@ object RandomStuff : Module(
     // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
     // — six full-screen passes — and only for the frames a screen is actually open.
     private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
-    private val blurStrength by NumberSetting("Blur Strength", 5, 1, 10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
+    private val blurStrength by NumberSetting("Blur Strength", 5, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
 
     // --- Enchantment glint ---------------------------------------------------------------------
     //
@@ -182,7 +182,7 @@ object RandomStuff : Module(
     private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", false, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
     private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", true, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
     private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", true, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
-    private val hideSbCustom by StringSetting("Scoreboard: Also Hide", "", 200, desc = "Extra sidebar lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard and copy what you see. Regexes work too.").withDependency { hideSbLines }
+    private val hideSbCustom by StringSetting("Scoreboard: Also Hide", "", 200, desc = "Extra sidebar lines to hide, separated by ;. A piece of the line is enough - run Dump Scoreboard and copy what you see. Regexes work too.", placeholder = "").withDependency { hideSbLines }
 
     /**
      * Prints the sidebar to chat, exactly as the game assembles it, so the patterns above can be
