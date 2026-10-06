@@ -2,7 +2,7 @@ package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.EntityEvent
@@ -34,11 +34,11 @@ import net.minecraft.world.entity.item.PrimedTnt
  */
 object PreRequeue : Module(
     name = "Pre-Requeue",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Joins the next F7/M7 run (/joininstance, same floor) on Necron's death TNT, ~2.4 s before the score (about 1 run in 60 lost to a server freeze after the send).",
 ) {
     private val leaderOnly by BooleanSetting("Leader Only", true, desc = "Only requeue when you lead the party (or are solo): one requeue for everyone.")
-    private val delay by NumberSetting("Extra Ticks", 0, 0, 40, 1, desc = "Server ticks to wait after the TNT. Waiting doesn't lower the risk in the recordings, it only gives back the time saved.", unit = "ticks")
+    private val delay by NumberSetting("Extra Ticks", 0, 0..40, 1, desc = "Server ticks to wait after the TNT. Waiting doesn't lower the risk in the recordings, it only gives back the time saved.", unit = "ticks")
     private val freezeGuard by BooleanSetting("Freeze Guard", true, desc = "Hold the requeue while the server is frozen (no server tick in the last 3 client ticks).")
     private val chestFallback by BooleanSetting("Chest Room Fallback", true, desc = "No TNT seen: requeue when you're teleported up to the chest room.")
     private val notify by BooleanSetting("Chat Note", true, desc = "Says in chat when it requeued, and on what.")

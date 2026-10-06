@@ -2,10 +2,10 @@ package com.engineerclient.waypoints
 
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.OdinMod.scope
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.*
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.InputEvent
 import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.SecretPickupEvent
@@ -38,30 +38,34 @@ import org.lwjgl.glfw.GLFW
  */
 object BrwWaypoints : Module(
     name = "Blood Rush Waypoints",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "EC's profile-driven blood-rush waypoints. Separate from Odin's Dungeon Waypoints."
 ) {
     var allowEdits by BooleanSetting("Allow Edits", false, desc = "Allows you to edit EC waypoints.")
     val allowTextEdit by BooleanSetting("Allow Text Edit", false, desc = "Allows you to set the text of a waypoint while sneaking.").withDependency { allowEdits }
 
-    val titleScale by NumberSetting("Title Scale", 1f, 0.1f, 4f, increment = 0.1f, desc = "The scale of the titles of waypoints.")
+    val titleScale by NumberSetting("Title Scale", 1f, 0.1..4.0, increment = 0.1f, desc = "The scale of the titles of waypoints.")
     val disableDepth by BooleanSetting("Global Depth", false, desc = "Disables depth testing for all waypoints.")
 
     private val editorHud by HUD("Editor HUD", "Shows information about the EC waypoint you're placing or looking at.", false) {
         drawBrwWaypointEditorHud(it)
     }
 
-    private val settingsDropDown by DropdownSetting("Next Waypoint Settings")
-    var waypointType by SelectorSetting("Waypoint Type", WaypointType.NONE.displayName, WaypointType.entries.map { it.displayName }, desc = "The type of waypoint you want to place.").withDependency { settingsDropDown }
+    private val settingsDropDown by DropdownSetting("Next Waypoint Settings", desc = "")
+    private var waypointTypeChoice by SelectorSetting("Waypoint Type", WaypointType.NONE, desc = "The type of waypoint you want to place.").withDependency { settingsDropDown }
+    /** The type as its position in [WaypointType.entries], 0 being NONE. */
+    var waypointType: Int
+        get() = waypointTypeChoice.ordinal
+        set(value) { waypointTypeChoice = WaypointType.entries[value] }
     var color by ColorSetting("Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the next waypoint you place.").withDependency { settingsDropDown }
     var filled by BooleanSetting("Filled", false, desc = "If the next waypoint you place should be 'filled'.").withDependency { settingsDropDown }
     var depthCheck by BooleanSetting("Depth check", false, desc = "Whether the next waypoint you place should have a depth check.").withDependency { settingsDropDown }
     var useBlockSize by BooleanSetting("Use block size", true, desc = "Use the size of the block you click for waypoint size.").withDependency { settingsDropDown }
-    var sizeX by NumberSetting("Size X", 1.0, .1, 5.0, 0.01, desc = "The X size of the next waypoint you place.").withDependency { !useBlockSize && settingsDropDown }
-    var sizeY by NumberSetting("Size Y", 1.0, .1, 5.0, 0.01, desc = "The Y size of the next waypoint you place.").withDependency { !useBlockSize && settingsDropDown }
-    var sizeZ by NumberSetting("Size Z", 1.0, .1, 5.0, 0.01, desc = "The Z size of the next waypoint you place.").withDependency { !useBlockSize && settingsDropDown }
+    var sizeX by NumberSetting("Size X", 1.0, (.1).toDouble()..5.0, 0.01, desc = "The X size of the next waypoint you place.").withDependency { !useBlockSize && settingsDropDown }
+    var sizeY by NumberSetting("Size Y", 1.0, (.1).toDouble()..5.0, 0.01, desc = "The Y size of the next waypoint you place.").withDependency { !useBlockSize && settingsDropDown }
+    var sizeZ by NumberSetting("Size Z", 1.0, (.1).toDouble()..5.0, 0.01, desc = "The Z size of the next waypoint you place.").withDependency { !useBlockSize && settingsDropDown }
 
-    private val editModeSettings by DropdownSetting("Edit Mode Settings")
+    private val editModeSettings by DropdownSetting("Edit Mode Settings", desc = "")
     private var presetNone by ColorSetting("None Color", Colors.MINECRAFT_GREEN, true, "Color for \"None\" Waypoints").withDependency { editModeSettings }
     private var presetNormal by ColorSetting("Normal Color", Colors.MINECRAFT_RED, true, "Color for Normal Waypoints").withDependency { editModeSettings }
     private var presetSecret by ColorSetting("Secret Color", Colors.MINECRAFT_BLUE, true, "Color for cyclable preset 3.").withDependency { editModeSettings }
@@ -77,8 +81,8 @@ object BrwWaypoints : Module(
             }
         }
 
-    var selectedPackIds by ListSetting("Selected Waypoint Packs", mutableListOf<String>()).hide()
-    var editPackId by StringSetting("Edit Waypoint Pack", "", length = 256, desc = "").hide()
+    var selectedPackIds by ListSetting("Selected Waypoint Packs", mutableListOf<String>())
+    var editPackId by StringSetting("Edit Waypoint Pack", "", length = 256, desc = "", placeholder = "").hide()
     var loadedPacks: MutableMap<String, MutableMap<String, MutableList<DungeonWaypoint>>> = mutableMapOf()
     var allActiveWaypoints: MutableMap<String, MutableList<DungeonWaypoint>> = mutableMapOf()
 
@@ -123,7 +127,7 @@ object BrwWaypoints : Module(
             lastEtherTime = 0L
         }
 
-        on<RenderEvent.Extract> {
+        on<RenderExtractEvent> {
             renderBrwWaypoints(this)
         }
 

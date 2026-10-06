@@ -31,7 +31,7 @@ public class LeapMenuRenderMixin {
         return y * LeapExtras.getOverlayScale();
     }
 
-    @ModifyArg(method = RENDER, at = @At(value = "INVOKE", target = "Lcom/odtheking/odin/utils/render/DrawContextUtilsKt;roundedFill(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIIIII)V"), index = 5, remap = false)
+    @ModifyArg(method = RENDER, at = @At(value = "INVOKE", target = "Lcom/odtheking/odin/utils/render/RoundedRectKt;roundedRect(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIIIIF)V"), index = 5, remap = false)
     private int ec$fadeBackground(int argb) {
         return LeapExtras.fade(argb);
     }

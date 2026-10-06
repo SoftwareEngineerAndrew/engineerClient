@@ -14,15 +14,15 @@ import com.odtheking.odin.features.Module
  */
 object SoundEditor : Module(
     name = "Sound Editor",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Makes particular sounds louder or quieter, from silent to 10x.",
 ) {
 
-    private val keyPickup by NumberSetting("Key Pickup", 1f, 0f, 10f, 0.1f, desc = "Devonian's key pickup sound (the vault shutter).", unit = "x")
-    private val arrows by NumberSetting("Arrows", 1f, 0f, 10f, 0.1f, desc = "Every arrow sound: shooting, hitting a block, hitting a player.", unit = "x")
-    private val endermanDeath by NumberSetting("Enderman Death", 1f, 0f, 10f, 0.1f, desc = "An enderman dying.", unit = "x")
-    private val endermanTeleport by NumberSetting("Enderman Teleport", 1f, 0f, 10f, 0.1f, desc = "An enderman teleporting.", unit = "x")
-    private val zombie by NumberSetting("Zombie", 1f, 0f, 10f, 0.1f, desc = "Every zombie sound: idle, hurt, death, steps, door attacks. Not zombie villagers or husks.", unit = "x")
+    private val keyPickup by NumberSetting("Key Pickup", 1f, 0.0..10.0, 0.1f, desc = "Devonian's key pickup sound (the vault shutter).", unit = "x")
+    private val arrows by NumberSetting("Arrows", 1f, 0.0..10.0, 0.1f, desc = "Every arrow sound: shooting, hitting a block, hitting a player.", unit = "x")
+    private val endermanDeath by NumberSetting("Enderman Death", 1f, 0.0..10.0, 0.1f, desc = "An enderman dying.", unit = "x")
+    private val endermanTeleport by NumberSetting("Enderman Teleport", 1f, 0.0..10.0, 0.1f, desc = "An enderman teleporting.", unit = "x")
+    private val zombie by NumberSetting("Zombie", 1f, 0.0..10.0, 0.1f, desc = "Every zombie sound: idle, hurt, death, steps, door attacks. Not zombie villagers or husks.", unit = "x")
 
     /** The multiplier for a sound event id such as "minecraft:entity.zombie.hurt"; 1 if none applies. */
     @JvmStatic

@@ -10,10 +10,10 @@ import com.odtheking.odin.features.Module
  */
 object CameraOffset : Module(
     name = "Camera Offset",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Moves the first-person camera forward (+) or back (-) along where you look, up to a block.",
 ) {
-    private val offset by NumberSetting("Offset", 0.0, -1.0, 1.0, 0.05, desc = "Blocks: + forward, - back.")
+    private val offset by NumberSetting("Offset", 0.0, -1.0..1.0, 0.05, desc = "Blocks: + forward, - back.")
 
     /** The offset now (0 while off). */
     @JvmStatic fun blocks(): Float = if (enabled) offset.toFloat() else 0f

@@ -4,7 +4,7 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.maxor.CrystalCycles.From
 import com.engineerclient.maxor.CrystalCycles.Side
 import com.engineerclient.rotation.EcLog
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -42,7 +42,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 object MaxorCrystals : Module(
     name = "Maxor Crystals",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "F7 P1: how many server ticks each energy crystal took to place, cycle by cycle, and which laser check that made.",
 ) {
     private val chatReport by BooleanSetting("Chat Report", true, desc = "A line in your chat for each crystal cycle, when the laser fires (or the phase ends without it).")

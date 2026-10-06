@@ -25,7 +25,7 @@ import net.minecraft.world.phys.Vec3
  */
 object I4Aims : Module(
     name = "i4 Bow Aims",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Odin's Arrows Device aim positions for the bow you hold (Terminator, Mosquito, Terror's Hydra arrows), not only the Terminator. Needs Odin's Show Aim Positions.",
 ) {
     private var switchedOn by com.odtheking.odin.clickgui.settings.impl.BooleanSetting("Switched On", false, desc = "").hide()

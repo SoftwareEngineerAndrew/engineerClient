@@ -27,8 +27,9 @@ dependencies {
     implementation("org.tukaani:xz:1.10")
     include("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json); compile against its release jar.
-    compileOnly(files("libs/Odin-0.3.4-26.1.jar"))
+    // Odin is a required runtime mod (declared in fabric.mod.json). Odin 0.3.6 is only released for 26.2:
+    // this jar is its source built for 26.1.2 (see libs/Odin-LICENSE.txt).
+    compileOnly(files("libs/Odin-0.3.6+mc26.1.2.jar"))
 
     // Sodium replaces the terrain renderer on every team client; the POV previews drive its
     // terrain pass directly. Optional at runtime (guarded by FabricLoader.isModLoaded).
@@ -37,7 +38,7 @@ dependencies {
     // The rotation engine is deliberately free of Minecraft/Odin, so it tests headlessly.
     testImplementation(kotlin("test"))
     // The P3 sim's role presets are keyed by Odin's DungeonClass (a plain enum).
-    testImplementation(files("libs/Odin-0.3.4-26.1.jar"))
+    testImplementation(files("libs/Odin-0.3.6+mc26.1.2.jar"))
 }
 
 tasks {

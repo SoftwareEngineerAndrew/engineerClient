@@ -9,6 +9,7 @@ import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.component.ItemLore
+import com.engineerclient.index
 
 /**
  * The three invincibility items, as Hypixel procs them on a hit that would kill you: Spirit Mask
@@ -58,7 +59,7 @@ object Masks {
             if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) SimItems.wear(p, EquipmentSlot.HEAD, ItemStack.EMPTY)
             if (SimItems.idOf(inv.getItem(SPARE_SLOT))?.endsWith("_MASK") == true) inv.setItem(SPARE_SLOT, ItemStack.EMPTY)
         } else {
-            val spirit = P3Sim.wornMaskS.value == 0
+            val spirit = P3Sim.wornMaskS.index == 0
             SimItems.wear(p, EquipmentSlot.HEAD, if (spirit) SPIRIT_MASK else BONZO_MASK)
             inv.setItem(SPARE_SLOT, if (spirit) BONZO_MASK else SPIRIT_MASK)
         }
@@ -159,7 +160,7 @@ object Masks {
                 val worn = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
                 sp.setItemSlot(EquipmentSlot.HEAD, clickedItem.copy())
                 sp.inventory.setItem(index, worn)
-                if (id.endsWith("_MASK")) P3Sim.wornMaskS.value = if (id.endsWith("SPIRIT_MASK")) 0 else 1
+                if (id.endsWith("_MASK")) P3Sim.wornMaskS.index = if (id.endsWith("SPIRIT_MASK")) 0 else 1
                 Fight.applySpeed(sp)  // the Racing Helmet adds 100 speed
                 Sim.sound(SoundEvents.ARMOR_EQUIP_GENERIC.value(), 1f, 1f)
                 if (!P3Sim.realMasks && id.endsWith("_MASK")) Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")

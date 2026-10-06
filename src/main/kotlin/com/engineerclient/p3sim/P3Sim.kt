@@ -23,6 +23,11 @@ import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.network.chat.Component
 import org.lwjgl.glfw.GLFW
+import com.engineerclient.ClassChoice
+import com.engineerclient.DeathTicksChoice
+import com.engineerclient.MaskChoice
+import com.engineerclient.TerminalChoice
+import com.engineerclient.index
 
 /**
  * P3 Sim: F7's boss fight in a singleplayer world of its own ("p3sim"), to practice it alone.
@@ -37,7 +42,7 @@ import org.lwjgl.glfw.GLFW
  */
 object P3Sim : Module(
     name = "P3 Sim",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
 ) {
     val menuKey by KeybindSetting("Menu Keybind", GLFW.GLFW_KEY_UNKNOWN, "Opens the P3 Sim menu in the sim world (so do /p3sim and the SkyBlock Menu star in your hotbar). Outside it, opens the sim.").onPress { openMenuOrSim() }
@@ -45,24 +50,24 @@ object P3Sim : Module(
         if (inSim) SimServer.run("restart") { Fight.start(Fight.lastStart) }
     }
     // Kept as objects (not delegates) so the sim's own menu can change them.
-    val classS = +SelectorSetting("Your Class", "Berserk", arrayListOf("Healer", "Berserk", "Archer", "Tank", "Mage"), desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
-    val speedS = +NumberSetting("Speed", 450, 100, 750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
+    val classS = +SelectorSetting("Your Class", ClassChoice.BERSERK, desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
+    val speedS = +NumberSetting("Speed", 450, 100..750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
     val botsS = +BooleanSetting("Party Bots", true, desc = "Four bots do the rest of the party's terminals, levers, devices and gates at the pace of fast Better PF runs. Off: you do everything.")
-    val deathTicksS = +SelectorSetting("Death Ticks", "Masks", arrayListOf("Off", "Warn", "Masks"), desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
-    val terminalS = +SelectorSetting("Terminals", "Random", arrayListOf("Random", "Order", "Panes", "Rubix", "Starts With", "Select", "Melody"), desc = "Every terminal as this type, or random as on Hypixel.")
-    val pingS = +NumberSetting("Simulated Ping", 0, 0, 300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
+    val deathTicksS = +SelectorSetting("Death Ticks", DeathTicksChoice.MASKS, desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
+    val terminalS = +SelectorSetting("Terminals", TerminalChoice.RANDOM, desc = "Every terminal as this type, or random as on Hypixel.")
+    val pingS = +NumberSetting("Simulated Ping", 0, 0..300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
     val jitterS = +BooleanSetting("Ping Jitter", true, desc = "Simulated Ping varies like a real connection: usually a few ms either way, now and then 30+ ms more, rarely a lag spike (spread recorded on Hypixel). Off: a fixed delay.")
-    val goldorKillS = +NumberSetting("Goldor Kill Time", 43, 10, 120, 1, unit = " ticks", desc = "How long after Goldor starts flying to the core his \"....\" line comes, i.e. he dies (median of 31 recorded runs: 43, range 17-74).")
-    val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1, 20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at 100% attack speed, on every bow and whatever Terror armor you wear (recordings: Terminator 5, Mosquito 5). A click inside it fires when it ends. Nasty Bite has its own 10.")
-    val hydraStartS = +NumberSetting("Hydra Stacks At Start", 9, 0, 10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
+    val goldorKillS = +NumberSetting("Goldor Kill Time", 43, 10..120, 1, unit = " ticks", desc = "How long after Goldor starts flying to the core his \"....\" line comes, i.e. he dies (median of 31 recorded runs: 43, range 17-74).")
+    val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 5, 1..20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at 100% attack speed, on every bow and whatever Terror armor you wear (recordings: Terminator 5, Mosquito 5). A click inside it fires when it ends. Nasty Bite has its own 10.")
+    val hydraStartS = +NumberSetting("Hydra Stacks At Start", 9, 0..10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer (measured from 82 recorded windows).")
     val noMelodiesS = +BooleanSetting("No Melodies", false, desc = "Random terminals are never melodies.")
     val recordS = +BooleanSetting("Record Runs", true, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
-    val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 6, 1, 10, 1, unit = "/s", desc = "Charges back each second (20 max), in irregular +2 steps. Main server: ~6 a second; alpha ~2.")
-    val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.05, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")
+    val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 6, 1..10, 1, unit = "/s", desc = "Charges back each second (20 max), in irregular +2 steps. Main server: ~6 a second; alpha ~2.")
+    val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.05, 1.0..30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")
     val realMasksS = +BooleanSetting("Real Masks", true, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
-    val wornMaskS = +SelectorSetting("Starting Mask", "Spirit", arrayListOf("Spirit", "Bonzo"), desc = "Real Masks: the mask you wear (/stats swaps it).")
+    val wornMaskS = +SelectorSetting("Starting Mask", MaskChoice.SPIRIT, desc = "Real Masks: the mask you wear (/stats swaps it).")
     val phoenixS = +BooleanSetting("Phoenix Pet", true, desc = "Your pet: Phoenix (saves you from a death, no Black Cat speed bonus) or Black Cat (+100 speed). The Pet Rod swaps them.")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
     val p3OnlyS = +BooleanSetting("Stop After P3", true, desc = "End at Goldor's death instead of going on to Necron.")
@@ -71,10 +76,10 @@ object P3Sim : Module(
 
     val autoStart: Boolean get() = autoStartS.value
     val showTimes: Boolean get() = showTimesS.value
-    val myClass: DungeonClass get() = Party.CLASSES[classS.value.coerceIn(0, 4)]
+    val myClass: DungeonClass get() = Party.CLASSES[classS.index.coerceIn(0, 4)]
     val speed: Int get() = speedS.value.toInt()
     val bots: Boolean get() = botsS.value
-    val deathTicks: Int get() = deathTicksS.value
+    val deathTicks: Int get() = deathTicksS.index
     val ping: Int get() = pingS.value.toInt()
     val jitter: Boolean get() = jitterS.value
     val goldorKill: Int get() = goldorKillS.value.toInt()
@@ -111,7 +116,7 @@ object P3Sim : Module(
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
     val realMasks: Boolean get() = realMasksS.value
     val phoenix: Boolean get() = phoenixS.value
-    val forcedTerminal: Terminals.Type? get() = terminalS.value.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
+    val forcedTerminal: Terminals.Type? get() = terminalS.index.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
 
     /** True only in the p3sim singleplayer world (client side). */
     @JvmStatic
@@ -191,8 +196,8 @@ object P3Sim : Module(
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7
         DungeonListener.inBoss = true
-        if (DungeonListener.dungeonTeammates.size != 5 || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != classS.value || roster != Party.bots().joinToString { it.name }) {
-            teamClass = classS.value
+        if (DungeonListener.dungeonTeammates.size != 5 || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != classS.index || roster != Party.bots().joinToString { it.name }) {
+            teamClass = classS.index
             roster = Party.bots().joinToString { it.name }
             val mine = myClass
             val team = arrayListOf(DungeonPlayer(me, mine, 50, mc.player?.skin))

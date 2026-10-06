@@ -26,6 +26,7 @@ import net.minecraft.world.entity.Marker
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.Level
 import org.joml.Matrix3x2f
+import com.odtheking.odin.clickgui.HudLayer
 
 /**
  * Renders the four teammate POV feeds and puts them on screen.
@@ -233,24 +234,21 @@ object PovCapture {
      * Odin draws its HUDs from a `HudElementRegistry` element in the HUD phase, which is *before*
      * the screen phase we are in, so a preview covers them. Rather than move the previews down
      * (they have to be above the vanilla hotbar and scoreboard), the few that matter mid-fight are
-     * simply submitted a second time here, under the same 1/guiScale pose `ModuleManager.render`
-     * uses. Drawing a HUD element twice in one frame is safe: `HudElement.draw` only renders and
-     * records its own width/height.
+     * drawn a second time here. Odin (0.3.6) draws every HUD in one Compose layer, [HudLayer], so
+     * the others are switched off for this pass only. Its HUDs keep nothing between frames (each
+     * is a plain draw call that records its width/height), so leaving them out of one pass is safe.
      */
     private fun redrawKeptHuds(gfx: GuiGraphicsExtractor) {
         val keep = PovPreviews.keptHudNames()
         if (keep.isEmpty()) return
-        val scale = EngineerClient.mc.window.guiScale.toFloat()
-        if (scale <= 0f) return
-        gfx.pose().pushMatrix()
-        gfx.pose().scale(1f / scale, 1f / scale)
+        val shown = ModuleManager.hudSettingsCache.filter { it.isEnabled }
+        if (shown.none { it.name in keep }) return
+        val hidden = shown.filter { it.name !in keep }
+        for (hud in hidden) hud.value.enabled = false
         try {
-            for (hud in ModuleManager.hudSettingsCache) {
-                if (!hud.isEnabled || hud.name !in keep) continue
-                EngineerClient.safely("pov keep hud ${hud.name}") { hud.value.draw(gfx, false) }
-            }
+            EngineerClient.safely("pov keep huds") { HudLayer.render(gfx, example = false, mouseX = -1, mouseY = -1) }
         } finally {
-            gfx.pose().popMatrix()
+            for (hud in hidden) hud.value.enabled = true
         }
     }
 

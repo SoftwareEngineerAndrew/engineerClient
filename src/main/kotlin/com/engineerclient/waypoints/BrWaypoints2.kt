@@ -7,7 +7,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
@@ -17,7 +17,7 @@ import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -55,6 +55,9 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import org.lwjgl.glfw.GLFW
 import java.io.File
+import com.engineerclient.BrRoleChoice
+import com.engineerclient.KillersChoice
+import com.odtheking.odin.utils.render.BoxStyle
 
 /**
  * Boxes that group a room's starred mobs, drawn and sized in game with a "wand" — any item you pick
@@ -81,7 +84,7 @@ import java.io.File
  */
 object BrWaypoints2 : Module(
     name = "BR Roles",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 1030, 10),
     description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made in game with a wand.",
 ) {
 
@@ -93,9 +96,9 @@ object BrWaypoints2 : Module(
     }
 
     /** Read by PosMsgEditor every tick. */
-    val posmsgRetrigger by BooleanSetting("Posmsg Re-trigger", false, desc = "Odin sends each /posmsg once per world. On: leaving a box (or its radius) re-arms it, so walking back in sends it again. Only your own client.")
+    val posmsgRetrigger by BooleanSetting("Posmsg Re-trigger", false, desc = "Off: each dungeon waypoint (Odin's /posmsg boxes are its Waypoints since 0.3.6) sends once per world, as /posmsg did. On: leaving one re-arms it, so walking back in sends it again. Only your own client.")
 
-    private val posmsgKey by KeybindSetting("Posmsg Here Keybind", GLFW.GLFW_KEY_UNKNOWN, "Adds an Odin /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
+    private val posmsgKey by KeybindSetting("Posmsg Here Keybind", GLFW.GLFW_KEY_UNKNOWN, "Adds an Odin waypoint, 1x1x1 on the block you stand in and for the area you are in, that sends \"entered box\".").onPress {
         PosMsgEditor.addHere("entered box")
     }
 
@@ -122,18 +125,20 @@ object BrWaypoints2 : Module(
     private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing. Wins over Fade Done Boxes.")
     private val doneColor by ColorSetting("Done Color", Color(85, 85, 85, 1f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
 
-    private val opacity by NumberSetting("Fill Opacity", 0.08f, 0f, 1f, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
+    private val opacity by NumberSetting("Fill Opacity", 0.08f, 0.0..1.0, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
 
     private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
 
-    private val killers by SelectorSetting("Killers", "Duo", arrayListOf("Duo", "Trio", "Quad"), desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
+    private val killersChoice by SelectorSetting("Killers", KillersChoice.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
+    private val killers: Int get() = killersChoice.ordinal
 
-    private val myRole by SelectorSetting("My Role", "All Boxes", arrayListOf("All Boxes", "Door", "Role 1", "Role 2", "Role 3", "Role 4"), desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
+    private val myRoleChoice by SelectorSetting("My Role", BrRoleChoice.ALL_BOXES, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
+    private val myRole: Int get() = myRoleChoice.ordinal
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
     /** Which item is the wand, saved with the config so it survives a restart. */
-    private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.").hide()
+    private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.", placeholder = "").hide()
 
     // --- boxes -----------------------------------------------------------------------------------
 
@@ -245,7 +250,7 @@ object BrWaypoints2 : Module(
             recState()
         }
 
-        on<RenderEvent.Extract> {
+        on<RenderExtractEvent> {
             if (!DungeonUtils.inDungeons) return@on
 
             for ((box, colour, label, next, done) in drawn()) {
@@ -276,7 +281,7 @@ object BrWaypoints2 : Module(
 
             if (spawnMarkers) {
                 val colour = (Highlight.settings["Highlight color"] as? ColorSetting)?.value ?: Colors.WHITE
-                val style = (Highlight.settings["Render Style"] as? SelectorSetting)?.value ?: 1
+                val style = (Highlight.settings["Render Style"] as? SelectorSetting<*>)?.value as? BoxStyle ?: BoxStyle.OUTLINE
                 for (mob in mobs) {
                     // Flat on the floor, lifted a hair so it does not flicker into the block.
                     val y = mob.y + 0.02
