@@ -1,0 +1,561 @@
+{
+ "version": 1,
+ "updatedAt": "2026-09-22T22:57:07Z",
+ "source": "Dungeon Chat Hider artifact, db doc chat/filters v1790116446338",
+ "custom": [
+  {
+   "regex": "^\\[BOSS\\] ",
+   "action": "block"
+  },
+  {
+   "regex": "hit you for \\d[\\d,.]* damage\\.$",
+   "action": "block"
+  },
+  {
+   "regex": "^ESSENCE! |found a Wither Essence! Everyone gains an extra essence!$",
+   "action": "block"
+  },
+  {
+   "regex": "formed a tether with",
+   "action": "block"
+  },
+  {
+   "regex": "^CHARM! ",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:[\\w ]+ is (?:now available|ready to use)!|Your [\\w ]+ ULTIMATE [\\w ]+ is now available!|Used [\\w ]+!|Your [\\w ]+ is currently on cooldown for \\d[\\d,.]* more seconds?\\.|This ability is on cooldown for .+|You are already channeling this ability!)",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[Bazaar\\] Executing instant (?:buy|sell)\\.\\.\\.$",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:-{10,}|▬{10,})$",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:\\[[A-Z+]+\\] )?\\w{1,16} has obtained ",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[Devonian\\] Switched leaderboard category",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[NPC\\] Mort: ",
+   "action": "block"
+  },
+  {
+   "regex": "^RARE REWARD! |^[A-Z]+ CHEST REWARDS$",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[(?:Mage|Berserk|Archer|Healer|Tank)\\] .+ -> |^Your (?:Mage|Berserk|Archer|Healer|Tank) stats are doubled",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[SKULL\\] ",
+   "action": "block"
+  },
+  {
+   "regex": "^You earned .+ GEXP",
+   "action": "block"
+  },
+  {
+   "regex": "^A mystical force ",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:\\[WATCHDOG ANNOUNCEMENT\\]|Watchdog has banned .+|Staff have banned .+|Blacklisted modifications are a bannable offense!|Link looks suspicious\\? - Don't click it!|Clicking sketchy links can result in your account|being stolen!|Latest update: SkyBlock .+)$",
+   "action": "block"
+  },
+  {
+   "regex": "^You cannot (?!invite|message|say)",
+   "action": "block"
+  },
+  {
+   "regex": "^Party > (?:\\[[A-Z+]+\\] )?\\w{1,16}: (?:(?:Mimic|Bat|Prince) Killed!?|\\[Skyblocker\\] (?:Crypts: \\d[\\d,.]*/\\d[\\d,.]*|We only have \\d[\\d,.]* crypts out of \\d[\\d,.]* we need more!|\\d[\\d,.]* Score Reached!))$",
+   "action": "block"
+  },
+  {
+   "regex": "^\\+\\d[\\d,.]* \\w+ Experience",
+   "action": "block"
+  },
+  {
+   "regex": "^BUFF! You have gained ",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:DUNGEON BUFF! |A Blessing of \\w+ was picked up!|(?:Also )?[Gg]ranted you \\+)",
+   "action": "block"
+  },
+  {
+   "regex": "^◕ ",
+   "action": "block"
+  },
+  {
+   "regex": "stashed away!|item stash|^>>> CLICK HERE to pick them up! <<<$|^\\(This totals .+ stashed!\\)$",
+   "action": "block"
+  },
+  {
+   "regex": "(?:hit|hitting) you for \\d[\\d,.]* (?:true )?damage[.!]$",
+   "action": "block"
+  },
+  {
+   "regex": "WITHER door|BLOOD DOOR",
+   "action": "block"
+  },
+  {
+   "regex": "^Your [\\w ]+ hit \\d[\\d,.]* enem(?:y|ies)(?: for \\d[\\d,.]* damage\\.)?!?",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:Sending to (?:server )?\\S+\\.\\.\\.|Request join for .+\\.\\.\\.|Warping\\.\\.\\.|Already connecting to this server!|Kicked whilst connecting to .+|Queu(?:e)?ing .+|I'm already sending you to SkyBlock!|Attempting to add you to the party\\.\\.\\.)$",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[STATUE\\] Oruo the Omniscient: (?!.*(?:answered|questions? left|One more question))",
+   "action": "block"
+  },
+  {
+   "regex": "^RARE DROP! ",
+   "action": "block"
+  },
+  {
+   "regex": "^(?:Healer|Mage|Berserk|Archer|Tank) Milestone [❶-❾]: ",
+   "action": "block"
+  },
+  {
+   "regex": "^\\[Sacks\\] ",
+   "action": "block"
+  },
+  {
+   "regex": "^Moved \\d[\\d,.]* .+ from your Sacks to your inventory\\.$",
+   "action": "block"
+  }
+ ],
+ "block": [
+  {
+   "regex": "^There\\ are\\ blocks\\ in\\ the\\ way!$",
+   "template": "There are blocks in the way!",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^\\w{1,16}\\ is\\ now\\ ready!$",
+   "template": "<name> is now ready!",
+   "family": "Terminals / devices / levers"
+  },
+  {
+   "regex": "^Odin\\ »\\ Teleporting\\ to\\ \\w{1,16}\\.$",
+   "template": "Odin » Teleporting to <name>.",
+   "family": "Odin"
+  },
+  {
+   "regex": "^You\\ have\\ teleported\\ to\\ \\w{1,16}!$",
+   "template": "You have teleported to <name>!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Starting\\ in\\ \\d[\\d,.]*\\ seconds\\.$",
+   "template": "Starting in # seconds.",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^You\\ equipped\\ Loadout\\ \\d[\\d,.]*!$",
+   "template": "You equipped Loadout #!",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^(?:\\[[A-Z+]+\\] )?\\w{1,16}\\ joined\\ the\\ lobby!$",
+   "template": "[RANK] <name> joined the lobby!",
+   "family": "Lobby / hub spam"
+  },
+  {
+   "regex": "^Profile\\ ID:\\ [0-9a-f-]{36}$",
+   "template": "Profile ID: <uuid>",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^You\\ are\\ playing\\ on\\ profile:\\ .+$",
+   "template": "You are playing on profile: <profile>",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^This\\ Terminal\\ doesn't\\ seem\\ to\\ be\\ responsive\\ at\\ the\\ moment\\.$",
+   "template": "This Terminal doesn't seem to be responsive at the moment.",
+   "family": "Terminals / devices / levers"
+  },
+  {
+   "regex": "^The\\ Energy\\ Laser\\ is\\ charging\\ up!$",
+   "template": "The Energy Laser is charging up!",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^Command\\ Failed:\\ This\\ command\\ is\\ on\\ cooldown!\\ Try\\ again\\ in\\ about\\ a\\ second!$",
+   "template": "Command Failed: This command is on cooldown! Try again in about a second!",
+   "family": "Ability status"
+  },
+  {
+   "regex": "^Someone\\ has\\ already\\ activated\\ this\\ lever!$",
+   "template": "Someone has already activated this lever!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Refreshing\\.\\.\\.$",
+   "template": "Refreshing...",
+   "family": "Other"
+  },
+  {
+   "regex": "^Creeper\\ Veil\\ Activated!$",
+   "template": "Creeper Veil Activated!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Your\\ bone\\ plating\\ reduced\\ the\\ damage\\ you\\ took\\ by\\ \\d[\\d,.]*!$",
+   "template": "Your bone plating reduced the damage you took by #!",
+   "family": "Other"
+  },
+  {
+   "regex": "^A\\ shiver\\ runs\\ down\\ your\\ spine\\.\\.\\.$",
+   "template": "A shiver runs down your spine...",
+   "family": "Watcher / blood"
+  },
+  {
+   "regex": "^This\\ chest\\ has\\ already\\ been\\ searched!$",
+   "template": "This chest has already been searched!",
+   "family": "Other"
+  },
+  {
+   "regex": "^»\\ \\w{1,16}\\ is\\ traveling\\ to\\ Dungeon\\ Hub\\ FOLLOW$",
+   "template": "» <name> is traveling to Dungeon Hub FOLLOW",
+   "family": "Other"
+  },
+  {
+   "regex": "^\\|\\ a$",
+   "template": "| a",
+   "family": "Other"
+  },
+  {
+   "regex": "^This\\ lever\\ has\\ already\\ been\\ used\\.$",
+   "template": "This lever has already been used.",
+   "family": "Other"
+  },
+  {
+   "regex": "^Creeper\\ Veil\\ De\\-activated!$",
+   "template": "Creeper Veil De-activated!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ haven't\\ claimed\\ your\\ Summer\\ Rewards\\ yet!$",
+   "template": "You haven't claimed your Summer Rewards yet!",
+   "family": "Lobby / hub spam"
+  },
+  {
+   "regex": "^Talk\\ to\\ the\\ Summer\\ Sloth\\ in\\ the\\ Hub!$",
+   "template": "Talk to the Summer Sloth in the Hub!",
+   "family": "Lobby / hub spam"
+  },
+  {
+   "regex": "^You\\ hear\\ the\\ sound\\ of\\ something\\ opening\\.\\.\\.$",
+   "template": "You hear the sound of something opening...",
+   "family": "Other"
+  },
+  {
+   "regex": "^⚠\\ Maxor\\ is\\ enraged!\\ ⚠$",
+   "template": "⚠ Maxor is enraged! ⚠",
+   "family": "Mob / boss mechanics"
+  },
+  {
+   "regex": "^The\\ Core\\ entrance\\ is\\ opening!$",
+   "template": "The Core entrance is opening!",
+   "family": "Terminals / devices / levers"
+  },
+  {
+   "regex": "^Queuing\\.\\.\\.\\ \\(Attempt\\ \\d[\\d,.]*/\\d[\\d,.]*\\)$",
+   "template": "Queuing... (Attempt #/#)",
+   "family": "Other"
+  },
+  {
+   "regex": "^A\\ Bat\\ has\\ been\\ slain\\.\\ \\+\\d[\\d,.]*\\ Bonus\\ Score$",
+   "template": "A Bat has been slain. +# Bonus Score",
+   "family": "Other"
+  },
+  {
+   "regex": "^From\\ stash:\\ Enchanted\\ Book$",
+   "template": "From stash: Enchanted Book",
+   "family": "Private messages"
+  },
+  {
+   "regex": "^You\\ are\\ not\\ allowed\\ to\\ use\\ Potion\\ Effects\\ while\\ in\\ Dungeon,\\ therefore\\ all\\ active\\ effects\\ have\\ been\\ paused\\ and\\ stored\\.\\ They\\ will\\ be\\ restored\\ when\\ you\\ leave\\ Dungeon!$",
+   "template": "You are not allowed to use Potion Effects while in Dungeon, therefore all active effects have been paused and stored. They will be restored when you leave Dungeon!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Cannot\\ use\\ this\\ item\\ here!$",
+   "template": "Cannot use this item here!",
+   "family": "Other"
+  },
+  {
+   "regex": "^\\w{1,16}'s\\ Wish\\ healed\\ you\\ for\\ \\d[\\d,.]*\\ health\\ and\\ granted\\ you\\ an\\ absorption\\ shield\\ with\\ \\d[\\d,.]*\\ health!$",
+   "template": "<name>'s Wish healed you for # health and granted you an absorption shield with # health!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Party\\ Members$",
+   "template": "Party Members",
+   "family": "Party management"
+  },
+  {
+   "regex": "^Woah\\ slow\\ down,\\ you're\\ doing\\ that\\ too\\ fast!$",
+   "template": "Woah slow down, you're doing that too fast!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ don't\\ have\\ enough\\ charges\\ to\\ break\\ this\\ block\\ right\\ now!$",
+   "template": "You don't have enough charges to break this block right now!",
+   "family": "Other"
+  },
+  {
+   "regex": "^It\\ isn't\\ your\\ turn!$",
+   "template": "It isn't your turn!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ sold\\ Healing\\ VIII\\ Splash\\ Potion\\ x1\\ for\\ \\d[\\d,.]*\\ Coins!$",
+   "template": "You sold Healing VIII Splash Potion x1 for # Coins!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Only\\ the\\ instance\\ creator\\ can\\ re\\-queue!$",
+   "template": "Only the instance creator can re-queue!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Welcome\\ to\\ Hypixel\\ SkyBlock!$",
+   "template": "Welcome to Hypixel SkyBlock!",
+   "family": "Lobby / hub spam"
+  },
+  {
+   "regex": "^Your\\ Revive\\ Stone\\ revived\\ you\\ and\\ broke!$",
+   "template": "Your Revive Stone revived you and broke!",
+   "family": "Deaths / revives"
+  },
+  {
+   "regex": "^PUZZLE\\ SOLVED!\\ \\w{1,16}\\ tied\\ Tic\\ Tac\\ Toe!\\ Good\\ job!$",
+   "template": "PUZZLE SOLVED! <name> tied Tic Tac Toe! Good job!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Someone\\ else\\ is\\ currently\\ reviving\\ that\\ player!$",
+   "template": "Someone else is currently reviving that player!",
+   "family": "Other"
+  },
+  {
+   "regex": "^✮\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}\\ is\\ on\\ your\\ server$",
+   "template": "✮ [RANK] <name> is on your server",
+   "family": "Other"
+  },
+  {
+   "regex": "^That\\ chest\\ is\\ locked!$",
+   "template": "That chest is locked!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Party\\ >\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}:\\ Watcher\\ will\\ move\\ in\\ (?:\\d+h )?(?:\\d+m )?\\d+(?:\\.\\d+)?s\\.$",
+   "template": "Party > [RANK] <name>: Watcher will move in <time>.",
+   "family": "Party chat"
+  },
+  {
+   "regex": "^Party\\ >\\ (?:\\[[A-Z+]+\\] )?\\w{1,16}:\\ Blaze\\ puzzle\\ solved!$",
+   "template": "Party > [RANK] <name>: Blaze puzzle solved!",
+   "family": "Party chat"
+  },
+  {
+   "regex": "^Wrong\\ number!$",
+   "template": "Wrong number!",
+   "family": "Other"
+  },
+  {
+   "regex": "^>\\ EXTRA\\ STATS\\ <$",
+   "template": "> EXTRA STATS <",
+   "family": "Other"
+  },
+  {
+   "regex": "^\\[NPC\\]\\ Centauri:\\ Pro\\ tip:\\ use\\ /centauri$",
+   "template": "[NPC] Centauri: Pro tip: use /centauri",
+   "family": "NPC dialogue"
+  },
+  {
+   "regex": "^A\\ Prince\\ falls\\.\\ \\+\\d[\\d,.]*\\ Bonus\\ Score$",
+   "template": "A Prince falls. +# Bonus Score",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ can\\ no\\ longer\\ consume\\ or\\ splash\\ any\\ potions\\ during\\ the\\ remainder\\ of\\ this\\ Dungeon\\ run!$",
+   "template": "You can no longer consume or splash any potions during the remainder of this Dungeon run!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Not\\ enough\\ vitality!\\ Creeper\\ Veil\\ De\\-activated!$",
+   "template": "Not enough vitality! Creeper Veil De-activated!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Please\\ wait\\ a\\ few\\ seconds\\ between\\ refreshing!$",
+   "template": "Please wait a few seconds between refreshing!",
+   "family": "Terminals / devices / levers"
+  },
+  {
+   "regex": "^Odin\\ »\\ Reminder\\ set\\ for\\ the\\ end\\ of\\ the\\ run!\\ \\(disabled\\ auto\\ requeue\\ for\\ this\\ run\\)$",
+   "template": "Odin » Reminder set for the end of the run! (disabled auto requeue for this run)",
+   "family": "Odin"
+  },
+  {
+   "regex": "^\\[NPC\\]\\ Centauri:\\ I\\ solemnly\\ swear\\ I\\ am\\ up\\ to\\ no\\ good\\.$",
+   "template": "[NPC] Centauri: I solemnly swear I am up to no good.",
+   "family": "NPC dialogue"
+  },
+  {
+   "regex": "^You\\ have\\ \\d[\\d,.]*\\ unclaimed\\ deliveries!\\\\nClick\\ here\\ or\\ talk\\ to\\ Jerry\\ to\\ claim\\ them!$",
+   "template": "You have # unclaimed deliveries!\\nClick here or talk to Jerry to claim them!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Hoppity's\\ Hunt\\ has\\ begun!\\ Help\\ Hoppity\\ find\\ his\\ Chocolate\\ Rabbit\\ Eggs\\ across\\ SkyBlock\\ each\\ day\\ during\\ the\\ Spring!$",
+   "template": "Hoppity's Hunt has begun! Help Hoppity find his Chocolate Rabbit Eggs across SkyBlock each day during the Spring!",
+   "family": "Other"
+  },
+  {
+   "regex": "^➤\\ You\\ have\\ reached\\ your\\ Hype\\ limit!\\ Add\\ Hype\\ to\\ Prototype\\ Lobby\\ minigames\\ by\\ right\\-clicking\\ with\\ the\\ Hype\\ Diamond!$",
+   "template": "➤ You have reached your Hype limit! Add Hype to Prototype Lobby minigames by right-clicking with the Hype Diamond!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Odin\\ »\\ This\\ player\\ is\\ dead,\\ can't\\ leap\\.$",
+   "template": "Odin » This player is dead, can't leap.",
+   "family": "Odin"
+  },
+  {
+   "regex": "^Talk\\ to\\ Vincent\\ in\\ the\\ Artist's\\ Abode\\ to\\ learn\\ more\\ about\\ this\\ dye!$",
+   "template": "Talk to Vincent in the Artist's Abode to learn more about this dye!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ may\\ only\\ use\\ this\\ command\\ after\\ (?:\\d+h )?(?:\\d+m )?\\d+(?:\\.\\d+)?s\\ on\\ the\\ server!$",
+   "template": "You may only use this command after <time> on the server!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ sold\\ Dungeon\\ VII\\ Potion\\ x1\\ for\\ \\d[\\d,.]*\\ Coins!$",
+   "template": "You sold Dungeon VII Potion x1 for # Coins!",
+   "family": "Other"
+  },
+  {
+   "regex": "^A\\ Wither\\ Key\\ was\\ picked\\ up!$",
+   "template": "A Wither Key was picked up!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Jax\\ told\\ me\\ not\\ to\\ share\\ these\\ arrows\\.$",
+   "template": "Jax told me not to share these arrows.",
+   "family": "Other"
+  },
+  {
+   "regex": "^\\\\n➔\\ Welcome\\ to\\ the\\ Prototype\\ Lobby\\\\nAll\\ games\\ in\\ this\\ lobby\\ are\\ currently\\ in\\ development\\.\\\\nClick\\ here\\ to\\ leave\\ feedback!\\ ➤\\ https://hypixel\\.net/PTL\\\\n$",
+   "template": "\\n➔ Welcome to the Prototype Lobby\\nAll games in this lobby are currently in development.\\nClick here to leave feedback! ➤ https://hypixel.net/PTL\\n",
+   "family": "Other"
+  },
+  {
+   "regex": "^Don't\\ move\\ diagonally!\\ Bad!$",
+   "template": "Don't move diagonally! Bad!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Couldn't\\ unstash\\ your\\ material\\ stash!\\ Your\\ inventory\\ is\\ full!$",
+   "template": "Couldn't unstash your material stash! Your inventory is full!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Odin\\ »\\ Already\\ at\\ max\\ stack\\ size\\.$",
+   "template": "Odin » Already at max stack size.",
+   "family": "Odin"
+  },
+  {
+   "regex": "^Woah\\ there!\\ You\\ already\\ have\\ an\\ outgoing\\ /trade\\ request!$",
+   "template": "Woah there! You already have an outgoing /trade request!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ buffed\\ yourself\\ for\\ \\+\\d[\\d,.]*\\ Strength$",
+   "template": "You buffed yourself for +# Strength",
+   "family": "Other"
+  },
+  {
+   "regex": "^This\\ Terminal\\ has\\ already\\ been\\ completed!$",
+   "template": "This Terminal has already been completed!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ are\\ not\\ allowed\\ to\\ use\\ that\\ command\\ as\\ a\\ spectator!$",
+   "template": "You are not allowed to use that command as a spectator!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ must\\ double\\ tap\\ the\\ drop\\ button\\ to\\ drop\\ this\\ item!$",
+   "template": "You must double tap the drop button to drop this item!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ can\\ disable\\ this\\ in\\ the\\ Settings\\ in\\ your\\ SkyBlock\\ Menu!$",
+   "template": "You can disable this in the Settings in your SkyBlock Menu!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ can\\ only\\ use\\ this\\ item\\ inside\\ dungeons!$",
+   "template": "You can only use this item inside dungeons!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ are\\ not\\ this\\ party's\\ leader\\.$",
+   "template": "You are not this party's leader.",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ bought\\ Dungeon\\ VII\\ Potion!$",
+   "template": "You bought Dungeon VII Potion!",
+   "family": "Other"
+  },
+  {
+   "regex": "^You\\ hear\\ something\\ open\\.\\.\\.$",
+   "template": "You hear something open...",
+   "family": "Other"
+  },
+  {
+   "regex": "^This\\ Fishing\\ Rod\\ does\\ not\\ work\\ in\\ lava\\.$",
+   "template": "This Fishing Rod does not work in lava.",
+   "family": "Other"
+  },
+  {
+   "regex": "^Your\\ Wish\\ healed\\ you\\ for\\ \\d[\\d,.]*\\ health\\ and\\ granted\\ you\\ an\\ absorption\\ shield\\ with\\ \\d[\\d,.]*\\ health!$",
+   "template": "Your Wish healed you for # health and granted you an absorption shield with # health!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Your\\ Wish\\ healed\\ your\\ entire\\ team\\ for\\ \\d[\\d,.]*\\ health\\ and\\ shielded\\ them\\ for\\ \\d[\\d,.]*!$",
+   "template": "Your Wish healed your entire team for # health and shielded them for #!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Woah!\\ Slow\\ down\\ there!$",
+   "template": "Woah! Slow down there!",
+   "family": "Other"
+  },
+  {
+   "regex": "^Oops!\\ You\\ stepped\\ on\\ the\\ wrong\\ block!$",
+   "template": "Oops! You stepped on the wrong block!",
+   "family": "Other"
+  }
+ ]
+}

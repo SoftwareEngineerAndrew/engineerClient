@@ -1,0 +1,936 @@
+package com.engineerclient.waypoints
+
+import com.engineerclient.EngineerClient
+import com.engineerclient.splits.DoorBlocks
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
+import com.mojang.brigadier.arguments.IntegerArgumentType
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.odtheking.odin.events.BlockUpdateEvent
+import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
+import com.odtheking.odin.features.Category
+import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.dungeon.Highlight
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.features.impl.dungeon.map.tile.DoorType
+import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
+import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
+import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
+import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.utils.itemUUID
+import com.odtheking.odin.utils.render.drawFilledBox
+import com.odtheking.odin.utils.render.drawStyledBox
+import com.odtheking.odin.utils.render.drawText
+import com.odtheking.odin.utils.render.drawWireFrameBox
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
+import net.minecraft.core.BlockPos
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.boss.wither.WitherBoss
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.monster.EnderMan
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
+import org.lwjgl.glfw.GLFW
+import java.io.File
+
+/**
+ * Boxes that group a room's starred mobs, drawn and sized in game with a "wand" — any item you pick
+ * with "Make Held Item Wand". With Edit Mode on and the wand in hand:
+ *
+ *  - Drop places a 1x1x1 box on the block at your feet, or deletes the box you are looking at.
+ *  - Look through a box to select the side behind ([BoxFaces]); stand inside it and look up to
+ *    select its top. Left click or scroll up pushes it out a block, right click or scroll down
+ *    pulls it in. A box never
+ *    gets thinner than a block, and its bottom never moves.
+ *
+ * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
+ * it overlaps most, if several); one in no box goes to the nearest box in its room within 5
+ * blocks. Boxes are purple and show only in the room you are in; a box hides once all its mobs
+ * are dead or the map shows the room cleared (never deleted), unless Keep All Boxes or Edit Mode
+ * is on.
+ *
+ * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
+ *
+ * Roles ([BrRoles]): once the party has said who kills what ("!3br 2" in party chat), a room the
+ * rush comes into through a door the site has a plan for shows your boxes purple, numbered in the
+ * order you kill them, your stack gold, and everyone else's boxes grey. The door runner ("!br d",
+ * or whoever gets to the doors first) sees no boxes while rushing.
+ */
+object BrWaypoints2 : Module(
+    name = "BR Roles",
+    category = Category.custom("Engineer Client"),
+    description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made in game with a wand.",
+    key = null,
+) {
+
+    private var editMode by BooleanSetting("Edit Mode", false, desc = "Edits only happen while this is on. Off, the wand is just an item.")
+
+    private val editKey by KeybindSetting("Edit Mode Keybind", GLFW.GLFW_KEY_UNKNOWN, "Toggles Edit Mode.").onPress {
+        editMode = !editMode
+        EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
+    }
+
+    /** Read by PosMsgEditor every tick. */
+    val posmsgRetrigger by BooleanSetting("Posmsg Re-trigger", false, desc = "Odin sends each /posmsg once per world. On: leaving a box (or its radius) re-arms it, so walking back in sends it again. Only your own client.")
+
+    private val posmsgKey by KeybindSetting("Posmsg Here Keybind", GLFW.GLFW_KEY_UNKNOWN, "Adds an Odin /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
+        PosMsgEditor.addHere("entered box")
+    }
+
+    private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
+        val held = mc.player?.mainHandItem
+        if (held == null || held.isEmpty) return@ActionSetting EngineerClient.msg("§cHold the item you want as the wand first.")
+        wand = identity(held)
+        EngineerClient.msg("§aWand set: §f${held.hoverName.string}")
+    }.withDependency { editMode }
+
+    private val clearRoom by ActionSetting("Clear Room", desc = "Deletes every box in the room you are standing in, saved ones included.") {
+        val room = DungeonUtils.currentRoom?.name ?: return@ActionSetting EngineerClient.msg("§cYou are not in a dungeon room.")
+        val gone = boxes.count { it.room == room }
+        boxes.removeAll { it.room == room }
+        saved.remove(room)
+        write()
+        EngineerClient.msg("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
+    }.withDependency { editMode }
+
+
+    private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
+
+    private val fadeDone by BooleanSetting("Fade Done Boxes", false, desc = "A box whose mobs are all dead, or in a room the map shows cleared, stays up very faint instead of disappearing.")
+    private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing. Wins over Fade Done Boxes.")
+    private val doneColor by ColorSetting("Done Color", Color(85, 85, 85, 1f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
+
+    private val opacity by NumberSetting("Fill Opacity", 0.08f, 0f, 1f, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
+
+    private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
+
+    private val killers by SelectorSetting("Killers", "Duo", arrayListOf("Duo", "Trio", "Quad"), desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
+
+    private val myRole by SelectorSetting("My Role", "All Boxes", arrayListOf("All Boxes", "Door", "Role 1", "Role 2", "Role 3", "Role 4"), desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
+
+    private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
+
+    /** Which item is the wand, saved with the config so it survives a restart. */
+    private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.").hide()
+
+    // --- boxes -----------------------------------------------------------------------------------
+
+    /** A box in the world: its corners ([BoxFaces.MIN_X]..) and the room it belongs to. */
+    class Box(val c: IntArray, val room: String?) {
+        /** Written to the file. A box placed before Odin has worked out its room waits to be. */
+        var saved = false
+
+        fun aabb() = AABB(c[0].toDouble(), c[1].toDouble(), c[2].toDouble(), c[3].toDouble(), c[4].toDouble(), c[5].toDouble())
+    }
+
+    private val boxes = mutableListOf<Box>()
+
+    /**
+     * Every room's boxes, by room name, as their lowest and highest block in the room's own
+     * coordinates (rotated to north, as Odin's waypoints are): x1 y1 z1 x2 y2 z2.
+     */
+    private val saved: MutableMap<String, MutableList<IntArray>> by lazy { read() }
+    /** Each room whose boxes are in the world, and the rotation and clay block they were placed by. */
+    private val loadedRooms = HashMap<String, String>()
+
+    // --- starred mobs ----------------------------------------------------------------------------
+
+    /**
+     * A starred mob: where it was first seen, the mob and name tag entities while they are in view,
+     * and whether it has died.
+     */
+    private class Mob(val spawn: AABB, val x: Double, val y: Double, val z: Double, val room: String?, var entity: Entity?, var tag: Entity?) {
+        var dead = false
+        /** The tick its name tag went, if it has — the same tick as the mob means it died. */
+        var tagGoneAt: Int? = null
+        /** Its box ([claimOf]), and the [boxesSig] it was worked out under. */
+        var claim: Box? = null
+        var claimSig = 0L
+        var claimed = false
+    }
+
+    private val mobs = mutableListOf<Mob>()
+    private val byId = HashMap<Int, Mob>()
+    private var ticks = 0
+
+    // Odin's Highlight: which name tags are starred mobs, and how a tag finds its mob.
+    private val MOB_NAMES = listOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
+    private val STARRED = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
+
+    private var useHeld = false
+
+    private val PURPLE = Color(170, 0, 170, 1f)
+    private val GOLD = Color(255, 170, 0, 1f)
+    private val GREEN = Color(85, 255, 85, 1f)
+
+    private val CONTROL_CODES = Regex("\u00a7.")
+    private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
+    private const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
+    private val WITHER_DOOR = Regex("""^\w+ opened a WITHER door!$""")
+
+    /** How far away a box can be selected from. */
+    private const val REACH = 48.0
+
+    /** A nearest box further than this from a mob does not claim it. */
+    private const val CLAIM_REACH = 5.0
+
+    // How far off a mob can vanish and still count as killed; see [watchDeaths].
+    private const val DIES_WITH_TAG = 48.0
+    private const val DIES_ALONE = 32.0
+
+    init {
+        on<LevelEvent.Load> {
+            pull()
+            BrRoles.pull()
+            BrRoles.newRun(dungeonOver = wasInDungeon)
+            wasInDungeon = false
+            entryDoors.clear(); noPlanSaid.clear(); walkedIn.clear(); myTile = null
+            boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
+            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); witherSides.clear(); path = emptyMap(); entrances = emptyMap(); lastRoom = null
+        }
+
+        // Chat straight off the network, before any mod can hide it: the rush starts with the
+        // dungeon, each wither door starts falling on its line, and it ends at the blood door.
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (overlay) return@onReceive
+            val text = content.string.replace(CONTROL_CODES, "")
+            mc.execute { if (!BrRoles.onChat(text)) onChat(text) }
+        }
+
+        // A door starting to fall: its blocks all turn to barrier on one tick — sometimes before its
+        // chat line, so every burst on the rush counts, not only those just after a line.
+        on<BlockUpdateEvent> {
+            if (rushing && updated.block == Blocks.BARRIER && old.block != Blocks.BARRIER) barriers += pos.x to pos.z
+        }
+
+        on<TickEvent.End> {
+            BrRoles.settingKilling = killers + 2
+            BrRoles.settingRole = when (myRole) { 0 -> null; 1 -> 0; else -> myRole - 1 }
+            PosMsgEditor.tick()
+            if (!DungeonUtils.inDungeons) return@on
+            wasInDungeon = true
+            ticks++
+            if (barriers.size >= DoorBlocks.DOOR_BLOCKS) for (d in DoorBlocks.doors(barriers)) doorFalling(tileRoom(d.a), tileRoom(d.b), d)
+            barriers.clear()
+            if (ticks % 10 == 0) mapPath()
+            trackMyDoor()
+            if (debug && (rushing || allRooms)) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
+            loadRooms()
+            if (DungeonUtils.inClear) findStarred()
+            watchDeaths()
+            // Right click repeats every few ticks while held; a pull is one per press.
+            if (!mc.options.keyUse.isDown) useHeld = false
+        }
+
+        on<RenderEvent.Extract> {
+            if (!DungeonUtils.inDungeons) return@on
+
+            for ((box, colour, label, next, done) in drawn()) {
+                val bb = box.aabb()
+                // Done (Recolor Done Boxes): a whole box in Done Color, number greyed, never "next".
+                if (done && recolorDone) {
+                    drawFilledBox(bb, doneColor.withAlpha(opacity), depth = false)
+                    drawWireFrameBox(bb, doneColor, depth = false)
+                    drawText("§7" + label.replace(CONTROL_CODES, ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+                    continue
+                }
+                // Done (Fade Done Boxes): just a ghost of the outline, and no label.
+                if (done) {
+                    drawWireFrameBox(bb, colour.withAlpha(0.15f), depth = false)
+                    continue
+                }
+                // Seen through walls; the faces faint enough to walk through without noticing, the
+                // next one of yours to kill filled in more.
+                drawFilledBox(bb, colour.withAlpha(if (next) (opacity * 3).coerceIn(opacity + 0.15f, 1f) else opacity), depth = false)
+                drawWireFrameBox(bb, colour, depth = false)
+                drawText(label, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
+            }
+
+            // The selected face, only with the wand in hand, when it can actually be edited.
+            if (editing()) target(mc.deltaTracker.getGameTimeDeltaPartialTick(true))?.let { (box, face) ->
+                drawFilledBox(faceSlab(box.aabb(), face), PURPLE.withAlpha(0.35f), depth = false)
+            }
+
+            if (spawnMarkers) {
+                val colour = (Highlight.settings["Highlight color"] as? ColorSetting)?.value ?: Colors.WHITE
+                val style = (Highlight.settings["Render Style"] as? SelectorSetting)?.value ?: 1
+                for (mob in mobs) {
+                    // Flat on the floor, lifted a hair so it does not flicker into the block.
+                    val y = mob.y + 0.02
+                    drawStyledBox(AABB(mob.x - 0.5, y, mob.z - 0.5, mob.x + 0.5, y, mob.z + 0.5), colour, style, true)
+                }
+            }
+        }
+    }
+
+    init {
+        // /brrole 3 2: take role 2 with 3 killing (says "!3br 2" in party chat). /brrole door: on the
+        // door ("!br d"). /brrole: who has what.
+        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            dispatcher.register(literal("brrole")
+                .executes { BrRoles.status(); 1 }
+                .then(literal("door").executes { BrRoles.claimDoor(); 1 })
+                .then(argument("killing", IntegerArgumentType.integer(2, BrRoles.MAX_KILLING)).then(argument("role", IntegerArgumentType.integer(1, BrRoles.MAX_KILLING)).executes { ctx ->
+                    BrRoles.claim(IntegerArgumentType.getInteger(ctx, "killing"), IntegerArgumentType.getInteger(ctx, "role"))
+                    1
+                })))
+        }
+    }
+
+    private fun Color.withAlpha(a: Float) = Color(red, green, blue, a)
+
+    // --- starred mobs ----------------------------------------------------------------------------
+
+    private fun findStarred() {
+        val level = mc.level ?: return
+        for (tag in level.entitiesForRendering()) {
+            if (tag !is ArmorStand || !tag.isAlive) continue
+            val name = tag.name.string
+            if (MOB_NAMES.none { it in name } || !STARRED.matches(name)) continue
+            val mob = level.getEntities(tag, tag.boundingBox.move(0.0, -1.0, 0.0)) { isMob(it) }.firstOrNull() ?: continue
+            val known = byId[mob.id]
+            if (known != null) {
+                // Back in view: Hypixel keeps a mob's id when it comes back into range.
+                if (known.entity == null && !known.dead) known.entity = mob
+                if (known.tag !== tag) { known.tag = tag; known.tagGoneAt = null }
+                continue
+            }
+            val m = Mob(mob.boundingBox, mob.x, mob.y, mob.z, roomAt(mob.x, mob.z)?.name, mob, tag)
+            mobs += m
+            byId[mob.id] = m
+        }
+    }
+
+    /**
+     * Whether a mob died, from what the recorded runs show (1721 starred mobs across 32 runs).
+     * Hypixel sends no death — no death animation, no health reaching zero, the tag never shows
+     * 0❤ — the mob and its name tag are simply removed, on the same tick. Going out of view removes
+     * them too, but further away, and a name tag also vanishes on its own from about 16 blocks
+     * while the mob stays. So a mob is dead when it is removed within 48 blocks on the same tick as
+     * its tag, or within 32 blocks at all. Removed further off, it is only out of view: it keeps
+     * its state, and is picked up again when it comes back.
+     */
+    private fun watchDeaths() {
+        val player = mc.player ?: return
+        for (mob in mobs) {
+            val tag = mob.tag
+            if (tag != null && tag.isRemoved && mob.tagGoneAt == null) mob.tagGoneAt = ticks
+        }
+        for (mob in mobs) {
+            val e = mob.entity ?: continue
+            if (!e.isRemoved) continue
+            val d = kotlin.math.hypot(player.x - e.x, player.z - e.z)
+            val withTag = mob.tagGoneAt?.let { ticks - it <= 1 } == true
+            if (d < DIES_WITH_TAG && (withTag || d < DIES_ALONE)) mob.dead = true
+            mob.entity = null
+            mob.tag = null
+        }
+    }
+
+    /**
+     * The boxes on screen, only ever the room you are in (or the next on the rush), and without All
+     * Rooms only if it is on the blood rush's path. With Edit Mode on, all of that room's boxes. Otherwise none once the map shows the room cleared, and a box hides
+     * once every mob it claimed is known dead, showing until then — before any of its mobs are in
+     * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
+     */
+    private fun shown(): List<Box> {
+        val rooms = shownRooms()
+        // Edit Mode shows them all too: a box being drawn has no mobs yet.
+        if (editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
+        val sig = boxesSig()
+        val claimed = HashSet<Box>(); val alive = HashSet<Box>()
+        for (mob in mobs) {
+            val box = cachedClaim(mob, sig) ?: continue
+            claimed += box
+            if (!mob.dead) alive += box
+        }
+        // Cleared on the map (white check, or green once secrets are done too): every mob is dead,
+        // including the ones killed out of your sight.
+        val open = rooms.filter { it.checkmark != MapCheckmark.WHITE && it.checkmark != MapCheckmark.GREEN }.mapTo(HashSet()) { it.name }
+        return boxes.filter { it.room in open && (it !in claimed || it in alive) }
+    }
+
+    /**
+     * The rooms whose boxes can show: the one you are in, and on blood rush the one whose door is
+     * coming down ahead of you. Without All Rooms, only rooms on the blood rush's path.
+     */
+    private fun shownRooms() = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
+        .distinctBy { it.name }
+        .filter { allRooms || editMode || onRush(it.name) }
+
+    // --- blood rush ------------------------------------------------------------------------------
+
+
+
+    /** Between the dungeon starting and the blood door opening. */
+    private var rushing = false
+    /** The room the rush is heading into: the one behind the door that last started falling. */
+    private var rushRoom: String? = null
+    /** Rooms the rush has already been through, so a door's far side can be told from its near. */
+    private val rushed = HashSet<String>()
+    /** Waiting for the start door: the first rush door, the one out of Entrance. */
+    private var startDoor = false
+    private val barriers = mutableListOf<Pair<Int, Int>>()
+
+    private fun onChat(msg: String) {
+        if (!DungeonUtils.inDungeons) return
+        when {
+            // The dungeon starting is the start door coming down.
+            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); startDoor = true }
+            // A wither door means the start door has been and gone, whether its blocks were seen or not.
+            rushing && WITHER_DOOR.matches(msg) -> startDoor = false
+            msg == BLOOD_DOOR -> { rushing = false; rushRoom = null }
+        }
+    }
+
+    /**
+     * A door started falling between two rooms. The start door is the one out of Entrance; after
+     * that it is whichever side the rush has not been through yet — past fairy too, which the rush
+     * walks through by fairy's own open door and so never has a wither door into.
+     */
+    private fun doorFalling(a: DungeonRoom?, b: DungeonRoom?, door: DoorBlocks.Door) {
+        val sides = listOfNotNull(a, b)
+        if (startDoor) {
+            // At the start other doors come down too (fairy's); the rush's is the one out of Entrance.
+            val entrance = sides.firstOrNull { it.type == RoomType.ENTRANCE } ?: return
+            rushed += entrance.name ?: return
+            startDoor = false
+        }
+        val next = sides.filter { it.name != null && it.name !in rushed }.minByOrNull { if (it.type == RoomType.FAIRY) 1 else 0 } ?: return
+        rushRoom = next.name
+        rushed += next.name!!
+        // The door sits halfway between its two tiles (tiles 32 blocks apart, the first centred at -185).
+        entryDoors[next.name!!] = (-185 + 16 * (door.a.first + door.b.first)) to (-185 + 16 * (door.a.second + door.b.second))
+    }
+
+    /** Rooms either side of a wither or blood door the map has shown this run; open, they turn normal on it. */
+    private val witherSides = HashSet<DungeonRoom>()
+
+    /** Rooms on the rush's path by the map, and the door each is entered by (world x, z; none for Entrance). */
+    private var path: Map<String, Pair<Int, Int>?> = emptyMap()
+
+    /** Every room the layout reaches, and its door on the Entrance side: what its roles go by off the rush too. */
+    private var entrances: Map<String, Pair<Int, Int>> = emptyMap()
+
+    /** For Debug: the room you were last told about. */
+    private var lastRoom: String? = null
+
+    /** Whether a room is on the blood rush: on the map's path, or behind a wither door seen falling. */
+    private fun onRush(name: String?) = name != null && (name in path || name in rushed)
+
+    /**
+     * The blood rush's path. A dungeon's rooms join up as a tree — one way between any two — and
+     * every wither door and the blood door is on the way from Entrance to Blood. So the rush's rooms
+     * are the ones on the way from Entrance to each of those doors (and to Blood), and each is
+     * entered by the door on its Entrance side. Other rooms, cleared by whoever isn't rushing, are
+     * not on it however early they are walked into. The doors come from the world ([worldDoors]),
+     * which has the whole dungeon from the start as far as it is loaded, and from Odin's map.
+     */
+    private fun mapPath() {
+        val links = HashMap<DungeonRoom, MutableList<Pair<DungeonRoom, Pair<Int, Int>>>>()
+        worldDoors(links)
+        for (door in DungeonScan.doors.values) {
+            val a = DungeonScan.tiles.getOrNull(door.originTileIndex)?.room ?: continue
+            val b = DungeonScan.tiles.getOrNull(door.destinationTileIndex)?.room ?: continue
+            if (a === b) continue
+            if (door.type == DoorType.Wither || door.type == DoorType.Blood) { witherSides += a; witherSides += b }
+            val at = (-185 + 16 * (2 * door.position.x + door.rotation.offset.x)) to (-185 + 16 * (2 * door.position.z + door.rotation.offset.z))
+            links.getOrPut(a) { mutableListOf() } += b to at
+            links.getOrPut(b) { mutableListOf() } += a to at
+        }
+        val entrance = DungeonScan.rooms.firstOrNull { it.type == RoomType.ENTRANCE } ?: return
+        // Out from Entrance: each room's way back, and the door it is entered by.
+        val back = HashMap<DungeonRoom, Pair<DungeonRoom, Pair<Int, Int>>>()
+        val queue = ArrayDeque(listOf(entrance))
+        while (queue.isNotEmpty()) {
+            val r = queue.removeFirst()
+            for ((next, at) in links[r].orEmpty()) if (next !== entrance && next !in back) { back[next] = r to at; queue += next }
+        }
+        val out = HashMap<String, Pair<Int, Int>?>()
+        entrance.name?.let { out[it] = null }
+        val ends = witherSides + DungeonScan.rooms.filter { it.type == RoomType.BLOOD || it.name in rushed }
+        for (end in ends) {
+            var r = end
+            while (r !== entrance) {
+                val (prev, at) = back[r] ?: break
+                r.name?.let { out[it] = at }
+                r = prev
+            }
+        }
+        path = out
+        entrances = back.entries.mapNotNull { (r, b) -> r.name?.let { it to b.second } }.toMap()
+    }
+
+    /**
+     * The doorways between neighbouring rooms, read from the world: where two tiles of different
+     * rooms meet, the doorway is halfway between their centres, and it is there if the two rows
+     * either side of the gap are open at head height (air, or a wither or blood door's blocks) —
+     * the same test the site's door map uses. Coal or red terracotta there is a wither or blood door.
+     * Tiles in chunks not loaded are left to the map.
+     */
+    private fun worldDoors(links: HashMap<DungeonRoom, MutableList<Pair<DungeonRoom, Pair<Int, Int>>>>) {
+        val level = mc.level ?: return
+        for (tz in 0..5) for (tx in 0..5) for ((dx, dz) in listOf(1 to 0, 0 to 1)) {
+            if (tx + dx > 5 || tz + dz > 5) continue
+            val a = DungeonScan.tiles[tx + tz * 6].room ?: continue
+            val b = DungeonScan.tiles[tx + dx + (tz + dz) * 6].room ?: continue
+            if (a === b) continue
+            val gx = -185 + 16 * (2 * tx + dx)
+            val gz = -185 + 16 * (2 * tz + dz)
+            val cells = listOf(-2, -1, 1, 2).flatMap { d -> listOf(70, 71).map { y -> BlockPos(gx + d * dx, y, gz + d * dz) } }
+            if (!cells.all { level.isLoaded(it) }) continue
+            val states = cells.map { level.getBlockState(it) }
+            if (!states.all { it.isAir || it.block == Blocks.BARRIER || it.block == Blocks.COAL_BLOCK || it.block == Blocks.RED_TERRACOTTA }) continue
+            val wither = states.any { it.block == Blocks.COAL_BLOCK || it.block == Blocks.RED_TERRACOTTA }
+            if (wither) { witherSides += a; witherSides += b }
+            links.getOrPut(a) { mutableListOf() } += b to (gx to gz)
+            links.getOrPut(b) { mutableListOf() } += a to (gx to gz)
+        }
+    }
+
+    /** For Debug: the room you walked into on the rush, its door, your role, and what it shows you. */
+    private fun debugRoom(name: String) {
+        val door = entryOf(name) ?: return EngineerClient.msg("§dBR debug §f$name §8— " + if (onRush(name)) "on the rush, door not known yet" else "not on the rush path")
+        val how = when {
+            walkedIn[name] != null -> "you walked in"
+            path[name] != null -> "rush path"
+            entryDoors[name] != null -> "wither door seen falling"
+            else -> "off the rush, Entrance side"
+        }
+        val room = placed(name)
+        val rel = room?.getRelativeCoords(BlockPos(door.first, 0, door.second))
+        val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)") + " §8· $how"
+        val role = "§7you: §f" + BrRoles.describe()
+        val inRoom = boxes.filter { it.room == name }
+        val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z)
+        val shows = when {
+            inRoom.isEmpty() -> "§8no boxes in this room"
+            !BrRoles.active -> "§7showing §fall ${inRoom.size}"
+            plan == null -> "§7no plan §8— showing §fall ${inRoom.size}"
+            BrRoles.youOnDoor -> "§7on the door §8— showing §fnone"
+            else -> {
+                val looks = inRoom.map { number(it) to BrRoles.look(plan, number(it)) }
+                val mine = looks.mapNotNull { (n, l) -> (l as? BrRoles.Look.Mine)?.let { n to it.order } }.sortedBy { it.second }.map { it.first }
+                val stack = looks.filter { it.second is BrRoles.Look.Stack }.map { it.first }
+                val loose = looks.filter { it.second == null }.map { it.first }
+                "§7kill §a" + mine.joinToString(" → ").ifEmpty { "none" } + " §7stack §6" + stack.joinToString().ifEmpty { "none" } +
+                    (if (loose.isEmpty()) "" else " §7unassigned §d" + loose.joinToString())
+            }
+        }
+        EngineerClient.msg("§dBR debug §7$at\n  $role\n  $shows")
+    }
+
+    /** Each room behind a wither door seen falling, and that door (world x, z). */
+    private val entryDoors = HashMap<String, Pair<Int, Int>>()
+
+    /**
+     * The door a room is entered by, for its roles: the one you last walked in through. Before you
+     * have (the next room while its door comes down), or if you leapt in, the rush path's door, the
+     * wither door seen falling into it, or else its door on the Entrance side of the layout.
+     */
+    private fun entryOf(name: String) = walkedIn[name] ?: path[name] ?: entryDoors[name] ?: entrances[name]
+
+    /** Each room you walked into, and the doorway you last came in through (world x, z). */
+    private val walkedIn = HashMap<String, Pair<Int, Int>>()
+    private var myTile: Pair<Int, Int>? = null
+
+    /**
+     * Your own steps between rooms: from one room's tile into the next tile over, belonging to
+     * another room, is through the doorway between them — the only one two tiles can share, halfway
+     * between their centres. A jump of more than one tile (a leap, a pearl) is no door.
+     */
+    private fun trackMyDoor() {
+        val p = mc.player ?: return
+        val t = Math.floorDiv(p.blockX + 201, 32) to Math.floorDiv(p.blockZ + 201, 32)
+        val was = myTile
+        if (was == t) return
+        val room = tileRoom(t)?.name ?: return
+        myTile = t
+        val from = was?.let { tileRoom(it)?.name } ?: return
+        if (from == room || kotlin.math.abs(was.first - t.first) + kotlin.math.abs(was.second - t.second) != 1) return
+        walkedIn[room] = (-185 + 16 * (was.first + t.first)) to (-185 + 16 * (was.second + t.second))
+    }
+
+    /**
+     * A box as drawn: its colour, the label over it, whether it is the next of yours to kill, and
+     * whether it is done (its mobs dead or its room cleared), drawn faint with Fade Done Boxes.
+     */
+    private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean, val done: Boolean = false)
+
+    /** Rooms already told they have no roles for this door and team size, once each per run. */
+    private val noPlanSaid = HashSet<String>()
+    /** Whether the world being left was a dungeon, so its party chat roles are done with. */
+    private var wasInDungeon = false
+
+    /**
+     * The boxes to draw. With roles, in a room the site has a plan for: yours green, numbered in the
+     * order you kill them, the next one filled in; your stack gold; others'
+     * not drawn, and the door runner sees none. Boxes the plan leaves to nobody show plain. Without
+     * roles, or with no plan for the door the rush came in by, every box purple with its number.
+     */
+    private fun drawn(): List<Drawn> {
+        val out = ArrayList<Drawn>()
+        val live = shown()
+        // With Fade or Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
+        val all = if ((fadeDone || recolorDone) && !editMode) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
+        val liveSet = live.toHashSet()
+        for ((room, list) in all.groupBy { it.room }) {
+            val plan = if (editMode || !BrRoles.active) null else planOf(room)
+            if (plan == null) {
+                list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false, it !in liveSet) }
+                continue
+            }
+            if (BrRoles.youOnDoor) continue
+            val looks = list.map { it to BrRoles.look(plan, number(it)) }
+            val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
+            // The next to kill: your first box still alive.
+            val next = mine.firstOrNull { it.first in liveSet }?.first
+            for ((b, order) in mine) out += Drawn(b, GREEN, "§a$order", b === next, b !in liveSet)
+            for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false, b !in liveSet)
+            for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false, b !in liveSet)
+        }
+        return out
+    }
+
+    /**
+     * The site's plan for a room: the one for the door the rush came in through and the number
+     * killing. None for a room the rush didn't come through; one it did but has no plan for says so
+     * once in chat, as its boxes all show.
+     */
+    private fun planOf(name: String?): BrRoles.Plan? {
+        name ?: return null
+        // A miniboss room (one mob, marked on the site): everyone kills its box, from any door.
+        if (BrRoles.isMini(name)) {
+            val all = boxes.filter { it.room == name }.map { number(it) }
+            return BrRoles.Plan(List(maxOf(1, BrRoles.count)) { all }, List(maxOf(1, BrRoles.count)) { emptyList() })
+        }
+        val door = entryOf(name) ?: return null
+        val room = placed(name) ?: return null
+        val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
+        val plan = BrRoles.planFor(name, rel.x to rel.z)
+        if (plan == null && debug && noPlanSaid.add("$name $door")) EngineerClient.msg("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
+        return plan
+    }
+
+    private fun tileRoom(t: Pair<Int, Int>): DungeonRoom? =
+        if (t.first !in 0..5 || t.second !in 0..5) null else DungeonScan.tiles[t.first + t.second * 6].room
+
+    /**
+     * The boxes as they are: their count, which ones, and their corners. A mob's box depends only on
+     * where it spawned and on these, so it's worked out again only when they change (each frame for
+     * every mob against every box took about 8% of the render thread in a dungeon).
+     */
+    private fun boxesSig(): Long {
+        var h = boxes.size.toLong()
+        for (b in boxes) h = h * 31 + System.identityHashCode(b) * 17L + b.c.contentHashCode()
+        return h
+    }
+
+    private fun cachedClaim(mob: Mob, sig: Long): Box? {
+        if (!mob.claimed || mob.claimSig != sig) { mob.claim = claimOf(mob); mob.claimSig = sig; mob.claimed = true }
+        return mob.claim
+    }
+
+    /**
+     * The box a mob belongs to: the one its body overlapped most where it was first seen, or, if it
+     * overlapped none, the nearest box in its room within [CLAIM_REACH] blocks. Otherwise, none.
+     */
+    private fun claimOf(mob: Mob): Box? {
+        var best: Box? = null
+        var most = 0.0
+        for (box in boxes) {
+            val o = overlap(mob.spawn, box.aabb())
+            if (o > most) { most = o; best = box }
+        }
+        if (best != null || mob.room == null) return best
+        return boxes.filter { it.room == mob.room && gap(mob.spawn, it.aabb()) <= CLAIM_REACH * CLAIM_REACH }
+            .minByOrNull { gap(mob.spawn, it.aabb()) }
+    }
+
+    /** How far apart two boxes are at their closest; 0 if they touch. */
+    private fun gap(a: AABB, b: AABB): Double {
+        val x = maxOf(0.0, maxOf(a.minX, b.minX) - minOf(a.maxX, b.maxX))
+        val y = maxOf(0.0, maxOf(a.minY, b.minY) - minOf(a.maxY, b.maxY))
+        val z = maxOf(0.0, maxOf(a.minZ, b.minZ) - minOf(a.maxZ, b.maxZ))
+        return x * x + y * y + z * z
+    }
+
+    private fun overlap(a: AABB, b: AABB): Double {
+        val x = minOf(a.maxX, b.maxX) - maxOf(a.minX, b.minX)
+        val y = minOf(a.maxY, b.maxY) - maxOf(a.minY, b.minY)
+        val z = minOf(a.maxZ, b.maxZ) - maxOf(a.minZ, b.minZ)
+        return if (x > 0 && y > 0 && z > 0) x * y * z else 0.0
+    }
+
+    /**
+     * What can sit under a starred tag: Odin's Highlight rule, except for Fels. A Fel is an
+     * enderman named "Dinnerbone" (drawn upside down) about 3 blocks under its tag, and until it
+     * wakes it is invisible but for its head — Odin skips invisible mobs, which would drop every
+     * dormant Fel, so an enderman counts whether it can be seen or not.
+     */
+    private fun isMob(e: Entity): Boolean = when (e) {
+        is ArmorStand -> false
+        is WitherBoss -> false
+        is EnderMan -> true
+        is Player -> e.uuid.version() == 2 && e != mc.player
+        else -> !e.isInvisible
+    }
+
+    // --- input, called from the mixins -----------------------------------------------------------
+
+    /** Drop: delete the box you are looking at, or place one. True means the drop must not happen. */
+    @JvmStatic
+    fun onDrop(): Boolean {
+        if (PosMsgEditor.onDrop()) return true
+        if (!editing()) return false
+        val player = mc.player ?: return false
+        target(1f)?.let { (box, _) ->
+            boxes -= box
+            save(box.room)
+            return true
+        }
+        val feet = BlockPos.containing(player.x, player.y, player.z)
+        val c = intArrayOf(feet.x, feet.y, feet.z, feet.x + 1, feet.y + 1, feet.z + 1)
+        if (boxes.any { it.c.contentEquals(c) }) return true
+        val box = Box(c, roomAt(player.x, player.z)?.name)
+        boxes += box
+        if (!save(box.room)) EngineerClient.msg("§eOdin has not worked out this room yet; the box saves once it has.")
+        return true
+    }
+
+    /** Left click: push the selected face out. True cancels the swing. */
+    @JvmStatic
+    fun onAttack(): Boolean = PosMsgEditor.onMove(+1) || move(+1)
+
+    /** Holding left click: swallowed while a face is selected, so the block behind is not mined. */
+    @JvmStatic
+    fun blocksContinueAttack(): Boolean = PosMsgEditor.blocksContinueAttack() || (editing() && target(1f) != null)
+
+    /** Right click: pull the selected face in, once per press. True cancels using the wand. */
+    @JvmStatic
+    fun onUse(): Boolean {
+        if (PosMsgEditor.onUse()) return true
+        if (!editing() || target(1f) == null) return false
+        if (!useHeld) { useHeld = true; move(-1) }
+        return true
+    }
+
+    /** Scroll: up pushes out, down pulls in. True keeps the hotbar from switching off the wand. */
+    @JvmStatic
+    fun onScroll(y: Double): Boolean = if (y == 0.0) false else PosMsgEditor.onMove(if (y > 0) +1 else -1) || move(if (y > 0) +1 else -1)
+
+    private fun move(by: Int): Boolean {
+        if (!editing()) return false
+        val (box, face) = target(1f) ?: return false
+        // Sneaking: the whole box moves up or down a block instead.
+        if (mc.player?.isShiftKeyDown == true) { box.c[1] += by; box.c[4] += by; save(box.room); return true }
+        if (BoxFaces.move(box.c, face, by)) save(box.room)
+        return true
+    }
+
+    private fun editing(): Boolean {
+        if (!enabled || !editMode || wand.isEmpty() || mc.screen != null) return false
+        return identity(mc.player?.mainHandItem ?: return false) == wand
+    }
+
+    // --- selection -------------------------------------------------------------------------------
+
+    /** The box under the crosshair, nearest first, and the face of it that is selected. */
+    private fun target(partial: Float): Pair<Box, Face>? {
+        val player = mc.player ?: return null
+        val e = player.getEyePosition(partial)
+        val v = player.getViewVector(partial)
+        val eye = doubleArrayOf(e.x, e.y, e.z)
+        val dir = doubleArrayOf(v.x, v.y, v.z)
+        // Standing in a box and looking up: its top, whatever the view passes through.
+        val feet = doubleArrayOf(player.x, player.y, player.z)
+        val pitch = player.getViewXRot(partial)
+        for (box in shown()) {
+            val min = doubleArrayOf(box.c[0].toDouble(), box.c[1].toDouble(), box.c[2].toDouble())
+            val max = doubleArrayOf(box.c[3].toDouble(), box.c[4].toDouble(), box.c[5].toDouble())
+            if (BoxFaces.editsTop(feet, pitch, min, max)) return box to Face.UP
+        }
+        var best: Pair<Box, Face>? = null
+        var bestT = REACH
+        for (box in shown()) {
+            val min = doubleArrayOf(box.c[0].toDouble(), box.c[1].toDouble(), box.c[2].toDouble())
+            val max = doubleArrayOf(box.c[3].toDouble(), box.c[4].toDouble(), box.c[5].toDouble())
+            val t = BoxFaces.distance(eye, dir, min, max) ?: continue
+            if (t > bestT) continue
+            val face = BoxFaces.select(eye, dir, min, max) ?: continue
+            best = box to face
+            bestT = t
+        }
+        return best
+    }
+
+    /** A thin slab lying on one face of a box, to show which face is selected. */
+    internal fun faceSlab(bb: AABB, face: Face): AABB {
+        val e = 0.02
+        return when (face) {
+            Face.EAST -> AABB(bb.maxX - e, bb.minY, bb.minZ, bb.maxX + e, bb.maxY, bb.maxZ)
+            Face.WEST -> AABB(bb.minX - e, bb.minY, bb.minZ, bb.minX + e, bb.maxY, bb.maxZ)
+            Face.SOUTH -> AABB(bb.minX, bb.minY, bb.maxZ - e, bb.maxX, bb.maxY, bb.maxZ + e)
+            Face.NORTH -> AABB(bb.minX, bb.minY, bb.minZ - e, bb.maxX, bb.maxY, bb.minZ + e)
+            Face.UP -> AABB(bb.minX, bb.maxY - e, bb.minZ, bb.maxX, bb.maxY + e, bb.maxZ)
+        }
+    }
+
+    // --- rooms and saving ------------------------------------------------------------------------
+
+    /** The map room a world position is in: tiles are 32 blocks apart, the first centred at -185. */
+    private fun roomAt(x: Double, z: Double): DungeonRoom? {
+        val tx = Math.floorDiv(Math.floor(x).toInt() + 200, 32)
+        val tz = Math.floorDiv(Math.floor(z).toInt() + 200, 32)
+        return if (tx !in 0..5 || tz !in 0..5) null else DungeonScan.tiles[tx + tz * 6].room
+    }
+
+    /**
+     * A room Odin has worked out well enough to turn room coordinates into world ones: rotation and
+     * clay block known, and every one of its tiles found. That last part matters — until the whole
+     * room is in, Odin reads a big room as a 1x1 and guesses its rotation from that. In the recorded
+     * runs Pipes, Pit, Waterfall, Hallway and Quartz Knight all read NORTH first and only turned WEST
+     * 10-180 ticks later, and boxes placed or saved by the first guess came out rotated.
+     */
+    private fun placed(name: String): DungeonRoom? = DungeonScan.rooms.firstOrNull { r ->
+        r.name == name && r.rotation != null && r.clayPos != null &&
+            r.tiles.size == (r.data?.shape?.tileAmount ?: r.tiles.size)
+    }
+
+    /** The rotation and clay block a room's boxes are placed by. */
+    private fun transform(room: DungeonRoom) = "${room.rotation}|${room.clayPos}"
+
+    /**
+     * Puts each saved room's boxes into the world once Odin has worked the room out, and puts them
+     * again if Odin later changes its mind about the room. Boxes placed before the room was worked
+     * out are kept where they are and saved now.
+     */
+    private fun loadRooms() {
+        val names = saved.keys + boxes.filter { !it.saved }.mapNotNull { it.room }
+        for (name in names.toSet()) {
+            val room = placed(name) ?: continue
+            val t = transform(room)
+            if (loadedRooms[name] == t) continue
+            boxes.removeAll { it.room == name && it.saved }
+            for (r in saved[name].orEmpty().sortedBy { it.getOrElse(6) { 0 } }) {
+                val a = room.getRealCoords(BlockPos(r[0], r[1], r[2]))
+                val b = room.getRealCoords(BlockPos(r[3], r[4], r[5]))
+                boxes += Box(intArrayOf(
+                    minOf(a.x, b.x), minOf(a.y, b.y), minOf(a.z, b.z),
+                    maxOf(a.x, b.x) + 1, maxOf(a.y, b.y) + 1, maxOf(a.z, b.z) + 1,
+                ), name).also { it.saved = true }
+            }
+            loadedRooms[name] = t
+            if (boxes.any { it.room == name && !it.saved }) save(name)
+        }
+    }
+
+    /** Saves a room's boxes as they are now. False if Odin has not worked the room out yet. */
+    private fun save(name: String?): Boolean {
+        if (name == null) return false
+        val room = placed(name) ?: return false
+        // Not yet put back by this room's current placement: [loadRooms] saves it once it has.
+        if (loadedRooms[name] != transform(room)) return false
+        val mine = boxes.filter { it.room == name }
+        val list = mine.mapIndexed { i, box ->
+            val a = room.getRelativeCoords(BlockPos(box.c[0], box.c[1], box.c[2]))
+            val b = room.getRelativeCoords(BlockPos(box.c[3] - 1, box.c[4] - 1, box.c[5] - 1))
+            intArrayOf(a.x, a.y, a.z, b.x, b.y, b.z, i + 1)
+        }
+        mine.forEach { it.saved = true }
+        if (list.isEmpty()) saved.remove(name) else saved[name] = list.toMutableList()
+        write()
+        return true
+    }
+
+    private val file get() = File(mc.gameDirectory, "config/engineerclient/brwaypoints2.json")
+    private val gson = GsonBuilder().setPrettyPrinting().create()
+
+    /**
+     * A box's number: its place among its room's boxes, in the order they were made — 1, 2, 3...
+     * in every room, with no gaps (deleting one moves the ones after it down).
+     */
+    private fun number(box: Box) = boxes.filter { it.room == box.room }.indexOf(box) + 1
+
+    /** The saved boxes: per room, each as x1 y1 z1 x2 y2 z2 and its number (its place in the room). */
+    private fun read(): MutableMap<String, MutableList<IntArray>> = runCatching {
+        val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
+        gson.fromJson<MutableMap<String, MutableList<IntArray>>>(file.readText(), type)
+    }.getOrNull() ?: mutableMapOf()
+
+    private fun write() {
+        runCatching {
+            file.parentFile.mkdirs()
+            file.writeText(gson.toJson(saved))
+        }.onFailure { EngineerClient.msg("§cCould not save BR Roles boxes: ${it.message}") }
+        push()
+    }
+
+    // --- the site's copy (undonecoffee.com/brroles) -----------------------------------------------
+
+    /** The site's copy this file last matched: its updatedAt, from a pull or a push. */
+    private var siteVersion = 0L
+
+    private fun push() {
+        val json = gson.toJson(mapOf("rooms" to saved))
+        BoxSync.push(json) { at -> mc.execute { siteVersion = maxOf(siteVersion, at) } }
+    }
+
+    /**
+     * Takes the site's copy if it is newer than this file, or sends this file if the site's is
+     * older (or empty). Boxes edited on the site show up here from the next world load.
+     */
+    private fun pull() = BoxSync.pull { body -> mc.execute { adopt(body) } }
+
+    private fun adopt(body: String) {
+        val site = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
+        val at = site["updatedAt"]?.asLong ?: 0L
+        if (at != 0L && at <= siteVersion) return
+        saved.size // the file is read before it is compared
+        if (at == 0L || (file.exists() && file.lastModified() > at)) { if (saved.isNotEmpty()) push(); return }
+        val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
+        val rooms = runCatching { gson.fromJson<MutableMap<String, MutableList<IntArray>>>(site["rooms"], type) }.getOrNull() ?: return
+        siteVersion = at
+        saved.clear(); saved.putAll(rooms)
+        runCatching { file.parentFile.mkdirs(); file.writeText(gson.toJson(saved)); file.setLastModified(at) }
+        // Put the boxes back from the new copy; ones placed here and not saved yet stay.
+        boxes.removeAll { it.saved }
+        loadedRooms.clear()
+    }
+
+    /**
+     * What makes an item this item: a Skyblock item's own uuid when it has one (that exact item),
+     * else its Skyblock id, else the vanilla item and its name.
+     */
+    /** Whether the wand is in hand, for [PosMsgEditor], which shares it. */
+    internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand
+
+    private fun identity(stack: ItemStack): String = when {
+        stack.isEmpty -> ""
+        stack.itemUUID.isNotEmpty() -> "uuid:" + stack.itemUUID
+        stack.itemId.isNotEmpty() -> "id:" + stack.itemId
+        else -> "item:" + BuiltInRegistries.ITEM.getKey(stack.item) + "|" + stack.hoverName.string
+    }
+}

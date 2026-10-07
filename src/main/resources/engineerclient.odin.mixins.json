@@ -1,0 +1,22 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.engineerclient.mixin.odin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "HudElementMixin",
+    "InvincibilityHudMixin",
+    "InvincibilityPhoenixMixin",
+    "LeapMenuRenderMixin",
+    "PersonalBestSimMixin",
+    "BlockUpdateServerThreadMixin",
+    "SimonSaysBlocksMixin",
+    "SimonSaysTicksMixin",
+    "ArrowsDeviceAimMixin",
+    "NumbersPreviewMixin",
+    "PanelOrderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

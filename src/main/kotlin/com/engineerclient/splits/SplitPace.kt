@@ -1,0 +1,129 @@
+package com.engineerclient.splits
+
+/**
+ * Pace and lag for the splits HUD and the scorecard (F7).
+ *
+ * Pace is the run's projected finish against the dark green times ([SubSplitGrades]' fastest
+ * band): time already proven, plus dark green for everything still to come. Proven is every
+ * finished split and sub split as it was, and for the one running, how far past its dark green
+ * time it already is. So pace starts at a dark green run and only ever moves later, by exactly the
+ * time lost so far. It is kept on both clocks: real time, and the server's ticks.
+ *
+ * Lag is the time the server lost against 20 ticks a second on the splits timed in ticks (all but
+ * the blood rush and the terminals): their real time minus their ticks x 50 ms.
+ *
+ * Nothing here touches Minecraft, so it tests headlessly.
+ */
+object SplitPace {
+
+    /** A time on both clocks. */
+    data class Clocks(val ms: Long, val ticks: Long) {
+        operator fun plus(o: Clocks) = Clocks(ms + o.ms, ticks + o.ticks)
+    }
+
+    /** The run's splits in order (SplitTracker's labels). */
+    val ORDER = listOf(
+        SplitTracker.OPEN, SplitTracker.BLOOD, SplitTracker.PORTAL, SplitTracker.MAXOR, SplitTracker.STORM,
+        SplitTracker.TERMS, SplitTracker.GOLDOR, SplitTracker.NECRON,
+    )
+
+    /** Splits timed in real time: lag is not counted on them. */
+    private val REAL_SPLITS = setOf(SplitTracker.OPEN, SplitTracker.TERMS)
+
+    /**
+     * Dark green per split. The six boss splits are their band's dark green limit; the blood rush
+     * and the portal have no bands and use the recorded runs' fastest 5% (10.15 s of 78 runs, 76
+     * ticks of 74, F7 since Hypixel's boss update of 5 Oct 2026). There is no end animation since
+     * the update: Necron runs to EXTRA STATS.
+     */
+    private val SPLIT_REFS: Map<String, Clocks> = mapOf(
+        SplitTracker.OPEN to real(10_150),
+        SplitTracker.BLOOD to ticks(936),
+        SplitTracker.PORTAL to ticks(76),
+        SplitTracker.MAXOR to ticks(265),
+        SplitTracker.STORM to ticks(822),
+        SplitTracker.TERMS to real(28_000),
+        SplitTracker.GOLDOR to ticks(105),
+        SplitTracker.NECRON to ticks(425),
+    )
+
+    /**
+     * Dark green per sub split, as a length (SubSplitTracker's ids). The band's dark green limit,
+     * except where a band is not a length: Maxor's Lure (graded on the tick of his first hit, 128,
+     * after Crystals' 110) and Necron's lock (ARGH! on time, 270 into his fight, after the intro's
+     * 82 and the trip's 12). Fillers are their fixed length (since Hypixel's boss update of 5 Oct
+     * 2026: SubSplitGrades).
+     */
+    private val SUB_REFS: Map<String, Clocks> = mapOf(
+        "watcher.dialogue" to ticks(255), "watcher.wait" to ticks(63), "watcher.camp" to ticks(520), "watcher.clear" to ticks(2),
+        "maxor.crystals" to ticks(110), "maxor.lure" to ticks(18), "maxor.cooldown" to ticks(85), "maxor.kill" to ticks(1),
+        "maxor.animation" to ticks(62),
+        "storm.opening" to ticks(647), "storm.crush1" to ticks(13), "storm.pin" to ticks(1), "storm.flight" to ticks(86),
+        "storm.crush2" to ticks(20), "storm.kill" to ticks(2), "storm.animation" to ticks(62),
+        "terms.s1" to real(8_700), "terms.s2" to real(7_700), "terms.s3" to real(7_800), "terms.s4" to real(5_000),
+        "goldor.leaps" to ticks(9), "goldor.kill" to ticks(85),
+        "necron.intro" to ticks(82), "necron.trip1" to ticks(12), "necron.lock1" to ticks(176), "necron.kill" to ticks(155),
+    )
+
+    /** A split's dark green (what Pace counts it as before it runs), or a sub split's. */
+    fun ref(label: String): Clocks? = SPLIT_REFS[label]
+    fun subRef(id: String): Clocks? = SUB_REFS[id]
+
+    private fun ticks(t: Long) = Clocks(t * 50, t)
+    private fun real(ms: Long) = Clocks(ms, ms / 50)
+
+    /** A sub split as the tracker has it: its id, and its times. */
+    data class Sub(val id: String, val split: Split)
+
+    /**
+     * The projected finish. [splits] are the run's splits so far (SplitTracker's), [subs] a split's
+     * sub splits so far.
+     */
+    fun pace(splits: List<Split>, subs: (String) -> List<Sub>, now: Stamp): Clocks {
+        var total = Clocks(0, 0)
+        for (label in ORDER) {
+            val ref = SPLIT_REFS[label] ?: continue
+            val split = splits.firstOrNull { it.label == label }
+            total += when {
+                split == null -> ref
+                split.stop != null -> length(split, now)
+                else -> running(split, ref, subs(label), now)
+            }
+        }
+        return total
+    }
+
+    /**
+     * The running split: its dark green, moved by what its sub splits have proven against theirs -
+     * a finished one by however much faster or slower it was, the running one once it is past its
+     * dark green. (The sub splits' dark greens don't add up to the split's exactly, so it is their
+     * differences that count, not their sum.) Never less than the split's time so far.
+     */
+    private fun running(split: Split, ref: Clocks, subs: List<Sub>, now: Stamp): Clocks {
+        var est = ref
+        for (s in subs) {
+            val subRef = SUB_REFS[s.id] ?: continue
+            val len = length(s.split, now)
+            val diff = Clocks(len.ms - subRef.ms, len.ticks - subRef.ticks)
+            est += if (s.split.stop != null) diff else Clocks(maxOf(diff.ms, 0), maxOf(diff.ticks, 0))
+        }
+        return atLeast(est, length(split, now))
+    }
+
+    /** Lag: real time minus ticks x 50 ms over the tick-timed splits so far (never below 0). */
+    fun lag(splits: List<Split>, now: Stamp): Long =
+        splits.filter { it.label !in REAL_SPLITS }.sumOf { length(it, now).let { c -> c.ms - c.ticks * 50 } }.coerceAtLeast(0)
+
+    private fun length(s: Split, now: Stamp): Clocks {
+        val stop = s.stop ?: now
+        return Clocks(stop.realMs - s.start.realMs, (stop.tick - s.start.tick).toLong())
+    }
+
+    private fun atLeast(a: Clocks, b: Clocks) = Clocks(maxOf(a.ms, b.ms), maxOf(a.ticks, b.ticks))
+
+    /** m:ss, the way pace is shown. */
+    fun mss(ms: Long): String {
+        val s = ms.coerceAtLeast(0) / 1000
+        return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    }
+}
