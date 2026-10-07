@@ -3,14 +3,16 @@ package com.engineerclient.splits
 /**
  * Pace and lag for the splits HUD and the scorecard (F7).
  *
- * Pace is the run's projected finish against the dark green times ([SubSplitGrades]' fastest
- * band): time already proven, plus dark green for everything still to come. Proven is every
- * finished split and sub split as it was, and for the one running, how far past its dark green
- * time it already is. So pace starts at a dark green run and only ever moves later, by exactly the
- * time lost so far. It is kept on both clocks: real time, and the server's ticks.
+ * Pace is the run's projected finish against a target per split: your Pace target box, else your PB
+ * for it (OdinSplitsLook.paceTarget), else its dark green time ([SubSplitGrades]' fastest band).
+ * Time already proven, plus the target for everything still to come. Proven is every finished
+ * split as it was; the one running is its target, moved by what its finished sub splits gained or
+ * lost against their share of that target, and by the running sub split once it is past its share.
+ * So at load-in Pace is your PBs added up, and from there it moves by exactly the time gained or
+ * lost. It is kept on both clocks: real time, and the server's ticks.
  *
  * Lag is the time the server lost against 20 ticks a second on the splits timed in ticks (all but
- * the blood rush and the terminals): their real time minus their ticks x 50 ms.
+ * the terminals): their real time minus their ticks x 50 ms.
  *
  * Nothing here touches Minecraft, so it tests headlessly.
  */
@@ -28,16 +30,32 @@ object SplitPace {
     )
 
     /** Splits timed in real time: lag is not counted on them. */
-    private val REAL_SPLITS = setOf(SplitTracker.OPEN, SplitTracker.TERMS)
+    private val REAL_SPLITS = setOf(SplitTracker.TERMS)
+
+    /** Each split's id in SubSplitGrades (its bands, and the best kept for it). */
+    val SPLIT_IDS = mapOf(
+        SplitTracker.OPEN to "split.open", SplitTracker.BLOOD to "split.blood", SplitTracker.PORTAL to "split.portal",
+        SplitTracker.MAXOR to "split.maxor", SplitTracker.STORM to "split.storm", SplitTracker.TERMS to "split.terms",
+        SplitTracker.GOLDOR to "split.goldor", SplitTracker.NECRON to "split.necron",
+    )
+
+    /** Which sub splits (SubSplitTracker's ids, by prefix) make up each split. */
+    private val SUB_PREFIX = mapOf(
+        SplitTracker.BLOOD to "watcher.", SplitTracker.MAXOR to "maxor.", SplitTracker.STORM to "storm.",
+        SplitTracker.TERMS to "terms.", SplitTracker.GOLDOR to "goldor.", SplitTracker.NECRON to "necron.",
+    )
+
+    /** Sub splits of a fixed length (fillers): their share of a split is always their own length. */
+    private val FIXED_SUBS = setOf("maxor.animation", "storm.opening", "storm.animation", "necron.intro", "necron.lock1")
 
     /**
-     * Dark green per split. The six boss splits are their band's dark green limit; the blood rush
-     * and the portal have no bands and use the recorded runs' fastest 5% (10.15 s of 78 runs, 76
-     * ticks of 74, F7 since Hypixel's boss update of 5 Oct 2026). There is no end animation since
-     * the update: Necron runs to EXTRA STATS.
+     * Dark green per split: what Pace counts a split as with no target and no PB. Each split with
+     * bands is its band's dark green limit; the portal has none and uses the recorded runs' fastest
+     * 5% (76 ticks of 74, F7 since Hypixel's boss update of 5 Oct 2026). There is no end animation
+     * since the update: Necron runs to EXTRA STATS.
      */
     private val SPLIT_REFS: Map<String, Clocks> = mapOf(
-        SplitTracker.OPEN to real(10_150),
+        SplitTracker.OPEN to ticks(160),
         SplitTracker.BLOOD to ticks(936),
         SplitTracker.PORTAL to ticks(76),
         SplitTracker.MAXOR to ticks(265),
@@ -72,39 +90,54 @@ object SplitPace {
     private fun ticks(t: Long) = Clocks(t * 50, t)
     private fun real(ms: Long) = Clocks(ms, ms / 50)
 
+    /** A best or band value of [id] (ticks, or ms on a real-time one) on both clocks. */
+    fun clocks(id: String, value: Long): Clocks =
+        if (SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL) real(value) else ticks(value)
+
     /** A sub split as the tracker has it: its id, and its times. */
     data class Sub(val id: String, val split: Split)
 
     /**
      * The projected finish. [splits] are the run's splits so far (SplitTracker's), [subs] a split's
-     * sub splits so far.
+     * sub splits so far, [target] a split's target (your box or PB), null for its dark green.
      */
-    fun pace(splits: List<Split>, subs: (String) -> List<Sub>, now: Stamp): Clocks {
+    fun pace(splits: List<Split>, subs: (String) -> List<Sub>, now: Stamp, target: (String) -> Clocks? = { null }): Clocks {
         var total = Clocks(0, 0)
         for (label in ORDER) {
-            val ref = SPLIT_REFS[label] ?: continue
+            val ref = target(label) ?: SPLIT_REFS[label] ?: continue
             val split = splits.firstOrNull { it.label == label }
             total += when {
                 split == null -> ref
                 split.stop != null -> length(split, now)
-                else -> running(split, ref, subs(label), now)
+                else -> running(label, split, ref, subs(label), now)
             }
         }
         return total
     }
 
     /**
-     * The running split: its dark green, moved by what its sub splits have proven against theirs -
-     * a finished one by however much faster or slower it was, the running one once it is past its
-     * dark green. (The sub splits' dark greens don't add up to the split's exactly, so it is their
-     * differences that count, not their sum.) Never less than the split's time so far.
+     * The running split: its target, moved by what its sub splits have proven against their share
+     * of it - a finished one by however much faster or slower it was, the running one once it is
+     * past its share. Never less than the split's time so far.
+     *
+     * A sub split's share: a filler's is its own fixed length; the rest of the target is shared out
+     * among the others in proportion to their dark greens. With the dark green as the target that is
+     * the dark greens themselves; with a slower PB each share is that much longer, so a run on your
+     * PB's pace holds Pace still instead of losing time on every step.
      */
-    private fun running(split: Split, ref: Clocks, subs: List<Sub>, now: Stamp): Clocks {
+    private fun running(label: String, split: Split, ref: Clocks, subs: List<Sub>, now: Stamp): Clocks {
+        val prefix = SUB_PREFIX[label] ?: return atLeast(ref, length(split, now))
+        val all = SUB_REFS.filterKeys { it.startsWith(prefix) }
+        val fixed = all.filterKeys { it in FIXED_SUBS }.values.fold(Clocks(0, 0), Clocks::plus)
+        val varying = all.filterKeys { it !in FIXED_SUBS }.values.fold(Clocks(0, 0), Clocks::plus)
+        val kMs = if (varying.ms > 0) (ref.ms - fixed.ms).coerceAtLeast(0).toDouble() / varying.ms else 1.0
+        val kTicks = if (varying.ticks > 0) (ref.ticks - fixed.ticks).coerceAtLeast(0).toDouble() / varying.ticks else 1.0
         var est = ref
         for (s in subs) {
             val subRef = SUB_REFS[s.id] ?: continue
+            val share = if (s.id in FIXED_SUBS) subRef else Clocks(Math.round(subRef.ms * kMs), Math.round(subRef.ticks * kTicks))
             val len = length(s.split, now)
-            val diff = Clocks(len.ms - subRef.ms, len.ticks - subRef.ticks)
+            val diff = Clocks(len.ms - share.ms, len.ticks - share.ticks)
             est += if (s.split.stop != null) diff else Clocks(maxOf(diff.ms, 0), maxOf(diff.ticks, 0))
         }
         return atLeast(est, length(split, now))

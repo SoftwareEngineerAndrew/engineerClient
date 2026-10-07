@@ -92,7 +92,7 @@ object DungeonSplits : Module(
         ))
         val now = now()
         val rows = card.rows(tracker.splits(), now, blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)) { scorecardCells(it, now) }
-        // Pace against the dark green times (F7), real time first; and the time lost to lag.
+        // Pace against your targets (F7: your PBs, else the dark green times), real time first; and the time lost to lag.
         val extra = if (rows.isEmpty()) emptyList() else listOfNotNull(
             pace(now)?.let { "§3Pace " + SplitPace.mss(it.ms) + " §8(" + SplitPace.mss(it.ticks * 50) + ")" },
             "§8Lag §7" + SplitFormat.seconds(SplitPace.lag(tracker.splits(), now)),
@@ -168,6 +168,7 @@ object DungeonSplits : Module(
 
     /** Forgets the run (world load, or a P3 Sim restart). */
     private fun resetRun() {
+        bestsChecked.clear(); realRun = true
         tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); necronCue.reset(); pinnedStorm = null
         goldorAt = null; goldorMoved = false; necronAt = null; necronId = null; goldorBar = null
         portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
@@ -183,6 +184,7 @@ object DungeonSplits : Module(
      */
     fun simStart(label: String, termsDone: Int = 0) {
         resetRun()
+        realRun = false
         val before = { l: String ->
             val ms = SimOdinSplits.odinName(l)?.let { SimOdinSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
             SplitTracker.Clock(ms, (ms / 50).toInt())
@@ -285,6 +287,7 @@ object DungeonSplits : Module(
         on<TickEvent.End> {
             EngineerClient.safely("sim odin splits") { SimOdinSplits.tick() }
             if (!DungeonUtils.inDungeons) return@on
+            EngineerClient.safely("split bests") { recordSplitBests() }
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers, "start") { at, a, b -> blood.onDoorStart(at, a, b) }
             if (cleared.size >= DoorBlocks.DOOR_BLOCKS) door(cleared, "down") { at, a, b -> blood.onDoorDown(at, a, b) }
             barriers.clear(); cleared.clear()
@@ -770,10 +773,10 @@ object DungeonSplits : Module(
             val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
             // A step ended by a moment further on (the ones between unseen) is not a real time.
             val finished = st.stop != null && !end.contains("never seen")
-            if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (bests[id] ?: Long.MAX_VALUE)) {
+            if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) {
                 bests[id] = value; newBest = true
             }
-            val grade = SubSplitGrades.colour(id, value, finished, bests[id], floor == "F7", st.label.take(2).replace('&', '§'))
+            val grade = SubSplitGrades.colour(id, value, finished, validBest(id, bests[id]), floor == "F7", st.label.take(2).replace('&', '§'))
             Row(st.label, st.start, ms, ticks, note = "ended by $end", grade = grade, real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL)
         }
         if (newBest) saveBests(floor, bests)
@@ -793,7 +796,7 @@ object DungeonSplits : Module(
         val ticks = (stop.tick - split.start.tick).toLong()
         val value = SubSplitGrades.value(id, ms, ticks)
         val real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL
-        val total = SubSplitGrades.colour(id, value, split.stop != null, bests(floor)[id], floor == "F7", split.label.take(2).replace('&', '§')) +
+        val total = SubSplitGrades.colour(id, value, split.stop != null, validBest(id, bests(floor)[id]), floor == "F7", split.label.take(2).replace('&', '§')) +
             SplitFormat.seconds(if (real) ms else ticks * 50).removeSuffix("s")
         return listOf(total) + gradedSteps(split.label, split, now).map {
             it.grade + SplitFormat.seconds(if (it.real) it.ms else it.ticks * 50).removeSuffix("s")
@@ -817,28 +820,59 @@ object DungeonSplits : Module(
     }
 
     /**
-     * The run's pace against the dark green times ([SplitPace]), on F7 once the run has started;
-     * null otherwise (no dark green times off F7).
+     * The run's pace ([SplitPace]) against your Pace targets - each split's box, else your PB, else
+     * its dark green - on F7 once the run has started; null otherwise (no dark green times off F7).
      */
     fun pace(now: Stamp = now()): SplitPace.Clocks? {
         if (DungeonUtils.floor?.name != "F7") return null
         val splits = tracker.splits()
         if (splits.isEmpty()) return null
-        return SplitPace.pace(splits, { label -> subs.forSplit(label).zip(subs.idsForSplit(label)) { s, id -> SplitPace.Sub(id, s) } }, now)
+        return SplitPace.pace(splits, { label -> subs.forSplit(label).zip(subs.idsForSplit(label)) { s, id -> SplitPace.Sub(id, s) } }, now,
+            { label -> OdinSplitsLook.paceTarget(label, false) })
+    }
+
+    /** Splits whose best this run has already been looked at. */
+    private val bestsChecked = HashSet<String>()
+
+    /** False for a P3 Sim run: the phases before its start are your targets, not times. */
+    private var realRun = true
+
+    /**
+     * Each split as it ends, as a best for its floor (F7, M7) when it is one - every split, the
+     * portal too, whatever the splits HUD shows: Pace's targets are these. Only a split that ran
+     * from its own line to the next split's (none missed in between) is a time.
+     */
+    private fun recordSplitBests() {
+        val floor = DungeonUtils.floor?.name?.takeIf { it == "F7" || it == "M7" } ?: return
+        if (!realRun) return
+        val splits = tracker.splits()
+        splits.forEachIndexed { i, split ->
+            val stop = split.stop ?: return@forEachIndexed
+            if (!bestsChecked.add(split.label)) return@forEachIndexed
+            val order = SplitPace.ORDER.indexOf(split.label)
+            val next = splits.getOrNull(i + 1)
+            val whole = if (next != null) SplitPace.ORDER.indexOf(next.label) == order + 1 else order == SplitPace.ORDER.lastIndex
+            val id = SplitPace.SPLIT_IDS[split.label] ?: return@forEachIndexed
+            if (!whole) return@forEachIndexed
+            recordBest(floor, id, SubSplitGrades.value(id, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()), true)
+        }
     }
 
     /** Time lost to lag so far on the tick-timed splits, or null before the run starts. */
     fun lag(now: Stamp = now()): Long? = tracker.splits().takeIf { it.isNotEmpty() }?.let { SplitPace.lag(it, now) }
 
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
-    fun bestOf(floor: String, id: String): Long? = bests(floor)[id]
+    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id])
 
     /** Records a finished [value] of [id] as the best on [floor] when it is one. */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
         if (!finished || !SubSplitGrades.canBeBest(id, value)) return
         val bests = bests(floor)
-        if (value < (bests[id] ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
+        if (value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
     }
+
+    /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
+    private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
 
     private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
         when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })

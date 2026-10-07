@@ -61,14 +61,14 @@ object OdinSplitsLook {
         .withDependency { engineer && pace.value }
 
     private fun boxes(floor: String, master: Boolean, index: Int) = EngineerLook.targetLabels(master).map { name ->
-        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your Odin PB for it (0 without one).", placeholder = "")
+        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your PB for it, shown grayed in the box (on F7 without a PB, its dark green time).", placeholder = "")
             .withDependency { engineer && pace.value && paceFloor.value.ordinal == index }
     }
 
     private val f7 = boxes("F7", false, 0)
     private val m7 = boxes("M7", true, 1)
 
-    private val fillFromPbs = ActionSetting("Fill From PBs", desc = "Fills the targets shown (F7 or M7) from Odin's personal best for each split. Each is that split's best ever, so together they add up to faster than any run you have done.") {
+    private val fillFromPbs = ActionSetting("Fill From PBs", desc = "Fills the targets shown (F7 or M7) with your PB for each split, fixed from now on (blank boxes follow your PBs as they improve). Each is that split's best ever, so together they add up to faster than any run you have done.") {
         fillFromPbs()
     }.withDependency { engineer && pace.value }
 
@@ -125,12 +125,11 @@ object OdinSplitsLook {
 
     private fun fillFromPbs() {
         val master = paceFloor.value == PaceFloor.M7
-        val pbs = Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal]
         val boxes = if (master) m7 else f7
         var filled = 0
-        PB_NAMES.forEachIndexed { i, n ->
-            val pb = pbs.get(n) ?: return@forEachIndexed
-            boxes.getOrNull(i)?.value = EngineerLook.formatSeconds(pb.toDouble())
+        boxes.forEachIndexed { i, box ->
+            val pb = pb(i, master) ?: return@forEachIndexed
+            box.value = EngineerLook.formatSeconds(pb.ms / 1000.0)
             filled++
         }
         ModuleManager.saveConfigurations()
@@ -186,9 +185,59 @@ object OdinSplitsLook {
      */
     private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? {
         if (place != EngineerLook.Place.FLOOR7) return null
-        val pbs = Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal]
-        return (if (master) m7 else f7).mapIndexed { i, box ->
-            EngineerLook.parseSeconds(box.value) ?: PB_NAMES.getOrNull(i)?.let { pbs.get(it)?.toDouble() }
+        return (if (master) m7 else f7).indices.map { i ->
+            (target(i, master) ?: darkGreen(i, master))?.let { it.ms / 1000.0 }
+        }
+    }
+
+    /**
+     * Split [i]'s Pace target ([EngineerLook.targetLabels] order) on F7 or M7: its box, else your PB
+     * for it, else null.
+     */
+    private fun target(i: Int, master: Boolean): SplitPace.Clocks? {
+        (if (master) m7 else f7).getOrNull(i)?.let { box -> EngineerLook.parseSeconds(box.value)?.let { return secs(it) } }
+        return pb(i, master)
+    }
+
+    /** [label]'s (SplitTracker's) Pace target for SplitPace: its box, else your PB, else null (its dark green). */
+    fun paceTarget(label: String, master: Boolean): SplitPace.Clocks? =
+        SplitPace.ORDER.indexOf(label).takeIf { it >= 0 }?.let { target(it, master) }
+
+    /**
+     * Your PB for split [i]: the faster of the best kept by Sub Splits (timed by its own tracker,
+     * on the split's own clock) and Odin's PB, each only if it is a real time - not under the
+     * split's floor. Odin's F7 PBs can't be taken as they are: its F7 Necron split never ends since
+     * the boss update (it waits for M7's Wither King), and old configs carry a 0.01 s Portal.
+     */
+    private fun pb(i: Int, master: Boolean): SplitPace.Clocks? {
+        val floor = if (master) "M7" else "F7"
+        val id = SplitPace.ORDER.getOrNull(i)?.let { SplitPace.SPLIT_IDS[it] }
+        val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.takeIf { SubSplitGrades.canBeBest(sid, it) }?.let { SplitPace.clocks(sid, it) } }
+        val odin = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
+            ?.let { secs(it.toDouble()) }
+            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks)) else c.ms >= 1000 }
+        return listOfNotNull(ours, odin).minByOrNull { it.ms }
+    }
+
+    /** F7's dark green for split [i] (SplitPace), what Pace counts it as with no box and no PB; none on M7. */
+    private fun darkGreen(i: Int, master: Boolean): SplitPace.Clocks? =
+        if (master) null else SplitPace.ORDER.getOrNull(i)?.let { SplitPace.ref(it) }
+
+    private fun secs(s: Double) = SplitPace.Clocks(Math.round(s * 1000), Math.round(s * 20))
+
+    private val placeholderField = runCatching { StringSetting::class.java.getDeclaredField("placeholder").apply { isAccessible = true } }.getOrNull()
+
+    /**
+     * Grays each blank target box's stand-in into it: your PB, or (F7 without one) the dark green
+     * time. Run as Odin's menu opens (ClickGuiSizeMixin), so it is current whenever the boxes show.
+     */
+    @JvmStatic
+    fun refreshPlaceholders() {
+        val field = placeholderField ?: return
+        for ((master, boxes) in listOf(false to f7, true to m7)) boxes.forEachIndexed { i, box ->
+            val text = pb(i, master)?.let { "PB " + EngineerLook.formatSeconds(it.ms / 1000.0) }
+                ?: darkGreen(i, master)?.let { EngineerLook.formatSeconds(it.ms / 1000.0) + " (no PB)" } ?: ""
+            runCatching { field.set(box, text) }
         }
     }
 

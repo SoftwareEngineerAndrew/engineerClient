@@ -185,8 +185,15 @@ object SubSplitGrades {
         return COLOURS[if (i < 0) COLOURS.lastIndex else i]
     }
 
+    /**
+     * Splits with no bands whose best is still kept, for Pace (your PB as its target): their floor,
+     * in ticks. The portal: anything under 2 s is a missed line, not a time.
+     */
+    private val UNGRADED_BESTS = mapOf("split.portal" to 40L)
+
     /** Whether a finished [value] can stand as a best: banded (not filler) and not under the floor. */
     fun canBeBest(id: String, value: Long): Boolean {
+        UNGRADED_BESTS[id]?.let { return value >= it }
         val b = BANDS[id] ?: return false
         return b.limits != null && value >= b.floor
     }

@@ -77,8 +77,9 @@ object EngineerLook {
      * target is passed), and one not reached yet counts its target - or nothing, blank or without
      * targets, so there Pace is the time so far. On both clocks, the same way.
      *
-     * As in Odin's own look, a split that hasn't started (time 0) only shows with Show 0 splits,
-     * and before the run starts that is all there is to show - Pace then is the targets' total.
+     * As in Odin's own look, a split that hasn't started (time 0) only shows with Show 0 splits.
+     * Before the run starts Pace is the targets' total: where there are targets (floor 7) it shows
+     * from the moment you load in, so the HUD opens on your PBs added up.
      */
     fun lines(rows: List<Row>, opts: Options, place: Place, master: Boolean, targets: List<Double?>?,
               /** A split's time colour (Odin's name, ms, ticks, over), or null for its label's colour. */
@@ -95,7 +96,8 @@ object EngineerLook {
         val started = current >= 0 || rows.any { it.ms > 0 }
         // Only once lag has cost something that shows (0.01 s), coloured by how much: gray, yellow, red.
         if (opts.showLag && lagMs != null && lagMs >= 10 && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null)
-        if (opts.showPace && (started || opts.show0)) {
+        // Pace from load-in where there are targets (your PBs added up), else once the run starts.
+        if (opts.showPace && (started || opts.show0 || targets != null)) {
             var ms = 0L; var ticks = 0L
             segments.forEachIndexed { i, s ->
                 val target = targetFor(s.name, targets)
