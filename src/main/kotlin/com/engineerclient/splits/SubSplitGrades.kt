@@ -35,6 +35,9 @@ object SubSplitGrades {
      */
     @JvmStatic var byTime: () -> Boolean = { true }
 
+    /** Show PB (OdinSplitsLook): off, a best is not picked out in gold, just graded like any other time. */
+    @JvmStatic var showBest: () -> Boolean = { false }
+
     val COLOURS = listOf("§2", "§a", "§e", "§c", "§4", "§0")
     const val BEST = "§6"
     const val FILLER = "§7"
@@ -179,7 +182,7 @@ object SubSplitGrades {
         val b = BANDS[id] ?: return fallback
         b.lateAfter?.let { return if (finished && value > it) COLOURS[4] else FILLER }
         val limits = b.limits ?: return FILLER
-        if (finished && best != null && value <= best && value >= b.floor) return BEST
+        if (showBest() && finished && best != null && value <= best && value >= b.floor) return BEST
         if (!banded) return fallback
         val i = limits.indexOfFirst { value <= it }
         return COLOURS[if (i < 0) COLOURS.lastIndex else i]

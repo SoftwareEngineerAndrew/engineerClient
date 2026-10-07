@@ -44,7 +44,11 @@ object OdinSplitsLook {
     val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS
 
     private val colourByTime = BooleanSetting("Color Based Off Time", true,
-        desc = "Floor 7 split times coloured by how fast they were (dark green to black, gold for your best), here and in Sub Splits and the scorecard. Off: each time in its split's own colour, as before. Added by engineerClient.")
+        desc = "Floor 7 split times coloured by how fast they were (dark green to black), here and in Sub Splits and the scorecard. Off: each time in its split's own colour, as before. Added by engineerClient.")
+
+    private val showPb = BooleanSetting("Show PB", false,
+        desc = "Times that tie or beat your best for that split in gold. Off: they get their colour from the time like any other. Added by engineerClient.")
+        .withDependency { colourByTime.value }
 
     private val showLag = BooleanSetting("Show Lag", true, desc = "Engineer Splits: the Lag line on top, the time lost to lag so far this run (floor 7).")
         .withDependency { engineer }
@@ -82,13 +86,15 @@ object OdinSplitsLook {
      */
     fun install() {
         SubSplitGrades.byTime = { colourByTime.value }
-        for (s in listOf(look, colourByTime, showLag, showPace, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        SubSplitGrades.showBest = { showPb.value }
+        for (s in listOf(look, colourByTime, showPb, showLag, showPace, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
         val all = LinkedHashMap(Splits.settings)
         val last = all.remove(CURRENT_SPLIT_HUD)
         Splits.settings.clear()
         all.remove(look.name)?.let { Splits.settings[look.name] = it }
         all.remove(colourByTime.name)?.let { Splits.settings[colourByTime.name] = it }
+        all.remove(showPb.name)?.let { Splits.settings[showPb.name] = it }
         Splits.settings.putAll(all)
         last?.let { Splits.settings[CURRENT_SPLIT_HUD] = it }
         ModuleManager.loadConfigurations()
