@@ -197,7 +197,9 @@ object TermInfo : Module(
             if (overlay) return@onReceive
             val msg = content.string.replace(CONTROL_CODES, "")
             when {
-                msg == GOLDOR_START -> start()
+                // A lever can be flicked the tick before Goldor speaks: its message has started
+                // terminals already, and starting again here would lose it.
+                msg == GOLDOR_START -> if (active == -1) start()
                 msg == CORE_OPEN -> active = -1
                 else -> {
                     // The first task message starts terminals too (Goldor's line missed).
