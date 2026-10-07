@@ -13,7 +13,7 @@ import java.util.Locale
 /**
  * /termsim inf: a numbers terminal that never ends and has no numbers. Odin's solver shows the
  * next three cells (its order colours, no text). The order comes in bags, like Tetris: each bag
- * is all 14 cells shuffled, so every cell comes up once before any comes up again; the next bag
+ * is all 10 cells shuffled, so every cell comes up once before any comes up again; the next bag
  * starts with [FRESH] cells that aren't highlighted when it's drawn, so the path never doubles back. Escape to stop: chat gets the
  * average time between clicks, and what a numbers would take at that pace.
  *
@@ -21,8 +21,8 @@ import java.util.Locale
  * (see NumbersHandlerMixin), not from stack sizes.
  */
 object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
-    /** The 14 cells: rows 1-2, columns 1-7, as in a numbers. */
-    private val CELLS = (1..2).flatMap { r -> (1..7).map { c -> r * 9 + c } }
+    /** The 10 cells: rows 1-2, columns 2-6, as in a numbers since the update cut its sides. */
+    private val CELLS = (1..2).flatMap { r -> (2..6).map { c -> r * 9 + c } }
     private const val SHOWN = 3
     private const val FRESH = 6
 
@@ -50,7 +50,7 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
     /** The next cell from the bag; an empty bag is refilled first. */
     private fun pick(): Int {
         if (bag.isEmpty()) {
-            // All 14, the first FRESH from the cells not highlighted now, then the rest.
+            // All 10, the first FRESH from the cells not highlighted now, then the rest.
             val fresh = CELLS.filter { it !in queue }.shuffled(rng).take(FRESH)
             bag += fresh
             bag += CELLS.filter { it !in fresh }.shuffled(rng)
@@ -80,7 +80,7 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
         if (gaps.isEmpty()) return
         val avg = gaps.average() / 1000.0
         val first = firstMs / 1000.0
-        EngineerClient.msg("§7Inf numbers: §f${gaps.size + 1}§7 clicks §8· §f${fmt(avg)}s§7 between §8· §7a numbers ≈ §f${fmt(first + 13 * avg)}s §8(first click ${fmt(first)} + 13 × ${fmt(avg)})")
+        EngineerClient.msg("§7Inf numbers: §f${gaps.size + 1}§7 clicks §8· §f${fmt(avg)}s§7 between §8· §7a numbers ≈ §f${fmt(first + (CELLS.size - 1) * avg)}s §8(first click ${fmt(first)} + ${CELLS.size - 1} × ${fmt(avg)})")
         gaps.clear()
     }
 

@@ -51,7 +51,7 @@ class Devices(val phase: GoldorPhase) {
      * Simon Says (S1), as measured in docs/mechanics/simon-says.md (the same timings as SS
      * Practice): the start button; lights one every 8 ticks; the buttons back 10 ticks after the
      * last light goes out (18 after the stray lamp, the lit one's 18 after its own); a press stays
-     * down 3 ticks; the next round 6 ticks after a round's last press; five rounds. A wrong press:
+     * down 3 ticks; the next round 6 ticks after a round's last press; four rounds (the update cut the fifth). A wrong press:
      * buttons gone 3 ticks later and a new sequence shown 26-34 ticks after that.
      */
     inner class SimonSays {
@@ -135,7 +135,7 @@ class Devices(val phase: GoldorPhase) {
         }
 
         /** 5 cells, no repeats (201 of 207), new each time. */
-        private fun newSequence() = (0 until 16).shuffled().take(5)
+        private fun newSequence() = (0 until 16).shuffled().take(4)
 
         /** The stray light: not part of the sequence, so a cell outside it. */
         private fun stray(): Int = ((0 until 16) - sequence.toSet()).random()
@@ -189,7 +189,7 @@ class Devices(val phase: GoldorPhase) {
                 if (next < expected.size) return
                 accepting = false
                 val n = expected.size
-                if (n == 5) after(6) { clear(); station("SS").complete(Sim.me) }
+                if (n == 4) after(6) { clear(); station("SS").complete(Sim.me) }
                 else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
             } else {
                 accepting = false

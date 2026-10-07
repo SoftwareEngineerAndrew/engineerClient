@@ -61,15 +61,15 @@ import java.util.Locale
  * How it plays, as measured in 208 Better PF recordings of P3 (see docs/mechanics/simon-says.md):
  *  - The start button is left of the grid. Presses in the 6 ticks after the first decide the
  *    first show: 1 press shows round 1; 2 or 3 show one stray light first, then the first 1 or 2
- *    of the sequence (the "skip": 3 presses, press 2, then rounds of 3, 4 and 5).
+ *    of the sequence (the "skip": 3 presses, press 2, then rounds of 3 and 4).
  *  - Lights: one every 8 ticks. Buttons: all 16 come back 10 ticks after the last light goes out;
  *    after a show that started with a stray light they come 5 ticks after the last light comes on,
  *    except that light's own button, which waits until 10 ticks after it goes out.
  *  - A pressed button stays down 3 ticks (pressing it again meanwhile does nothing).
- *  - The next round starts 6 ticks after the round's last correct press; after round 5 that is
- *    the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks after it a new (in the game)
- *    sequence, shown the way the skip shows it. Practice: a wrong press restarts the run at once.
- *  - Practice is SkyBlock's coming SS (alpha): no round 5, so a run is done 6 ticks after round 4.
+ *  - The next round starts 6 ticks after the round's last correct press; after round 4 (the update
+ *    cut round 5) that is the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks
+ *    after it a new (in the game) sequence, shown the way the skip shows it. Practice: a wrong press
+ *    restarts the run at once.
  */
 object SimonSaysPractice : Module(
     name = "SS Practice",
@@ -103,10 +103,10 @@ object SimonSaysPractice : Module(
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
 
     /**
-     * Each round's clicking: the fastest healers' medians on Better PF, which with the fixed 7.4 s
-     * and a 0.3 s start add up to 11.90 (a good legit total, under the death tick at 12 s).
+     * Each round's clicking (skip, r3, r4): the fastest healers' medians on Better PF, from before
+     * the update cut r5 (its 1.25 s is gone with it).
      */
-    private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05, 1.25)
+    private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05)
 
     // Odin's Simon Says colours.
     private val FIRST = Colors.MINECRAFT_GREEN.withAlpha(0.5f)
@@ -217,7 +217,7 @@ object SimonSaysPractice : Module(
 
     private var phase = Phase.IDLE
     private val rng = java.util.Random()
-    private var sequence = IntArray(5)
+    private var sequence = IntArray(FINAL_ROUND)
     private var expected: List<Int> = emptyList()
     private var next = 0
     private var accepting = false
@@ -260,20 +260,20 @@ object SimonSaysPractice : Module(
     }
 
     /**
-     * Five different cells. Normal RNG: any order. Otherwise each after the first is picked with a
+     * [FINAL_ROUND] different cells. Normal RNG: any order. Otherwise each after the first is picked with a
      * weight by its distance (in cells) from the one before: tighter levels favour near cells
      * (Easier e^-d, Easiest e^-2d), Harder far ones (e^d).
      */
     private fun newSequence() {
         if (rngLevel == 0) {
             val cells = (0 until 16).shuffled(rng)
-            sequence = IntArray(5) { cells[it] }
+            sequence = IntArray(FINAL_ROUND) { cells[it] }
             return
         }
         val k = when (rngLevel) { -1 -> -1.0; 1 -> 1.0; else -> 2.0 }
         val out = ArrayList<Int>()
         out += rng.nextInt(16)
-        while (out.size < 5) {
+        while (out.size < FINAL_ROUND) {
             val last = out.last()
             val left = (0 until 16).filter { it !in out }
             val w = left.map { c -> Math.exp(-k * Math.hypot((c / 4 - last / 4).toDouble(), (c % 4 - last % 4).toDouble())) }
@@ -299,7 +299,7 @@ object SimonSaysPractice : Module(
     /** The grid buttons' world positions while placed, for [fullBlockShape]. */
     private var gridCells: Set<BlockPos> = emptySet()
 
-    /** The last round of a run: SkyBlock's coming SS (alpha) has no r5. */
+    /** The last round of a run: 4 since the update (there was an r5). */
     private const val FINAL_ROUND = 4
 
     /** Light grey wool behind the Full Block toggle while it's on, black when off. */
@@ -648,11 +648,11 @@ object SimonSaysPractice : Module(
         // As at 1x: the time Show Speed saved added back.
         val total = (tick + shownFaster - firstLight) / 20.0
         val speed = if (instantShow) " §8(instant, as at 1x)" else if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
-        report(total, null, rounds, splits, alphaRun = true, (if (fails > 0) " §c$fails wrong" else "") + speed)
+        report(total, rounds, splits, (if (fails > 0) " §c$fails wrong" else "") + speed)
     }
 
     /** A run's chat lines (practice or the real device): the total, then a line a round with each press. */
-    private fun report(total: Double, r4Total: Double?, rounds: List<Double>, splits: List<List<Double>>, alphaRun: Boolean, suffix: String) {
+    private fun report(total: Double, rounds: List<Double>, splits: List<List<Double>>, suffix: String) {
         // First light to done: green, dark green (under the 12 s death tick), yellow, red, dark red.
         val colour = when {
             total <= 11.6 -> "§a"
@@ -661,12 +661,11 @@ object SimonSaysPractice : Module(
             total <= 13.5 -> "§c"
             else -> "§4"
         }
-        val r4 = if (r4Total != null) " §7(${fmt(r4Total)}s)" else ""
-        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$r4$suffix")
+        EngineerClient.msg("§7SS took: $colour${fmt(total)}s$suffix")
         if (!roundTimes) return
         // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
-        val vsTop = rounds.size == TOP_ROUNDS.size - (if (alphaRun) 1 else 0)
+        val vsTop = rounds.size == TOP_ROUNDS.size
         for (i in rounds.indices) {
             val presses = splits.getOrNull(i).orEmpty()
             val name = if (vsTop && i == 0) "skip" else "r${presses.size}"
@@ -747,14 +746,13 @@ object SimonSaysPractice : Module(
         var roundUp = 0L
         var buttonsUp = false
         var lastPress = 0L
-        var r4Done = 0L
         var fails = 0
         val rounds = ArrayList<Double>()
         val splits = ArrayList<List<Double>>()
         val presses = ArrayList<Double>()
 
         fun reset() {
-            firstLight = 0L; roundUp = 0L; buttonsUp = false; lastPress = 0L; r4Done = 0L; fails = 0
+            firstLight = 0L; roundUp = 0L; buttonsUp = false; lastPress = 0L; fails = 0
             rounds.clear(); splits.clear(); presses.clear()
         }
 
@@ -778,7 +776,7 @@ object SimonSaysPractice : Module(
             if (firstLight == 0L || roundUp == 0L) return
             if (!right) {
                 // The device starts the sequence over: so do the rounds.
-                fails++; rounds.clear(); splits.clear(); presses.clear(); r4Done = 0L
+                fails++; rounds.clear(); splits.clear(); presses.clear()
                 return
             }
             presses += (now - lastPress) / 1000.0; lastPress = now
@@ -786,10 +784,8 @@ object SimonSaysPractice : Module(
             // A round's clicking ends 6 ticks after its last press, when the next one starts.
             rounds += (now - roundUp) / 1000.0 + 0.3
             splits += presses.toList()
-            if (presses.size == 4) r4Done = now + 300
-            if (presses.size == 5) {
-                report((now + 300 - firstLight) / 1000.0, if (r4Done != 0L) (r4Done - firstLight) / 1000.0 else null,
-                    rounds, splits, alphaRun = false, suffix = (if (fails > 0) " §c$fails wrong" else "") + " §8(real)")
+            if (presses.size == FINAL_ROUND) {
+                report((now + 300 - firstLight) / 1000.0, rounds, splits, suffix = (if (fails > 0) " §c$fails wrong" else "") + " §8(real)")
                 reset()
             }
             presses.clear()

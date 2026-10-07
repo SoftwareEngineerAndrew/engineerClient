@@ -30,7 +30,7 @@ import kotlin.random.Random
  * finishing click closes the window (then the chat line, then a close of window 0) in one tick.
  */
 object Terminals {
-    enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
+    enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(5) }
 
     /** A random draw: the six are equally likely (first opens per station, n = 1164: 182-211 each). */
     fun randomType(): Type = Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random()
@@ -94,10 +94,10 @@ object Terminals {
         }
     }
 
-    /** "Click in order!": 14 red panes, count and name 1..14, in the 2 x 7 middle. */
+    /** "Click in order!": 10 red panes, count and name 1..10, in the 2 x 5 middle (the update cut the 2 x 7 down). */
     class Order : Term(Type.ORDER) {
         override val title = "Click in order!"
-        private val slots = (10..16) + (19..25)
+        private val slots = (11..15) + (20..24)
         private var next = 1
         init {
             slots.shuffled().forEachIndexed { i, s -> items[s] = named(Items.STAINED_GLASS_PANE.red(), "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
@@ -109,7 +109,7 @@ object Terminals {
             next++
             return true
         }
-        override fun solved() = next > 14
+        override fun solved() = next > 10
     }
 
     /** "Correct all the panes!": 15 panes, Off (red) or On (lime), clicks toggle. */
@@ -159,7 +159,7 @@ object Terminals {
 
     /** "What starts with: 'X'?": 21 items (1.8 names); click every one starting with X (it glints). */
     class Starts : Term(Type.STARTS) {
-        private val slots = (10..16) + (19..25) + (28..34)
+        private val slots = (11..15) + (20..24) + (28..34)
         private val letter: Char
         override val title: String
         init {
@@ -193,7 +193,7 @@ object Terminals {
      * in 110 (the 3 in 5 odds) and a 5 in 65.
      */
     class Select : Term(Type.SELECT) {
-        private val slots = (10..16) + (19..25) + (28..34) + (37..43)
+        private val slots = (11..15) + (20..24) + (28..34) + (37..43)
         private val target = COLOURS.random()
         override val title = "Select all the ${target.title} items!"
         init {
@@ -219,7 +219,8 @@ object Terminals {
     /**
      * "Click the button on time!": a lime pane bounces along the active row (one column every 10
      * ticks); Lock In Slot while it is in the magenta column. The row moves on at the next step;
-     * the 4th lock finishes at once. Each new row's magenta column differs from the last (409 of
+     * the last lock finishes at once. Since the update there are [LANES] rows (the 4th is gone, and
+     * the window is a row shorter for it). Each new row's magenta column differs from the last (409 of
      * 409). A wrong lock (the lime off target, or another row's Lock In Slot, e.g. clicked ahead)
      * freezes the lime for two steps: lone wrong clicks were followed by a +30 step in 8 of 9, and a
      * row change after a click ahead did not move the lime (42 of 43), its next step +20.
@@ -237,11 +238,12 @@ object Terminals {
         init { draw() }
         private fun draw() {
             for (i in items.indices) items[i] = FILLER
-            // The black panes the magenta moves along (rows 0 and 5, columns 1-5) keep their tooltip.
-            for (c in 1..5) { items[c] = named(Items.STAINED_GLASS_PANE.black(), ""); items[45 + c] = named(Items.STAINED_GLASS_PANE.black(), "") }
+            // The black panes the magenta moves along (the top and bottom rows, columns 1-5) keep their tooltip.
+            val bottom = (LANES + 1) * 9
+            for (c in 1..5) { items[c] = named(Items.STAINED_GLASS_PANE.black(), ""); items[bottom + c] = named(Items.STAINED_GLASS_PANE.black(), "") }
             items[target] = named(Items.STAINED_GLASS_PANE.magenta(), "")
-            items[45 + target] = named(Items.STAINED_GLASS_PANE.magenta(), "")
-            for (r in 0 until 4) {
+            items[bottom + target] = named(Items.STAINED_GLASS_PANE.magenta(), "")
+            for (r in 0 until LANES) {
                 for (c in 1..5) {
                     val slot = (r + 1) * 9 + c
                     items[slot] = when {
@@ -272,18 +274,23 @@ object Terminals {
             draw()
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
-            val lock = slot % 9 == 7 && slot / 9 in 1..4
+            val lock = slot % 9 == 7 && slot / 9 in 1..LANES
             if (!lock) return false
             if (slot != (row + 1) * 9 + 7 || locked || lime != target) {
                 // Hypixel shows nothing for it, but the lime sits out its next two steps.
                 if (!(locked && slot == (row + 1) * 9 + 7)) frozen = 2
                 return false
             }
-            if (row == 3) { row = 4; return true }
+            if (row == LANES - 1) { row = LANES; return true }
             locked = true
             return true
         }
-        override fun solved() = row >= 4
+        override fun solved() = row >= LANES
+
+        companion object {
+            /** The rows to lock: 3 since the update (it was 4). */
+            const val LANES = 3
+        }
     }
 
     // ------------------------------------------------------------------ the window

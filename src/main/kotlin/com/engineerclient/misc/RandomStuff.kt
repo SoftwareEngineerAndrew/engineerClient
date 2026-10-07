@@ -52,7 +52,7 @@ object RandomStuff : Module(
 ) {
     /**
      * Odin carried this as Terminal Solver's "Show Numbers" until a settings cleanup dropped it.
-     * With it on the numbers terminal ("Click in order!") is drawn without its 1-14, so the only
+     * With it on the numbers terminal ("Click in order!") is drawn without its 1-10, so the only
      * thing to go on is the solver's three order colours - you click the colour, not the number.
      *
      * Two places draw those numbers, so two read this: [com.engineerclient.mixin.NumbersHandlerMixin]
@@ -60,7 +60,7 @@ object RandomStuff : Module(
      * [com.engineerclient.mixin.TerminalNumberMixin] for the vanilla stack count, which the Normal
      * render type still shows on the slots Odin hands back to vanilla.
      */
-    private val hideTermNumbers by BooleanSetting("Hide Numbers in Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-14 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
+    private val hideTermNumbers by BooleanSetting("Hide Numbers in Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-10 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
     private val i4BowAims by BooleanSetting("i4 Bow Aims", true, desc = "Odin's Arrows Device aim positions for the bow you hold (Terminator, Mosquito, Terror's Hydra arrows), not only the Terminator. Needs Odin's Show Aim Positions.")
     private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
@@ -262,7 +262,7 @@ object RandomStuff : Module(
         return !(context == ItemDisplayContext.GUI && inTerminal())
     }
 
-    /** True while the numbers terminal's 1-14 should not be drawn at all. */
+    /** True while the numbers terminal's 1-10 should not be drawn at all. */
     @JvmStatic
     fun hidesTerminalNumbers(): Boolean = enabled && hideTermNumbers
 
