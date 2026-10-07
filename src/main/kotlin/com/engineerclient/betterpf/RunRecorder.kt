@@ -20,6 +20,8 @@ import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
+import com.engineerclient.mixin.ArrowInGroundInvoker
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
@@ -45,12 +47,12 @@ import java.util.zip.GZIPOutputStream
  * flushed, so the recording still starts at instance load. If Odin works out the area is something else, or a minute passes without it, the
  * session is dropped - a hub or island visit costs nothing on disk.
  *
- * Disk writes happen on a single background thread; the client thread only builds strings.
+ * Disk writes happen on a single background thread; the client thread only builds strings, and
+ * hands them over once a tick (one batch, not one hand-off per line).
  */
 class RunRecorder(
     private val dir: Path,
     private val captureGeometry: Boolean,
-    libraryKeys: () -> Set<String>? = { null },
     private val onSaved: (Path) -> Unit = {},
 ) {
 
@@ -70,11 +72,24 @@ class RunRecorder(
     private var partyKey = ""
 
     // Entity tracking: last written position/name per entity id, to only write changes.
-    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float)
+    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float, var ballistic: Boolean = false) {
+        // A flying arrow: where the viewer thinks it is and how fast it's going - the game's arrow
+        // physics from the last line written, run here too, so a line is only written when the
+        // arrow strays from it.
+        var px = 0.0; var py = 0.0; var pz = 0.0; var vx = 0.0; var vy = 0.0; var vz = 0.0
+        fun launch(x: Double, y: Double, z: Double, v: net.minecraft.world.phys.Vec3) {
+            px = r(x, 1000.0); py = r(y, 1000.0); pz = r(z, 1000.0); vx = r(v.x, 10000.0); vy = r(v.y, 10000.0); vz = r(v.z, 10000.0)
+        }
+        /** The viewer's arrow, a tick on: it moves, slows to 0.99 and drops 0.05 (blocks a tick). */
+        fun fly() { px += vx; py += vy; pz += vz; vx *= 0.99; vy = vy * 0.99 - 0.05; vz *= 0.99 }
+        /** The flight line (as the viewer reads it, rounded as written). */
+        fun flight() = ",\"x\":$px,\"y\":$py,\"z\":$pz,\"v\":[$vx,$vy,$vz]"
+        private fun r(v: Double, s: Double) = Math.round(v * s) / s
+    }
     private val tracked = HashMap<Int, Tracked>()
 
-    // Geometry: rooms go to the server's room library once, gaps between rooms per run (GeometryCapture).
-    private val geometry = GeometryCapture(::emit, libraryKeys)
+    // Geometry: the rooms are all in the server's room library; each run only reads its doorways (GeometryCapture).
+    private val geometry = GeometryCapture(::emit)
     private val palette = HashMap<BlockState, Int>()
 
     // ------------------------------------------------------------------ inputs
@@ -103,6 +118,7 @@ class RunRecorder(
         recordEntities(level)
         if (confirmed && tick % 20 == 0) recordSkulls(level)
         if (confirmed && captureGeometry) geometry.tick(level, tick)
+        flushPending()
     }
 
     // Your own look direction every rendered frame, not just every tick: the mouse turns the camera
@@ -280,6 +296,7 @@ class RunRecorder(
     fun finish() {
         if (!confirmed) { abandon(); return }
         emit("""{"k":"end","t":$tick,"ms":${System.currentTimeMillis()}}""")
+        flushPending()
         val temp = tempFile ?: return
         val finalName = "${startedAt.format(STAMP)}_${(floorName ?: "unknown").replace(Regex("[^A-Za-z0-9]+"), "")}.jsonl.gz"
         val lines = linesWritten
@@ -312,6 +329,7 @@ class RunRecorder(
         writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF}""")
         backlog.forEach(::writeNow)
         backlog.clear()
+        flushPending()
         if (BetterPF.recordingMessage) EngineerClient.msg("§7Better PF: recording this run")
     }
 
@@ -327,11 +345,22 @@ class RunRecorder(
         if (confirmed) writeNow(line) else backlog.add(line)
     }
 
+    // This tick's lines, handed to the writer thread together at the end of the tick.
+    private val pending = StringBuilder(1 shl 14)
+
     private fun writeNow(line: String) {
-        val w = writer ?: return
+        if (writer == null) return
         linesWritten++
+        pending.append(line).append('\n')
+    }
+
+    private fun flushPending() {
+        val w = writer ?: return
+        if (pending.isEmpty()) return
+        val chunk = pending.toString()
+        pending.setLength(0)
         io.execute {
-            try { w.write(line); w.newLine() } catch (t: Throwable) { EngineerClient.logger.error("[ec] betterpf write failed", t) }
+            try { w.write(chunk) } catch (t: Throwable) { EngineerClient.logger.error("[ec] betterpf write failed", t) }
         }
     }
 
@@ -534,18 +563,40 @@ class RunRecorder(
             // Mobs turn their heads apart from their bodies (the way they look at you).
             val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
             if (t == null) {
-                tracked[id] = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw))
+                // Arrows fly on the game's own physics, so their flight is the spawn and its velocity
+                // ("v", blocks a tick): the viewer works out the rest. Only when the arrow strays from
+                // that by more than a tenth of a block (a hit, a server correction) is there a new
+                // flight ("arc"); when it sticks it is an ordinary entity again - one move to where it
+                // stuck - and "gone" ends it.
+                val arrow = e is AbstractArrow && !(e as ArrowInGroundInvoker).`ec$isInGround`() // (already stuck: an ordinary entity)
+                val tr = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw), arrow)
+                tracked[id] = tr
+                if (arrow) tr.launch(e.x, e.y, e.z, e.deltaMovement)
+                val v = if (arrow) ",\"v\":[${tr.vx},${tr.vy},${tr.vz}]" else ""
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
                 val item = (e as? ItemEntity)?.item?.let { ",\"item\":" + str(it.hoverName.string.replace(FORMAT_CODES, "")) + ",\"itemId\":" + str(vanillaId(it)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item}""")
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item$v}""")
                 if (e is ArmorStand) {
                     recordStand(e)
                     tagOf(level, e)?.let { tg -> tags[id] = tg; emit("""{"k":"tag","t":$tick,"id":$id,"of":${tg.mob},"dx":${tg.dx},"dy":${tg.dy},"dz":${tg.dz}}""") }
                 }
                 if (e is ItemFrame) recordFrame(e)
                 continue
+            }
+            if (t.ballistic) {
+                // Stuck in a block (the game's own flag, from the server): an ordinary entity from here.
+                if (!(e as ArrowInGroundInvoker).`ec$isInGround`()) {
+                    t.fly()
+                    val dx = e.x - t.px; val dy = e.y - t.py; val dz = e.z - t.pz
+                    if (dx * dx + dy * dy + dz * dz > ARC_SLACK * ARC_SLACK) {
+                        t.launch(e.x, e.y, e.z, e.deltaMovement)
+                        emit("""{"k":"arc","t":$tick,"id":$id${t.flight()}}""")
+                    }
+                    continue
+                }
+                t.ballistic = false
             }
             if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
             if (e is ArmorStand) recordStand(e)
@@ -687,14 +738,33 @@ class RunRecorder(
 
     private fun typeOf(e: Entity): String = BuiltInRegistries.ENTITY_TYPE.getKey(e.type).toString()
 
-    private fun n(v: Double) = String.format(Locale.ROOT, "%.3f", v)
+    private fun n(v: Double) = fixed(v, 3)
     /** A position to 1/100 of a block, and as written ("12.5", not "12.500"). */
     private fun q(v: Double) = Math.round(v * 100) / 100.0
     private fun m(v: Double): String { val r = Math.round(v * 100); return if (r % 100 == 0L) (r / 100).toString() else (r / 100.0).toString() }
     private fun deg(v: Float) = Math.round(v).toFloat()
-    private fun a(v: Float) = String.format(Locale.ROOT, "%.1f", v)
+    private fun a(v: Float) = fixed(v.toDouble(), 1)
     /** Boss packet positions: exact to the protocol's 1/4096 of a block. */
-    private fun f2(v: Float) = String.format(Locale.ROOT, "%.2f", v)
+    private fun f2(v: Float) = fixed(v.toDouble(), 2)
+
+    /**
+     * [v] to [decimals] places, as String.format("%.Nf") writes it but without its cost (it runs
+     * thousands of times a second): rounded half up, trailing zeros kept.
+     */
+    private fun fixed(v: Double, decimals: Int): String {
+        if (!v.isFinite()) return "0"
+        val scale = POW10[decimals]
+        val r = Math.round(v * scale)
+        val abs = kotlin.math.abs(r)
+        val sb = StringBuilder(20)
+        if (r < 0) sb.append('-')
+        sb.append(abs / scale)
+        if (decimals == 0) return sb.toString()
+        sb.append('.')
+        val frac = (abs % scale).toString()
+        for (i in frac.length until decimals) sb.append('0')
+        return sb.append(frac).toString()
+    }
 
     private fun str(s: String): String {
         val sb = StringBuilder(s.length + 2).append('"')
@@ -710,6 +780,9 @@ class RunRecorder(
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
+        private val POW10 = longArrayOf(1, 10, 100, 1000, 10000)
+        /** How far (blocks) a flying arrow may be from the flight last written before a new one is. */
+        private const val ARC_SLACK = 0.1
         private val FORMAT_CODES = Regex("\u00a7.")
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L

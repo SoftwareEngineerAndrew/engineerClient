@@ -63,7 +63,7 @@ object BetterPF : Module(
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
     key = null,
 ) {
-    private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Captures each dungeon room once (every block) for the viewer's shared room library, plus the doors/walls between rooms each run. Rooms the library already has are skipped.")
+    private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Records each run's doorways (two blocks per door spot) - the rooms themselves come from the viewer's room library, which has them all.")
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed. Turn on Private Runs to keep them off the public list.")
     private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them. /betterpf gives you a link to all your runs, private ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, and friends coming online out of recordings, so they are never saved or uploaded. Party chat stays in.")
@@ -90,7 +90,7 @@ object BetterPF : Module(
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
-    private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Optional, for the team: also shares room captures with the viewer's room library and lifts the hourly upload limit. Runs upload without it.", placeholder = "")
+    private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Optional, for the team: lifts the hourly upload limit. Runs upload without it.", placeholder = "")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
 
     /** The upload key, for other features that write to the site (BR Roles's boxes). */
@@ -98,10 +98,6 @@ object BetterPF : Module(
 
     const val SITE = "undonecoffee.com"
     private const val RUNS_URL = "https://$SITE/betterpf/api/runs"
-    private const val ROOMS_URL = "https://$SITE/betterpf/api/rooms"
-
-    /** Rooms the server's library already has ("Name|ROTATION"); null until the fetch lands. */
-    @Volatile private var libraryKeys: Set<String>? = null
     private val CONTROL_CODES = Regex("\u00a7.")
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
@@ -112,10 +108,8 @@ object BetterPF : Module(
         on<LevelEvent.Load> {
             EngineerClient.safely("betterpf start") {
                 session?.finish()
-                libraryKeys = null
-                fetchLibraryKeys()
                 RoomKeys.reset()
-                session = RunRecorder(runsDir, captureGeometry, { libraryKeys }, ::upload)
+                session = RunRecorder(runsDir, captureGeometry, ::upload)
             }
         }
 
@@ -264,26 +258,16 @@ object BetterPF : Module(
         return if (legacy != null) legacy.toString() else "§#" + String.format(java.util.Locale.ROOT, "%06x", color.value and 0xFFFFFF)
     }
 
-    private fun fetchLibraryKeys() {
-        val request = HttpRequest.newBuilder(URI.create(ROOMS_URL)).timeout(Duration.ofSeconds(15)).GET().build()
-        http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete { res, err ->
-            if (err != null || res.statusCode() != 200) return@whenComplete
-            EngineerClient.safely("betterpf library keys") {
-                val keys = JsonParser.parseString(res.body()).asJsonObject.getAsJsonArray("keys")
-                libraryKeys = keys.map { it.asString }.toSet()
-            }
-        }
-    }
-
     /**
-     * Sends a finished run to the viewer, off the game thread: first the room captures the library
-     * didn't have (one request each), then the run itself with its summary in a header - the site
-     * stores files as-is and never unpacks them, so it needs to be told what the list shows.
+     * Sends a finished run to the viewer, off the game thread: the run with its summary in a header -
+     * the site stores files as-is and never unpacks them, so it needs to be told what the list shows.
+     * On a low-priority platform thread: packing it (xz) is a few seconds of CPU, and that shouldn't
+     * compete with the game loading the next world.
      */
     private fun upload(file: Path) {
         val key = uploadKey.trim()
         if (!uploadRuns) return
-        Thread.ofVirtual().name("betterpf-upload").start {
+        Thread.ofPlatform().name("betterpf-upload").daemon(true).priority(Thread.MIN_PRIORITY).start {
             try {
                 // Party members recording the same run take turns, a little apart, so the first one's
                 // recording is on the site when the next ones look for it (see [send]).
@@ -311,7 +295,7 @@ object BetterPF : Module(
      * straight away, and the others find their recording there to leave out what it already has.
      */
     private fun staggerForParty(file: Path) {
-        val (summary, _) = runCatching { readForUpload(file) }.getOrNull() ?: return
+        val summary = runCatching { readForUpload(file) }.getOrNull() ?: return
         val self = summary["self"]?.asString ?: return
         val names = summary["party"]?.asJsonArray?.mapNotNull { runCatching { it.asJsonArray[0].asString }.getOrNull() }?.sortedBy { it.lowercase() } ?: return
         val rank = names.indexOfFirst { it.equals(self, ignoreCase = true) }
@@ -333,17 +317,9 @@ object BetterPF : Module(
         }.onFailure { EngineerClient.logger.warn("[ec] betterpf: sibling lookup failed", it) }.getOrNull()
     }
 
-    /** Sends one run, on the calling thread: its new room captures, then the run. Its id on the site. */
+    /** Sends one run, on the calling thread. Its id on the site. */
     private fun send(file: Path, key: String): String {
-        val (summary, rooms) = readForUpload(file)
-        // Room captures go into the library everyone's replays are drawn from, so only with the key.
-        if (key.isNotEmpty()) for ((roomKey, line) in rooms) {
-            val req = HttpRequest.newBuilder(URI.create(ROOMS_URL))
-                .header("X-Upload-Key", key).header("X-Room-Key", roomKey).header("Content-Type", "application/json")
-                .timeout(Duration.ofMinutes(2)).POST(HttpRequest.BodyPublishers.ofString(line)).build()
-            val res = http.send(req, HttpResponse.BodyHandlers.ofString())
-            if (res.statusCode() != 200) EngineerClient.logger.warn("[ec] betterpf: room $roomKey refused (${res.statusCode()})")
-        }
+        val summary = readForUpload(file)
         // Without the mobs a party member's recording already on the site has (UploadPacker); xz
         // with the key, gzip without (the site checks a keyless recording on its way in, which it
         // can only read as gzip).
@@ -473,10 +449,9 @@ object BetterPF : Module(
     private val KIND = Regex("""^\{"k":"([a-z]+)"""")
     private val TICK = Regex(""""t":(\d+)""")
 
-    /** One pass over the run file: the list summary (self, startMs, floor, party, ticks) and its room captures. */
-    private fun readForUpload(file: Path): Pair<JsonObject, List<Pair<String, String>>> {
+    /** One pass over the run file: the list summary (self, startMs, floor, party, ticks). */
+    private fun readForUpload(file: Path): JsonObject {
         val summary = JsonObject()
-        val rooms = ArrayList<Pair<String, String>>()
         var ticks = 0
         var startTick: Int? = null
         var endTick: Int? = null
@@ -488,7 +463,6 @@ object BetterPF : Module(
                     "meta" -> JsonParser.parseString(line).asJsonObject.let { summary.add("self", it["self"]); summary.add("startMs", it["startMs"]) }
                     "floor" -> summary.add("floor", JsonParser.parseString(line).asJsonObject["floor"])
                     "party" -> summary.add("party", JsonParser.parseString(line).asJsonObject["m"])
-                    "lib" -> JsonParser.parseString(line).asJsonObject["key"]?.asString?.let { rooms += it to line }
                     "chat" -> {
                         val l = JsonParser.parseString(line).asJsonObject
                         val m = l["m"]?.asString ?: continue
@@ -510,7 +484,7 @@ object BetterPF : Module(
         summary.addProperty("cleared", if (cleared) 1 else 0)
         if (privateRuns) summary.addProperty("private", 1)
         if (cleared) summary.addProperty("timeMs", (end!! - start!!) * 50L)
-        return summary to rooms
+        return summary
     }
 
     override fun onDisable() {

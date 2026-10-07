@@ -53,7 +53,7 @@ object UploadPacker {
     fun pack(file: Path, sibling: ByteArray?, xz: Boolean = true): Pair<Path, Int> {
         val drop = sibling?.let { dropped(file, it) } ?: emptySet()
         val out = Files.createTempFile("betterpf-upload-", if (xz) ".jsonl.xz" else ".jsonl.gz")
-        val stream = if (xz) XZOutputStream(Files.newOutputStream(out), LZMA2Options(6)) else java.util.zip.GZIPOutputStream(Files.newOutputStream(out), 1 shl 16)
+        val stream = if (xz) XZOutputStream(Files.newOutputStream(out), LZMA2Options(3)) else java.util.zip.GZIPOutputStream(Files.newOutputStream(out), 1 shl 16)
         val layout = longestRooms(file)?.replaceFirst(""""k":"rooms"""", """"k":"roomsAll"""")
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             fun put(line: String) {
