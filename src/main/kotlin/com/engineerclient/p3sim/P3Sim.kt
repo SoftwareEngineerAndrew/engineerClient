@@ -147,10 +147,22 @@ object P3Sim : Module(
         }
         ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick() } }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
+            // The title screen's Minecraft Realms button becomes two: P3 Sim on the left half, Join
+            // Hypixel on the right. No Realms button (another mod's menu): a small P3 Sim button in the corner.
             if (screen is TitleScreen) EngineerClient.safely("p3sim title button") {
-                Screens.getWidgets(screen).add(
-                    Button.builder(Component.literal("P3 Sim")) { SimWorld.open() }.bounds(w - 64, 4, 60, 16).build()
-                )
+                val widgets = Screens.getWidgets(screen)
+                val realms = widgets.filterIsInstance<Button>()
+                    .firstOrNull { (it.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key == "menu.online" }
+                if (realms == null) {
+                    widgets.add(Button.builder(Component.literal("P3 Sim")) { SimWorld.open() }.bounds(w - 64, 4, 60, 16).build())
+                    return@safely
+                }
+                val half = (realms.width - 4) / 2
+                widgets.remove(realms)
+                widgets.add(Button.builder(Component.literal("P3 Sim")) { SimWorld.open() }
+                    .bounds(realms.x, realms.y, half, realms.height).build())
+                widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
+                    .bounds(realms.x + realms.width - half, realms.y, half, realms.height).build())
             }
             // In the sim, Esc has the menu too: right under Save and Quit (the bottom button if that isn't found).
             if (screen is net.minecraft.client.gui.screens.PauseScreen && inSim) EngineerClient.safely("p3sim pause button") {
