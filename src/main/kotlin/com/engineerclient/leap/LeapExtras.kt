@@ -4,6 +4,10 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.recorder.EcRec
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.core.onReceive
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import com.odtheking.odin.events.ScreenEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -41,6 +45,8 @@ object LeapExtras : Module(
     toggled = true,
 ) {
     private val clickDelay by NumberSetting("Click Delay", 1, 0, 10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
+
+    private val showIn by SelectorSetting("Show In", "Everywhere", ShowIn.OPTIONS, desc = "Where Click Delay and Leap Outline work. Blood rush is from the dungeon starting until the blood door opens.")
 
     private val leapOutline by BooleanSetting("Leap Outline", false, desc = "Draws a very faint rectangle where each person in the leap menu would be, so your mouse can already be on the right one when it opens.")
 
@@ -113,7 +119,7 @@ object LeapExtras : Module(
 
     /** Within Click Delay of the leap menu opening. Read by the click mixins. */
     @JvmStatic
-    fun inClickDelay(): Boolean = enabled && System.currentTimeMillis() - openedAt < clickDelay * 50L
+    fun inClickDelay(): Boolean = enabled && ShowIn.allows(showIn) && System.currentTimeMillis() - openedAt < clickDelay * 50L
 
     init {
         on<ScreenEvent.Open> {
@@ -126,6 +132,12 @@ object LeapExtras : Module(
                 }
             }
         }
+
+        // Blood rush ends at the blood door, read straight off the network ([ShowIn]).
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (!overlay) ShowIn.onChat(content.string)
+        }
+        on<LevelEvent.Load> { ShowIn.reset() }
 
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "leap_outline")) { g, _ ->
             EngineerClient.safely("leap outline") { drawOutline(g) }
@@ -142,7 +154,7 @@ object LeapExtras : Module(
      * way). Grey where nobody is, or outside a dungeon.
      */
     private fun drawOutline(g: GuiGraphicsExtractor) {
-        if (!enabled || !leapOutline || !LeapMenu.enabled || EngineerClient.mc.screen != null) return
+        if (!enabled || !leapOutline || !LeapMenu.enabled || EngineerClient.mc.screen != null || !ShowIn.allows(showIn)) return
         val window = EngineerClient.mc.window
         val halfW = window.guiScaledWidth / 2
         val halfH = window.guiScaledHeight / 2

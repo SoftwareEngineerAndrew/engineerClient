@@ -15,13 +15,12 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.engineerclient.leap.LeapExtras
+import com.engineerclient.leap.ShowIn
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.render.textDim
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
@@ -120,19 +119,7 @@ object PovPreviews : Module(
     }
 
     /** Where the previews show: everywhere, or only in boss, only in Goldor (P3), or only on blood rush. */
-    private val showIn by SelectorSetting("Show In", "Everywhere", arrayListOf("Everywhere", "Only In Boss", "Only In Goldor", "Only In Blood Rush"), desc = "Where the previews show. Blood rush is from the dungeon starting until the blood door opens.")
-
-    private val FORMATTING = Regex("§.")
-
-    /** The blood door has opened this dungeon: blood rush is over. Reset on every world load. */
-    private var bloodOpened = false
-
-    private fun whereAllowed(): Boolean = when (showIn) {
-        1 -> DungeonUtils.inBoss
-        2 -> DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P3
-        3 -> DungeonUtils.inDungeons && !DungeonUtils.inBoss && !bloodOpened
-        else -> true
-    }
+    private val showIn by SelectorSetting("Show In", "Everywhere", ShowIn.OPTIONS, desc = ShowIn.DESC)
 
     val showCost by BooleanSetting("Show Cost", false, desc = "HUD line with the milliseconds the previews added to the last frame.")
 
@@ -176,11 +163,11 @@ object PovPreviews : Module(
 
         // Blood rush ends at the blood door (as in BR Waypoints), read straight off the network.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
-            if (!overlay && content.string.replace(FORMATTING, "") == "The BLOOD DOOR has been opened!") bloodOpened = true
+            if (!overlay) ShowIn.onChat(content.string)
         }
 
         on<LevelEvent.Load> {
-            bloodOpened = false
+            ShowIn.reset()
             PovPose.reset()
             PovCapture.onWorldChange()
         }
@@ -204,7 +191,7 @@ object PovPreviews : Module(
     fun wants(): Boolean {
         if (!enabled || PovCapture.disabledForSession) return false
         if (!LeapMenu.enabled) return false
-        if (!whereAllowed()) return false
+        if (!ShowIn.allows(showIn)) return false
         val screen = Minecraft.getInstance().screen as? AbstractContainerScreen<*> ?: return false
         return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
     }
