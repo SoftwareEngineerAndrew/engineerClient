@@ -199,6 +199,16 @@ object RandomStuff : Module(
     /** Click GUI Size: read by ClickGuiSizeMixin each time Odin's menu opens; 0 leaves Odin's own size. */
     fun clickGuiSize(): Float = if (enabled) clickGuiScale else 0f
 
+    /**
+     * Whether text drawn at pose scale [scale] should be sampled smoothly (ClickGuiTextMixin): only in
+     * Odin's menu, and only where a font pixel doesn't land on a whole number of screen pixels.
+     */
+    fun smoothsGuiText(scale: Float): Boolean {
+        if (mc.gui.screen() !is com.odtheking.odin.clickgui.ClickGUI) return false
+        val px = scale * mc.window.guiScale
+        return kotlin.math.abs(px - kotlin.math.round(px)) > 0.01f
+    }
+
     /** Mod Menu's mod list over [parent], or null without Mod Menu (the Esc menu's Options then stays full width). */
     fun modsScreen(parent: Screen): Screen? = runCatching {
         Class.forName("com.terraformersmc.modmenu.gui.ModsScreen").getConstructor(Screen::class.java).newInstance(parent) as Screen

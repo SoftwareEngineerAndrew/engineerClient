@@ -29,6 +29,12 @@ object SubSplitGrades {
      */
     class Bands(val clock: Clock, val limits: LongArray?, val floor: Long, val fromStart: Boolean = false, val lateAfter: Long? = null)
 
+    /**
+     * Color Based Off Time (Odin's Splits, set by OdinSplitsLook): off, nothing is graded - every
+     * time is drawn in its split's own colour again, as before the bands.
+     */
+    @JvmStatic var byTime: () -> Boolean = { true }
+
     val COLOURS = listOf("§2", "§a", "§e", "§c", "§4", "§0")
     const val BEST = "§6"
     const val FILLER = "§7"
@@ -123,6 +129,9 @@ object SubSplitGrades {
         "necron.kill" to stepped(Clock.TICKS, 140, 155, 20),
 
         // The run's own splits (Odin's), F7, all but the terminals in ticks.
+        // Open: Mort's line to the blood door. The team's picks (7 Oct 2026): 8 / 14 / 19 / 25 / 32 s;
+        // the floor (5 s) only keeps a missed moment from standing as a best.
+        "split.open" to ticks(100, 160, 280, 380, 500, 640),
         // Blood: the Watcher's first line to "proven yourself", 907-1370 (n 75).
         "split.blood" to ticks(907, 936, 970, 1038, 1078, 1186),
         // Maxor 263-1498 (n 74), Storm 820-1624 (n 72): a perfect fight is ~263-277 and ~820-829.
@@ -141,7 +150,7 @@ object SubSplitGrades {
 
     /** Odin's split names (colour codes stripped) to their ids here. */
     val MAIN_SPLITS = mapOf(
-        "Blood Clear" to "split.blood", "Maxor" to "split.maxor", "Storm" to "split.storm",
+        "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Maxor" to "split.maxor", "Storm" to "split.storm",
         "Terminals" to "split.terms", "Goldor" to "split.goldor", "Necron" to "split.necron",
     )
 
@@ -166,6 +175,7 @@ object SubSplitGrades {
      * then only the gold and the filler gray apply, and [fallback] (the step's own colour) the rest.
      */
     fun colour(id: String, value: Long, finished: Boolean, best: Long?, banded: Boolean, fallback: String): String {
+        if (!byTime()) return fallback
         val b = BANDS[id] ?: return fallback
         b.lateAfter?.let { return if (finished && value > it) COLOURS[4] else FILLER }
         val limits = b.limits ?: return FILLER

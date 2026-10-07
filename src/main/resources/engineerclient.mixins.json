@@ -19,6 +19,7 @@
     "BlurRadiusMixin",
     "CameraAccessor",
     "ChatComponentMixin",
+    "ClickGuiTextMixin",
     "ConnectionTapMixin",
     "ContainerScreenAccessor",
     "ContainerTooltipMixin",

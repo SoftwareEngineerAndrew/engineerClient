@@ -43,6 +43,9 @@ object OdinSplitsLook {
     /** The Engineer look is picked. */
     val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS
 
+    private val colourByTime = BooleanSetting("Color Based Off Time", true,
+        desc = "Floor 7 split times coloured by how fast they were (dark green to black, gold for your best), here and in Sub Splits and the scorecard. Off: each time in its split's own colour, as before. Added by engineerClient.")
+
     private val enterAfterEntry = BooleanSetting("Enter After Entry", false, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
@@ -73,12 +76,14 @@ object OdinSplitsLook {
      * out of the cache Odin fires keybinds from as well, so a saved key can't toggle Splits).
      */
     fun install() {
-        for (s in listOf(look, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        SubSplitGrades.byTime = { colourByTime.value }
+        for (s in listOf(look, colourByTime, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
         val all = LinkedHashMap(Splits.settings)
         val last = all.remove(CURRENT_SPLIT_HUD)
         Splits.settings.clear()
         all.remove(look.name)?.let { Splits.settings[look.name] = it }
+        all.remove(colourByTime.name)?.let { Splits.settings[colourByTime.name] = it }
         Splits.settings.putAll(all)
         last?.let { Splits.settings[CURRENT_SPLIT_HUD] = it }
         ModuleManager.loadConfigurations()
