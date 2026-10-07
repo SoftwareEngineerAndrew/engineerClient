@@ -70,6 +70,7 @@ object BetterPF : Module(
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
+    private val tidyRuns by BooleanSetting("Tidy Runs Folder", true, desc = "Once a game, runs here older than 30 days that the viewer has are deleted from this computer - the site keeps every run for good. Recordings a crash left unfinished are always saved as runs.")
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
     /**
      * A secret this install sends with every upload, so the site can list this player's runs -
@@ -106,6 +107,7 @@ object BetterPF : Module(
 
     init {
         on<LevelEvent.Load> {
+            if (!tidied) { tidied = true; tidyRunsFolder() }
             EngineerClient.safely("betterpf start") {
                 session?.finish()
                 RoomKeys.reset()
@@ -271,8 +273,9 @@ object BetterPF : Module(
             try {
                 // Party members recording the same run take turns, a little apart, so the first one's
                 // recording is on the site when the next ones look for it (see [send]).
-                staggerForParty(file)
-                val id = send(file, key)
+                val scan = UploadPacker.scan(file, privateRuns)
+                staggerForParty(scan.summary)
+                val id = send(file, key, scan)
                 uploadFailSaid = false
                 if (uploadedMessage) EngineerClient.msg("§7Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
             } catch (t: Throwable) {
@@ -294,8 +297,7 @@ object BetterPF : Module(
      * Waits 20 s for each party member whose name sorts before yours: whoever sorts first uploads
      * straight away, and the others find their recording there to leave out what it already has.
      */
-    private fun staggerForParty(file: Path) {
-        val summary = runCatching { readForUpload(file) }.getOrNull() ?: return
+    private fun staggerForParty(summary: JsonObject) {
         val self = summary["self"]?.asString ?: return
         val names = summary["party"]?.asJsonArray?.mapNotNull { runCatching { it.asJsonArray[0].asString }.getOrNull() }?.sortedBy { it.lowercase() } ?: return
         val rank = names.indexOfFirst { it.equals(self, ignoreCase = true) }
@@ -318,12 +320,12 @@ object BetterPF : Module(
     }
 
     /** Sends one run, on the calling thread. Its id on the site. */
-    private fun send(file: Path, key: String): String {
-        val summary = readForUpload(file)
+    private fun send(file: Path, key: String, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns)): String {
+        val summary = scan.summary
         // Without the mobs a party member's recording already on the site has (UploadPacker); xz
         // with the key, gzip without (the site checks a keyless recording on its way in, which it
         // can only read as gzip).
-        val (packed, left) = UploadPacker.pack(file, siblingOf(summary, key), xz = key.isNotEmpty())
+        val (packed, left) = UploadPacker.pack(file, scan, siblingOf(summary, key), xz = key.isNotEmpty())
         if (left > 0) EngineerClient.logger.info("[ec] betterpf: $left mobs left out, already uploaded by a party member")
         try {
             return sendPacked(packed, summary, key)
@@ -348,6 +350,73 @@ object BetterPF : Module(
     }
 
     @Volatile private var catchingUp = false
+
+    // ------------------------------------------------------------------ the runs folder
+
+    private var tidied = false
+    private const val KEEP_DAYS = 30L
+    private val PART_NAME = Regex("""^recording-(.+)\.jsonl\.gz\.part$""")
+
+    /**
+     * Once a game, in the background: recordings a crash left as .part files are saved as runs (as
+     * far as they got), and with Tidy Runs Folder, runs older than [KEEP_DAYS] days that the site
+     * has (asked by recorder and start time, as Upload Missing Runs does) are deleted here.
+     */
+    private fun tidyRunsFolder() {
+        Thread.ofPlatform().name("betterpf-tidy").daemon(true).priority(Thread.MIN_PRIORITY).start {
+            try {
+                if (!Files.isDirectory(runsDir)) return@start
+                val now = System.currentTimeMillis()
+                // (one still being written is touched every few seconds)
+                val parts = Files.list(runsDir).use { s -> s.filter { PART_NAME.matches(it.fileName.toString()) }.toList() }
+                for (part in parts) if (now - Files.getLastModifiedTime(part).toMillis() > 30 * 60_000L) salvage(part)
+                if (!tidyRuns) return@start
+                val old = Files.list(runsDir).use { s ->
+                    s.filter { it.fileName.toString().endsWith(".jsonl.gz") && now - Files.getLastModifiedTime(it).toMillis() > KEEP_DAYS * 86_400_000L }.toList()
+                }
+                if (old.isEmpty()) return@start
+                val keys = old.associateWith { runKey(it) }
+                val ask = JsonArray().also { arr -> keys.values.filterNotNull().forEach { arr.add(it) } }
+                val have = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/have")).header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(ask.toString())).build(), HttpResponse.BodyHandlers.ofString())
+                if (have.statusCode() != 200) return@start
+                val onSite = JsonParser.parseString(have.body()).asJsonArray.mapTo(HashSet()) { it.asString }
+                val gone = old.filter { f -> keys[f]?.let { it in onSite } == true && Files.deleteIfExists(f) }
+                if (gone.isNotEmpty()) EngineerClient.logger.info("[ec] betterpf: deleted ${gone.size} runs over $KEEP_DAYS days old that the viewer has")
+            } catch (t: Throwable) {
+                EngineerClient.logger.warn("[ec] betterpf: tidying the runs folder failed", t)
+            }
+        }
+    }
+
+    /** A recording a crash cut off: its whole lines into a run file named as a finished one would be, then the .part goes. */
+    private fun salvage(part: Path) {
+        val stamp = PART_NAME.find(part.fileName.toString())?.groupValues?.get(1) ?: return
+        val temp = part.resolveSibling("salvage-$stamp.tmp")
+        var lines = 0
+        var floor = "unknown"
+        var meta = false
+        java.util.zip.GZIPOutputStream(Files.newOutputStream(temp)).bufferedWriter(Charsets.UTF_8).use { w ->
+            try {
+                BufferedReader(InputStreamReader(GZIPInputStream(Files.newInputStream(part)), Charsets.UTF_8)).use { r ->
+                    while (true) {
+                        val line = r.readLine() ?: break
+                        if (lines == 0) meta = line.startsWith("{\"k\":\"meta\"")
+                        if (line.startsWith("{\"k\":\"floor\"")) runCatching { floor = JsonParser.parseString(line).asJsonObject["floor"].asString }
+                        w.write(line); w.newLine(); lines++
+                    }
+                }
+            } catch (_: java.io.IOException) {
+                // (where the crash cut it off)
+            }
+        }
+        if (!meta || lines < 2) { Files.deleteIfExists(temp); Files.deleteIfExists(part); return }
+        val target = part.resolveSibling("${stamp}_${floor.replace(Regex("[^A-Za-z0-9]+"), "")}.jsonl.gz")
+        if (Files.exists(target)) { Files.deleteIfExists(temp); return }
+        Files.move(temp, target)
+        Files.deleteIfExists(part)
+        EngineerClient.logger.info("[ec] betterpf: saved $lines lines of an unfinished recording as ${target.fileName}")
+    }
 
     /**
      * Uploads every finished run in the runs folder the site doesn't have. A run is on the site if a
@@ -443,49 +512,6 @@ object BetterPF : Module(
      * "Guild > ...", "Officer > ...", "Co-op > ...", "Friend > ...".
      */
     private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > )""")
-
-    private const val RUN_START = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
-    private val RUN_END = Regex("""^\s*☠ Defeated """)
-    private val KIND = Regex("""^\{"k":"([a-z]+)"""")
-    private val TICK = Regex(""""t":(\d+)""")
-
-    /** One pass over the run file: the list summary (self, startMs, floor, party, ticks). */
-    private fun readForUpload(file: Path): JsonObject {
-        val summary = JsonObject()
-        var ticks = 0
-        var startTick: Int? = null
-        var endTick: Int? = null
-        BufferedReader(InputStreamReader(GZIPInputStream(Files.newInputStream(file)), Charsets.UTF_8), 1 shl 16).useLines { lines ->
-            for (line in lines) {
-                val kind = KIND.find(line)?.groupValues?.get(1) ?: continue
-                TICK.find(line.take(48))?.groupValues?.get(1)?.toIntOrNull()?.let { if (it > ticks) ticks = it }
-                when (kind) {
-                    "meta" -> JsonParser.parseString(line).asJsonObject.let { summary.add("self", it["self"]); summary.add("startMs", it["startMs"]) }
-                    "floor" -> summary.add("floor", JsonParser.parseString(line).asJsonObject["floor"])
-                    "party" -> summary.add("party", JsonParser.parseString(line).asJsonObject["m"])
-                    "chat" -> {
-                        val l = JsonParser.parseString(line).asJsonObject
-                        val m = l["m"]?.asString ?: continue
-                        val t = l["t"]?.asInt ?: 0
-                        if (startTick == null && m.startsWith(RUN_START)) startTick = t
-                        else if (RUN_END.containsMatchIn(m)) endTick = t
-                    }
-                }
-            }
-        }
-        if (!summary.has("floor")) summary.addProperty("floor", "")
-        if (!summary.has("party")) summary.add("party", JsonArray())
-        summary.addProperty("ticks", ticks)
-        // Whether it is a whole run (Mort's map to "☠ Defeated") and how long it took — worked out
-        // here so the server doesn't have to unpack the recording, which a big run can't afford on
-        // its CPU budget (Cloudflare error 1102). The same rule the server used.
-        val start = startTick; val end = endTick
-        val cleared = start != null && end != null && end > start
-        summary.addProperty("cleared", if (cleared) 1 else 0)
-        if (privateRuns) summary.addProperty("private", 1)
-        if (cleared) summary.addProperty("timeMs", (end!! - start!!) * 50L)
-        return summary
-    }
 
     override fun onDisable() {
         session?.finish()

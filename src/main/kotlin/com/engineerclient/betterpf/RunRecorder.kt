@@ -1,6 +1,7 @@
 package com.engineerclient.betterpf
 
 import com.engineerclient.EngineerClient
+import com.google.gson.JsonParser
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.skyblock.Island
@@ -22,6 +23,9 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
 import com.engineerclient.mixin.ArrowInGroundInvoker
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow
+import net.minecraft.world.entity.projectile.hurtingprojectile.AbstractHurtingProjectile
+import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull
+import net.minecraft.util.Mth
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
@@ -72,18 +76,32 @@ class RunRecorder(
     private var partyKey = ""
 
     // Entity tracking: last written position/name per entity id, to only write changes.
-    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float, var ballistic: Boolean = false) {
-        // A flying arrow: where the viewer thinks it is and how fast it's going - the game's arrow
+    private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float, var flight: Int = NO_FLIGHT) {
+        val ballistic get() = flight != NO_FLIGHT
+        // A flying projectile: where the viewer thinks it is and how fast it's going - the game's
         // physics from the last line written, run here too, so a line is only written when the
-        // arrow strays from it.
+        // projectile strays from it. Wither skulls and fireballs also speed up along their way
+        // ([accel]) and keep [inertia] of their speed each tick.
         var px = 0.0; var py = 0.0; var pz = 0.0; var vx = 0.0; var vy = 0.0; var vz = 0.0
+        var accel = 0.0; var inertia = 0.0
         fun launch(x: Double, y: Double, z: Double, v: net.minecraft.world.phys.Vec3) {
             px = r(x, 1000.0); py = r(y, 1000.0); pz = r(z, 1000.0); vx = r(v.x, 10000.0); vy = r(v.y, 10000.0); vz = r(v.z, 10000.0)
         }
-        /** The viewer's arrow, a tick on: it moves, slows to 0.99 and drops 0.05 (blocks a tick). */
-        fun fly() { px += vx; py += vy; pz += vz; vx *= 0.99; vy = vy * 0.99 - 0.05; vz *= 0.99 }
+        /** The viewer's projectile, a tick on. */
+        fun fly() {
+            if (flight == ARROW) {
+                // Arrows: move, slow to 0.99, drop 0.05 (blocks a tick).
+                px += vx; py += vy; pz += vz; vx *= 0.99; vy = vy * 0.99 - 0.05; vz *= 0.99
+            } else {
+                // Skulls and fireballs: speed up by accel along their way, keep inertia of it, then move.
+                val len = Math.sqrt(vx * vx + vy * vy + vz * vz)
+                if (len > 1e-9) { vx += vx / len * accel; vy += vy / len * accel; vz += vz / len * accel }
+                vx *= inertia; vy *= inertia; vz *= inertia
+                px += vx; py += vy; pz += vz
+            }
+        }
         /** The flight line (as the viewer reads it, rounded as written). */
-        fun flight() = ",\"x\":$px,\"y\":$py,\"z\":$pz,\"v\":[$vx,$vy,$vz]"
+        fun flight() = ",\"x\":$px,\"y\":$py,\"z\":$pz,\"v\":[$vx,$vy,$vz]" + if (flight == POWERED) ",\"a\":$accel,\"i\":$inertia" else ""
         private fun r(v: Double, s: Double) = Math.round(v * s) / s
     }
     private val tracked = HashMap<Int, Tracked>()
@@ -107,7 +125,11 @@ class RunRecorder(
             else if (tick > ABANDON_AFTER_TICKS || !LocationUtils.isCurrentArea(Island.Unknown)) { abandon(); return }
         }
         if (tick % 20 == 0) emit("""{"k":"time","t":$tick,"ms":${System.currentTimeMillis()}}""")
-        if (serverTicks != lastServerTicks) { lastServerTicks = serverTicks; emit("""{"k":"st","t":$tick,"n":$serverTicks}""") }
+        // The viewer counts on a server tick each client tick from the last "st" (meta "stx"): only
+        // a tick where the server fell behind that (or caught up) is written.
+        val st = serverTicks
+        if (st != lastServerTicks + (tick - lastServerTickAt)) emit("""{"k":"st","t":$tick,"n":$st}""")
+        lastServerTicks = st; lastServerTickAt = tick
         recordEther()
         recordFloorAndParty()
         if (tick % 10 == 0) recordRooms()
@@ -137,7 +159,7 @@ class RunRecorder(
         val now = System.nanoTime()
         if (now - lastFrameNs < 960_000_000L / BetterPF.cameraFps.coerceIn(20, 160)) return
         lastFrameNs = now
-        val entry = "[${f2(partialTick)},${f2(yaw)},${f2(pitch)}]"
+        val entry = "[${f2(partialTick)},${f2(Mth.wrapDegrees(yaw))},${f2(pitch)}]"
         if (yaw == lastFrameYaw && pitch == lastFramePitch) { heldFrame = entry; return }
         heldFrame?.let { if (frames.isNotEmpty()) frames.append(','); frames.append(it) }
         heldFrame = null
@@ -162,6 +184,7 @@ class RunRecorder(
     // timers count these, and they fall behind the client's ticks when the server lags.
     @Volatile private var serverTicks = 0
     private var lastServerTicks = 0
+    private var lastServerTickAt = 0
     fun onServerTick() { serverTicks++ }
 
     /** The server tick count right now: read on the network thread, where the pings are counted. */
@@ -181,7 +204,7 @@ class RunRecorder(
      */
     fun onTeleport(x: Double, y: Double, z: Double, yaw: Float, pitch: Float, rel: List<String>) {
         val r = if (rel.isEmpty()) "" else rel.joinToString(",", ",\"rel\":[", "]") { str(it) }
-        emit("""{"k":"tp","t":$tick,"x":${n(x)},"y":${n(y)},"z":${n(z)},"yaw":${a(yaw)},"pitch":${a(pitch)}$r}""")
+        emit("""{"k":"tp","t":$tick,"x":${n(x)},"y":${n(y)},"z":${n(z)},"yaw":${w(yaw)},"pitch":${a(pitch)}$r}""")
     }
 
     /** A bat hurt or killed (the sound's position and volume: secret bats squeak at 0.1). */
@@ -197,8 +220,13 @@ class RunRecorder(
     // Your held item's etherwarp: whether it has Etherwarp merged and how many Transmission Tuners
     // (each +1 block of range), written when it changes.
     private var lastEther = ""
+    private var lastEtherStack: ItemStack? = null
     private fun recordEther() {
-        val tag = EngineerClient.mc.player?.mainHandItem?.get(DataComponents.CUSTOM_DATA)?.copyTag()
+        // (the same stack as last tick is no change: the game swaps in a new one when it changes)
+        val stack = EngineerClient.mc.player?.mainHandItem
+        if (stack != null && stack === lastEtherStack) return
+        lastEtherStack = stack
+        val tag = stack?.get(DataComponents.CUSTOM_DATA)?.copyTag()
         val entry = """"merge":${tag?.getIntOr("ethermerge", 0) ?: 0},"tuners":${tag?.getIntOr("tuned_transmission", 0) ?: 0}"""
         if (entry == lastEther) return
         lastEther = entry
@@ -326,7 +354,7 @@ class RunRecorder(
         val self = EngineerClient.mc.player?.name?.string ?: "?"
         val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient")
             .map { it.metadata.version.friendlyString }.orElse("?")
-        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF}""")
+        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF,"stx":1}""")
         backlog.forEach(::writeNow)
         backlog.clear()
         flushPending()
@@ -415,8 +443,14 @@ class RunRecorder(
 
     // Your own hotbar: the nine items, which slot is selected, and the skins of any player heads in it.
     private var lastHotbar = ""
+    private val lastHotbarStacks = arrayOfNulls<ItemStack>(9)
+    private var lastHotbarSel = -1
     private fun recordHotbar() {
         val inv = EngineerClient.mc.player?.inventory ?: return
+        // Nothing to build when the same nine stacks are there, the same one selected.
+        if (lastHotbarSel == inv.selectedSlot && (0 until 9).all { lastHotbarStacks[it] === inv.getItem(it) }) return
+        for (i in 0 until 9) lastHotbarStacks[i] = inv.getItem(i)
+        lastHotbarSel = inv.selectedSlot
         val items = (0 until 9).joinToString(",", "[", "]") { str(vanillaId(inv.getItem(it))) }
         val tex = (0 until 9).mapNotNull { i ->
             inv.getItem(i).get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }?.let { "\"$i\":${str(it)}" }
@@ -429,7 +463,9 @@ class RunRecorder(
 
     // The skin of a player head someone holds (the leap item, for one), written when it changes.
     private val lastHeldHead = HashMap<String, String>()
+    private val lastHeldStack = HashMap<String, ItemStack>()
     private fun recordHeldHead(p: Player, name: String) {
+        if (lastHeldStack.put(name, p.mainHandItem) === p.mainHandItem) return
         val tex = p.mainHandItem.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) } ?: ""
         val prev = lastHeldHead.put(name, tex)
         if (prev != tex && !(prev == null && tex.isEmpty())) emit("""{"k":"held","t":$tick,"name":${str(name)},"tex":${str(tex)}}""")
@@ -450,7 +486,7 @@ class RunRecorder(
             if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
             recordEquipment(p, "\"name\":${str(name)}", name)
             // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one; [9] 1 while crouching.
-            val entry = "[${str(name)},${m(p.x)},${m(p.y)},${m(p.z)},${a(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
+            val entry = "[${str(name)},${m(p.x)},${m(p.y)},${m(p.z)},${w(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
             recordHeldHead(p, name)
             if (lastPlayer.put(name, entry) == entry) continue
             if (changed++ > 0) sb.append(',')
@@ -568,16 +604,34 @@ class RunRecorder(
                 // that by more than a tenth of a block (a hit, a server correction) is there a new
                 // flight ("arc"); when it sticks it is an ordinary entity again - one move to where it
                 // stuck - and "gone" ends it.
-                val arrow = e is AbstractArrow && !(e as ArrowInGroundInvoker).`ec$isInGround`() // (already stuck: an ordinary entity)
-                val tr = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw), arrow)
+                // Wither skulls and fireballs fly the same way, on their own physics (see Tracked.fly).
+                val flight = when {
+                    name.isNotEmpty() -> NO_FLIGHT
+                    e is AbstractArrow -> if ((e as ArrowInGroundInvoker).`ec$isInGround`()) NO_FLIGHT else ARROW // (already stuck: an ordinary entity)
+                    e is AbstractHurtingProjectile -> POWERED
+                    else -> NO_FLIGHT
+                }
+                val tr = Tracked(q(e.x), q(e.y), q(e.z), deg(e.yRot), colored, deg(headYaw), flight)
                 tracked[id] = tr
-                if (arrow) tr.launch(e.x, e.y, e.z, e.deltaMovement)
-                val v = if (arrow) ",\"v\":[${tr.vx},${tr.vy},${tr.vz}]" else ""
+                if (e is AbstractHurtingProjectile && flight == POWERED) {
+                    tr.accel = Math.round(e.accelerationPower * 10000) / 10000.0
+                    // (the game's inertia: 0.95, a blue wither skull's 0.73)
+                    tr.inertia = if (e is WitherSkull && e.isDangerous) 0.73 else 0.95
+                }
+                if (flight != NO_FLIGHT) {
+                    // A projectile's spawn is its flight: where it is and how fast it goes. It has no
+                    // name, and which way it faces is its velocity.
+                    tr.launch(e.x, e.y, e.z, e.deltaMovement)
+                    emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))}${tr.flight()}}""")
+                    continue
+                }
                 // Falling blocks carry which block they are, so the viewer can draw it.
                 val block = (e as? FallingBlockEntity)?.let { ",\"block\":" + str(BlockStateParser.serialize(it.blockState)) } ?: ""
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
                 val item = (e as? ItemEntity)?.item?.let { ",\"item\":" + str(it.hoverName.string.replace(FORMAT_CODES, "")) + ",\"itemId\":" + str(vanillaId(it)) } ?: ""
-                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))},"name":${str(name)}$c,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${a(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + a(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item$v}""")
+                // (no name: no "name" - the viewer takes it as "")
+                val named = if (name.isEmpty()) "" else ",\"name\":${str(name)}$c"
+                emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))}$named,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${w(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + w(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item}""")
                 if (e is ArmorStand) {
                     recordStand(e)
                     tagOf(level, e)?.let { tg -> tags[id] = tg; emit("""{"k":"tag","t":$tick,"id":$id,"of":${tg.mob},"dx":${tg.dx},"dy":${tg.dy},"dz":${tg.dz}}""") }
@@ -587,7 +641,7 @@ class RunRecorder(
             }
             if (t.ballistic) {
                 // Stuck in a block (the game's own flag, from the server): an ordinary entity from here.
-                if (!(e as ArrowInGroundInvoker).`ec$isInGround`()) {
+                if (!(e is AbstractArrow && (e as ArrowInGroundInvoker).`ec$isInGround`())) {
                     t.fly()
                     val dx = e.x - t.px; val dy = e.y - t.py; val dz = e.z - t.pz
                     if (dx * dx + dy * dy + dz * dz > ARC_SLACK * ARC_SLACK) {
@@ -596,7 +650,7 @@ class RunRecorder(
                     }
                     continue
                 }
-                t.ballistic = false
+                t.flight = NO_FLIGHT
             }
             if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
             if (e is ArmorStand) recordStand(e)
@@ -721,10 +775,26 @@ class RunRecorder(
         // A model from another namespace (Hypixel's own) is kept after "@", for the viewer to map.
         if (modelId != null && model == null) id += "@" + modelId
         val dye = stack.get(DataComponents.DYED_COLOR) ?: return id
-        return id + "#" + String.format(Locale.ROOT, "%06x", dye.rgb() and 0xFFFFFF)
+        return id + "#" + Integer.toHexString((dye.rgb() and 0xFFFFFF) or 0x1000000).substring(1)
     }
 
-    private fun texturesOf(props: com.mojang.authlib.properties.PropertyMap): String? = props.get("textures").firstOrNull()?.value()
+    /**
+     * A skin as the viewer needs it: the texture's hash on textures.minecraft.net, ":s" after it for
+     * the slim model. The profile value it comes from (base64 JSON) also carries a profile id, name
+     * and timestamp - three times the size, and nothing the viewer uses. Kept whole if it can't be read.
+     */
+    private fun texturesOf(props: com.mojang.authlib.properties.PropertyMap): String? {
+        val value = props.get("textures").firstOrNull()?.value() ?: return null
+        return skinHashes.getOrPut(value) {
+            runCatching {
+                val skin = JsonParser.parseString(String(java.util.Base64.getDecoder().decode(value))).asJsonObject["textures"].asJsonObject["SKIN"].asJsonObject
+                val hash = skin["url"].asString.substringAfterLast('/')
+                if (!hash.matches(SKIN_HASH)) value
+                else hash + if (skin["metadata"]?.asJsonObject?.get("model")?.asString == "slim") ":s" else ""
+            }.getOrDefault(value)
+        }
+    }
+    private val skinHashes = HashMap<String, String>()
 
     // ------------------------------------------------------------------ block palette (for "block" change lines)
 
@@ -742,7 +812,9 @@ class RunRecorder(
     /** A position to 1/100 of a block, and as written ("12.5", not "12.500"). */
     private fun q(v: Double) = Math.round(v * 100) / 100.0
     private fun m(v: Double): String { val r = Math.round(v * 100); return if (r % 100 == 0L) (r / 100).toString() else (r / 100.0).toString() }
-    private fun deg(v: Float) = Math.round(v).toFloat()
+    private fun deg(v: Float) = Math.round(Mth.wrapDegrees(v)).toFloat()
+    /** A yaw to 0.1 degree, wrapped to -180..180 (the game lets them run on past 360 as you turn). */
+    private fun w(v: Float) = a(Mth.wrapDegrees(v))
     private fun a(v: Float) = fixed(v.toDouble(), 1)
     /** Boss packet positions: exact to the protocol's 1/4096 of a block. */
     private fun f2(v: Float) = fixed(v.toDouble(), 2)
@@ -783,6 +855,11 @@ class RunRecorder(
         private val POW10 = longArrayOf(1, 10, 100, 1000, 10000)
         /** How far (blocks) a flying arrow may be from the flight last written before a new one is. */
         private const val ARC_SLACK = 0.1
+        // Tracked.flight: not flying, an arrow, a wither skull or fireball.
+        private const val NO_FLIGHT = 0
+        private const val ARROW = 1
+        private const val POWERED = 2
+        private val SKIN_HASH = Regex("[0-9a-f]{20,80}")
         private val FORMAT_CODES = Regex("\u00a7.")
         // A little under 1/60 s, so a game running at 60 fps with uneven frame times keeps every frame.
         const val FRAME_NS = 16_000_000L
