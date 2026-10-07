@@ -217,6 +217,25 @@ object RandomStuff : Module(
     private var ticksUntilSkyblock = -1
     private var attempts = 0
 
+    /** The title screen's Join Hypixel button: connects to Hypixel, as Auto Join Hypixel does (no /skyblock after). */
+    fun joinHypixel(screen: net.minecraft.client.gui.screens.Screen) = connect(screen)
+
+    private fun connect(screen: net.minecraft.client.gui.screens.Screen) {
+        ConnectScreen.startConnecting(
+            screen,
+            mc,
+            ServerAddress.parseString(HYPIXEL_ADDRESS),
+            ServerData("Hypixel", HYPIXEL_ADDRESS, ServerData.Type.OTHER),
+            false,
+            // null, not an empty TransferState: ConnectScreen$1.run() checks this for null to
+            // decide whether to tell the server "this is a transfer" (initiateServerboundPlay-
+            // Connection's transferConnection flag). A non-null value here - even an "empty"
+            // one - declares an illegitimate transfer with nothing having actually transferred
+            // us, which is exactly the "you cannot transfer to this server" rejection.
+            null,
+        )
+    }
+
     private const val HYPIXEL_ADDRESS = "hypixel.net"
     private const val FIRST_TRY_TICKS = 10  // 0.5s after the lobby loads
     private const val RETRY_TICKS = 40      // then every 2s until we are on Skyblock
@@ -447,19 +466,7 @@ object RandomStuff : Module(
             if (!enabled || !autoJoinHypixel || hasConnectedToHypixel || screen !is TitleScreen) return@register
             hasConnectedToHypixel = true
             pendingSkyblockJoin = true
-            ConnectScreen.startConnecting(
-                screen,
-                client,
-                ServerAddress.parseString(HYPIXEL_ADDRESS),
-                ServerData("Hypixel", HYPIXEL_ADDRESS, ServerData.Type.OTHER),
-                false,
-                // null, not an empty TransferState: ConnectScreen$1.run() checks this for null to
-                // decide whether to tell the server "this is a transfer" (initiateServerboundPlay-
-                // Connection's transferConnection flag). A non-null value here - even an "empty"
-                // one - declares an illegitimate transfer with nothing having actually transferred
-                // us, which is exactly the "you cannot transfer to this server" rejection.
-                null,
-            )
+            connect(screen)
         }
 
         // The lobby we land in ignores a command sent before it is ready, so /skyblock goes out
