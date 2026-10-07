@@ -30,7 +30,8 @@ object EngineerLook {
     enum class Place { FLOOR7, DUNGEON, OTHER }
 
     /** [enterAfterEntry]: the Enter line only once the boss has been entered (the first three splits over). */
-    data class Options(val bossEntry: Boolean, val show0: Boolean, val showTicks: Boolean, val enterAfterEntry: Boolean = false)
+    data class Options(val bossEntry: Boolean, val show0: Boolean, val showTicks: Boolean, val enterAfterEntry: Boolean = false,
+                       val showPace: Boolean = true, val showLag: Boolean = true)
 
     /** A line: its label (colour codes included), the colour its time is drawn in, the time, and the tick time if shown. */
     data class Line(val label: String, val colour: String, val time: String, val ticks: String?)
@@ -84,7 +85,7 @@ object EngineerLook {
               grade: ((String, Long, Long, Boolean) -> String?)? = null,
               /** Pace against the dark green times ([SplitPace], ms and ticks), in place of the targets' pace. */
               pace: Pair<Long, Long>? = null,
-              /** Time lost to lag so far ([SplitPace.lag]): a last line when given. */
+              /** Time lost to lag so far ([SplitPace.lag]): the top line when given, above Pace. */
               lagMs: Long? = null): List<Line> {
         if (rows.isEmpty()) return emptyList()
         val segments = segments(rows, place, master)
@@ -92,7 +93,8 @@ object EngineerLook {
 
         val current = segments.indexOfFirst { it.current }
         val started = current >= 0 || rows.any { it.ms > 0 }
-        if (started || opts.show0) {
+        if (opts.showLag && lagMs != null && started) out += Line(LAG, "§7", SplitFormat.seconds(lagMs), null)
+        if (opts.showPace && (started || opts.show0)) {
             var ms = 0L; var ticks = 0L
             segments.forEachIndexed { i, s ->
                 val target = targetFor(s.name, targets)
@@ -121,14 +123,13 @@ object EngineerLook {
                 if (ms != 0L || opts.show0) out += line(label(BOSS_ENTRY, place, master), ms, ticks, opts, SplitFormat::minutes)
             }
         }
-        if (lagMs != null && started) out += Line(LAG, "§7", SplitFormat.seconds(lagMs), null)
         return out
     }
 
     /** Every label [lines] could show for these rows, shown or not yet: what Fixed Width sizes its name column by. */
     fun allLabels(rows: List<Row>, opts: Options, place: Place, master: Boolean): List<String> {
         val segments = segments(rows, place, master)
-        return listOf(PACE, LAG) + segments.map { label(it.name, place, master) } +
+        return listOfNotNull(PACE.takeIf { opts.showPace }, LAG.takeIf { opts.showLag }) + segments.map { label(it.name, place, master) } +
             (if (opts.bossEntry && rows.size > 3) listOf(label(BOSS_ENTRY, place, master)) else emptyList())
     }
 

@@ -46,6 +46,11 @@ object OdinSplitsLook {
     private val colourByTime = BooleanSetting("Color Based Off Time", true,
         desc = "Floor 7 split times coloured by how fast they were (dark green to black, gold for your best), here and in Sub Splits and the scorecard. Off: each time in its split's own colour, as before. Added by engineerClient.")
 
+    private val showLag = BooleanSetting("Show Lag", true, desc = "Engineer Splits: the Lag line on top, the time lost to lag so far this run (floor 7).")
+        .withDependency { engineer }
+    private val showPace = BooleanSetting("Show Pace", true, desc = "Engineer Splits: the Pace line, the projected finish.")
+        .withDependency { engineer }
+
     private val enterAfterEntry = BooleanSetting("Enter After Entry", false, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
@@ -77,7 +82,7 @@ object OdinSplitsLook {
      */
     fun install() {
         SubSplitGrades.byTime = { colourByTime.value }
-        for (s in listOf(look, colourByTime, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        for (s in listOf(look, colourByTime, showLag, showPace, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
         val all = LinkedHashMap(Splits.settings)
         val last = all.remove(CURRENT_SPLIT_HUD)
@@ -163,6 +168,8 @@ object OdinSplitsLook {
         show0 = bool("Show 0 splits", false),
         showTicks = Splits.showTickTime,
         enterAfterEntry = enterAfterEntry.value,
+        showPace = showPace.value,
+        showLag = showLag.value,
     )
 
     /** Where the rows are from, and whether it is master mode. */
