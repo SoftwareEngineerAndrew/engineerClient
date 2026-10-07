@@ -1,17 +1,22 @@
 package com.engineerclient.pov
 
+import net.minecraft.world.entity.EntityTypes
 import com.engineerclient.EngineerClient
+import com.engineerclient.OdinHuds
 import com.engineerclient.mixin.CameraAccessor
 import com.engineerclient.mixin.GameRendererInvoker
-import com.engineerclient.mixin.MinecraftAccessor
 import com.engineerclient.rotation.EcLog
 import com.mojang.blaze3d.pipeline.RenderTarget
 import com.mojang.blaze3d.pipeline.TextureTarget
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.textures.FilterMode
+import com.mojang.blaze3d.GpuFormat
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.CameraType
+import net.minecraft.client.renderer.culling.Frustum
+import net.minecraft.client.renderer.state.level.LevelRenderState
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.client.DeltaTracker
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.render.TextureSetup
@@ -26,16 +31,17 @@ import net.minecraft.world.entity.Marker
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.Level
 import org.joml.Matrix3x2f
+import org.joml.Vector4f
 
 /**
  * Renders the four teammate POV feeds and puts them on screen.
  *
- * ## Why a second `renderLevel` is cheap here
- * 26.1.2 splits the frame into `update()` -> `extract()` -> `render()`, and ALL the expensive
- * terrain work — `LevelRenderer.update`, `cullTerrain`, the occlusion graph, section compilation —
- * lives in `update()`, which we never call. A preview pass is therefore extract + render only:
- * sky, entities, block entities, particles and the already-built terrain, drawn from another pair
- * of eyes into an offscreen target.
+ * ## What a second `renderLevel` costs
+ * A preview pass is a level extract + `renderLevel`: sky, entities, block entities, particles and
+ * the already-built terrain, drawn from another pair of eyes into an offscreen target. 26.2 moved
+ * the terrain upkeep (frustum cull, occlusion graph, view area, translucency sort) into those two
+ * calls; a pass keeps all of it on YOUR camera (`PovLevelExtractorMixin`, `PovLevelRendererMixin`,
+ * the lent captured frustum), so it costs what it did when it lived in `update()`.
  *
  * ## Where the two halves of the feature sit in a frame
  * ```
@@ -63,15 +69,16 @@ import org.joml.Matrix3x2f
  *
  * ## The pass itself
  * ```
- * save   cameraEntity, window w/h, cameraType, hideGui, camera eye height, mainRenderTarget
+ * save   cameraEntity, window w/h, cameraType, isHudHidden, camera eye height, captured frustum,
+ *        mainRenderTarget
  * pose   PovPose.begin(target, mode, ticks, partialTick)   // rewrites the entity's lerp fields
- * set    cameraEntity = teammate, cameraType = FIRST_PERSON, hideGui = true (no hand),
+ * set    cameraEntity = teammate, cameraType = FIRST_PERSON, isHudHidden = true (no hand),
  *        window = feed size (Camera.update reads it for the aspect ratio),
  *        camera eye height = the teammate's, mainRenderTarget = feed
  * camera.update(delta)                     // aligns the shared camera with the teammate
- * SodiumBridge.recull(camera)              // else Sodium shows only YOUR frustum's sections
+ * captured frustum = its cull frustum     // keep YOUR culled terrain, unless Sodium re-culls
  * EntityCulling off                        // its verdicts were raytraced from your camera
- * extractWindow + extractOptions + extractCamera + levelRenderer.extractLevel(camera)
+ * extractWindow + extractOptions + extractCamera + levelExtractor.extract(camera)
  * gameRenderer.renderLevel(delta)          // whole pass lands in the feed
  * restore everything, in reverse
  * ```
@@ -99,8 +106,9 @@ object PovCapture {
     private var feedWidth = 0
     private var feedHeight = 0
 
-    /** The nested `renderLevel` fires our own injectors again. */
-    private var capturing = false
+    /** The nested `renderLevel` fires our own injectors again; the terrain guard mixins read it too. */
+    var capturing = false
+        private set
 
     private var nextFeed = 0
     private var freeRequested = false
@@ -122,11 +130,37 @@ object PovCapture {
         val windowWidth: Int,
         val windowHeight: Int,
         val cameraType: CameraType,
-        val hideGui: Boolean,
+        val hudHidden: Boolean,
+        val capturedFrustum: Frustum?,
         val eyeHeight: Float,
         val eyeHeightOld: Float,
         val target: RenderTarget,
     )
+
+    /**
+     * Skip Own View: the terrain upkeep the main extract handed its (cancelled) render. A level
+     * extract consumes it - chunk load/unload sets, dirty sections - so the first preview pass takes
+     * it over and its render does that work instead.
+     */
+    private class Carried(state: LevelRenderState) {
+        private val sectionUpdates = ArrayList(state.sectionUpdateRenderStates)
+        private val loading = state.chunkLoadingRenderState.let {
+            listOf(it.addedEmptySections, it.removedEmptySections, it.addedLoadedChunks, it.removedLoadedChunks, it.loadedExpectedChunks).map(::LongOpenHashSet)
+        }
+        private val resetChunkLayerSampler = state.shouldResetChunkLayerSampler
+        private val resetSkyRenderer = state.shouldResetSkyRenderer
+
+        fun into(state: LevelRenderState) {
+            state.sectionUpdateRenderStates.addAll(0, sectionUpdates)
+            state.chunkLoadingRenderState.let {
+                listOf(it.addedEmptySections, it.removedEmptySections, it.addedLoadedChunks, it.removedLoadedChunks, it.loadedExpectedChunks)
+            }.forEachIndexed { i, set -> set.addAll(loading[i]) }
+            state.shouldResetChunkLayerSampler = state.shouldResetChunkLayerSampler || resetChunkLayerSampler
+            state.shouldResetSkyRenderer = state.shouldResetSkyRenderer || resetSkyRenderer
+        }
+    }
+
+    private var carried: Carried? = null
 
     /** Deferred: the actual destroy needs the render thread and a frame that has no blit pending. */
     fun requestFree() {
@@ -169,7 +203,7 @@ object PovCapture {
             freeFeedsNow()
             return
         }
-        val main = mc.mainRenderTarget
+        val main = mc.gameRenderer.mainRenderTarget()
         val scale = PovPreviews.resolution
         val width = ((main.width / 2) * scale).toInt()
         val height = ((main.height / 2) * scale).toInt()
@@ -233,24 +267,15 @@ object PovCapture {
      * Odin draws its HUDs from a `HudElementRegistry` element in the HUD phase, which is *before*
      * the screen phase we are in, so a preview covers them. Rather than move the previews down
      * (they have to be above the vanilla hotbar and scoreboard), the few that matter mid-fight are
-     * simply submitted a second time here, under the same 1/guiScale pose `ModuleManager.render`
-     * uses. Drawing a HUD element twice in one frame is safe: `HudElement.draw` only renders and
-     * records its own width/height.
+     * simply drawn a second time here, through the draw function `OdinHuds` keeps for each.
+     * Drawing a HUD twice in one frame is safe: it only renders and returns its size.
      */
     private fun redrawKeptHuds(gfx: GuiGraphicsExtractor) {
         val keep = PovPreviews.keptHudNames()
         if (keep.isEmpty()) return
-        val scale = EngineerClient.mc.window.guiScale.toFloat()
-        if (scale <= 0f) return
-        gfx.pose().pushMatrix()
-        gfx.pose().scale(1f / scale, 1f / scale)
-        try {
-            for (hud in ModuleManager.hudSettingsCache) {
-                if (!hud.isEnabled || hud.name !in keep) continue
-                EngineerClient.safely("pov keep hud ${hud.name}") { hud.value.draw(gfx, false) }
-            }
-        } finally {
-            gfx.pose().popMatrix()
+        for (hud in ModuleManager.hudSettingsCache) {
+            if (!hud.isEnabled || hud.name !in keep) continue
+            EngineerClient.safely("pov keep hud ${hud.name}") { OdinHuds.redraw(gfx, hud) }
         }
     }
 
@@ -273,16 +298,23 @@ object PovCapture {
         // Only when every quadrant has an image to show: otherwise cancelling would leave bare
         // black where a quadrant has no teammate.
         if (blitsSubmitted < FEEDS) return false
-        if (runPasses(deltaTracker) == 0) return false
+        carried = Carried(EngineerClient.mc.gameRenderer.gameRenderState().levelRenderState)
+        val ran = runPasses(deltaTracker)
+        // No pass extracted, so the main extract is still there to draw.
+        if (carried != null) {
+            carried = null
+            return false
+        }
+        if (ran == 0) return false
 
         // Nothing drew into the real target this frame. `GameRenderer.render` cleared it on the
         // way in, but clear it again here so a rounding gap between the gui-scaled quadrants and
         // the framebuffer cannot show a stale frame.
-        val main = EngineerClient.mc.mainRenderTarget
+        val main = EngineerClient.mc.gameRenderer.mainRenderTarget()
         val color = main.colorTexture
         val depth = main.depthTexture
         if (color != null && depth != null) {
-            RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(color, 0xFF000000.toInt(), depth, 1.0)
+            RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(color, Vector4f(0f, 0f, 0f, 1f), depth, 0.0)
         }
         blitsSubmitted = 0
         skippedMainPass = true
@@ -335,7 +367,7 @@ object PovCapture {
         return ran
     }
 
-    private const val OUT_OF_RANGE_ARGB = 0xFF141414.toInt()
+    private val OUT_OF_RANGE = Vector4f(0x14 / 255f, 0x14 / 255f, 0x14 / 255f, 1f)
 
     private fun renderFeed(index: Int, deltaTracker: DeltaTracker) {
         val mc = EngineerClient.mc
@@ -355,7 +387,7 @@ object PovCapture {
         if (target == null) {
             if (!outOfRange[index]) {
                 outOfRange[index] = true
-                feed.colorTexture?.let { RenderSystem.getDevice().createCommandEncoder().clearColorTexture(it, OUT_OF_RANGE_ARGB) }
+                feed.colorTexture?.let { RenderSystem.getDevice().createCommandEncoder().clearColorTexture(it, OUT_OF_RANGE) }
             }
             return
         }
@@ -363,20 +395,22 @@ object PovCapture {
 
         val gameRenderer = mc.gameRenderer
         val invoker = gameRenderer as GameRendererInvoker
-        val camera = gameRenderer.mainCamera
+        val camera = gameRenderer.mainCamera()
         val cameraAccess = camera as CameraAccessor
         val window = mc.window
         val options = mc.options
+        val gui = gameRenderer.gameRenderState().guiRenderState
 
         val saved = Saved(
             cameraEntity = mc.cameraEntity,
             windowWidth = window.width,
             windowHeight = window.height,
             cameraType = options.cameraType,
-            hideGui = options.hideGui,
+            hudHidden = gui.isHudHidden,
+            capturedFrustum = cameraAccess.`ec$getCapturedFrustum`(),
             eyeHeight = cameraAccess.`ec$getEyeHeight`(),
             eyeHeightOld = cameraAccess.`ec$getEyeHeightOld`(),
-            target = mc.mainRenderTarget,
+            target = gameRenderer.mainRenderTarget(),
         )
         var pose: PovPose.Restore? = null
         var cullingWas: Boolean? = null
@@ -389,7 +423,7 @@ object PovCapture {
 
             mc.setCameraEntity(target)
             options.cameraType = CameraType.FIRST_PERSON
-            options.hideGui = true
+            gui.isHudHidden = true
             window.setWidth(feed.width)
             window.setHeight(feed.height)
             // Camera.tick() is the only thing that maintains the eye height, and ticking the
@@ -397,30 +431,32 @@ object PovCapture {
             // probe and so the real view's fog and cloud colour.
             cameraAccess.`ec$setEyeHeight`(eyeHeight)
             cameraAccess.`ec$setEyeHeightOld`(eyeHeight)
-            (mc as MinecraftAccessor).`ec$setMainRenderTarget`(feed)
+            invoker.`ec$setMainRenderTarget`(feed)
 
             camera.update(deltaTracker)
-            if (PovPreviews.recullTerrain) SodiumBridge.recull(camera)
+            // 26.2 culls the terrain inside the level extract. Lending the camera a captured frustum
+            // keeps YOUR culled sections and occlusion graph, as 26.1.2 did; with Re-cull Terrain on,
+            // Sodium culls from these eyes instead.
+            if (!(PovPreviews.recullTerrain && SodiumBridge.available)) cameraAccess.`ec$setCapturedFrustum`(camera.cullFrustum)
             // EntityCulling's verdicts were raytraced from YOUR camera and are consumed inside
-            // extractLevel, so the flip has to bracket the extract, not the draw.
+            // the level extract, so the flip has to bracket the extract, not the draw.
             cullingWas = EntityCullingBridge.disable()
 
             invoker.`ec$extractWindow`()
             invoker.`ec$extractOptions`()
             invoker.`ec$extractCamera`(deltaTracker, worldPartialTicks, camera.getCameraEntityPartialTicks(deltaTracker))
-            // extractLevel appends to the render-state lists; only renderLevel resets them. On the
-            // Skip Own View path the main pass never ran, so the main extract's entities would
-            // otherwise be drawn a second time in the first preview.
-            gameRenderer.gameRenderState.levelRenderState.reset()
-            mc.levelRenderer.extractLevel(deltaTracker, camera, worldPartialTicks)
+            mc.levelExtractor.extract(deltaTracker, camera, worldPartialTicks)
+            carried?.into(gameRenderer.gameRenderState().levelRenderState)
+            carried = null
 
             gameRenderer.renderLevel(deltaTracker)
         } finally {
-            (mc as MinecraftAccessor).`ec$setMainRenderTarget`(saved.target)
+            invoker.`ec$setMainRenderTarget`(saved.target)
             window.setWidth(saved.windowWidth)
             window.setHeight(saved.windowHeight)
             options.cameraType = saved.cameraType
-            options.hideGui = saved.hideGui
+            gui.isHudHidden = saved.hudHidden
+            cameraAccess.`ec$setCapturedFrustum`(saved.capturedFrustum)
             cameraAccess.`ec$setEyeHeight`(saved.eyeHeight)
             cameraAccess.`ec$setEyeHeightOld`(saved.eyeHeightOld)
             mc.setCameraEntity(saved.cameraEntity)
@@ -437,7 +473,7 @@ object PovCapture {
         val mc = EngineerClient.mc
         if (mc.level == null || mc.player == null) return
         val gameRenderer = mc.gameRenderer
-        val camera = gameRenderer.mainCamera
+        val camera = gameRenderer.mainCamera()
         val invoker = gameRenderer as GameRendererInvoker
         camera.update(deltaTracker)
         val worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false)
@@ -454,10 +490,10 @@ object PovCapture {
         feedWidth = width
         feedHeight = height
         for (index in 0 until FEEDS) {
-            val feed = TextureTarget("ec:pov$index", width, height, true)
+            val feed = TextureTarget("ec:pov$index", width, height, true, GpuFormat.RGBA8_UNORM)
             // A fresh target's contents are undefined; make the first frame a dark quadrant rather
             // than whatever was last in that piece of VRAM.
-            feed.colorTexture?.let { RenderSystem.getDevice().createCommandEncoder().clearColorTexture(it, OUT_OF_RANGE_ARGB) }
+            feed.colorTexture?.let { RenderSystem.getDevice().createCommandEncoder().clearColorTexture(it, OUT_OF_RANGE) }
             feeds[index] = feed
         }
         outOfRange.fill(false)
@@ -510,7 +546,7 @@ object PovCapture {
         val y = if (cached != null && cached.first == bx && cached.second == bz) cached.third
             else groundY(level, bx, bz).also { groundCache[p.name] = Triple(bx, bz, it) }
 
-        val e = standIn?.takeIf { it.level() === level } ?: Marker(EntityType.MARKER, level).also { standIn = it }
+        val e = standIn?.takeIf { it.level() === level } ?: Marker(EntityTypes.MARKER, level).also { standIn = it }
         e.setPos(x, y.toDouble(), z)
         e.xo = x; e.yo = y.toDouble(); e.zo = z
         e.setYRot(p.yaw); e.yRotO = p.yaw

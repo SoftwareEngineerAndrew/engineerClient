@@ -207,7 +207,7 @@ object ScoreboardLines {
         // Colour first: in the legacy scheme a colour code clears bold/italic/etc., so anything
         // else has to come after it to survive. A custom RGB colour has no legacy code at all and
         // is simply left out — Hypixel's sidebar uses the sixteen named colours.
-        style.color?.let { color -> legacyColour(color)?.let { out.append('§').append(it.char) } }
+        style.color?.let { color -> legacyColour(color)?.let { out.append(it.toString()) } }
         if (style.isBold) out.append("§l")
         if (style.isStrikethrough) out.append("§m")
         if (style.isUnderlined) out.append("§n")
@@ -217,7 +217,7 @@ object ScoreboardLines {
     }
 
     private val LEGACY_COLOURS: Map<TextColor, ChatFormatting> =
-        ChatFormatting.values().filter { it.isColor }.associateBy { TextColor.fromLegacyFormat(it)!! }
+        ChatFormatting.values().filter { TextColor.fromLegacyFormat(it) != null }.associateBy { TextColor.fromLegacyFormat(it)!! }
 
     private fun legacyColour(color: TextColor): ChatFormatting? = LEGACY_COLOURS[color]
 }

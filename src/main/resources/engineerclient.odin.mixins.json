@@ -14,7 +14,8 @@
     "SimonSaysTicksMixin",
     "ArrowsDeviceAimMixin",
     "NumbersPreviewMixin",
-    "PanelOrderMixin"
+    "PanelOrderMixin",
+    "ClickGuiSizeMixin"
   ],
   "injectors": {
     "defaultRequire": 0

@@ -10,8 +10,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Odin's Numbers solver colours the solution's first three slots (Order 1-3) and leaves the rest
- * transparent; {@link TermInfo}'s "Numbers 4th/5th Preview" colours the 4th and 5th, keeping Odin's text.
+ * Odin's Numbers solver colours the solution's first four slots (Numbers 1-4) and leaves the rest
+ * transparent; {@link TermInfo}'s "Numbers 4th/5th Preview" colours the 4th (over Odin's) and 5th, keeping Odin's text.
  */
 @Mixin(value = NumbersHandler.class, remap = false)
 public class NumbersPreviewMixin {

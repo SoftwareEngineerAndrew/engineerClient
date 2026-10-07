@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import net.minecraft.world.entity.EntityTypes
 import com.engineerclient.rotation.P3Sections
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
@@ -766,7 +767,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     /** A greatsword giant that stays in the peaceful sim world (vanilla deletes monsters there, as it does [SimWither]s). */
-    class SimGiant(level: net.minecraft.world.level.Level) : Giant(EntityType.GIANT, level) {
+    class SimGiant(level: net.minecraft.world.level.Level) : Giant(EntityTypes.GIANT, level) {
         override fun checkDespawn() {}
     }
 

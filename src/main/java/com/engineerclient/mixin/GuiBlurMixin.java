@@ -2,7 +2,7 @@ package com.engineerclient.mixin;
 
 import com.engineerclient.misc.RandomStuff;
 import net.minecraft.client.DeltaTracker;
-import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.Hud;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,12 +12,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * {@link RandomStuff}'s "Blur In GUI": says where the frame's blur pass goes.
  *
- * <p>26.1.2 builds the GUI as a list of strata and {@code blurBeforeThisStratum} splits that list
+ * <p>26.x builds the GUI as a list of strata and {@code blurBeforeThisStratum} splits that list
  * in two: everything up to the marked stratum is drawn, the blur post chain runs over the whole
  * main target, then everything from the marked stratum on is drawn on top. So the marker is not
  * "blur this" — it is the line the blur happens at.
  *
- * <p>{@code Gui.extractRenderState} is the first thing to touch the GUI state after
+ * <p>{@code Hud.extractRenderState} is the first thing to touch the GUI state after
  * {@code GuiRenderState.reset()}, so marking at its HEAD marks stratum 0 and nothing GUI-side is
  * ever behind the line: the blur lands on the world alone, and the HUD, the screen, its items and
  * its tooltips all draw afterwards, sharp. Vanilla's own menu blur instead marks at the screen's
@@ -33,7 +33,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * frame's blur is still unspent ({@code firstStratumAfterBlur == Integer.MAX_VALUE}), or the game
  * crashes with "Can only blur once per frame".
  */
-@Mixin(Gui.class)
+@Mixin(Hud.class)
 public class GuiBlurMixin {
 
     @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"))

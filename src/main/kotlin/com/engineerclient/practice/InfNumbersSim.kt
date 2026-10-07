@@ -38,7 +38,7 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
 
     /** This simulator is on screen (Odin's numbers solver orders it by [queue], no numbers). */
     @JvmStatic
-    fun active(): Boolean = EngineerClient.mc.screen === this
+    fun active(): Boolean = EngineerClient.mc.gui.screen() === this
 
     override fun create() {
         queue.clear(); bag.clear(); gaps.clear()
@@ -59,7 +59,7 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
     }
 
     private fun pane(lit: Boolean) =
-        ItemStack(if (lit) Items.RED_STAINED_GLASS_PANE else Items.LIME_STAINED_GLASS_PANE).apply { set(DataComponents.CUSTOM_NAME, Component.literal("")) }
+        ItemStack(if (lit) Items.STAINED_GLASS_PANE.red() else Items.STAINED_GLASS_PANE.lime()).apply { set(DataComponents.CUSTOM_NAME, Component.literal("")) }
 
     override fun slotClick(slot: Slot, button: Int) {
         if (slot.index != queue.firstOrNull()) return

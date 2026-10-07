@@ -1,7 +1,7 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
@@ -48,7 +48,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  */
 object DungeonSplits : Module(
     name = "Sub Splits",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "A sub-split HUD per section of the run, and the Scorecard, on the real and server-tick clocks. The splits themselves are Odin's Splits (Look: Engineer Splits).",
     key = null,
 ) {
@@ -79,8 +79,6 @@ object DungeonSplits : Module(
         Section("Necron", SplitTracker.NECRON, "§c"),
     )
 
-    private val LEVELS = listOf("Compact", "Detailed", "Debug")
-
     // The run's splits themselves are Odin's Splits now, in the Engineer Splits look
     // (OdinSplitsLook); [tracker] still times the phases the sub splits and scorecard hang off.
 
@@ -103,8 +101,8 @@ object DungeonSplits : Module(
     }
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
-    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "").hide()
-    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "").hide()
+    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
+    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "", placeholder = "").hide()
     private val resetBests by ActionSetting("Reset Sub Split Bests", desc = "Forgets every boss sub split's best time (the gold ones), on F7 and M7.") {
         bestsF7 = ""; bestsM7 = ""
         com.odtheking.odin.features.ModuleManager.saveConfigurations()
@@ -119,7 +117,7 @@ object DungeonSplits : Module(
      * on/off toggle, then under it its detail level and (blood rush only) the Total row toggle. The
      * HUDs are made up front because a HUD has to exist before the run that fills it.
      */
-    private val levels = HashMap<Section, SelectorSetting>()
+    private val levels = HashMap<Section, SelectorSetting<BloodRunDetail.Level>>()
     private val huds = HashMap<Section, HUDSetting>()
     private lateinit var totalRow: BooleanSetting
     private lateinit var bloodHideInBoss: BooleanSetting
@@ -145,7 +143,7 @@ object DungeonSplits : Module(
                     draw(this, subLines(s) + cueLines(s))
                 }
             )
-            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", "Compact", LEVELS, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
+            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", BloodRunDetail.Level.COMPACT, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
                 .withDependency { hudOn(s) }
             if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
                 BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
@@ -159,7 +157,7 @@ object DungeonSplits : Module(
         }
     }
 
-    private fun level(s: Section) = BloodRunDetail.Level.entries[levels[s]?.value ?: 0]
+    private fun level(s: Section) = levels[s]?.value ?: BloodRunDetail.Level.COMPACT
 
     // What the world shows, watched only while it can matter.
     private val barriers = mutableListOf<Pair<Int, Int>>()

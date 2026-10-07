@@ -117,7 +117,7 @@ object Blocks {
     private fun coreBats() {
         val gold = B.GOLD_BLOCK.defaultBlockState()
         repeat(35) {
-            val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityType.BAT, Sim.level)
+            val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityTypes.BAT, Sim.level)
             // Invisible, as Hypixel's are (105 of 105 core bats flagged invisible).
             b.isSilent = true; b.isInvulnerable = true; b.isInvisible = true; b.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
             // No flying of its own: it is placed each tick below.
@@ -202,7 +202,7 @@ object Blocks {
         // Maxor's end: the strip where it stopped, the beacon column bedrock under red glass, the floors gone.
         finish(STRIP)
         set(73, 221, 73, B.BEDROCK.defaultBlockState())
-        for (y in 222..224) set(73, y, 73, B.RED_STAINED_GLASS.defaultBlockState())
+        for (y in 222..224) set(73, y, 73, B.STAINED_GLASS.red().defaultBlockState())
         finish("p1end")
         if (start == Fight.Start.P2) return
         stormPillars()
@@ -263,8 +263,8 @@ object Blocks {
                 val s = when {
                     west in inRow -> old.getValue(west)
                     p.y != 224 -> B.AIR.defaultBlockState()
-                    p.x == row.first().x -> old[p.offset(6, 0, 0)] ?: B.GRAY_WOOL.defaultBlockState()
-                    else -> B.GRAY_WOOL.defaultBlockState()
+                    p.x == row.first().x -> old[p.offset(6, 0, 0)] ?: B.WOOL.gray().defaultBlockState()
+                    else -> B.WOOL.gray().defaultBlockState()
                 }
                 set(p, s)
             }
@@ -334,7 +334,7 @@ object Blocks {
  * 10 s), never placing itself or dropping anything, so the arena stays as the animations leave it.
  */
 class Debris(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
-    net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityType.FALLING_BLOCK, level) {
+    net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityTypes.FALLING_BLOCK, level) {
     /** An autosave never writes it (it would come back as a vanilla falling block that lands and places itself). */
     override fun shouldBeSaved() = false
     init {
@@ -353,7 +353,7 @@ class Debris(level: net.minecraft.world.level.Level, state: net.minecraft.world.
 
 /** A falling block that is only carried (STANDS-01): never ticks, so it never falls, lands or places itself. */
 class CarriedBlock(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
-    net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityType.FALLING_BLOCK, level) {
+    net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityTypes.FALLING_BLOCK, level) {
     /** An autosave never writes it (it would come back as a vanilla falling block that lands and places itself). */
     override fun shouldBeSaved() = false
     init {

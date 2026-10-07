@@ -20,18 +20,27 @@ object ConfigMigration {
      *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
      *  - engineerClient's own Splits HUD is Odin's Splits in the Engineer Splits look now, so if it
      *    was on, Odin's Splits gets that look (written into Odin's config, read once the look's
-     *    settings exist - see OdinSplitsLook.install).
+     *    settings exist - see OdinSplitsLook.install);
+     *  - Positional Messages left Odin in 0.3.6 and lives here now: Odin's module (on/off, settings and
+     *    the saved boxes) is copied over as it was.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
     fun run(odinDir: Path): Boolean {
         val file = odinDir.resolve("addons").resolve("engineerclient.json")
-        if (!Files.exists(file)) return false
-        val modules = JsonParser.parseString(Files.readString(file)).asJsonArray
+        val odinFile = odinDir.resolve("odin-config.json")
+        val oldPosMsgs = if (Files.exists(odinFile)) module(JsonParser.parseString(Files.readString(odinFile)).asJsonArray, "Positional Messages") else null
+        if (!Files.exists(file) && oldPosMsgs == null) return false
+        val modules = if (Files.exists(file)) JsonParser.parseString(Files.readString(file)).asJsonArray else JsonArray()
         fun ensure(name: String) = module(modules, name) ?: JsonObject().apply {
             addProperty("name", name); addProperty("enabled", true); add("settings", JsonObject())
         }.also { modules.add(it) }
         var changed = false
+
+        if (oldPosMsgs != null && module(modules, "Positional Messages") == null) {
+            modules.add(oldPosMsgs.deepCopy())
+            changed = true
+        }
 
         module(modules, "BR Waypoints 2")?.let {
             if (module(modules, "BR Roles") == null) { it.addProperty("name", "BR Roles"); changed = true }
@@ -53,7 +62,6 @@ object ConfigMigration {
             }
         }
 
-        val odinFile = odinDir.resolve("odin-config.json")
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
             fun copy(from: String, to: String, keys: List<String>) {
@@ -76,7 +84,10 @@ object ConfigMigration {
             }
         }
 
-        if (changed) Files.writeString(file, GsonBuilder().setPrettyPrinting().create().toJson(modules))
+        if (changed) {
+            Files.createDirectories(file.parent)
+            Files.writeString(file, GsonBuilder().setPrettyPrinting().create().toJson(modules))
+        }
         return changed
     }
 

@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import net.minecraft.world.entity.EntityTypes
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.sounds.SoundEvents
@@ -299,15 +300,15 @@ class Devices(val phase: GoldorPhase) {
                 val wool = EXTRAS[layout][i]
                 if (solution[i] < 0 && wool == null) continue
                 val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
-                val f = ItemFrame(EntityType.ITEM_FRAME, Sim.level, pos, Direction.EAST)
+                val f = ItemFrame(EntityTypes.ITEM_FRAME, Sim.level, pos, Direction.EAST)
                 f.isInvulnerable = true
                 if (solution[i] >= 0) {
                     f.setItem(ItemStack(Items.ARROW), false)
                     f.setRotation(solution[i])
                 } else f.setItem(
                     // Hypixel names them: "Start" (green) on the lime wool, "End" (red) on the red, non-italic.
-                    if (wool == true) Terminals.named(Items.LIME_WOOL, "Start", color = net.minecraft.ChatFormatting.GREEN)
-                    else Terminals.named(Items.RED_WOOL, "End", color = net.minecraft.ChatFormatting.RED), false)
+                    if (wool == true) Terminals.named(Items.WOOL.lime(), "Start", color = net.minecraft.ChatFormatting.GREEN)
+                    else Terminals.named(Items.WOOL.red(), "End", color = net.minecraft.ChatFormatting.RED), false)
                 frames[i] = Sim.spawn(f)
             }
             drawWall()
@@ -328,7 +329,7 @@ class Devices(val phase: GoldorPhase) {
         private fun drawWall() {
             for (i in 0 until 25) {
                 val lit = i in frames && (solution[i] < 0 || Random.nextInt(8) == 0)
-                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.BLUE_TERRACOTTA).defaultBlockState())
+                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.DYED_TERRACOTTA.blue()).defaultBlockState())
             }
         }
 
@@ -396,8 +397,8 @@ class Devices(val phase: GoldorPhase) {
         /** This run's grid phase: lights land on t ≡ grid (mod 10). */
         private var grid = Random.nextInt(10)
 
-        fun place() { reset(); grid = Random.nextInt(10); blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
-        fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
+        fun place() { reset(); grid = Random.nextInt(10); blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
+        fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
 
         private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled() }
 
@@ -432,7 +433,7 @@ class Devices(val phase: GoldorPhase) {
             if (onPlate()) {
                 if (current >= 0 && lit != current) light()
             } else if (lit >= 0 || hits > 0) {
-                if (lit >= 0) Blocks.set(blocks[lit], B.BLUE_TERRACOTTA.defaultBlockState())
+                if (lit >= 0) Blocks.set(blocks[lit], B.DYED_TERRACOTTA.blue().defaultBlockState())
                 reset()
             }
         }
@@ -451,7 +452,7 @@ class Devices(val phase: GoldorPhase) {
             if (st.done || current < 0 || pos != blocks[current]) return
             // The board runs while someone is on the plate (or a target is up or under way).
             if (lit < 0 && hits == 0 && !onPlate()) return
-            if (lit == current) { Blocks.set(pos, B.BLUE_TERRACOTTA.defaultBlockState()); lit = -1 }
+            if (lit == current) { Blocks.set(pos, B.DYED_TERRACOTTA.blue().defaultBlockState()); lit = -1 }
             hits++
             if (hits >= 9) { clear(); st.complete(Sim.me) }
         }

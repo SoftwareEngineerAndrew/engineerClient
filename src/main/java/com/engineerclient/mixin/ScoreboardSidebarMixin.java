@@ -1,7 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.misc.ScoreboardLines;
-import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.Hud;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.PlayerScoreEntry;
@@ -21,7 +21,7 @@ import java.util.Collection;
  * Nothing else sees this. The scoreboard itself is untouched, so Odin's area detection and
  * anything else reading the sidebar still get every line; they just are not drawn.
  */
-@Mixin(Gui.class)
+@Mixin(Hud.class)
 public class ScoreboardSidebarMixin {
 
     @Redirect(

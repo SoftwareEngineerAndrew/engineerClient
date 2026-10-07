@@ -1000,7 +1000,7 @@ object SimItems {
             val id = idOf(stack) ?: return@register InteractionResult.PASS
             if (simClient(level)) {
                 // The menu opens here (client side); everything else is the server's.
-                if (id == "SKYBLOCK_MENU") { mc.execute { mc.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
+                if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
                 return@register InteractionResult.PASS
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
@@ -1015,7 +1015,7 @@ object SimItems {
             if (hand != InteractionHand.MAIN_HAND) return@register InteractionResult.PASS
             val id = idOf(player.getItemInHand(hand))
             if (simClient(level)) {
-                if (id == "SKYBLOCK_MENU") { mc.execute { mc.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
+                if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
                 return@register InteractionResult.PASS
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
@@ -1545,7 +1545,7 @@ object SimItems {
         val fw = net.minecraft.world.entity.projectile.FireworkRocketEntity(Sim.level, b32.x, b32.y, b32.z, rocket)
         val conn = p.connection
         conn.send(net.minecraft.network.protocol.game.ClientboundAddEntityPacket(fw.id, fw.uuid, b32.x, b32.y, b32.z, 0f, 0f,
-            net.minecraft.world.entity.EntityType.FIREWORK_ROCKET, 0, Vec3.ZERO, 0.0))
+            net.minecraft.world.entity.EntityTypes.FIREWORK_ROCKET, 0, Vec3.ZERO, 0.0))
         fw.entityData.nonDefaultValues?.let { conn.send(net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket(fw.id, it)) }
         conn.send(net.minecraft.network.protocol.game.ClientboundEntityEventPacket(fw, 17.toByte()))
         liveRockets += fw.id
@@ -1723,7 +1723,7 @@ object SimItems {
     private var veilAngle = 0.0
 
     /** A creeper that stays in the peaceful sim world and can't be hit, pushed or aimed at. */
-    class VeilCreeper(level: Level) : net.minecraft.world.entity.monster.Creeper(net.minecraft.world.entity.EntityType.CREEPER, level) {
+    class VeilCreeper(level: Level) : net.minecraft.world.entity.monster.Creeper(net.minecraft.world.entity.EntityTypes.CREEPER, level) {
         override fun checkDespawn() {}
         override fun isPickable() = false
         override fun isPushable() = false
@@ -1744,7 +1744,7 @@ object SimItems {
             // Vanilla clears a mob's invisible flag without the effect: a permanent effect keeps it (no particles).
             e.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
             // Powered, as recorded: the lightning hit sets the flag; its fire is put out again.
-            e.thunderHit(Sim.level, net.minecraft.world.entity.LightningBolt(net.minecraft.world.entity.EntityType.LIGHTNING_BOLT, Sim.level))
+            e.thunderHit(Sim.level, net.minecraft.world.entity.LightningBolt(net.minecraft.world.entity.EntityTypes.LIGHTNING_BOLT, Sim.level))
             e.clearFire()
             val g = veilPos(p, i)
             e.snapTo(g.x, g.y, g.z, 0f, 0f)

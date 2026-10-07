@@ -22,7 +22,7 @@ object LeapNumbersSim {
     @JvmStatic
     fun open(): Boolean {
         val player = EngineerClient.mc.player ?: return false
-        if (EngineerClient.mc.screen != null || player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
+        if (EngineerClient.mc.gui.screen() != null || player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
         simFromLeap = true
         NumbersSim.open(0L)
         return true
@@ -38,12 +38,12 @@ object LeapNumbersSim {
     @JvmStatic
     fun cancelScreen(screen: Screen?): Boolean {
         if (!simFromLeap) return false
-        if (screen === StartGUI && EngineerClient.mc.screen === NumbersSim) {
+        if (screen === StartGUI && EngineerClient.mc.gui.screen() === NumbersSim) {
             val round = ++simRound
             // From another thread, so it's queued for the next frame rather than run right here.
             Thread.ofVirtual().start {
                 EngineerClient.mc.execute {
-                    if (simFromLeap && round == simRound && EngineerClient.mc.screen === NumbersSim) NumbersSim.open(0L)
+                    if (simFromLeap && round == simRound && EngineerClient.mc.gui.screen() === NumbersSim) NumbersSim.open(0L)
                 }
             }
             return true
@@ -54,5 +54,5 @@ object LeapNumbersSim {
 
     /** A simulator from [open] is on screen (no first click protection on it). */
     @JvmStatic
-    fun simActive(): Boolean = simFromLeap && EngineerClient.mc.screen is TermSimGUI
+    fun simActive(): Boolean = simFromLeap && EngineerClient.mc.gui.screen() is TermSimGUI
 }

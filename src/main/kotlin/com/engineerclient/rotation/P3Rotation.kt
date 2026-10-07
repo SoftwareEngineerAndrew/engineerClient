@@ -5,7 +5,7 @@ import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.PacketEvent
 import net.minecraft.network.chat.Component
@@ -43,7 +43,7 @@ import net.minecraft.sounds.SoundEvents
  */
 object P3Rotation : Module(
     name = "Dynamic Term Roles",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "Tracks the phase-3 terminal rotation and shows the role you are on.",
     key = null,
 ) {
@@ -59,7 +59,7 @@ object P3Rotation : Module(
     private val vignetteCorner by BooleanSetting("Vignette In Leap Corner", false, desc = "Flashes only the corner of the screen where your leap target sits in Odin's leap menu, so you know which quadrant to click before it is open.").withDependency { roleVignette }
 
     // One identity per slot: the same job is the same colour and the same note in every section.
-    private val slotColors by DropdownSetting("Slot Colours")
+    private val slotColors by DropdownSetting("Slot Colours", desc = "")
     private val slot1 by ColorSetting("Slot 1", Color(255, 85, 85), desc = "1st terminal / ss").withDependency { slotColors }
     private val slot2 by ColorSetting("Slot 2", Color(255, 170, 0), desc = "2nd terminal / 21").withDependency { slotColors }
     private val slot3 by ColorSetting("Slot 3", Color(85, 255, 85), desc = "3rd terminal / i4 / ee3").withDependency { slotColors }
@@ -72,7 +72,7 @@ object P3Rotation : Module(
     // audition it. Defaults are five different note-block instruments so they tell apart untuned.
     // For now every slot is a note-block pling on a rising scale, one pitch per slot — Odin's own
     // sound-settings helper cannot take a default pitch, hence the local copy of it below.
-    private val slotSounds by DropdownSetting("Slot Sounds")
+    private val slotSounds by DropdownSetting("Slot Sounds", desc = "")
     private val sound1 = soundSettings("Slot 1 Sound", "block.note_block.pling", 0.6f) { slotSounds }
     private val sound2 = soundSettings("Slot 2 Sound", "block.note_block.pling", 0.8f) { slotSounds }
     private val sound3 = soundSettings("Slot 3 Sound", "block.note_block.pling", 1.0f) { slotSounds }
@@ -82,9 +82,9 @@ object P3Rotation : Module(
 
     /** Odin's `createSoundSettings`, plus a default pitch. Same four settings, same Play button. */
     private fun soundSettings(name: String, sound: String, pitchDefault: Float, deps: () -> Boolean): () -> Triple<String, Float, Float> {
-        val id = +StringSetting(name, sound, desc = "Sound id, as /playsound takes it.", length = 64).withDependency { deps() }
-        val pitch = +NumberSetting("$name Pitch", pitchDefault, 0.1f, 2f, 0.01f, desc = "Pitch.").withDependency { deps() }
-        val volume = +NumberSetting("$name Volume", 1f, 0.1f, 1f, 0.01f, desc = "Volume.").withDependency { deps() }
+        val id = +StringSetting(name, sound, desc = "Sound id, as /playsound takes it.", length = 64, placeholder = "").withDependency { deps() }
+        val pitch = +NumberSetting("$name Pitch", pitchDefault, 0.1..2.0, 0.01f, desc = "Pitch.").withDependency { deps() }
+        val volume = +NumberSetting("$name Volume", 1f, 0.1..1.0, 0.01f, desc = "Volume.").withDependency { deps() }
         val get = { Triple(id.value, volume.value, pitch.value) }
         +ActionSetting("Play $name", desc = "Plays it.") { playSoundSettings(get()) }.withDependency { deps() }
         return get

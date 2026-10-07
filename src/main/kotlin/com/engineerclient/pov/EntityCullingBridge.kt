@@ -6,7 +6,7 @@ import net.fabricmc.loader.api.FabricLoader
  * Switches EntityCulling off for the duration of a preview's extract.
  *
  * EntityCulling decides what is visible by raytracing every entity from YOUR camera on its own
- * thread and stamping the verdict onto the entity; `LevelRenderer.extractEntity` then returns an
+ * thread and stamping the verdict onto the entity; `LevelExtractor.extractEntity` then returns an
  * invisible stub for anything marked culled. Those verdicts are meaningless for a camera somewhere
  * else in the room, so a preview would be missing exactly the players it exists to show. The public
  * static `EntityCullingVersionlessBase.enabled` is the whole mod's master switch — one field,

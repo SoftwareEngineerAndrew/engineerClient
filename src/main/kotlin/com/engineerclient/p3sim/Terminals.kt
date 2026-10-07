@@ -50,7 +50,7 @@ object Terminals {
     }
 
     /** Hypixel's filler: a nameless black pane whose tooltip is hidden (TERM-10). */
-    val FILLER: ItemStack get() = named(Items.BLACK_STAINED_GLASS_PANE, "").also {
+    val FILLER: ItemStack get() = named(Items.STAINED_GLASS_PANE.black(), "").also {
         it.set(DataComponents.TOOLTIP_DISPLAY, net.minecraft.world.item.component.TooltipDisplay(true, java.util.LinkedHashSet()))
     }
 
@@ -100,12 +100,12 @@ object Terminals {
         private val slots = (10..16) + (19..25)
         private var next = 1
         init {
-            slots.shuffled().forEachIndexed { i, s -> items[s] = named(Items.RED_STAINED_GLASS_PANE, "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
+            slots.shuffled().forEachIndexed { i, s -> items[s] = named(Items.STAINED_GLASS_PANE.red(), "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
             val it = items[slot]
-            if (it.item != Items.RED_STAINED_GLASS_PANE || it.count != next) return false
-            items[slot] = named(Items.LIME_STAINED_GLASS_PANE, "$next", next, color = net.minecraft.ChatFormatting.GREEN)
+            if (it.item != Items.STAINED_GLASS_PANE.red() || it.count != next) return false
+            items[slot] = named(Items.STAINED_GLASS_PANE.lime(), "$next", next, color = net.minecraft.ChatFormatting.GREEN)
             next++
             return true
         }
@@ -122,13 +122,13 @@ object Terminals {
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
-        private fun pane(on: Boolean) = if (on) named(Items.LIME_STAINED_GLASS_PANE, "On", color = net.minecraft.ChatFormatting.GREEN) else named(Items.RED_STAINED_GLASS_PANE, "Off", color = net.minecraft.ChatFormatting.RED)
+        private fun pane(on: Boolean) = if (on) named(Items.STAINED_GLASS_PANE.lime(), "On", color = net.minecraft.ChatFormatting.GREEN) else named(Items.STAINED_GLASS_PANE.red(), "Off", color = net.minecraft.ChatFormatting.RED)
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
             if (slot !in slots) return false
-            items[slot] = pane(items[slot].item == Items.RED_STAINED_GLASS_PANE)
+            items[slot] = pane(items[slot].item == Items.STAINED_GLASS_PANE.red())
             return true
         }
-        override fun solved() = slots.all { items[it].item == Items.LIME_STAINED_GLASS_PANE }
+        override fun solved() = slots.all { items[it].item == Items.STAINED_GLASS_PANE.lime() }
     }
 
     /** "Change all to same color!": 3 x 3 panes, left/middle step forward R-O-Y-G-B, right back. */
@@ -136,7 +136,7 @@ object Terminals {
         override val title = "Change all to same color!"
         // Slot 32 last: Odin locks its target colour on that slot's update.
         private val slots = listOf(12, 13, 14, 21, 22, 23, 30, 31, 32)
-        private val cycle = listOf(Items.RED_STAINED_GLASS_PANE to "Red", Items.ORANGE_STAINED_GLASS_PANE to "Orange", Items.YELLOW_STAINED_GLASS_PANE to "Yellow", Items.GREEN_STAINED_GLASS_PANE to "Green", Items.BLUE_STAINED_GLASS_PANE to "Blue")
+        private val cycle = listOf(Items.STAINED_GLASS_PANE.red() to "Red", Items.STAINED_GLASS_PANE.orange() to "Orange", Items.STAINED_GLASS_PANE.yellow() to "Yellow", Items.STAINED_GLASS_PANE.green() to "Green", Items.STAINED_GLASS_PANE.blue() to "Blue")
         private val colour = IntArray(45)
         init {
             // Boards drawn to main's fewest-clicks spread (n = 33: 4:3 5:4 6:4 7:6 8:7 9:7 10:2; mean
@@ -238,19 +238,19 @@ object Terminals {
         private fun draw() {
             for (i in items.indices) items[i] = FILLER
             // The black panes the magenta moves along (rows 0 and 5, columns 1-5) keep their tooltip.
-            for (c in 1..5) { items[c] = named(Items.BLACK_STAINED_GLASS_PANE, ""); items[45 + c] = named(Items.BLACK_STAINED_GLASS_PANE, "") }
-            items[target] = named(Items.MAGENTA_STAINED_GLASS_PANE, "")
-            items[45 + target] = named(Items.MAGENTA_STAINED_GLASS_PANE, "")
+            for (c in 1..5) { items[c] = named(Items.STAINED_GLASS_PANE.black(), ""); items[45 + c] = named(Items.STAINED_GLASS_PANE.black(), "") }
+            items[target] = named(Items.STAINED_GLASS_PANE.magenta(), "")
+            items[45 + target] = named(Items.STAINED_GLASS_PANE.magenta(), "")
             for (r in 0 until 4) {
                 for (c in 1..5) {
                     val slot = (r + 1) * 9 + c
                     items[slot] = when {
-                        r != row -> named(Items.WHITE_STAINED_GLASS_PANE, "")
-                        c == lime -> named(Items.LIME_STAINED_GLASS_PANE, "")
-                        else -> named(Items.RED_STAINED_GLASS_PANE, "")
+                        r != row -> named(Items.STAINED_GLASS_PANE.white(), "")
+                        c == lime -> named(Items.STAINED_GLASS_PANE.lime(), "")
+                        else -> named(Items.STAINED_GLASS_PANE.red(), "")
                     }
                 }
-                items[(r + 1) * 9 + 7] = if (r == row) button(named(Items.LIME_TERRACOTTA, "Lock In Slot", color = net.minecraft.ChatFormatting.GREEN)) else button(named(Items.RED_TERRACOTTA, "Row Not Active", color = net.minecraft.ChatFormatting.RED))
+                items[(r + 1) * 9 + 7] = if (r == row) button(named(Items.DYED_TERRACOTTA.lime(), "Lock In Slot", color = net.minecraft.ChatFormatting.GREEN)) else button(named(Items.DYED_TERRACOTTA.red(), "Row Not Active", color = net.minecraft.ChatFormatting.RED))
             }
         }
         /** Both terracotta buttons carry Hypixel's two gray, non-italic lore lines. */

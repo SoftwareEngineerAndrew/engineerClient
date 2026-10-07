@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import net.minecraft.world.entity.EntityTypes
 import net.minecraft.core.BlockPos
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
@@ -57,7 +58,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
         if (Fight.serverTick < speechUntil) showSpeech()
     }
 
-    private fun marker(text: String, dy: Double) = ArmorStand(EntityType.ARMOR_STAND, Sim.level).also { s ->
+    private fun marker(text: String, dy: Double) = ArmorStand(EntityTypes.ARMOR_STAND, Sim.level).also { s ->
         s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         Station.setMarker(s)
         s.setCustomName(Sim.legacy(text))
@@ -137,7 +138,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
  * A boss's wither. The sim world is peaceful (no mobs of its own), and vanilla deletes every wither in a peaceful
  * world each tick; this one stays. With no AI it never charges up, shoots or breaks blocks.
  */
-class SimWither(level: net.minecraft.world.level.Level) : WitherBoss(EntityType.WITHER, level) {
+class SimWither(level: net.minecraft.world.level.Level) : WitherBoss(EntityTypes.WITHER, level) {
     override fun checkDespawn() {}
 }
 
@@ -410,7 +411,7 @@ class P1Maxor : Fight.Phase("P1") {
     private fun inAbility() = tauntAt >= 0 && t >= tauntAt - 1 && t < tauntAt + 62
 
     private fun spawnCrystal(at: Vec3): EndCrystal {
-        val c = EndCrystal(EntityType.END_CRYSTAL, Sim.level)
+        val c = EndCrystal(EntityTypes.END_CRYSTAL, Sim.level)
         c.setShowBottom(false)
         c.isInvulnerable = true
         c.snapTo(at.x, at.y, at.z, 0f, 0f)
@@ -419,7 +420,7 @@ class P1Maxor : Fight.Phase("P1") {
 
     /** A crystal's name stand: invisible, not a marker (you click them), as Hypixel's (flags 2). */
     private fun label(at: Vec3, text: String): ArmorStand {
-        val s = ArmorStand(EntityType.ARMOR_STAND, Sim.level)
+        val s = ArmorStand(EntityTypes.ARMOR_STAND, Sim.level)
         s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         rename(s, text)
         s.snapTo(at.x, at.y, at.z, 0f, 0f)
@@ -533,9 +534,9 @@ class P1Maxor : Fight.Phase("P1") {
     private fun column() {
         val n = placeTimes.count { t >= it + 28 }
         val state = when {
-            charged() && beacon -> B.RED_STAINED_GLASS
-            n >= 1 -> B.YELLOW_STAINED_GLASS
-            else -> B.BLACK_STAINED_GLASS
+            charged() && beacon -> B.STAINED_GLASS.red()
+            n >= 1 -> B.STAINED_GLASS.yellow()
+            else -> B.STAINED_GLASS.black()
         }.defaultBlockState()
         for (y in (if (t >= 206 + 120) 222 else 223)..224) if (Blocks.get(BlockPos(73, y, 73)) != state) Blocks.set(BlockPos(73, y, 73), state)
     }

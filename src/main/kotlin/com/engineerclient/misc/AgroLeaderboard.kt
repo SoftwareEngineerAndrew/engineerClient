@@ -1,11 +1,11 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -38,7 +38,7 @@ import java.util.Locale
  */
 object AgroLeaderboard : Module(
     name = "Agro Leaderboard",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "In F7 P1/P2, lists the party by distance to Maxor/Storm. Closest (who has aggro) is green.",
     key = null,
 ) {
@@ -113,7 +113,7 @@ object AgroLeaderboard : Module(
             }.sortedBy { it.distance }
         }
 
-        on<RenderEvent.Last> {
+        on<RenderExtractEvent> {
             if (!sphereMode) return@on
             val boss = boss?.takeIf { it.isAlive } ?: return@on
             val me = mc.player ?: return@on
@@ -127,25 +127,23 @@ object AgroLeaderboard : Module(
             }
             val result = AgroSphere.radius(members) ?: return@on
             val color = if (result.youHaveAggro) aggroColor else sphereColor
-            drawSphere(context.poseStack(), context.bufferSource(), center, result.radius, color)
+            drawSphere(context.poseStack(), context.submitNodeCollector(), center, result.radius, color)
         }
     }
 
     /** Translucent, depth-tested, not culled: reads from inside the sphere as well as outside. */
     private fun drawSphere(
         pose: com.mojang.blaze3d.vertex.PoseStack,
-        buffers: net.minecraft.client.renderer.MultiBufferSource.BufferSource,
+        collector: net.minecraft.client.renderer.SubmitNodeCollector,
         center: net.minecraft.world.phys.Vec3,
         radius: Double,
         color: Color,
     ) {
         if (radius <= 0.05) return
-        val cam = mc.gameRenderer.mainCamera.position()
+        val cam = mc.gameRenderer.mainCamera().position()
         pose.pushPose()
         pose.translate(center.x - cam.x, center.y - cam.y, center.z - cam.z)
-        val matrix = pose.last().pose()
         val argb = color.rgba
-        val buffer = buffers.getBuffer(RenderTypes.debugQuads())
         val r = radius.toFloat()
         fun point(lat: Int, lon: Int): FloatArray {
             val theta = Math.PI * lat / LAT_BANDS          // 0 at the top, PI at the bottom
@@ -156,12 +154,13 @@ object AgroLeaderboard : Module(
                 (r * Math.sin(theta) * Math.sin(phi)).toFloat(),
             )
         }
-        for (lat in 0 until LAT_BANDS) for (lon in 0 until LON_BANDS) {
-            for (v in arrayOf(point(lat, lon), point(lat + 1, lon), point(lat + 1, lon + 1), point(lat, lon + 1))) {
-                buffer.addVertex(matrix, v[0], v[1], v[2]).setColor(argb)
+        collector.submitCustomGeometry(pose, RenderTypes.debugQuads()) { last, buffer ->
+            for (lat in 0 until LAT_BANDS) for (lon in 0 until LON_BANDS) {
+                for (v in arrayOf(point(lat, lon), point(lat + 1, lon), point(lat + 1, lon + 1), point(lat, lon + 1))) {
+                    buffer.addVertex(last, v[0], v[1], v[2]).setColor(argb)
+                }
             }
         }
-        buffers.endBatch(RenderTypes.debugQuads())
         pose.popPose()
     }
 

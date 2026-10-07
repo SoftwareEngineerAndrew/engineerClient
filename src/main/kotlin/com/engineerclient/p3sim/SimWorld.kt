@@ -63,7 +63,7 @@ object SimWorld {
         mc.execute {
             if (!P3Sim.inSim) return@execute
             mc.disconnectFromWorld(Component.literal("Leaving P3 Sim"))
-            mc.setScreen(TitleScreen())
+            mc.gui.setScreen(TitleScreen())
         }
     }
 
@@ -80,7 +80,7 @@ object SimWorld {
     }
 
     private fun create() {
-        mc.setScreen(GenericMessageScreen(Component.literal("Building the F7 boss...")))
+        mc.gui.setScreen(GenericMessageScreen(Component.literal("Building the F7 boss...")))
         val settings = LevelSettings(
             // SURVIVAL from the login on, as main (census saw ADVENTURE at login, then SURVIVAL from Fight.setup).
             NAME, GameType.SURVIVAL,
@@ -91,7 +91,7 @@ object SimWorld {
             val biomes = provider.lookupOrThrow(Registries.BIOME)
             val void = biomes.getOrThrow(Biomes.THE_VOID)
             val flat = FlatLevelGeneratorSettings(Optional.empty(), void, emptyList())
-            WorldPresets.createFlatWorldDimensions(provider).replaceOverworldGenerator(provider, FlatLevelSource(flat))
+            provider.lookupOrThrow(net.minecraft.core.registries.Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).value().createWorldDimensions().replaceOverworldGenerator(provider, FlatLevelSource(flat))
         }, TitleScreen())
     }
 

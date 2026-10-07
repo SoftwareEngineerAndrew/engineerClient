@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import net.minecraft.world.entity.EntityTypes
 import net.minecraft.core.BlockPos
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.sounds.SoundEvents
@@ -133,7 +134,7 @@ internal object StormFx {
         Sim.chat("§4[BOSS] Storm§r§c: $text")
         Sim.sound(SoundEvents.WITHER_AMBIENT, 5f, 1.19f, w?.pos)
         w ?: return
-        val s = ArmorStand(EntityType.ARMOR_STAND, Sim.level)
+        val s = ArmorStand(EntityTypes.ARMOR_STAND, Sim.level)
         s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         Station.setMarker(s)
         s.setCustomName(Sim.legacy("§4§l$text"))
@@ -158,7 +159,7 @@ internal object StormFx {
     /** A visual-only bolt (vanilla's flash and thunder) on the ground at (x, z), looking down from [fromY]. */
     fun bolt(x: Double, z: Double, fromY: Double, thunder: Boolean = false): Vec3 {
         val p = Vec3(x, ground(x, z, fromY), z)
-        val b = LightningBolt(EntityType.LIGHTNING_BOLT, Sim.level)
+        val b = LightningBolt(EntityTypes.LIGHTNING_BOLT, Sim.level)
         b.setVisualOnly(true)
         b.snapTo(p.x, p.y, p.z, 0f, 0f)
         Sim.spawn(b)
@@ -195,7 +196,7 @@ internal object StormFx {
  * ticks 1-10 / 10-20 / 20-30, vanilla's 0.95 inertia with power 0.15). It never explodes on its own:
  * the impact is [onImpact]'s.
  */
-internal class StormFireball(level: Level, private val onImpact: (Vec3) -> Unit) : LargeFireball(EntityType.FIREBALL, level) {
+internal class StormFireball(level: Level, private val onImpact: (Vec3) -> Unit) : LargeFireball(EntityTypes.FIREBALL, level) {
     override fun onHit(result: HitResult) {
         if (level().isClientSide || isRemoved) return
         onImpact(result.location)
@@ -206,7 +207,7 @@ internal class StormFireball(level: Level, private val onImpact: (Vec3) -> Unit)
 }
 
 /** One of his wither skulls (power 0.1, skulls.mjs); bursts harmlessly. */
-internal class StormSkull(level: Level) : WitherSkull(EntityType.WITHER_SKULL, level) {
+internal class StormSkull(level: Level) : WitherSkull(EntityTypes.WITHER_SKULL, level) {
     override fun onHit(result: HitResult) {
         if (level().isClientSide || isRemoved) return
         StormFx.burst(result.location)

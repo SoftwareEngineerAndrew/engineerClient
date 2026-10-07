@@ -1,7 +1,7 @@
 package com.engineerclient.misc
 
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
@@ -27,7 +27,13 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.ConnectScreen
+import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.TitleScreen
+import net.minecraft.client.gui.components.Button
+import net.minecraft.client.gui.components.FriendsButton
+import net.minecraft.client.gui.components.PlainTextButton
+import net.fabricmc.fabric.api.client.screen.v1.Screens
+import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.client.multiplayer.ServerData
 import net.minecraft.client.multiplayer.resolver.ServerAddress
 import net.minecraft.world.inventory.Slot
@@ -40,7 +46,7 @@ import net.minecraft.world.item.ItemDisplayContext
  */
 object RandomStuff : Module(
     name = "Random Stuff",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "A collection of small unrelated QoL toggles.",
     key = null,
 ) {
@@ -59,7 +65,7 @@ object RandomStuff : Module(
     private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
     private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
-    private val healthManaThreshold by NumberSetting("Threshold", 20, 1, 100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
+    private val healthManaThreshold by NumberSetting("Threshold", 20, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
 
     // --- Health and mana bars ------------------------------------------------------------------
     //
@@ -75,8 +81,8 @@ object RandomStuff : Module(
         }
         statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth, healthBarHeight)
     }
-    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20, 200, 5, desc = "Width of the health bar.")
-    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2, 30, 1, desc = "Height of the health bar.")
+    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
+    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
 
     private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.") { example ->
         val (current, max) = when {
@@ -87,8 +93,8 @@ object RandomStuff : Module(
         }
         statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth, manaBarHeight)
     }
-    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20, 200, 5, desc = "Width of the mana bar.")
-    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2, 30, 1, desc = "Height of the mana bar.")
+    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.")
+    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.")
 
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
@@ -108,7 +114,7 @@ object RandomStuff : Module(
     // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
     // — six full-screen passes — and only for the frames a screen is actually open.
     private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
-    private val blurStrength by NumberSetting("Blur Strength", 5, 1, 10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
+    private val blurStrength by NumberSetting("Blur Strength", 5, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
 
     // --- Enchantment glint ---------------------------------------------------------------------
     //
@@ -138,6 +144,8 @@ object RandomStuff : Module(
 
     // --- Startup and restart -------------------------------------------------------------------
 
+    private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
+    private val clickGuiScale by NumberSetting("Click GUI Size", 2f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
     private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
 
     // --- Scoreboard lines ----------------------------------------------------------------------
@@ -184,6 +192,28 @@ object RandomStuff : Module(
     private const val RETRY_TICKS = 40      // then every 2s until we are on Skyblock
     private const val TRANSFER_TICKS = 60   // a world load mid-way means a transfer is happening: give it 3s
     private const val MAX_ATTEMPTS = 6
+
+    /** Clean Menus: read by PauseMenuMixin, and below for the title screen. */
+    fun cleansMenus(): Boolean = enabled && cleanMenus
+
+    /** Click GUI Size: read by ClickGuiSizeMixin each time Odin's menu opens; 0 leaves Odin's own size. */
+    fun clickGuiSize(): Float = if (enabled) clickGuiScale else 0f
+
+    /** Mod Menu's mod list over [parent], or null without Mod Menu (the Esc menu's Options then stays full width). */
+    fun modsScreen(parent: Screen): Screen? = runCatching {
+        Class.forName("com.terraformersmc.modmenu.gui.ModsScreen").getConstructor(Screen::class.java).newInstance(parent) as Screen
+    }.getOrNull()
+
+    private val titleIconKeys = setOf("options.language", "options.accessibility", "accessibility.onboarding.accessibility.button")
+
+    /** Takes the Friends/Language/Accessibility row off the title screen and closes the gap it leaves. */
+    private fun cleanTitleScreen(screen: TitleScreen) {
+        val widgets = Screens.getWidgets(screen)
+        val icons = widgets.filter { it is FriendsButton || (it is Button && (it.message.contents as? TranslatableContents)?.key in titleIconKeys) }
+        val row = icons.firstOrNull()?.y ?: return
+        widgets.removeAll(icons)
+        widgets.filter { it.y > row && it !is PlainTextButton }.forEach { it.y -= 24 }
+    }
 
     /** Read by I4Aims and ArrowsDeviceAimMixin. */
     fun showsI4BowAims(): Boolean = enabled && i4BowAims
@@ -255,7 +285,7 @@ object RandomStuff : Module(
      * thread, so they cannot disagree — which matters, because the game throws outright if one
      * frame is told to blur twice.
      */
-    fun blursGui(): Boolean = enabled && blurInGui && mc.screen != null && mc.level != null
+    fun blursGui(): Boolean = enabled && blurInGui && mc.gui.screen() != null && mc.level != null
 
     /** Radius for [blursGui], on the same 1..10 scale as vanilla's Menu Background Blur slider. */
     fun blurRadius(): Int = blurStrength.toInt()
@@ -294,7 +324,7 @@ object RandomStuff : Module(
 
     /** A live terminal (Odin tracks the open one) or a practice term sim. */
     private fun inTerminal(): Boolean =
-        TerminalUtils.currentTerm != null || mc.screen is TermSimGUI
+        TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI
 
     init {
         on<TickEvent.End> {
@@ -318,6 +348,10 @@ object RandomStuff : Module(
         // would sit at its starting value forever and never reach zero. ScreenEvents.AFTER_INIT
         // (fires once the title screen has actually finished initializing, unlike Odin's
         // BEFORE_INIT-based ScreenEvent.Open) makes a connect-delay unnecessary entirely.
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (screen is TitleScreen && cleansMenus()) cleanTitleScreen(screen)
+        }
+
         ScreenEvents.AFTER_INIT.register { client, screen, _, _ ->
             if (!enabled || !autoJoinHypixel || hasConnectedToHypixel || screen !is TitleScreen) return@register
             hasConnectedToHypixel = true

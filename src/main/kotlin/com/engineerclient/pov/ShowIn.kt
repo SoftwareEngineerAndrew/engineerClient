@@ -9,7 +9,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
  * [reset] from its own listeners, so it stays current while it is on.
  */
 object ShowIn {
-    val OPTIONS = arrayListOf("Everywhere", "Only In Boss", "Only In Goldor", "Only In Blood Rush")
+    enum class Option { EVERYWHERE, ONLY_IN_BOSS, ONLY_IN_GOLDOR, ONLY_IN_BLOOD_RUSH }
     const val DESC = "Where it works. Blood rush is from the dungeon starting until the blood door opens."
 
     private val FORMATTING = Regex("§.")
@@ -25,7 +25,7 @@ object ShowIn {
     /** A world load: a new dungeon (or none). */
     fun reset() { bloodOpened = false }
 
-    /** Whether [option] (an index into [OPTIONS]) allows it here and now. */
+    /** Whether [option] (an index into [Option]) allows it here and now. */
     fun allows(option: Int): Boolean = when (option) {
         1 -> DungeonUtils.inBoss
         2 -> DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P3
