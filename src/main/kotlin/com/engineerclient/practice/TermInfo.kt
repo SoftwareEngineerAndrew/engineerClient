@@ -41,10 +41,10 @@ object TermInfo : Module(
     description = "F7 terminals: section progress HUD, hides the terminal completion titles, and each section's time when it's done.",
     key = null,
 ) {
-    private val simple by BooleanSetting("Simple Mode", true, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
-    private val hideTitles by BooleanSetting("Hide Completion Titles", false, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening titles.")
+    private val simple by BooleanSetting("Simple Mode", false, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
+    private val hideTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening titles.")
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
-    private val sectionSeconds by NumberSetting("Section Time Seconds", 2.0, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
+    private val sectionSeconds by NumberSetting("Section Time Seconds", 1.5, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
     private val numbersPreview by BooleanSetting("Numbers 4th/5th Preview", false, desc = "Odin's terminal solver shows the next 3 clicks in Numbers; this colours the 4th and 5th too.")
     private val order4 by ColorSetting("Order 4", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Color of the Numbers solver for the 4th item.").withDependency { numbersPreview }
     private val order5 by ColorSetting("Order 5", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Color of the Numbers solver for the 5th item.").withDependency { numbersPreview }
@@ -57,7 +57,7 @@ object TermInfo : Module(
         else -> null
     }
 
-    private val infoHud by HUD("Term Info", "The current terminal section's progress.", true, 10, 80, 1.5f) { example ->
+    private val infoHud by HUD("Term Info", "The current terminal section's progress.", true, 633, 416, 2.05f) { example ->
         if (example) return@HUD lines(this, if (simple) listOf("§c2/7") else listOf("§eTerms: 3/4", "§aLevers: 2/2", "§aDevice: §l✔", "§cGate: §l✘"))
         val s = current() ?: return@HUD 0 to 0
         lines(this, if (simple) listOf("${if (s.gateDestroyed) "§a" else "§c"}${s.termsDone + s.leversDone + (if (s.deviceDone) 1 else 0)}/${s.terms + 3}")
@@ -69,7 +69,7 @@ object TermInfo : Module(
         ))
     }
 
-    private val timeHud by HUD("Section Time", "The last terminal section's time, for a few seconds after it's done.", true, 200, 120, 2f) { example ->
+    private val timeHud by HUD("Section Time", "The last terminal section's time, for a few seconds after it's done.", true, 420, 330, 5f) { example ->
         if (example) return@HUD lines(this, listOf("§514.35"))
         if (!sectionTimes) return@HUD 0 to 0
         val (text, at) = shownTime ?: return@HUD 0 to 0
@@ -190,6 +190,8 @@ object TermInfo : Module(
     }
 
     init {
+        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
+        infoHud.enabled = true; timeHud.enabled = true
         on<LevelEvent.Load> { reset(); shownTime = null }
         on<TickEvent.Server> { serverTicks++ }
 

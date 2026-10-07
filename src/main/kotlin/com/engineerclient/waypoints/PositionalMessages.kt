@@ -48,7 +48,7 @@ object PositionalMessages : Module(
     description = "Sends a message when you're near a certain position. /posmsg",
 ) {
     private val onlyDungeons by BooleanSetting("Only in Dungeons", true, desc = "Only sends messages when you're in a dungeon.")
-    private val showPositions by BooleanSetting("Show Positions", true, desc = "Draws boxes/lines around the positions.")
+    private val showPositions by BooleanSetting("Show Positions", false, desc = "Draws boxes/lines around the positions.")
     private val cylinderHeight by NumberSetting("Height", 0.2f, 0.1..5.0, 0.1, desc = "Height of the cylinder for in messages.").withDependency { showPositions }
     private val displayMessage by BooleanSetting("Show Message", true, desc = "Whether or not to display the message in the box.").withDependency { showPositions }
     private val messageSize by NumberSetting("Message Size", 1f, 0.1..4.0, 0.1f, desc = "The size at which to display the message in the box.").withDependency { showPositions && displayMessage }

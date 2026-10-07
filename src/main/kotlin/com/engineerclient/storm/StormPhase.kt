@@ -74,7 +74,7 @@ object StormPhase : Module(
     private val insideColor by ColorSetting("Inside Color", Color(85, 255, 85, 0.25f), true, desc = "Hitbox colour when the check had him inside the zone.").withDependency { hitbox }
     private val outsideColor by ColorSetting("Outside Color", Color(255, 85, 85, 0.25f), true, desc = "Hitbox colour when the check had him outside it.").withDependency { hitbox }
 
-    private val ticksHud by HUD("Storm Ticks", "Server ticks since Storm's phase started.", true, 10, 60, 1.5f) { example ->
+    private val ticksHud by HUD("Storm Ticks", "Server ticks since Storm's phase started.", true, 5, 30, 0.75f) { example ->
         if (example) return@HUD draw(this, if (modulo) 7 else 347)
         val count = count() ?: return@HUD 0 to 0
         if (!inArena()) return@HUD 0 to 0

@@ -87,7 +87,7 @@ object BetterPF : Module(
         return ownerToken
     }
 
-    private val cameraFpsSetting by NumberSetting("Camera FPS", 60, 20..160, 10, desc = "How many times a second your view is saved (at most - never more than the game draws). Higher makes your POV in the viewer smoother on a high refresh rate screen; each 60 more adds about 3% to a run.")
+    private val cameraFpsSetting by NumberSetting("Camera FPS", 30, 20..160, 10, desc = "How many times a second your view is saved (at most - never more than the game draws). Higher makes your POV in the viewer smoother on a high refresh rate screen; each 60 more adds about 3% to a run.")
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 

@@ -71,10 +71,9 @@ object EngineerClient : ClientModInitializer {
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
-        // fresh install nothing has saved state yet, so turn the module on once.
+        // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            if (!P3Rotation.enabled) P3Rotation.toggle()
-            if (!RandomStuff.enabled) RandomStuff.toggle()
+            for (m in listOf(AgroLeaderboard, com.engineerclient.p3sim.P3Sim, RandomStuff, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 

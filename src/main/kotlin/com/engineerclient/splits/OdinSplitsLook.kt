@@ -37,7 +37,7 @@ object OdinSplitsLook {
     private enum class Look { ODIN_SPLITS, ENGINEER_SPLITS }
     private enum class PaceFloor { F7, M7 }
 
-    private val look = SelectorSetting("Look", Look.ODIN_SPLITS,
+    private val look = SelectorSetting("Look", Look.ENGINEER_SPLITS,
         desc = "Odin Splits, or Engineer Splits: EngineerSplits' lines (Name > time (ticks)) with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
 
     /** The Engineer look is picked. */
@@ -55,7 +55,7 @@ object OdinSplitsLook {
     private val showPace = BooleanSetting("Show Pace", true, desc = "Engineer Splits: the Pace line, the projected finish.")
         .withDependency { engineer }
 
-    private val enterAfterEntry = BooleanSetting("Enter After Entry", false, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
+    private val enterAfterEntry = BooleanSetting("Enter After Entry", true, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }

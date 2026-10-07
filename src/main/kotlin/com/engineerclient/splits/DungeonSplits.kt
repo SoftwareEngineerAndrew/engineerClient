@@ -49,7 +49,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "A sub-split HUD per section of the run, and the Scorecard, on the real and server-tick clocks. The splits themselves are Odin's Splits (Look: Engineer Splits).",
+    description = "The blood rush sub splits, room by room. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
 
@@ -82,24 +82,6 @@ object DungeonSplits : Module(
     // The run's splits themselves are Odin's Splits now, in the Engineer Splits look
     // (OdinSplitsLook); [tracker] still times the phases the sub splits and scorecard hang off.
 
-    private val scorecardHud by HUD("Scorecard Splits", "The whole run as a table: each split's total, then its sub splits.", true, 10, 150, 1f) { example ->
-        if (example) return@HUD scorecard(this, listOf(
-            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§e63.40\t§e22.60\t§e4.10\t§e36.30\t§e0.40", "§d3.1\t§53.0\t§60.0",
-            "§e25.85\t§29.75\t§20.55\t§210.15\t§e0.30\t§75.10", "§c46.40\t§734.35\t§20.60\t§c0.45\t§e4.60\t§e1.30\t§60.10\t§75.10",
-            "§e47.20\t§e12.90\t§a9.40\t§c13.80\t§e8.90", "§e7.90\t§03.40\t§24.50",
-            "§230.35\t§77.95\t§e0.70\t§77.85\t§e3.30\t§60.05\t§77.55\t§73.10",
-            "§3Pace 4:58 §8(4:57)", "§8Lag §71.35s",
-        ))
-        val now = now()
-        val rows = card.rows(tracker.splits(), now, blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)) { scorecardCells(it, now) }
-        // Pace against your targets (F7: your PBs, else the dark green times), real time first; and the time lost to lag.
-        val extra = if (rows.isEmpty()) emptyList() else listOfNotNull(
-            pace(now)?.let { "§3Pace " + SplitPace.mss(it.ms) + " §8(" + SplitPace.mss(it.ticks * 50) + ")" },
-            "§8Lag §7" + SplitFormat.seconds(SplitPace.lag(tracker.splits(), now)),
-        )
-        scorecard(this, rows + extra)
-    }
-
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
     private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
     private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "", placeholder = "").hide()
@@ -109,8 +91,8 @@ object DungeonSplits : Module(
         EngineerClient.msg("§7Sub split bests cleared.")
     }
 
-    private val cardDebug by BooleanSetting("Scorecard Debug", false, desc = "Says in chat each moment the scorecard picks up, and what it read it from — for checking the new ones (portal, leaps, Goldor's first hit, Storm breaking free).")
-    private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) EngineerClient.msg("§8[scorecard] §7$what") } }
+    // Still fed: it reads the moments (portal, leaps, Goldor's first hit) the splits' bests are graded on. Its HUD is Devgineer Client's.
+    private val card = Scorecard()
 
     /**
      * Each section's settings together, in the order they show in the ClickGUI: its HUD with its own
@@ -131,10 +113,11 @@ object DungeonSplits : Module(
     private fun hudOn(s: Section) = huds[s]?.value?.enabled == true
 
     init {
-        for (s in SECTIONS) {
+        // Only the blood rush HUD here; the other sections' HUDs are Devgineer Client's Sub Splits.
+        for (s in SECTIONS.filter { it.window == SplitTracker.OPEN }) {
             // The HUD toggle first, its detail settings under it.
             huds[s] = registerSetting(
-                HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 0, 0, 1f) { example ->
+                HUD("${s.name} Sub Splits", "What happened inside ${s.name}.", true, 780, 229, 0.9f) { example ->
                     if (example) return@HUD draw(this, if (s.window == SplitTracker.OPEN) listOf(
                         "§70.52s §8| \t§c1.73s \t§5Hallway: \t§62.31s",
                         "\t§411.73s \t§dDino: \t§622.31s",

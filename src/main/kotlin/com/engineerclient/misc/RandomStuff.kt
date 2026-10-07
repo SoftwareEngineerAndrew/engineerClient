@@ -65,14 +65,14 @@ object RandomStuff : Module(
     private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
     private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
-    private val healthManaThreshold by NumberSetting("Threshold", 20, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
+    private val healthManaThreshold by NumberSetting("Threshold", 50, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
 
     // --- Health and mana bars ------------------------------------------------------------------
     //
     // Bar versions of Odin's Health HUD and Mana HUD, in the colours set in Odin's Player Display.
     // Each is its own HUD so it can be placed and toggled on its own; unlike the text, a bar stays
     // up at 0 as an empty bar.
-    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.") { example ->
+    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
         val (current, max) = when {
             example -> 3000 to 4000
             !LocationUtils.isInSkyblock || ActionBarListener.maxHealth == 0 -> return@HUD 0 to 0
@@ -84,7 +84,7 @@ object RandomStuff : Module(
     private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
     private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
 
-    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.") { example ->
+    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
         val (current, max) = when {
             example -> 2000 to 20000
             !LocationUtils.isInSkyblock || ActionBarListener.maxMana == 0 -> return@HUD 0 to 0
@@ -99,8 +99,8 @@ object RandomStuff : Module(
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
 
-    private val blessOnLeave by BooleanSetting("Bless On Party Leave", false, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
-    private val blackSky by BooleanSetting("Black Sky", false, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
+    private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
+    private val blackSky by BooleanSetting("Black Sky", true, desc = "Makes the sky (and distant fog) black instead of blue. Pairs with Sodium Extra's Sky toggle.")
 
     // --- Blur in GUI ---------------------------------------------------------------------------
     //
@@ -114,7 +114,7 @@ object RandomStuff : Module(
     // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
     // — six full-screen passes — and only for the frames a screen is actually open.
     private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
-    private val blurStrength by NumberSetting("Blur Strength", 5, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
+    private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
 
     // --- Enchantment glint ---------------------------------------------------------------------
     //
@@ -145,7 +145,7 @@ object RandomStuff : Module(
     // --- Startup and restart -------------------------------------------------------------------
 
     private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
-    private val clickGuiScale by NumberSetting("Click GUI Size", 2f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
+    private val clickGuiScale by NumberSetting("Click GUI Size", 1.55f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
     private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
 
     // --- Scoreboard lines ----------------------------------------------------------------------
@@ -154,10 +154,10 @@ object RandomStuff : Module(
     // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
     // does the matching and the hiding; these settings only say what to hide.
 
-    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", true, desc = "Hides the sidebar lines chosen on the Scoreboard Lines page: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
-    private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", false, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
-    private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", true, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
-    private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", true, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
+    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", false, desc = "Hides the sidebar lines chosen on the Scoreboard Lines page: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
+    private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
+    private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
+    private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
 

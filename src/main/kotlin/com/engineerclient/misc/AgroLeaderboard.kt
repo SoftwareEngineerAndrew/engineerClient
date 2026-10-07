@@ -44,7 +44,7 @@ object AgroLeaderboard : Module(
 ) {
     private class Entry(val name: String, val skin: PlayerSkin?, val distance: Double, val player: Player? = null)
 
-    val sphereMode by BooleanSetting("Sphere Mode", false, desc = "Draws a see-through sphere around Maxor/Storm through the closest player: the aggro boundary. If you are the closest, it goes through the 2nd closest instead, showing your margin.")
+    val sphereMode by BooleanSetting("Sphere Mode", true, desc = "Draws a see-through sphere around Maxor/Storm through the closest player: the aggro boundary. If you are the closest, it goes through the 2nd closest instead, showing your margin.")
     private val sphereColor by ColorSetting("Sphere Color", Color(255, 85, 85, 0.18f), true, desc = "Sphere colour when someone else has aggro.").withDependency { sphereMode }
     private val aggroColor by ColorSetting("Sphere Color (Your Aggro)", Color(85, 255, 85, 0.18f), true, desc = "Sphere colour when you are the closest and it shows the 2nd closest.").withDependency { sphereMode }
 
@@ -67,7 +67,7 @@ object AgroLeaderboard : Module(
     private const val LINE_HEIGHT = 10
     private const val HEAD_SIZE = 8
 
-    private val leaderboardHud by HUD("Agro Leaderboard", "Party ordered by distance to Maxor/Storm.", toggleable = false) { example ->
+    private val leaderboardHud by HUD("Agro Leaderboard", "Party ordered by distance to Maxor/Storm.", toggleable = false, x = 840, y = 432) { example ->
         if (example) return@HUD draw(this, "Maxor", true, listOf(
             Entry("undonecoffee", mc.player?.skin, 4.2), Entry("Teammate", null, 9.8), Entry("Another", null, 15.1),
         ))

@@ -52,7 +52,7 @@ object PovPreviews : Module(
      * resolution is a quarter of the fragments and, on a preview you are reading for position
      * rather than detail, hard to notice.
      */
-    val resolution by NumberSetting("Resolution", 0.5f, 0.25..1.0, 0.05f, desc = "Render scale of each feed, as a fraction of its quadrant. Lower is cheaper and softer.", unit = "x")
+    val resolution by NumberSetting("Resolution", 0.75f, 0.25..1.0, 0.05f, desc = "Render scale of each feed, as a fraction of its quadrant. Lower is cheaper and softer.", unit = "x")
 
     /**
      * Sodium's render lists hold whatever the last cull produced — your own frustum — so without a
@@ -71,15 +71,15 @@ object PovPreviews : Module(
 
     // Separate from [opacity]: these apply to Odin's own leap boxes (colour, head, name, class)
     // drawn on top of the previews, only while the previews are actually up.
-    val leapBoxScale by NumberSetting("Leap Box Size", 1f, 0.3..1.0, 0.05f, desc = "Shrinks Odin's leap boxes toward the centre while the previews are showing.", unit = "x")
-    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 1f, 0.1..1.0, 0.05f, desc = "Fades the background of Odin's leap boxes (not the head or name) while the previews are showing.", unit = "x")
+    val leapBoxScale by NumberSetting("Leap Box Size", 0.5f, 0.3..1.0, 0.05f, desc = "Shrinks Odin's leap boxes toward the centre while the previews are showing.", unit = "x")
+    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 0.2f, 0.1..1.0, 0.05f, desc = "Fades the background of Odin's leap boxes (not the head or name) while the previews are showing.", unit = "x")
 
     /**
      * With four previews tiling the screen, your own view is behind all of them. Skipping it is a
      * whole world render saved per frame, and costs nothing to resume: the next frame simply does
      * not take that branch.
      */
-    val skipOwnView by BooleanSetting("Skip Own View", true, desc = "Skips rendering your own view while the previews cover the screen. Saves a full world render per frame.")
+    val skipOwnView by BooleanSetting("Skip Own View", false, desc = "Skips rendering your own view while the previews cover the screen. Saves a full world render per frame.")
 
     /**
      * Vanilla = whatever `Camera.update` lerps to (smooth, ~3 ticks / 150 ms behind the server).
@@ -122,7 +122,7 @@ object PovPreviews : Module(
     /** Where the previews show: everywhere, or only in boss, only in Goldor (P3), or only on blood rush. */
     private val showIn by SelectorSetting("Show In", ShowIn.Option.EVERYWHERE, desc = ShowIn.DESC)
 
-    val showCost by BooleanSetting("Show Cost", false, desc = "HUD line with the milliseconds the previews added to the last frame.")
+    val showCost by BooleanSetting("Show Cost", true, desc = "HUD line with the milliseconds the previews added to the last frame.")
 
     val mode: PovPose.Mode
         get() = when (headSmoothing.ordinal) {
@@ -131,7 +131,7 @@ object PovPreviews : Module(
             else -> PovPose.Mode.VANILLA
         }
 
-    private val costHud by HUD("POV Cost", "Milliseconds the POV previews added to the last frame, and how many feeds are live.", x = 10, y = 200, scale = 1f) { example ->
+    private val costHud by HUD("POV Cost", "Milliseconds the POV previews added to the last frame, and how many feeds are live.", x = 491, y = 415, scale = 4f) { example ->
         val line = if (example) "§7POV §f1.8§7ms  §f4§7/4" else PovCapture.costLine() ?: return@HUD 0 to 0
         drawLine(this, line)
     }
@@ -159,6 +159,8 @@ object PovPreviews : Module(
     }
 
     init {
+        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
+        costHud.enabled = true
         // Above Odin's CustomGUIImpl (EventPriority.HIGHEST): the bus sorts listeners by priority
         // descending, so this runs first and everything Odin submits for the leap menu — its
         // boxes, the names, EC's own ring — is submitted after the previews and lands on top.

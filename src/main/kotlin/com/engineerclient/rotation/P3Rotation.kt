@@ -56,7 +56,7 @@ object P3Rotation : Module(
     private val leapSound by BooleanSetting("Sounds", true, desc = "Plays the role's sound when you are handed one, and the leap-ready sound when your target is in place.")
     val dimOthers by BooleanSetting("Dim Other Players", false, desc = "Greys out the three players you should NOT leap to in Odin's leap menu, as well as ringing the one you should.")
     private val roleVignette by BooleanSetting("Role Vignette", true, desc = "Flashes the screen edge in the role's colour when you are handed a new role, and amber when your leap target is in place.")
-    private val vignetteCorner by BooleanSetting("Vignette In Leap Corner", false, desc = "Flashes only the corner of the screen where your leap target sits in Odin's leap menu, so you know which quadrant to click before it is open.").withDependency { roleVignette }
+    private val vignetteCorner by BooleanSetting("Vignette In Leap Corner", true, desc = "Flashes only the corner of the screen where your leap target sits in Odin's leap menu, so you know which quadrant to click before it is open.").withDependency { roleVignette }
 
     // One identity per slot: the same job is the same colour and the same note in every section.
     private val slotColors by DropdownSetting("Slot Colours", desc = "")
@@ -96,7 +96,7 @@ object P3Rotation : Module(
         desc = "Only if you cannot run Odin's own Leap Announce and Announce Invincibility: EC sends them instead. With both on, the party hears everything twice.",
     )
 
-    private val roleHud by HUD("Your Role", "Shows the phase-3 role you are on and what is left of it.") { example ->
+    private val roleHud by HUD("Your Role", "Shows the phase-3 role you are on and what is left of it.", true, 634, 191, 3.2f) { example ->
         drawRoleHud(this, example)
     }
 
@@ -104,7 +104,7 @@ object P3Rotation : Module(
      * The leap menu before it's open: its four players in Odin's quadrants, your target ringed
      * (amber on the way, green in place), so you know where to click before the menu appears.
      */
-    private val leapPreviewHud by HUD("Leap Preview", "A small copy of Odin's leap menu while it's closed: your leap target's quadrant lit up (amber on their way, green in place), so you know where to click before you open it.", true, x = 10, y = 200, scale = 1f) { example ->
+    private val leapPreviewHud by HUD("Leap Preview", "A small copy of Odin's leap menu while it's closed: your leap target's quadrant lit up (amber on their way, green in place), so you know where to click before you open it.", true, x = 5, y = 100, scale = 0.5f) { example ->
         if (!example && !enabled) return@HUD 0 to 0
         LeapHighlight.drawPreview(this, example)
     }
@@ -113,7 +113,7 @@ object P3Rotation : Module(
      * Everything the mod believes, on screen, so a clip of a run is enough to see where it went
      * wrong. Off by default; the same content is in `/ec debug` and in the game log under `[ec]`.
      */
-    private val debugHud by HUD("Debug HUD", "Full internal state of the rotation: every player's role, tasks, masks, arrivals, pot exits used, and the last decisions.", true, x = 10, y = 120, scale = 1f) { example ->
+    private val debugHud by HUD("Debug HUD", "Full internal state of the rotation: every player's role, tasks, masks, arrivals, pot exits used, and the last decisions.", true, x = 5, y = 60, scale = 0.5f) { example ->
         drawDebugHud(this, example)
     }
 
@@ -134,6 +134,8 @@ object P3Rotation : Module(
     private var gateBlown = false
 
     init {
+        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
+        roleHud.enabled = true
         RotationEngine.masksAvailable = { ign -> MaskTracker.available(ign) }
 
         // Chat is read off the WIRE, not from Odin's chat event. Odin posts that event from Fabric's
