@@ -85,7 +85,7 @@ object EngineerLook {
               grade: ((String, Long, Long, Boolean) -> String?)? = null,
               /** Pace against the dark green times ([SplitPace], ms and ticks), in place of the targets' pace. */
               pace: Pair<Long, Long>? = null,
-              /** Time lost to lag so far ([SplitPace.lag]): the top line when given, above Pace. */
+              /** Time lost to lag so far ([SplitPace.lag]): the top line, above Pace, once it is 0.01 s or more. */
               lagMs: Long? = null): List<Line> {
         if (rows.isEmpty()) return emptyList()
         val segments = segments(rows, place, master)
@@ -93,7 +93,8 @@ object EngineerLook {
 
         val current = segments.indexOfFirst { it.current }
         val started = current >= 0 || rows.any { it.ms > 0 }
-        if (opts.showLag && lagMs != null && started) out += Line(LAG, "§7", SplitFormat.seconds(lagMs), null)
+        // Only once lag has cost something that shows (0.01 s), coloured by how much: gray, yellow, red.
+        if (opts.showLag && lagMs != null && lagMs >= 10 && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null)
         if (opts.showPace && (started || opts.show0)) {
             var ms = 0L; var ticks = 0L
             segments.forEachIndexed { i, s ->
@@ -145,6 +146,13 @@ object EngineerLook {
      */
     private fun segments(rows: List<Row>, place: Place, master: Boolean) =
         rows.dropLast(1).filterNot { place == Place.FLOOR7 && !master && strip(it.name) == "Cleared" }
+
+    /** Lag's time colour: gray under 1 s, yellow up to 3 s, red past that. */
+    private fun lagColour(ms: Long) = when {
+        ms < 1000 -> "§7"
+        ms <= 3000 -> "§e"
+        else -> "§c"
+    }
 
     /** A line as text, the way EngineerSplits wrote it: `Name > time (ticks)`, the arrow aqua. */
     fun text(l: Line): String = "${l.label} §b> ${l.colour}${l.time}" + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
