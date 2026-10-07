@@ -88,6 +88,44 @@ class PreRequeueTest {
     }
 
     @Test
+    fun `!dt holds every requeue, with its reason`() {
+        val d = PreRequeue.Downtime()
+        assertEquals(false, d.active)
+        assertEquals("§c!dt §7from §fp3wr§7: no requeue at the end of this run (food).", d.onParty("p3wr", "!dt food"))
+        assertEquals(true, d.active)
+        d.onParty("Skyyqt", "!DOWNTIME")
+        assertEquals("p3wr (food), Skyyqt (no reason given)", d.who())
+    }
+
+    @Test
+    fun `!undt takes only your own back`() {
+        val d = PreRequeue.Downtime()
+        d.onParty("p3wr", "!dt")
+        d.onParty("Skyyqt", "!dt brb")
+        assertNull(d.onParty("owoskilly", "!undt"))
+        assertEquals("§7!undt from §fp3wr§7, still waiting on Skyyqt (brb).", d.onParty("p3wr", "!undt"))
+        assertEquals("§a!undt §7from §fSkyyqt§7: requeue back on.", d.onParty("Skyyqt", "!undowntime"))
+        assertEquals(false, d.active)
+    }
+
+    @Test
+    fun `other party chat is not downtime`() {
+        val d = PreRequeue.Downtime()
+        assertNull(d.onParty("p3wr", "dt please"))
+        assertNull(d.onParty("p3wr", "!dtx"))
+        assertNull(d.onParty("p3wr", "Leaped to Skyyqt!"))
+        assertEquals(false, d.active)
+    }
+
+    @Test
+    fun `the run's end clears it`() {
+        val d = PreRequeue.Downtime()
+        d.onParty("p3wr", "!dt")
+        d.clear()
+        assertEquals(false, d.active)
+    }
+
+    @Test
     fun `a world change resets it`() {
         val p = PreRequeue.Plan().apply { onEndLine(); onTnt(140, 0) }
         p.reset()

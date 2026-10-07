@@ -14,6 +14,7 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.DungeonQueue
 import com.odtheking.odin.utils.sendCommand
+import com.engineerclient.rotation.P3ChatParser
 import com.odtheking.odin.utils.skyblock.PartyUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -31,6 +32,10 @@ import net.minecraft.world.entity.item.PrimedTnt
  *
  * With no TNT seen it falls back to the chest room (you're teleported up to y 166 at the score).
  * Odin's Auto Requeue is told to skip that run, so it doesn't requeue a second time.
+ *
+ * `!dt` / `!downtime` in party chat (optionally with a reason) stops every requeue for the end of
+ * the run: this one, and Odin's Auto Requeue, which is held off until the run is over even when
+ * Odin's own chat commands are off. `!undt` / `!undowntime` takes yours back.
  */
 object PreRequeue : Module(
     name = "Pre-Requeue",
@@ -44,6 +49,35 @@ object PreRequeue : Module(
     private val notify by BooleanSetting("Chat Note", true, desc = "Says in chat when it requeued, and on what.")
 
     private val plan = Plan()
+    private val downtime = Downtime()
+
+    /**
+     * Who asked for downtime with `!dt` in party chat, and why: while anyone has, no requeue. Kept
+     * until the run's end has been dealt with ([clear]), across the world loads into the run.
+     */
+    class Downtime {
+        private val reasons = LinkedHashMap<String, String>()
+        val active get() = reasons.isNotEmpty()
+
+        /** A party chat message from [ign]: a note for chat when it was a `!dt` / `!undt`, else null. */
+        fun onParty(ign: String, message: String): String? {
+            val words = message.trim().split(Regex("\\s+"))
+            return when (words.first().lowercase()) {
+                "!dt", "!downtime" -> {
+                    reasons[ign] = words.drop(1).joinToString(" ").ifBlank { "no reason given" }
+                    "§c!dt §7from §f$ign§7: no requeue at the end of this run (${reasons[ign]})."
+                }
+                "!undt", "!undowntime" -> {
+                    if (reasons.remove(ign) == null) return null
+                    if (active) "§7!undt from §f$ign§7, still waiting on " + who() + "." else "§a!undt §7from §f$ign§7: requeue back on."
+                }
+                else -> null
+            }
+        }
+
+        fun who() = reasons.entries.joinToString(", ") { (ign, why) -> "$ign ($why)" }
+        fun clear() = reasons.clear()
+    }
     private var serverTicks = 0
 
     /** The decision, without Minecraft: armed by the end line, fired by the TNT or the chest room. */
@@ -83,6 +117,7 @@ object PreRequeue : Module(
         }
     }
 
+    private val EXTRA_STATS = Regex(" {29}> EXTRA STATS <")
     private const val END_LINE = "[BOSS] Necron: All this, for nothing..."
     private val CODES = Regex("§.")
 
@@ -101,6 +136,11 @@ object PreRequeue : Module(
             if (overlay) return@onReceive
             val text = content.string.replace(CODES, "")
             if (text == END_LINE) mc.execute { if (inFloor7()) { floor = DungeonUtils.floor?.name ?: "F7"; plan.onEndLine() } }
+            P3ChatParser.partyLine(text)?.let { line ->
+                mc.execute { downtime.onParty(line.ign, line.message)?.let { if (enabled) EngineerClient.msg(it) } }
+            }
+            // The run's stats: Odin's Auto Requeue has looked at its flag by now, so the downtime is spent.
+            if (EXTRA_STATS.matches(text)) mc.execute { downtime.clear() }
         }
 
         on<EntityEvent.Add> {
@@ -108,11 +148,17 @@ object PreRequeue : Module(
         }
 
         on<TickEvent.End> {
+            // Odin's Auto Requeue forgets its flag on every world load (the run's own included).
+            if (enabled && downtime.active) DungeonQueue.disableRequeue = true
             if (!plan.armed || plan.sent) return@on
             // The score teleports everyone up to the chest room (y 166); Necron's arena is far below.
             if (chestFallback && (mc.player?.y ?: 0.0) > 150) plan.onChestRoom(serverTicks)
             val why = plan.onClientTick(serverTicks, freezeGuard) ?: return@on
             if (leaderOnly && PartyUtils.isInParty && !PartyUtils.isLeader()) return@on
+            if (downtime.active) {
+                EngineerClient.msg("§7Not requeueing: §c!dt §7from " + downtime.who() + ".")
+                return@on
+            }
             EngineerClient.safely("pre-requeue") {
                 // Odin's Auto Requeue would send another at the score's stats line.
                 DungeonQueue.disableRequeue = true
