@@ -47,8 +47,9 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             Triple(0, "Normal PF", "34s"), Triple(1, "Quality PF", "28s"),
             Triple(2, "Optimal PF", "22s"), Triple(P3Plan.RANDOM + 1, "Theoretical", "18s"),
         )
-        val right = cx + RESTART_W / 2 + GAP
-        y = cy - skills.size * ROW / 2 + 2
+        // Up and out of the plan's way: the last one ends level with Restart's bottom.
+        val right = cx + RESTART_W / 2 + GAP + 20
+        y = cy + 10 - skills.size * ROW + 4
         for ((i, name, time) in skills) {
             addRenderableWidget(Button.builder(Component.literal(if (i == P3Plan.skill) "§a§n$name" else name)) {
                 P3Plan.chooseSkill(i)
