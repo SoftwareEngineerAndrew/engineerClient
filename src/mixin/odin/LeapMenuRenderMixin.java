@@ -1,10 +1,14 @@
 package com.engineerclient.mixin.odin;
 
+import com.engineerclient.leap.LeapExtras;
 import com.engineerclient.pov.PovPreviews;
+import com.odtheking.odin.events.ScreenEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Odin's leap menu drawing its four boxes (the render handler, compiled into LeapMenu$2), shrunk
@@ -20,6 +24,16 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 public class LeapMenuRenderMixin {
 
     private static final String RENDER = "invoke(Lcom/odtheking/odin/events/ScreenEvent$Render;)Ljava/lang/Object;";
+
+    /**
+     * Leap Extras' Map Leap: in the clear, the map is drawn instead of the boxes, and true is Odin's
+     * own "drawn" answer. Odin only calls this handler while its leap menu is the screen (its
+     * HandlerSet's active check), so nothing else ever gets the map.
+     */
+    @Inject(method = RENDER, at = @At("HEAD"), cancellable = true, remap = false)
+    private void ec$mapLeap(ScreenEvent.Render event, CallbackInfoReturnable<Object> cir) {
+        if (LeapExtras.renderMapLeap(event)) cir.setReturnValue(true);
+    }
 
     @ModifyArg(method = RENDER, at = @At(value = "INVOKE", target = "Lorg/joml/Matrix3x2fStack;scale(FF)Lorg/joml/Matrix3x2f;"), index = 0, remap = false)
     private float ec$scaleX(float x) {
