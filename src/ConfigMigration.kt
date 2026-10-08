@@ -24,7 +24,8 @@ object ConfigMigration {
      *    Splits look (written into Odin's config, read once the look's settings exist - see
      *    OdinSplitsLook.install);
      *  - Positional Messages was removed from Odin in 0.3.6 and is provided here: Odin's module
-     *    (on/off, settings and the saved boxes) is copied over as it was.
+     *    (on/off, settings and the saved boxes) is copied over as it was;
+     *  - POV Previews' Show In choice is its matching Only In checkbox (Everywhere: none ticked).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -82,6 +83,14 @@ object ConfigMigration {
             }
         }
 
+        // POV Previews' one Show In choice became a checkbox per place; the old key goes, so this runs once.
+        module(modules, "POV Previews")?.let(::settings)?.let { pov ->
+            val old = pov.remove("Show In") ?: return@let
+            changed = true
+            val key = POV_SHOW_IN[old.takeIf { it.isJsonPrimitive }?.asString] ?: return@let
+            if (!pov.has(key)) pov.addProperty(key, true)
+        }
+
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
             fun copy(from: String, to: String, keys: List<String>) {
@@ -116,6 +125,10 @@ object ConfigMigration {
     private val HEALTH_MANA_KEYS = listOf(
         "Hide Health/Mana Above %", "Threshold", "Health Bar HUD", "Health Bar Width", "Health Bar Height",
         "Mana Bar HUD", "Mana Bar Width", "Mana Bar Height",
+    )
+
+    private val POV_SHOW_IN = mapOf(
+        "ONLY_IN_BLOOD_RUSH" to "Only In Blood Rush", "ONLY_IN_BOSS" to "Only In Boss", "ONLY_IN_GOLDOR" to "Only In Goldor",
     )
 
     private fun module(list: JsonArray, name: String): JsonObject? =
