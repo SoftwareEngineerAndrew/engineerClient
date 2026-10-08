@@ -16,7 +16,8 @@
     "PersonalBestSimMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
-    "TickTimersGoldorMixin"
+    "TickTimersGoldorMixin",
+    "HighlightRenderMixin"
   ],
   "injectors": {
     "defaultRequire": 0
