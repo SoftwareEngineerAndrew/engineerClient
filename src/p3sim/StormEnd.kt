@@ -42,7 +42,8 @@ class StormEnd : Fight.Phase("Storm end") {
         StormFx.line(b, "I should have known that I stood no chance.")
         // Hypixel: the bar usually still shows 0.45 at the line and drops to 0 about 4 ticks later.
         BossBar.show("§c§lStorm", 0.45f)
-        StormCorpse(b).start()
+        // The lead-in is 2.1 s shorter than the game's, so his body dies 2 s later to keep it near P3's start as in the game.
+        StormCorpse(b, later = 40).start()
     }
 
     override fun tick() {
@@ -70,9 +71,12 @@ class StormEnd : Fight.Phase("Storm end") {
  * death fall) at +226 (215-236), removed 20-28 later (+249). Meanwhile 480 lightning bolts: 24
  * spirals from his body on a fixed schedule ([SPIRALS], the same in every fight to a tick or two),
  * each 20 bolts 2 blocks apart walking out to 38 blocks, one every ~4.5 ticks, turning 90° a bolt;
- * the last strikes ~+410 (Goldor's n ~ 310). Runs on [Fight.later], so it outlives the phase.
+ * the last strikes ~+410 (Goldor's n ~ 310). Runs on [Fight.later], so it outlives the phase. [later]: ticks to put
+ * the death fall and removal back by (a P3 start's shorter lead-in).
  */
-internal class StormCorpse(private val body: BossWither) {
+internal class StormCorpse(private val body: BossWither, private val later: Int) {
+    constructor(body: BossWither) : this(body, 0)
+
     private val at = body.pos
     private var n = 0
     private var yaw = body.e.yRot.toDouble()
@@ -98,7 +102,7 @@ internal class StormCorpse(private val body: BossWither) {
     }
 
     private fun tick() {
-        if (n < DEAD) {
+        if (n < DEAD + later) {
             yaw += 40.0
             val r = Math.toRadians(yaw)
             body.moveTo(at, at.add(-sin(r), 0.0, cos(r)))
@@ -107,8 +111,8 @@ internal class StormCorpse(private val body: BossWither) {
         when (n) {
             0, 4 -> Sim.sound(SoundEvents.GENERIC_EXPLODE, 2f, 0.6f, at, net.minecraft.sounds.SoundSource.BLOCKS)
             12 -> Sim.sound(SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR, 3f, 0.9f, at)
-            DEAD -> body.dieAnim()
-            GONE -> body.remove()
+            DEAD + later -> body.dieAnim()
+            GONE + later -> body.remove()
         }
         bolts[n]?.forEach { StormFx.bolt(it.x, it.z, it.y, thunder = true) }
     }
