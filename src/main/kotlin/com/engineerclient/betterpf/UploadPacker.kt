@@ -47,6 +47,17 @@ import java.util.zip.GZIPInputStream
  *    fraction of the numbers written out. 38% smaller in all on a 7-minute F7. The viewer puts each
  *    line back where it was.
  *
+ *  - Your camera's frames thinned: one is left out where the frames either side of it, as the
+ *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (under a pixel), never
+ *    leaving more than [CAM_GAP] ticks between two (more than 2 is "not rendering" to the viewer).
+ *
+ *  - Other players a party member's upload already has ([sibling]): their lines are left out
+ *    while that recording has them, with a margin either side: the two recordings' ticks are
+ *    lined up the way the viewer does it (the same block changes in both), [ALIGNED_MARGIN]; if
+ *    they can't be, by start time, [COVER_MARGIN]. The viewer fills a player from any
+ *    recording that has them at that tick, so nothing it shows changes. If that recording is the
+ *    player's own, their equipment, skin and held head go too: the viewer takes those from it.
+ *
  * Two reads of the file: [scan] (also the summary the site lists it by), then [pack]. Runs on an
  * upload thread, never the game's. The local file is left as it is.
  */
@@ -68,6 +79,10 @@ object UploadPacker {
     /** Ticks of mob and player lines a "cols" line holds; a stretch bigger than [COLS_MAX] is split. */
     private const val COLS_TICKS = 200
     private const val COLS_MAX = 100_000 // (the site takes lines up to 128 KB)
+    private const val CAM_TOLERANCE = 0.05
+    private const val CAM_GAP = 1.95
+    private const val COVER_MARGIN = 600
+    private const val ALIGNED_MARGIN = 40
 
     /** A projectile, followed through the file for its "proj" line. */
     internal class Proj(val spawn: JsonObject) {
@@ -86,6 +101,12 @@ object UploadPacker {
         internal val world: List<String>,
         internal val counts: Map<Int, Int>,
         private val projs: Map<Int, Proj>,
+        internal val self: String,
+        internal val startMs: Long,
+        /** Per "cam" line (in order), which of its frames stay; null: all. */
+        internal val camKeep: List<BooleanArray?>,
+        /** Block changes as (tick, "x,y,z,state"), for lining this recording up with another. */
+        internal val blocks: List<Pair<Long, String>>,
     ) {
         internal fun fold(id: Int) = projs[id]?.takeIf { it.foldable }
     }
@@ -101,6 +122,11 @@ object UploadPacker {
         val counts = HashMap<Int, Int>()
         val projs = HashMap<Int, Proj>()
         val flying = HashSet<Int>() // projectiles not gone yet
+        var self = ""
+        var startMs = 0L
+        val frames = ArrayList<DoubleArray>() // time, yaw, pitch, cam line, frame
+        var camLines = 0
+        val blocks = BlockReader()
         lines(Files.newInputStream(file)).use { r ->
             for (line in r.lineSequence()) {
                 val kind = kindOf(line) ?: continue
@@ -108,8 +134,17 @@ object UploadPacker {
                 val t = head?.groupValues?.get(2)?.toInt()
                 if (t != null && t > ticks && kind !in WORLD) ticks = t
                 if (kind in WORLD) world += line
+                blocks.read(kind, line)
                 when (kind) {
-                    "meta" -> JsonParser.parseString(line).asJsonObject.let { summary.add("self", it["self"]); summary.add("startMs", it["startMs"]) }
+                    "meta" -> JsonParser.parseString(line).asJsonObject.let {
+                        summary.add("self", it["self"]); summary.add("startMs", it["startMs"])
+                        self = it["self"]?.asString ?: ""; startMs = it["startMs"]?.asLong ?: 0L
+                    }
+                    "cam" -> {
+                        val d = JsonParser.parseString(line).asJsonObject.getAsJsonArray("d")
+                        d.forEachIndexed { k, f -> val a = f.asJsonArray; frames += doubleArrayOf(t!! - 1 + a[0].asDouble, a[1].asDouble, a[2].asDouble, camLines.toDouble(), k.toDouble()) }
+                        camLines++
+                    }
                     "floor" -> summary.add("floor", JsonParser.parseString(line).asJsonObject["floor"])
                     "party" -> summary.add("party", JsonParser.parseString(line).asJsonObject["m"])
                     "rooms" -> if (line.length > (layout?.length ?: -1)) layout = line
@@ -161,7 +196,81 @@ object UploadPacker {
         summary.addProperty("cleared", if (cleared) 1 else 0)
         if (privateRun) summary.addProperty("private", 1)
         if (cleared) summary.addProperty("timeMs", (end!! - start!!) * 50L)
-        return Scan(summary, layout?.replaceFirst(""""k":"rooms"""", """"k":"roomsAll""""), world, counts, projs)
+        return Scan(summary, layout?.replaceFirst(""""k":"rooms"""", """"k":"roomsAll""""), world, counts, projs, self, startMs, thinCamera(frames, camLines), blocks.changes())
+    }
+
+    /**
+     * Which camera frames to keep (see the top): from each kept frame, the furthest one the viewer's
+     * straight line to it stays within [CAM_TOLERANCE] of every frame between, at most [CAM_GAP]
+     * ticks on. In time order, as the viewer sorts them.
+     */
+    private fun thinCamera(frames: MutableList<DoubleArray>, lines: Int): List<BooleanArray?> {
+        val keep = arrayOfNulls<BooleanArray>(lines)
+        if (frames.size < 3) return keep.toList()
+        frames.sortBy { it[0] }
+        val kept = BooleanArray(frames.size)
+        kept[0] = true; kept[frames.size - 1] = true
+        fun turn(a: Double, b: Double) = ((b - a) % 360 + 540) % 360 - 180
+        var k = 0
+        while (k < frames.size - 1) {
+            var m = k + 1
+            var c = k + 2
+            while (c < frames.size && frames[c][0] - frames[k][0] <= CAM_GAP) {
+                val fk = frames[k]; val fc = frames[c]
+                var ok = true
+                for (j in k + 1 until c) {
+                    val a = (frames[j][0] - fk[0]) / (fc[0] - fk[0])
+                    val yaw = fk[1] + turn(fk[1], fc[1]) * a; val pitch = fk[2] + (fc[2] - fk[2]) * a
+                    if (Math.abs(turn(yaw, frames[j][1])) > CAM_TOLERANCE || Math.abs(pitch - frames[j][2]) > CAM_TOLERANCE) { ok = false; break }
+                }
+                if (!ok) break
+                m = c; c++
+            }
+            kept[m] = true; k = m
+        }
+        val counts = IntArray(lines)
+        for (f in frames) counts[f[3].toInt()] = maxOf(counts[f[3].toInt()], f[4].toInt() + 1)
+        frames.forEachIndexed { i, f ->
+            val li = f[3].toInt()
+            val arr = keep[li] ?: BooleanArray(counts[li]).also { keep[li] = it }
+            arr[f[4].toInt()] = kept[i]
+        }
+        return keep.toList()
+    }
+
+    /** A party member's upload, as far as leaving things out goes: whose it is, each mob's event count, when it had each player, its block changes. */
+    private class Sibling(val self: String, val startMs: Long, val counts: Map<Int, Int>, val players: Map<String, List<LongRange>>, val blocks: List<Pair<Long, String>>)
+
+    /** A recording's block changes with their palette's states, as (tick, "x,y,z,state"). */
+    private class BlockReader {
+        private val pal = HashMap<Int, String>()
+        private val raw = ArrayList<Triple<Long, String, Int>>()
+        fun read(kind: String, line: String) {
+            if (kind != "pal" && kind != "block") return
+            val l = JsonParser.parseString(line).asJsonObject
+            if (kind == "pal") pal[l["i"].asInt] = l["s"].asString
+            else raw += Triple(l["t"].asLong, "${l["x"].asInt},${l["y"].asInt},${l["z"].asInt}", l["s"].asInt)
+        }
+        fun changes() = raw.map { (t, at, s) -> t to at + "," + (pal[s] ?: "?") }
+    }
+
+    /**
+     * How many ticks to add to the sibling's to get this recording's, and how sure: the viewer's
+     * way (align) - the middle of the differences between the same block change in both, near
+     * what the start times say - or failing that the start times.
+     */
+    private fun lineUp(scan: Scan, sib: Sibling): Pair<Long, Int> {
+        val guess = (sib.startMs - scan.startMs) / 50
+        val theirs = HashMap<String, MutableList<Long>>()
+        for ((t, k) in sib.blocks) theirs.getOrPut(k) { ArrayList() } += t
+        val diffs = ArrayList<Long>()
+        for ((t, k) in scan.blocks) {
+            for (ts in theirs[k] ?: continue) { val d = t - ts; if (Math.abs(d - guess) <= 400) diffs += d }
+            if (diffs.size > 2000) break
+        }
+        if (diffs.size < 3) return guess to COVER_MARGIN
+        diffs.sort()
+        return diffs[diffs.size / 2] to ALIGNED_MARGIN
     }
 
     /**
@@ -170,15 +279,20 @@ object UploadPacker {
      * uploaded.
      */
     fun pack(file: Path, scan: Scan, sibling: ByteArray?, xz: Boolean = true): Pair<Path, Int> {
-        val drop = sibling?.let { s -> val theirs = counts(s.inputStream()); scan.counts.filter { (id, n) -> (theirs[id] ?: 0) >= n }.keys } ?: emptySet()
+        val sib = sibling?.let { readSibling(it.inputStream()) }
+        val drop = sib?.let { s -> scan.counts.filter { (id, n) -> (s.counts[id] ?: 0) >= n }.keys } ?: emptySet()
+        val players = sib?.let { Players(scan, it) }
+        var camLine = 0
         val out = Files.createTempFile("betterpf-upload-", if (xz) ".jsonl.xz" else ".jsonl.gz")
         val stream = if (xz) XZOutputStream(Files.newOutputStream(out), LZMA2Options(3)) else java.util.zip.GZIPOutputStream(Files.newOutputStream(out), 1 shl 16)
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             val cols = Columns(w)
             fun put(line: String, timed: Boolean = true) {
-                val kept = (if (drop.isEmpty()) line else keep(line, drop) ?: return).let { fold(it, scan) ?: return }
+                var kept = (if (drop.isEmpty()) line else keep(line, drop) ?: return).let { fold(it, scan) ?: return }
+                if (kept.startsWith("{\"k\":\"cam\"")) kept = thin(kept, scan.camKeep.getOrNull(camLine++)) ?: return
                 // (the world's lines carry ticks, but aren't in the timeline: none of them start a stretch)
-                if (timed) cols.put(kept) else { w.write(kept); w.newLine() }
+                if (!timed) { if (players?.keepsWorld(kept) != false) { w.write(kept); w.newLine() }; return }
+                if (players == null) cols.put(kept) else players.put(kept, cols::put)
             }
             // The first line (meta), the layout and the world's lines; then everything else.
             lines(Files.newInputStream(file)).use { r ->
@@ -336,17 +450,116 @@ object UploadPacker {
         }
     }
 
-    /** How many events each mob has in a recording (the viewer's measure of which saw it best), as saved or as uploaded. */
-    private fun counts(input: InputStream): Map<Int, Int> {
+    /** A "cam" line with only the frames [keep] keeps, or null when none are left. */
+    private fun thin(line: String, keep: BooleanArray?): String? {
+        if (keep == null || keep.all { it }) return line
+        if (keep.none { it }) return null
+        val l = JsonParser.parseString(line).asJsonObject
+        val d = l.getAsJsonArray("d")
+        val left = JsonArray()
+        d.forEachIndexed { k, f -> if (keep.getOrElse(k) { true }) left.add(f) }
+        l.add("d", left)
+        return l.toString()
+    }
+
+    /**
+     * Other players' lines left out while [sib] has them (see the top). Their rows go from "p"
+     * lines; when that starts, a "pgone" so this recording's view of them doesn't hold still on the
+     * last row it had; when it ends, the row they're at then, as the recording would have had it.
+     */
+    private class Players(private val scan: Scan, private val sib: Sibling) {
+        private val aligned = lineUp(scan, sib)
+        /** Ticks (this recording's) the sibling surely has each player. */
+        private val covered = sib.players.mapValues { (_, list) ->
+            val (offset, margin) = aligned
+            list.mapNotNull { r -> val a = r.first + offset + margin; val b = r.last + offset - margin; if (a <= b) a..b else null }
+        }
+        private val dropping = HashMap<String, Long>() // name -> the end of the stretch it's left out in
+        private val last = HashMap<String, JsonElement?>() // the row each one left out is at
+
+        private fun coverEnd(name: String, t: Long): Long? =
+            if (name == scan.self) null else covered[name]?.firstOrNull { t in it }?.last
+
+        /** Lines about a player the sibling is: their skin, held head and equipment come from their own recording. */
+        private fun theirs(line: String): Boolean {
+            val kind = kindOf(line) ?: return false
+            if (kind != "eq" && kind != "skin" && kind != "held") return false
+            if (sib.self.isEmpty() || sib.self == scan.self) return false
+            return line.contains("\"name\":" + JsonPrimitive(sib.self).toString() + ",")
+        }
+
+        fun keepsWorld(line: String) = !theirs(line)
+
+        fun put(line: String, out: (String) -> Unit) {
+            val head = HEAD.find(line) ?: return out(line)
+            val kind = head.groupValues[1]
+            val t = head.groupValues[2].toLong()
+            // Stretches over: back to how this recording has them.
+            if (dropping.isNotEmpty()) {
+                val ended = dropping.filter { (_, end) -> t > end }.keys
+                if (ended.isNotEmpty()) {
+                    val rows = JsonArray()
+                    for (name in ended) { dropping.remove(name); last.remove(name)?.let { rows.add(it) } }
+                    if (rows.size() > 0) out(JsonObject().apply { addProperty("k", "p"); addProperty("t", t); add("d", rows) }.toString())
+                }
+            }
+            if (theirs(line)) return
+            when (kind) {
+                "p" -> {
+                    val l = JsonParser.parseString(line).asJsonObject
+                    val left = JsonArray()
+                    val started = ArrayList<String>()
+                    for (r in l.getAsJsonArray("d")) {
+                        val name = r.asJsonArray[0].asString
+                        val end = dropping[name] ?: coverEnd(name, t)?.also { dropping[name] = it; started += name }
+                        if (end == null) left.add(r) else last[name] = r
+                    }
+                    if (left.size() == l.getAsJsonArray("d").size()) out(line)
+                    else if (left.size() > 0) { l.add("d", left); out(l.toString()) }
+                    for (name in started) out(JsonObject().apply { addProperty("k", "pgone"); addProperty("t", t); addProperty("name", name) }.toString())
+                }
+                "pgone" -> {
+                    val name = JsonParser.parseString(line).asJsonObject["name"]?.asString
+                    if (name != null && name in dropping) last[name] = null else out(line)
+                }
+                else -> out(line)
+            }
+        }
+    }
+
+    /** What leaving things out needs from a party member's upload (or a saved run). */
+    private fun readSibling(input: InputStream): Sibling {
         val out = HashMap<Int, Int>()
+        var self = ""
+        var startMs = 0L
+        var maxT = 0L
+        val seen = HashMap<String, MutableList<Long>>() // name -> ticks it had a row at, and pgone ticks as -(t + 1)
+        val blocks = BlockReader()
+        fun row(name: String, t: Long) { seen.getOrPut(name) { ArrayList() } += t }
         lines(input).use { r ->
             for (line in r.lineSequence()) {
                 val kind = KIND.find(line.take(24))?.groupValues?.get(1) ?: continue
+                HEAD.find(line)?.groupValues?.get(2)?.toLong()?.let { if (kind !in WORLD && it > maxT) maxT = it }
+                blocks.read(kind, line)
+                when (kind) {
+                    "meta" -> JsonParser.parseString(line).asJsonObject.let { self = it["self"]?.asString ?: ""; startMs = it["startMs"]?.asLong ?: 0L }
+                    "p" -> { val l = JsonParser.parseString(line).asJsonObject; val t = l["t"].asLong; for (x in l.getAsJsonArray("d")) row(x.asJsonArray[0].asString, t) }
+                    "pgone" -> { val l = JsonParser.parseString(line).asJsonObject; row(l["name"].asString, -(l["t"].asLong + 1)) }
+                }
                 when {
                     kind == "e" -> for (m in ROW_ID.findAll(line)) out.merge(m.groupValues[1].toInt(), 1, Int::plus)
                     kind == "cols" -> {
                         val l = JsonParser.parseString(line).asJsonObject
                         if (l["of"]?.asString == "e") for (t in l.getAsJsonArray("tr")) t.asJsonArray.let { out.merge(it[0].asInt, it[1].asJsonArray.size(), Int::plus) }
+                        if (l["of"]?.asString == "p") {
+                            var acc = 0L
+                            val ticks = l.getAsJsonArray("t").map { acc += it.asLong; acc }
+                            for (tr in l.getAsJsonArray("tr")) {
+                                val a = tr.asJsonArray
+                                var li = 0
+                                for (d in a[1].asJsonArray) { li += d.asInt; row(a[0].asString, ticks[li]) }
+                            }
+                        }
                     }
                     kind == "proj" -> {
                         val l = JsonParser.parseString(line).asJsonObject
@@ -358,7 +571,18 @@ object UploadPacker {
                 }
             }
         }
-        return out
+        // When it had each player: from a row until their "pgone" (rows only come when something changed).
+        val players = seen.mapValues { (_, events) ->
+            val ranges = ArrayList<LongRange>()
+            var from: Long? = null
+            for (e in events.sortedBy { if (it < 0) -it - 1 else it }) {
+                if (e >= 0) { if (from == null) from = e }
+                else { val t = -e - 1; from?.let { ranges += it until t }; from = null }
+            }
+            from?.let { ranges += it..maxT }
+            ranges
+        }
+        return Sibling(self, startMs, out, players, blocks.changes())
     }
 
     /** A recording's lines, gzip or xz (told apart by their first bytes, as the site and viewer do). */

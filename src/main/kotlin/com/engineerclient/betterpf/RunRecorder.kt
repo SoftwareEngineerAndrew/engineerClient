@@ -124,7 +124,13 @@ class RunRecorder(
             // right away rather than buffered for the full timeout.
             else if (tick > ABANDON_AFTER_TICKS || !LocationUtils.isCurrentArea(Island.Unknown)) { abandon(); return }
         }
-        if (tick % 20 == 0) emit("""{"k":"time","t":$tick,"ms":${System.currentTimeMillis()}}""")
+        // The wall clock: the viewer counts 50 ms a tick from the last "time" line (and between two,
+        // evenly), so only a tick where that is more than 50 ms out is written.
+        val now = System.currentTimeMillis()
+        if (lastClockTick < 0 || Math.abs(now - (lastClockMs + (tick - lastClockTick) * 50L)) > 50) {
+            emit("""{"k":"time","t":$tick,"ms":$now}""")
+            lastClockMs = now; lastClockTick = tick
+        }
         // The viewer counts on a server tick each client tick from the last "st" (meta "stx"): only
         // a tick where the server fell behind that (or caught up) is written.
         val st = serverTicks
@@ -185,6 +191,8 @@ class RunRecorder(
     @Volatile private var serverTicks = 0
     private var lastServerTicks = 0
     private var lastServerTickAt = 0
+    private var lastClockMs = 0L
+    private var lastClockTick = -1
     fun onServerTick() { serverTicks++ }
 
     /** The server tick count right now: read on the network thread, where the pings are counted. */
