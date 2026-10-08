@@ -9,6 +9,9 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.render.drawText
+import net.minecraft.world.entity.EntityAttachment
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.phys.Vec3
 
 /**
  * In the Dungeon Hub, every real player gets a stat line floating over their nametag — the same
@@ -44,10 +47,14 @@ object HubNametags : Module(
 
     private val pbFloor by SelectorSetting("PB Floor", PbFloor.F7, desc = "Which floor the PB column shows.")
     private val scale by NumberSetting("Text Scale", 1f, 0.5..2.0, 0.1f, desc = "The scale of the stat line.")
-    private val height by NumberSetting("Height", 0.85f, 0.5..1.5, 0.05f, desc = "How far above the player's head the line sits, in blocks.")
+    private val gap by NumberSetting("Gap", 0f, 0.0..1.0, 0.05f, desc = "Extra space between the player's nametag and the stat line, in blocks.")
 
-    /** Vanilla stops rendering nametags past 64 blocks; match it. */
+    /** Vanilla draws name tags within 64 blocks of the camera and the below-name score within 10. */
     private const val RANGE_SQ = 64.0 * 64.0
+    private const val SCORE_RANGE_SQ = 10.0 * 10.0
+
+    /** One line of vanilla name-tag text: 9 px at the name tag's 0.025 scale, with its 1.15 line spacing. */
+    private const val LINE = 9 * 1.15 * 0.025
 
     init {
         on<RenderExtractEvent> {
@@ -55,13 +62,18 @@ object HubNametags : Module(
             val level = mc.level ?: return@on
             val me = mc.player ?: return@on
             val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false)
+            val cam = mc.gameRenderer.mainCamera().position()
             for (p in level.players()) {
                 if (p === me || !p.isAlive || p.isInvisible) continue
                 if (p.uuid.version() != 4) continue // hub NPCs pose as players; real ones are v4
-                if (p.distanceToSqr(me) > RANGE_SQ) continue
+                val pos = p.getPosition(pt)
+                if (pos.distanceToSqr(cam) > RANGE_SQ) continue
+                val nameTop = nameTop(p, pos, cam, pt) ?: continue
                 val line = lineFor(p.name.string, pbFloor.mode, pbFloor.floor)
                 if (line.isEmpty()) continue
-                drawText(line, p.getPosition(pt).add(0.0, p.bbHeight + height.toDouble(), 0.0), scale, false)
+                // drawText puts the top of the text at pos, as name tags do: one line (at our scale) above
+                // the name's top leaves the same space vanilla leaves between the name and the score.
+                drawText(line, pos.add(0.0, nameTop + LINE * scale + gap, 0.0), scale, false)
             }
         }
 
@@ -70,6 +82,17 @@ object HubNametags : Module(
         // also on never transitions, so its listeners register but never dispatch. Mirror the
         // alwaysActive path; the set-based bus keeps a later toggle's (un)subscribe idempotent.
         if (enabled) EventBus.subscribe(this)
+    }
+
+    /**
+     * Where vanilla draws the top of [p]'s name, above their feet: the NAME_TAG attachment plus 0.5, and
+     * one line higher when the below-name score (Hypixel's health) sits under it - which the game shows
+     * only within 10 blocks of the camera. Null: no name tag.
+     */
+    private fun nameTop(p: Player, pos: Vec3, cam: Vec3, pt: Float): Double? {
+        val attachment = p.attachments.getNullable(EntityAttachment.NAME_TAG, 0, p.getYRot(pt)) ?: return null
+        val scoreShown = p.belowNameDisplay() != null && pos.distanceToSqr(cam) < SCORE_RANGE_SQ
+        return attachment.y + 0.5 + if (scoreShown) LINE else 0.0
     }
 
     /** The tab list's "Area: Dungeon Hub" info line (all entries: the info lines are fake players that need not be listed). */
