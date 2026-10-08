@@ -21,11 +21,22 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             mc.gui.setScreen(null)
             SimServer.run("restart") { Fight.start(Fight.Start.P3) }
         }.bounds(cx - RESTART_W / 2, cy - 10, RESTART_W, 20).build())
+        addRenderableWidget(Button.builder(Component.literal("§cStop")) {
+            mc.gui.setScreen(null)
+            SimServer.run("stop") { Fight.end() }
+        }.bounds(cx - RESTART_W / 2, cy - 34, RESTART_W, 20).build())
 
-        // Below Restart: every job of each section, centred. Green: yours; grey and a letter: the
-        // bot's that does it; * a stack.
+        // Left of Restart: the Helper (the bot on your stack does its share of it too).
+        addRenderableWidget(Button.builder(Component.literal("Helper: " + if (P3Plan.helper) "§aON" else "§cOFF")) {
+            P3Plan.helper = !P3Plan.helper
+            P3Plan.save()
+            rebuildWidgets()
+        }.bounds(cx - RESTART_W / 2 - GAP - SKILL_W, cy - 10, SKILL_W, 20).build())
+
+        // Below Restart and the skills: every job of each section, centred. Green: yours; grey and
+        // a letter: the bot's that does it; * a stack.
         val jobW = 34
-        var y = cy + 10 + GAP
+        var y = cy + 2 * ROW + GAP
         for (s in 1..4) {
             val jobs = P3Plan.jobsIn(s)
             var x = cx - (LABEL_W + jobs.size * (jobW + 2)) / 2 + LABEL_W
@@ -47,9 +58,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             Triple(0, "Normal PF", "34s"), Triple(1, "Quality PF", "28s"),
             Triple(2, "Optimal PF", "22s"), Triple(P3Plan.RANDOM + 1, "Theoretical", "18s"),
         )
-        // Up and out of the plan's way: the last one ends level with Restart's bottom.
-        val right = cx + RESTART_W / 2 + GAP + 20
-        y = cy + 10 - skills.size * ROW + 4
+        val right = cx + RESTART_W / 2 + GAP
+        y = cy - skills.size * ROW / 2 + 2
         for ((i, name, time) in skills) {
             addRenderableWidget(Button.builder(Component.literal(if (i == P3Plan.skill) "§a§n$name" else name)) {
                 P3Plan.chooseSkill(i)
