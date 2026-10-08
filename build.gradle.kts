@@ -50,6 +50,10 @@ dependencies {
     // Sodium replaces the terrain renderer on every team client. Since 26.2 it culls from inside the
     // level extract, so the POV previews no longer call it; optional at runtime.
     compileOnly("maven.modrinth:sodium:xJZxADzI")
+
+    // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
+    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.2.
+    compileOnly("maven.modrinth:devonian:oRqT0YaC")
 }
 
 tasks {
