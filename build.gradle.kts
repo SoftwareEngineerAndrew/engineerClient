@@ -1,9 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// Fabric Loom is only on Fabric's maven, so it is loaded here rather than through a settings file.
+buildscript {
+    repositories { maven("https://maven.fabricmc.net/"); mavenCentral(); gradlePluginPortal() }
+    dependencies { classpath("net.fabricmc:fabric-loom:1.16-SNAPSHOT") }
+}
+
 plugins {
-    id("net.fabricmc.fabric-loom") version "1.16-SNAPSHOT"
     kotlin("jvm") version "2.4.20"
 }
+
+apply(plugin = "net.fabricmc.fabric-loom")
 
 group = "com.engineerclient"
 // ec-release sets EC_VERSION (2026.10.8+abc1234); ec-build sets GITHUB_REF_NAME.
@@ -26,7 +33,7 @@ repositories {
 }
 
 dependencies {
-    minecraft("com.mojang:minecraft:26.2")
+    "minecraft"("com.mojang:minecraft:26.2")
     implementation("net.fabricmc:fabric-loader:0.19.5")
     implementation("net.fabricmc:fabric-language-kotlin:1.14.1+kotlin.2.4.20")
     implementation("net.fabricmc.fabric-api:fabric-api:0.161.0+26.2")
@@ -34,7 +41,7 @@ dependencies {
     // xz (LZMA2) for Better PF recordings: about half the size of gzip. Pure Java, shipped inside
     // the mod jar.
     implementation("org.tukaani:xz:1.10")
-    include("org.tukaani:xz:1.10")
+    "include"("org.tukaani:xz:1.10")
 
     // Odin is a required runtime mod (declared in fabric.mod.json); compiled against its Modrinth
     // release (0.3.6 for 26.2).
