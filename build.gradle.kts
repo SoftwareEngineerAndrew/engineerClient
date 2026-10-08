@@ -13,11 +13,11 @@ base {
     archivesName.set("engineerclient")
 }
 
-// Code in src/ (package folders without the com/engineerclient root), resources in resources/.
+// Code in src/ (package folders without the com/engineerclient root), resources in src/resources/.
 sourceSets.main {
     java.setSrcDirs(listOf("src"))
     kotlin.setSrcDirs(listOf("src"))
-    resources.setSrcDirs(listOf("resources"))
+    resources.setSrcDirs(listOf("src/resources"))
 }
 
 repositories {
