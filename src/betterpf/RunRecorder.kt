@@ -509,17 +509,18 @@ class RunRecorder(
     }
 
     // Arm swings: a left click, or a right click that hit something (opening a terminal swings too).
-    // Other players' swings arrive as animation packets; a new one shows as swinging with swingTime
-    // at -1 or 0 (depending on whether the entity has ticked since), so -1 then 0 is one swing.
-    private val lastSwingTime = HashMap<String, Int>()
+    // Other players' swings arrive as animation packets. Since 26.3 every swing (a restart too) starts
+    // a new SwingDescription, so a new one is a current swing that isn't the same object as last tick.
+    private val lastSwing = HashMap<String, Any?>()
 
     private fun recordSwings(level: ClientLevel) {
         val sb = StringBuilder()
         var count = 0
         for (p in level.players()) {
             val name = p.name.string
-            val prev = lastSwingTime.put(name, if (p.swinging) p.swingTime else 99) ?: 99
-            if (!p.swinging || p.swingTime > 0 || prev == -1) continue
+            val swing = p.currentSwing
+            val prev = lastSwing.put(name, swing)
+            if (swing == null || swing === prev) continue
             if (count++ > 0) sb.append(',')
             sb.append(str(name))
         }

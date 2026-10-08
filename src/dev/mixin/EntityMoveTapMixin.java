@@ -2,7 +2,7 @@ package com.devgineerclient.mixin;
 
 import com.devgineerclient.recorder.EntityCapture;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.entity.PositionPath;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -22,16 +22,18 @@ import java.util.Optional;
 public class EntityMoveTapMixin {
 
     @Inject(
-        method = "moveOrInterpolateTo(Ljava/util/Optional;Ljava/util/Optional;Ljava/util/Optional;)V",
+        method = "moveOrInterpolateTo(Lnet/minecraft/world/entity/PositionPath;FFZ)V",
         at = @At("HEAD"),
         require = 0,
         expect = 0
     )
-    private void dc$recMove(Optional<Vec3> pos, Optional<Float> yRot, Optional<Float> xRot, CallbackInfo ci) {
+    private void dc$recMove(PositionPath pos, float yRot, float xRot, boolean hasRotation, CallbackInfo ci) {
         if (!EntityCapture.movesOn) return;
         // The recorder must never break the game: whatever it hits stays here.
         try {
-            EntityCapture.onMove((Entity) (Object) this, pos, yRot, xRot);
+            // 26.3: one overload, a nullable path and a rotation flag instead of three Optionals.
+            EntityCapture.onMove((Entity) (Object) this, Optional.ofNullable(pos == null ? null : pos.endPosition()),
+                hasRotation ? Optional.of(yRot) : Optional.empty(), hasRotation ? Optional.of(xRot) : Optional.empty());
         } catch (Throwable ignored) {
         }
     }

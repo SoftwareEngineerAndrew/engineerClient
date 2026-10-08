@@ -922,7 +922,7 @@ object Party {
     /** A bot's party chat line, as Hypixel shows one (the bots are MVP+, as the leap lines colour them). */
     fun partyLine(b: Bot, text: String) = "§9Party §8> §b[MVP§c+§b] ${b.name}§f: $text"
 
-    private fun swing(b: Bot) { b.entity?.swing(net.minecraft.world.InteractionHand.MAIN_HAND) }
+    private fun swing(b: Bot) { b.entity?.let { it.swing(net.minecraft.world.InteractionHand.MAIN_HAND, it.mainHandItem.interactAnimation, false) } }
 
     /**
      * What a bot holds, as teammates do: in P3 the Dungeonbreaker (teammates' rest
@@ -1014,7 +1014,7 @@ object Party {
         m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(profile(b)))
         m.setCustomName(Component.literal("§a${b.name}"))
         m.isCustomNameVisible = true
-        m.isInvulnerable = true
+        m.isPermanentlyInvulnerable = true
         m.setNoGravity(true)
         dress(m, b.clazz)
         hideDescription(m)

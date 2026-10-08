@@ -154,7 +154,7 @@ object PacketDecode {
     // ------------------------------------------------------------------ entity ids
 
     /**
-     * The entity-id fields of each packet class, checked by name against Minecraft 26.2. A subclass
+     * The entity-id fields of each packet class, checked by name against Minecraft 26.3. A subclass
      * (the move_entity variants) uses its parent's entry.
      */
     private val ENTITY_FIELDS: Map<Class<*>, List<String>> = mapOf(

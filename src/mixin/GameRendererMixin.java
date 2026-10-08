@@ -1,7 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.pov.PovCapture;
-import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,13 +25,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameRenderer.class)
 public class GameRendererMixin {
 
-    @Inject(method = "renderLevel(Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true)
-    private void ec$beforeLevelRender(DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (PovCapture.INSTANCE.beforeLevelRender(deltaTracker)) ci.cancel();
+    // 26.3: renderLevel() no longer takes the DeltaTracker; it is the game's own one.
+    @Inject(method = "renderLevel()V", at = @At("HEAD"), cancellable = true)
+    private void ec$beforeLevelRender(CallbackInfo ci) {
+        if (PovCapture.INSTANCE.beforeLevelRender(Minecraft.getInstance().getDeltaTracker())) ci.cancel();
     }
 
-    @Inject(method = "renderLevel(Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"))
-    private void ec$afterLevelRender(DeltaTracker deltaTracker, CallbackInfo ci) {
-        PovCapture.INSTANCE.afterLevelRender(deltaTracker);
+    @Inject(method = "renderLevel()V", at = @At("RETURN"))
+    private void ec$afterLevelRender(CallbackInfo ci) {
+        PovCapture.INSTANCE.afterLevelRender(Minecraft.getInstance().getDeltaTracker());
     }
 }

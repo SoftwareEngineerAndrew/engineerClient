@@ -103,7 +103,7 @@ object ChunkCapture {
             // The game hands these to the chunk (heightmaps copied, tags read), but copying is cheap.
             val hm = data.heightmaps.entries.map { it.key to it.value.clone() }
             val bes = ArrayList<BeRow>()
-            data.getBlockEntitiesTagsConsumer(x, z).accept(ClientboundLevelChunkPacketData.BlockEntityTagOutput { pos, type, tag ->
+            data.forEachBlockEntityTag(x, z, ClientboundLevelChunkPacketData.BlockEntityTagOutput { pos, type, tag ->
                 // pos is one mutable position reused for every entry: read it now.
                 bes += BeRow(pos.x, pos.y, pos.z, BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type)?.toString() ?: type.toString(), tag?.copy())
             })
