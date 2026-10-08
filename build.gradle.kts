@@ -6,11 +6,18 @@ plugins {
 }
 
 group = "com.engineerclient"
-// The release workflow sets EC_VERSION (2026.10.7+abc1234, 2026.10.7-beta+abc1234); local builds use GITHUB_REF_NAME.
+// ec-release sets EC_VERSION (2026.10.8+abc1234); ec-build sets GITHUB_REF_NAME.
 version = providers.environmentVariable("EC_VERSION").orElse(providers.environmentVariable("GITHUB_REF_NAME").map { it.removePrefix("v") }).getOrElse("dev")
 
 base {
     archivesName.set("engineerclient")
+}
+
+// Code in src/ (package folders without the com/engineerclient root), resources in resources/.
+sourceSets.main {
+    java.setSrcDirs(listOf("src"))
+    kotlin.setSrcDirs(listOf("src"))
+    resources.setSrcDirs(listOf("resources"))
 }
 
 repositories {
