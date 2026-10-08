@@ -30,7 +30,7 @@ import net.minecraft.world.entity.boss.wither.WitherBoss
  *  - Storm: the next crush check (every 20 ticks from the phase starting, a tick before his first
  *    line) until he dies, and the lightning at 548.
  *  - Goldor: the next death tick (n = 60k - 1, n ticks since "Who dares trespass"), until the
- *    core opens; or with Goldor Count Up, the time since the last one.
+ *    core opens; or with Goldor Count Up, the time since his first line (colour still by the tick).
  *  - Necron: he takes the platform 60 ticks after "I'm afraid, your journey ends now."
  *  - Relics: in M7 they spawn 45 ticks after "All this, for nothing...".
  */
@@ -82,12 +82,12 @@ object Timers : Module(
     private val goldorHud by HUD("Goldor Tick", "Counts down to Goldor's next death tick, every 3 s until the core opens.", true, 10, 160, 1.5f) { example ->
         val start = goldorStart
         when {
-            example -> goldorTimer(35)
+            example -> goldorTimer(35, 70)
             start == null -> 0 to 0
-            else -> goldorTimer(GOLDOR_PERIOD - 1 - Math.floorMod(serverTicks - start, GOLDOR_PERIOD))
+            else -> goldorTimer(GOLDOR_PERIOD - 1 - Math.floorMod(serverTicks - start, GOLDOR_PERIOD), serverTicks - start)
         }
     }
-    private val goldorCountUp by BooleanSetting("Goldor Count Up", false, desc = "Goldor Tick counts up from the last death tick like a split, in the same green / yellow / red.").withDependency { goldorHud.enabled }
+    private val goldorCountUp by BooleanSetting("Goldor Count Up", false, desc = "Goldor Tick counts up from Goldor's first line like a split, past 3 s; the colour still goes green / yellow / red with each death tick.").withDependency { goldorHud.enabled }
     private val necronHud by HUD("Necron Drop", "Counts down to Necron taking the platform, 3 s after \"I'm afraid, your journey ends now.\"", true, 10, 175, 1.5f) { example ->
         if (example) timer("Necron", 35, NECRON_DROP) else left(necronDropAt, NECRON_DROP)?.let { timer("Necron", it, NECRON_DROP) } ?: (0 to 0)
     }
@@ -158,9 +158,12 @@ object Timers : Module(
     private fun GuiGraphicsExtractor.timer(label: String, left: Int, total: Int): Pair<Int, Int> =
         draw("§7$label: ${colour(left, total)}${time(left)}")
 
-    /** Goldor Tick: [left] ticks to the next death tick, or the time since the last with Count Up. */
-    private fun GuiGraphicsExtractor.goldorTimer(left: Int): Pair<Int, Int> {
-        val shown = if (goldorCountUp) (GOLDOR_PERIOD - 1 - left) else left
+    /**
+     * Goldor Tick: [left] ticks to the next death tick, or with Count Up the time since Goldor's
+     * first line ([elapsed]), still coloured by the next death tick.
+     */
+    private fun GuiGraphicsExtractor.goldorTimer(left: Int, elapsed: Int): Pair<Int, Int> {
+        val shown = if (goldorCountUp) elapsed else left
         return draw("§7Goldor: ${colour(left, GOLDOR_PERIOD)}${time(shown)}")
     }
 
