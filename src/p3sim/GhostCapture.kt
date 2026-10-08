@@ -55,7 +55,9 @@ object GhostStore {
     private fun file(skill: String, clazz: String) = File(File(dir, skill.replace(Regex("[^A-Za-z0-9 _-]"), "_")), "$clazz.json.gz")
 
     @Synchronized fun best(skill: String, clazz: String): GhostRun? = cache.getOrPut("$skill/$clazz") {
-        runCatching { file(skill, clazz).takeIf { it.exists() }?.let { f -> GZIPInputStream(f.inputStream()).use { GhostRun.fromJson(it.readBytes().decodeToString()) } } }.getOrNull()
+        // The file stream gets its own use: GZIPInputStream's constructor throws on a broken file, and
+        // a stream left open keeps Windows from replacing that file in offer().
+        runCatching { file(skill, clazz).takeIf { it.exists() }?.let { f -> f.inputStream().use { raw -> GZIPInputStream(raw).use { GhostRun.fromJson(it.readBytes().decodeToString()) } } } }.getOrNull()
     }
 
     /** [new] beats [old]: a faster core (a tie: the newer). */
