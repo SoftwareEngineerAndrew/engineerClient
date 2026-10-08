@@ -1,6 +1,6 @@
-package com.engineerclient.mixin.odin;
+package com.coffeeclient.mixin.odin;
 
-import com.engineerclient.leap.LeapExtras;
+import com.coffeeclient.leap.LeapExtras;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class LeapMenuReleaseMixin {
 
     @Inject(method = "invoke(Lcom/odtheking/odin/events/ScreenEvent$MouseRelease;)Ljava/lang/Object;", at = @At("HEAD"), cancellable = true, remap = false)
-    private void ec$clickDelay(CallbackInfoReturnable<Object> cir) {
+    private void cc$clickDelay(CallbackInfoReturnable<Object> cir) {
         if (LeapExtras.inClickDelay()) cir.setReturnValue(true);
     }
 }

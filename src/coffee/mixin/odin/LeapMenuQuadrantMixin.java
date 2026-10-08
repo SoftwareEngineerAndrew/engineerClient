@@ -1,6 +1,6 @@
-package com.engineerclient.mixin.odin;
+package com.coffeeclient.mixin.odin;
 
-import com.engineerclient.leap.LeapExtras;
+import com.coffeeclient.leap.LeapExtras;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class LeapMenuQuadrantMixin {
 
     @Inject(method = "_init_$triggerMouseQuadrant(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;II)V", at = @At("HEAD"), cancellable = true, remap = false)
-    private static void ec$mapLeap(AbstractContainerScreen<?> screen, int x, int y, CallbackInfo ci) {
+    private static void cc$mapLeap(AbstractContainerScreen<?> screen, int x, int y, CallbackInfo ci) {
         if (LeapExtras.mapLeapClick(screen, x, y)) ci.cancel();
     }
 }

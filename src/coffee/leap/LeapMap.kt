@@ -1,4 +1,4 @@
-package com.engineerclient.leap
+package com.coffeeclient.leap
 
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
