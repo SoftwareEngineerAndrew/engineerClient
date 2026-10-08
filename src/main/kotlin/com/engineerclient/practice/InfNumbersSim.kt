@@ -12,7 +12,7 @@ import java.util.Locale
 
 /**
  * /termsim inf: a numbers terminal that never ends and has no numbers. Odin's solver shows the
- * next three cells (its order colours, no text). The order comes in bags, like Tetris: each bag
+ * next four cells (its four order colours, no text; five with Term Info's Numbers 4th/5th Preview). The order comes in bags, like Tetris: each bag
  * is all 10 cells shuffled, so every cell comes up once before any comes up again; the next bag
  * starts with [FRESH] cells that aren't highlighted when it's drawn, so the path never doubles back. Escape to stop: chat gets the
  * average time between clicks, and what a numbers would take at that pace.
@@ -23,7 +23,8 @@ import java.util.Locale
 object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
     /** The 10 cells: rows 1-2, columns 2-6, as in a numbers since the update cut its sides. */
     private val CELLS = (1..2).flatMap { r -> (2..6).map { c -> r * 9 + c } }
-    private const val SHOWN = 3
+    /** How many cells are lit: Odin colours the next 4, Term Info's preview a 5th. */
+    private fun shown() = if (TermInfo.numbersColor(4) != null) 5 else 4
     private const val FRESH = 6
 
     private val rng = java.util.Random()
@@ -42,7 +43,7 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
 
     override fun create() {
         queue.clear(); bag.clear(); gaps.clear()
-        while (queue.size < SHOWN) queue += pick()
+        while (queue.size < shown()) queue += pick()
         setSlots { if (it.index in CELLS) pane(it.index in queue) else blackPane }
         openedMs = System.currentTimeMillis(); lastMs = 0L; firstMs = 0L
     }
@@ -68,10 +69,12 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
         lastMs = now
         // The queue first, so the solver reads the new order on the slot updates below.
         queue.removeAt(0)
-        val added = pick()
-        queue += added
         slot.setSlot(pane(false))
-        guiInventorySlots[added].setSlot(pane(true))
+        while (queue.size < shown()) {
+            val added = pick()
+            queue += added
+            guiInventorySlots[added].setSlot(pane(true))
+        }
         super.slotClick(slot, button)
     }
 
