@@ -4,13 +4,18 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 
 /**
- * POV Previews' "Show In" choice: everywhere, only in boss, only in Goldor (F7/M7 P3), or only on
- * blood rush (the dungeon starting until the blood door opens). The module feeds [onChat] and
- * [reset] from its own listeners, so it stays current while it is on.
+ * Where a feature may show: in boss, in Goldor (F7/M7 P3), or on blood rush (the dungeon starting
+ * until the blood door opens). POV Previews ticks any number of them ([allows] with a set of
+ * places); Leap Extras picks one or everywhere ([Option]). The modules using it feed [onChat] and
+ * [reset] from their own listeners, so it stays current while they are on.
  */
 object ShowIn {
-    enum class Option { EVERYWHERE, ONLY_IN_BOSS, ONLY_IN_GOLDOR, ONLY_IN_BLOOD_RUSH }
-    const val DESC = "Where it works. Blood rush is from the dungeon starting until the blood door opens."
+    enum class Place { BLOOD_RUSH, BOSS, GOLDOR }
+
+    /** A single choice: everywhere, or one [Place]. */
+    enum class Option(val place: Place?) {
+        EVERYWHERE(null), ONLY_IN_BOSS(Place.BOSS), ONLY_IN_GOLDOR(Place.GOLDOR), ONLY_IN_BLOOD_RUSH(Place.BLOOD_RUSH)
+    }
 
     private val FORMATTING = Regex("§.")
 
@@ -25,11 +30,16 @@ object ShowIn {
     /** A world load: a new dungeon (or none). */
     fun reset() { bloodOpened = false }
 
-    /** Whether [option] (an index into [Option]) allows it here and now. */
-    fun allows(option: Int): Boolean = when (option) {
-        1 -> DungeonUtils.inBoss
-        2 -> DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P3
-        3 -> DungeonUtils.inDungeons && !DungeonUtils.inBoss && !bloodOpened
-        else -> true
+    /** Whether you are in [place] right now. */
+    fun isIn(place: Place): Boolean = when (place) {
+        Place.BOSS -> DungeonUtils.inBoss
+        Place.GOLDOR -> DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P3
+        Place.BLOOD_RUSH -> DungeonUtils.inDungeons && !DungeonUtils.inBoss && !bloodOpened
     }
+
+    /** Whether [places] allow it here and now: none picked is everywhere, otherwise any one of them. */
+    fun allows(places: Collection<Place>): Boolean = places.isEmpty() || places.any(::isIn)
+
+    /** Whether [option] (an index into [Option]) allows it here and now. */
+    fun allows(option: Int): Boolean = allows(listOfNotNull(Option.entries.getOrNull(option)?.place))
 }

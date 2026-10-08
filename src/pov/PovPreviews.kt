@@ -121,8 +121,19 @@ object PovPreviews : Module(
         return names
     }
 
-    /** Where the previews show: everywhere, or only in boss, only in Goldor (P3), or only on blood rush. */
-    private val showIn by SelectorSetting("Show In", ShowIn.Option.EVERYWHERE, desc = ShowIn.DESC)
+    // ---- where the previews show ----------------------------------------------------------
+    //
+    // A checkbox per place, so any mix works (blood rush and Goldor, say): the previews show in
+    // every ticked place, and with none ticked they show everywhere.
+    private val onlyBloodRush by BooleanSetting("Only In Blood Rush", false, desc = "Shows the previews on blood rush: from the dungeon starting until the blood door opens. Adds to the other Only In places; none ticked is everywhere.")
+    private val onlyBoss by BooleanSetting("Only In Boss", false, desc = "Shows the previews in boss. Adds to the other Only In places; none ticked is everywhere.")
+    private val onlyGoldor by BooleanSetting("Only In Goldor", false, desc = "Shows the previews in Goldor (F7/M7 phase 3). Adds to the other Only In places; none ticked is everywhere.")
+
+    private fun places(): List<ShowIn.Place> = buildList {
+        if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH)
+        if (onlyBoss) add(ShowIn.Place.BOSS)
+        if (onlyGoldor) add(ShowIn.Place.GOLDOR)
+    }
 
     val showCost by BooleanSetting("Show Cost", true, desc = "HUD line with the milliseconds the previews added to the last frame.")
 
@@ -207,12 +218,12 @@ object PovPreviews : Module(
     /**
      * True only while there is something to draw into: the module on, Odin's leap menu on (it is
      * what cancels the vanilla chest render, so without it the previews would sit under a chest
-     * GUI), the place allowed by Show In, and the Spirit Leap screen open. Same title check as `LeapHighlight.leapScreen`.
+     * GUI), a place the Only In checkboxes allow, and the Spirit Leap screen open. Same title check as `LeapHighlight.leapScreen`.
      */
     fun wants(): Boolean {
         if (!enabled || PovCapture.disabledForSession) return false
         if (!LeapMenu.enabled) return false
-        if (!ShowIn.allows(showIn.ordinal)) return false
+        if (!ShowIn.allows(places())) return false
         val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*> ?: return false
         return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
     }
