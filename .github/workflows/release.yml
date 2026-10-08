@@ -1,15 +1,15 @@
 name: Release
 
-# Two rolling releases: a push to main replaces the "main" release, a push to beta the "beta" one.
+# One rolling release: every push to main replaces the "main" release.
 on:
   push:
-    branches: [main, beta]
+    branches: [main]
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release
 
 jobs:
   release:
@@ -24,16 +24,11 @@ jobs:
         with:
           gradle-version: 9.6.1
       - name: Version
-        run: |
-          v="$(date -u +%Y.%-m.%-d)"
-          [ "$GITHUB_REF_NAME" = beta ] && v="$v-beta"
-          echo "EC_VERSION=$v+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        run: echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - run: gradle build --console=plain -Dorg.gradle.jvmargs=-Xmx2G
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="release-$GITHUB_REF_NAME"
-          gh release delete "$tag" --yes --cleanup-tag || true
-          if [ "$GITHUB_REF_NAME" = beta ]; then flags="--prerelease --latest=false"; else flags="--latest"; fi
-          gh release create "$tag" build/libs/*.jar --target "$GITHUB_SHA" --title "$GITHUB_REF_NAME" --notes "$EC_VERSION" $flags
+          gh release delete release-main --yes --cleanup-tag || true
+          gh release create release-main build/libs/*.jar --target "$GITHUB_SHA" --title main --notes "$EC_VERSION" --latest
