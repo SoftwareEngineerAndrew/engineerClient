@@ -23,6 +23,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: 9.6.1
+      - name: Odin 0.3.7 (26.3 port, not released yet)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 37808382947 -R odtheking/OdinFabric -n Odin-0.3.7.jar -D libs/odin
       - name: Version
         run: echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - run: gradle build --console=plain -Dorg.gradle.jvmargs=-Xmx2G

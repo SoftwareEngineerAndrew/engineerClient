@@ -149,7 +149,7 @@ object EntityCapture {
             if (p != null) flags = flags or MoveBuffer.POS
             if (y != null) flags = flags or MoveBuffer.YROT
             if (x != null) flags = flags or MoveBuffer.XROT
-            if (e.interpolation != null) flags = flags or MoveBuffer.INTERP
+            if (e.interpolation !== net.minecraft.world.entity.InterpolationHandler.NO_OP) flags = flags or MoveBuffer.INTERP // 26.3: never null
             record(e.id, p?.x ?: 0.0, p?.y ?: 0.0, p?.z ?: 0.0, y ?: 0f, x ?: 0f, flags)
         } catch (t: Throwable) {
             DevgineerClient.logger.error("[dc] recorder emove failed", t)
@@ -286,7 +286,7 @@ object EntityCapture {
         val b = e.positionCodec.base
         r[15] = b.x; r[16] = b.y; r[17] = b.z
         r[18] = living?.health?.toDouble() ?: Double.NaN
-        val target = if (active && interp != null) interp.position() else null
+        val target = if (active) interp.target()?.position() else null
         r[19] = target?.x ?: Double.NaN; r[20] = target?.y ?: Double.NaN; r[21] = target?.z ?: Double.NaN
     }
 
