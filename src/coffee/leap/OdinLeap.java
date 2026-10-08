@@ -1,4 +1,4 @@
-package com.engineerclient.leap;
+package com.coffeeclient.leap;
 
 import com.odtheking.odin.features.impl.dungeon.LeapMenu;
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer;

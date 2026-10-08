@@ -1,0 +1,15 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.coffeeclient.mixin.odin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "LeapMenuClickMixin",
+    "LeapMenuMapMixin",
+    "LeapMenuQuadrantMixin",
+    "LeapMenuReleaseMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

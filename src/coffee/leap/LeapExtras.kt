@@ -1,6 +1,6 @@
-package com.engineerclient.leap
+package com.coffeeclient.leap
 
-import com.engineerclient.EngineerClient
+import com.coffeeclient.CoffeeClient
 import com.engineerclient.pov.PovPreviews
 import com.engineerclient.pov.ShowIn
 import com.google.gson.JsonParser
@@ -36,7 +36,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.resources.Identifier
 
 /**
- * Additions to Odin's Leap Menu that ship with engineerClient, so they work on anyone's Odin: they
+ * Additions to Odin's Leap Menu, so they work on anyone's Odin: they
  * patch Odin's leap menu from outside (see the mixins in `mixin/odin`) rather than living in a
  * modified copy of it. Odin's Leap Menu has to be on for any of it, as it is the menu being added to.
  *
@@ -47,7 +47,7 @@ import net.minecraft.resources.Identifier
  */
 object LeapExtras : Module(
     name = "Leap Extras",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Coffee Client", 860, 10),
     description = "Adds to Odin's Leap Menu: a click delay when it opens, an outline of where each person will be, and Map Leap (the dungeon map as the leap menu, in the clear).",
     toggled = true,
 ) {
@@ -114,8 +114,8 @@ object LeapExtras : Module(
         }
         on<LevelEvent.Load> { ShowIn.reset() }
 
-        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "leap_outline")) { g, _ ->
-            EngineerClient.safely("leap outline") { drawOutline(g) }
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("coffeeclient", "leap_outline")) { g, _ ->
+            CoffeeClient.safely("leap outline") { drawOutline(g) }
         }
     }
 
@@ -129,8 +129,8 @@ object LeapExtras : Module(
      * way). Grey where nobody is, or outside a dungeon.
      */
     private fun drawOutline(g: GuiGraphicsExtractor) {
-        if (!enabled || !leapOutline || !LeapMenu.enabled || EngineerClient.mc.gui.screen() != null || !ShowIn.allows(showIn.ordinal)) return
-        val window = EngineerClient.mc.window
+        if (!enabled || !leapOutline || !LeapMenu.enabled || CoffeeClient.mc.gui.screen() != null || !ShowIn.allows(showIn.ordinal)) return
+        val window = CoffeeClient.mc.window
         val halfW = window.guiScaledWidth / 2
         val halfH = window.guiScaledHeight / 2
         val scale = menuScale() * PovPreviews.overlayScale
@@ -163,7 +163,7 @@ object LeapExtras : Module(
 
     private fun broke(what: String, t: Throwable) {
         mapLeapBroken = true
-        EngineerClient.logger.error("[ec] map leap: $what failed - back to Odin's leap boxes for this session", t)
+        CoffeeClient.logger.error("[cc] map leap: $what failed - back to Odin's leap boxes for this session", t)
     }
 
     /**
@@ -224,7 +224,7 @@ object LeapExtras : Module(
             val read: (MapColour) -> Color? = when (source) {
                 "Odin" -> ({ c -> c.odin?.invoke() })
                 "DTMap" -> {
-                    val file = EngineerClient.mc.gameDirectory.resolve("config/dtmap/tabs/Map.txt")
+                    val file = CoffeeClient.mc.gameDirectory.resolve("config/dtmap/tabs/Map.txt")
                     if (!file.exists()) { modMessage("DTMap's config wasn't found (config/dtmap/tabs/Map.txt)."); return }
                     // "key: ARGB int" lines.
                     val values = file.readLines().mapNotNull { line ->
@@ -233,7 +233,7 @@ object LeapExtras : Module(
                     ({ c -> c.dtmap?.let(values::get)?.toIntOrNull()?.let { Color(it) } })
                 }
                 "Devonian" -> {
-                    val file = EngineerClient.mc.gameDirectory.resolve("config/devonianConfig.json")
+                    val file = CoffeeClient.mc.gameDirectory.resolve("config/devonianConfig.json")
                     if (!file.exists()) { modMessage("Devonian's config wasn't found (config/devonianConfig.json)."); return }
                     val config = JsonParser.parseString(file.readText()).asJsonObject.getAsJsonObject("config")
                     ({ c -> c.devonian?.let { config?.get(it) }?.takeIf { it.isJsonPrimitive }?.asInt?.let { Color(it) } })

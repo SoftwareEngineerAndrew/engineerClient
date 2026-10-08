@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # promote.sh [-n] "<commit message>": copies this repo's committed HEAD to the public
 # undonecoffee/EngineerClient, without the extras that only ship in this dev build:
-#   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient.mixins.json)
+#   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient{,.odin}.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
 #   promote.sh    this script
 # fabric.mod.json loses their entrypoints, mixin configs and the "breaks" line. The result must
@@ -29,11 +29,11 @@ git -C "$PUB" merge -q --ff-only origin/main
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
 rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
-  "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json"
+  "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json"
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \
-  -e 's/, "(coffeeclient|devgineerclient)\.mixins\.json"//g' \
+  -e 's/, "(coffeeclient|devgineerclient)(\.odin)?\.mixins\.json"//g' \
   -e '/"breaks": \{ "coffeeclient"/d' \
   -e '/"value": "com\.(coffeeclient|devgineerclient)\./d' \
   -e 's/("value": "com\.engineerclient\.EngineerClient" \}),$/\1/' \

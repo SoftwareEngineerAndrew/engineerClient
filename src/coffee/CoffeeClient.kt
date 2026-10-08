@@ -1,5 +1,6 @@
 package com.coffeeclient
 
+import com.coffeeclient.leap.LeapExtras
 import com.coffeeclient.misc.CameraOffset
 import com.coffeeclient.misc.EntityDistance
 import com.coffeeclient.misc.Termsim
@@ -25,14 +26,17 @@ object CoffeeClient : ClientModInitializer {
         // No saved module settings yet: a fresh install.
         val firstRun = !java.nio.file.Files.exists(mc.gameDirectory.toPath().resolve("config/odin/addons/coffeeclient.json"))
 
+        safely("leap extras settings") { adoptLeapExtrasSettings() }
+
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, BetterPFMenu, CameraOffset, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, BetterPFMenu, CameraOffset, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
             if (!RandomStuff.enabled) RandomStuff.toggle()
+            if (!LeapExtras.enabled) LeapExtras.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -42,6 +46,24 @@ object CoffeeClient : ClientModInitializer {
         safely("witherborn") { com.coffeeclient.misc.Witherborn.register() }
 
         logger.info("[cc] initialized")
+    }
+
+    /**
+     * Leap Extras used to be an Engineer Client module: the first time it loads here, its saved
+     * settings are copied over from engineerclient.json so they carry across.
+     */
+    private fun adoptLeapExtrasSettings() {
+        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
+        val ours = dir.resolve("coffeeclient.json")
+        val theirs = dir.resolve("engineerclient.json")
+        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
+        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
+        if (target.any { it.asJsonObject.get("name")?.asString == "Leap Extras" }) return
+        val source = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
+        val entry = source.firstOrNull { it.asJsonObject.get("name")?.asString == "Leap Extras" } ?: return
+        target.add(entry)
+        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
+        logger.info("[cc] Leap Extras settings copied from engineerclient.json")
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */

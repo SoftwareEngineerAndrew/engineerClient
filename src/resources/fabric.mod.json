@@ -8,7 +8,7 @@
   "license": "All-Rights-Reserved",
   "environment": "client",
   "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
-  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json", "coffeeclient.mixins.json", "devgineerclient.mixins.json"],
+  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json"],
   "entrypoints": {
     "client": [
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
