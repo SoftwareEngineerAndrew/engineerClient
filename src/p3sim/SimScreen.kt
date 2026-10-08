@@ -15,7 +15,7 @@ import net.minecraft.world.phys.Vec3
 import java.util.Locale
 
 /**
- * The sim's menu: Esc > P3 Sim Menu, the SkyBlock Menu star (hotbar), `/p3sim` or the keybind.
+ * The sim's full menu: Esc > P3 Sim Full Menu (the main one, [SimRestartScreen], is just Restart).
  * Start buttons on top of every tab; tabs for your plan (which jobs are yours, the bots' times,
  * presets), the early enters (who, where, when, the leap menu order), every setting, and teleports.
  * Start and teleport buttons close it; everything else saves at once and keeps it open.

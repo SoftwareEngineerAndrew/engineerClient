@@ -999,7 +999,7 @@ object SimItems {
             val id = idOf(stack) ?: return@register InteractionResult.PASS
             if (simClient(level)) {
                 // The menu opens here (client side); everything else is the server's.
-                if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
+                if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimRestartScreen()) }; return@register InteractionResult.FAIL }
                 return@register InteractionResult.PASS
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
@@ -1014,7 +1014,7 @@ object SimItems {
             if (hand != InteractionHand.MAIN_HAND) return@register InteractionResult.PASS
             val id = idOf(player.getItemInHand(hand))
             if (simClient(level)) {
-                if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimScreen()) }; return@register InteractionResult.FAIL }
+                if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimRestartScreen()) }; return@register InteractionResult.FAIL }
                 return@register InteractionResult.PASS
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
