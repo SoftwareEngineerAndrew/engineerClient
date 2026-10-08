@@ -2,44 +2,40 @@ package com.engineerclient.mixin;
 
 import com.engineerclient.misc.RandomStuff;
 import net.minecraft.client.DeltaTracker;
-import net.minecraft.client.gui.Hud;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.Gui;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * {@link RandomStuff}'s "Blur In GUI": says where the frame's blur pass goes.
+ * {@link RandomStuff}'s "Blur In GUI": the window in which the frame's GUI is built, so
+ * {@code GuiRenderStateBlurMixin} knows which resets of the GUI state to put the blur line after.
  *
  * <p>26.x builds the GUI as a list of strata and {@code blurBeforeThisStratum} splits that list
- * in two: everything up to the marked stratum is drawn, the blur post chain runs over the whole
- * main target, then everything from the marked stratum on is drawn on top. So the marker is not
- * "blur this" — it is the line the blur happens at.
+ * in two: everything up to the marked stratum is drawn, the blur post chain runs over the main
+ * target, then everything from the marked stratum on is drawn on top. So the marker is not "blur
+ * this" — it is the line the blur happens at. Marked at stratum 0, nothing GUI-side is behind the
+ * line: the blur lands on the world alone, and the HUD, the screen, its items and its tooltips all
+ * draw afterwards, sharp.
  *
- * <p>{@code Hud.extractRenderState} is the first thing to touch the GUI state after
- * {@code GuiRenderState.reset()}, so marking at its HEAD marks stratum 0 and nothing GUI-side is
- * ever behind the line: the blur lands on the world alone, and the HUD, the screen, its items and
- * its tooltips all draw afterwards, sharp. Vanilla's own menu blur instead marks at the screen's
- * background stratum, which puts the HUD behind the line and blurs it along with the world — which
- * is why this hooks here rather than reusing that call, and why {@code ScreenBlurMixin} has to drop
- * it: {@code blurBeforeThisStratum} throws "Can only blur once per frame".
- *
- * <p>Nothing here runs when the HUD is not being extracted (no level, so nothing to blur), which
- * is the other half of the condition {@link RandomStuff#blursGui()} checks.
- *
- * <p>Some HUD mods (gnetum's {@code wrapHudRender}) run {@code extractRenderState} more than once a
- * frame, and something else may already have marked the blur; the marker is only placed while the
- * frame's blur is still unspent ({@code firstStratumAfterBlur == Integer.MAX_VALUE}), or the game
- * crashes with "Can only blur once per frame".
+ * <p>{@code Gui.extractRenderState} opens with {@code GuiRenderState.reset()}, so the window covers
+ * that reset (stratum 0 of the frame) and also any reset some mod does part-way through: a HUD
+ * cache like gnetum flushes the GUI built so far into its own framebuffer mid-frame
+ * ({@code GuiRenderer.render()} ends in a reset), which spends a marker placed before it on that
+ * framebuffer and wipes it from the frame. Re-marking the fresh state puts the line back in front
+ * of everything that is still to come — the cached HUD's blit and the screen. The reset at the end
+ * of the frame, after the GUI is drawn, is outside the window and is never marked.
  */
-@Mixin(Hud.class)
+@Mixin(Gui.class)
 public class GuiBlurMixin {
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/DeltaTracker;ZZ)V", at = @At("HEAD"))
+    private void ec$openBlurWindow(DeltaTracker deltaTracker, boolean renderLevel, boolean renderGui, CallbackInfo ci) {
+        RandomStuff.INSTANCE.setBuildingGui(true);
+    }
 
-    @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"))
-    private void ec$blurBehindGui(GuiGraphicsExtractor extractor, DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (!RandomStuff.INSTANCE.blursGui()) return;
-        if (((GuiRenderStateAccessor) extractor.guiRenderState).ec$firstStratumAfterBlur() != Integer.MAX_VALUE) return;
-        extractor.blurBeforeThisStratum();
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/DeltaTracker;ZZ)V", at = @At("RETURN"))
+    private void ec$closeBlurWindow(DeltaTracker deltaTracker, boolean renderLevel, boolean renderGui, CallbackInfo ci) {
+        RandomStuff.INSTANCE.setBuildingGui(false);
     }
 }

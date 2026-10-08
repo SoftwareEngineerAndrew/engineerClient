@@ -329,12 +329,18 @@ object RandomStuff : Module(
     /**
      * Whether the world behind the open screen should be blurred this frame.
      *
-     * Read by GuiBlurMixin (marks the blur), ScreenBlurMixin (drops vanilla's own marker) and
-     * BlurRadiusMixin (radius). All three run in the same frame's extract pass on the render
-     * thread, so they cannot disagree — which matters, because the game throws outright if one
-     * frame is told to blur twice.
+     * Read by GuiRenderStateBlurMixin (marks the blur), ScreenBlurMixin (drops vanilla's own
+     * marker) and BlurRadiusMixin (radius). All three run in the same frame's extract pass on the
+     * render thread, so they cannot disagree — which matters, because the game throws outright if
+     * one frame is told to blur twice.
      */
     fun blursGui(): Boolean = enabled && blurInGui && mc.gui.screen() != null && mc.level != null
+
+    /** Set by GuiBlurMixin while `Gui.extractRenderState` builds the frame's GUI (render thread only). */
+    var buildingGui = false
+
+    /** A GUI state reset now starts a state the frame will draw: it gets the blur line at stratum 0. */
+    fun blursAfterReset(): Boolean = buildingGui && blursGui()
 
     /** Radius for [blursGui], on the same 1..10 scale as vanilla's Menu Background Blur slider. */
     fun blurRadius(): Int = blurStrength.toInt()

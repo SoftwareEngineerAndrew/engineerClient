@@ -28,7 +28,7 @@
     "GameRendererInvoker",
     "GameRendererMixin",
     "GuiBlurMixin",
-    "GuiRenderStateAccessor",
+    "GuiRenderStateBlurMixin",
     "GuiItemNameMixin",
     "ItemFoilMixin",
     "LeapTermsimProtMixin",
