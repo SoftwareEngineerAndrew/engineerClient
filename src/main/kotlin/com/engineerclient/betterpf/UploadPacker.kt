@@ -274,17 +274,17 @@ object UploadPacker {
     }
 
     /**
-     * The run as a temp file to send - xz, or gzip when [xz] is off (the site can only check a
-     * recording sent without the key if it is gzip) - and how many mobs were left out as already
-     * uploaded.
+     * The run as a temp xz file to send, and how many mobs were left out as already uploaded.
+     * Preset 6: 17% smaller than 3 for about three times the CPU (a few seconds, on the upload's
+     * low-priority thread, after the run) and about 100 MB while it packs.
      */
-    fun pack(file: Path, scan: Scan, sibling: ByteArray?, xz: Boolean = true): Pair<Path, Int> {
+    fun pack(file: Path, scan: Scan, sibling: ByteArray?): Pair<Path, Int> {
         val sib = sibling?.let { readSibling(it.inputStream()) }
         val drop = sib?.let { s -> scan.counts.filter { (id, n) -> (s.counts[id] ?: 0) >= n }.keys } ?: emptySet()
         val players = sib?.let { Players(scan, it) }
         var camLine = 0
-        val out = Files.createTempFile("betterpf-upload-", if (xz) ".jsonl.xz" else ".jsonl.gz")
-        val stream = if (xz) XZOutputStream(Files.newOutputStream(out), LZMA2Options(3)) else java.util.zip.GZIPOutputStream(Files.newOutputStream(out), 1 shl 16)
+        val out = Files.createTempFile("betterpf-upload-", ".jsonl.xz")
+        val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             val cols = Columns(w)
             fun put(line: String, timed: Boolean = true) {

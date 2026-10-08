@@ -91,11 +91,7 @@ object BetterPF : Module(
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
-    private val uploadKey by StringSetting("Upload Key", "", 64, desc = "Optional, for the team: lifts the hourly upload limit. Runs upload without it.", placeholder = "")
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
-
-    /** The upload key, for other features that write to the site (BR Roles's boxes). */
-    val siteKey: String get() = uploadKey.trim()
 
     const val SITE = "undonecoffee.com"
     private const val RUNS_URL = "https://$SITE/betterpf/api/runs"
@@ -267,7 +263,6 @@ object BetterPF : Module(
      * compete with the game loading the next world.
      */
     private fun upload(file: Path) {
-        val key = uploadKey.trim()
         if (!uploadRuns) return
         Thread.ofPlatform().name("betterpf-upload").daemon(true).priority(Thread.MIN_PRIORITY).start {
             try {
@@ -275,7 +270,7 @@ object BetterPF : Module(
                 // recording is on the site when the next ones look for it (see [send]).
                 val scan = UploadPacker.scan(file, privateRuns)
                 staggerForParty(scan.summary)
-                val id = send(file, key, scan)
+                val id = send(file, scan)
                 uploadFailSaid = false
                 if (uploadedMessage) EngineerClient.msg("§7Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
             } catch (t: Throwable) {
@@ -308,10 +303,10 @@ object BetterPF : Module(
      * Another party member's recording of this run already on the site (the earliest), to leave out
      * what it has: its bytes, or null.
      */
-    private fun siblingOf(summary: JsonObject, key: String): ByteArray? {
-        // (Without the key the site only offers public runs.)
+    private fun siblingOf(summary: JsonObject): ByteArray? {
+        // (The site only offers public runs.)
         return runCatching {
-            val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).apply { if (key.isNotEmpty()) header("X-Upload-Key", key) }.header("Content-Type", "application/json")
+            val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofString())
             val id = JsonParser.parseString(res.body()).asJsonObject["id"]?.takeIf { !it.isJsonNull }?.asString ?: return null
             val got = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/$id")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofByteArray())
@@ -320,24 +315,21 @@ object BetterPF : Module(
     }
 
     /** Sends one run, on the calling thread. Its id on the site. */
-    private fun send(file: Path, key: String, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns)): String {
+    private fun send(file: Path, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns)): String {
         val summary = scan.summary
-        // Without the mobs a party member's recording already on the site has (UploadPacker); xz
-        // with the key, gzip without (the site checks a keyless recording on its way in, which it
-        // can only read as gzip).
-        val (packed, left) = UploadPacker.pack(file, scan, siblingOf(summary, key), xz = key.isNotEmpty())
+        // Without the mobs a party member's recording already on the site has (UploadPacker), as xz.
+        val (packed, left) = UploadPacker.pack(file, scan, siblingOf(summary))
         if (left > 0) EngineerClient.logger.info("[ec] betterpf: $left mobs left out, already uploaded by a party member")
         try {
-            return sendPacked(packed, summary, key)
+            return sendPacked(packed, summary)
         } finally {
             Files.deleteIfExists(packed)
         }
     }
 
-    private fun sendPacked(file: Path, summary: JsonObject, key: String): String {
-        // Without the key the site still takes it: checked, and a limited number an hour.
+    private fun sendPacked(file: Path, summary: JsonObject): String {
+        // The site checks it, and takes a limited number an hour (more for solo runs).
         val req = HttpRequest.newBuilder(URI.create(RUNS_URL))
-            .apply { if (key.isNotEmpty()) header("X-Upload-Key", key) }
             .header("X-Run-Summary", summary.toString())
             .header("X-Run-Owner", token())
             .header("Content-Type", "application/octet-stream")
@@ -431,13 +423,12 @@ object BetterPF : Module(
      */
     fun myRunsLink() {
         val token = token()
-        val key = uploadKey.trim()
         Thread.ofVirtual().name("betterpf-mine").start {
-            if (key.isNotEmpty()) try {
+            try {
                 val local = Files.list(runsDir).use { s -> s.filter { it.fileName.toString().endsWith(".jsonl.gz") }.toList() }
                 val runs = JsonArray().also { arr -> local.mapNotNull { runKey(it) }.forEach { arr.add(it) } }
                 val body = JsonObject().apply { addProperty("owner", token); add("runs", runs) }
-                http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/claim")).header("X-Upload-Key", key).header("Content-Type", "application/json")
+                http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/claim")).header("Content-Type", "application/json")
                     .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString())
             } catch (t: Throwable) {
                 EngineerClient.logger.warn("[ec] betterpf: claiming older runs failed", t)
@@ -455,7 +446,6 @@ object BetterPF : Module(
     @Volatile private var uploadFailSaid = false
 
     private fun uploadMissing() {
-        val key = uploadKey.trim()
 
         if (catchingUp) return EngineerClient.msg("§7Better PF: already uploading missing runs.")
         catchingUp = true
@@ -475,11 +465,11 @@ object BetterPF : Module(
                 var done = 0
                 for ((i, f) in missing.withIndex()) {
                     try {
-                        send(f, key)
+                        send(f)
                         done++
                         EngineerClient.msg("§7Better PF: uploaded ${i + 1}/${missing.size} §8(${f.fileName})")
                     } catch (t: Throwable) {
-                        // Without the key the site takes a limited number an hour: the rest another time.
+                        // The site takes a limited number an hour: the rest another time.
                         if (t is Refused && t.message?.startsWith("429") == true) {
                             EngineerClient.msg("§eBetter PF: $done uploaded - that's the hourly limit. Use Upload Missing Runs again later for the other ${missing.size - done}.")
                             return@start

@@ -889,22 +889,16 @@ object BrWaypoints2 : Module(
             file.parentFile.mkdirs()
             file.writeText(gson.toJson(saved))
         }.onFailure { EngineerClient.msg("§cCould not save BR Roles boxes: ${it.message}") }
-        push()
     }
 
     // --- the site's copy (undonecoffee.com/brroles) -----------------------------------------------
 
-    /** The site's copy this file last matched: its updatedAt, from a pull or a push. */
+    /** The site's copy this file last matched: its updatedAt, from a pull. */
     private var siteVersion = 0L
 
-    private fun push() {
-        val json = gson.toJson(mapOf("rooms" to saved))
-        BoxSync.push(json) { at -> mc.execute { siteVersion = maxOf(siteVersion, at) } }
-    }
-
     /**
-     * Takes the site's copy if it is newer than this file, or sends this file if the site's is
-     * older (or empty). Boxes edited on the site show up here from the next world load.
+     * Takes the site's copy if it is newer than this file; boxes saved here since stay here (the
+     * site is edited on its own page). Boxes edited on the site show up here from the next world load.
      */
     private fun pull() = BoxSync.pull { body -> mc.execute { adopt(body) } }
 
@@ -913,7 +907,7 @@ object BrWaypoints2 : Module(
         val at = site["updatedAt"]?.asLong ?: 0L
         if (at != 0L && at <= siteVersion) return
         saved.size // the file is read before it is compared
-        if (at == 0L || (file.exists() && file.lastModified() > at)) { if (saved.isNotEmpty()) push(); return }
+        if (at == 0L || (file.exists() && file.lastModified() > at)) return
         val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
         val rooms = runCatching { gson.fromJson<MutableMap<String, MutableList<IntArray>>>(site["rooms"], type) }.getOrNull() ?: return
         siteVersion = at

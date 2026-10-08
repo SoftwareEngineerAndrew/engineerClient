@@ -9,9 +9,8 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * BR Roles's boxes on the site (undonecoffee.com/brroles), where they can be looked at and
- * edited too. One shared document, { rooms, lastId, updatedAt }, read and written whole; the newer
- * copy wins. Writing needs Better PF's upload key; without it nothing is sent.
+ * BR Roles's boxes on the site (undonecoffee.com/brroles), where they are edited (by the site's
+ * owner). One shared document, { rooms, lastId, updatedAt }, read whole; the mod only reads it.
  */
 object BoxSync {
 
@@ -38,21 +37,5 @@ object BoxSync {
                 if (res.statusCode() == 200) done(res.body())
             }.onFailure { EngineerClient.logger.warn("[ec] brroles pull failed: ${it.message}") }
         }
-    }
-
-    /** Sends [json] as the site's copy; [done] gets the site's new updatedAt. False if there is no key. */
-    fun push(json: String, done: (Long) -> Unit): Boolean {
-        val key = BetterPF.siteKey
-        if (key.isEmpty()) return false
-        Thread.ofVirtual().name("brboxes-push").start {
-            runCatching {
-                val req = HttpRequest.newBuilder(URI.create(URL)).header("X-Upload-Key", key).header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(30)).PUT(HttpRequest.BodyPublishers.ofString(json)).build()
-                val res = http.send(req, HttpResponse.BodyHandlers.ofString())
-                if (res.statusCode() == 200) done(Regex(""""updatedAt":(\d+)""").find(res.body())?.groupValues?.get(1)?.toLong() ?: 0L)
-                else EngineerClient.logger.warn("[ec] brboxes push refused (${res.statusCode()}: ${res.body().take(80)})")
-            }.onFailure { EngineerClient.logger.warn("[ec] brboxes push failed: ${it.message}") }
-        }
-        return true
     }
 }
