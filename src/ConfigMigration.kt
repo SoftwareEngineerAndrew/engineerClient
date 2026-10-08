@@ -14,8 +14,9 @@ object ConfigMigration {
      * One-time moves inside config/odin/addons/engineerclient.json, before Odin reads it, so a
      * module that was renamed or folded into another keeps what was set in it:
      *  - BR Waypoints 2 is BR Roles;
-     *  - Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied to
-     *    Random Stuff, which provides those HUDs;
+     *  - the health and mana settings moved from Random Stuff to Health & Mana (on if Random Stuff
+     *    was); Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied
+     *    to Health & Mana, which provides those HUDs;
      *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
      *  - a former engineerClient Splits HUD that was on becomes Odin's Splits in the Engineer
      *    Splits look (written into Odin's config, read once the look's settings exist - see
@@ -45,6 +46,15 @@ object ConfigMigration {
             if (module(modules, "BR Roles") == null) { it.addProperty("name", "BR Roles"); changed = true }
         }
 
+        module(modules, "Random Stuff")?.let { rs ->
+            val from = settings(rs)
+            val moved = HEALTH_MANA_KEYS.filter { from.has(it) }
+            if (moved.isEmpty() || module(modules, "Health & Mana") != null) return@let
+            val to = settings(ensure("Health & Mana").also { it.addProperty("enabled", rs["enabled"]?.asBoolean ?: true) })
+            for (k in moved) to.add(k, from.remove(k))
+            changed = true
+        }
+
         // Sub Splits' detail levels lost "Off" and renamed "Extreme" to "Debug". Off was a way of
         // hiding the HUD, so it becomes the HUD switched off (the level itself back to Compact).
         module(modules, "Sub Splits")?.let(::settings)?.let { sub ->
@@ -71,7 +81,7 @@ object ConfigMigration {
                 for (k in keys) src[k]?.let { dst.add(k, it) }
                 changed = true
             }
-            copy("Player Display", "Random Stuff", listOf("Health Bar HUD", "Health Bar Width", "Health Bar Height", "Mana Bar HUD", "Mana Bar Width", "Mana Bar Height"))
+            copy("Player Display", "Health & Mana", listOf("Health Bar HUD", "Health Bar Width", "Health Bar Height", "Mana Bar HUD", "Mana Bar Width", "Mana Bar Height"))
 
             val oldSplitsHud = module(modules, "Sub Splits")?.let(::settings)?.get("Splits")
             val used = oldSplitsHud?.takeIf { it.isJsonObject }?.asJsonObject?.get("enabled")?.asBoolean == true
@@ -89,6 +99,11 @@ object ConfigMigration {
         }
         return changed
     }
+
+    private val HEALTH_MANA_KEYS = listOf(
+        "Hide Health/Mana Above %", "Threshold", "Health Bar HUD", "Health Bar Width", "Health Bar Height",
+        "Mana Bar HUD", "Mana Bar Width", "Mana Bar Height",
+    )
 
     private fun module(list: JsonArray, name: String): JsonObject? =
         list.firstOrNull { it.isJsonObject && it.asJsonObject["name"]?.asString == name }?.asJsonObject

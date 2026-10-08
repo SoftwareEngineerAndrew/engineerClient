@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** {@link SimonSaysPractice}'s Full Block toggle: the practice grid's buttons get a full-face hitbox. */
+/** {@link SimonSaysPractice}'s Full Block Hitboxes: the practice grid's buttons get a full-face hitbox. */
 @Mixin(ButtonBlock.class)
 public class SsFullBlockMixin {
 

@@ -88,6 +88,7 @@ object SimonSaysPractice : Module(
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
     private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
+    private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
 
     // ------------------------------------------------------------------ the real device
 
@@ -176,17 +177,12 @@ object SimonSaysPractice : Module(
                 p.set(rngButton(level), BUTTON)
                 val (a, b) = when (level) { -1 -> "Harder" to "spread out"; 0 -> "Normal RNG" to "random"; 1 -> "Easier" to "tighter"; else -> "Easiest" to "tightest" }
                 sign(p, rngButton(level), a, b, Direction.SOUTH)
-            }
-            // On top, above the grid's left edge: the Full Block toggle (grey when on).
-            p.set(FULL_BUTTON, BUTTON)
-            topSign(p, FULL_BUTTON, "Full Block", "hitboxes")
-        }
+            }        }
         placed = p
         gridCells = (0 until 16).map { p.at(buttonAt(it)) }.toSet()
         reset()
         markMode(0)
         markRng()
-        markToggle()
         EngineerClient.msg("§7SS Practice: summoned. Press the start button §8(left of the grid)§7 to begin, 3 times for the skip. The others are signed. The keybind again takes it away.")
     }
 
@@ -289,33 +285,13 @@ object SimonSaysPractice : Module(
     /** The RNG buttons, right of the grid (on the wall's wool at z 96): Normal RNG level with the start one. */
     private fun rngButton(level: Int) = BlockPos(110, 121 + level, 96)
 
-    /** The Full Block toggle, on top of the wall above the grid's left edge. */
-    private val FULL_BUTTON = BlockPos(110, 124, 92)
-
-    /** Full Block: the grid's buttons click as the whole face of their block (still a button's depth). */
-    private var fullBlock = false
+    /** Full Block Hitboxes: the grid's buttons click as the whole face of their block (still a button's depth). */
+    private val fullBlock: Boolean get() = fullBlockHitboxes
     /** The grid buttons' world positions while placed, for [fullBlockShape]. */
     private var gridCells: Set<BlockPos> = emptySet()
 
     /** The last round of a run: 4 since Hypixel's Oct 2026 update removed round 5. */
     private const val FINAL_ROUND = 4
-
-    /** Light grey wool behind the Full Block toggle while it's on, black when off. */
-    private fun markToggle() {
-        val p = placed ?: return
-        p.set(FULL_BUTTON.east(), if (fullBlock) Blocks.WOOL.lightGray().defaultBlockState() else Blocks.WOOL.black().defaultBlockState())
-    }
-
-    /** Flips Full Block (at once). */
-    private fun pressToggle() {
-        val p = placed ?: return
-        fullBlock = !fullBlock
-        markToggle()
-        click(p.at(FULL_BUTTON))
-        if (clickSounds) playSoundSettings(correctSound())
-        p.set(FULL_BUTTON, BUTTON.setValue(ButtonBlock.POWERED, true))
-        after(2) { placed?.set(FULL_BUTTON, BUTTON) }
-    }
 
     /** Odin's solver box for a cell (in front of its lamp): the button's size, or the whole face with Full Block. */
     private fun solverBox(p: Placement, lamp: BlockPos): AABB =
@@ -336,16 +312,6 @@ object SimonSaysPractice : Module(
             Direction.NORTH -> Block.box(0.0, 0.0, 16 - d, 16.0, 16.0, 16.0)
             else -> Block.box(0.0, 0.0, 0.0, 16.0, 16.0, d)
         }
-    }
-
-    /** A standing sign on top of the wool block [button] is on, facing you. */
-    private fun topSign(p: Placement, button: BlockPos, line1: String, line2: String) {
-        val real = button.east().above()
-        p.set(real, Blocks.OAK_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.StandingSignBlock.ROTATION, 4))
-        val be = p.level.getBlockEntity(p.at(real)) as? net.minecraft.world.level.block.entity.SignBlockEntity ?: return
-        be.setText(net.minecraft.world.level.block.entity.SignText()
-            .setMessage(1, net.minecraft.network.chat.Component.literal(line1))
-            .setMessage(2, net.minecraft.network.chat.Component.literal(line2)), true)
     }
 
     /** Light grey wool behind the selected RNG button, black behind the others. */
@@ -799,7 +765,6 @@ object SimonSaysPractice : Module(
             val rngPick = (-1..2).firstOrNull { pos == p.at(rngButton(it)) }
             if (pos == p.at(START)) pressStart()
             else if (rngPick != null) pressRng(rngPick)
-            else if (pos == p.at(FULL_BUTTON)) pressToggle()
             else if (pos == p.at(EXTRA)) pressExtra()
             else if (from != null) pressFrom(from)
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }

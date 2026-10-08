@@ -19,7 +19,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Random Stuff's Clean Menus, Esc side: the pause menu is built as just Back to Game, Options | Mods,
- * (Open to LAN in singleplayer) and Disconnect - no advancements, statistics, server links or icon row.
+ * (Open to LAN in singleplayer) and Disconnect - no advancements, statistics, server links or icon row -
+ * centred on the screen.
  * Replaces the whole build so nothing else's injections into it land half-way through a layout we
  * don't use; P3 Sim's button is added after init and finds Disconnect by its key.
  */
@@ -40,7 +41,7 @@ public abstract class PauseMenuMixin extends Screen {
         helper.addChild(Button.builder(Component.translatable("menu.returnToGame"), b -> {
             minecraft.gui.setScreen(null);
             minecraft.mouseHandler.grabMouse();
-        }).width(204).build(), 2, grid.newCellSettings().paddingTop(50));
+        }).width(204).build(), 2);
         Button.Builder options = Button.builder(Component.translatable("menu.options"),
             b -> minecraft.gui.setScreen(new OptionsScreen(self, minecraft.options, true)));
         Screen mods = RandomStuff.INSTANCE.modsScreen(self);
@@ -58,7 +59,7 @@ public abstract class PauseMenuMixin extends Screen {
             minecraft.getReportingContext().draftReportHandled(minecraft, self, () -> minecraft.disconnectFromWorld(ClientLevel.DEFAULT_QUIT_MESSAGE), true);
         }).width(204).build(), 2);
         grid.arrangeElements();
-        FrameLayout.alignInRectangle(grid, 0, 0, width, height, 0.5F, 0.25F);
+        FrameLayout.alignInRectangle(grid, 0, 0, width, height, 0.5F, 0.5F);
         grid.visitWidgets(this::addRenderableWidget);
     }
 }

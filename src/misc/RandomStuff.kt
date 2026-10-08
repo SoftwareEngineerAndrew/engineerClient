@@ -6,30 +6,22 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.clickgui.settings.impl.HudElement
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
-import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.playSoundAtPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.render.text
 import net.minecraft.sounds.SoundEvents
-import com.odtheking.odin.utils.skyblock.ActionBarListener
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.ConnectScreen
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.TitleScreen
@@ -68,37 +60,6 @@ object RandomStuff : Module(
     private val i4BowAims by BooleanSetting("i4 Bow Aims", true, desc = "Odin's Arrows Device aim positions for the bow you hold (Terminator, Mosquito, Terror's Hydra arrows), not only the Terminator. Needs Odin's Show Aim Positions.")
     private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
-    private val hideHealthManaUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
-    private val healthManaThreshold by NumberSetting("Threshold", 50, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideHealthManaUnlessLow }
-
-    // --- Health and mana bars ------------------------------------------------------------------
-    //
-    // Bar versions of Odin's Health HUD and Mana HUD, in the colours set in Odin's Player Display.
-    // Each is its own HUD so it can be placed and toggled on its own; unlike the text, a bar stays
-    // up at 0 as an empty bar.
-    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
-        val (current, max) = when {
-            example -> 3000 to 4000
-            !LocationUtils.isInSkyblock || ActionBarListener.maxHealth == 0 -> return@HUD 0 to 0
-            aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth) -> return@HUD 0 to 0
-            else -> ActionBarListener.currentHealth to ActionBarListener.maxHealth
-        }
-        statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth, healthBarHeight)
-    }
-    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
-    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
-
-    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
-        val (current, max) = when {
-            example -> 2000 to 20000
-            !LocationUtils.isInSkyblock || ActionBarListener.maxMana == 0 -> return@HUD 0 to 0
-            aboveThreshold(ActionBarListener.currentMana, ActionBarListener.maxMana) -> return@HUD 0 to 0
-            else -> ActionBarListener.currentMana to ActionBarListener.maxMana
-        }
-        statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth, manaBarHeight)
-    }
-    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.")
-    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.")
 
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
@@ -171,11 +132,7 @@ object RandomStuff : Module(
      * typically through about 4 s later) it is set to 4 s, red, whatever it read.
      * Counted in server ticks, so lag doesn't run it down.
      */
-    private val bossEnterTimer by BooleanSetting("Boss Enter Timer", true, desc = "From blood opening, counts down 54 s to the boss (50 s camp, 4 s portal): green, yellow under 30, red under 20. Hidden if blood isn't done by 50 s; set to 4 s when the portal spawns.")
-    private val portalChime by BooleanSetting("Portal Chime", true, desc = "A chime when the portal spawns.").withDependency { bossEnterTimer }
-    private val portalText by BooleanSetting("Portal Text", true, desc = "\"PORTAL\" in pink on screen while the portal's 4 s run.").withDependency { bossEnterTimer }
-
-    private val bossTimerHud by HUD("Boss Enter Timer", "The countdown from blood opening to the boss.", false, 420, 200, 2f) { example ->
+    private val bossTimerHud by HUD("Boss Enter Timer", "From blood opening, counts down 54 s to the boss (50 s camp, 4 s portal): green, yellow under 30, red under 20. Hidden if blood isn't done by 50 s; set to 4 s when the portal spawns.", true, 420, 200, 2f) { example ->
         val left = if (example) 41.3 else bossTicksLeft()?.let { it / 20.0 } ?: return@HUD 0 to 0
         val colour = when { left > 30 -> "§a"; left > 20 -> "§e"; else -> "§c" }
         val s = colour + String.format(java.util.Locale.ROOT, "%.1f", left)
@@ -183,11 +140,12 @@ object RandomStuff : Module(
         mc.font.width(s) to 9
     }
 
-    private val portalHud by HUD("Portal Text", "\"PORTAL\" in pink while the portal's 4 s run.", false, 400, 160, 4f) { example ->
-        if (!example && (!portalText || !portalOpen || bossTicksLeft() == null)) return@HUD 0 to 0
+    private val portalHud by HUD("Portal Text", "\"PORTAL\" in pink on screen while the portal's 4 s run.", true, 400, 160, 4f) { example ->
+        if (!example && (!portalOpen || bossTicksLeft() == null)) return@HUD 0 to 0
         text("§d§lPORTAL", 0, 0, Colors.WHITE, shadow = true)
         mc.font.width("§d§lPORTAL") to 9
     }
+    private val portalChime by BooleanSetting("Portal Chime", true, desc = "A chime when the portal spawns.")
 
     private const val CAMP_TICKS = 50 * 20
     private const val PORTAL_TICKS = 4 * 20
@@ -201,7 +159,7 @@ object RandomStuff : Module(
     private var portalOpen = false
 
     private fun bossTicksLeft(): Int? {
-        if (!enabled || !bossEnterTimer || DungeonUtils.inBoss) return null
+        if (!enabled || DungeonUtils.inBoss) return null
         val at = bossAt ?: return null
         return (at - serverTicks).takeIf { it > 0 }
     }
@@ -212,7 +170,7 @@ object RandomStuff : Module(
                 bloodSeen = true
                 portalOpen = true
                 bossAt = serverTicks + PORTAL_TICKS
-                if (enabled && bossEnterTimer && portalChime) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_CHIME.value(), 1f, 1.2f)
+                if (enabled && portalChime) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_CHIME.value(), 1f, 1.2f)
             }
             message.startsWith(WATCHER) && !bloodSeen -> {
                 bloodSeen = true
@@ -377,40 +335,12 @@ object RandomStuff : Module(
     /** Hide Item Names: read by GuiItemNameMixin. */
     fun hidesItemNames(): Boolean = enabled && hideItemNames
 
-    /**
-     * Whether Odin's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
-     * % is on and the stat is above the threshold. Read by HudElementMixin for every Odin HUD
-     * element; only those two are ever skipped.
-     */
-    fun hidesOdinHud(hud: HudElement): Boolean {
-        if (!enabled || !hideHealthManaUnlessLow) return false
-        return when {
-            hud === (PlayerDisplay.settings["Health HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth)
-            hud === (PlayerDisplay.settings["Mana HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentMana, ActionBarListener.maxMana)
-            else -> false
-        }
-    }
-
-    private fun aboveThreshold(current: Int, max: Int): Boolean =
-        hideHealthManaUnlessLow && max > 0 && current.toFloat() / max >= healthManaThreshold / 100f
-
-    private fun playerDisplayColor(name: String, fallback: Color): Color =
-        (PlayerDisplay.settings[name] as? ColorSetting)?.value ?: fallback
-
-    /** A bar filled to [current]/[max] over a dark background. */
-    private fun GuiGraphicsExtractor.statBar(current: Int, max: Int, color: Color, width: Int, height: Int): Pair<Int, Int> {
-        val pct = if (max <= 0) 0f else (current.toFloat() / max).coerceIn(0f, 1f)
-        fill(0, 0, width, height, Colors.BLACK.withAlpha(0.6f).rgba)
-        val filled = (width * pct).toInt().let { if (pct > 0f) it.coerceAtLeast(1) else it }
-        fill(0, 0, filled, height, color.rgba)
-        return width to height
-    }
-
     /** A live terminal (Odin tracks the open one) or a practice term sim. */
     private fun inTerminal(): Boolean =
         TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI
 
     init {
+        bossTimerHud.enabled = true; portalHud.enabled = true
         on<TickEvent.End> {
             ScoreboardLines.hideLines = enabled && hideSbLines
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs

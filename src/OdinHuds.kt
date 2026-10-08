@@ -1,6 +1,6 @@
 package com.engineerclient
 
-import com.engineerclient.misc.RandomStuff
+import com.engineerclient.misc.HealthMana
 import com.engineerclient.splits.OdinSplitsLook
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
 import com.odtheking.odin.clickgui.settings.impl.HudElement
@@ -24,7 +24,7 @@ object OdinHuds {
 
         override fun invoke(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
             val h = hud ?: return block(g, example)
-            if (!example && RandomStuff.hidesOdinHud(h)) return 0 to 0
+            if (!example && HealthMana.hidesOdinHud(h)) return 0 to 0
             return OdinSplitsLook.render(h, g, example) ?: block(g, example)
         }
     }
