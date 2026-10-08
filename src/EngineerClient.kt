@@ -41,6 +41,22 @@ object EngineerClient : ClientModInitializer {
     val mc: Minecraft get() = Minecraft.getInstance()
 
     private var tickCounter = 0
+    /** [keepWindowUp] has run (once is enough: the attribute sticks). */
+    private var windowKept = false
+
+    /**
+     * Fullscreen GLFW windows minimize themselves when they lose focus (Alt-Tab, a click on another
+     * screen), and on KDE Wayland a window minimized that way comes back blank: the game never hears
+     * it was restored, so it keeps skipping its frames. Auto-minimize off, and a window that is
+     * already stuck minimized is restored.
+     */
+    private fun keepWindowUp() {
+        val h = mc.window.handle()
+        if (h == 0L) return
+        org.lwjgl.glfw.GLFW.glfwSetWindowAttrib(h, org.lwjgl.glfw.GLFW.GLFW_AUTO_ICONIFY, org.lwjgl.glfw.GLFW.GLFW_FALSE)
+        if (org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(h, org.lwjgl.glfw.GLFW.GLFW_ICONIFIED) == org.lwjgl.glfw.GLFW.GLFW_TRUE) org.lwjgl.glfw.GLFW.glfwRestoreWindow(h)
+        windowKept = true
+    }
 
     /**
      * Every module, in the order the ClickGUI panel lists them (PanelOrderMixin: Odin itself sorts
@@ -85,6 +101,7 @@ object EngineerClient : ClientModInitializer {
         // Own-class poll: once a second is plenty; Odin keeps the teammate list fresh from packets.
         ClientTickEvents.END_CLIENT_TICK.register {
             if (++tickCounter % 20 == 0) safely("classPoll") { ClassDetect.poll() }
+            if (!windowKept) safely("window") { keepWindowUp() }
         }
 
         LeapHighlight.register()
