@@ -21,7 +21,7 @@ public class PersonalBestSimMixin {
     }
 
     /**
-     * ODIN-04: with nothing stored, a sim run faster than the stored PB would print "(New PB) Old PB was X"
+     * With nothing stored, a sim run faster than the stored PB would print "(New PB) Old PB was X"
      * every time. Its PB is capped at this run's time in the sim, so it reads "(this time)", never "New PB".
      */
     @ModifyVariable(method = "time(Ljava/lang/String;FLjava/lang/String;Ljava/lang/String;Z)V", at = @At("STORE"), ordinal = 0, remap = false)

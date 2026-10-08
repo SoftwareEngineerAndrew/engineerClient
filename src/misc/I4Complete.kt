@@ -16,7 +16,7 @@ import net.minecraft.world.phys.AABB
 
 /**
  * A title the moment your 4th device (i4, the S4 target) is done - only while you stand on its plate, (63, 127, 35).
- * Part of Random Stuff, always on while it is. Works on Hypixel and in P3 Sim. Three signals; the first one wins (tools/p3sim/research/devices.md §1):
+ * Part of Random Stuff, always on while it is. Works on Hypixel and in P3 Sim. Three signals; the first one wins:
  *
  *  - Chat: "<you> completed a device! (n/7)". Hypixel sends it in the tick of the last hit.
  *  - Device tag: the device's stand turning "Active" (Hypixel renames its stands on a 20-tick grid, so up to a

@@ -1,16 +1,16 @@
 package com.engineerclient.splits
 
 /**
- * What happens inside the Watcher, Portal and boss splits beyond the 25 named boss steps — only
- * the moments that were asked for, each filed under the split it actually happens in.
+ * What happens inside the Watcher, Portal and boss splits beyond the named boss steps, each moment
+ * filed under the split it actually happens in.
  *
- * Checked against the 32 recorded F7 runs:
+ * Checked against recorded F7 runs:
  *  - The energy crystals are Maxor's: two spawn on the upper platforms (y 238) when he starts,
  *    get picked up ("X picked up an Energy Crystal!"), and reappear placed on the lower ones
  *    (y 224). Chat's "1/2 Energy Crystals are now active!" says 1/2 for both, so the placed
  *    crystal appearing is what counts, and whoever stands nearest it placed it.
- *  - Goldor dies on "[BOSS] Goldor: ....". "Necron, forgive me.", 50-54 ticks later since
- *    Hypixel's boss update of 5 Oct 2026 (38 runs; 81-83 before it), ends his death animation.
+ *  - Goldor dies on "[BOSS] Goldor: ....". "Necron, forgive me.", 50-54 ticks later, ends his
+ *    death animation.
  *  - Simon Says presses are its buttons turning powered; the nearest player pressed them.
  *
  * Not possible: who hit Goldor or Necron (hits arrive with no attacker), and Storm's crushers

@@ -36,16 +36,15 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 
 /**
- * One sub-split HUD per section of the run (the splits themselves are Odin's Splits, in the Engineer
- * Splits look - see [OdinSplitsLook]), each with a dropdown for how much it shows:
+ * The Blood Rush sub-split HUD, plus the run tracking behind the Engineer Splits look (the splits
+ * themselves are drawn by Odin's Splits module, see [OdinSplitsLook]): bests, Pace and lag.
  *
- *  - Compact: one row, the section's times left to right, `Name: 1.52s | 0.21s | ...`.
- *  - Detailed: the same, vertical and labelled, `Move > 8.12s (8.00s)`.
- *  - Debug: Detailed plus every extra moment known about the section.
+ * [SplitTracker] times the splits, [SubSplitTracker] the boss steps, [BloodRunDetail] the rush room
+ * by room and [BossDetail] everything else; this module feeds them chat, the two clocks (real time
+ * and server ticks) and what it sees in the world.
  *
- * [SplitTracker] times the splits, [SubSplitTracker] the 25 boss steps, [BloodRunDetail] the rush
- * room by room and [BossDetail] everything else; this module feeds them chat, the two clocks and
- * what it sees in the world, and draws the result.
+ * The HUD's detail levels: Compact (one row per room), Detailed (labelled, one per line) and Debug
+ * (Detailed plus every extra moment known).
  */
 object DungeonSplits : Module(
     name = "Sub Splits",
@@ -72,16 +71,12 @@ object DungeonSplits : Module(
         Section("Blood Rush", SplitTracker.OPEN, "§a"),
         Section("Watcher", SplitTracker.BLOOD, "§c"),
         Section("Portal", SplitTracker.PORTAL, "§d"),
-        // The phase headers' colours from EngineerSubSplits.
         Section("Maxor", SplitTracker.MAXOR, "§a"),
         Section("Storm", SplitTracker.STORM, "§b"),
         Section("Terminals", SplitTracker.TERMS, "§6"),
         Section("Goldor", SplitTracker.GOLDOR, "§e"),
         Section("Necron", SplitTracker.NECRON, "§c"),
     )
-
-    // The run's splits themselves are Odin's Splits now, in the Engineer Splits look
-    // (OdinSplitsLook); [tracker] still times the phases the sub splits and scorecard hang off.
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
     private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
@@ -92,7 +87,7 @@ object DungeonSplits : Module(
         EngineerClient.msg("§7Sub split bests cleared.")
     }
 
-    // Still fed: it reads the moments (portal, leaps, Goldor's first hit) the splits' bests are graded on. Its HUD is Devgineer Client's.
+    /** Tracks the in-boss moments (portal, everyone in the core, Goldor's first hit, ...) the watchers below key off. */
     private val card = Scorecard()
 
     /**
@@ -114,7 +109,7 @@ object DungeonSplits : Module(
     private fun hudOn(s: Section) = huds[s]?.value?.enabled == true
 
     init {
-        // Only the blood rush HUD here; the other sections' HUDs are Devgineer Client's Sub Splits.
+        // Only the blood rush section has a HUD.
         for (s in SECTIONS.filter { it.window == SplitTracker.OPEN }) {
             // The HUD toggle first, its detail settings under it.
             huds[s] = registerSetting(
@@ -163,9 +158,9 @@ object DungeonSplits : Module(
 
     /**
      * The P3 Sim starting a fight at [label]'s phase (client thread, before its lines arrive): a
-     * fresh run, in Odin's Splits ([SimOdinSplits]) and here (the scorecard), whose earlier phases
-     * are your Pace targets. [termsDone]: sections already done when starting partway through the
-     * terminals (now, as no Goldor line comes then).
+     * fresh run, in Odin's Splits ([SimOdinSplits]) and here, whose earlier phases are taken as their
+     * Pace targets. [termsDone]: sections already done when starting partway through the terminals,
+     * where no Goldor line comes to start the split.
      */
     fun simStart(label: String, termsDone: Int = 0) {
         resetRun()
@@ -176,11 +171,10 @@ object DungeonSplits : Module(
         }
         val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
         val headClock = SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt())
-        // ODIN-03: a P3 / S1 start comes with Storm's end (5.1 s to Goldor's "Who dares" line), and on
-        // Hypixel Odin's Storm row is running through it: start Odin there, that far into Storm (your
-        // Storm Pace target, or its dark green - 41.3 s since Hypixel's boss update, was a fixed 46.2 s -
-        // less the lead-in) so "Storm took" reads a real time. The 5.1 s is the sim's (p3sim Fight):
-        // the game's is 3.1 s since the update.
+        // A P3 / S1 start plays Storm's end first (5.1 s to Goldor's "Who dares" line), and on
+        // Hypixel Odin's Storm row runs through it: start Odin that far into Storm (the Storm Pace
+        // target, or its dark green time of 41.3 s, less the lead-in) so "Storm took" reads a real
+        // time. The 5.1 s is the sim's lead-in; the game's is 3.1 s since Hypixel's boss update.
         if (label == SplitTracker.TERMS && termsDone == 0) {
             val storm = SimOdinSplits.odinName(SplitTracker.STORM)
             if (storm != null) {
@@ -191,7 +185,7 @@ object DungeonSplits : Module(
         if (termsDone > 0) {
             val at = now()
             tracker.startAt(label, before, at, headClock)
-            // The sections before at your Pace times, so the section steps run too.
+            // The sections before, at their Pace times, so the section steps run too.
             if (head.size == termsDone) {
                 val back = IntArray(termsDone + 1)
                 for (s in termsDone downTo 1) back[s - 1] = back[s] + head[s - 1].ticks.toInt()
@@ -418,9 +412,8 @@ object DungeonSplits : Module(
     /**
      * Every living teammate inside the core — the main way everyone-in is found: true, false (a
      * teammate you can see is outside), or null when someone is out of render distance and
-     * everyone you can see is in, which the box can't decide. Your original box stopped at y 112,
-     * but the fight goes down to the core's floor (players stood at y 64-90 in the recorded runs),
-     * so it now reaches all the way down.
+     * everyone you can see is in, which the box can't decide. The box reaches down to the core's
+     * floor, since players stand as low as y 64 during the fight.
      */
     private fun everyoneInCore(level: net.minecraft.client.multiplayer.ClientLevel): Boolean? {
         val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
@@ -443,11 +436,10 @@ object DungeonSplits : Module(
 
     /**
      * A TNT appearing during Necron's fight. He dies in a burst of them, 3 or more within 2 server
-     * ticks (10 split 9 + 1 across two ticks at times), which since Hypixel's boss update (5 Oct
-     * 2026) is the clearest sign of his death: "All this, for nothing..." is never said. It came in
-     * 37 of 38 F7 recordings since (the other had no TNT at all) and all 5 M7, EXTRA STATS 38-50
-     * ticks after it on F7; the single TNT seen earlier in his fight (~236 and ~309 ticks in) never
-     * come 3 at a time.
+     * ticks (sometimes split 9 + 1 across two ticks), which since Hypixel's boss update (5 Oct 2026)
+     * is the clearest sign of his death: "All this, for nothing..." is no longer said. On F7, EXTRA
+     * STATS follows 38-50 ticks later. The single TNT seen earlier in his fight never come 3 at a
+     * time.
      */
     private fun onNecronTnt(at: Stamp) {
         necronTnt.addLast(at)
@@ -460,9 +452,9 @@ object DungeonSplits : Module(
 
     /**
      * Necron dead at [at]. On F7 that is all: his split runs on to the run's end, there being no
-     * end animation since the update. On M7 his fight is over and the Wither King's is next, so his
-     * steps end here, and Odin's own Necron split (which ended on "All this, for nothing...") is
-     * handed that line.
+     * end animation since Hypixel's boss update. On M7 the Wither King's fight is next, so his steps
+     * end here, and Odin's own Necron split (which ends on "All this, for nothing...") is handed
+     * that line.
      */
     private fun necronDead(at: Stamp, how: String) {
         necronCue.onDeath()
@@ -479,8 +471,8 @@ object DungeonSplits : Module(
     private val DEATH_BURST_TNT = 3
     private val DEATH_BURST_TICKS = 2
     /**
-     * His wither is removed 20-21 server ticks after the burst (24 of 24 F7 runs since the update
-     * where it was seen go). The one recording with no TNT at all still had it, 19 before the score.
+     * His wither is removed 20-21 server ticks after the burst, in every recorded run where it was
+     * seen go.
      */
     private val NECRON_GONE = 20
 
@@ -577,10 +569,6 @@ object DungeonSplits : Module(
         return mc.level?.players()?.filter { it.name.string in team }?.minByOrNull { it.distanceToSqr(x, y, z) }?.name?.string
     }
 
-    /**
-     * A door's blocks, handed to [sink] with the two rooms either side of it. A door sits halfway
-     * between two map tiles, which are 32 blocks apart with the grid's first at -185.
-     */
     /** Each door among [blocks] ([DoorBlocks]), handed to [sink] with the rooms either side of it. */
     private fun door(blocks: List<Pair<Int, Int>>, phase: String, sink: (Stamp, BloodRunDetail.MapRoom?, BloodRunDetail.MapRoom?) -> Unit) {
         for (d in DoorBlocks.doors(blocks)) {
@@ -811,8 +799,8 @@ object DungeonSplits : Module(
     }
 
     /**
-     * The run's pace ([SplitPace]) against your Pace targets - each split's box, else your PB, else
-     * its dark green - on F7 once the run has started; null otherwise (no dark green times off F7).
+     * The run's pace ([SplitPace]) against the Pace targets - each split's setting, else the PB, else
+     * its dark green time - on F7 once the run has started; null otherwise (no dark green times off F7).
      */
     fun pace(now: Stamp = now()): SplitPace.Clocks? {
         if (DungeonUtils.floor?.name != "F7") return null
@@ -825,7 +813,7 @@ object DungeonSplits : Module(
     /** Splits whose best this run has already been looked at. */
     private val bestsChecked = HashSet<String>()
 
-    /** False for a P3 Sim run: the phases before its start are your targets, not times. */
+    /** False for a P3 Sim run: the phases before its start are Pace targets, not times. */
     private var realRun = true
 
     /**

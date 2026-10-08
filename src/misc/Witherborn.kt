@@ -17,9 +17,9 @@ import java.util.concurrent.ConcurrentHashMap
  * anything looking for "the wither" can take it for him (his death when it explodes, a hit,
  * the wrong boss to aim at).
  *
- * Told apart by where it first appears: on its owner. In 219 recorded F7/M7 runs since the boss
- * update, 216 of 222 Witherborn withers first showed within 3 blocks of a player (all within 4),
- * and no boss within 4.8 - they appear at their own spots, 15+ blocks off as a rule. A boss coming
+ * Told apart by where it first appears: on its owner. In recorded F7/M7 runs every Witherborn
+ * wither first appeared within 4 blocks of a player, and no boss closer than ~5 - bosses appear at
+ * their own spots, usually 15+ blocks off. A boss coming
  * back into view next to someone keeps its entity id, so only an id's first sighting decides.
  * A wither scaled down (a smaller size attribute) counts as one too.
  */

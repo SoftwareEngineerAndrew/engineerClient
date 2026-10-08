@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * P3 Sim: the player's rotation as a use_item arrives, before handleUseItem snaps it to the packet's: the last
- * movement packet's rotation, which Hypixel aims the Jerry-chine with (JERRY-03). Only the sim's server records it
+ * movement packet's rotation, which Hypixel aims the Jerry-chine with. Only the sim's server records it
  * ({@link Fight#noteUseItem}); the netty-thread pass of this method is ignored there.
  */
 @Mixin(ServerGamePacketListenerImpl.class)

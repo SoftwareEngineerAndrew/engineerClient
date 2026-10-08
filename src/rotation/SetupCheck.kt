@@ -8,10 +8,9 @@ import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.GraphicsPreset
 
 /**
- * Reads the client's ACTUAL configuration and says what is wrong with it — not a checklist to
- * eyeball, a check. The prescribed setup is: Odin does the party announcing (Leap Announce and
- * Announce Invincibility on — the whole party already runs that), EC listens, and the
- * positional-message boxes carry the exact arrival texts the rotation waits on.
+ * Inspects the client's actual configuration and reports what is wrong with it. The expected
+ * setup: Odin does the party announcing (Leap Announce and Announce Invincibility on), EC
+ * listens, and the positional-message boxes carry the exact arrival texts the rotation waits on.
  */
 object SetupCheck {
 
@@ -66,7 +65,7 @@ object SetupCheck {
         else Item(false, "no starting role set", "/ec role <${RotationSpec.graph.startingRoles.joinToString("|") { it.name }}>")
 
         // Other mods that intercept system chat at the network layer. EC reads packets ahead of
-        // them now, but say so anyway: a run that still misses lines starts here.
+        // them, but report them anyway: a run that still misses lines starts here.
         interceptor("blade-addons.json", "enableTerminalSplits", "blade-addons Terminal Splits rewrites completion lines")?.let { items += it }
         interceptor("devonianConfig.json", "terminalHideCompletion", "devonian Hide Terminal Completion drops completion lines")?.let { items += it }
 
@@ -83,7 +82,7 @@ object SetupCheck {
             else -> Item(true, "graphics preset ${preset.serializedName}")
         }
 
-        // Informational: both are assumed present on a team client and both are bridged, but a
+        // Informational: both are optional and bridged, but a
         // preview that looks wrong (missing terrain, missing entities) starts with which is loaded.
         fun optionalMod(id: String, name: String) {
             items += if (FabricLoader.getInstance().isModLoaded(id)) Item(true, "$name present")

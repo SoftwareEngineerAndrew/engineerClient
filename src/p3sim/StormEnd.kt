@@ -21,9 +21,9 @@ import kotlin.random.Random
 
 /**
  * A P3 start's lead-in: the 102 ticks (5.1 s) from Storm's death line to Goldor's "Who dares
- * trespass" (death + 102 in 140 of 150 runs; p2storm/deathgap.mjs). You're on your P3 spot with the
- * P3 hotbar; the party has already leapt down to the SS (dropspot.mjs: they leave Yellow 5-20 ticks
- * after the line and land on (108, 120, 94)). Storm's body spins at Yellow, where he nearly always
+ * trespass" (death + 102 in nearly every run). You're on your P3 spot with the P3 hotbar; the party
+ * has already leapt down to the SS (they leave Yellow 5-20 ticks after the line and land on
+ * (108, 120, 94)). Storm's body spins at Yellow, where he nearly always
  * dies, under its lightning storm ([StormCorpse]), and his last lines play.
  */
 class StormEnd : Fight.Phase("Storm end") {
@@ -40,7 +40,7 @@ class StormEnd : Fight.Phase("Storm end") {
         val b = BossWither("Storm", DEATH_AT, armoured = false)
         body = b
         StormFx.line(b, "I should have known that I stood no chance.")
-        // Hypixel: the bar still shows 0.45 at the line (30/37 runs) and drops to 0 about 4 ticks later.
+        // Hypixel: the bar usually still shows 0.45 at the line and drops to 0 about 4 ticks later.
         BossBar.show("§c§lStorm", 0.45f)
         StormCorpse(b).start()
     }
@@ -49,23 +49,22 @@ class StormEnd : Fight.Phase("Storm end") {
         when (t) {
             4 -> BossBar.progress(0f)
             62 -> StormFx.line(body, "At least my son died by your hands.")
-            // 3 ticks early: the first lever credit can land 1-2 ticks before "Who dares" (LEV-06); the line itself still lands at LEAD.
+            // 3 ticks early: the first lever credit can land 1-2 ticks before "Who dares"; the line itself still lands at LEAD.
             LEAD - 3 -> Fight.begin(GoldorPhase(1, arrived = true))
         }
     }
 
     companion object {
         const val LEAD = 102
-        /** Where he dies: pinned under Yellow (postdeath.mjs, the median of 50 bodies). */
+        /** Where he dies: pinned under Yellow (the median of recorded bodies). */
         val DEATH_AT = Vec3(44.6, 172.9, 65.2)
-        /** The party after its leap onto the SS player (dropspot.mjs). */
+        /** The party after its leap onto the SS player. */
         val SS_LANDING = listOf(Vec3(108.3, 120.0, 94.0), Vec3(107.4, 120.0, 92.8), Vec3(108.3, 120.0, 95.4), Vec3(107.0, 120.0, 94.6))
     }
 }
 
 /**
- * What Storm does after his death line, into P3 (BossRecorder, p2storm/corpseend.mjs,
- * postdeath.mjs, deathsnd.mjs, 15-50 fights). His body never falls over at the line: it stays where
+ * What Storm does after his death line, into P3. His body never falls over at the line: it stays where
  * the crush pinned it, spinning 40° a tick, with a wither.hurt (hostile, 15, 1.0) every 10-13 ticks;
  * explode (2, ~0.6) at +0 and +4, a wooden-door break (3, ~0.9) at ~+12. Health 0 (the vanilla
  * death fall) at +226 (215-236), removed 20-28 later (+249). Meanwhile 480 lightning bolts: 24
@@ -117,7 +116,7 @@ internal class StormCorpse(private val body: BossWither) {
     companion object {
         const val DEAD = 226
         const val GONE = 249
-        /** Spiral starts after the death line (two fights' bolts on his body: 21-00-45 and 21-05-29). */
+        /** Spiral starts after the death line (measured from recorded fights' bolts on his body). */
         val SPIRALS = listOf(0, 22, 46, 70, 85, 100, 116, 132, 147, 162, 173, 186, 200, 210, 220, 231, 242, 257, 270, 282, 292, 302, 312, 323)
         val LAST = SPIRALS.last() + 87
     }
@@ -126,9 +125,9 @@ internal class StormCorpse(private val body: BossWither) {
 /** Storm's own effects: his lines, the bolts, the projectiles; used by [P2Storm] and [StormEnd]. */
 internal object StormFx {
     /**
-     * A `[BOSS] Storm` line: the chat line, wither.ambient (5, 1.19) at him (deathsnd.mjs: at his
-     * body, not at you), and the speech stand: `§4§l<line>` 4.1 above him, following him, ~40
-     * ticks (speech.mjs: 65 stands in 20 runs, spawned the next tick, life p90 43).
+     * A `[BOSS] Storm` line: the chat line, wither.ambient (5, 1.19) at him (at his body, not at
+     * you), and the speech stand: `§4§l<line>` 4.1 above him, following him, ~40 ticks (spawned the
+     * next tick on Hypixel).
      */
     fun line(w: BossWither?, text: String) {
         Sim.chat("§4[BOSS] Storm§r§c: $text")
@@ -179,10 +178,10 @@ internal object StormFx {
         return fromY
     }
 
-    /** Hypixel's damage numbers: thousands commas, one decimal, none when it's .0 (hits.mjs: "10,047", "9,292.1"). */
+    /** Hypixel's damage numbers: thousands commas, one decimal, none when it's .0 ("10,047", "9,292.1"). */
     fun dmg(v: Double): String = String.format(Locale.US, "%,.1f", v).removeSuffix(".0")
 
-    /** A hit line of Storm's (hits.mjs: exact colours). */
+    /** A hit line of Storm's (exact colours). */
     fun hit(what: String, v: Double, trueDamage: Boolean = false) =
         Sim.chat("§cStorm's§r§7 $what hit you for §r§c${dmg(v)}§r§7 ${if (trueDamage) "true " else ""}damage.")
 
@@ -192,7 +191,7 @@ internal object StormFx {
 
 /**
  * Storm's Lightning Fireball: a vanilla large fireball (the fire-charge sprite) with Hypixel's push
- * of 0.15 a tick (fireballs.mjs: launch speed 0.15, then 0.74 / 1.55 / 2.0 blocks a tick averaged over
+ * of 0.15 a tick (launch speed 0.15, then 0.74 / 1.55 / 2.0 blocks a tick averaged over
  * ticks 1-10 / 10-20 / 20-30, vanilla's 0.95 inertia with power 0.15). It never explodes on its own:
  * the impact is [onImpact]'s.
  */
@@ -206,7 +205,7 @@ internal class StormFireball(level: Level, private val onImpact: (Vec3) -> Unit)
     override fun tick() { super.tick(); if (tickCount > 200) discard() }
 }
 
-/** One of his wither skulls (power 0.1, skulls.mjs); bursts harmlessly. */
+/** One of his wither skulls (power 0.1); bursts harmlessly. */
 internal class StormSkull(level: Level) : WitherSkull(EntityTypes.WITHER_SKULL, level) {
     override fun onHit(result: HitResult) {
         if (level().isClientSide || isRemoved) return

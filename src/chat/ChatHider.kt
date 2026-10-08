@@ -10,8 +10,8 @@ import net.minecraft.network.chat.Component
 import java.nio.file.Files
 
 /**
- * Hides chat lines the Dungeon Chat Hider page marked Block — at the very last step, when the
- * chat GUI is about to add the line to its list (see ChatComponentMixin).
+ * Hides chat lines its rules mark Block — at the very last step, when the chat GUI is about to
+ * add the line to its list (see ChatComponentMixin).
  *
  * That placement is the point. Everything else that reads chat — Odin's parsers, this mod's
  * own rotation, blade-addons, devonian, anything on Fabric's message events or the packet —
@@ -25,7 +25,7 @@ import java.nio.file.Files
 object ChatHider : Module(
     name = "Chat Hider",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Hides the chat lines marked Block in the Dungeon Chat Hider page. Other mods still see every line.",
+    description = "Hides the chat lines its rules mark Block (built in, or config/engineerclient/chat-hider.json). Other mods still see every line.",
     key = null,
     toggled = true,
 ) {

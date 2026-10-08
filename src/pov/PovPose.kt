@@ -6,7 +6,7 @@ import net.minecraft.world.entity.LivingEntity
 
 /**
  * Decides where a teammate's eyes are for a POV preview pass — the "interpolate head
- * movements" option. See docs/pov-preview-plan.md, section PovPose.
+ * movements" option.
  *
  * Contract (PovCapture relies on exactly this):
  *  - [begin] may rewrite the entity's position/rotation lerp fields so that the following
@@ -14,7 +14,7 @@ import net.minecraft.world.entity.LivingEntity
  *    field back. Call [Restore.restore] in a `finally`.
  *  - [onClientTick] is called once per client tick (render thread) so CUSTOM can sample.
  *
- * What the camera actually reads (26.1.2 `Camera.alignWithEntity`, first person):
+ * What the camera actually reads (`Camera.alignWithEntity`, first person):
  *  `Mth.lerp(partialTick, entity.xo/yo/zo, entity.getX/Y/Z())` for the eye position,
  *  `entity.getViewYRot(partialTick)` = `Mth.rotLerp(p, yHeadRotO, yHeadRot)` on LivingEntity,
  *  and `entity.getViewXRot(partialTick)` = `Mth.lerp(p, xRotO, getXRot())`.

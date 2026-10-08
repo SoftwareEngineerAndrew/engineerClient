@@ -42,8 +42,8 @@ object Spots {
     }
 
     /**
-     * How you face at P3's first tick on each job spot, as recorded (P3START-08): the S1 levers yaw 357-25 / pitch -22..-16, the S4 target 281-286 / 17-21,
-     * T4 about 10-44 / 0-2 (3 runs), T2 -181 / 48 and Simon Says -131 / 1.4 (one teammate each, PF); the rest face 180 / 0 (not measured).
+     * How you face at P3's first tick on each job spot, as recorded: the S1 levers yaw 357-25 / pitch -22..-16, the S4 target 281-286 / 17-21,
+     * T4 about 10-44 / 0-2, T2 -181 / 48 and Simon Says -131 / 1.4; the rest face 180 / 0 (not measured).
      */
     private fun startLook(job: String): Pair<Float, Float> = when (job) {
         "S1 east lever", "S1 west lever" -> 10f to -19f

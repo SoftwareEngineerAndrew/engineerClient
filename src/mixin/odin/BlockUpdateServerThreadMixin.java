@@ -10,8 +10,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Odin posts its BlockUpdateEvent from LevelChunk.setBlockState, which in singleplayer (the P3 Sim)
- * also runs on the integrated server's thread: every block change reached Odin twice, the server's
- * copy early and off the client thread (Simon Says' and the arrows device's solvers got confused).
+ * also runs on the integrated server's thread, so every block change would reach Odin twice, the
+ * server's copy early and off the client thread (which confuses the Simon Says and arrows device solvers).
  * Only the client's own changes go through. On a server (Hypixel) there is no integrated server,
  * so nothing changes there.
  */

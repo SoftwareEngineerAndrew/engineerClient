@@ -15,11 +15,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
  */
 class GeometryCapture(private val emit: (String) -> Unit) {
 
-    // Every place a door can be: the middle of each tile edge inside the grid. The box is generous
-    // (DOOR_ALONG either side of the middle, DOOR_ACROSS blocks into each room, y DOOR_Y up
-    // DOOR_H) so everything around a doorway that differs between runs - the door, the opening,
-    // or the wall filling it - comes from this run. Written whole, air included.
-    // Each spot: x0, z0, w, d.
+    // Every place a door can be: the middle of each tile edge inside the grid, as a box
+    // (DOOR_ALONG either side of the middle, DOOR_ACROSS blocks into each room) whose centre
+    // column is what [readDoors] reads. Each spot: x0, z0, w, d.
     private val doorSpots = ArrayList<IntArray>().apply {
         val across = 2 * DOOR_ACROSS + 1; val along = 2 * DOOR_ALONG + 1
         for (i in 1..5) for (j in 0..5) {
@@ -37,7 +35,7 @@ class GeometryCapture(private val emit: (String) -> Unit) {
      * door itself: coal a wither door, red terracotta blood, infested stone the entrance, barrier
      * one falling, air an open doorway. One line of the spots read that tick:
      * {"k":"dslots","t":t,"d":[[x, z, what, top], ...]} - what: "-" none, "n" open, "w" wither,
-     * "b" blood, "e" entrance, "f" falling. (Checked against 4,285 recorded doors, 2026-09-28.)
+     * "b" blood, "e" entrance, "f" falling. (Verified against several thousand recorded doors.)
      */
     private fun readDoors(level: ClientLevel, t: Int) {
         val read = ArrayList<String>()

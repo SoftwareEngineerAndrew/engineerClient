@@ -9,7 +9,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
  * Every HUD made through Odin's `Module.HUD`, by its setting. Odin draws HUDs through Compose and
- * has no per-element draw call to hook any more, so `HudElementMixin` wraps each HUD's draw
+ * has no per-element draw call to hook, so `HudElementMixin` wraps each HUD's draw
  * function as it is made ([Draw]). The wrapper is where two things step in, for Odin's own modules
  * without touching them:
  *  - Random Stuff's Hide Health/Mana Above %: Odin's Health HUD and Mana HUD draw nothing while the

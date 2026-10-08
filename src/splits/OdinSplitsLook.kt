@@ -38,13 +38,13 @@ object OdinSplitsLook {
     private enum class PaceFloor { F7, M7 }
 
     private val look = SelectorSetting("Look", Look.ENGINEER_SPLITS,
-        desc = "Odin Splits, or Engineer Splits: EngineerSplits' lines (Name > time (ticks)) with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
+        desc = "Odin Splits, or Engineer Splits: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
 
     /** The Engineer look is picked. */
     val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS
 
     private val colourByTime = BooleanSetting("Color Based Off Time", true,
-        desc = "Floor 7 split times coloured by how fast they were (dark green to black), here and in Sub Splits and the scorecard. Off: each time in its split's own colour, as before. Added by engineerClient.")
+        desc = "Floor 7 split times coloured by how fast they were (dark green to black), here and in Sub Splits. Off: each time in its split's own colour. Added by engineerClient.")
 
     private val showPb = BooleanSetting("Show PB", false,
         desc = "Times that tie or beat your best for that split in gold. Off: they get their colour from the time like any other. Added by engineerClient.")
@@ -107,12 +107,10 @@ object OdinSplitsLook {
     /**
      * M7 only. Odin's splits end Necron's split (and start "Cleared", the Dragons) on "[BOSS] Necron:
      * All this, for nothing...", which he stopped saying with Hypixel's boss update of 5 Oct 2026.
-     * On F7 that is right as it is: there is no end animation any more, so Necron runs to the end of
-     * the run. On M7 the Dragons follow him, so at his death (DungeonSplits: the TNT burst he dies
-     * in) that line is handed to Odin's SplitsManager as if he had said it.
-     * Odin ignores a split's line once that split has its time, so when the line does come (from
-     * before the update) whichever is first counts and the other does nothing; off floor 7 no split
-     * matches it.
+     * On F7 there is no end animation, so Necron runs to the end of the run. On M7 the Dragons follow
+     * him, so at his death (DungeonSplits: the TNT burst he dies in) that line is handed to Odin's
+     * SplitsManager as if he had said it. Odin ignores a split's line once that split has its time,
+     * so if the real line also comes, whichever is first counts; off floor 7 no split matches it.
      */
     fun onNecronDead() {
         if (necronEndFailed) return
@@ -187,7 +185,7 @@ object OdinSplitsLook {
 
     /**
      * The targets for the floor, as seconds; null off floor 7. A blank box (or one that isn't a
-     * time) follows your Odin PB for that split, live, so it keeps up as the PB improves.
+     * time) follows the Odin PB for that split, live, so it keeps up as the PB improves.
      */
     private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? {
         if (place != EngineerLook.Place.FLOOR7) return null
@@ -197,7 +195,7 @@ object OdinSplitsLook {
     }
 
     /**
-     * Split [i]'s Pace target ([EngineerLook.targetLabels] order) on F7 or M7: its box, else your PB
+     * Split [i]'s Pace target ([EngineerLook.targetLabels] order) on F7 or M7: its box, else the PB
      * for it, else null.
      */
     private fun target(i: Int, master: Boolean): SplitPace.Clocks? {
@@ -205,15 +203,15 @@ object OdinSplitsLook {
         return pb(i, master)
     }
 
-    /** [label]'s (SplitTracker's) Pace target for SplitPace: its box, else your PB, else null (its dark green). */
+    /** [label]'s (SplitTracker's) Pace target for SplitPace: its box, else the PB, else null (its dark green). */
     fun paceTarget(label: String, master: Boolean): SplitPace.Clocks? =
         SplitPace.ORDER.indexOf(label).takeIf { it >= 0 }?.let { target(it, master) }
 
     /**
-     * Your PB for split [i]: the faster of the best kept by Sub Splits (timed by its own tracker,
-     * on the split's own clock) and Odin's PB, each only if it is a real time - not under the
-     * split's floor. Odin's F7 PBs can't be taken as they are: its F7 Necron split never ends since
-     * the boss update (it waits for M7's Wither King), and old configs carry a 0.01 s Portal.
+     * The PB for split [i]: the faster of the best kept by Sub Splits (timed by its own tracker, on
+     * the split's own clock) and Odin's PB, each only if it is a real time - not under the split's
+     * floor. Odin's F7 PBs can't be taken as they are: its F7 Necron split never ends (it waits for
+     * a line Necron no longer says), and old configs can carry a 0.01 s Portal.
      */
     private fun pb(i: Int, master: Boolean): SplitPace.Clocks? {
         val floor = if (master) "M7" else "F7"
@@ -234,7 +232,7 @@ object OdinSplitsLook {
     private val placeholderField = runCatching { StringSetting::class.java.getDeclaredField("placeholder").apply { isAccessible = true } }.getOrNull()
 
     /**
-     * Grays each blank target box's stand-in into it: your PB, or (F7 without one) the dark green
+     * Grays each blank target box's stand-in into it: the PB, or (F7 without one) the dark green
      * time. Run as Odin's menu opens (ClickGuiSizeMixin), so it is current whenever the boxes show.
      */
     @JvmStatic
@@ -247,7 +245,7 @@ object OdinSplitsLook {
         }
     }
 
-    /** Your F7 Pace target for the Odin split named [name] (seconds; a blank box your PB), null with neither. */
+    /** The F7 Pace target for the Odin split named [name] (seconds; a blank box the PB), null with neither. */
     fun f7Target(name: String): Double? {
         val i = PB_NAMES.indexOf(name).takeIf { it >= 0 } ?: return null
         return targets(EngineerLook.Place.FLOOR7, false)?.getOrNull(i)
@@ -257,7 +255,7 @@ object OdinSplitsLook {
     private val PB_NAMES by lazy { listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name } }
 
     /**
-     * A floor 7 split's time colour (SubSplitGrades): bands from the recorded F7 runs, gold for your
+     * A floor 7 split's time colour (SubSplitGrades): bands from the recorded F7 runs, gold for a
      * best (kept with the sub splits' bests), on M7 gold only.
      */
     private fun grade(name: String, ms: Long, ticks: Long, over: Boolean, master: Boolean): String? {

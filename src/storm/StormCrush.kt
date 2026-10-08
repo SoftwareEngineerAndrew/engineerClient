@@ -5,8 +5,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Storm's crush rule, as worked out from the F7 runs recorded on Better PF (the numbers, and how
- * they were found, are in docs/storm-crush.md). Kept free of Minecraft so it tests headlessly.
+ * Storm's crush rule, as worked out from recorded F7 runs. Kept free of Minecraft so it tests
+ * headlessly.
  *
  *  - Hypixel checks for a crush once every [CHECK_PERIOD] server ticks, counted from when Storm's
  *    phase starts (his wither appears one server tick before "Pathetic Maxor, just like
@@ -28,10 +28,9 @@ object StormCrush {
 
     /**
      * How far above Storm's feet the check's head point sits. The recordings put it between 3.000
-     * (crushed) and 3.41 (not crushed): after Hypixel's 2026-10-06 boss update, 11 of 37 pinned crushes
-     * (102 runs, 10-06 to 10-07) had his feet at y 173.00-173.06 under a pillar bottom of 176, where a
-     * wither's eye height (2.975, the old value) would have missed. Before the update the lowest
-     * crushed head was 2.947 below the bottom, so nothing earlier contradicts 3.
+     * (crushed) and 3.41 (not crushed): since Hypixel's boss update (Oct 2026), pinned crushes often
+     * have his feet at y 173.00-173.06 under a pillar bottom of 176, where a wither's eye height
+     * (2.975) would have missed.
      */
     const val HEAD = 3.0
 

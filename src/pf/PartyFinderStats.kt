@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * ```
  *   Members: · missing: Mage, Tank
- *   TimTaroo: Berserk (47) | 47.3 | 41.2k | 4:31
+ *   Player: Berserk (47) | 47.3 | 41.2k | 4:31
  * ```
  *
  * The header also says which of the five classes nobody in the party has taken, so scrolling the
@@ -39,9 +39,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * mode or not. The tooltip is rebuilt every frame, so a row shows `…` until the fetch lands
  * and then fills in on its own.
  *
- * Stats change rarely and the same few hundred players list night after night, so the three
- * numbers (the cata XP, secrets and every floor's S+ times for both modes) are kept on disk for a day: `config/engineerclient/pfstats.json`.
- * Odin's own profile cache only lives five minutes, and only in memory.
+ * Stats change rarely and the same players list again and again, so the three numbers (cata XP,
+ * secrets and every floor's S+ times for both modes) are kept on disk for a day, in
+ * `config/engineerclient/pfstats.json`. Odin's own profile cache only lives five minutes, in memory.
  *
  * Hooked at `AbstractContainerScreen.getTooltipFromContainerItem` (see ContainerTooltipMixin):
  * the lines are rewritten, never a second GUI.
@@ -123,9 +123,8 @@ object PartyFinderStats {
      * already ends in one and two spaces showed.
      *
      * Read off the same member rows the stat columns use, so it costs one extra walk of a tooltip
-     * that is already being rebuilt every frame. Empty string when the party has no seat left, or
-     * when no row parsed — a listing whose wording we do not
-     * recognise says nothing rather than claiming all five classes are missing.
+     * that is already being rebuilt every frame. Empty string when no row parsed — a listing whose
+     * wording is not recognised says nothing rather than claiming all five classes are missing.
      *
      * A party can be short of more classes than it has seats (two Mages in a 4/5 party leaves one
      * seat and two classes absent), so this is deliberately "missing" and not "needs": every class

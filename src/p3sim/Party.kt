@@ -32,12 +32,12 @@ object Party {
 
     /**
      * Bot walking speed, blocks a tick: teammates' sustained 1 s ground speed in P3 is 0.60 / 0.85 /
-     * 1.21 (p10 / median / p90, 30 Better PF runs, analysis party/move.mjs).
+     * 1.21 (p10 / median / p90, measured from recorded runs).
      */
     private const val WALK = 0.85
     /**
      * A Hyperion blink, 10 blocks along the look. The few teleports teammates make in P3 that aren't
-     * leaps are these (Hyperion held, ~10 blocks; party/leapers.mjs): nearly all their distance is
+     * leaps are these (Hyperion held, ~10 blocks): nearly all their distance is
      * walked or leapt. A bot blinks only where it can't walk (a wall, a climb) or is late.
      */
     private const val BLINK = 10.0
@@ -182,8 +182,7 @@ object Party {
     private class Job(val job: String, val bot: Bot, val timeSection: Int, var sec: Double) { var at = -1 }
 
     private val jobs = ArrayList<Job>()
-    /** Leaps queued: [bot] onto wherever [onto] is at n = [at]. */
-    /** [youAt]: a leap onto you at your early-enter spot, which waits while you're not on it. */
+    /** Leaps queued: [bot] onto wherever [onto] is at n = [at]; [youAt]: a leap onto you at your early-enter spot, which waits while you're not on it. */
     private class Leap(val bot: Bot, val at: Int, val youAt: Vec3? = null, val onto: () -> Vec3?)
     private val leaps = ArrayList<Leap>()
     private var planned = 0
@@ -442,7 +441,7 @@ object Party {
             val st = phase.stations.firstOrNull { it.id == j.job }
             if (st != null) {
                 if (st.section == s && held && phase.stations.count { it.section == s && !it.done } == 1) return@removeAll false
-                // A lever's line comes on the swing that pulls it (1 tick, party/leapers.mjs); a device's last click swings too.
+                // A lever's line comes on the swing that pulls it (1 tick); a device's last click swings too.
                 if (st.kind != Station.Kind.TERMINAL) swing(j.bot)
                 if (st.kind == Station.Kind.LEVER) phase.pullLever(st, j.bot.name) else st.complete(j.bot.name)
                 if (st.kind == Station.Kind.DEVICE) phase.devices.shownDone(st.label)
@@ -792,13 +791,12 @@ object Party {
     private fun spotOf(job: String): Vec3 = STANDS[job] ?: job.removePrefix("gate ").toIntOrNull()?.let { GATES.getOrNull(it) } ?: CORE_SPOT
 
     /**
-     * A tick of getting there, as teammates do (party/move.mjs, leapers.mjs): walking on the
+     * A tick of getting there, as teammates do: walking on the
      * blocks at [WALK] (up steps and 1-block climbs, falling off edges), and a Hyperion [BLINK]
      * toward it where walking can't (a wall, somewhere higher, lava) - every 8 ticks - or won't make
      * it in time - every 4, every 2 (Hyperion's own limit) once it's due already. P3's floors are
-     * islands over lava that players cross with jumps and Bonzo/Jerry boosts (rises of 1-1.6 a tick,
-     * move.mjs); the blinks stand in for those (no walking path exists between most job spots on the
-     * sim's arena: party/path.mjs).
+     * islands over lava that players cross with jumps and Bonzo/Jerry boosts (rises of 1-1.6 a tick);
+     * the blinks stand in for those (no walking path exists between most job spots on the sim's arena).
      */
     private fun move(b: Bot, n: Int) {
         val to = b.to
@@ -913,7 +911,7 @@ object Party {
         b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n
         onto?.let { b.yaw = it.second }
         Sim.sound(net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, at)
-        // 103 of 146 teammates' leaps were announced (all 81 in older runs), median 1 tick after the tp (party/leapers.mjs).
+        // Most teammates' leaps are announced, usually 1 tick after the tp.
         val name = onto?.first ?: return
         // On you: what an early enterer (you, recording) waits for.
         if (name == Sim.me) GhostCapture.event("landed", b.clazz.name)
@@ -927,7 +925,7 @@ object Party {
     private fun swing(b: Bot) { b.entity?.swing(net.minecraft.world.InteractionHand.MAIN_HAND) }
 
     /**
-     * What a bot holds (party/measure.mjs, leapers.mjs): in P3 the Dungeonbreaker (teammates' rest
+     * What a bot holds, as teammates do: in P3 the Dungeonbreaker (teammates' rest
      * slot: 37-67% of P3 by class), the Infinileap from ~0.5 s before a leap to 1 s after (the head
      * comes out a median 8-19 ticks before), a Hyperion after a blink.
      */
@@ -963,8 +961,8 @@ object Party {
     }
 
     /**
-     * What each class holds standing about outside P3, its most-held item there (party/measure.mjs,
-     * 40 runs): P1 the Archer's Terminator, the Healer's Dungeonbreaker, everyone else's Hyperion;
+     * What each class holds standing about outside P3, its most-held item there (measured):
+     * P1 the Archer's Terminator, the Healer's Dungeonbreaker, everyone else's Hyperion;
      * P2 the same; P4 Hyperion but the Healer's Dungeonbreaker.
      */
     private fun restingItem(c: DungeonClass): String = when {
@@ -986,7 +984,7 @@ object Party {
     fun tick() {}
 
     /**
-     * P4: where teammates stand once they're down at Necron (party/where.mjs, 30 runs, 10 s in):
+     * P4: where teammates stand once they're down at Necron (measured 10 s in):
      * on the floor at y 64 around (45-62, 104-120), the Mage often right at (54, 101). From P3 they
      * drop in from the core over ~3 s (at 3 s most are still at y 69-75), so they land one by one.
      */
@@ -1031,8 +1029,8 @@ object Party {
     }
 
     /**
-     * Teammates' gear in P3 (party/gear.mjs, gear-sets.mjs: 57 players, 120 runs): a mask on the head
-     * (Spirit Mask 36, Bonzo's Mask 11, other heads 10) and dyed leather - each player's own dyes,
+     * Teammates' gear in P3 (measured from recorded runs): a mask on the head (mostly the Spirit Mask,
+     * then Bonzo's Mask) and dyed leather - each player's own dyes,
      * mostly Storm's blues (chest #1793c4 / legs #17a8c4) with #8969c8 or #1cd4e4 boots. Each class
      * wears one set seen on that class.
      */
@@ -1073,7 +1071,7 @@ object Party {
 
     // ------------------------------------------------------------------ places
 
-    /** Where a player stands to do each job (median from the recordings, terminal-roles.md). */
+    /** Where a player stands to do each job (medians from recorded runs). */
     val STANDS: Map<String, Vec3> = mapOf(
         "S1 T1" to Vec3(110.3, 113.0, 73.8), "S1 T2" to Vec3(109.1, 119.0, 79.6), "S1 T3" to Vec3(92.1, 112.0, 92.7), "S1 T4" to Vec3(92.5, 122.0, 100.5),
         "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.0625, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),

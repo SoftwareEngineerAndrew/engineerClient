@@ -15,10 +15,10 @@ import net.minecraft.world.phys.Vec3
 /**
  * Odin's Arrows Device (the i4 / sharpshooter solver) shows "aim positions": where to put your crosshair so one
  * volley hits the lit target and as many unhit cells as it can (a cell hit while it's the next, not yet lit target
- * counts too: tools/p3sim/research/devices.md §1). Odin's aims assume a Terminator: two side arrows, so it aims
- * between two cells. This works them out for the bow you hold, from Hypixel's measured arrows
- * (tools/p3sim/research/terror-mosquito.md, [ShotPlan]): the Terminator's ±5.5° pair, the Mosquito's single arrow
- * and Terror's two Hydra Strike arrows at ±8° at 10 stacks - with which a cell in the middle column covers its row.
+ * counts too). Odin's aims assume a Terminator: two side arrows, so it aims between two cells. This works them out
+ * for the bow you hold, from Hypixel's measured arrows ([ShotPlan]): the Terminator's ±5.5° pair, the Mosquito's
+ * single arrow and Terror's two Hydra Strike arrows at ±8° at 10 stacks - with which a cell in the middle column
+ * covers its row.
  *
  * Odin's module draws them (its "Show Aim Positions" on); ArrowsDeviceAimMixin hands Odin these instead of its
  * own, and they're redone whenever your bow, Hydra stacks or stance change. Random Stuff's "i4 Bow Aims" toggle.

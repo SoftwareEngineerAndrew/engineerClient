@@ -58,7 +58,7 @@ import java.util.Locale
  * arena, facing +x) and turned to face whichever way you look. [solver] is Odin's Simon Says
  * solution drawn on it: Odin's own only works on the real one.
  *
- * How it plays, as measured in 208 Better PF recordings of P3 (see docs/mechanics/simon-says.md):
+ * How it plays, as measured from recordings of real P3 runs:
  *  - The start button is left of the grid. Presses in the 6 ticks after the first decide the
  *    first show: 1 press shows round 1; 2 or 3 show one stray light first, then the first 1 or 2
  *    of the sequence (the "skip": 3 presses, press 2, then rounds of 3 and 4).
@@ -66,8 +66,8 @@ import java.util.Locale
  *    after a show that started with a stray light they come 5 ticks after the last light comes on,
  *    except that light's own button, which waits until 10 ticks after it goes out.
  *  - A pressed button stays down 3 ticks (pressing it again meanwhile does nothing).
- *  - The next round starts 6 ticks after the round's last correct press; after round 4 (the update
- *    cut round 5) that is the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks
+ *  - The next round starts 6 ticks after the round's last correct press; after round 4 (Hypixel's
+ *    Oct 2026 update removed round 5) that is the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks
  *    after it a new (in the game) sequence, shown the way the skip shows it. Practice: a wrong press
  *    restarts the run at once.
  */
@@ -102,10 +102,7 @@ object SimonSaysPractice : Module(
     private fun buttonAt(cell: Int) = BlockPos(110, 123 - cell / 4, 92 + cell % 4)
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
 
-    /**
-     * Each round's clicking (skip, r3, r4): the fastest healers' medians on Better PF, from before
-     * the update cut r5 (its 1.25 s is gone with it).
-     */
+    /** Reference times for each round's clicking (skip, r3, r4): the fastest healers' medians from Better PF runs. */
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05)
 
     // Odin's Simon Says colours.
@@ -299,7 +296,7 @@ object SimonSaysPractice : Module(
     /** The grid buttons' world positions while placed, for [fullBlockShape]. */
     private var gridCells: Set<BlockPos> = emptySet()
 
-    /** The last round of a run: 4 since the update (there was an r5). */
+    /** The last round of a run: 4 since Hypixel's Oct 2026 update removed round 5. */
     private const val FINAL_ROUND = 4
 
     /** Light grey wool behind the Full Block toggle while it's on, black when off. */
@@ -436,11 +433,10 @@ object SimonSaysPractice : Module(
     // ------------------------------------------------------------------ Inf mode
 
     /**
-     * Inf mode (the upper start button): every button up, no lights, and always three to press,
-     * highlighted green, gold, red like the solver. The order comes in bags of all 16, so each
+     * Inf mode (the button below the start one): every button up, no lights, and always three to
+     * press, highlighted green, gold, red like the solver. The order comes in bags of all 16, so each
      * button comes up once before any again; a new bag starts with [Inf.FRESH] buttons that
-     * aren't highlighted (nor just pressed). Its own object, so its state is set up when first
-     * used (hotswap-friendly too).
+     * aren't highlighted (nor just pressed). Its own object, so its state is set up when first used.
      */
     private object Inf {
         const val SHOWN = 3
@@ -572,7 +568,6 @@ object SimonSaysPractice : Module(
     /** The tick of a run's first start press; presses within [LATE_START_TICKS] of it never restart. */
     private var startedAt = 0L
     private val LATE_START_TICKS get() = 20
-    /** After a wrong press, ticks until the new sequence (the game's 25, a bit sooner for practice). */
 
     private fun pressStart() {
         val p = placed ?: return

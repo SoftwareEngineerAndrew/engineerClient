@@ -51,8 +51,8 @@ import java.time.Duration
 import java.util.zip.GZIPInputStream
 
 /**
- * Better PF, step 1: record everything about a dungeon run, from instance load to leaving, so it
- * can later be replayed/simulated in the browser (tools/betterpf-viewer).
+ * Better PF: records everything about a dungeon run, from instance load to leaving, so it can be
+ * replayed in the browser viewer (undonecoffee.com/betterpf).
  *
  * A session starts on every world load while this is on; [RunRecorder] keeps it only if the world
  * turns out to be a dungeon. Runs land in config/engineerclient/betterpf/runs/.
@@ -411,15 +411,9 @@ object BetterPF : Module(
     }
 
     /**
-     * Uploads every finished run in the runs folder the site doesn't have. A run is on the site if a
-     * run there has the same recorder and start time — private ones included, asked for by name.
-     * The one being recorded is still a .part file, so it is never picked up. Runs even with Upload
-     * Runs off - pressing the button is the ask.
-     */
-    /**
-     * /betterpf: the link to every run you have uploaded, private ones included. Runs uploaded
-     * before uploads carried your token are claimed first - named by recorder and start time, which
-     * only this computer knows - so the list has them too.
+     * /betterpf: the link to every run this install has uploaded, private ones included. Local runs
+     * are claimed for the owner token first - named by recorder and start time, which only this
+     * computer knows - so runs uploaded without the token are listed too.
      */
     fun myRunsLink() {
         val token = token()
@@ -445,6 +439,12 @@ object BetterPF : Module(
 
     @Volatile private var uploadFailSaid = false
 
+    /**
+     * Uploads every finished run in the runs folder the site doesn't have. A run is on the site if a
+     * run there has the same recorder and start time — private ones included, asked for by name.
+     * The one being recorded is still a .part file, so it is never picked up. Runs even with Upload
+     * Runs off - pressing the button is the ask.
+     */
     private fun uploadMissing() {
 
         if (catchingUp) return EngineerClient.msg("§7Better PF: already uploading missing runs.")

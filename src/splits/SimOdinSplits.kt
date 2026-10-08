@@ -7,10 +7,10 @@ import com.odtheking.odin.utils.skyblock.SplitsManager
  * The P3 Sim's run in Odin's Splits. The sim starts partway (P1, P2, P3, a section, the core, P4),
  * so the lines before it (Mort, the Watcher, ...) never come and Odin would show nothing. The run is
  * started directly, the starting phase's split gets its time, and every split before it is filled in
- * backwards as your Pace target for it ([target]: the Engineer look's F7 boxes, a blank one your Odin
- * PB, neither the dark green time). ODIN-08: Hypixel's earlier rows hold that run's real times, which
- * the sim has no way to know; Pace targets (your usual times) were kept over blank rows, as a blank
- * row would also make the next "took" line and the split lengths wrong.
+ * backwards as its Pace target ([target]: the Engineer look's F7 boxes, a blank one the Odin PB,
+ * neither the dark green time). On Hypixel the earlier rows would hold that run's real times, which
+ * the sim cannot know; Pace targets stand in for them rather than blank rows, which would also make
+ * the next "took" line and the split lengths wrong.
  *
  * Odin keeps each split as the moment (clock and its tick count) its line came; a split's length is
  * the next one's moment minus its own. Its PBs are never saved in the sim (PersonalBestSimMixin).
@@ -41,7 +41,7 @@ object SimOdinSplits {
     /** Odin's name for one of our split labels. */
     fun odinName(ours: String): String? = OURS.entries.firstOrNull { it.value == ours }?.key
 
-    /** How long [odinName] counts as before the sim's start: your Pace target, as ms. */
+    /** How long [odinName] counts as before the sim's start: its Pace target, as ms. */
     fun target(odinName: String): Long =
         OdinSplitsLook.f7Target(odinName)?.let { (it * 1000).toLong() }
             ?: OURS[odinName]?.let { SplitPace.ref(it)?.ms } ?: 0L

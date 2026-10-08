@@ -75,9 +75,9 @@ import java.io.File
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  *
  * Roles ([BrRoles]): once the party has said who kills what ("!3br 2" in party chat), a room the
- * rush comes into through a door the site has a plan for shows your boxes purple, numbered in the
- * order you kill them, your stack gold, and everyone else's boxes grey. The door runner ("!br d",
- * or whoever gets to the doors first) sees no boxes while rushing.
+ * rush comes into through a door the site has a plan for shows your boxes green, numbered in the
+ * order you kill them, and your stack gold; everyone else's are not drawn. The door runner
+ * ("!br d") sees no boxes while rushing.
  */
 object BrWaypoints2 : Module(
     name = "BR Roles",
@@ -328,7 +328,7 @@ object BrWaypoints2 : Module(
     }
 
     /**
-     * Whether a mob died, from what the recorded runs show (1721 starred mobs across 32 runs).
+     * Whether a mob died, going by how starred mobs behave in recorded runs.
      * Hypixel sends no death — no death animation, no health reaching zero, the tag never shows
      * 0❤ — the mob and its name tag are simply removed, on the same tick. Going out of view removes
      * them too, but further away, and a name tag also vanishes on its own from about 16 blocks
@@ -355,9 +355,10 @@ object BrWaypoints2 : Module(
 
     /**
      * The boxes on screen, only ever the room you are in (or the next on the rush), and without All
-     * Rooms only if it is on the blood rush's path. With Edit Mode on, all of that room's boxes. Otherwise none once the map shows the room cleared, and a box hides
-     * once every mob it claimed is known dead, showing until then — before any of its mobs are in
-     * view, too. Hidden is only hidden: the box stays saved and comes back with its room next run.
+     * Rooms only if it is on the blood rush's path. With Edit Mode on, all of that room's boxes.
+     * Otherwise none once the map shows the room cleared, and a box hides once every mob it claimed
+     * is known dead, showing until then — before any of its mobs are in view, too. Hidden is only
+     * hidden: the box stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
         val rooms = shownRooms()
@@ -643,8 +644,8 @@ object BrWaypoints2 : Module(
 
     /**
      * The boxes as they are: their count, which ones, and their corners. A mob's box depends only on
-     * where it spawned and on these, so it's worked out again only when they change (each frame for
-     * every mob against every box took about 8% of the render thread in a dungeon).
+     * where it spawned and on these, so it's worked out again only when they change (every mob
+     * against every box each frame is a noticeable share of render time in a dungeon).
      */
     private fun boxesSig(): Long {
         var h = boxes.size.toLong()
@@ -814,9 +815,9 @@ object BrWaypoints2 : Module(
     /**
      * A room Odin has worked out well enough to turn room coordinates into world ones: rotation and
      * clay block known, and every one of its tiles found. That last part matters — until the whole
-     * room is in, Odin reads a big room as a 1x1 and guesses its rotation from that. In the recorded
-     * runs Pipes, Pit, Waterfall, Hallway and Quartz Knight all read NORTH first and only turned WEST
-     * 10-180 ticks later, and boxes placed or saved by the first guess came out rotated.
+     * room is in, Odin reads a big room as a 1x1 and guesses its rotation from that. Rooms such as
+     * Pipes, Pit, Waterfall, Hallway and Quartz Knight can read NORTH first and only turn WEST up to
+     * ~180 ticks later, and boxes placed or saved by the first guess would come out rotated.
      */
     private fun placed(name: String): DungeonRoom? = DungeonScan.rooms.firstOrNull { r ->
         r.name == name && r.rotation != null && r.clayPos != null &&
@@ -918,13 +919,13 @@ object BrWaypoints2 : Module(
         loadedRooms.clear()
     }
 
+    /** Whether the wand is in hand, for [PosMsgEditor], which shares it. */
+    internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand
+
     /**
      * What makes an item this item: a Skyblock item's own uuid when it has one (that exact item),
      * else its Skyblock id, else the vanilla item and its name.
      */
-    /** Whether the wand is in hand, for [PosMsgEditor], which shares it. */
-    internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand
-
     private fun identity(stack: ItemStack): String = when {
         stack.isEmpty -> ""
         stack.itemUUID.isNotEmpty() -> "uuid:" + stack.itemUUID

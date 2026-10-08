@@ -48,7 +48,7 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ Simon Says
 
     /**
-     * Simon Says (S1), as measured in docs/mechanics/simon-says.md (the same timings as SS
+     * Simon Says (S1), as measured on Hypixel (the same timings as SS
      * Practice): the start button; lights one every 8 ticks; the buttons back 10 ticks after the
      * last light goes out (18 after the stray lamp, the lit one's 18 after its own); a press stays
      * down 3 ticks; the next round 6 ticks after a round's last press; four rounds (the update cut the fifth). A wrong press:
@@ -134,7 +134,7 @@ class Devices(val phase: GoldorPhase) {
             }
         }
 
-        /** 5 cells, no repeats (201 of 207), new each time. */
+        /** 4 cells, no repeats, new each time. */
         private fun newSequence() = (0 until 16).shuffled().take(4)
 
         /** The stray light: not part of the sequence, so a cell outside it. */
@@ -144,11 +144,11 @@ class Devices(val phase: GoldorPhase) {
         private var litCell = -1
 
         /**
-         * A show. Lamps every 8 ticks, except the stray's gap to the next, 4-8 (median 6, SS-02). The first lamp
-         * is in the call's own tick, as the buttons vanish (SS-04). After a stray the 15 buttons are back 18 ticks
-         * after the stray lit and the lit one's 18 after its own lamp (SS-01); a plain show brings all 16 back 10
+         * A show. Lamps every 8 ticks, except the stray's gap to the next, 4-8 (median 6). The first lamp
+         * is in the call's own tick, as the buttons vanish. After a stray the 15 buttons are back 18 ticks
+         * after the stray lit and the lit one's 18 after its own lamp; a plain show brings all 16 back 10
          * after the last lamp goes out. [stale]: a restart after a wrong press, where Hypixel's old button timer
-         * fires 1-4 ticks in, so the buttons stay clickable, and a lit lamp's button vanishes (SS-09).
+         * fires 1-4 ticks in, so the buttons stay clickable, and a lit lamp's button vanishes.
          */
         private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean, stale: Boolean = false) {
             accepting = false
@@ -178,8 +178,7 @@ class Devices(val phase: GoldorPhase) {
             if (!up[cell] || downUntil[cell] > phase.t) return
             button(cell, true, pressed = true)
             downUntil[cell] = phase.t + 3
-            // Each press: note_block.pling (vol 8, pitch 4.05 as sent) at the presser, never a button
-            // click (a pling 0-4 ticks after each of ~400 own presses that showed a pressed button).
+            // Each press: note_block.pling (vol 8, pitch 4.05 as sent) at the presser, never a button click.
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
             val g = gen
             Fight.later(3, "ss up") { if (g == gen && up[cell]) button(cell, true) }
@@ -194,8 +193,8 @@ class Devices(val phase: GoldorPhase) {
             } else {
                 accepting = false
                 after(3) { for (c in 0 until 16) button(c, false) }
-                // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26,
-                // run 25) or stray + [a, b] (34, run 15); buttons stale-clickable through it (SS-08, SS-09).
+                // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26)
+                // or stray + [a, b] (34); the buttons stay stale-clickable through it.
                 val plain = Random.nextBoolean()
                 after(3 + if (plain) 26 else 34) {
                     sequence = newSequence()
@@ -209,8 +208,8 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ Lights
 
     /**
-     * Lights: 20 levers (x58-62, y133-136, z142) over 20 lamps (z143), all off at the start
-     * (devices.md §3). A lamp is lit while any lever in its plus (itself and the four next to it)
+     * Lights: 20 levers (x58-62, y133-136, z142) over 20 lamps (z143), all off at the start.
+     * A lamp is lit while any lever in its plus (itself and the four next to it)
      * is on: an OR, not a toggle. Levers flick any time (players pre-do it in Maxor); a click in S2
      * with all 20 lamps lit is the device done, even one that turns a lever off. Odin's six are
      * the solution from all off.
@@ -234,7 +233,7 @@ class Devices(val phase: GoldorPhase) {
             if (st != null && st.hasProperty(LeverBlock.POWERED)) Blocks.set(lever, st.setValue(LeverBlock.POWERED, (x to y) in on))
             val lampPos = BlockPos(x, y, 143)
             val lit = lamp(x, y)
-            // LIGHTS-03: a lamp lights in the lever's tick, goes dark 3 (31 of 37) or 4 ticks after it.
+            // A lamp lights in the lever's tick and goes dark 3 (usually) or 4 ticks after it.
             if (lit || lampOffDelay <= 0) Blocks.set(lampPos, B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lit))
             else Fight.later(lampOffDelay, "lamp off") {
                 if (phase === Fight.phase && !lamp(x, y)) Blocks.set(lampPos, B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, false))
@@ -244,8 +243,8 @@ class Devices(val phase: GoldorPhase) {
         fun isLever(pos: BlockPos) = pos.z == 142 && (pos.x to pos.y) in levers
 
         /**
-         * A click on a lever, 1 tick after the click the lever changes (sound with it), the credit line 2 after it (LIGHTS-04).
-         * A LEFT click toggles nothing but completes the device the same way (LIGHTS-01, 7 of 36 runs).
+         * A click on a lever, 1 tick after the click the lever changes (sound with it), the credit line 2 after it.
+         * A LEFT click toggles nothing but completes the device the same way.
          */
         fun use(pos: BlockPos, left: Boolean = false): Boolean {
             if (!isLever(pos)) return false
@@ -263,7 +262,7 @@ class Devices(val phase: GoldorPhase) {
                         draw(if (Random.nextInt(6) == 0) 4 else 3)
                         Sim.sound(SoundEvents.LEVER_CLICK, 0.3f, if (k in on) 0.5873016f else 0.4920635f, Vec3.atCenterOf(pos), net.minecraft.sounds.SoundSource.BLOCKS)
                     }
-                    // In S2, or pre-done from S1 (as the bots do it, Quality PF's "lights" in S1's times).
+                    // In S2, or pre-done from S1 (as the bots do it).
                     credit = phase.section in 1..2 && (wasLit || (!left && allLit()))
                 }
                 // A left click is processed twice on Hypixel: the completion line goes out twice in one tick, counted once.
@@ -284,8 +283,8 @@ class Devices(val phase: GoldorPhase) {
     /**
      * Arrow Align (S3): item frames at x=-2, y120-124, z75-79 (index (y-120) + (z-75)*5), only on
      * one of Odin's nine layouts' arrow cells plus its few extra (non-arrow) frames, never on the
-     * other cells (devices.md §2). It starts solved but for the arrow nearest the bottom left; a click turns one +1. Frames turn
-     * any time (pre-dev); the device line comes in the same tick as the solving click, before S3 too (ARROWS-01).
+     * other cells. It starts solved but for the arrow nearest the bottom left; a click turns one +1. Frames turn
+     * any time (pre-dev); the device line comes in the same tick as the solving click, before S3 too.
      */
     inner class Arrows {
         private val frames = HashMap<Int, ItemFrame>()
@@ -293,7 +292,7 @@ class Devices(val phase: GoldorPhase) {
 
         fun place() {
             remove()
-            // Layouts 1-8 come about equally often (26-43 runs each); Odin's layout 0 never showed up in 280.
+            // Layouts 1-8 come about equally often; Odin's layout 0 has not been seen on Hypixel.
             val layout = (1 until SOLUTIONS.size).random()
             solution = SOLUTIONS[layout]
             for (i in 0 until 25) {
@@ -320,11 +319,10 @@ class Devices(val phase: GoldorPhase) {
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }
 
         /**
-         * ARENA-04, the back wall (x -3, y120-124, z75-79, the board's own y/z): sea lanterns on the layout's frame
-         * cells, blue terracotta elsewhere. Recorded (rec2, 36 P3s): at the start every wool cell is lit, an arrow
-         * cell only about one in eight (51 of ~400; always one that was turned right at first sight, never a wrong
-         * one bar one), no other cell ever; it does not follow clicks (no wall change between the load and
-         * completion in any run). On completion every frame cell goes lantern in one tick (36 of 36), 6-15 cells.
+         * The back wall (x -3, y120-124, z75-79, the board's own y/z): sea lanterns on the layout's frame
+         * cells, blue terracotta elsewhere. At the start every wool cell is lit, an arrow cell only about one in
+         * eight (in practice one already turned right), no other cell ever; it does not follow clicks. On
+         * completion every frame cell (6-15 of them) goes lantern in one tick.
          */
         private fun drawWall() {
             for (i in 0 until 25) {
@@ -338,7 +336,7 @@ class Devices(val phase: GoldorPhase) {
             for (i in frames.keys) Blocks.set(-3, 120 + i % 5, 75 + i / 5, B.SEA_LANTERN.defaultBlockState())
         }
 
-        /** ARROWS-08: a teammate's clicks, one frame per tick, not every frame in one tick. */
+        /** A teammate's clicks, one frame per tick, not every frame in one tick. */
         fun solve() {
             lightWall()
             var delay = 0
@@ -358,7 +356,7 @@ class Devices(val phase: GoldorPhase) {
             Fight.afterPing("arrow") {
                 val st = station("Arrows")
                 if (st.done) return@afterPing
-                // ARROWS-04: an extra (Start/End) frame turns as well (rec2 runs 16, 18); it never counts toward the solution.
+                // An extra (Start/End) frame turns as well; it never counts toward the solution.
                 if (solution[i] < 0) {
                     frame.setRotation((frame.rotation + 1) % 8)
                     Sim.sound(SoundEvents.ITEM_FRAME_ROTATE_ITEM, 1f, 1f, frame.position(), net.minecraft.sounds.SoundSource.PLAYERS)
@@ -378,9 +376,9 @@ class Devices(val phase: GoldorPhase) {
 
     /**
      * The target ("i4"): stand on the plate (63, 127, 35) and shoot the target block of the 3x3 at x64-68, y126-130,
-     * z50 (devices.md §1). Live from P3's start, not only in S4 (an early finish counts in S4 via
-     * GoldorPhase.complete). Each run is a random order of the 9 cells. As on Hypixel's main server
-     * (tools/p3sim/research/scripts/i4): the next cell is the target the moment the last one is hit, and a later
+     * z50. Live from P3's start, not only in S4 (an early finish counts in S4 via
+     * GoldorPhase.complete). Each run is a random order of the 9 cells. As on Hypixel's main server:
+     * the next cell is the target the moment the last one is hit, and a later
      * arrow in that same tick can hit it too; but it only shows (emerald) on a per-run 10-tick grid while someone is
      * on the plate - in the same tick when the hit lands on a grid tick. A target hit before it showed counts and
      * changes no block, so the board (and Odin's solver, which only sees blocks) never lights it: 7-8 lights for 9
@@ -408,7 +406,7 @@ class Devices(val phase: GoldorPhase) {
         private var held = false
         private var offAt = -1
 
-        /** The plate's power: it releases 1-10 ticks after you step off (0-10 measured, TARGET-01). */
+        /** The plate's power: it releases 1-10 ticks after you step off (0-10 measured). */
         fun onPlate(): Boolean {
             if (rawOnPlate()) { held = true; offAt = -1 }
             else if (held) {
@@ -477,7 +475,7 @@ class Devices(val phase: GoldorPhase) {
         /**
          * Each layout's extra (non-arrow) frames, Odin index to their item: true = lime wool (a
          * path's start), false = red wool (its end). The same cells and wool in every run of a layout
-         * (devices.md §2). Layout 0 was never seen; it keeps layout 2's, whose shape it shares (C).
+         * Layout 0 has not been seen on Hypixel; it keeps layout 2's, whose shape it shares.
          */
         val EXTRAS: List<Map<Int, Boolean>> = listOf(
             mapOf(2 to false, 22 to false),

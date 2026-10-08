@@ -44,12 +44,13 @@ import java.util.zip.GZIPOutputStream
  * One recording session: everything that happens in one world, from the moment it loads.
  *
  * Format: gzipped JSON Lines, one event per line, every line has "k" (kind) and, for anything that
- * happens during the run, "t" (ticks since the world loaded). See tools/betterpf-viewer/FORMAT.md.
+ * happens during the run, "t" (ticks since the world loaded).
  *
  * Nothing is kept unless the world turns out to be a dungeon: until [DungeonUtils.inDungeons]
  * reports true, lines pile up in memory; the moment it does, the file is opened and the backlog
- * flushed, so the recording still starts at instance load. If Odin works out the area is something else, or a minute passes without it, the
- * session is dropped - a hub or island visit costs nothing on disk.
+ * flushed, so the recording still starts at instance load. If Odin works out the area is
+ * something else, or a minute passes without it, the session is dropped - a hub or island visit
+ * costs nothing on disk.
  *
  * Disk writes happen on a single background thread; the client thread only builds strings, and
  * hands them over once a tick (one batch, not one hand-off per line).
@@ -184,7 +185,6 @@ class RunRecorder(
         emit("""{"k":"block","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"s":${paletteIndex(state)}}""")
     }
 
-    /** A chat line: plain [message], plus [colored] (with § formatting codes) when it has any formatting. */
     // ------------------------------------------------------------------ server ticks
     // The server's own tick count (Odin's per-tick ping), written when it moved: split and tick
     // timers count these, and they fall behind the client's ticks when the server lags.
@@ -241,6 +241,7 @@ class RunRecorder(
         emit("""{"k":"ether","t":$tick,$entry}""")
     }
 
+    /** A chat line: plain [message], plus [colored] (with § formatting codes) when it has any formatting. */
     fun onChat(message: String, colored: String? = null, n: Int? = null) {
         val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
         val st = if (n != null) ",\"n\":$n" else ""
@@ -262,8 +263,8 @@ class RunRecorder(
 
     // ------------------------------------------------------------------ what's in your open container
     // So the viewer can redraw the window you had open: its layout (on the gui line), every slot's
-    // item (changes only), the item on your cursor, the mouse at every frame (up to 60 a second,
-    // like the camera) and your clicks. Positions are GUI pixels from the window's top-left.
+    // item (changes only), the item on your cursor, the mouse at every frame (up to 60 a second)
+    // and your clicks. Positions are GUI pixels from the window's top-left.
 
     /** A container screen opened: its menu type ("inventory" for your own), size and slot positions. */
     fun onContainerOpen(title: String, menu: String, w: Int, h: Int, slots: List<IntArray>) {
@@ -485,9 +486,9 @@ class RunRecorder(
         val seen = HashSet<String>()
         for (p in level.players()) {
             // Hypixel's player-shaped mobs (uuid version 2) share names - sixteen "Crypt Souleater"s -
-            // so each is keyed by its entity id too ("Crypt Souleater#1234"): otherwise they
-            // overwrote each other here, every one looked changed every tick, and the viewer drew
-            // them as one mob jumping about. Real players keep their names.
+            // so each is keyed by its entity id too ("Crypt Souleater#1234"): otherwise they would
+            // overwrite each other here, every one would look changed every tick, and the viewer
+            // would draw them as one mob jumping about. Real players keep their names.
             val name = if (p.uuid.version() == 2) "${p.name.string}#${p.id}" else p.name.string
             seen += name
             val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { vanillaId(it) } }
@@ -755,7 +756,7 @@ class RunRecorder(
 
     private fun recordEquipment(e: LivingEntity, who: String, key: String) {
         // (the game swaps in new stacks when equipment changes: the same objects as last tick are no change -
-        // building the line for every entity every tick was most of the recorder's time)
+        // building the line for every entity every tick would be most of the recorder's time)
         val stacks = arrayOf(e.mainHandItem, e.getItemBySlot(EquipmentSlot.HEAD), e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val was = lastStacks[key]
         if (was != null && (0 until 5).all { was[it] === stacks[it] }) return
@@ -764,8 +765,9 @@ class RunRecorder(
         val items = listOf(e.mainHandItem, head, e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val headTex = head.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
         val body = items.joinToString(",", "[", "]") { str(vanillaId(it)) } + (headTex?.let { ",\"headTex\":${str(it)}" } ?: "")
-        // Rainbow armour changes its dye every tick or two: 99% of these lines were that alone, each
-        // with the head's texture again. Only a change of item counts; the first colour stays.
+        // Rainbow armour changes its dye every tick or two, which would make nearly every line this
+        // writes a dye change, each with the head's texture again. Only a change of item counts; the
+        // first colour stays.
         val same = body.replace(DYE, "")
         val previous = lastEquipment.put(key, same)
         if (previous == same || (previous == null && body == NO_EQUIPMENT)) return
@@ -824,7 +826,7 @@ class RunRecorder(
     /** A yaw to 0.1 degree, wrapped to -180..180 (the game lets them run on past 360 as you turn). */
     private fun w(v: Float) = a(Mth.wrapDegrees(v))
     private fun a(v: Float) = fixed(v.toDouble(), 1)
-    /** Boss packet positions: exact to the protocol's 1/4096 of a block. */
+    /** Two decimals: partial ticks, volumes, pitches and GUI pixels. */
     private fun f2(v: Float) = fixed(v.toDouble(), 2)
 
     /**

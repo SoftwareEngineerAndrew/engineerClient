@@ -11,9 +11,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * 26.2 moved the terrain upkeep that 26.1.2 kept in {@code LevelRenderer.update} into
- * {@code render}, so a POV pass now runs it too. These keep it on YOUR camera, as before: the view
- * area and the translucency sort are not moved to a teammate's eyes and back every frame. (The
+ * The terrain upkeep (view area, translucency sort) runs inside {@code LevelRenderer.render}, so a
+ * POV pass would run it too. These keep it on the local camera: the view area and the
+ * translucency sort are not moved to a teammate's eyes and back every frame. (The
  * occlusion graph is held by the captured frustum, see {@code PovCapture.renderFeed}.)
  */
 @Mixin(LevelRenderer.class)

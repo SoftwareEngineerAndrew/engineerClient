@@ -69,9 +69,8 @@ object P3Rotation : Module(
     fun slotColor(slot: Int): Color = when (slot) { 1 -> slot1; 2 -> slot2; 3 -> slot3; 4 -> slot4; else -> slot5 }
 
     // One sound per slot, each with its own id, pitch and volume and a "Play sound" button to
-    // audition it. Defaults are five different note-block instruments so they tell apart untuned.
-    // For now every slot is a note-block pling on a rising scale, one pitch per slot — Odin's own
-    // sound-settings helper cannot take a default pitch, hence the local copy of it below.
+    // audition it. Defaults are a note-block pling on a rising scale, one pitch per slot. Odin's
+    // own sound-settings helper cannot take a default pitch, hence the local copy of it below.
     private val slotSounds by DropdownSetting("Slot Sounds", desc = "")
     private val sound1 = soundSettings("Slot 1 Sound", "block.note_block.pling", 0.6f) { slotSounds }
     private val sound2 = soundSettings("Slot 2 Sound", "block.note_block.pling", 0.8f) { slotSounds }
@@ -141,20 +140,20 @@ object P3Rotation : Module(
         // Chat is read off the WIRE, not from Odin's chat event. Odin posts that event from Fabric's
         // ClientReceiveMessageEvents.ALLOW_GAME, which short-circuits: the moment any mod registered
         // ahead of it hides or rewrites a line (terminal-split features do exactly that to every
-        // completion line), no later listener runs and the line simply never existed for us. Two
-        // clients lost all of section 1 that way. The packet hook fires before any chat handling,
-        // on the network thread, so the text is handed to the main thread in arrival order.
+        // completion line), no later listener runs and the line never reaches us. The packet hook
+        // fires before any chat handling, on the network thread, so the text is handed to the main
+        // thread in arrival order.
         //
         // Hypixel sends a terminal completion together with its sound and title, and the protocol
-        // delivers that as ONE bundle packet. Odin's connection hook posts only the outer bundle;
-        // its second hook, which should post each inner packet, demonstrably did not deliver a
-        // single completion line in a real run. So bundles are opened here, by hand, and every
-        // packet is remembered by identity so a line is never processed twice if both paths fire.
+        // delivers that as ONE bundle packet. Odin's connection hook posts only the outer bundle,
+        // and its per-inner-packet hook does not reliably deliver completion lines. So bundles are
+        // opened here, by hand, and every packet is remembered by identity so a line is never
+        // processed twice if both paths fire.
         //
-        // And even that was not enough: blade-addons and devonian inject into the same network
-        // method Odin does, ahead of it, and consume completion packets before Odin's hook ever
-        // fires. So EC has its own mixin there at priority 1 (ConnectionTapMixin -> [tap]) — first
-        // in line, read-only. Odin's event stays as a second path; [take] dedupes by identity.
+        // blade-addons and devonian inject into the same network method Odin does, ahead of it,
+        // and consume completion packets before Odin's hook fires. So EC has its own mixin there
+        // at priority 1 (ConnectionTapMixin -> [tap]) — first in line, read-only. Odin's event
+        // stays as a second path; [take] dedupes by identity.
         on<PacketEvent.Receive>(EventPriority.HIGHEST) { handlePacket(packet, "odin") }
 
         // Re-delivery to Odin (see [Pending]). Odin's own path is watched, not trusted: these two
@@ -323,9 +322,8 @@ object P3Rotation : Module(
     /**
      * Every client has to reach the same answer about masks and arrivals, so that state is only
      * ever taken from PARTY chat — one event, one order, seen by all five. Your own proc and leap
-     * lines are sent only to you; EC forwards them itself, immediately, in Odin's wording. This
-     * is a team mod with a prescribed setup, so the party is not expected to also have Odin's
-     * announcements on — that would just say everything twice.
+     * lines are sent only to you; normally Odin announces them, and with [announceToParty] on EC
+     * forwards them itself in Odin's wording instead. Running both says everything twice.
      */
     private fun onMaskChat(raw: String) {
         P3ChatParser.partyLine(raw)?.let { party ->

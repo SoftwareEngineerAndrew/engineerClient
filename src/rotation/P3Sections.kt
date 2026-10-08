@@ -4,8 +4,8 @@ package com.engineerclient.rotation
  * Where the four phase-3 sections are in the world.
  *
  * The F7/M7 boss room always generates at the same coordinates, so these need no calibration.
- * The boxes are inherited from the FatesLeap mod's `PhaseTracker` (same author, same floor) and
- * have not been independently re-measured — if a leap cue fires in the wrong section, these are
+ * The boxes are taken from the FatesLeap mod's `PhaseTracker` and have not been independently
+ * re-measured — if a leap cue fires in the wrong section, these are
  * the first thing to check.
  *
  * This is only ever used for display timing: whether the person you are leaping to has actually

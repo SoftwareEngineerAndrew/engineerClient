@@ -55,7 +55,7 @@ object RandomStuff : Module(
     key = null,
 ) {
     /**
-     * Odin carried this as Terminal Solver's "Show Numbers" until a settings cleanup dropped it.
+     * The inverse of the "Show Numbers" option older Odin versions had on Terminal Solver.
      * With it on the numbers terminal ("Click in order!") is drawn without its 1-10, so the only
      * thing to go on is the solver's three order colours - you click the colour, not the number.
      *
@@ -125,8 +125,7 @@ object RandomStuff : Module(
     // Every Skyblock weapon, piece of armour and most of the junk in a dungeon inventory carries
     // enchantments, so the glint is on nearly everything at once — it washes out item colours in
     // the hotbar and turns a full inventory into a moving surface, which is exactly the wrong thing
-    // to be reading a chest through at speed. On by default; it was its own always-on module before
-    // it moved in here.
+    // to be reading a chest through at speed. On by default.
     //
     // Purely a render-side change: nothing here touches the stack, its components, or
     // [net.minecraft.world.item.ItemStack.hasFoil] itself. That matters, because Odin's terminal
@@ -158,7 +157,7 @@ object RandomStuff : Module(
     // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
     // does the matching and the hiding; these settings only say what to hide.
 
-    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", false, desc = "Hides the sidebar lines chosen on the Scoreboard Lines page: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
+    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", false, desc = "Hides the noisy sidebar lines: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
     private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
     private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
     private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
@@ -169,7 +168,7 @@ object RandomStuff : Module(
      * Boss Enter Timer: from the Watcher's first line (blood open), a countdown to the boss: 50 s of
      * camp and 4 s of portal. Over 30 s green, over 20 yellow, then red. Gone at 4 s left if the
      * Watcher hasn't let you go by then; when he does ("You may pass" - the portal, which you are
-     * through about 4 s later in the recorded runs) it is set to 4 s, red, whatever it read.
+     * typically through about 4 s later) it is set to 4 s, red, whatever it read.
      * Counted in server ticks, so lag doesn't run it down.
      */
     private val bossEnterTimer by BooleanSetting("Boss Enter Timer", true, desc = "From blood opening, counts down 54 s to the boss (50 s camp, 4 s portal): green, yellow under 30, red under 20. Hidden if blood isn't done by 50 s; set to 4 s when the portal spawns.")
@@ -445,9 +444,6 @@ object RandomStuff : Module(
             connect(screen)
         }
 
-        // The lobby we land in ignores a command sent before it is ready, so /skyblock goes out
-        // shortly after the world loads and then every couple of seconds until Odin sees the
-        // Skyblock scoreboard.
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
         on<TickEvent.Server> { bossTimerTick() }
 
@@ -457,6 +453,9 @@ object RandomStuff : Module(
             ticksUntilSkyblock = if (attempts == 0) FIRST_TRY_TICKS else TRANSFER_TICKS
         }
 
+        // The lobby we land in ignores a command sent before it is ready, so /skyblock goes out
+        // shortly after the world loads and then every couple of seconds until Odin sees the
+        // Skyblock scoreboard.
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!pendingSkyblockJoin || ticksUntilSkyblock < 0) return@register
             if (LocationUtils.isInSkyblock || attempts >= MAX_ATTEMPTS) { pendingSkyblockJoin = false; ticksUntilSkyblock = -1; return@register }

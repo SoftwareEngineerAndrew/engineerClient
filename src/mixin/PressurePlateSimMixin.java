@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * P3 Sim: S4's target plate (63, 127, 35) clicks silently, as on Hypixel (no pressure-plate sound in the recordings).
+ * P3 Sim: S4's target plate (63, 127, 35) clicks silently, as on Hypixel (which plays no pressure-plate sound for it).
  * Only that plate in the sim's own world; every other plate, and every other world, plays vanilla's click.
  */
 @Mixin(BasePressurePlateBlock.class)

@@ -7,11 +7,11 @@ import net.minecraft.world.phys.Vec3
 import kotlin.random.Random
 
 /**
- * Hypixel's lava bounce (tools/p3sim/research/physics.md §1): 1-6 ticks after your box first
- * touches lava (mostly 2-3) the server sets your motion to straight up, vy 2.25 (3.038 in the P3
- * lava when you're looking up: [HIGH_PITCH]). The client's own physics carries it (+2.25 on the first tick, apex +18.5; 3.038: apex +30.5). No health lost, but the hurt
- * sound and tilt, and you burn for 100-125 ticks. Again each time you come back down into it; never
- * while you're still rising out.
+ * Hypixel's lava bounce: 1-6 ticks after your box first touches lava (mostly 2-3) the server sets
+ * your motion to straight up, vy 2.25 (3.038 in the P3 lava when you're looking up: [HIGH_PITCH]).
+ * The client's own physics carries it (+2.25 on the first tick, apex +18.5; 3.038: apex +30.5). No
+ * health lost, but the hurt sound and tilt. Again each time you come back down into it; never while
+ * you're still rising out.
  */
 object Lava {
     private var touchedAt = -1
@@ -31,7 +31,7 @@ object Lava {
             // Rising out of the last bounce: no second one in the air.
             if (now - bouncedAt < 4) return
             touchedAt = now
-            // Necron-start lava (y~55): re-bounces 4 ticks after the last one, no delay (LAVA-10).
+            // Necron-start lava (y~55): re-bounces 4 ticks after the last one, no delay.
             bounceAt = now + (if (now - bouncedAt <= 4 && necronLava(p)) 0 else delay())
         }
         if (now < bounceAt) return
@@ -52,7 +52,7 @@ object Lava {
         return false
     }
 
-    /** Contact -> bounce as recorded (LAVA-02, 181 bounces): 0 5%, 1 39%, 2 42%, 3 13%, 4 1%; never 5+. */
+    /** Contact -> bounce delay as recorded: 0 5%, 1 39%, 2 42%, 3 13%, 4 1%; never 5+. */
     private fun delay(): Int {
         val r = Random.nextDouble()
         return when {
@@ -69,28 +69,28 @@ object Lava {
 
     /**
      * The 3.038 bounce is the one you get looking up: pitch -40.7 or further up, as you were 2 ticks
-     * before the bounce (Hypixel decides on the look it has, a round trip behind). Better PF's 217
-     * runs: 2 misses in 515 of the recorder's own bounces at that lag (both flicks across it).
+     * before the bounce (Hypixel decides on the look it has, a round trip behind); this matches
+     * nearly every recorded bounce.
      */
     private const val HIGH_PITCH = -40.7f
     private const val PITCH_LAG = 2
     private val pitches = FloatArray(PITCH_LAG + 1)
 
     private fun bounce(p: ServerPlayer, now: Int) {
-        // The 3.038 variant exists in the P3 lava and the Necron-start lava (LAVA-10).
+        // The 3.038 variant exists in the P3 lava and the Necron-start lava.
         val p3Lava = (p.y < 108.5 && p.y > 104.0) || necronLava(p)
         val vy = if (p3Lava && pitches[(now - PITCH_LAG).mod(pitches.size)] <= HIGH_PITCH) 3.038 else 2.25
         p.deltaMovement = Vec3(0.0, vy, 0.0)
         p.hurtMarked = true
         p.fallDistance = 0.0
-        // Main: 16% of bounces are silent (no hurt tilt, no sound); otherwise the hurt sound lands a tick after the
+        // On Hypixel 16% of bounces are silent (no hurt tilt, no sound); otherwise the hurt sound lands a tick after the
         // bounce 69% of the time, with it the rest.
         if (Random.nextDouble() >= 0.16) {
             p.connection.send(ClientboundHurtAnimationPacket(p))
             val hurt = { if (!p.isRemoved) Sim.sound(SoundEvents.PLAYER_HURT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.PLAYERS) }
             if (Random.nextDouble() < 0.69) Fight.later(1, "lava hurt sound") { hurt() } else hurt()
         }
-        // No fire after a bounce (Andrew's call): put out anything the lava itself lit.
+        // No fire after a bounce: put out anything the lava itself lit.
         p.clearFire()
         bouncedAt = now
         touchedAt = -1; bounceAt = -1

@@ -37,7 +37,7 @@ object ClassDetect {
             DungeonClass.entries.firstOrNull { it != DungeonClass.EMPTY && (it.name == stash || stashName(it) == stash) }
         }
 
-    /** The stash's old spelling, from when it fed the blood rush pack names ("Berserker", "Mage", ...). */
+    /** The title-case spelling older config files stored ("Berserker", "Mage", ...). */
     private fun stashName(clazz: DungeonClass): String =
         if (clazz == DungeonClass.BERSERK) "Berserker" else clazz.name.lowercase().replaceFirstChar(Char::titlecase)
 }

@@ -14,15 +14,14 @@ object ConfigMigration {
      * One-time moves inside config/odin/addons/engineerclient.json, before Odin reads it, so a
      * module that was renamed or folded into another keeps what was set in it:
      *  - BR Waypoints 2 is BR Roles;
-     *  - what used to live in a modified Odin and ships with engineerClient now - Player Display's
-     *    Health/Mana Bar HUDs (Random Stuff) - is copied out of Odin's own config, where that Odin
-     *    saved it;
+     *  - Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied to
+     *    Random Stuff, which provides those HUDs;
      *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
-     *  - engineerClient's own Splits HUD is Odin's Splits in the Engineer Splits look now, so if it
-     *    was on, Odin's Splits gets that look (written into Odin's config, read once the look's
-     *    settings exist - see OdinSplitsLook.install);
-     *  - Positional Messages left Odin in 0.3.6 and lives here now: Odin's module (on/off, settings and
-     *    the saved boxes) is copied over as it was.
+     *  - a former engineerClient Splits HUD that was on becomes Odin's Splits in the Engineer
+     *    Splits look (written into Odin's config, read once the look's settings exist - see
+     *    OdinSplitsLook.install);
+     *  - Positional Messages was removed from Odin in 0.3.6 and is provided here: Odin's module
+     *    (on/off, settings and the saved boxes) is copied over as it was.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -66,7 +65,7 @@ object ConfigMigration {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
             fun copy(from: String, to: String, keys: List<String>) {
                 val src = module(odin, from)?.let(::settings) ?: return
-                if (keys.none { src.has(it) }) return // never saved by a modified Odin
+                if (keys.none { src.has(it) }) return // nothing to copy
                 val dst = settings(ensure(to))
                 if (keys.any { dst.has(it) }) return
                 for (k in keys) src[k]?.let { dst.add(k, it) }

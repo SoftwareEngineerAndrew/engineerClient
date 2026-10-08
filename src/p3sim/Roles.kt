@@ -75,7 +75,7 @@ object Roles {
         "Quality PF",
         roles = linkedMapOf(
             HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
-            // S2's dev: not in the roles as given; the mage does it (dev at 8.3, on the ee2 spot at 8.6).
+            // S2's dev: the mage does it (dev at 8.3, on the ee2 spot at 8.6).
             MAGE to "bl ee2 / dev 2 3 core / core / recore",
             BERSERK to "i4 / 53 / 3 dev / 3 bl",
             TANK to "21 / ll ee3 / 1 bl / 1",
@@ -92,7 +92,7 @@ object Roles {
             "ee3 waits 1 2 3 4",
             "", "",
         ),
-        // The stacks' help (undonecoffee): S3 4 bl -> 1st term gets rl, 1 bl -> 4th term gets ll and the
+        // Stack help: S3 4 bl -> 1st term gets rl, 1 bl -> 4th term gets ll and the
         // gate (4.8 s); S4 3 bl -> 4th term gets rl, 4 bl -> 3rd term gets ll (4.2 s).
         helps = listOf(
             Help(3, "S3 T4", "S3 T1", listOf("S3 east lever"), 4.8),
@@ -102,12 +102,11 @@ object Roles {
         ),
     )
 
-    /** For now the same as Quality PF. */
+    /** The same as Quality PF. */
     val DYNAMIC = Preset("Dynamic", QUALITY_PF.roles, QUALITY_PF.times, QUALITY_PF.moves, QUALITY_PF.helps)
 
     /**
-     * The p3sim route planner's prototype roles 1 (tools/p3sim/routes/custom/prototype1.json, 399 ticks), times
-     * from its simulation. The tank pre-does Lights and waits on S2's high path for the archer, mage and bers;
+     * A route planner's prototype roles (a 399-tick P3), times from its simulation. The tank pre-does Lights and waits on S2's high path for the archer, mage and bers;
      * the bers waits on S3 T3 for the healer, tank and archer; the mage waits by the core (EE4) for the S4
      * leaps. (The planner's bers also leaps onto the archer at T4 for S3's levers: the bots walk it.)
      */

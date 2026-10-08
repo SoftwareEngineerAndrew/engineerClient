@@ -23,12 +23,11 @@ import net.minecraft.world.level.block.Blocks as B
 
 /**
  * Static and per-run corrections to the arena that arena.bin (built from the Better PF library) does not carry,
- * from the recorder-2 captures of 36 Hypixel P3s (`arena-fixes.json`, `arena-ext.bin`; audit ARENA-01..12):
+ * from packet captures of Hypixel P3s (`arena-fixes.json`, `arena-ext.bin`):
  * - the thicker east wall (x128-134) and the NW column ([Arena.Data] patch, `arena-ext.bin`);
  * - the y63 floor layer, rolled per cell from the recorded spread, and the sparse removals before Terms
  *   (lava y162, quartz, dirt, red terracotta, stone bricks), each cell with its recorded frequency;
- * - (the Arrow Align back wall, x -3, y120-124, z75-79, is no longer here: Devices.Arrows draws it, ARENA-04);
- * - player-head textures (ARENA-03);
+ * - player-head textures;
  * - [Replay]: that same recorded run's block changes from Terms on (TNT cubes, polished granite blobs,
  *   the S4 plate), so a fight gets the timing of a real one.
  * Everything that moves at runtime goes through [Blocks.set], so [Blocks.restoreAll] puts it back.
@@ -85,7 +84,7 @@ object ArenaFixes {
         fun put(x: Int, y: Int, z: Int, s: BlockState) { if (inBox(x, y, z)) cells[cell(x, y, z)] = idx(s).toShort() }
         fun at(x: Int, y: Int, z: Int): BlockState = if (inBox(x, y, z)) states[cells[cell(x, y, z)].toInt()] else air
 
-        // ARENA-09: the thicker east wall and the NW column.
+        // The thicker east wall and the NW column.
         if (ext != null) {
             for (y in 0 until ext.h) for (z in 0 until ext.d) for (x in 0 until ext.w) {
                 val s = ext.states[ext.cells[(y * ext.d + z) * ext.w + x].toInt()]
@@ -96,7 +95,7 @@ object ArenaFixes {
         if (t != null) {
             val st = t.states
             val root = t.root
-            // ARENA-06: the y63 layer varies per run; each cell drawn from its recorded spread.
+            // The y63 layer varies per run; each cell drawn from its recorded spread.
             for (e in root.getAsJsonArray("y63")) {
                 val a = e.asJsonArray
                 val opts = a[2].asJsonArray
@@ -104,20 +103,20 @@ object ArenaFixes {
                 var r = Random.nextInt(total)
                 for (o in opts) { val oa = o.asJsonArray; r -= oa[1].asInt; if (r < 0) { put(a[0].asInt, 63, a[1].asInt, st[oa[0].asInt]); break } }
             }
-            // ARENA-07: sparse removals, each cell with its recorded frequency.
+            // Sparse removals, each cell with its recorded frequency.
             val runs = root.get("removeRuns").asInt
             for (e in root.getAsJsonArray("remove")) {
                 val a = e.asJsonArray
                 val x = a[0].asInt; val y = a[1].asInt; val z = a[2].asInt
                 if (at(x, y, z) == st[a[3].asInt] && Random.nextInt(runs) < a[4].asInt) put(x, y, z, air)
             }
-            // ARENA-04: the run this world's Replay copies. The Arrow Align wall (x -3) is Devices.Arrows' now.
+            // The run this world's Replay copies. The Arrow Align wall (x -3) is drawn by Devices.Arrows.
             pick = Random.nextInt(t.runs.size)
         }
         return Arena.Data(x0, y0, z0, w, h, d, states.toTypedArray(), cells)
     }
 
-    // ------------------------------------------------------------------ player heads (ARENA-03)
+    // ------------------------------------------------------------------ player heads
 
     private class Skull(val x: Int, val y: Int, val z: Int, val profile: ResolvableProfile)
 
@@ -156,7 +155,7 @@ object ArenaFixes {
         }
     }
 
-    // ------------------------------------------------------------------ the recorded run's changes (ARENA-01/02/04/08)
+    // ------------------------------------------------------------------ the recorded run's changes
 
     /** One recorded run's block changes, relative to n (server ticks since Goldor's first line). */
     class Replay internal constructor(private val run: Run, private val states: Array<BlockState>) {
@@ -197,7 +196,7 @@ object ArenaFixes {
         }
 
         /**
-         * A TNT cube going away as main does it (census): a primed TNT on each block (fuse 80, vanilla's random
+         * A TNT cube going away as Hypixel does it: a primed TNT on each block (fuse 80, vanilla's random
          * (+-0.02, 0.2, +-0.02) hop, entity.tnt.primed BLOCKS 1.0/1.0 each), the block air one tick later, and the
          * entity gone 21 ticks on, never exploding or hurting anything.
          */

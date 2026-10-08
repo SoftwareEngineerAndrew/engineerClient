@@ -67,7 +67,7 @@ object SimWorld {
         }
     }
 
-    /** Deletes the world and makes it again (the menu's "Rebuild world"). */
+    /** Deletes the world and makes it again (`/p3sim rebuild`). */
     fun rebuild() {
         mc.execute {
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim"))
@@ -82,7 +82,7 @@ object SimWorld {
     private fun create() {
         mc.gui.setScreen(GenericMessageScreen(Component.literal("Building the F7 boss...")))
         val settings = LevelSettings(
-            // SURVIVAL from the login on, as main (census saw ADVENTURE at login, then SURVIVAL from Fight.setup).
+            // SURVIVAL from the login on (Hypixel sends ADVENTURE at login, then SURVIVAL; Fight.setup sets it too).
             NAME, GameType.SURVIVAL,
             LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, true),
             true, WorldDataConfiguration.DEFAULT,
@@ -95,12 +95,12 @@ object SimWorld {
         }, TitleScreen())
     }
 
-    /** Called on the server once it runs: stamps which arena the world was built from. */
     /** The mod is opening (or making) the sim world right now. */
     @Volatile var opening = false
 
     fun isBuilt(worldDir: java.nio.file.Path) = Files.exists(worldDir.resolve(MARKER))
 
+    /** Called on the server once it runs: stamps which arena the world was built from. */
     fun markBuilt(worldDir: java.nio.file.Path) {
         EngineerClient.safely("p3sim marker") { Files.writeString(worldDir.resolve(MARKER), arenaVersion) }
     }

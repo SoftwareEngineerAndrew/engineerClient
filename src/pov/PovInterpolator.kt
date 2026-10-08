@@ -108,7 +108,7 @@ class PovInterpolator(
     companion object {
         fun lerp(t: Double, a: Double, b: Double) = a + (b - a) * t
 
-        /** Degrees to (-180, 180]. */
+        /** Degrees to [-180, 180). */
         fun wrapDegrees(deg: Float): Float {
             var d = deg % 360.0f
             if (d >= 180.0f) d -= 360.0f

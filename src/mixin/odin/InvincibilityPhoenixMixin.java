@@ -11,9 +11,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Odin's Invincibility Timer shows Phoenix as invincible for 4 s (80 ticks, the Lvl 100 pet's lore),
- * but in game a Phoenix proc covers you no longer than a mask's 3 s: in the Better PF recordings,
- * with the Phoenix kept out and no leap, the next Goldor death tick 60 server ticks later always
- * takes the next mask or kills you (analysis/masks). So the gold timer runs 3 s, like Spirit and Bonzo.
+ * but in game a Phoenix proc covers the player no longer than a mask's 3 s: in recorded runs with
+ * the Phoenix kept out and no leap, the next Goldor death tick 60 server ticks later always takes
+ * the next mask or kills. So the gold timer runs 3 s, like Spirit and Bonzo.
  */
 @Pseudo
 @Mixin(targets = "com.odtheking.odin.features.impl.dungeon.InvincibilityTimer$InvincibilityType", remap = false)

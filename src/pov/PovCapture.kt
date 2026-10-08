@@ -38,10 +38,10 @@ import org.joml.Vector4f
  *
  * ## What a second `renderLevel` costs
  * A preview pass is a level extract + `renderLevel`: sky, entities, block entities, particles and
- * the already-built terrain, drawn from another pair of eyes into an offscreen target. 26.2 moved
- * the terrain upkeep (frustum cull, occlusion graph, view area, translucency sort) into those two
+ * the already-built terrain, drawn from another pair of eyes into an offscreen target. The terrain
+ * upkeep (frustum cull, occlusion graph, view area, translucency sort) also runs inside those two
  * calls; a pass keeps all of it on YOUR camera (`PovLevelExtractorMixin`, `PovLevelRendererMixin`,
- * the lent captured frustum), so it costs what it did when it lived in `update()`.
+ * the lent captured frustum), so a pass does not redo that work.
  *
  * ## Where the two halves of the feature sit in a frame
  * ```
@@ -85,8 +85,8 @@ import org.joml.Vector4f
  * then, once all the passes are done, `camera.update` + the three extract halves again with the
  * real state, so anything drawing later in the frame sees the player's camera and the real window.
  *
- * ## One deliberate deviation from `docs/pov-preview-plan.md`
- * **No `gameRenderer.extract(delta, true)`.** That is the SecurityCraft recipe, but it also runs
+ * ## Why not `gameRenderer.extract(delta, true)`
+ * That is the SecurityCraft recipe, but it also runs
  * `extractGui`, which resets the frame's `GuiRenderState` — including the blits we just submitted —
  * and replays every screen and HUD handler a second time with the POV window size. Calling the
  * three private extract halves instead leaves the GUI state completely untouched.
@@ -244,7 +244,7 @@ object PovCapture {
             val y1 = if (row == 0) guiHeight / 2 else guiHeight
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
-                    // Opaque, not GUI_TEXTURED: the level pass clears its target to alpha ZERO
+                    // Opaque when possible: the level pass clears its target to alpha ZERO
                     // (`LevelRenderer` clear pass), so anything that blends on source alpha would
                     // drop the sky and every other fragment that did not write alpha.
                     pipeline,
@@ -434,9 +434,9 @@ object PovCapture {
             invoker.`ec$setMainRenderTarget`(feed)
 
             camera.update(deltaTracker)
-            // 26.2 culls the terrain inside the level extract. Lending the camera a captured frustum
-            // keeps YOUR culled sections and occlusion graph, as 26.1.2 did; with Re-cull Terrain on,
-            // Sodium culls from these eyes instead.
+            // Terrain is culled inside the level extract. Lending the camera a captured frustum
+            // keeps YOUR culled sections and occlusion graph; with Re-cull Terrain on, Sodium
+            // culls from these eyes instead.
             if (!(PovPreviews.recullTerrain && SodiumBridge.available)) cameraAccess.`ec$setCapturedFrustum`(camera.cullFrustum)
             // EntityCulling's verdicts were raytraced from YOUR camera and are consumed inside
             // the level extract, so the flip has to bracket the extract, not the draw.

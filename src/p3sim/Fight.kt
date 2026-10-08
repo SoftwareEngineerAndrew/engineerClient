@@ -41,7 +41,7 @@ object Fight {
     /** Every terminal opens as this type (the menu's "Terminals: ..."), or random when null. */
     val forcedTerminal: Terminals.Type? get() = P3Sim.forcedTerminal
 
-    /** STANDS-14: the tick (n % 20) stand names are set on this run: 18 (sent on 19, 21 of 36 runs) or 17 (sent on 18, 15 of 36). */
+    /** The tick (n % 20) stand names are set on this run: 18 (sent on 19, slightly more common) or 17 (sent on 18). */
     var refreshPhase = 18
         private set
 
@@ -67,7 +67,7 @@ object Fight {
 
     /**
      * One simulated delay in real ms, sub-tick: the setting, plus (Ping Jitter) the spread recorded on
-     * Hypixel (PING-03: round trip p10 30 / median 33 / p90 63 / p99 73 ms, with rare 150 ms+ spikes), as an
+     * Hypixel (round trip p10 30 / median 33 / p90 63 / p99 73 ms, with rare 150 ms+ spikes), as an
      * offset from the 33 ms median so it doesn't scale with the setting. 0 with no ping.
      */
     fun pingMs(): Double {
@@ -96,7 +96,7 @@ object Fight {
 
     /**
      * (xRot, yRot) at the head of the last handleUseItem, before it snaps the player to the packet's rotation: the
-     * last movement packet's rotation, which Hypixel aims a use_item's Jerry-chine with (JERRY-03). UseItemRotSimMixin.
+     * last movement packet's rotation, which Hypixel aims a use_item's Jerry-chine with. Set by UseItemRotSimMixin.
      */
     var lastRot: Pair<Float, Float> = 0f to 0f
         private set
@@ -111,7 +111,7 @@ object Fight {
     private val posHistory = java.util.ArrayDeque<Pair<Long, net.minecraft.world.phys.Vec3>>()
 
     /**
-     * Where the server sees [p]: where they were one one-way latency ago (PING-08: its checks run on the
+     * Where the server sees [p]: where they were one one-way latency ago (its checks run on the
      * position packets that arrived, so about ping/2 late). Live position with no ping.
      */
     fun seenPos(p: ServerPlayer): net.minecraft.world.phys.Vec3 {
@@ -174,14 +174,14 @@ object Fight {
 
     /** Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. */
     fun setup(player: ServerPlayer) {
-        // Hypixel: SURVIVAL (1111/1111 samples). Blocks stay whole through Sim.guardBlocks + DungeonbreakerSimMixin.
+        // Hypixel: SURVIVAL. Blocks stay whole through Sim.guardBlocks + DungeonbreakerSimMixin.
         if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.SURVIVAL)
         Sim.guardBlocks()
         applySpeed(player)
         player.getAttribute(Attributes.KNOCKBACK_RESISTANCE)?.baseValue = 1.0
         player.getAttribute(Attributes.STEP_HEIGHT)?.baseValue = 0.6
         player.isInvulnerable = true
-        // Hypixel main: 40 hp with 16 absorption (MOVE-05).
+        // Hypixel main: 40 hp with 16 absorption.
         player.getAttribute(Attributes.MAX_HEALTH)?.baseValue = 40.0
         player.health = 40f
         // 26.1.2 clamps absorption to MAX_ABSORPTION (base 0): raise it first or the 16 comes out as 0.
@@ -210,8 +210,10 @@ object Fight {
         field("optimalAimPositions").set(null, emptyList<Any>())
     }
 
-    /** Your speed: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out adds nothing. */
-    /** Your speed stat now: Black Cat +100; the Racing Helmet +100 more (rec2 loadouts: Cat terms 650, Phoenix terms 550; Terror and Mask terms with Cat 550). */
+    /**
+     * Your speed stat: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out
+     * adds nothing; the Racing Helmet adds 100 more.
+     */
     fun speedStat(player: ServerPlayer): Int {
         val racing = SimItems.idOf(player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "RACING_HELMET"
         return P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
@@ -267,7 +269,7 @@ object Fight {
             EngineerClient.safely("p3sim arrows device") { resetArrowsDevice() }
         }
         Recorder.begin(what.label)
-        // ODIN-07: no "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
+        // No "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
         val p: Phase = when (what) {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()

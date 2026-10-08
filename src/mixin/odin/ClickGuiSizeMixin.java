@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Odin's menu opening. Random Stuff's Click GUI Size: Odin's own setting only goes in whole steps
  * (1, 2, 3, 4); this sets the scale it derives from it. And the Pace target boxes' grayed stand-ins
- * (your PBs) are brought up to date.
+ * (the player's PBs) are brought up to date.
  */
 @Mixin(value = ClickGUI.class, remap = false)
 public class ClickGuiSizeMixin {

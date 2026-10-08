@@ -6,9 +6,8 @@ import kotlin.math.hypot
  * The boss fights broken into sub splits, each timed on both clocks: the Watcher's camp, Maxor,
  * Storm, the four terminal sections, Goldor and Necron.
  *
- * The steps come from what the recorded runs showed about each fight (docs/mechanics/sub-splits.md):
- * every step is either the game's own script, which nobody can speed up, or the party's time,
- * never a mix. So a fixed step that runs long points at lag or a missed grid tick, and a
+ * The steps come from what recorded runs showed about each fight: every step is either the game's
+ * own script, which nobody can speed up, or the party's time, never a mix. So a fixed step that runs long points at lag or a missed grid tick, and a
  * controlled step's time over its floor is exactly what the party lost.
  *
  * A step runs until the next one starts, so the whole sequence is a stopwatch that is handed on.
@@ -243,7 +242,7 @@ class SubSplitTracker {
             msg in STORM_CRUSHED -> when (current) {
                 S_OPENING, S_CRUSH1 -> jumpTo(S_PIN, at, said(msg))
                 S_CRUSH2 -> jumpTo(S_KILL, at, said(msg))
-                // Crushed before he was seen within 2.4 blocks of Yellow (10 in 136 runs): Crush is 0.
+                // Crushed before he was seen within 2.4 blocks of Yellow (it happens): Crush is 0.
                 S_FLIGHT -> { jumpTo(S_CRUSH2, at, said(msg) + ", before he was seen reaching Yellow"); jumpTo(S_KILL, at, said(msg)) }
             }
             msg == STORM_ENRAGED -> if (current == S_PIN) jumpTo(S_FLIGHT, at, "\"$STORM_ENRAGED\"")
@@ -300,7 +299,6 @@ class SubSplitTracker {
         const val GATE_DESTROYED = "The gate has been destroyed!"
         const val CORE_OPENING = "The Core entrance is opening!"
         const val NECRON_ARGH = "[BOSS] Necron: ARGH!"
-        /** His death line before Hypixel's boss update (5 Oct 2026): gone since, kept for old lines. */
         val SECTION_DONE = Regex("""^(\w+) (?:activated|completed) a (?:terminal|device|lever)! \((\d+)/(\d+)\)$""")
 
         val MAXOR_STUN = setOf("[BOSS] Maxor: YOU TRICKED ME!", "[BOSS] Maxor: THAT BEAM! IT HURTS! IT HURTS!!")
@@ -315,24 +313,21 @@ class SubSplitTracker {
         const val BLOOD_MOBS = 19
 
         /**
-         * Maxor's top crystals come back 41 ticks after a hit: stun line to crystals 39-42 (25 hits
-         * before Hypixel's boss update), at most 41-42 since (117 hits; less when the line itself
-         * was held back). His wither goes 54 after the kill: bedrock to the wither going was 80-81
-         * in 12 runs before the update, 51-55 in 5 of the 6 since that saw it go before Storm spoke.
+         * Maxor's top crystals come back 41-42 ticks after a hit (less when the stun line itself was
+         * held back). His wither goes 51-55 ticks after the kill (bedrock).
          */
         const val CRYSTALS_BACK = 41
         const val MAXOR_DESPAWN = 54
         /**
-         * Since the update there is no 10 s cooldown: the second hit only waits on the crystals
-         * (back +41, placed, the laser +27), so hits are 81 ticks apart at the least (81-85 the
-         * fastest of 46 runs, 140-200 before). A held-back stun line trails its hit by up to ~41:
-         * closer than 60 is the same hit.
+         * There is no cooldown between Maxor's hits: the second only waits on the crystals (back +41,
+         * placed, the laser +27), so hits are at least 81 ticks apart. A held-back stun line trails
+         * its hit by up to ~41: closer than 60 is the same hit.
          */
         const val MIN_HIT_GAP = 60
 
         /**
-         * Storm parks at (102.375, 183, 52.375) and leaves 99 ticks after his lightning line: 98-102
-         * in 45 of 56 runs since the update (median 100; 139-141 before it).
+         * Storm parks at (102.375, 183, 52.375) and leaves 99 ticks after his lightning line (98-102
+         * in most recorded runs).
          */
         const val STORM_LEAVES = 99
         const val STORM_SPOT_X = 102.375
@@ -360,12 +355,10 @@ class SubSplitTracker {
          * Flight, Intro, Lock. The rest are the party's. Storm repeats a name on purpose: it is the
          * second crush that tells you whether the first was slow.
          *
-         * Necron since Hypixel's boss update (5 Oct 2026; 38 F7 and 5 M7 runs): his intro until his
-         * sidestep off mid (81-84 ticks), the trip until he is back on it, the lock until ARGH! (said
-         * 269-273 ticks in, in every run, however late he was back - up to 158), then the kill, to
-         * the run's end on F7 (140-153 after ARGH! on time: no end animation any more) or the TNT
-         * burst he dies in on M7. The second ARGH!, "Let's make some space!" trip and "All this, for
-         * nothing..." that used to follow are gone.
+         * Necron: his intro until his sidestep off mid (81-84 ticks), the trip until he is back on it,
+         * the lock until ARGH! (always 269-273 ticks in, however late he was back), then the kill, to
+         * the run's end on F7 (there is no end animation since Hypixel's boss update, Oct 2026) or the
+         * TNT burst he dies in on M7.
          */
         val SEQUENCE: List<Step> = listOf(
             Step(SplitTracker.BLOOD, "&7Dialogue", "watcher.dialogue"), Step(SplitTracker.BLOOD, "&5Wait", "watcher.wait"), Step(SplitTracker.BLOOD, "&cCamp", "watcher.camp"),

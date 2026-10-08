@@ -15,7 +15,7 @@ import net.minecraft.world.level.block.Blocks as B
  * arena back exactly as built. Also plays the arena's scripted animations (gates, doors, the core,
  * the floors between phases) frame by frame as recorded on Hypixel (`anims-*.json`, extracted from
  * Better PF runs), and the world's own rules that are not fixed frames: Maxor's conveyor strip
- * after its recording ends, and Goldor eating the walkway as he walks (tools/p3sim/research/world.md).
+ * after its recording ends, and Goldor eating the walkway as he walks.
  */
 object Blocks {
     private val touched = LinkedHashSet<BlockPos>()
@@ -108,17 +108,17 @@ object Blocks {
     }
 
     /**
-     * FLOW-23 / STANDS-01: 35 invisible bats at x 52-56, y 114-120, z 54.5 in the tick the core opens (35 of 36
-     * runs), each with a gold block as its passenger (spawned with it, riding from the next tick). They hang
-     * still for 7 ticks, then drop straight down 0.5 a tick, and bat and block go together 31 ticks after
-     * spawning (recordings: life 31 in 1138 of 1225 bats). The block is a [CarriedBlock] (it never ticks, so
-     * it never lands and places itself: the arena stays as built); the bats keep their invisibility effect.
+     * 35 invisible bats at x 52-56, y 114-120, z 54.5 in the tick the core opens, each with a gold block as
+     * its passenger (spawned with it, riding from the next tick). They hang still for 7 ticks, then drop
+     * straight down 0.5 a tick, and bat and block go together 31 ticks after spawning (nearly always 31).
+     * The block is a [CarriedBlock] (it never ticks, so it never lands and places itself: the arena stays as
+     * built); the bats keep their invisibility effect.
      */
     private fun coreBats() {
         val gold = B.GOLD_BLOCK.defaultBlockState()
         repeat(35) {
             val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityTypes.BAT, Sim.level)
-            // Invisible, as Hypixel's are (105 of 105 core bats flagged invisible).
+            // Invisible, as Hypixel's are.
             b.isSilent = true; b.isInvulnerable = true; b.isInvisible = true; b.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
             // No flying of its own: it is placed each tick below.
             b.setNoAi(true); b.setNoGravity(true)
@@ -163,7 +163,7 @@ object Blocks {
     private fun advance(p: Playing) {
         val now = Fight.serverTick - p.start
         val f = p.anim.frames
-        // A falling_block for each block about to go, one tick before it turns to air (census: main's gate/door/core debris).
+        // A falling_block for each block about to go, one tick before it turns to air, as Hypixel's gate/door/core debris.
         if (p.debris) while (p.debrisNext < f.size && f[p.debrisNext].dt <= now + 1) {
             val fr = f[p.debrisNext]
             if (!p.skip[p.debrisNext] && fr.state.isAir) debris(fr.pos)
@@ -194,7 +194,7 @@ object Blocks {
     // ------------------------------------------------------------------ the world at a phase start
 
     /**
-     * A menu start: the world as the earlier phases leave it on Hypixel (world.md §1), so a start
+     * A menu start: the world as the earlier phases leave it on Hypixel, so a start
      * from the middle sees what a full run would. The phase itself then adds its own part.
      */
     fun prepare(start: Fight.Start) {
@@ -213,7 +213,7 @@ object Blocks {
     }
 
     /**
-     * Storm's pillars as they hang at Goldor's line (101 runs): Purple and Yellow, the two that
+     * Storm's pillars as they hang at Goldor's line: Purple and Yellow, the two that
      * crushed, back up with their bottom at y183 (181-186), every block polished diorite (Hypixel
      * puts back no plain diorite); Green and Red as built.
      */
@@ -274,12 +274,11 @@ object Blocks {
     // ------------------------------------------------------------------ Goldor's carving
 
     /**
-     * Goldor eats the walkway as he walks (world.md §3, 30 runs, 126 passes with him in view):
-     * every 40 server ticks from n 37 (n = 37 + 40k, ±1), every block in the 11x11x11 box round
+     * Goldor eats the walkway as he walks: every 40 server ticks from n 37 (n = 37 + 40k, ±1), every block in the 11x11x11 box round
      * his block (x, z ±5, y ±5) goes with a 60% chance, rolled again each pass, so the walls and
      * floor along his path thin out over a few passes. Barriers (the walkway's invisible walls) and
-     * gold blocks always stay; TNT cubes are never carved (ArenaFixes.Replay takes them whole); the cobblestone portcullis at the S1 entrance (cobblestone, walls,
-     * nether brick fences) always goes. Levers, buttons and blocks with a block entity are left for
+     * gold blocks always stay; TNT cubes are never carved (ArenaFixes.Replay takes them whole); the
+     * cobblestone portcullis at the S1 entrance (cobblestone, walls, nether brick fences) always goes. Levers, buttons and blocks with a block entity are left for
      * the devices (never seen carved).
      */
     private var carvedFor: GoldorPhase? = null
@@ -351,7 +350,7 @@ class Debris(level: net.minecraft.world.level.Level, state: net.minecraft.world.
     }
 }
 
-/** A falling block that is only carried (STANDS-01): never ticks, so it never falls, lands or places itself. */
+/** A falling block that is only carried: never ticks, so it never falls, lands or places itself. */
 class CarriedBlock(level: net.minecraft.world.level.Level, state: net.minecraft.world.level.block.state.BlockState) :
     net.minecraft.world.entity.item.FallingBlockEntity(net.minecraft.world.entity.EntityTypes.FALLING_BLOCK, level) {
     /** An autosave never writes it (it would come back as a vanilla falling block that lands and places itself). */

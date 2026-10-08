@@ -10,7 +10,7 @@ package com.engineerclient.rotation
  *
  *  - **Yourself**: the proc lines are sent only to you, so your own state is exact.
  *  - **Teammates**: Odin already announces every proc to party chat when "Announce Invincibility"
- *    is on (it is by default, and the party's logs show every member doing it), so a teammate's
+ *    is on (the default), so a teammate's
  *    cooldowns can be followed without adding any traffic of our own. What that cannot reveal is
  *    which invincibility items a player actually *owns* — someone with no Bonzo mask never procs
  *    one, and looks indistinguishable from someone holding an unused one. So a teammate's count is

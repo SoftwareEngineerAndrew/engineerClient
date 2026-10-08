@@ -22,7 +22,7 @@ import java.util.zip.GZIPInputStream
 /**
  * What a saved run (.jsonl.gz, as written while recording) is turned into to upload:
  *
- *  - xz (LZMA2) instead of gzip: about half the size (2.95 MB -> 1.43 MB on a 7-minute run).
+ *  - xz (LZMA2) instead of gzip: about half the size on a typical run.
  *    The site stores it as it comes; the viewer tells the two apart by their first bytes.
  *
  *  - When someone else in the party already uploaded their recording of the same run ([sibling]),
@@ -44,10 +44,10 @@ import java.util.zip.GZIPInputStream
  *
  *  - Mob moves ("e") and player lines ("p") as columns ("cols"): each 10 s, every mob's (player's)
  *    values one after another, as differences from the last - mostly 0, 1 and -1, which pack to a
- *    fraction of the numbers written out. 38% smaller in all on a 7-minute F7. The viewer puts each
+ *    fraction of the numbers written out (over a third smaller overall on an F7 run). The viewer puts each
  *    line back where it was.
  *
- *  - Your camera's frames thinned: one is left out where the frames either side of it, as the
+ *  - The recording player's camera frames thinned: one is left out where the frames either side of it, as the
  *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (under a pixel), never
  *    leaving more than [CAM_GAP] ticks between two (more than 2 is "not rendering" to the viewer).
  *
@@ -190,7 +190,7 @@ object UploadPacker {
         summary.addProperty("ticks", ticks)
         // Whether it is a whole run (Mort's map to "☠ Defeated") and how long it took — worked out
         // here so the server doesn't have to unpack the recording, which a big run can't afford on
-        // its CPU budget (Cloudflare error 1102). The same rule the server used.
+        // its CPU budget (Cloudflare error 1102).
         val start = startTick; val end = endTick
         val cleared = start != null && end != null && end > start
         summary.addProperty("cleared", if (cleared) 1 else 0)

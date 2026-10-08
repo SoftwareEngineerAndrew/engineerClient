@@ -81,11 +81,11 @@ object Sim {
         return out
     }
 
-    /** A `[BOSS]` line, with the wither.ambient (5, 1.19) Hypixel plays on every one (chat-attacks.md §2; at the boss when [at] is given). */
+    /** A `[BOSS]` line, with the wither.ambient (5, 1.19) Hypixel plays on every one (at the boss when [at] is given). */
     fun boss(name: String, line: String, at: Vec3? = null, stand: Boolean = true) {
         chat("§4[BOSS] $name§r§c: $line")
         if (stand) BossWither.speak(name, line)
-        // At the boss (Goldor's 110 of 110 tracked lines within 0.96 blocks of him; median 82 from the player).
+        // At the boss: Hypixel plays it within a block of him, not at the player.
         sound(net.minecraft.sounds.SoundEvents.WITHER_AMBIENT, 5f, 1.19f, at)
     }
 

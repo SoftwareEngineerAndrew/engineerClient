@@ -25,11 +25,10 @@ import java.util.Optional
  *
  * where `ownerName()` is the entry's display Component if it has one and the raw holder name
  * otherwise, and `formatNameForTeam` wraps that in the team's prefix and suffix (and is null-safe
- * when the holder has no team). Mirroring that one line is the whole trick, and it is why the old
- * dump printed the right number of blank lines: it looked the team up with `getPlayerTeam(owner)`,
- * which searches teams *by team name*, not `getPlayersTeam(owner)`, which finds the team a holder
- * is *a member of*. Hypixel's teams are named things like `team_0`, so the lookup always missed,
- * every prefix and suffix came back empty, and the holder's own name was never printed at all.
+ * when the holder has no team). Mirroring that one line is the whole trick. Note it is
+ * `getPlayersTeam(owner)`, which finds the team a holder is *a member of*, not
+ * `getPlayerTeam(owner)`, which searches teams *by team name*: Hypixel's teams are named things
+ * like `team_0`, so that lookup always misses and every prefix and suffix comes back empty.
  */
 object ScoreboardLines {
 
@@ -40,11 +39,10 @@ object ScoreboardLines {
 
     // --- what gets hidden ----------------------------------------------------------------------
     //
-    // Every line the sidebar showed across the recordings falls into one of these kinds (see
-    // tools/scoreboard/classify.py and the Scoreboard Lines page, where each was chosen Show or
-    // Hide). Patterns match the plain text: codes and Hypixel's salt stripped, ends trimmed. A line
-    // that is none of them is left alone — the recordings never covered the boss fights or the other
-    // islands, and an unknown line is more likely wanted than not.
+    // Every sidebar line seen in recorded dungeon runs and their lobbies falls into one of these
+    // kinds. Patterns match the plain text: codes and Hypixel's salt stripped, ends trimmed. A line
+    // that is none of them is left alone — boss fights and the other islands were not covered, and
+    // an unknown line is more likely wanted than not.
 
     enum class Kind {
         BLANK, DATE, SEASON, CLOCK, LOCATION_CATACOMBS, LOCATION_OTHER, PURSE, BITS, OBJECTIVE,
@@ -57,7 +55,7 @@ object ScoreboardLines {
     @JvmField var hideTimeElapsed: Boolean = true
     @JvmField var hideCleared: Boolean = true
 
-    /** Chosen Hide on the Scoreboard Lines page. Purse, Bits and both teammate kinds stay. */
+    /** Hidden whenever Hide Scoreboard Lines is on. Purse, Bits and both teammate kinds stay. */
     private val ALWAYS_HIDDEN = setOf(
         Kind.BLANK, Kind.DATE, Kind.SEASON, Kind.CLOCK, Kind.LOCATION_OTHER, Kind.OBJECTIVE,
         Kind.OBJECTIVE_TASK, Kind.HYPE, Kind.PROTOTYPE_LOBBY, Kind.FOOTER, Kind.STARTING, Kind.SOLO,
@@ -142,14 +140,13 @@ object ScoreboardLines {
      */
     fun hidesTitle(): Boolean = hideLines
 
-    /**
-     * The whole decision, over a line's plain text. Split out from [shouldHide] so it can be tested
-     * without a running game: everything above this point needs Minecraft, nothing below it does.
-     */
     /** Like [hides] but takes a line exactly as Hypixel sent it, salt and all. */
     internal fun hidesRaw(raw: String): Boolean = hides(raw.replace(FORMATTING, ""))
 
-    /** A line on its own, out of context; the objective's task is only recognised in [visibleEntries]. */
+    /**
+     * The whole decision, over a line's plain text, so it can be tested without a running game. A
+     * line on its own, out of context; the objective's task is only recognised in [visibleEntries].
+     */
     internal fun hides(raw: String, previous: Kind? = null): Boolean =
         hidesKind(kindOf(raw, previous))
 
@@ -183,7 +180,7 @@ object ScoreboardLines {
      * A scoreboard cannot hold two identical lines, so Hypixel makes each one unique by salting it
      * with a § followed by some letter outside the legacy set — and it lands mid-word, so a real
      * sidebar says "Early Summer 19§wth" and "The Catac§uombs (F7)". Stripping only the legacy
-     * codes left that salt in place and every pattern here missed. One line is nothing but salt,
+     * codes would leave that salt in place and every pattern here would miss. One line is nothing but salt,
      * "§j", which is how Hypixel draws a blank spacer.
      */
     private val FORMATTING = Regex("§.")

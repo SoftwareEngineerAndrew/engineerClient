@@ -59,10 +59,10 @@ object P3Sim : Module(
     val terminalS = +SelectorSetting("Terminals", TerminalOption.RANDOM, desc = "Every terminal as this type, or random as on Hypixel.")
     val pingS = +NumberSetting("Simulated Ping", 0, 0..300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
     val jitterS = +BooleanSetting("Ping Jitter", true, desc = "Simulated Ping varies like a real connection: usually a few ms either way, now and then 30+ ms more, rarely a lag spike (spread recorded on Hypixel). Off: a fixed delay.")
-    val goldorKillS = +NumberSetting("Goldor Kill Time", 20, 10..120, 1, unit = " ticks", desc = "How long after Goldor starts flying to the core his \"....\" line comes, i.e. he dies (median of 31 recorded runs: 43, range 17-74).")
+    val goldorKillS = +NumberSetting("Goldor Kill Time", 20, 10..120, 1, unit = " ticks", desc = "How long after Goldor starts flying to the core his \"....\" line comes, i.e. he dies (recorded runs: median 43, range 17-74).")
     val shortbowCooldownS = +NumberSetting("Shortbow Cooldown", 2, 1..20, 1, unit = " ticks", desc = "Ticks between shots of the Terminator, Spirit Shortbow and Mosquito Shortbow: 5 at 100% attack speed, on every bow and whatever Terror armor you wear (recordings: Terminator 5, Mosquito 5). A click inside it fires when it ends. Nasty Bite has its own 10.")
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0..10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
-    val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer (measured from 82 recorded windows).")
+    val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer.")
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
     val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
@@ -138,7 +138,7 @@ object P3Sim : Module(
             dispatcher.register(net.minecraft.commands.Commands.literal("stats")
                 .requires { it.server === SimServer.server }
                 .executes { ctx -> ctx.source.player?.let { p -> Masks.openStats(p) }; 1 })
-            // /loadouts: Hypixel's Loadouts window (recorded: Andrew types /loadouts), same sim-server-only rule.
+            // /loadouts: Hypixel's Loadouts window, same sim-server-only rule.
             dispatcher.register(net.minecraft.commands.Commands.literal("loadouts")
                 .requires { it.server === SimServer.server }
                 .executes { ctx -> ctx.source.player?.let { p -> Loadouts.open(p) }; 1 })

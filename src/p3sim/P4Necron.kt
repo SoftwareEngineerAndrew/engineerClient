@@ -28,14 +28,13 @@ import kotlin.random.Random
 // ====================================================================== P4
 
 /**
- * P4, Necron (docs/mechanics/necron.md, tools/p3sim/research/necron-p4.md), the fastest script
- * (§9): lines 62 apart from 0, off mid at L1 = 159 (a 7-tick 0.25 b/t sidestep 45-75° off south,
- * 3 held, then 0.49 b/t at the closest player; §3) and teleported back at B1 = 177. ARGH is the
- * first n ≡ 5 (mod 20) at least B + 141 (§4), the first held to 248 + 82 = 330 by the taunt;
- * Nuclear Frenzy pulses on that grid while he waits at mid (§5). Volley 2 starts ARGH 1 + 8 at the
- * platform that goes at volley 2 + 100; L2 = volley 2 + 60, B2 = L2 + 5, so ARGH 2 = 545 and
- * "All this, for nothing..." 607; then the death throes, ten TNT at +40, gone at +61, the 14% "my
- * master" at +62, the end-of-run chat at +86 (§7).
+ * P4, Necron, as the fastest script: lines 62 apart from 0, off mid at L1 = 159 (a 7-tick
+ * 0.25 b/t sidestep 45-75° off south, 3 held, then 0.49 b/t at the closest player) and teleported
+ * back at B1 = 177. ARGH is the first n ≡ 5 (mod 20) at least B + 141, the first held to
+ * 248 + 82 = 330 by the taunt; Nuclear Frenzy pulses on that grid while he waits at mid. Volley 2
+ * starts ARGH 1 + 8 at the platform that goes at volley 2 + 100; L2 = volley 2 + 60, B2 = L2 + 5,
+ * so ARGH 2 = 545 and "All this, for nothing..." 607; then the death throes, ten TNT at +40, gone
+ * at +61, the 14% "my master" at +62, the end-of-run chat at +86.
  *
  * The script doesn't wait for damage (the sim has no boss health): B1 and B2 are the measured
  * medians of fast runs, so every run is the fastest possible Necron.
@@ -47,14 +46,14 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private companion object {
         val MID = Vec3(54.0, 66.0, 76.0)
         const val L1 = 159; const val B1 = L1 + 18
-        /** First tick on the 20-tick grid (n ≡ 5) at least 141 after [b] (§4). */
+        /** First tick on the 20-tick grid (n ≡ 5) at least 141 after [b]. */
         fun argh(b: Int) = (b + 141 - 5 + 19) / 20 * 20 + 5
         val ARGH1 = max(argh(B1), 248 + 82)
         val SPACE = ARGH1 + 62
         const val V1 = 60
         val V2 = ARGH1 + 8
         val L2 = V2 + 60; val B2 = L2 + 5
-        /** The side platform goes 100 server ticks after volley 2's first fireball (Boss Recorder, 100 in most runs). */
+        /** The side platform goes 100 server ticks after volley 2's first fireball (in most recorded runs). */
         val BREAK = V2 + 100
         val TAUNT1 = max(186 + 62, B1); val TAUNT2 = max(SPACE + 62, B2)
         val ARGH2 = argh(B2)
@@ -67,7 +66,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
         /** Fireballs leave his centre head (2.97 up) at 0.5 b/t, pitched 11.8° down, and speed up as vanilla's do. */
         const val HEAD_Y = 2.97
         val PITCH = Math.toRadians(11.8)
-        /** Conjecture (§5): only players near mid report Nuclear Frenzy. */
+        /** Conjecture: only players near mid report Nuclear Frenzy. */
         const val FRENZY_RANGE = 12.0
         val TAUNTS = listOf("Sometimes when you have a problem, you just need to destroy it all and start again.", "WITNESS MY RAW NUCLEAR POWER!")
         /** The five platforms he can break (never S), by their centres. */
@@ -77,7 +76,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
         const val CLASSES = "Healer,Berserk,Archer,Tank,Mage"
     }
 
-    /** The sidestep's direction: 45-75° left or right of south, rising or sinking a little (§3). */
+    /** The sidestep's direction: 45-75° left or right of south, rising or sinking a little. */
     private val side = Random.nextDouble(45.0, 75.0).let { if (Random.nextBoolean()) it else -it }.let { Math.toRadians(it) }
         .let { Vec3(-sin(it), Random.nextDouble(-0.9, 0.9), cos(it)) }
     private val master = Random.nextDouble() < 0.14
@@ -98,7 +97,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
         Party.startP4(fromP3)
         necron = BossWither("Necron", MID)
         Sim.boss("Necron", "You went further than any human before, congratulations.")
-        // The same bar as Goldor's, renamed; 0 through the intro (bosses.md).
+        // The same bar as Goldor's, renamed; 0 through the intro.
         BossBar.show("§c§lNecron", 0f)
         pillars = Pillars.plan()
         storm = Storm.plan()
@@ -141,7 +140,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     }
 
     /**
-     * His health as the bar shows it (Boss Recorder, 57 runs): 0 through the intro, full when he
+     * His health as the bar shows it in recorded runs: 0 through the intro, full when he
      * leaves, 0.8 by the time he is back (B1), down to 0.25 within ~15 of ARGH 1, 0.05 (0.04) by
      * B2 and 0 just after ARGH 2.
      */
@@ -156,7 +155,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
         else -> 0f
     }
 
-    /** §3: sidestep, hold, fly at the closest player; teleported back to exactly mid at B. Faces south for volley 1 and the platform for volley 2. */
+    /** Sidestep, hold, fly at the closest player; teleported back to exactly mid at B. Faces south for volley 1 and the platform for volley 2. */
     private fun move() {
         val target = PLATFORMS.getValue(platform)
         when {
@@ -182,7 +181,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private fun <T : Entity> spawn(e: T): T { Sim.spawn(e); spawned += e; return e }
 
     /**
-     * A fireball (§5): a real one, from his centre head, 0.5 b/t at [yaw] (radians, 0 = south),
+     * A fireball: a real one, from his centre head, 0.5 b/t at [yaw] (radians, 0 = south),
      * 11.8° down, gaining vanilla's 0.1 a tick (inertia 0.95), as the recorded velocities show. No
      * launch sound; on a block it's an explosion of radius 0 with explode v4 p0.6-0.8.
      */
@@ -210,7 +209,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     }
 
     /**
-     * Nuclear Frenzy (§5): a pulse every 20 ticks at mid while he waits, explode v30 p31/63 and
+     * Nuclear Frenzy: a pulse every 20 ticks at mid while he waits, explode v30 p31/63 and
      * wither.ambient v30 p44/63 at him (heard by all); the chat line only for players near him (it
      * isn't lethal on its own, so it doesn't go through Masks).
      */
@@ -238,11 +237,11 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     // ------------------------------------------------------------------ the end-of-run chat
 
     /**
-     * The two blocks Hypixel sends at "All this" + 86 and 3 later (Better PF, 80 runs): the summary
-     * with the experience lines, then the "Floor VII Stats" block. Each line is centred with
-     * spaces = ceil((160 - width / 2) / 4) (337 of 338 measured lines). The numbers are typical of
-     * the recordings (score 298-311 S+, Catacombs XP 46-50k, class XP 0.76 of it, team bonus a
-     * quarter of that, bits in 58 of 80); a full run's time when the sim knows it (started at P1).
+     * The two blocks Hypixel sends at "All this" + 86 and 3 later: the summary with the experience
+     * lines, then the "Floor VII Stats" block. Each line is centred with
+     * spaces = ceil((160 - width / 2) / 4). The numbers are typical of recorded runs (score
+     * 298-311 S+, Catacombs XP 46-50k, class XP 0.76 of it, team bonus a quarter of that, bits in
+     * most runs); a full run's time when the sim knows it (started at P1).
      */
     private fun stats(first: Boolean) {
         val bar = "§a§l" + "▬".repeat(64)
@@ -338,7 +337,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private lateinit var storm: Storm
 
     /**
-     * The lava pillars (Boss Recorder, 57 runs): a source column falls from y85 at one random
+     * The lava pillars: a source column falls from y85 at one random
      * pillar from about "Let's make some space!" - 225 (one block every ~10 ticks, flowing lava
      * around it) and then eats into the platform under it; at the line the others start too, each
      * with its measured odds. The frames are one recorded run's ([Blocks] "p4": the corner pillar
@@ -381,7 +380,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     // ------------------------------------------------------------------ the lightning
 
     /**
-     * The lightning (Boss Recorder, 57 runs): from n ≈ 61, 30 bolts about 10 ticks apart strike
+     * The lightning: from n ≈ 61, 30 bolts about 10 ticks apart strike
      * around one of seven light columns (each about as often), the column's sea lanterns climbing
      * through its iron blocks until 13 ticks after the last bolt. Frames and bolt times are one
      * recorded run per column kind; where each bolt lands around the column (median 8.6 blocks
@@ -415,7 +414,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
 
     // ------------------------------------------------------------------ data
 
-    /** `p4-necron.json` (built by the analysis's buildres.mjs) and the pillar frames of the "p4" animation. */
+    /** `p4-necron.json` and the pillar frames of the "p4" animation. */
     private object Data {
         class StormData(val bolts: List<Int>, val frames: List<Triple<Int, Int, BlockState>>)
 

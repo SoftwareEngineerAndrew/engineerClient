@@ -28,7 +28,7 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * Hypixel's shortbows as the main server fires them, arrow for arrow (tools/p3sim/research/terror-mosquito.md):
+ * Hypixel's shortbows as the main server fires them, arrow for arrow:
  * the Terminator, the Spirit Shortbow and the Mosquito Shortbow, with Terror armor's Hydra Strike ([Hydra]).
  *
  * A shot handled on server tick N: the main arrow leaves your eye - 0.1 (1.27 sneaking), 0.01745 to your right, at
@@ -137,10 +137,10 @@ object Bows {
         val now = Fight.serverTick
         val r = java.util.Random()
         val noise = Vec3(r.nextGaussian(), r.nextGaussian(), r.nextGaussian()).scale(0.0075)
-        // Duplex delay after the main arrow, recorded (island 2026-10-04): 39% 3 ticks, 51% 4, 9% 5 (rest folded into 4).
+        // Duplex delay after the main arrow, measured: 39% 3 ticks, 51% 4, 9% 5 (rest folded into 4).
         val duplexRoll = Random.nextDouble()
         val duplex = if (duplexRoll < 0.39) 3 else if (duplexRoll < 0.91) 4 else 5
-        // The two Duplex entities spawn on the same tick 42 of 64 times, otherwise one is +-1 tick off.
+        // The two Duplex entities usually spawn on the same tick (about 2 in 3), otherwise one is +-1 tick off.
         var dupIdx = 0
         val dupShift = if (Random.nextDouble() < 42.0 / 64.0) 0 else if (Random.nextBoolean()) 1 else -1
         val plan = ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex, 3.0 * power)
@@ -148,7 +148,7 @@ object Bows {
             if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null)?.let { if (arrow.owned && bow == LAST_BREATH && power >= 1f) it.isCritArrow = true }
             else {
                 // Hypixel's Duplex entities each make a quieter shoot sound on the tick they spawn, at the centre of the
-                // block holding that entity's spawn position (island recording: master, vol 0.5, pitch 0.698).
+                // block holding that entity's spawn position (master, vol 0.5, pitch 0.698).
                 val delay = arrow.delay + (if (bow in ShotPlan.DUPLEX && dupIdx++ == 1) dupShift else 0)
                 later += Later(now + delay) {
                     launch(arrow.from, arrow.at, arrow.v)
@@ -180,7 +180,7 @@ object Bows {
                 .minByOrNull { it.second.distanceToSqr(from) }
             if (boss != null) { hit(EntityHitResult(boss.first, boss.second), onHit); return null }
             if (block.type != HitResult.Type.MISS) {
-                // TARGET-04: at the arrow's last position (before this leg), pitch on 1/63 steps.
+                // At the arrow's last position (before this leg), pitch on 1/63 steps.
                 val pitch = Mth.floor(1.2f / (Random.nextFloat() * 0.2f + 0.9f) * 63f) / 63f
                 level.playSound(null, from.x, from.y, from.z, SoundEvents.ARROW_HIT, SoundSource.NEUTRAL, 1f, pitch)
                 hit(block, onHit)
@@ -202,7 +202,7 @@ object Bows {
 
     /**
      * Damage immunity of an arrow's target: vanilla's hurt window (invulnerableTime over half of 20). The sim's boss
-     * withers are never damaged, so this never holds for them today; the rebound path in [SimArrow] is generic.
+     * withers are never damaged, so this never holds for them; the rebound path in [SimArrow] is generic.
      */
     fun immune(e: Entity): Boolean = e is net.minecraft.world.entity.LivingEntity && e.invulnerableTime > 10
 
@@ -227,10 +227,10 @@ object Bows {
     }
 
     /**
-     * Terror armor's Hydra Strike (terror-mosquito.md §5): +1 stack (max 10) when an arrow hits a boss, at most every
-     * 4 ticks (a hit at 10 still counts). A once-a-second task, on its own grid, counts seconds without a gain and
-     * (replaced: a stack is lost every (T+1)*20 ticks after the last gain, see [periodNow]). +1% arrow
-     * speed a stack; at 10, +2 arrows. Shown as Hypixel's action bar does: `§6N⁑`, bold at 10, every 10 ticks.
+     * Terror armor's Hydra Strike: +1 stack (max 10) when an arrow hits a boss, at most every 4 ticks (a hit at 10
+     * still counts). A stack is lost every (T+1)*20 ticks after the last gain (see [periodNow]). +1% arrow speed a
+     * stack; at 10, +2 arrows. Shown as Hypixel's action bar does: `§6N⁑`, bold at 10, every 10 ticks, on its own
+     * once-a-second grid.
      */
     object Hydra {
         var stacks = 0
@@ -241,7 +241,7 @@ object Bows {
         private var grid = 0
         private var shown = 0
         private val pieces: Int get() = P3Sim.terrorPieces
-        /** Ticks per lost stack: (T+1)*20, T = 4 s (1-2 pieces), 7 s (3), 10 s (4); sampled at the last gain (island recording). */
+        /** Ticks per lost stack: (T+1)*20, T = 4 s (1-2 pieces), 7 s (3), 10 s (4); sampled at the last gain. */
         private fun periodNow(): Int = ((if (pieces >= 4) 10 else if (pieces == 3) 7 else 4) + 1) * 20
 
         fun reset() { stacks = 0; lastGain = -100; nextLoss = Int.MAX_VALUE; shown = 0; grid = Random.nextInt(20); start() }
@@ -315,7 +315,7 @@ class SimArrow(level: Level, x: Double, y: Double, z: Double, private val whenHi
 }
 
 /**
- * Every arrow of one shortbow shot, as Hypixel's server moves them (terror-mosquito.md §2-4, §8). Pure (no world),
+ * Every arrow of one shortbow shot, as Hypixel's server moves them. Pure (no world),
  * so it tests against recorded shots. Fired on tick N by someone standing at [pos] looking [yaw]/[pitch] ([crouch]:
  * eye 1.27), with [stacks] Hydra Strike stacks; [noise]: the aim noise added to the unit look (1.8: three gaussians
  * x 0.0075); [duplexDelay]: 3 or 4.
@@ -357,17 +357,15 @@ object ShotPlan {
         // Hydra Strike at 10 stacks: that move turned +-8 deg.
         if (stacks >= 10) for (s in listOf(8.0, -8.0)) out += Planned(pos1, pos1, roty(move, s), owned = false, delay = 0)
         when (bow) {
-            // The Terminator's side arrows: Hypixel spawns each twice, identical (BOWS-07: 1 main + 2 pairs = 5 entities,
-            // 4 of 4 isolated Terminator shots without Terror, 60 of 69 volleys with exactly 4 side entities, never
-            // Terror-dependent): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
+            // The Terminator's side arrows: Hypixel spawns each twice, identical (1 main + 2 pairs = 5 entities, with or
+            // without Terror): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
             // tick's gravity given back.
             Bows.TERMINATOR -> {
                 val side = pos1.add(0.0, -0.5, 0.0)
                 for (s in listOf(5.5, -5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
             }
         }
-        // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities (BOWS-07, 266 of
-        // 272 volleys with Terror at 10 stacks have exactly 2, plus 84 of 86 at 9 stacks).
+        // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities.
         if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay) }
         return out
     }

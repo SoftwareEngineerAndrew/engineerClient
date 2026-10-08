@@ -1,14 +1,14 @@
 package com.engineerclient.splits
 
 /**
- * Pace and lag for the splits HUD and the scorecard (F7).
+ * Pace and lag for the splits HUD (F7).
  *
- * Pace is the run's projected finish against a target per split: your Pace target box, else your PB
- * for it (OdinSplitsLook.paceTarget), else its dark green time ([SubSplitGrades]' fastest band).
+ * Pace is the run's projected finish against a target per split: its Pace target setting, else the
+ * PB for it (OdinSplitsLook.paceTarget), else its dark green time ([SubSplitGrades]' fastest band).
  * Time already proven, plus the target for everything still to come. Proven is every finished
  * split as it was; the one running is its target, moved by what its finished sub splits gained or
  * lost against their share of that target, and by the running sub split once it is past its share.
- * So at load-in Pace is your PBs added up, and from there it moves by exactly the time gained or
+ * So at load-in Pace is the PBs added up, and from there it moves by exactly the time gained or
  * lost. It is kept on both clocks: real time, and the server's ticks.
  *
  * Lag is the time the server lost against 20 ticks a second on the splits timed in ticks (all but
@@ -51,7 +51,7 @@ object SplitPace {
     /**
      * Dark green per split: what Pace counts a split as with no target and no PB. Each split with
      * bands is its band's dark green limit (SubSplitGrades; keep the two together). There is no end
-     * animation since Hypixel's boss update of 5 Oct 2026: Necron runs to EXTRA STATS.
+     * animation since Hypixel's boss update (Oct 2026): Necron runs to EXTRA STATS.
      */
     private val SPLIT_REFS: Map<String, Clocks> = mapOf(
         SplitTracker.OPEN to ticks(160),
@@ -68,8 +68,7 @@ object SplitPace {
      * Dark green per sub split, as a length (SubSplitTracker's ids). The band's dark green limit,
      * except where a band is not a length: Maxor's Lure (graded on the tick of his first hit, 128,
      * after Crystals' 110) and Necron's lock (ARGH! on time, 270 into his fight, after the intro's
-     * 82 and the trip's 12). Fillers are their fixed length (since Hypixel's boss update of 5 Oct
-     * 2026: SubSplitGrades).
+     * 82 and the trip's 12). Fillers are their fixed length.
      */
     private val SUB_REFS: Map<String, Clocks> = mapOf(
         "watcher.dialogue" to ticks(255), "watcher.wait" to ticks(63), "watcher.camp" to ticks(520), "watcher.clear" to ticks(2),
@@ -98,7 +97,7 @@ object SplitPace {
 
     /**
      * The projected finish. [splits] are the run's splits so far (SplitTracker's), [subs] a split's
-     * sub splits so far, [target] a split's target (your box or PB), null for its dark green.
+     * sub splits so far, [target] a split's target (its setting or PB), null for its dark green.
      */
     fun pace(splits: List<Split>, subs: (String) -> List<Sub>, now: Stamp, target: (String) -> Clocks? = { null }): Clocks {
         var total = Clocks(0, 0)
@@ -121,8 +120,8 @@ object SplitPace {
      *
      * A sub split's share: a filler's is its own fixed length; the rest of the target is shared out
      * among the others in proportion to their dark greens. With the dark green as the target that is
-     * the dark greens themselves; with a slower PB each share is that much longer, so a run on your
-     * PB's pace holds Pace still instead of losing time on every step.
+     * the dark greens themselves; with a slower PB each share is that much longer, so a run on
+     * PB pace holds Pace still instead of losing time on every step.
      */
     private fun running(label: String, split: Split, ref: Clocks, subs: List<Sub>, now: Stamp): Clocks {
         val prefix = SUB_PREFIX[label] ?: return atLeast(ref, length(split, now))

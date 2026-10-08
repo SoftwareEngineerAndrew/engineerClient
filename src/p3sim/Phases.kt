@@ -26,7 +26,7 @@ import net.minecraft.world.level.block.Blocks as B
  * A boss as Hypixel shows it: a plain wither (no name of its own; [inv] invulnerable ticks, 200 for
  * Maxor's smaller pale look), its blue armour driven by fake health (1 = on, 1000 = off), and its
  * name on a separate marker stand 3.7 above it (3.6875 client side: Hypixel's 1/32 positions), as
- * `§e﴾ §r§8<U+E085>§r§5<U+E073> §r§c§l<Name>§r §e﴿` in every recording (the two are Hypixel's
+ * `§e﴾ §r§8<U+E085>§r§5<U+E073> §r§c§l<Name>§r §e﴿` (the two are Hypixel's
  * resource-pack icons). The name stand can come [tagDelay] ticks after the wither (Maxor's: ~17).
  * Each `[BOSS]` line also shows a `§4§l<line>` stand 4.1 above it for ~41 ticks ([speak]). Moved by
  * the phase; no AI.
@@ -68,8 +68,8 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
     }
 
     /**
-     * A `[BOSS]` line's stand over the wither, from the tick of the line for [SPEECH_TICKS] (recordings:
-     * same tick, gone 41-42 later when watched throughout). Said before the name stand is
+     * A `[BOSS]` line's stand over the wither, from the tick of the line for [SPEECH_TICKS] (measured:
+     * same tick, gone 41-42 later). Said before the name stand is
      * up (Maxor's first line), it comes with the name stand, and goes at the same time.
      */
     fun speak(line: String) {
@@ -78,7 +78,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
         speechText = text
         speechUntil = Fight.serverTick + if (name == "Goldor") GOLDOR_SPEECH_TICKS else SPEECH_TICKS
         speech?.discard(); speech = null
-        // STANDS-05: Hypixel's speech stand spawns in the same tick as the chat line (+0 in 66 of 72 Goldor, 119 of 123 Necron).
+        // Hypixel's speech stand spawns in the same tick as the chat line (almost always).
         if (tag != null) showSpeech()
     }
 
@@ -125,7 +125,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
         const val TAG_Y = 3.6875
         const val SPEECH_Y = 4.09375
         const val SPEECH_TICKS = 41
-        /** Goldor's line stands last longer: mode 61 recorded (FLOW-14). */
+        /** Goldor's line stands last longer: 61 ticks (the usual measured value). */
         const val GOLDOR_SPEECH_TICKS = 61
         private val live = HashMap<String, BossWither>()
 
@@ -202,31 +202,31 @@ fun lookingAt(at: Vec3, degrees: Double, range: Double): Boolean {
 // ====================================================================== P1
 
 /**
- * P1, Maxor (docs/mechanics/maxor.md, tools/p3sim/research/p1-maxor.md). The intro on 62-tick lines;
+ * P1, Maxor. The intro on 62-tick lines;
  * crystals on the top platforms from +5 (their "Energy Crystal" / "CLICK HERE" stands ~23 later):
  * click one (or a stand) to pick it up, which puts it in your SkyBlock Menu slot and selects it.
  * Everything else runs on the 10-tick checks (t 6 mod 10):
  *  - the pylons open on the +166 check (their stands appear: "Energy Crystal Missing" / "CLICK
  *    HERE"); a placement registers one tick after a check, and says "X/2" with X = 1 + this cycle's
- *    earlier placements already charged (28 ticks) (§4.2). The stands say "Crystal Active" ~20 later;
+ *    earlier placements already charged (28 ticks). The stands say "Crystal Active" ~20 later;
  *    the pylon's power line (19 sea lanterns in the floor, then its half of the ceiling T, then for
  *    the cycle's first crystal the centre and the column toward Maxor) lights ~1 block a tick;
  *  - "The Energy Laser is charging up!" 28 after the second placement; the beacon goes in on the
  *    +206 check whatever the crystals do; the column (73, 223-224, 73, and 222 from beacon + 120)
  *    shows yellow / red / black;
  *  - a hit: a check, the laser charged, the beacon in, 200 ticks since the last hit, him within
- *    3.5 of (73.5, 73.5) with his feet at y 225+ (§4.4). The laser resets: the lines go dark from
+ *    3.5 of (73.5, 73.5) with his feet at y 225+. The laser resets: the lines go dark from
  *    hit + 40, top crystals back at + 41, placed ones gone at + 42, pylons open again at + 70.
  * A stun takes his armour off and freezes him facing south until "⚠ Maxor is enraged! ⚠" (the
  * party's damage: mostly 6-12 ticks with a party, 240 at most), and he moves 1-5 ticks after it.
  * Taunt A comes 161 after the beacon (never stunned) or 161-164 after an enrage; a hit inside it is
- * silent, its stun line 62 after the taunt (§5.3). He dies 0-13 after the second stun line (at once
+ * silent, its stun line 62 after the taunt. He dies 0-13 after the second stun line (at once
  * after a silent hit), "I'M TOO YOUNG TO DIE AGAIN!" at stun 2 + 82 if he's still there, despawn at
  * kill + 80, Storm at kill + 102. The bar is his health, resent once a second: 0.95 at a hit, falling
  * while stunned, 0.25 once he breaks free, ~0.2 at the second hit, 0 at the kill.
  *
- * With bots, two carry (pick up, wait at their pylon, go back up for the respawn: the recordings'
- * flow) and one lures him from (73.6, 225, 77.2); you can take either crystal yourself.
+ * With bots, two carry (pick up, wait at their pylon, go back up for the respawn, as real
+ * parties do) and one lures him from (73.6, 225, 77.2); you can take either crystal yourself.
  */
 class P1Maxor : Fight.Phase("P1") {
     override val restart get() = Fight.Start.P1
@@ -310,7 +310,7 @@ class P1Maxor : Fight.Phase("P1") {
         "YOUR WEAPONS CAN'T PIERCE THROUGH MY SHIELD!", "YOUR MOBILITY TRICKS DON'T WORK IN MY DOMAIN!",
         "I HOPE YOU LIKE EXPLOSIONS TOO!", "MY MINIONS WILL HAVE TO WIPE THE FLOOR AFTER I'M DONE WITH YOU ALL!",
     )
-    /** The skull-volley taunts: ~11 % of runs, one of them at t 534-572 (chat-attacks.md §1.1). */
+    /** The skull-volley taunts: ~11 % of runs, one of them at t 534-572. */
     private val TAUNTS_SKULL = listOf("How about you taste some rapid fire Wither Skulls!", "Time for me to blast you away for good!", "Eat Wither Skulls, scum!")
     private val skullTauntAt = if (Random.nextInt(100) < 11) 534 + Random.nextInt(39) else -1
 
@@ -324,7 +324,7 @@ class P1Maxor : Fight.Phase("P1") {
         stripStart()
         Blocks.play("p1strip", exclude = COLUMN)
         Party.standAt(listOf(Vec3(71.5, 221.0, 16.5), Vec3(75.5, 221.0, 16.5), Vec3(69.5, 221.0, 18.5), Vec3(77.5, 221.0, 18.5)))
-        // Roles by class (party.md §6): Berserk west crystal, Mage east, Tank lures under the laser,
+        // Roles by class: Berserk west crystal, Mage east, Tank lures under the laser,
         // Healer goes down to Storm, Archer waits at the start and drops at ~+15 s. Yours is left to you.
         val bots = if (P3Sim.bots) Party.bots().filter { it.entity != null } else emptyList()
         fun of(c: DungeonClass) = bots.firstOrNull { it.clazz == c }
@@ -356,7 +356,7 @@ class P1Maxor : Fight.Phase("P1") {
                 maxor.speak("WELL! WELL! WELL! LOOK WHO'S HERE!")
                 for (i in 0..1) tops[i] = Top(i, stands = false)
             }
-            // The first pair's stands: ~23 after the crystals (17-40 in the recordings).
+            // The first pair's stands: ~23 after the crystals (17-40 measured).
             28 -> tops.forEach { it?.labels() }
             62 -> Sim.boss("Maxor", "I'VE BEEN TOLD I COULD HAVE A BIT OF FUN WITH YOU.")
             124 -> Sim.boss("Maxor", "DON'T DISAPPOINT ME, I HAVEN'T HAD A GOOD FIGHT IN A WHILE.")
@@ -469,8 +469,8 @@ class P1Maxor : Fight.Phase("P1") {
     }
 
     /**
-     * Hypixel puts the crystal in your SkyBlock Menu slot and selects that slot (51 of 54 own pickups:
-     * slot 9 selected 0-2 ticks after the line); the menu comes back once placed.
+     * Hypixel puts the crystal in your SkyBlock Menu slot and selects that slot (0-2 ticks
+     * after the line); the menu comes back once placed.
      */
     private fun holdCrystal() {
         val p = Sim.player ?: return
@@ -505,7 +505,7 @@ class P1Maxor : Fight.Phase("P1") {
         if (by == Sim.me && carrying == 0) giveBackMenu()
         val x = 1 + placeTimes.count { t >= it + 28 }
         placeTimes += t
-        // Green from 2 on ("§a2/2", "§a3/2"; chat-attacks.md §1.2).
+        // Green from 2 on ("§a2/2", "§a3/2").
         Sim.chat(if (x >= 2) "§a$x/2 Energy Crystals are now active!" else "§c$x§r§a/2 Energy Crystals are now active!")
         // The stands' names change on Hypixel's next refresh (3-22 ticks after the line).
         val c = pylon.crystal
@@ -520,7 +520,7 @@ class P1Maxor : Fight.Phase("P1") {
     /**
      * One pylon's power line from [at]: its 19 floor lanterns from the pylon, ~1 a tick, then its half
      * of the ceiling T from the outer end, then (the cycle's first crystal, or going dark) the centre
-     * and the column toward Maxor (8 recordings, every placement and every hit + 40).
+     * and the column toward Maxor (as measured on every placement and every hit + 40).
      */
     private fun light(at: Int, side: Int, on: Boolean, centre: Boolean) {
         FLOORS[side].forEachIndexed { i, p -> queue(at + i, p, on) }
@@ -543,7 +543,7 @@ class P1Maxor : Fight.Phase("P1") {
 
     // ------------------------------------------------------------------ the conveyor strip
 
-    /** The strip as it is just before its first shift (the recording starts at that shift). */
+    /** The strip as it is just before its first shift (the recorded animation starts at that shift). */
     private fun stripStart() {
         val blocks = Blocks.extra("anims-p124.json", "p1stripStart")?.getAsJsonArray("blocks") ?: return
         for (e in blocks) {
@@ -557,8 +557,8 @@ class P1Maxor : Fight.Phase("P1") {
     // ------------------------------------------------------------------ bots
 
     /**
-     * The bots' P1 (recordings: the carriers take the crystals at ~50-90 and wait on their pylon; the
-     * lure stands 3-4 south of the beam; after a hit the carriers go back up for the respawn at + 41).
+     * The bots' P1, as real parties play it: the carriers take the crystals at ~50-90 and wait on their
+     * pylon; the lure stands 3-4 south of the beam; after a hit the carriers go back up for the respawn at + 41.
      */
     private fun bots() {
         lure?.let { if (t >= 5) walk(it, LURE, 0.7) }
@@ -673,11 +673,11 @@ class P1Maxor : Fight.Phase("P1") {
         val TOPS = listOf(Vec3(64.5, 238.375, 50.5), Vec3(82.5, 238.375, 50.5))
         val PYLONS = listOf(Vec3(52.5, 224.375, 41.5), Vec3(94.5, 224.375, 41.5))
         val BEAM = Vec3(73.5, 226.0, 73.5)
-        /** Where carriers and the lure stand (recordings' medians). */
+        /** Where carriers and the lure stand (medians from recorded runs). */
         val TOP_STANDS = listOf(Vec3(63.5, 238.0, 49.5), Vec3(83.5, 238.0, 49.5))
         val PYLON_STANDS = listOf(Vec3(51.8, 224.0, 40.6), Vec3(95.9, 224.0, 40.4))
         val LURE = Vec3(73.6, 225.0, 77.2)
-        /** Where the Healer (from the start) and the Archer (+15 s) wait on Storm's floor (party.md §6). */
+        /** Where the Healer (from the start) and the Archer (+15 s) wait on Storm's floor. */
         val STORM_HEALER = Vec3(96.5, 165.0, 41.5)
         val STORM_ARCHER = Vec3(36.5, 170.0, 90.5)
         /** The beacon and its glass: driven here, not by the recorded strip. */

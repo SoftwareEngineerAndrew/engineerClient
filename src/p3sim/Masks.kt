@@ -16,7 +16,7 @@ import net.minecraft.world.item.component.ItemLore
  * (30 s), Bonzo's Mask (180 s) and Phoenix (60 s), with the game's chat lines (Odin's invincibility
  * timer and Masks Used read them). With none left you die: back to the start of the section.
  *
- * Real Masks off: the first one off cooldown saves you. On (dungeonbreaker.md, masks): they're
+ * Real Masks off: the first one off cooldown saves you. On: they're
  * helmets, only the one you wear saves you, then Phoenix if it's your pet; swap them in /stats,
  * each keeps its own cooldown. The Pet Rod swaps Phoenix and Black Cat.
  */
@@ -24,18 +24,18 @@ object Masks {
     private class Item(val id: String, val name: String, val cooldown: Int, val safe: Int, val line: String) { var readyAt = 0 }
 
     private val items = listOf(
-        // The exact lines (chat-attacks.md §1.2; Bonzo's with Hypixel's glyph, dungeonbreaker.md).
+        // The exact lines (Bonzo's with Hypixel's glyph).
         Item("SPIRIT_MASK", "Spirit Mask", 600, 60, "§6Second Wind Activated§r§a! Your Spirit Mask saved your life!"),
         Item("BONZO_MASK", "Bonzo's Mask", 3600, 60, "§aYour §r§9 Bonzo's Mask §r§asaved your life!"),
-        // Phoenix covers no longer than a mask (3 s, not its lore's 4 s): on Hypixel the next death tick, 60 ticks on, still hits (analysis/masks).
+        // Phoenix covers no longer than a mask (3 s, not its lore's 4 s): on Hypixel the next death tick, 60 ticks on, still hits.
         Item("PHOENIX", "Phoenix", 1200, 60, "§eYour §r§cPhoenix Pet §r§esaved you from certain death!"),
     )
 
-    // Skins as on Hypixel (dungeonbreaker.md).
+    // Skins as on Hypixel.
     private const val BONZO_TEX = "eyJ0aW1lc3RhbXAiOjE1ODc5MDgzMDU4MjYsInByb2ZpbGVJZCI6IjJkYzc3YWU3OTQ2MzQ4MDI5NDI4MGM4NDIyNzRiNTY3IiwicHJvZmlsZU5hbWUiOiJzYWR5MDYxMCIsInNpZ25hdHVyZVJlcXVpcmVkIjp0cnVlLCJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTI3MTZlY2JmNWI4ZGEwMGIwNWYzMTZlYzZhZjYxZThiZDAyODA1YjIxZWI4ZTQ0MDE1MTQ2OGRjNjU2NTQ5YyJ9fX0="
     private const val SPIRIT_TEX = "eyJ0aW1lc3RhbXAiOjE1MDUyMjI5OTg3MzQsInByb2ZpbGVJZCI6IjBiZTU2MmUxNzIyODQ3YmQ5MDY3MWYxNzNjNjA5NmNhIiwicHJvZmlsZU5hbWUiOiJ4Y29vbHgzIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsibWV0YWRhdGEiOnsibW9kZWwiOiJzbGltIn0sInVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWJiZTcyMWQ3YWQ4YWI5NjVmMDhjYmVjMGI4MzRmNzc5YjUxOTdmNzlkYTRhZWEzZDEzZDI1M2VjZTlkZWMyIn19fQ=="
 
-    // Names and lore as Hypixel sends them (recorder-2 inv lines); the "Cooldown: Ns" line stays for Odin's timer.
+    // Names and lore as Hypixel sends them; the "Cooldown: Ns" line stays for Odin's timer.
     val SPIRIT_MASK get() = mask(SPIRIT_TEX, "STARRED_SPIRIT_MASK", SimItems.Lore.STARRED_SPIRIT_MASK_NAME, SimItems.Lore.STARRED_SPIRIT_MASK, "mythic")
     // Odin's invincibility timer reads Bonzo's cooldown from "Cooldown: Ns".
     val BONZO_MASK get() = mask(BONZO_TEX, "STARRED_BONZO_MASK", SimItems.Lore.STARRED_BONZO_MASK_NAME, SimItems.Lore.STARRED_BONZO_MASK, "epic")
@@ -82,7 +82,7 @@ object Masks {
     const val PHOENIX_TEX = "ewogICJ0aW1lc3RhbXAiIDogMTY0Mjg2NTc3MTM5MSwKICAicHJvZmlsZUlkIiA6ICJiYjdjY2E3MTA0MzQ0NDEyOGQzMDg5ZTEzYmRmYWI1OSIsCiAgInByb2ZpbGVOYW1lIiA6ICJsYXVyZW5jaW8zMDMiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjZiMWI1OWJjODkwYzljOTc1Mjc3ODdkZGUyMDYwMGM4Yjg2ZjZiOTkxMmQ1MWE2YmZjZGIwZTRjMmFhM2M5NyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
 
     /**
-     * 9x6 "Stats & Equipment", laid out as Hypixel's (Better PF recordings): black panes; your held
+     * 9x6 "Stats & Equipment", laid out as Hypixel's: black panes; your held
      * item at 2; necklace, cloak, belt, gloves down column 1 (10/19/28/37); helmet, chestplate,
      * leggings, boots down column 2 (11/20/29/38); stat categories on the right; pet at 47; Close,
      * Active Effects, Achievements at 49-51. Your inventory below: click a mask there to wear it
@@ -90,7 +90,7 @@ object Masks {
      */
     class StatsMenu(id: Int, inv: net.minecraft.world.entity.player.Inventory, private val sp: ServerPlayer) :
         net.minecraft.world.inventory.ChestMenu(net.minecraft.world.inventory.MenuType.GENERIC_9x6, id, inv, net.minecraft.world.SimpleContainer(54), 6) {
-        /** The recorded /stats window's names and lore (rec2, pass2 census run34), by slot: equipment heads, stat categories, the pet, the buttons. */
+        /** A recorded /stats window's names and lore, by slot: equipment heads, stat categories, the pet, the buttons. */
         private val REC_NAME = mapOf(10 to "§6\ue068 Blooming Bone Necklace §6\u272a\u272a\u272a\u272a\u272a", 19 to "§d\ue068 Blooming Shadow Assassin Cloak §6\u272a\u272a\u272a\u272a\u272a", 28 to "§6Blooming Implosion Belt", 37 to "§6Blooming Soulweaver Gloves §6\u272a\u272a\u272a\u272a\u272a", 47 to "§7[Lvl 100] §6Black Cat§5 \u2726")
         private val REC_LORE = mapOf(
             10 to listOf("§7Defense: §a+288", "§7Crit Chance: §9+7.75%", "§7Farming Fortune: §6+32 §9(+5)", "§7Speed: §f+38.4 §9(+6)", "", "§6Ability: Gladiator's Will ", "§7Gain §a+3\ue008 Defense §7for each enemy", "§7within §e10 §7blocks up to §a+30\ue008 Defense§7.", "§7Range increases to §e30 §7blocks and", "§7the cap increases to §a+60\ue008 Defense", "§7when you play as a §aTank §7in dungeons.", "", "§7Increases the range of your", "§aDiversion §7passive by §e15 §7blocks.", "", "§6§l§ka §6§lLEGENDARY DUNGEON NECKLACE §6§l§ka"),
@@ -179,15 +179,15 @@ object Masks {
     /** The Pet Rod: Phoenix (saves you once, no Black Cat bonus) <-> Black Cat (+100 speed); applySpeed does the rest. */
     fun swapPet(p: ServerPlayer) {
         P3Sim.phoenixS.value = !P3Sim.phoenix
-        // The speed update lands 2-3 ticks after the Autopet chat (PETS-04: 2 x21, 3 x20 of 47); the swap itself is silent
-        // bar one vol-0 splash at (200,300,400) (PETS-05).
+        // The speed update lands 2-3 ticks after the Autopet chat (about evenly); the swap itself is silent
+        // bar one vol-0 splash at (200,300,400).
         Fight.later(2 + kotlin.random.Random.nextInt(2), "pet speed") { Fight.applySpeed(p) }
         // The splash goes to you alone (SimItems.castRod); then main's player_abilities with the new pet's walking speed,
         // ahead of the movement_speed attribute that follows 2-3 ticks on.
         p.abilities.setWalkingSpeed(Fight.speedStat(p).coerceAtLeast(100) / 1000f)
         p.onUpdateAbilities()
         // A rod cast swaps pets on Hypixel through an Autopet rule: its line 2-3 ticks after the rod comes
-        // out (party/autopet.mjs, 60 runs: 74 of these lines with the rod held), exactly as below.
+        // out, exactly as below.
         Sim.chat(if (P3Sim.phoenix) "§cAutopet §eequipped your §7[Lvl 100] §5Phoenix§e! §a§lVIEW RULE"
             else "§cAutopet §eequipped your §7[Lvl 100] §6Black Cat§5 ✦§e! §a§lVIEW RULE")
     }
@@ -218,12 +218,12 @@ object Masks {
         }
     }
 
-    /** [by]: the killer named in the death line, or null for the plain "You died" (chat-attacks.md §1.2). */
+    /** [by]: the killer named in the death line, or null for the plain "You died". */
     fun hit(p: ServerPlayer, by: String?, goldor: (() -> Unit)? = null) {
         val now = Fight.serverTick
-        // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds (MASKS-04, DEATH-10).
+        // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds.
         if (ghost || now < safeUntil) { goldor?.invoke(); return }
-        // A named hit meets the Creeper Veil first (death ticks, by == null, go through it: CLOAK-01).
+        // A named hit meets the Creeper Veil first (death ticks, by == null, go through it).
         if (by != null && SimItems.veilAbsorbs()) return
         val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
@@ -234,10 +234,10 @@ object Masks {
             // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
             if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.phoenixS.value = true; Fight.applySpeed(p) }
             safeUntil = now + item.safe
-            // Proc particles as recorded (MASKS-08): explosion x3 at your feet, Phoenix adds lava x18.
+            // Proc particles as recorded: explosion x3 at your feet, Phoenix adds lava x18.
             Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
             if (item.id == "PHOENIX") Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA, p.x, p.y, p.z, 18, 0.1, 0.1, 0.1, 0.08)
-            // Proc order as recorded (MASKS-04/06/07): masks eat + cure then the proc chat; Phoenix chat, then
+            // Proc order as recorded: masks eat + cure then the proc chat; Phoenix chat, then
             // extinguish, two infects and the ghast scream; then Goldor's line. No enderman sound on Spirit.
             if (item.id == "PHOENIX") {
                 Sim.chat(item.line)
@@ -256,12 +256,12 @@ object Masks {
             return
         }
         Sim.chat(if (by == null) "§c ☠ §r§7You died and became a ghost." else "§c ☠ §r§7You were killed by $by and became a ghost.")
-        // The Revive Stone line shows in 71% of the deaths on main (DEATH-15); it changes nothing.
+        // The Revive Stone line shows in about 71% of deaths on Hypixel; it changes nothing.
         if (kotlin.random.Random.nextInt(100) < 71) Sim.chat("§aYour Revive Stone revived you and broke!")
         becomeGhost(p)
         Sim.sound(SoundEvents.GENERIC_HURT, 1f, 0.889f, null, net.minecraft.sounds.SoundSource.NEUTRAL)
         goldor?.invoke()
-        // No immunity after dying or a revive (rec2 14-01-12: killed again on the next death tick).
+        // No immunity after dying or a revive (you can be killed again on the next death tick).
     }
 
     // ------------------------------------------------------------------ the ghost
@@ -276,7 +276,7 @@ object Masks {
 
     private val ARMOR_SLOTS = listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET)
 
-    /** Puts the armour you died in back (INV-11: the ghost's armour slots are empty). */
+    /** Puts the armour you died in back (the ghost's armour slots are empty). */
     private fun restoreArmor(p: ServerPlayer) {
         savedArmor?.forEach { (slot, st) -> p.setItemSlot(slot, st) }
         savedArmor = null
@@ -290,9 +290,9 @@ object Masks {
         val inv = p.inventory
         saved = (0 until 36).map { inv.getItem(it).copy() }
         savedSlot = inv.selectedSlot
-        // The Hyperion stays where it is (recorded in 7 of 9 ghost kits); the rest of the bar and the main inventory go.
+        // The Hyperion stays where it is (as in most recorded ghost kits); the rest of the bar and the main inventory go.
         for (i in 0 until 36) if (SimItems.idOf(inv.getItem(i)) != "HYPERION") inv.setItem(i, ItemStack.EMPTY)
-        // The ghost kit as recorded (INV-11): Haunt in hotbar 1, the class's two abilities in 4 and 6, the Magical Map in 9, Ghost Arrows
+        // The ghost kit as recorded: Haunt in hotbar 1, the class's two abilities in 4 and 6, the Magical Map in 9, Ghost Arrows
         // in the first inventory slot. The Haunt opens the "Teleport to Player" menu; the abilities are inert here. The selected slot stays.
         inv.setItem(0, SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "HAUNT_ABILITY", "§aHaunt"))
         val (a3, a5) = when (P3Sim.myClass) {
@@ -312,11 +312,11 @@ object Masks {
         p.containerMenu.broadcastChanges()
         p.inventoryMenu.broadcastChanges()
         Sim.title("§eYou became a ghost!", "§7Hopefully your teammates will be able to revive you!", 0, 100, 5)
-        // Revived 119-137 ticks on (median ~124); the countdown titles run 5..1 from 100 ticks before (DEATH-01/04).
+        // Revived 119-137 ticks on (median ~124); the countdown titles run 5..1 from 100 ticks before.
         val delay = if (kotlin.random.Random.nextInt(10) < 6) kotlin.random.Random.nextInt(120, 126) else kotlin.random.Random.nextInt(119, 138)
         val gen = ++reviveGen
         Corpse.spawn(p, delay)
-        // The corpse wears what you had on; the ghost's own armour slots are empty (INV-11).
+        // The corpse wears what you had on; the ghost's own armour slots are empty.
         savedArmor = ARMOR_SLOTS.associateWith { p.getItemBySlot(it).copy() }
         ARMOR_SLOTS.forEach { p.setItemSlot(it, ItemStack.EMPTY) }
         for (k in 0 until 5) Fight.later(delay - 100 + 20 * k, "revive title") {

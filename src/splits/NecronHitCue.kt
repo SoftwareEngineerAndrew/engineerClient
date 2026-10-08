@@ -4,20 +4,19 @@ package com.engineerclient.splits
  * When to hit Necron, as a line under his sub splits: the two hits that move his fight on, each
  * counted down, called while its window is open, and marked on time or late.
  *
- * His fight since Hypixel's boss update (5 Oct 2026), from 38 F7 and 5 M7 Better PF recordings
- * of it, n counting server ticks from his first line:
+ * His fight since Hypixel's boss update (5 Oct 2026), from recorded F7 and M7 runs, n counting
+ * server ticks from his first line:
  *
- *  1. 20% once his scripted sidestep is over: he leaves mid at 81-84 (159-164 before the update)
- *     and can't be hit for 7; hit, he is put back on mid (93-125 on F7, as late as 158 on M7).
+ *  1. 20% once his scripted sidestep is over: he leaves mid at 81-84 and can't be hit for 7; hit,
+ *     he is put back on mid (93-125 on F7, as late as 158 on M7).
  *  2. The kill, once the floor lifts: ARGH! is said at 269-273 in every run, however late he was
  *     back (so the slot is 265 on the 20-tick grid, n = 5 mod 20), and he dies on a later tick of
  *     the same grid - 365 at the earliest: the burst of TNT he dies in comes 4-12 after it
- *     (369-377 in 34 of 37 F7 runs), one tick late is 391, and a kill slow enough to see him leave
- *     mid again was 492.
+ *     (usually 369-377), one tick late is 391, and a kill slow enough to see him leave mid again
+ *     was 492.
  *
- * The second ARGH!, the trip after "Let's make some space!" and "All this, for nothing..." that
- * the old fight had are gone, so his death is the burst ([onDeath]); the line still ends the cue
- * should it come. Every other hit does nothing for the time. Nothing here touches Minecraft; the
+ * His death is the TNT burst ([onDeath]); "All this, for nothing..." is no longer said, but still
+ * ends the cue should it come. Every other hit does nothing for the time. Nothing here touches Minecraft; the
  * module feeds his position, the TNT and the clock in.
  */
 class NecronHitCue {
@@ -34,7 +33,7 @@ class NecronHitCue {
     /** His first line: the fight's n = 0. */
     fun onStart(tick: Int) { reset(); start = tick }
 
-    /** His death (the TNT burst), or "All this, for nothing..." from before the update: the cue is done with. */
+    /** His death (the TNT burst, or "All this, for nothing..."): the cue is done with. */
     fun onDeath() { if (start != null) ended = true }
 
     /** A chat line: his first starts the fight, his first ARGH! is the floor lifting. */
@@ -113,7 +112,7 @@ class NecronHitCue {
             "[BOSS] Necron: You went further than any human before, congratulations.",
         )
         const val ARGH = "[BOSS] Necron: ARGH!"
-        /** His death line before the update: gone since, kept for old lines. */
+        /** His death line before Hypixel's boss update; no longer said, still handled. */
         const val END_LINE = "[BOSS] Necron: All this, for nothing..."
         const val OFF_MID = 0.5
         const val ON_MID = 0.05

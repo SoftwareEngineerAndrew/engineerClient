@@ -7,7 +7,7 @@ import java.util.Locale
  * and settings and puts the result on screen). Pure: rows and options in, lines out, so every case
  * tests without the game.
  *
- * The look is the team's original EngineerSplits (their old ChatTriggers module):
+ * The look:
  *
  *     Pace   > 3m 48.2s (3m 47.9s)     the projected finish, from the targets
  *     Open   > 14.00s (14.00s)
@@ -54,7 +54,7 @@ object EngineerLook {
     private val CODES = Regex("§.")
     private fun strip(s: String) = s.replace(CODES, "").trim()
 
-    /** A split's label in this look: EngineerSplits' name in a dungeon, Odin's own elsewhere. */
+    /** A split's label in this look: the short Engineer name in a dungeon, Odin's own elsewhere. */
     fun label(odinName: String, place: Place, master: Boolean): String {
         val name = strip(odinName)
         if (place != Place.OTHER) DUNGEON_NAMES[name]?.let { return it }
@@ -79,7 +79,7 @@ object EngineerLook {
      *
      * As in Odin's own look, a split that hasn't started (time 0) only shows with Show 0 splits.
      * Before the run starts Pace is the targets' total: where there are targets (floor 7) it shows
-     * from the moment you load in, so the HUD opens on your PBs added up.
+     * from the moment you load in, so the HUD opens on the PBs added up.
      */
     fun lines(rows: List<Row>, opts: Options, place: Place, master: Boolean, targets: List<Double?>?,
               /** A split's time colour (Odin's name, ms, ticks, over), or null for its label's colour. */
@@ -96,7 +96,7 @@ object EngineerLook {
         val started = current >= 0 || rows.any { it.ms > 0 }
         // Once lag has cost a tick (DungeonSplits.lag, which then keeps it up), coloured by how much: gray, yellow, red.
         if (opts.showLag && lagMs != null && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null)
-        // Pace from load-in where there are targets (your PBs added up), else once the run starts.
+        // Pace from load-in where there are targets (the PBs added up), else once the run starts.
         if (opts.showPace && (started || opts.show0 || targets != null)) {
             var ms = 0L; var ticks = 0L
             segments.forEachIndexed { i, s ->
@@ -160,7 +160,7 @@ object EngineerLook {
         else -> "§c"
     }
 
-    /** A line as text, the way EngineerSplits wrote it: `Name > time (ticks)`, the arrow aqua. */
+    /** A line as text: `Name > time (ticks)`, the arrow aqua. */
     fun text(l: Line): String = "${l.label} §b> ${l.colour}${l.time}" + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
 
     private fun line(label: String, ms: Long, ticks: Long, opts: Options, format: (Long) -> String) =

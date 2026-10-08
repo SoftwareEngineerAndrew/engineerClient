@@ -6,8 +6,7 @@ import org.slf4j.LoggerFactory
 /**
  * The M7 phase-3 role rotation, loaded from `resources/rotation/p3.json`.
  *
- * The file is authored in the rotation editor (an artifact page) and shipped verbatim,
- * so the strategy is data, not code. Its execution rules live in [RotationEngine];
+ * The file is shipped verbatim, so the strategy is data, not code. Its execution rules live in [RotationEngine];
  * this file only describes the shapes.
  */
 object RotationSpec {
@@ -83,7 +82,7 @@ object RotationSpec {
         val leapNote: String = "",
         /**
          * The party message this role's holder sends on reaching their spot — one of the texts in
-         * Odin's positional messages (`/posmsg`), which every teammate runs with the same config.
+         * the positional messages (`/posmsg`), which every teammate runs with the same config.
          * Because it arrives as chat, every client learns of the arrival in the same order.
          * Empty means no such message: readiness then falls back to watching their position.
          * [ARRIVED_ON_LEAP] means any leap announcement made while holding this role.
@@ -116,7 +115,7 @@ object RotationSpec {
         /** Reserved for the final arrival. Must sit at position 1 or earlier exits take them first. */
         val last: Boolean = false,
         /**
-         * Minimum invincibilities the taker must have off cooldown — the sketch's "1 + mask".
+         * Minimum invincibilities the taker must have off cooldown ("1 + mask" in the strategy).
          * 0 means no requirement. Like [cond], failing it just skips the exit: you take the next
          * one you do qualify for.
          */

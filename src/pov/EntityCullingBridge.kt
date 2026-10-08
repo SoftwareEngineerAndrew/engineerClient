@@ -12,8 +12,7 @@ import net.fabricmc.loader.api.FabricLoader
  * static `EntityCullingVersionlessBase.enabled` is the whole mod's master switch — one field,
  * flipped around the extract and put straight back.
  *
- * Reflection, not a compile dependency: EntityCulling is expected on every EC client but nothing
- * here may require it.
+ * Reflection, not a compile dependency: EntityCulling is optional and nothing here may require it.
  */
 object EntityCullingBridge {
 

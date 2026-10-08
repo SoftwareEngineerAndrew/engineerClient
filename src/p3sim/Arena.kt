@@ -14,8 +14,8 @@ import java.util.EnumSet
 import java.util.zip.GZIPInputStream
 
 /**
- * The F7 boss arena, block for block, at Hypixel's own coordinates (built by
- * `tools/p3sim/build-arena.mjs` from the Better PF room library). The sim world's void generator
+ * The F7 boss arena, block for block, at Hypixel's own coordinates (built from the Better PF room
+ * library). The sim world's void generator
  * fills each chunk from it as the chunk is first generated ([fill]), so the world is the arena from
  * its first tick, lit by the game's own lighting pass. The blocks that change during a fight
  * (gates, doors, levers, devices) are put back with [restore].

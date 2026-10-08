@@ -28,7 +28,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 object OdinSimonSays {
 
     private val better = BooleanSetting("Better Solver", true,
-        desc = "engineerClient's solver: right in 99.7% of recorded rounds against Odin's own 94% (skips after a fail, 2-light skips, flashes before the show, lag). Odin still draws, blocks and announces from it.")
+        desc = "engineerClient's solver: handles skips after a fail, 2-light skips, flashes before the show and lag. Odin still draws, blocks and announces from it.")
 
     /** On, and Odin's Simon Says with it: Odin's own working-out is off. Read by SimonSaysMixin. */
     @JvmStatic

@@ -49,10 +49,10 @@ class Station(
             val s = SimStand(level)
             s.snapTo(at.x, y, at.z, 0f, 0f)
             s.isInvisible = true
-            // STANDS-15: gravity is on in Hypixel's packets (noGravity false); SimStand never moves by itself.
+            // Gravity is on in Hypixel's packets (noGravity false); SimStand never moves by itself.
             s.isInvulnerable = true
             s.isSilent = true
-            // Styled from the start, as Hypixel's names are (TERM-19).
+            // Styled from the start, as Hypixel's names are.
             s.setCustomName(if (name.isEmpty()) null else Sim.legacy(name))
             s.isCustomNameVisible = name.isNotEmpty()
             if (marker) { setMarker(s); setLeverFlags(s) }
@@ -68,8 +68,8 @@ class Station(
 
     /**
      * The stands' names as they should read now (Hypixel refreshes them on a 20-tick grid). A
-     * terminal's or device's pair reads "" while you are 25+ blocks away: of ~4000 renames, the
-     * status names came within 26 blocks only, the blanks from 23 out (`terminals.md`). Levers keep theirs.
+     * terminal's or device's pair reads "" while you are 25+ blocks away (Hypixel sends the status
+     * names within ~25 blocks only, blanks beyond). Levers keep theirs.
      */
     fun refreshStands() {
         fun name(s: ArmorStand?, n: String) {
@@ -83,7 +83,7 @@ class Station(
         if (far) { name(top, ""); name(bottom, ""); return }
         when (kind) {
             Kind.TERMINAL -> if (done) {
-                // Done: the top stand moves down 0.375, onto the bottom one's height (TERM-11).
+                // Done: the top stand moves down 0.375, onto the bottom one's height.
                 top?.let { if (kotlin.math.abs(it.y - (at.y + BOTTOM_DY)) > 1e-3) it.snapTo(at.x, at.y + BOTTOM_DY, at.z, 0f, 0f) }
                 name(top, "§aTerminal Active"); name(bottom, "")
             } else { top?.let { if (kotlin.math.abs(it.y - (at.y + TOP_DY)) > 1e-3) it.snapTo(at.x, at.y + TOP_DY, at.z, 0f, 0f) }; name(top, INACTIVE); name(bottom, CLICK_HERE) }
@@ -108,7 +108,7 @@ class Station(
         private val markerMethod by lazy { ArmorStand::class.java.getDeclaredMethod("setMarker", Boolean::class.javaPrimitiveType).apply { isAccessible = true } }
         fun setMarker(s: ArmorStand) { runCatching { markerMethod.invoke(s, true) } }
 
-        /** STANDS-12: Hypixel's lever stands carry armor-stand flags 18 (marker 16 + the unused bit 2) on 288 of 288; terminal and device stands 0. */
+        /** Hypixel's lever stands carry armor-stand flags 18 (marker 16 + the unused bit 2); terminal and device stands 0. */
         fun setLeverFlags(s: ArmorStand) { runCatching { s.entityData.set(ArmorStand.DATA_CLIENT_FLAGS, 18.toByte()) } }
 
         private fun t(section: Int, n: Int, x: Double, y: Double, z: Double) = Station(Kind.TERMINAL, section, Vec3(x, y, z), "T$n")
@@ -116,7 +116,7 @@ class Station(
         private fun d(section: Int, label: String, x: Double, y: Double, z: Double) = Station(Kind.DEVICE, section, Vec3(x, y, z), label)
 
         /**
-         * All 30, positions from the recordings (stands), numbered as in terminal-roles.md: the
+         * All 30, positions from the recordings (stands), numbered by the usual convention: the
          * n-th terminal a player reaches walking in from the section's start. Except, named as players do:
          * S1's by how close they are to the levers (4 nearest, 1 furthest), and S2's 4 and 5,
          * named as players do: 5 is the high one (by the low lever), 4 the low one by ll (the high lever).
@@ -142,7 +142,7 @@ class Station(
 }
 
 /**
- * A status stand as Hypixel's: gravity on (STANDS-15: noGravity false in every recorded stand's data) yet
+ * A status stand as Hypixel's: gravity on (noGravity false in Hypixel's stand data) yet
  * it stays where it is put, as there. Vanilla would let it fall, so its own movement is dropped.
  */
 class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.ARMOR_STAND, level) {
@@ -150,7 +150,7 @@ class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.
 }
 
 /**
- * STANDS-06: where you die as a ghost Hypixel leaves your body for about as long as you wait to be revived
+ * Where you die as a ghost Hypixel leaves your body for about as long as you wait to be revived
  * (life 119-141 ticks, median 121): a fake player lying down in your armour, a name stand and a red "DEAD"
  * stand just under it, and a stand with your head on it a block to the side.
  */

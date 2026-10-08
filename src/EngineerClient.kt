@@ -62,8 +62,9 @@ object EngineerClient : ClientModInitializer {
         // subscription lifecycle. This is Odin's documented addon path.
         ModuleManager.registerModules(ModuleConfig("engineerclient.json"), *MODULES.toTypedArray())
 
-        // The Engineer Splits look, added to Odin's own Splits module - before anything saves the
-        // configs, which would drop saved values for settings that don't exist yet.
+        // Additions to Odin's own modules (e.g. the Engineer Splits look on Odin's Splits) go in
+        // before anything saves the configs, which would drop saved values for settings that don't
+        // exist yet.
         safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
         safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
         safely("splits look") { OdinSplitsLook.install() }
@@ -80,8 +81,6 @@ object EngineerClient : ClientModInitializer {
         // Odin's event bus: world load resets class detection.
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
         EventBus.subscribe(this)
-        // TEMPORARY: scoreboard recorder for the hider bug — delete with debug/ScoreboardRecorder.kt.
-        safely("scoreboard recorder") { com.engineerclient.debug.ScoreboardRecorder.register() }
 
         // Own-class poll: once a second is plenty; Odin keeps the teammate list fresh from packets.
         ClientTickEvents.END_CLIENT_TICK.register {
@@ -175,7 +174,7 @@ object EngineerClient : ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /betterpf: the link to all your uploaded runs, private ones included.
             for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 })
-            // /posmsg: Odin's, until 0.3.6 dropped it; Positional Messages lives here now.
+            // /posmsg: Positional Messages (removed from Odin in 0.3.6) is provided here.
             com.engineerclient.waypoints.PositionalMessages.registerCommand(dispatcher)
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))

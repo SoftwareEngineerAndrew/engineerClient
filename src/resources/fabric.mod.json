@@ -3,7 +3,7 @@
   "id": "engineerclient",
   "version": "${version}",
   "name": "Engineer Client",
-  "description": "engineerandrew's Odin addon: M7 phase-3 role rotation, leap-menu POV previews, the P3 Sim and Party Finder stats.",
+  "description": "An Odin addon for Hypixel SkyBlock dungeons: M7 phase-3 role rotation, leap-menu POV previews, the P3 Sim and Party Finder stats.",
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",

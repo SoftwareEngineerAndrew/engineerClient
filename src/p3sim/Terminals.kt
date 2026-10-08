@@ -18,9 +18,8 @@ import net.minecraft.world.item.Items
 import kotlin.random.Random
 
 /**
- * F7's six terminals as Hypixel serves them (measured from Better PF and Dungeon Recorder runs, see
- * `tools/p3sim/research/terminals.md` and the terminals audit): the same titles, window sizes, items,
- * names and counts, so Odin's solver and custom GUI take them for the real thing.
+ * F7's six terminals as Hypixel serves them (measured from recorded runs): the same titles, window
+ * sizes, items, names and counts, so Odin's solver and custom GUI take them for the real thing.
  *
  * As on Hypixel: the items come in the same tick as the window, one slot update each (no full
  * refill; Odin only solves on those), and one full refill ~5 ticks later; a click is answered by a
@@ -32,7 +31,7 @@ import kotlin.random.Random
 object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(5) }
 
-    /** A random draw: the six are equally likely (first opens per station, n = 1164: 182-211 each). */
+    /** A random draw: the six are equally likely (as measured on first opens). */
     fun randomType(): Type = Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random()
 
     fun <T> weighted(w: List<Pair<T, Int>>): T {
@@ -49,7 +48,7 @@ object Terminals {
         return s
     }
 
-    /** Hypixel's filler: a nameless black pane whose tooltip is hidden (TERM-10). */
+    /** Hypixel's filler: a nameless black pane whose tooltip is hidden. */
     val FILLER: ItemStack get() = named(Items.STAINED_GLASS_PANE.black(), "").also {
         it.set(DataComponents.TOOLTIP_DISPLAY, net.minecraft.world.item.component.TooltipDisplay(true, java.util.LinkedHashSet()))
     }
@@ -58,14 +57,13 @@ object Terminals {
 
     /**
      * Opens [station]'s terminal for [player]. As on Hypixel, every open deals a fresh puzzle: a
-     * terminal closed unsolved comes back with new items and no progress, always of the same type
-     * (41 of 41 reopens on main).
+     * terminal closed unsolved comes back with new items and no progress, always of the same type.
      */
     fun open(player: ServerPlayer, station: Station, type: Type? = null) {
         val keep = station.term?.type?.takeIf { Fight.forcedTerminal == null }
         val term = Term.create(type ?: keep ?: station.nextType()).also { station.term = it }
         player.openMenu(SimpleMenuProvider({ id, inv, _ -> TerminalMenu(id, inv, term, station) }, Component.literal(term.title)))
-        // A lever click at you as the window opens (vol 0.5, pitch 1, blocks; TERM-08).
+        // A lever click at you as the window opens (vol 0.5, pitch 1, blocks).
         Sim.sound(net.minecraft.sounds.SoundEvents.LEVER_CLICK, 0.5f, 1f, source = net.minecraft.sounds.SoundSource.BLOCKS)
     }
 
@@ -117,7 +115,7 @@ object Terminals {
         override val title = "Correct all the panes!"
         private val slots = (11..15) + (20..24) + (29..33)
         init {
-            // 0-9 start On, median 3 (measured, n = 181).
+            // 0-9 start On, median 3 (measured).
             val on = weighted(listOf(0 to 8, 1 to 24, 2 to 36, 3 to 44, 4 to 40, 5 to 16, 6 to 5, 7 to 4, 8 to 3, 9 to 1))
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
@@ -139,8 +137,8 @@ object Terminals {
         private val cycle = listOf(Items.STAINED_GLASS_PANE.red() to "Red", Items.STAINED_GLASS_PANE.orange() to "Orange", Items.STAINED_GLASS_PANE.yellow() to "Yellow", Items.STAINED_GLASS_PANE.green() to "Green", Items.STAINED_GLASS_PANE.blue() to "Blue")
         private val colour = IntArray(45)
         init {
-            // Boards drawn to main's fewest-clicks spread (n = 33: 4:3 5:4 6:4 7:6 8:7 9:7 10:2; mean
-            // 7.2, easier than 9 free draws' 8.1): free draws until one needs the drawn count.
+            // Boards follow Hypixel's measured fewest-clicks spread (mean ~7.2, easier than 9 free draws'
+            // 8.1): free draws until one needs the drawn count.
             val want = weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2))
             do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
             slots.forEach { set(it) }
@@ -163,13 +161,13 @@ object Terminals {
         private val letter: Char
         override val title: String
         init {
-            // The letter is a random pool item's initial: seen about as often as the pool has names
-            // with it (186 windows: S 23 for 20 names, C 22/16, G 20/19, B 17/16 ... A 2/4, O 2/1).
+            // The letter is a random pool item's initial: on Hypixel each letter shows up about as often
+            // as the pool has names with it.
             letter = STARTS_POOL.random().second[0]
             title = "What starts with: '$letter'?"
             val right = STARTS_POOL.filter { it.second[0] == letter }
             val wrong = STARTS_POOL.filter { it.second[0] != letter }
-            // Items with the letter per window, as measured (n = 186); each slot's item is uniform.
+            // Items with the letter per window, as measured; each slot's item is uniform.
             val n = weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4))
             val picks = (List(n) { right.random() } + List(slots.size - n) { wrong.random() }).shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
@@ -189,8 +187,8 @@ object Terminals {
 
     /**
      * "Select all the X items!": 28 items of 5 colours; click every X one (it glints). Each colour
-     * has 5 items and 3 of the 5 one more: all 175 windows split 6-6-6-5-5, the target taking a 6
-     * in 110 (the 3 in 5 odds) and a 5 in 65.
+     * has 5 items and 3 of the 5 one more: every measured window splits 6-6-6-5-5, the target
+     * taking a 6 at the expected 3 in 5 odds.
      */
     class Select : Term(Type.SELECT) {
         private val slots = (11..15) + (20..24) + (28..34) + (37..43)
@@ -220,10 +218,10 @@ object Terminals {
      * "Click the button on time!": a lime pane bounces along the active row (one column every 10
      * ticks); Lock In Slot while it is in the magenta column. The row moves on at the next step;
      * the last lock finishes at once. Since the update there are [LANES] rows (the 4th is gone, and
-     * the window is a row shorter for it). Each new row's magenta column differs from the last (409 of
-     * 409). A wrong lock (the lime off target, or another row's Lock In Slot, e.g. clicked ahead)
-     * freezes the lime for two steps: lone wrong clicks were followed by a +30 step in 8 of 9, and a
-     * row change after a click ahead did not move the lime (42 of 43), its next step +20.
+     * the window is a row shorter for it). Each new row's magenta column differs from the last. A
+     * wrong lock (the lime off target, or another row's Lock In Slot, e.g. clicked ahead) freezes the
+     * lime for two steps: on Hypixel a lone wrong click is followed by a +30 step, and a row change
+     * after a click ahead doesn't move the lime, its next step +20.
      */
     class Melody : Term(Type.MELODY) {
         override val title = "Click the button on time!"
@@ -299,22 +297,22 @@ object Terminals {
         ChestMenu(menuType(term.type.rows), id, inv, SimpleContainer(term.size), term.type.rows) {
         private val player = inv.player as ServerPlayer
         private val opened = Fight.serverTick
-        /** The server tick a click was answered on: its slot updates go out the tick after (TERM-04). */
+        /** The server tick a click was answered on: its slot updates go out the tick after. */
         private var answeredAt = -1
-        /** Ticks of the clicks that counted, for the 5-per-10-ticks limit (TERM-01). */
+        /** Ticks of the clicks that counted, for the 5-per-10-ticks limit. */
         private val counted = ArrayDeque<Int>()
         private var sync: net.minecraft.world.inventory.ContainerSynchronizer? = null
         private var refilled = false
 
         init {
             Terminals.open += this
-            // The puzzle is in the window from the start: its items go out with the window (TERM-03).
+            // The puzzle is in the window from the start: its items go out with the window.
             for (i in 0 until term.size) container.setItem(i, term.items[i].copy())
         }
 
         /**
          * Hypixel opens a window with one slot update per slot (stateId from 1), the player's
-         * inventory slots included, never a full content packet; that follows ~5 ticks later (TERM-14).
+         * inventory slots included, never a full content packet; that follows ~5 ticks later.
          */
         override fun setSynchronizer(s: net.minecraft.world.inventory.ContainerSynchronizer) {
             sync = s
@@ -362,12 +360,12 @@ object Terminals {
                     counted.addLast(now)
                 }
                 if (!term.click(slot, button, input)) return@afterPing
-                // A counted click: a pling at you at once (TERM-07), the slot change next tick.
+                // A counted click: a pling at you at once, the slot change next tick.
                 Sim.sound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
                 answeredAt = now
                 if (term.solved()) {
                     term.done = true
-                    // One tick: close the window, the chat line (titles, pling), close window 0 (TERM-15).
+                    // One tick: close the window, the chat line (titles, pling), close window 0.
                     player.closeContainer()
                     station.complete(Sim.me)
                     player.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))

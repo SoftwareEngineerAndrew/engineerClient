@@ -13,8 +13,8 @@ import org.slf4j.LoggerFactory
  * next unmatched task of that type in that player's current role, so the mod never has to work
  * out *which* terminal was pressed.
  *
- * Verified against 30,000 random finish schedules (100% clean) before it was written; the same
- * schedules run as a JUnit test in [RotationEngineTest].
+ * Free of Minecraft, so randomised finish schedules can be replayed through it in a plain JVM
+ * test to check that every run routes cleanly.
  */
 object RotationEngine {
 
@@ -36,9 +36,9 @@ object RotationEngine {
     /**
      * How many invincibilities a player has off cooldown. Injected so the engine stays free of
      * Minecraft; the client points it at [MaskTracker], tests point it wherever they like.
-     * Everyone in this party carries all three, so a teammate's count is exact rather than an
-     * upper bound, and it is derived on every client from the same party announcements — which is
-     * what keeps the mask branch decided identically everywhere.
+     * The strategy assumes everyone carries all three, so a teammate's count is treated as exact,
+     * and it is derived on every client from the same party announcements — which is what keeps
+     * the mask branch decided identically everywhere.
      */
     var masksAvailable: (String) -> Int = { 3 }
 

@@ -6,14 +6,14 @@ package com.engineerclient.splits
  *
  * A room starts the moment the door into it starts falling and ends when the door out of it
  * starts falling, so the rooms tile end to end. Every time in a room is measured from that room's
- * own start. What a real run looks like (ticks, from a recording):
+ * own start. What a real run looks like (server ticks):
  *
  *     128  [NPC] Mort: Here, I found this map...
  *     131  36 door blocks turn to barrier            <- the start door starts falling: room 1
  *     144  those 36 barriers turn to air             <- it is down; it joins Entrance and Pipes
  *     292  a "Wither Key" armor stand appears        <- the room's last mob died
  *     304  ... has obtained Wither Key!
- *     306  TheBadOne opened a WITHER door!           <- room 1 ends, room 2 starts falling in
+ *     306  Player opened a WITHER door!              <- room 1 ends, room 2 starts falling in
  *     319  36 barriers turn to air, joining Pipes and Duncan
  *     ...
  *     680  The BLOOD DOOR has been opened!           <- the rush ends
@@ -328,7 +328,7 @@ class BloodRunDetail {
 
     private fun mean(vals: List<Pair<Long, Long>>) = vals.sumOf { it.first } / vals.size to vals.sumOf { it.second } / vals.size
 
-    /** `label > time (ticks)`, the label and time in the line's colour — the detailed screenshot's shape. */
+    /** `label > time (ticks)`, the label and time in the line's colour. */
     private fun labelled(colour: String, label: String, s: Pair<Long, Long>) =
         "$colour$label §b> $colour" + SplitFormat.seconds(s.first) + " §8(§7" + SplitFormat.seconds(s.second * 50L) + "§8)"
 
@@ -350,7 +350,7 @@ class BloodRunDetail {
         const val SLOW_PICKUP_MS = 350L
         const val SLOW_DOOR_MS = 250L
 
-        /** The five columns, in order, and their colours: door fell dark grey, last mob light grey, then the screenshot's. */
+        /** The five columns, in order, and their colours: door fell dark grey, last mob light grey, then the compact row's. */
         val LABELS = listOf("door fell", "last mob", "pickup", "opened", "room total")
         val COLOURS = listOf("§8", "§7", "§c", "§4", "§6")
 

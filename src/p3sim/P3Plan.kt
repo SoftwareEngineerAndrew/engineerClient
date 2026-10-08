@@ -16,8 +16,8 @@ import java.io.File
  */
 object P3Plan {
     /**
-     * The skill levels: [Roles.PRESETS] with Random (Quality PF's roles, each bot job at a random time) 4th,
-     * where it has always been (saved choices keep their index); later presets after it.
+     * The skill levels: [Roles.PRESETS] with Random (Quality PF's roles, each bot job at a random time) 4th
+     * (the choice is saved by index, so it stays there); later presets after it.
      */
     const val RANDOM = 3
     val SKILLS = Roles.PRESETS.take(RANDOM).map { it.name } + "Random" + Roles.PRESETS.drop(RANDOM).map { it.name }
@@ -36,7 +36,6 @@ object P3Plan {
     fun defaultEarlyEnters() = listOf(
         // On S2's device (Lights): the EE2 player does it early and waits there for the leaps.
         EarlyEnter("ee2", "EE2", 2, Vec3(60.6, 132.0, 139.0)),
-        // Where undonecoffee stands for it.
         EarlyEnter("ee3", "EE3", 3, Vec3(1.9, 109.0, 104.6)),
         EarlyEnter("ee4", "EE4", 4, Vec3(41.3, 109.0, 32.6)),
         // Just outside the core in S4; then inside it.
@@ -167,8 +166,8 @@ object P3Plan {
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
-            // EE2 used to default to S2's 1st terminal (69, 109, 124.7): a saved copy of that goes to the new default.
-            // [x, y, z] or [x, y, z, yaw, pitch].
+            // [x, y, z] or [x, y, z, yaw, pitch]. A saved EE2 spot at (69, 109, 124.7), S2's 1st terminal and an
+            // earlier default, is ignored so the current default applies.
             s.spots?.forEach { (k, v) ->
                 earlyEnters.firstOrNull { it.key == k }?.let {
                     if (v.size >= 3 && !(k == "ee2" && v == listOf(69.0, 109.0, 124.7))) it.spot = Vec3(v[0], v[1], v[2])
@@ -183,7 +182,7 @@ object P3Plan {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
                 earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList())
             file.parentFile.mkdirs()
-            // The copy before this session's first save, should a save ever lose something (as one did EE3's spot).
+            // A backup of the file before this session's first save, should a save ever lose something.
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }
             file.writeText(gson.toJson(s))
         }

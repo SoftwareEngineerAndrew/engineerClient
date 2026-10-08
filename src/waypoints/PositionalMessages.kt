@@ -38,7 +38,7 @@ import kotlin.math.floor
 
 /**
  * Odin's Positional Messages (and its /posmsg), which Odin dropped in 0.3.6: party chat when you
- * reach a spot in the boss, once per world. The rotation's arrival texts come from these boxes, so
+ * reach a spot in the boss, once per world. Arrival callouts in the boss rely on these boxes, so
  * engineerClient carries the module on as it was - same settings, same stored format (its saved
  * list is copied over from Odin's config by [com.engineerclient.ConfigMigration]).
  */

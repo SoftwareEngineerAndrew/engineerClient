@@ -5,18 +5,18 @@ import net.minecraft.client.Minecraft
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-/** EC's own settings outside Odin's module config: your P3 starting role and the class stash. */
+/** EC's own settings outside Odin's module config: the player's P3 starting role and the class stash. */
 object EcConfig {
 
     data class Data(
-        /** Last class detected from tab (DungeonClass name), so your class is known outside a dungeon. */
+        /** Last class detected from tab (DungeonClass name), so the player's class is known outside a dungeon. */
         var lastKnownClass: String? = null,
         /**
-         * MY phase-3 starting role (section-1 role id). Each client knows only its own; the team's
+         * This player's phase-3 starting role (section-1 role id). Each client knows only its own; the team's
          * full binding is assembled on every client from the roles each announces to party chat.
          */
         var myStartingRole: String? = null,
-        /** Pre-2026-09-06 shape, kept only so an old file's own-role entry can be migrated. */
+        /** Legacy whole-team role map, kept only so an old file's own-role entry can be migrated. */
         var roleBindings: MutableMap<String, String>? = null,
     )
 

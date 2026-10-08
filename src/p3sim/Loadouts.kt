@@ -24,13 +24,12 @@ import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.component.ItemLore
 
 /**
- * Hypixel's Loadouts window ("(1/3) Loadouts"), opened with /loadouts (recorder-2: 556 `/loadouts` commands,
- * 996 opens, the rest being the window re-sent after a click). Its items, slots and lore are the recorded
- * ones (assets/engineerclient/p3sim/loadouts.json, from the first open of rec2 13-30-21_F7_c48518; the
- * helmet / chest / legs / boots / pet slots show what you wear right now). Of Andrew's saved loadouts only
- * the four the sim models are kept: Cat terms, Phoenix terms, Terror (renamed from "Speed Terror") and
- * Mask terms. A click equips: armour, helmet and pet change, speed follows through [Fight.applySpeed], and
- * the chat line and sounds are the recorded ones (lever click 0.5, then "You equipped X!", then horse saddle 1.0).
+ * Hypixel's Loadouts window ("(1/3) Loadouts"), opened with /loadouts (Hypixel re-sends the window after a
+ * click). Its items, slots and lore are a recorded window (assets/engineerclient/p3sim/loadouts.json; the
+ * helmet / chest / legs / boots / pet slots show what you wear right now). Four preset loadouts are modelled:
+ * Cat terms, Phoenix terms, Terror and Mask terms; players can save their own as custom loadouts. A click
+ * equips: armour, helmet and pet change, speed follows through [Fight.applySpeed], and the chat line and
+ * sounds are the recorded ones (lever click 0.5, then "You equipped X!", then horse saddle 1.0).
  */
 object Loadouts {
     private class Entry(val slot: Int, val item: String, val name: String, val lore: List<String>, val tex: String?,
@@ -61,7 +60,7 @@ object Loadouts {
         return s
     }
 
-    /** Terror Helmet as recorded (rec2 13-30-21 inventory slot 9); worn with the set it is Hydra Strike 4/4. */
+    /** Terror Helmet as recorded; worn with the set it is Hydra Strike 4/4. */
     private fun terrorHelmet(): ItemStack {
         val e = entries[54] ?: return ItemStack.EMPTY
         return Entry(e.slot, e.item, e.name, e.lore.map { it.replace("(3/4)", "(4/4)").replace("after 7s", "after 10s") }, e.tex, e.dye, e.glint, e.style, e.id).stack()
@@ -279,7 +278,7 @@ object Loadouts {
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
             if (slot == 49) { sp.closeContainer(); return }
-            // Left-click equips ("Left-click to equip!"); right-click would edit, which the sim doesn't have.
+            // Left-click equips ("Left-click to equip!"); on a custom loadout, right- or shift-click deletes it.
             val ci = CUSTOM_SLOTS.indexOf(slot)
             if (slot == SAVE_SLOT) saveCurrent(sp)
             else if (ci in customs().indices) {

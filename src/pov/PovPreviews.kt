@@ -65,7 +65,7 @@ object PovPreviews : Module(
     /**
      * Below 1, the previews blend over your own view instead of replacing it - and your own view
      * keeps rendering underneath regardless of [skipOwnView], since there's something to see
-     * through to now.
+     * through to.
      */
     val opacity by NumberSetting("Opacity", 1f, 0.1..1.0, 0.05f, desc = "How opaque the previews are. Below 1 you can see your own game through them (your own view keeps rendering, so this costs a world render).", unit = "x")
 

@@ -13,7 +13,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
  *  - **ready** — that player has actually reached the section you are going to, so you know
  *    *when to click*. Leaping to an early-enterer before they are through is a wasted leap.
  *
- * Readiness comes from the arrival messages Odin's positional-message boxes send to party chat
+ * Readiness comes from the arrival messages the positional-message boxes send to party chat
  * (`/posmsg`, same config on every teammate), so every client hears it in the same order. Where
  * the strategy has no such message for a target, it falls back to watching their position — a
  * local judgement, so it can be late, but role assignment stays chat-driven either way and can

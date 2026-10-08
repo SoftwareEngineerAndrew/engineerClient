@@ -7,10 +7,9 @@ import java.util.regex.PatternSyntaxException
 /**
  * The chat-hider rule set, plain Kotlin so it loads and tests headlessly.
  *
- * Shape of `chat/hidden.json` (written by tools/chat-hider/export.py from the Dungeon Chat
- * Hider page): `custom` rules first — a hand-written regex with `show` or `block`, matched
- * anywhere in the line, first match wins — then `block`, the templates the page marked
- * Block, each an anchored regex over the whole message. Colour codes are stripped before
+ * Shape of `chat/hidden.json`: `custom` rules first — a hand-written regex with `show` or
+ * `block`, matched anywhere in the line, first match wins — then `block`, message templates to
+ * hide, each an anchored regex over the whole message. Colour codes are stripped before
  * matching; a multi-line message is matched as one string with `\n` in it.
  */
 class ChatRules(val custom: List<Custom>, val block: List<Block>) {
