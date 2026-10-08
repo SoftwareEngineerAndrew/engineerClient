@@ -30,8 +30,9 @@ import net.minecraft.world.phys.Vec3
  *    earliest), and dies; his Frenzy hits you every 10 ticks 2-14 blocks from him there;
  *  - his lines go one at a time, each at least 62 ticks after the one before (a queue: intro,
  *    taunts, a random section line per door, the arrival script, "....");
- *  - Necron's first line 82 ticks (81-83) after Goldor's death, then P4; "Necron, forgive me." 82
- *    after "...." (with Necron's line when he died in flight, later when he reached the core).
+ *  - Necron's first line [NECRON_AFTER] ticks after Goldor's death, then P4; "Necron, forgive me."
+ *    [FORGIVE_AFTER] after "...." (10 before Necron's line when he died in flight, later when he
+ *    reached the core). Since Hypixel's boss update; both were 82 before it.
  * [from] 1-4 starts at that section (the earlier ones done), 5 at the core opening.
  */
 class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3") {
@@ -158,10 +159,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         GhostCapture.stopped(this)
         Terminals.closeAll()
         devices.stop()
-        // Handed over to Necron: his body stays where he died until ~290 ticks after Necron's first line
-        // (279-307 measured); else gone with the phase.
+        // Handed over to Necron: his body stays where he died until Necron's own body goes (in the same
+        // tick since the boss update; ~280 after Necron's first line before it); else gone with the phase.
         val g = goldor
-        if (necronAt >= 0) Fight.later(290, "goldor body") { g.remove() } else g.remove()
+        if (necronAt >= 0) Fight.later(P4Necron.GONE, "goldor body") { g.remove() } else g.remove()
     }
 
     override fun tick() {
@@ -237,8 +238,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun speak(line: String) {
         gsay(line)
         lastLine = n
-        // "Necron, forgive me." 82 after "...." (82-88 when he reached the core).
-        if (line == "....") forgiveAt = n + 82
+        // "Necron, forgive me." FORGIVE_AFTER after "...." (whichever ending).
+        if (line == "....") forgiveAt = n + FORGIVE_AFTER
     }
 
     private fun dialogue() {
@@ -253,7 +254,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             at = maxOf(at + 62, n)
             val dt = at - n
             Fight.later(dt, "goldor line") { gsay(line) }
-            if (line == "....") forgiveAt = at + 82
+            if (line == "....") forgiveAt = at + FORGIVE_AFTER
         }
         lines.clear()
         if (forgiveAt >= 0) { val dt = forgiveAt - n; forgiveAt = -1; Fight.later(dt, "goldor forgive") { gsay("Necron, forgive me."); Fight.later(12, "goldor rearm") { goldor.reArmour() } } }
@@ -480,10 +481,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             }
         }
         // The floor under the core goes 2 ticks before Necron's first line (anims-p3.json p3end, dt -2).
-        if (deadAt >= 0 && p3endAt < 0 && n >= deadAt + 80 && !P3Sim.p3Only) { p3endAt = n; Blocks.play("p3end") }
-        // Necron's first line 82 ticks after Goldor's death (81-83), whichever ending; "Necron, forgive me." comes
-        // from the dialogue (82 after "....": in the same tick, just before, when he died in flight).
-        if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 82) {
+        if (deadAt >= 0 && p3endAt < 0 && n >= deadAt + NECRON_AFTER - 2 && !P3Sim.p3Only) { p3endAt = n; Blocks.play("p3end") }
+        // Necron's first line NECRON_AFTER ticks after Goldor's death, whichever ending; "Necron, forgive me." comes
+        // from the dialogue (FORGIVE_AFTER after "....": 10 ticks before it when he died in flight).
+        if (deadAt >= 0 && necronAt < 0 && n >= deadAt + NECRON_AFTER) {
             necronAt = n
             // Stopping here, the run's recording ends here too (else it grows until the next start).
             if (P3Sim.p3Only) { Recorder.finish(); Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
@@ -500,6 +501,13 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     companion object {
         /** Ticks the phase runs before "Who dares" when it follows Storm's death (S1 levers are live from then). */
         const val LEAD_IN = 3
+
+        /**
+         * Goldor's death to Necron's first line, and "...." to "Necron, forgive me.": 62 (p10-p90 62-67,
+         * 153 post-update recordings killed in flight) and 52 (all 182), both 82 before the boss update.
+         */
+        const val NECRON_AFTER = 62
+        const val FORGIVE_AFTER = 52
 
         /**
          * Death-tick zones (feet, y 106 to 146): four plain rectangles, one per section, with block-wide gaps between
