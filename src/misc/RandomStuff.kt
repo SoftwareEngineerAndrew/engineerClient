@@ -109,6 +109,7 @@ object RandomStuff : Module(
     // --- Startup and restart -------------------------------------------------------------------
 
     private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
+    private val skipLoadingScreen by BooleanSetting("Skip Loading Screen", true, desc = "No \"Loading terrain\" screen when joining or changing world: the world shows as it loads in.")
     private val clickGuiScale by NumberSetting("Click GUI Size", 1.55f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
     private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
 
@@ -224,6 +225,9 @@ object RandomStuff : Module(
     private const val RETRY_TICKS = 40      // then every 2s until we are on Skyblock
     private const val TRANSFER_TICKS = 60   // a world load mid-way means a transfer is happening: give it 3s
     private const val MAX_ATTEMPTS = 6
+
+    /** Skip Loading Screen: read by SkipLoadingScreenMixin on every world change. */
+    fun skipsLoadingScreen(): Boolean = enabled && skipLoadingScreen
 
     /** Clean Menus: read by PauseMenuMixin, and below for the title screen. */
     fun cleansMenus(): Boolean = enabled && cleanMenus

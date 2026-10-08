@@ -37,6 +37,7 @@
     "MinecraftAccessor",
     "P3SimFluidMixin",
     "PauseMenuMixin",
+    "SkipLoadingScreenMixin",
     "PovLevelExtractorMixin",
     "PovLevelRendererMixin",
     "P3SimWorldMixin",
