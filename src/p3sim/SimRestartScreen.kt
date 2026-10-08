@@ -9,7 +9,7 @@ import net.minecraft.client.gui.screens.Screen
 /**
  * The sim's main menu: Esc > P3 Sim Menu, the SkyBlock Menu star (hotbar), `/p3sim` or the
  * keybind. Restart P3 in the middle (where the cursor already is from the Esc menu), each
- * section's jobs on its left (click: yours or a bot's, as in the full menu's Plan tab), the skill on
+ * section's jobs below it (click: yours or a bot's, as in the full menu's Plan tab), the skill on
  * its right. Everything else is the full menu ([SimScreen]).
  */
 class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
@@ -22,15 +22,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             SimServer.run("restart") { Fight.start(Fight.Start.P3) }
         }.bounds(cx - RESTART_W / 2, cy - 10, RESTART_W, 20).build())
 
-        // Left: every job of each section, right-aligned against Restart. Green: yours; grey and a
-        // letter: the bot's that does it; * a stack.
-        val leftEdge = cx - RESTART_W / 2 - GAP
-        val widest = (1..4).maxOf { P3Plan.jobsIn(it).size }
-        val jobW = ((leftEdge - 4 - LABEL_W) / widest - 2).coerceIn(22, 48)
-        var y = cy - 2 * ROW + 2
+        // Below Restart: every job of each section, centred. Green: yours; grey and a letter: the
+        // bot's that does it; * a stack.
+        val jobW = 34
+        var y = cy + 10 + GAP
         for (s in 1..4) {
             val jobs = P3Plan.jobsIn(s)
-            var x = leftEdge - jobs.size * (jobW + 2) + 2
+            var x = cx - (LABEL_W + jobs.size * (jobW + 2)) / 2 + LABEL_W
             addRenderableWidget(StringWidget(x - LABEL_W, y, LABEL_W, 20, Component.literal("§6§lS$s"), font))
             for (job in jobs) {
                 val stack = if (P3Plan.isStack(job)) "*" else ""
@@ -43,14 +41,20 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             y += ROW
         }
 
-        // Right: the skill, against Restart, the chosen one highlighted.
+        // Right: the skill, against Restart, the chosen one highlighted, each with its P3 time.
+        // Shown names only: the presets keep theirs (best runs and stats are saved under them).
+        val skills = listOf(
+            Triple(0, "Normal PF", "34s"), Triple(1, "Quality PF", "28s"),
+            Triple(2, "Optimal PF", "22s"), Triple(P3Plan.RANDOM + 1, "Theoretical", "18s"),
+        )
         val right = cx + RESTART_W / 2 + GAP
-        y = cy - P3Plan.SKILLS.size * ROW / 2 + 2
-        P3Plan.SKILLS.forEachIndexed { i, name ->
+        y = cy - skills.size * ROW / 2 + 2
+        for ((i, name, time) in skills) {
             addRenderableWidget(Button.builder(Component.literal(if (i == P3Plan.skill) "§a§n$name" else name)) {
                 P3Plan.chooseSkill(i)
                 rebuildWidgets()
             }.bounds(right, y, SKILL_W, 20).build())
+            addRenderableWidget(StringWidget(right + SKILL_W + 4, y, 24, 20, Component.literal("§8$time"), font))
             y += ROW
         }
     }
