@@ -165,7 +165,7 @@ object PosMsgEditor {
 
     /** A 1x1x1 posmsg box on the block your feet are in, sending [text] (no delay, white, sent), saved with the module. */
     fun addHere(text: String) {
-        val p = com.engineerclient.EngineerClient.mc.player ?: return
+        val p = mc.player ?: return
         val x = Math.floor(p.x); val y = Math.floor(p.y); val z = Math.floor(p.z)
         list().add(PosMessage(x, y, z, x + 1, y + 1, z + 1, 0, null, com.odtheking.odin.utils.Colors.WHITE, text, false))
         ModuleManager.saveConfigurations()

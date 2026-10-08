@@ -6,7 +6,7 @@ import java.util.UUID
  * The time machine behind [PovPose]'s CUSTOM mode: a per-player ring of packet targets stamped
  * with wall-clock nanos, and the lerp that reads the pose back out at an arbitrary past instant.
  *
- * Deliberately free of Minecraft types so it unit-tests headlessly — [PovPose] is the thin layer
+ * Deliberately free of Minecraft types — [PovPose] is the thin layer
  * that reads the entity's fields into [sample] and writes [poseAt] back out.
  *
  * Thread confinement: the client thread samples and the same thread renders, so no locking.
@@ -94,14 +94,7 @@ class PovInterpolator(
         }
     }
 
-    fun forget(id: UUID) { rings.remove(id) }
-
     fun clear() = rings.clear()
-
-    /** Test/diagnostic view: how many samples are held for [id]. */
-    fun size(id: UUID): Int = rings[id]?.size ?: 0
-
-    fun tracked(): Int = rings.size
 
     private fun pose(s: Sample) = Pose(s.x, s.y, s.z, s.headYaw, s.pitch)
 

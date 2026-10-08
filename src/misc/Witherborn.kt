@@ -56,11 +56,4 @@ object Witherborn {
     /** [e] is a wither that is a boss (Maxor, Storm, Goldor, Necron), not a Witherborn one. */
     @JvmStatic
     fun isBoss(e: Entity?): Boolean = e is WitherBoss && !isMinion(e)
-
-    /** A sound at ([x], [y], [z]) is a Witherborn wither's: one is within 2 blocks of it. */
-    fun soundFromMinion(x: Double, y: Double, z: Double): Boolean {
-        val level = EngineerClient.mc.level ?: return false
-        return minions.any { id -> level.getEntity(id)?.let { it.distanceToSqr(x, y, z) <= 4.0 } == true }
-    }
-
 }

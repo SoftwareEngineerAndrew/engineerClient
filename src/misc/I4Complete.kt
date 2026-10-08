@@ -55,7 +55,7 @@ object I4Complete {
         return b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
     }
 
-    private fun done(why: String) {
+    private fun done() {
         if (shown || !RandomStuff.enabled || !onPlate()) return
         shown = true
         mc.execute { alert(TITLE, true) }
@@ -69,7 +69,7 @@ object I4Complete {
             val msg = content.string.replace(CONTROL_CODES, "")
             if (msg == "[BOSS] Goldor: Who dares trespass into my domain?") { reset(); return@onReceive }
             val m = DEVICE_LINE.matchEntire(msg) ?: return@onReceive
-            if (m.groupValues[1] == mc.player?.gameProfile?.name) done("chat")
+            if (m.groupValues[1] == mc.player?.gameProfile?.name) done()
         }
 
         on<BlockUpdateEvent> {
@@ -88,7 +88,7 @@ object I4Complete {
             // block update to arrive behind the tick's other packets.
             if (hitAt >= 0 && lit == null && grid >= 0) {
                 val next = hitAt + 1 + (grid - (hitAt + 1)).mod(10)
-                if (serverTicks >= next + 1) { hitAt = -1; done("emeralds") }
+                if (serverTicks >= next + 1) { hitAt = -1; done() }
             }
         }
 
@@ -99,7 +99,7 @@ object I4Complete {
             val was = tagWasActive
             tagWasActive = active
             // Only the change counts: stepping onto the plate of a device done earlier shows nothing.
-            if (active && was == false) done("tag")
+            if (active && was == false) done()
         }
     }
 }

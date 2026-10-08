@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory
  */
 object RotationEngine {
 
-    private val logger = LoggerFactory.getLogger("brw-rotation")
+    private val logger = LoggerFactory.getLogger("engineerclient-rotation")
 
     /** One player and what is left of their current role. */
     data class Holder(
@@ -139,18 +139,7 @@ object RotationEngine {
      */
     fun leapTargetFor(ign: String): String? {
         val myRole = graph.role(holders[ign]?.roleId) ?: return null
-        val rules = myRole.leapRules.ifEmpty {
-            listOf(RotationSpec.LeapRule(graph.earlyEnterInto(myRole.section)?.id ?: return null))
-        }
-        for (rule in rules) {
-            if (rule.target == RotationSpec.NO_LEAP) return null
-            if (rule.requires != null && whoHeld(rule.requires) == null) continue
-            if (rule.target == myRole.id) continue
-            // The early-enterer does not leap to themselves, and neither does the player who
-            // simply carried straight on from that role.
-            whoHeld(rule.target)?.takeUnless { it.equals(ign, ignoreCase = true) }?.let { return it }
-        }
-        return null
+        return activeLeapRule(ign, myRole)?.let { whoHeld(it.target) }
     }
 
     /** A party message from [ign]. Only arrival texts matter, but recording all is cheaper than deciding. */
@@ -247,6 +236,8 @@ object RotationEngine {
             if (rule.target == RotationSpec.NO_LEAP) return null
             if (rule.requires != null && whoHeld(rule.requires) == null) continue
             if (rule.target == myRole.id) continue
+            // The early-enterer does not leap to themselves, and neither does the player who
+            // simply carried straight on from that role.
             whoHeld(rule.target)?.takeUnless { it.equals(ign, ignoreCase = true) } ?: continue
             return rule
         }

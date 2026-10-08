@@ -1,6 +1,5 @@
 package com.engineerclient.splits
 
-
 /**
  * The blood rush, room by room, rebuilt every frame so the room being run counts up live.
  *
@@ -145,17 +144,7 @@ class BloodRunDetail {
 
     enum class Level { COMPACT, DETAILED, DEBUG }
 
-    /** The room names so far, the one being run included. */
-    fun rooms(): List<String> = all().map { it.name }
-
-    /** Each finished room's total on the server's clock, in ticks, oldest first. */
-    fun roomTicks(): List<Long> = rooms.mapNotNull { r -> r.doorOpened?.let { (it.tick - r.start.tick).toLong() } }
-
-    /** The blood door is open. */
-    val over: Boolean get() = done
-
     private fun all() = rooms + listOfNotNull(room)
-
 
     fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> = when (level) {
         Level.COMPACT -> compact(now, totalRow)
@@ -269,7 +258,7 @@ class BloodRunDetail {
         out += "§8· start: ${r.startFrom}"
         out += if (r.doorFell != null) "§8· door down: seen (its blocks)" else "§8· door down: not seen - too far away; key time counts from the start"
         out += when {
-            r.keySeenAt != null -> "§8· key dropped: seen " + BossDetail.blocks(r.keySeenAt!!) + " away"
+            r.keySeenAt != null -> "§8· key dropped: seen " + String.format(java.util.Locale.ROOT, "%.0f blocks", r.keySeenAt!!) + " away"
             r.keyPicked != null -> "§8· key dropped: not seen (out of render distance) - put at the pickup line"
             else -> "§8· key dropped: not yet"
         }

@@ -1,14 +1,10 @@
 package com.engineerclient.misc
 
-import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
-import net.minecraft.network.chat.Style
-import net.minecraft.network.chat.TextColor
 import net.minecraft.world.scores.Objective
 import net.minecraft.world.scores.PlayerScoreEntry
 import net.minecraft.world.scores.PlayerTeam
 import net.minecraft.world.scores.Scoreboard
-import java.util.Optional
 
 /**
  * The sidebar ("scoreboard") on the right of the screen: the hider that drops the noisy Skyblock lines — the date/time, the season, and in dungeons
@@ -110,24 +106,9 @@ object ScoreboardLines {
     private val DISPLAY_ORDER = compareByDescending<PlayerScoreEntry> { it.value() }
         .thenBy(String.CASE_INSENSITIVE_ORDER) { it.owner() }
 
-    /** Vanilla draws at most this many sidebar lines, however many scores the server sent. */
-    private const val MAX_SIDEBAR_LINES = 15
-
     /** The line as the renderer will draw it. */
     internal fun lineText(scoreboard: Scoreboard, entry: PlayerScoreEntry): Component =
         PlayerTeam.formatNameForTeam(scoreboard.getPlayersTeam(entry.owner()), entry.ownerName())
-
-    /**
-     * Sidebar lines in the order they appear on screen: hidden holders (the `#`-prefixed ones the
-     * server uses as scratch space) dropped, sorted highest score first with ties broken on the
-     * holder name, and cut to the fifteen lines vanilla will actually draw — same as
-     * `Gui.displayScoreboardSidebar`.
-     */
-    internal fun sidebarEntries(scoreboard: Scoreboard, objective: Objective): List<PlayerScoreEntry> =
-        scoreboard.listPlayerScores(objective)
-            .filter { !it.isHidden }
-            .sortedWith(DISPLAY_ORDER)
-            .take(MAX_SIDEBAR_LINES)
 
     // --- hiding --------------------------------------------------------------------------------
 
@@ -139,9 +120,6 @@ object ScoreboardLines {
      * own hook, see ScoreboardSidebarMixin.
      */
     fun hidesTitle(): Boolean = hideLines
-
-    /** Like [hides] but takes a line exactly as Hypixel sent it, salt and all. */
-    internal fun hidesRaw(raw: String): Boolean = hides(raw.replace(FORMATTING, ""))
 
     /**
      * The whole decision, over a line's plain text, so it can be tested without a running game. A
@@ -184,37 +162,4 @@ object ScoreboardLines {
      * "§j", which is how Hypixel draws a blank spacer.
      */
     private val FORMATTING = Regex("§.")
-
-    /**
-     * Component tree flattened back to a §-coded string. Components carry style as objects, not as
-     * codes, so this walks the tree and re-emits the legacy code for each run — the form Hypixel
-     * sent and the form anyone writing a pattern is used to reading.
-     */
-    internal fun toLegacy(component: Component): String {
-        val out = StringBuilder()
-        component.visit<Unit>({ style: Style, text: String ->
-            out.append(codesFor(style)).append(text)
-            Optional.empty()
-        }, Style.EMPTY)
-        return out.toString()
-    }
-
-    private fun codesFor(style: Style): String {
-        val out = StringBuilder()
-        // Colour first: in the legacy scheme a colour code clears bold/italic/etc., so anything
-        // else has to come after it to survive. A custom RGB colour has no legacy code at all and
-        // is simply left out — Hypixel's sidebar uses the sixteen named colours.
-        style.color?.let { color -> legacyColour(color)?.let { out.append(it.toString()) } }
-        if (style.isBold) out.append("§l")
-        if (style.isStrikethrough) out.append("§m")
-        if (style.isUnderlined) out.append("§n")
-        if (style.isItalic) out.append("§o")
-        if (style.isObfuscated) out.append("§k")
-        return out.toString()
-    }
-
-    private val LEGACY_COLOURS: Map<TextColor, ChatFormatting> =
-        ChatFormatting.values().filter { TextColor.fromLegacyFormat(it) != null }.associateBy { TextColor.fromLegacyFormat(it)!! }
-
-    private fun legacyColour(color: TextColor): ChatFormatting? = LEGACY_COLOURS[color]
 }

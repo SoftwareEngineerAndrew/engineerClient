@@ -98,7 +98,7 @@ object LeapHighlight {
         val index: Int
         val color: Color
         if (example) {
-            names = listOf("Skyyqt", "p3wr", "FO55IL_BL4ZE", "owoskilly")
+            names = listOf("Archer", "Mage", "Berserker", "Healer")
             index = 1; color = READY
         } else {
             if (leapScreen() != null) return 0 to 0

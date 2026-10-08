@@ -678,7 +678,7 @@ object SimItems {
 §8When horses are not fast enough,
 §8use a Racing Helmet instead.
 
-§7Purchased by: §6[MVP§9++§6] Jamie_x§f
+§7Purchased by: §6[MVP§9++§6] Player§f
 §7Purchased for: §64,545,454,545 Coins
 
 §8Auction #18
@@ -1839,7 +1839,6 @@ object SimItems {
 
     private const val THAT_BLOCK = "§cA mystical force prevents you from digging that block!"
     private const val THERE = "§cA mystical force prevents you digging there!"
-    private const val INNER_CHAMBER = "§cA mystical force prevents you from leaving the inner chamber!"
     private const val NO_CHARGES = "§cYou don't have enough charges to break this block right now!"
     const val MAX_CHARGES = 20
 
@@ -1847,7 +1846,6 @@ object SimItems {
     private val CORE_DOOR = AABB(52.0, 115.0, 54.0, 57.0, 122.0, 55.0)
     /** S4's device area: its lamps, levers and bedrock refuse with "digging there". */
     private val S4_DEVICE = AABB(55.0, 132.0, 142.0, 65.0, 137.0, 148.0)
-    private val INNER = AABB(39.0, 0.0, 99.0, 70.0, 113.0, 130.0)
 
     /** Something rests on [pos], hangs on one of its sides or under it: on top a carpet, plate, floor lever or button, torch, fire, head, sign, banner, rail, redstone, snow layer, door or plant; on a side a wall torch, wall lever or button, wall head, sign or banner, ladder, tripwire hook, or fire or vines on that face; under it a ceiling lever or button. */
     private fun holdsSomething(pos: BlockPos): Boolean {
@@ -1909,7 +1907,6 @@ object SimItems {
 
     /** Charges (max 20), refilled in small irregular steps; blocks broken, oldest first, and when. */
     var charges = MAX_CHARGES; private set(v) { if (field != v) { field = v; refreshBreakerLore() } }
-    private var refillAt = 0
     private var refillStep = 0 // main: irregular +2 steps, not a batch per second
     private val refillRng = java.util.Random()
     private class Broken(val pos: BlockPos, val state: BlockState, val at: Int) { var restoreAt = Int.MAX_VALUE }
@@ -1917,9 +1914,8 @@ object SimItems {
     /** The last 20 breaks: the 21st one schedules the oldest of them back. */
     private val window = ArrayDeque<Broken>()
     private var refusedSaidAt = -100 // one 20-tick throttle shared by the refusal and no-charges lines
-    private var noChargesSaidAt = -100
 
-    private fun resetBreaker() { charges = MAX_CHARGES; refillAt = 0; refillStep = 0; broken.clear(); window.clear(); refusedSaidAt = -100; noChargesSaidAt = -100 }
+    private fun resetBreaker() { charges = MAX_CHARGES; refillStep = 0; broken.clear(); window.clear(); refusedSaidAt = -100 }
 
     /**
      * A hit with the Dungeonbreaker reaching the server (after the ping): breaks that one block for

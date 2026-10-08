@@ -38,29 +38,10 @@ object SplitFormat {
         val s = ms / 1000.0
         return "${(s / 60).toInt()}m " + String.format(Locale.ROOT, "%.1f", s % 60) + "s"
     }
-
-    /**
-     * One line:
-     *
-     *     ${colour}${name} &b> ${colour}${time}s &8(&7${serverTime}s&8)
-     *
-     * The name and the real time share the colour, the arrow is aqua, and the server's tick time
-     * sits in dark-grey brackets with grey digits.
-     */
-    fun line(label: String, realMs: Long, ticks: Long, format: (Long) -> String = ::seconds): String {
-        val colour = label.take(2).replace('&', '§')
-        val name = label.drop(2)
-        return "$colour$name §b> $colour${format(realMs)} §8(§7${format(ticks * 50L)}§8)"
-    }
-
-    fun line(split: Split, now: Stamp): String {
-        val stop = split.stop ?: now
-        return line(split.label, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong())
-    }
 }
 
 /**
- * One run's splits. Feed every chat line to [onChat] (colour codes stripped) and read [lines] back.
+ * One run's splits. Feed every chat line to [onChat] (colour codes stripped) and read [splits] back.
  * [reset] on world load.
  */
 class SplitTracker {
@@ -125,7 +106,6 @@ class SplitTracker {
         }
     }
 
-
     /** Every phase that has started, in order, each running until the next one starts. */
     fun splits(): List<Split> = PHASES.indices.mapNotNull { i ->
         val from = starts[i] ?: return@mapNotNull null
@@ -136,38 +116,14 @@ class SplitTracker {
     /** The split with this label, if it has started. */
     fun split(label: String): Split? = splits().firstOrNull { it.label == label }
 
-    /** The HUD: Pace, then the phases so far with Enter after Portal. */
-    fun lines(now: Stamp): List<String> {
-        val splits = splits()
-        if (splits.isEmpty()) return emptyList()
-        val out = mutableListOf(total(PACE, splits, now))
-        for (split in splits) {
-            out += SplitFormat.line(split, now)
-            if (split.label == PORTAL) out += total(ENTER, splits.take(3), now)
-        }
-        return out
-    }
-
-    private fun total(label: String, splits: List<Split>, now: Stamp): String {
-        var ms = 0L; var ticks = 0L
-        for (s in splits) {
-            val stop = s.stop ?: now
-            ms += stop.realMs - s.start.realMs
-            ticks += stop.tick - s.start.tick
-        }
-        return SplitFormat.line(label, ms, ticks, SplitFormat::minutes)
-    }
-
     private class Phase(val label: String, val starts: (String) -> Boolean)
 
     companion object {
         const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
 
-        const val PACE = "&3Pace"
         const val OPEN = "&aOpen"
         const val BLOOD = "&cBlood"
         const val PORTAL = "&dPortal"
-        const val ENTER = "&9Enter"
         const val MAXOR = "&5Maxor"
         const val STORM = "&bStorm"
         const val TERMS = "&6Terms"

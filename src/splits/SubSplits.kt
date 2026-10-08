@@ -35,8 +35,6 @@ class SubSplitTracker {
 
     private val steps = SEQUENCE
     private val starts = arrayOfNulls<Stamp>(SEQUENCE.size)
-    /** How each step's start was found, for Debug: a chat line, a timed wait, something seen. */
-    private val sources = arrayOfNulls<String>(SEQUENCE.size)
 
     /** -1 before anything starts, otherwise the index of the step being timed. */
     private var current = -1
@@ -58,7 +56,6 @@ class SubSplitTracker {
 
     fun reset() {
         java.util.Arrays.fill(starts, null)
-        java.util.Arrays.fill(sources, null)
         current = -1; ticks = 0; lightning = null; bloodMobs = 0
         gateBlown = false; gateWaiting = false; watchingCore = false
     }
@@ -79,32 +76,6 @@ class SubSplitTracker {
     fun idsForSplit(split: String): List<String> =
         steps.indices.filter { steps[it].split == split && steps[it].label != null && starts[it] != null }.map { steps[it].id }
 
-    /**
-     * For Debug: how each of [split]'s steps (in [forSplit]'s order) came to an end - how the next
-     * step's start was found - or "running". A step can end on a later step's moment when the
-     * moments between were never seen; that shows here too.
-     */
-    fun endSources(split: String): List<String> {
-        val out = mutableListOf<String>()
-        steps.forEachIndexed { i, step ->
-            if (step.split != split || step.label == null || starts[i] == null) return@forEachIndexed
-            val next = (i + 1 until starts.size).firstOrNull { starts[it] != null }
-            out += when {
-                next == null -> "running"
-                next != i + 1 && steps[i + 1].split == split -> (sources[next] ?: "?") + " - the steps between were never seen"
-                else -> sources[next] ?: "?"
-            }
-        }
-        return out
-    }
-
-    /** How [split]'s first step started, for Debug. */
-    fun startSource(split: String): String? =
-        steps.indices.firstOrNull { steps[it].split == split && starts[it] != null }?.let { sources[it] }
-
-    /** Whether any split has steps yet - the HUDs fall back to chat events until it does. */
-    fun started(): Boolean = current >= 0
-
     // ------------------------------------------------------------------ the world's moments
 
     /** Odin's server tick: Storm leaves his spot a fixed 99 of them after his lightning line. */
@@ -113,24 +84,24 @@ class SubSplitTracker {
         val from = lightning ?: return
         if (current == S_OPENING && ticks >= STORM_LEAVES) {
             lightning = null
-            jumpTo(S_CRUSH1, from.plus(STORM_LEAVES), "$STORM_LEAVES server ticks after the lightning line - he wasn't seen leaving, so counted")
+            jumpTo(S_CRUSH1, from.plus(STORM_LEAVES))
         }
     }
 
     /** The Watcher seen starting his move, the first leg after his dialogue. */
     fun onWatcherMoved(at: Stamp) {
-        if (current == W_WAIT) jumpTo(W_CAMP, at, "the Watcher seen starting his move")
+        if (current == W_WAIT) jumpTo(W_CAMP, at)
     }
 
     /** A blood mob appearing: the 19th (17 regulars, the Giant and a mini-boss) is the camp's last. */
     fun onBloodMobSpawn(at: Stamp) {
         if (current !in W_DIALOGUE..W_CAMP) return
-        if (++bloodMobs >= BLOOD_MOBS) jumpTo(W_CLEAR, at, "the ${BLOOD_MOBS}th blood mob seen appearing")
+        if (++bloodMobs >= BLOOD_MOBS) jumpTo(W_CLEAR, at)
     }
 
     /** Maxor's beacon at (73, 221, 73) turning to bedrock: he is dead. */
     fun onMaxorKilled(at: Stamp) {
-        if (current in M_CRYSTALS until M_ANIMATION) jumpTo(M_ANIMATION, at, "his beacon turning to bedrock")
+        if (current in M_CRYSTALS until M_ANIMATION) jumpTo(M_ANIMATION, at)
     }
 
     /**
@@ -138,7 +109,7 @@ class SubSplitTracker {
      * seen; before the last step a wither going is just him leaving view.
      */
     fun onMaxorDead(at: Stamp) {
-        if (current == M_KILL) jumpTo(M_ANIMATION, maxOf(at.minus(MAXOR_DESPAWN), starts[M_KILL]!!), "his wither going, $MAXOR_DESPAWN ticks after the kill - the beacon wasn't seen")
+        if (current == M_KILL) jumpTo(M_ANIMATION, maxOf(at.minus(MAXOR_DESPAWN), starts[M_KILL]!!))
     }
 
     /**
@@ -150,9 +121,9 @@ class SubSplitTracker {
     fun onTopCrystal(at: Stamp) {
         val hit = at.minus(CRYSTALS_BACK)
         when (current) {
-            M_LURE -> jumpTo(M_COOLDOWN, maxOf(hit, starts[current]!!), "crystals back on top, $CRYSTALS_BACK ticks after a silent hit")
+            M_LURE -> jumpTo(M_COOLDOWN, maxOf(hit, starts[current]!!))
             M_COOLDOWN -> if (hit.tick - starts[M_COOLDOWN]!!.tick >= MIN_HIT_GAP)
-                jumpTo(M_KILL, maxOf(hit, starts[current]!!), "crystals back on top, $CRYSTALS_BACK ticks after a silent hit")
+                jumpTo(M_KILL, maxOf(hit, starts[current]!!))
         }
     }
 
@@ -161,9 +132,9 @@ class SubSplitTracker {
         when (current) {
             S_OPENING -> if (lightning != null && hypot(x - STORM_SPOT_X, z - STORM_SPOT_Z) > 0.5) {
                 lightning = null
-                jumpTo(S_CRUSH1, at, "Storm seen leaving his spot")
+                jumpTo(S_CRUSH1, at)
             }
-            S_FLIGHT -> if (hypot(x - YELLOW_X, z - YELLOW_Z) <= YELLOW_REACHED) jumpTo(S_CRUSH2, at, "Storm seen reaching Yellow")
+            S_FLIGHT -> if (hypot(x - YELLOW_X, z - YELLOW_Z) <= YELLOW_REACHED) jumpTo(S_CRUSH2, at)
         }
     }
 
@@ -174,8 +145,8 @@ class SubSplitTracker {
      */
     fun onNecronPosition(at: Stamp, fromMid: Double) {
         when (current) {
-            N_INTRO -> if (fromMid > OFF_MID) jumpTo(N_TRIP1, at, "Necron seen leaving mid")
-            N_TRIP1 -> if (fromMid < ON_MID) jumpTo(N_LOCK1, at, "Necron seen back at mid")
+            N_INTRO -> if (fromMid > OFF_MID) jumpTo(N_TRIP1, at)
+            N_TRIP1 -> if (fromMid < ON_MID) jumpTo(N_LOCK1, at)
         }
     }
 
@@ -185,13 +156,13 @@ class SubSplitTracker {
      * animation since Hypixel's boss update.
      */
     fun onNecronDeath(at: Stamp) {
-        if (current in N_INTRO until N_END) jumpTo(N_END, at, "his death's TNT burst")
+        if (current in N_INTRO until N_END) jumpTo(N_END, at)
     }
 
     /** A terminal section's door opening (its barriers turning to air): [section] 1-3 is over. */
     fun onSectionDoor(at: Stamp, section: Int) {
         val step = T_S1 + section - 1
-        if (current == step) jumpTo(step + 1, at, "S$section's door opening")
+        if (current == step) jumpTo(step + 1, at)
     }
 
     /**
@@ -200,14 +171,14 @@ class SubSplitTracker {
      */
     fun startTerms(section: Int, starts: List<Stamp>) {
         reset()
-        for (s in 1..section.coerceAtMost(4)) jumpTo(T_S1 + s - 1, starts[s - 1], "the sim's start")
+        for (s in 1..section.coerceAtMost(4)) jumpTo(T_S1 + s - 1, starts[s - 1])
     }
 
-    /** The party is all inside the core ([how] it was told): the leap is over and Goldor's kill begins. */
-    fun onEveryoneInCore(at: Stamp, how: String) {
+    /** The party is all inside the core (seen in the core box, or Goldor moving): the leap is over and Goldor's kill begins. */
+    fun onEveryoneInCore(at: Stamp) {
         if (!watchingCore) return
         watchingCore = false
-        if (current == G_LEAPS) jumpTo(G_KILL, at, how)
+        if (current == G_LEAPS) jumpTo(G_KILL, at)
     }
 
     // ------------------------------------------------------------------ chat
@@ -215,71 +186,66 @@ class SubSplitTracker {
     fun onChat(msg: String, at: Stamp) {
         when {
             // The Watcher: any line of his starts the camp, as it starts the Blood split.
-            msg.startsWith(WATCHER) && current < W_DIALOGUE -> { reset(); jumpTo(W_DIALOGUE, at, said(msg)) }
-            msg == WATCHER_HANDLE -> if (current == W_DIALOGUE) jumpTo(W_WAIT, at, said(msg))
-            msg == WATCHER_DONE -> if (current in W_DIALOGUE..W_CLEAR) jumpTo(W_END, at, said(msg))
+            msg.startsWith(WATCHER) && current < W_DIALOGUE -> { reset(); jumpTo(W_DIALOGUE, at) }
+            msg == WATCHER_HANDLE -> if (current == W_DIALOGUE) jumpTo(W_WAIT, at)
+            msg == WATCHER_DONE -> if (current in W_DIALOGUE..W_CLEAR) jumpTo(W_END, at)
 
             // A jump rather than a step, so a missed moment earlier cannot leave the rest misaligned.
-            msg == MAXOR_START -> jumpTo(M_CRYSTALS, at, said(msg))
-            msg == STORM_START -> { lightning = null; jumpTo(S_OPENING, at, said(msg)) }
-            msg == GOLDOR_START -> { gateBlown = false; gateWaiting = false; jumpTo(T_S1, at, said(msg)) }
-            msg == CORE_OPENING -> if (current in T_S1..T_S4) { jumpTo(G_LEAPS, at, "\"$CORE_OPENING\""); watchingCore = true }
-            msg in NECRON_START -> { watchingCore = false; jumpTo(N_INTRO, at, said(msg)) }
-            SplitTracker.EXTRA_STATS.matches(msg) -> if (current in N_INTRO until N_END) jumpTo(N_END, at, "the run's end (EXTRA STATS)")
+            msg == MAXOR_START -> jumpTo(M_CRYSTALS, at)
+            msg == STORM_START -> { lightning = null; jumpTo(S_OPENING, at) }
+            msg == GOLDOR_START -> { gateBlown = false; gateWaiting = false; jumpTo(T_S1, at) }
+            msg == CORE_OPENING -> if (current in T_S1..T_S4) { jumpTo(G_LEAPS, at); watchingCore = true }
+            msg in NECRON_START -> { watchingCore = false; jumpTo(N_INTRO, at) }
+            SplitTracker.EXTRA_STATS.matches(msg) -> if (current in N_INTRO until N_END) jumpTo(N_END, at)
 
             current < 0 -> return
 
             // Maxor: the laser charging, the two hits.
-            msg == LASER_CHARGING -> if (current == M_CRYSTALS) jumpTo(M_LURE, at, "\"$LASER_CHARGING\"")
+            msg == LASER_CHARGING -> if (current == M_CRYSTALS) jumpTo(M_LURE, at)
             msg in MAXOR_STUN -> when (current) {
-                M_CRYSTALS, M_LURE -> jumpTo(M_COOLDOWN, at, said(msg))
+                M_CRYSTALS, M_LURE -> jumpTo(M_COOLDOWN, at)
                 // A held-back stun line after a silent hit is the same hit, not the next one.
-                M_COOLDOWN -> if (at.tick - starts[M_COOLDOWN]!!.tick >= MIN_HIT_GAP) jumpTo(M_KILL, at, said(msg))
+                M_COOLDOWN -> if (at.tick - starts[M_COOLDOWN]!!.tick >= MIN_HIT_GAP) jumpTo(M_KILL, at)
             }
 
             // Storm: the lightning arms the count to his leaving; crushes, the pin's end, the death.
             msg in STORM_LIGHTNING -> if (current == S_OPENING && lightning == null) { lightning = at; ticks = 0 }
             msg in STORM_CRUSHED -> when (current) {
-                S_OPENING, S_CRUSH1 -> jumpTo(S_PIN, at, said(msg))
-                S_CRUSH2 -> jumpTo(S_KILL, at, said(msg))
+                S_OPENING, S_CRUSH1 -> jumpTo(S_PIN, at)
+                S_CRUSH2 -> jumpTo(S_KILL, at)
                 // Crushed before he was seen within 2.4 blocks of Yellow (it happens): Crush is 0.
-                S_FLIGHT -> { jumpTo(S_CRUSH2, at, said(msg) + ", before he was seen reaching Yellow"); jumpTo(S_KILL, at, said(msg)) }
+                S_FLIGHT -> { jumpTo(S_CRUSH2, at); jumpTo(S_KILL, at) }
             }
-            msg == STORM_ENRAGED -> if (current == S_PIN) jumpTo(S_FLIGHT, at, "\"$STORM_ENRAGED\"")
+            msg == STORM_ENRAGED -> if (current == S_PIN) jumpTo(S_FLIGHT, at)
             // Some deaths come with no second crush line: the death still ends whatever is running.
-            msg == STORM_DEAD -> if (current in S_OPENING until S_ANIMATION) jumpTo(S_ANIMATION, at, said(msg))
+            msg == STORM_DEAD -> if (current in S_OPENING until S_ANIMATION) jumpTo(S_ANIMATION, at)
 
             // Necron: his first ARGH! ends the lock on mid. A second (a slow kill) is part of the kill.
-            msg == NECRON_ARGH -> if (current in N_INTRO..N_LOCK1) jumpTo(N_KILL, at, said(msg))
+            msg == NECRON_ARGH -> if (current in N_INTRO..N_LOCK1) jumpTo(N_KILL, at)
 
             // Terminals: a section is over once its last completion and its gate are both in.
             msg == GATE_DESTROYED -> if (current in T_S1..T_S3) {
-                if (gateWaiting) jumpTo(current + 1, at, "the gate destroyed, after the last completion") else gateBlown = true
+                if (gateWaiting) jumpTo(current + 1, at) else gateBlown = true
             }
             else -> {
                 if (current !in T_S1..T_S4) return
                 val m = SECTION_DONE.find(msg) ?: return
                 if (m.groupValues[2] != m.groupValues[3]) return
-                val done = "the last completion (${m.groupValues[3]}/${m.groupValues[3]})"
                 when {
-                    current == T_S4 -> { jumpTo(G_LEAPS, at, "$done - no gate after S4"); watchingCore = true }
-                    gateBlown -> jumpTo(current + 1, at, "$done, after the gate")
+                    current == T_S4 -> { jumpTo(G_LEAPS, at); watchingCore = true }
+                    gateBlown -> jumpTo(current + 1, at)
                     else -> gateWaiting = true
                 }
             }
         }
     }
 
-    /** A chat line as a source: `"YOU TRICKED ME!"`, the speaker left off. */
-    private fun said(msg: String) = "\"" + msg.substringAfter(": ").let { if (it.length > 32) it.take(30) + "..." else it } + "\""
-
-    private fun jumpTo(step: Int, at: Stamp, source: String) {
+    private fun jumpTo(step: Int, at: Stamp) {
         ticks = 0
         gateBlown = false
         gateWaiting = false
         current = step
         starts[step] = at
-        sources[step] = source
     }
 
     private fun Stamp.plus(n: Int) = Stamp(realMs + n * 50L, tick + n)

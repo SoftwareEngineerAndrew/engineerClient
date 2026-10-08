@@ -4,7 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 
-/** A point, without Minecraft's types (the ghost code runs in tests too). */
+/** A point, without Minecraft's types. */
 data class P(val x: Double, val y: Double, val z: Double) {
     operator fun plus(o: P) = P(x + o.x, y + o.y, z + o.z)
     operator fun minus(o: P) = P(x - o.x, y - o.y, z - o.z)

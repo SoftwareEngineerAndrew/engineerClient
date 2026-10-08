@@ -19,7 +19,7 @@ object P3ChatParser {
 
     private val colorCodes = Regex("§[0-9a-fk-orA-FK-OR]")
     // Anchored at the start: Hypixel's line begins with the IGN. Mods relay completions into party
-    // chat ("Party > p3wr: p3wr activated lever! (2/7)"), and those must never count.
+    // chat ("Party > Player1: Player1 activated lever! (2/7)"), and those must never count.
     private val completed = Regex("^(\\w{1,16}) (?:activated|completed) (?:an? )?(terminal|lever|device)! \\((\\d+)/(\\d+)\\)")
     private val goldor = Regex("\\[BOSS] Goldor: Who dares trespass into my domain\\?")
     private val coreOpening = Regex("The Core entrance is opening!")
@@ -44,7 +44,7 @@ object P3ChatParser {
     /** One party message, with the rank prefix stripped. */
     data class PartyLine(val ign: String, val message: String)
 
-    // "Party > [MVP++] m7kitten: Spirit Procced! (1/3)" — the rank bracket is absent for
+    // "Party > [MVP++] Player1: Spirit Procced! (1/3)" — the rank bracket is absent for
     // unranked players, and Minecraft appends "(2)" to a repeated line.
     private val party = Regex("^Party > (?:\\[[^]]*] )?(\\w{1,16}): (.*)$")
 

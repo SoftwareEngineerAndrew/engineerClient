@@ -12,13 +12,12 @@ object Stats {
 
     fun reset(from: Int) { this.from = from; sections.fill(-1); mine = 0; deaths = 0 }
 
-    private fun s(ticks: Int) = "%.2fs".format(ticks / 20.0)
+    private fun s(ticks: Int) = "%.2fs".format(java.util.Locale.ROOT, ticks / 20.0)
 
-    fun done(st: Station, n: Int) {
-        mine++
-    }
+    /** One of your own completions. */
+    fun done() { mine++ }
 
-    fun section(s: Int, ticks: Int, n: Int) {
+    fun section(s: Int, ticks: Int) {
         if (s !in 1..4 || sections[s] >= 0) return
         sections[s] = ticks
         val best = best("S$s", ticks)
@@ -40,7 +39,7 @@ object Stats {
         return if (old == null) " §6PB" else " §6§lNEW PB §8(was ${s(old)})"
     }
 
-    fun deathTick(n: Int) { deaths++ }
+    fun deathTick() { deaths++ }
 
     fun p3(n: Int) {
         if (!P3Sim.showTimes) return
@@ -50,13 +49,8 @@ object Stats {
         Sim.note("You did §f$mine§7 of the jobs; death ticks taken: §f$deaths")
     }
 
-    fun goldorDone(n: Int) {}
-
     /** The server tick a full run (from P1) started, or -1. */
     var runStart = -1
 
     fun runTicks() = if (runStart >= 0) Fight.serverTick - runStart else 0
-
-    private var lightnings = 0
-    fun lightning() { lightnings++ }
 }

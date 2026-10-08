@@ -532,7 +532,7 @@ object P3Rotation : Module(
     }
 
     private fun drawDebugHud(gfx: net.minecraft.client.gui.GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
-        val lines = if (example) listOf("§6EC debug §7(example)", "§7leap: §f-> Skyyqt  READY", "§ep3wr         §f4       §7S2 §bT §aL  §7m§f3") else debugLines()
+        val lines = if (example) listOf("§6EC debug §7(example)", "§7leap: §f-> Archer  READY", "§eMage         §f4       §7S2 §bT §aL  §7m§f3") else debugLines()
         if (!example && !enabled) return 0 to 0
         var width = 0
         lines.forEachIndexed { i, s ->

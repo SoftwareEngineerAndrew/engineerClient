@@ -980,9 +980,6 @@ object Party {
         bots().forEachIndexed { i, b -> spawn(b, spots[i % spots.size]); place(b) }
     }
 
-    /** Called every server tick by the fight (outside P3, the bots just stand). */
-    fun tick() {}
-
     /**
      * P4: where teammates stand once they're down at Necron (measured 10 s in):
      * on the floor at y 64 around (45-62, 104-120), the Mage often right at (54, 101). From P3 they

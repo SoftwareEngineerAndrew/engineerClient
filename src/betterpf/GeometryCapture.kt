@@ -73,8 +73,6 @@ class GeometryCapture(private val emit: (String) -> Unit) {
     companion object {
         /** World x/z of tile 0's first block; tile i covers [ORIGIN + 32i, ORIGIN + 32i + 30], gaps between. */
         const val GRID_ORIGIN = -200
-        const val DOOR_Y = 67
-        const val DOOR_H = 10
         const val DOOR_ALONG = 3
         const val DOOR_ACROSS = 2
 

@@ -264,7 +264,7 @@ object BetterPF : Module(
      */
     private fun upload(file: Path) {
         if (!uploadRuns) return
-        Thread.ofPlatform().name("betterpf-upload").daemon(true).priority(Thread.MIN_PRIORITY).start {
+        Thread.ofPlatform().name("engineerclient-betterpf-upload").daemon(true).priority(Thread.MIN_PRIORITY).start {
             try {
                 // Party members recording the same run take turns, a little apart, so the first one's
                 // recording is on the site when the next ones look for it (see [send]).
@@ -355,7 +355,7 @@ object BetterPF : Module(
      * has (asked by recorder and start time, as Upload Missing Runs does) are deleted here.
      */
     private fun tidyRunsFolder() {
-        Thread.ofPlatform().name("betterpf-tidy").daemon(true).priority(Thread.MIN_PRIORITY).start {
+        Thread.ofPlatform().name("engineerclient-betterpf-tidy").daemon(true).priority(Thread.MIN_PRIORITY).start {
             try {
                 if (!Files.isDirectory(runsDir)) return@start
                 val now = System.currentTimeMillis()

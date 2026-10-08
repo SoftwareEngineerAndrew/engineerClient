@@ -207,9 +207,9 @@ object PositionalMessages : Module(
             })
             .then(literal("list").executes {
                 val output = posMessageStrings.withIndex().joinToString(separator = "\n") { (index, it) ->
-                    "${index + 1}: ${it.x}, ${it.y}, ${it.z}, ${it.x2}, ${it.y2}, ${it.z2}, ${it.delay}, ${it.distance}, ${it.color.hex()}, send=${it.dontSend}, \"${it.message}\""
+                    "${index + 1}: ${it.x}, ${it.y}, ${it.z}, ${it.x2}, ${it.y2}, ${it.z2}, ${it.delay}, ${it.distance}, ${it.color.hex()}, send=${!it.dontSend}, \"${it.message}\""
                 }
-                say(if (posMessageStrings.isEmpty()) "Positional Message list is empty!" else "Positonal Message list:\n$output")
+                say(if (posMessageStrings.isEmpty()) "Positional Message list is empty!" else "Positional Message list:\n$output")
                 1
             }))
     }

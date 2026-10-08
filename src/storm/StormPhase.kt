@@ -173,7 +173,6 @@ object StormPhase : Module(
             .filter { it.isAlive && ARENA.contains(it.position()) && com.engineerclient.misc.Witherborn.isBoss(it) }
             .minByOrNull { it.distanceToSqr(70.0, 180.0, 53.0) }
         if (storm == null) return
-        val fromServer = storm.positionCodec.base != Vec3.ZERO
         val at = storm.positionCodec.base.takeIf { it != Vec3.ZERO } ?: storm.position()
         val pillar = StormCrush.nearest(at.x, at.z)
         val dist = StormCrush.distance(pillar, at.x, at.z)
@@ -185,8 +184,6 @@ object StormPhase : Module(
         val box = AABB(at.x, at.y, at.z, at.x + 1, at.y + StormCrush.HEAD, at.z + 1)
         snapshots += Snapshot(box, verdict, bottom, StormCrush.armed(lastStep[pillar], now), System.currentTimeMillis())
     }
-
-
 
     /** The pillar's lowest block: down its piston column from the top until the first air. */
     private fun bottomOf(level: net.minecraft.client.multiplayer.ClientLevel, p: StormCrush.Pillar): Int? {

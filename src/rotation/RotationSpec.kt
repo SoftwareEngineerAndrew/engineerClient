@@ -13,7 +13,7 @@ object RotationSpec {
 
     // Deliberately no Minecraft, Fabric or Odin imports in this file or RotationEngine:
     // the rotation is plain data + plain logic, so it runs under a headless test.
-    private val logger = LoggerFactory.getLogger("brw-rotation")
+    private val logger = LoggerFactory.getLogger("engineerclient-rotation")
 
     /** [Role.leapRules] target meaning "this role does not leap". */
     const val NO_LEAP = "none"

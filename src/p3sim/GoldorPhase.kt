@@ -285,7 +285,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val line = progressLine(by, what, k, Station.total(shown))
         // Someone else finishing the terminal you're in closes your window first, in the same tick.
         if (by != Sim.me && st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st)
-        if (by == Sim.me) { Stats.done(st, n); GhostCapture.event("done", st.id) }
+        if (by == Sim.me) { Stats.done(); GhostCapture.event("done", st.id) }
         // [twice]: Hypixel processes a Lights left click twice, so the announcement goes out again in the same tick
         // (counted once).
         repeat(if (twice) 2 else 1) { announce(line) }
@@ -297,21 +297,16 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Hypixel's line is a styled component (name, green text, red count), not a § string.
         Sim.chatStyled(line)
         // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it): 0/40/0, the
-        // subtitle a legacy string without the §r's ("§bp3wr§a activated a terminal! (§c3§a/8)").
+        // subtitle a legacy string without the §r's ("§bPlayer1§a activated a terminal! (§c3§a/8)").
         Sim.title("", line.replace("§r", ""), 0, 40, 0)
         // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
         // Odin's Terminal Sounds keys on the raw 4.047619).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
     }
 
-    /** Rank colours: you and the bots are MVP+ (the leap menu and party lines colour the bots §b). */
-    private fun nameColour(name: String) = "§b"
-
-    /** `<col><P>§r§a activated a terminal! (§r§c4§r§a/7)`; with a green (`§a`) name the `§r§a` is dropped. */
-    private fun progressLine(by: String, what: String, k: Int, total: Int): String {
-        val col = nameColour(by)
-        return "$col$by${if (col == "§a") "" else "§r§a"} $what (§r§c$k§r§a/$total)"
-    }
+    /** `§b<P>§r§a activated a terminal! (§r§c4§r§a/7)`: you and the bots are MVP+, so every name is §b (as the leap menu and party lines colour the bots). */
+    private fun progressLine(by: String, what: String, k: Int, total: Int): String =
+        "§b$by§r§a $what (§r§c$k§r§a/$total)"
 
     /**
      * Goldor's taunts: 1-3 queue up during S1 (mostly 1 or 2), so they follow the intro at 248, 310...;
@@ -361,7 +356,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // A slow section: Goldor may already have walked through the next one's segment; it counts as reached and left.
         if (section in 2..4 && !goldor.firstLap && goldorSeg() > section) goldorReached[section] = true
         maybeTaunt()
-        Stats.section(s, sectionEnd[s].coerceAtLeast(gateAt[s]) - sectionStart[s], n)
+        Stats.section(s, sectionEnd[s].coerceAtLeast(gateAt[s]) - sectionStart[s])
         // The section ends with its door (max(last completion, gate)): Goldor's catch-up cue.
         goldor.sectionEnded(s, n)
         // Stations of the new section that were done early already count.
@@ -414,7 +409,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death Ticks: Off: nothing at all.
         if (P3Sim.deathTicks == 0) return
         deaths++
-        Stats.deathTick(n)
+        Stats.deathTick()
         // No line stand for death ticks. Quiet wither.ambient 1/1 HOSTILE at you, not the loud boss sound;
         // after the death/proc chat and sounds.
         val line = {
@@ -437,7 +432,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.chat("§aThe Core entrance is opening!")
         Sim.title("", "§aThe Core entrance is opening!", 0, 40, 0)
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
-        if (from != 5) Stats.section(4, n - sectionStart[4], n)
+        if (from != 5) Stats.section(4, n - sectionStart[4])
         Blocks.play("core", delay = 1)
         Stats.p3(n)
     }
@@ -492,7 +487,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // from the dialogue (82 after "....": in the same tick, just before, when he died in flight).
         if (deadAt >= 0 && necronAt < 0 && n >= deadAt + 82) {
             necronAt = n
-            Stats.goldorDone(n)
             // Stopping here, the run's recording ends here too (else it grows until the next start).
             if (P3Sim.p3Only) { Recorder.finish(); Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
             handOff = true
@@ -718,7 +712,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
 
         companion object {
-                const val WALK = 0.06
+            const val WALK = 0.06
             /** He walks 0.048 a tick for the first ~194 ticks (measured 0.034-0.061), then 0.06. */
             const val SLOW_WALK = 0.048
             const val SLOW_TICKS = 194

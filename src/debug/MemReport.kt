@@ -66,7 +66,7 @@ object MemReport {
                 }
                 say("§7full report: §f$file")
             }
-        }, "ec-memreport").apply { isDaemon = true }.start()
+        }, "engineerclient-memreport").apply { isDaemon = true }.start()
     }
 
     private fun mb(bytes: Long) = String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1048576.0)

@@ -333,7 +333,6 @@ object Fight {
         if (p is P4Necron) Recorder.finish()
         EngineerClient.safely("p3sim ${p.name}") { p.tick() }
         p.t++
-        Party.tick()
         if (p !is P4Necron) EngineerClient.safely("p3sim recorder") { Recorder.tick(serverTick) }
         // This tick's knockback, straight to the player in the burst's own tick (SimItems.push).
         SimItems.flushMotion()

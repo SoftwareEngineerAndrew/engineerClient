@@ -192,6 +192,7 @@ object SimonSaysPractice : Module(
 
     private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
+    private val CONTROL_CODES = Regex("§.")
 
     private fun remove() {
         val p = placed ?: return
@@ -450,7 +451,7 @@ object SimonSaysPractice : Module(
     }
 
     private fun startInf() {
-        val p = placed ?: return
+        placed ?: return
         reset()
         markMode(1)
         Inf.on = true
@@ -567,7 +568,7 @@ object SimonSaysPractice : Module(
 
     /** The tick of a run's first start press; presses within [LATE_START_TICKS] of it never restart. */
     private var startedAt = 0L
-    private val LATE_START_TICKS get() = 20
+    private const val LATE_START_TICKS = 20
 
     private fun pressStart() {
         val p = placed ?: return
@@ -862,7 +863,7 @@ object SimonSaysPractice : Module(
         // The terminals start countdown (Storm dying; Goldor's first line if that was missed): the practice device goes away.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val msg = content.string.replace(Regex("§."), "")
+            val msg = content.string.replace(CONTROL_CODES, "")
             if (msg != STORM_DEAD && msg != GOLDOR_START) return@onReceive
             mc.execute { if (placed != null) EngineerClient.safely("ss practice countdown") { remove(); EngineerClient.msg("§7SS Practice: removed (terminals starting).") } }
         }

@@ -35,8 +35,6 @@ object ChatHider : Module(
     @Volatile
     private var rules: ChatRules = ChatRules(emptyList(), emptyList())
     private var loaded = false
-    var hiddenCount = 0
-        private set
 
     private val overrideFile = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("chat-hider.json")
 
@@ -60,7 +58,6 @@ object ChatHider : Module(
         if (!loaded) load(announce = false)
         val text = ChatRules.strip(message.string)
         val rule = rules.hides(text) ?: return false
-        hiddenCount++
         if (logHidden) EcLog.log("CHAT-HIDE", "$rule ⇐ ${text.replace("\n", "\\n")}")
         return true
     }

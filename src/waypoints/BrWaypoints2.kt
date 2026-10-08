@@ -116,7 +116,6 @@ object BrWaypoints2 : Module(
         EngineerClient.msg("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
     }.withDependency { editMode }
 
-
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
 
     private val fadeDone by BooleanSetting("Fade Done Boxes", false, desc = "A box whose mobs are all dead, or in a room the map shows cleared, stays up very faint instead of disappearing.")
@@ -155,7 +154,8 @@ object BrWaypoints2 : Module(
      * Every room's boxes, by room name, as their lowest and highest block in the room's own
      * coordinates (rotated to north, as Odin's waypoints are): x1 y1 z1 x2 y2 z2.
      */
-    private val saved: MutableMap<String, MutableList<IntArray>> by lazy { read() }
+    private val savedFile = lazy { read() }
+    private val saved: MutableMap<String, MutableList<IntArray>> by savedFile
     /** Each room whose boxes are in the world, and the rotation and clay block they were placed by. */
     private val loadedRooms = HashMap<String, String>()
 
@@ -386,8 +386,6 @@ object BrWaypoints2 : Module(
         .filter { allRooms || editMode || onRush(it.name) }
 
     // --- blood rush ------------------------------------------------------------------------------
-
-
 
     /** Between the dungeon starting and the blood door opening. */
     private var rushing = false
@@ -907,7 +905,7 @@ object BrWaypoints2 : Module(
         val site = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
         val at = site["updatedAt"]?.asLong ?: 0L
         if (at != 0L && at <= siteVersion) return
-        saved.size // the file is read before it is compared
+        savedFile.value // load this file's boxes before its age is compared with the site's
         if (at == 0L || (file.exists() && file.lastModified() > at)) return
         val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
         val rooms = runCatching { gson.fromJson<MutableMap<String, MutableList<IntArray>>>(site["rooms"], type) }.getOrNull() ?: return

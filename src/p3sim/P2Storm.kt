@@ -357,7 +357,6 @@ class P2Storm : Fight.Phase("P2") {
         Sim.sound(SoundEvents.LIGHTNING_BOLT_THUNDER, 2f, 1.4f)
         if (pillars.any { it.under(p.position()) } || SimItems.cloaked) return
         StormFx.hit("Giga Lightning", gigaDamage, trueDamage = true)
-        Stats.lightning()
     }
 
     private var nextFireball = -1

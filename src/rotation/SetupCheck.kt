@@ -72,7 +72,7 @@ object SetupCheck {
         // POV previews render a second world pass into their own target. The Fabulous preset
         // (and its Improved Transparency post-chain, which a Custom preset can also switch on)
         // owns extra render targets the nested pass cannot borrow.
-        val options = com.engineerclient.EngineerClient.mc.options
+        val options = EngineerClient.mc.options
         val preset = options.graphicsPreset().get()
         items += when {
             preset == GraphicsPreset.FABULOUS ->
@@ -98,7 +98,7 @@ object SetupCheck {
     }
 
     private fun interceptor(file: String, key: String, what: String): Item? {
-        val path = com.engineerclient.EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve(file)
+        val path = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve(file)
         if (!java.nio.file.Files.exists(path)) return null
         val on = Regex("\"$key\"\\s*:\\s*true").containsMatchIn(runCatching { java.nio.file.Files.readString(path) }.getOrDefault(""))
         return if (on) Item(false, "$what is ON", "EC copes, but turn it off if completions still go missing") else Item(true, "$what is off")

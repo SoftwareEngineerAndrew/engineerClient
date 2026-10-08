@@ -67,7 +67,7 @@ class RunRecorder(
         private set
     private val backlog = ArrayList<String>()
 
-    private val io = Executors.newSingleThreadExecutor { Thread(it, "ec-betterpf-writer").apply { isDaemon = true } }
+    private val io = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-betterpf-writer").apply { isDaemon = true } }
     private var writer: BufferedWriter? = null
     private var tempFile: Path? = null
     private var linesWritten = 0L
