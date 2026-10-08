@@ -183,7 +183,7 @@ class SimScreen : Screen(Component.literal("P3 Sim")) {
 
     private fun name(c: com.odtheking.odin.utils.skyblock.dungeon.DungeonClass) = c.name.lowercase().replaceFirstChar { it.uppercase() }
 
-    /** "S1 T1" -> "T1", a lever as the roles write it ("S2 high lever" -> "LL", "S2 low lever" -> "RL"), "gate 2" -> "Gate". */
+    /** "S1 T1" -> "1", the levers "L" / "R", the device "D", "gate 2" -> "G" ([P3Plan.short]). */
     private fun short(job: String) = P3Plan.short(job)
 
     private fun round1(v: Double) = Math.round(v * 10) / 10.0

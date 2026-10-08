@@ -33,21 +33,22 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             rebuildWidgets()
         }.bounds(cx - RESTART_W / 2 - GAP - SKILL_W, cy - 10, SKILL_W, 20).build())
 
-        // Below Restart and the skills: every job of each section, centred. Green: yours; grey and
-        // a letter: the bot's that does it; * a stack.
+        // Below Restart and the skills: every job of each section, in columns that mean the same in
+        // every section (terminals 1-5, then L, R, D, G), the grid centred. Green: yours; grey and a
+        // letter: the bot's that does it; * a stack.
         val jobW = 34
+        val x0 = cx - (LABEL_W + 9 * (jobW + 2)) / 2 + LABEL_W
         var y = cy + 3 * ROW + GAP
         for (s in 1..4) {
-            val jobs = P3Plan.jobsIn(s)
-            var x = cx - (LABEL_W + jobs.size * (jobW + 2)) / 2 + LABEL_W
-            addRenderableWidget(StringWidget(x - LABEL_W, y, LABEL_W, 20, Component.literal("§6§lS$s"), font))
-            for (job in jobs) {
+            addRenderableWidget(StringWidget(x0 - LABEL_W, y, LABEL_W, 20, Component.literal("§6§lS$s"), font))
+            for (job in P3Plan.jobsIn(s)) {
+                val short = P3Plan.short(job)
+                val col = when (short) { "L" -> 5; "R" -> 6; "D" -> 7; "G" -> 8; else -> ((short.toIntOrNull() ?: 1) - 1).coerceIn(0, 4) }
                 val stack = if (P3Plan.isStack(job)) "*" else ""
-                val text = if (P3Plan.isMine(job)) "§a${P3Plan.short(job)}$stack"
-                    else "§7${P3Plan.short(job)}$stack§8${P3Plan.doer(job)?.let { Roles.label(it).take(1) } ?: "?"}"
+                val text = if (P3Plan.isMine(job)) "§a$short$stack"
+                    else "§7$short$stack§8${P3Plan.doer(job)?.let { Roles.label(it).take(1) } ?: "?"}"
                 addRenderableWidget(Button.builder(Component.literal(text)) { P3Plan.toggle(job); rebuildWidgets() }
-                    .bounds(x, y, jobW, 20).build())
-                x += jobW + 2
+                    .bounds(x0 + col * (jobW + 2), y, jobW, 20).build())
             }
             y += ROW
         }
