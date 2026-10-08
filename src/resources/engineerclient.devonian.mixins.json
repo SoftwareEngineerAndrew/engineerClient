@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.engineerclient.mixin.devonian",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "DevonianChatMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
