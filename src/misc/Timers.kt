@@ -32,7 +32,8 @@ import net.minecraft.world.entity.boss.wither.WitherBoss
  *  - Goldor: the next death tick (n = 60k - 1, n ticks since "Who dares trespass"), until the
  *    core opens; or with Goldor Count Up, the time since his first line (colour still by the tick).
  *  - Necron: he takes the platform 60 ticks after "I'm afraid, your journey ends now."
- *  - Relics: in M7 they spawn 45 ticks after "All this, for nothing...".
+ *  - Relics: in M7 they spawn 45 ticks after "All this, for nothing...", or since he stopped saying
+ *    it, 5 ticks after his death burst ([onNecronDead]).
  */
 object Timers : Module(
     name = "Timers",
@@ -104,6 +105,7 @@ object Timers : Module(
     private const val GOLDOR_PERIOD = 60
     private const val NECRON_DROP = 60
     private const val RELICS = 45
+    private const val RELICS_AFTER_DEATH = 5
     /** Maxor's health once his armour is off: a laser hit. Flickers within one stun are one hit. */
     private const val DAMAGEABLE = 500f
     private const val HIT_DEBOUNCE = 30
@@ -192,6 +194,15 @@ object Timers : Module(
             message == NECRON_DROP_LINE -> necronDropAt = serverTicks + NECRON_DROP
             message == NECRON_DEAD -> if (DungeonUtils.floor?.name?.startsWith("M") == true) relicsAt = serverTicks + RELICS
         }
+    }
+
+    /**
+     * Necron dead on M7 (DungeonSplits: the TNT burst he dies in). He no longer says "All this, for
+     * nothing..." since Hypixel's boss update; in the recorded fights the burst came 40 ticks after
+     * that line, so the relics are [RELICS_AFTER_DEATH] ticks after it.
+     */
+    fun onNecronDead() {
+        if (relicsAt == null || relicsAt!! < serverTicks) relicsAt = serverTicks + RELICS_AFTER_DEATH
     }
 
     /** Maxor's armour coming off (his health jumping past [DAMAGEABLE]): a laser hit. Client thread. */
