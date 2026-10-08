@@ -29,7 +29,7 @@ import kotlin.random.Random
  * finishing click closes the window (then the chat line, then a close of window 0) in one tick.
  */
 object Terminals {
-    enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(5) }
+    enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
 
     /** A random draw: the six are equally likely (as measured on first opens). */
     fun randomType(): Type = Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random()
@@ -157,7 +157,7 @@ object Terminals {
 
     /** "What starts with: 'X'?": 21 items (1.8 names); click every one starting with X (it glints). */
     class Starts : Term(Type.STARTS) {
-        private val slots = (11..15) + (20..24) + (28..34)
+        private val slots = (10..16) + (19..25) + (28..34)
         private val letter: Char
         override val title: String
         init {
@@ -191,7 +191,7 @@ object Terminals {
      * taking a 6 at the expected 3 in 5 odds.
      */
     class Select : Term(Type.SELECT) {
-        private val slots = (11..15) + (20..24) + (28..34) + (37..43)
+        private val slots = (10..16) + (19..25) + (28..34) + (37..43)
         private val target = COLOURS.random()
         override val title = "Select all the ${target.title} items!"
         init {
@@ -217,8 +217,8 @@ object Terminals {
     /**
      * "Click the button on time!": a lime pane bounces along the active row (one column every 10
      * ticks); Lock In Slot while it is in the magenta column. The row moves on at the next step;
-     * the last lock finishes at once. Since the update there are [LANES] rows (the 4th is gone, and
-     * the window is a row shorter for it). Each new row's magenta column differs from the last. A
+     * the last lock finishes at once. Since the update there are [LANES] rows: the 4th is gone, the
+     * magenta track moved up under the 3rd, and the window kept its 6 rows (the bottom one filler). Each new row's magenta column differs from the last. A
      * wrong lock (the lime off target, or another row's Lock In Slot, e.g. clicked ahead) freezes the
      * lime for two steps: on Hypixel a lone wrong click is followed by a +30 step, and a row change
      * after a click ahead doesn't move the lime, its next step +20.
