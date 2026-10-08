@@ -44,8 +44,6 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** n: server ticks since Goldor's first line. */
     val n get() = t + nOffset
     private var nOffset = 0
-    /** Ticks the phase runs before "Who dares" when it follows StormEnd (S1 levers are live from then). */
-    private val LEAD_IN = 3
     private val sectionStart = IntArray(6)
     private val sectionEnd = IntArray(6) { -1 }
     private val gateDown = BooleanArray(5)
@@ -500,6 +498,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     companion object {
+        /** Ticks the phase runs before "Who dares" when it follows Storm's death (S1 levers are live from then). */
+        const val LEAD_IN = 3
+
         /**
          * Death-tick zones (feet, y 106 to 146): four plain rectangles, one per section, with block-wide gaps between
          * them at the gates. Measured edges: S1 x 90..114 z 26..121 (it takes the east strip and

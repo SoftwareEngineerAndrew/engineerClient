@@ -146,8 +146,9 @@ class P2Storm : Fight.Phase("P2") {
         if (deadAt >= 0 && t >= deadAt) {
             when (t - deadAt) {
                 0 -> { line("I should have known that I stood no chance."); handed = true; StormCorpse(storm).start() }
-                62 -> line("At least my son died by your hands.")
-                102 -> Fight.begin(GoldorPhase(1, arrived = true))
+                StormEnd.SON -> line("At least my son died by your hands.")
+                // As from StormEnd: the phase starts LEAD_IN early, so "Who dares" lands at LEAD.
+                StormEnd.LEAD - GoldorPhase.LEAD_IN -> Fight.begin(GoldorPhase(1, arrived = true))
             }
             return
         }
