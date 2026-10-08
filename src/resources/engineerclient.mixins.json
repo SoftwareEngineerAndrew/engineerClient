@@ -38,6 +38,7 @@
     "P3SimFluidMixin",
     "PauseMenuMixin",
     "SkipLoadingScreenMixin",
+    "ExclusiveFullscreenMixin",
     "SwingSpeedMixin",
     "PovLevelExtractorMixin",
     "PovLevelRendererMixin",
