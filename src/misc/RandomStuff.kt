@@ -11,12 +11,7 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
-import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.sendCommand
-import com.odtheking.odin.utils.playSoundAtPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.render.text
-import net.minecraft.sounds.SoundEvents
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
@@ -124,74 +119,6 @@ object RandomStuff : Module(
     private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
     private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
     private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
-
-    // --- Boss Enter Timer ------------------------------------------------------------------------
-
-    /**
-     * Boss Enter Timer: from the Watcher's first line (blood open), a countdown to the boss: 50 s of
-     * camp and 4 s of portal. Over 30 s green, over 20 yellow, then red. Gone at 4 s left if the
-     * Watcher hasn't let you go by then; when he does ("You may pass" - the portal, which you are
-     * typically through about 4 s later) it is set to 4 s, red, whatever it read.
-     * Counted in server ticks, so lag doesn't run it down.
-     */
-    private val bossTimerHud by HUD("Boss Enter Timer", "From blood opening, counts down 54 s to the boss (50 s camp, 4 s portal): green, yellow under 30, red under 20. Hidden if blood isn't done by 50 s; set to 4 s when the portal spawns.", true, 420, 200, 2f) { example ->
-        val left = if (example) 41.3 else bossTicksLeft()?.let { it / 20.0 } ?: return@HUD 0 to 0
-        val colour = when { left > 30 -> "§a"; left > 20 -> "§e"; else -> "§c" }
-        val s = colour + String.format(java.util.Locale.ROOT, "%.1f", left)
-        text(s, 0, 0, Colors.WHITE, shadow = true)
-        mc.font.width(s) to 9
-    }
-
-    private val portalHud by HUD("Portal Text", "\"PORTAL\" in pink on screen while the portal's 4 s run.", true, 400, 160, 4f) { example ->
-        if (!example && (!portalOpen || bossTicksLeft() == null)) return@HUD 0 to 0
-        text("§d§lPORTAL", 0, 0, Colors.WHITE, shadow = true)
-        mc.font.width("§d§lPORTAL") to 9
-    }
-    private val portalChime by BooleanSetting("Portal Chime", true, desc = "A chime when the portal spawns.")
-
-    private const val CAMP_TICKS = 50 * 20
-    private const val PORTAL_TICKS = 4 * 20
-    private const val WATCHER = "[BOSS] The Watcher: "
-    private const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
-
-    private var serverTicks = 0
-    /** Server tick the countdown reaches 0 on; null when it isn't showing. */
-    private var bossAt: Int? = null
-    private var bloodSeen = false
-    private var portalOpen = false
-
-    private fun bossTicksLeft(): Int? {
-        if (!enabled || DungeonUtils.inBoss) return null
-        val at = bossAt ?: return null
-        return (at - serverTicks).takeIf { it > 0 }
-    }
-
-    private fun bossTimerChat(message: String) {
-        when {
-            message == WATCHER_DONE -> {
-                bloodSeen = true
-                portalOpen = true
-                bossAt = serverTicks + PORTAL_TICKS
-                if (enabled && portalChime) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_CHIME.value(), 1f, 1.2f)
-            }
-            message.startsWith(WATCHER) && !bloodSeen -> {
-                bloodSeen = true
-                bossAt = serverTicks + CAMP_TICKS + PORTAL_TICKS
-            }
-        }
-    }
-
-    private fun bossTimerTick() {
-        serverTicks++
-        val at = bossAt ?: return
-        // Blood not done by 50 s: hidden until the portal.
-        if (!portalOpen && at - serverTicks <= PORTAL_TICKS) bossAt = null
-        else if (at - serverTicks <= 0) bossAt = null
-    }
-
-    private fun bossTimerReset() {
-        bossAt = null; bloodSeen = false; portalOpen = false
-    }
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
     private const val BLESS_COOLDOWN_MS = 10_000L
@@ -356,7 +283,6 @@ object RandomStuff : Module(
         TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI
 
     init {
-        bossTimerHud.enabled = true; portalHud.enabled = true
         on<TickEvent.End> {
             ScoreboardLines.hideLines = enabled && hideSbLines
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
@@ -369,7 +295,6 @@ object RandomStuff : Module(
         }
 
         on<MessageEvent.Chat> {
-            bossTimerChat(message)
             // At most once per [BLESS_COOLDOWN_MS]: a party filling and emptying (or someone joining and
             // leaving over and over) would otherwise have the server mute you for spam.
             if (blessOnLeave && partyLeaveRegex.matches(message) && System.currentTimeMillis() - lastBless >= BLESS_COOLDOWN_MS) {
@@ -395,10 +320,8 @@ object RandomStuff : Module(
         }
 
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
-        on<TickEvent.Server> { bossTimerTick() }
 
         on<LevelEvent.Load> {
-            bossTimerReset()
             if (!enabled || !autoJoinHypixel || !pendingSkyblockJoin) return@on
             ticksUntilSkyblock = if (attempts == 0) FIRST_TRY_TICKS else TRANSFER_TICKS
         }

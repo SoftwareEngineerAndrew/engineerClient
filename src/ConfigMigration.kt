@@ -17,6 +17,8 @@ object ConfigMigration {
      *  - the health and mana settings moved from Random Stuff to Health & Mana (on if Random Stuff
      *    was); Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied
      *    to Health & Mana, which provides those HUDs;
+     *  - the Boss Enter Timer (as Clear Countdown), Portal Text and Portal Chime moved from Random
+     *    Stuff to Timers (on if Random Stuff was);
      *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
      *  - a former engineerClient Splits HUD that was on becomes Odin's Splits in the Engineer
      *    Splits look (written into Odin's config, read once the look's settings exist - see
@@ -52,6 +54,15 @@ object ConfigMigration {
             if (moved.isEmpty() || module(modules, "Health & Mana") != null) return@let
             val to = settings(ensure("Health & Mana").also { it.addProperty("enabled", rs["enabled"]?.asBoolean ?: true) })
             for (k in moved) to.add(k, from.remove(k))
+            changed = true
+        }
+
+        module(modules, "Random Stuff")?.let { rs ->
+            val from = settings(rs)
+            val moved = TIMERS_KEYS.filterKeys { from.has(it) }
+            if (moved.isEmpty() || module(modules, "Timers") != null) return@let
+            val to = settings(ensure("Timers").also { it.addProperty("enabled", rs["enabled"]?.asBoolean ?: true) })
+            for ((old, new) in moved) to.add(new, from.remove(old))
             changed = true
         }
 
@@ -99,6 +110,8 @@ object ConfigMigration {
         }
         return changed
     }
+
+    private val TIMERS_KEYS = mapOf("Boss Enter Timer" to "Clear Countdown", "Portal Text" to "Portal Text", "Portal Chime" to "Portal Chime")
 
     private val HEALTH_MANA_KEYS = listOf(
         "Hide Health/Mana Above %", "Threshold", "Health Bar HUD", "Health Bar Width", "Health Bar Height",
