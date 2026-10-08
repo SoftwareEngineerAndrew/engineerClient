@@ -135,17 +135,23 @@ object SubSplitGrades {
         // Open: Mort's line to the blood door. The team's picks (7 Oct 2026): 8 / 14 / 19 / 25 / 32 s;
         // the floor (5 s) only keeps a missed moment from standing as a best.
         "split.open" to ticks(100, 160, 280, 380, 500, 640),
-        // Blood: the Watcher's first line to "proven yourself", 907-1370 (n 75).
-        "split.blood" to ticks(907, 936, 970, 1038, 1078, 1186),
+        // Blood (camp): the Watcher's first line to "proven yourself", 907-1370 (n 75).
+        // The limits from here down are the team's own picks, not percentiles: Blood, Portal, Enter,
+        // Maxor, Storm and Goldor of 8 Oct 2026, Terms and Necron of 7 Oct.
+        "split.blood" to ticks(907, 920, 1000, 1100, 1200, 1400),
+        // Portal: "proven yourself" to Maxor's line, mostly the warp: 4.10 or 4.60 s (107 of 235 since
+        // the update), 3.1-4.0 when it opened early, over 9 s (a quarter) when someone was late.
+        "split.portal" to ticks(40, 76, 88, 100, 120, 160),
+        // Enter: Odin's Boss Entry, Mort to Maxor's line (Open + Blood + Portal): 59.15-162.65 s, median 71.35 (n 234).
+        "split.enter" to ticks(1100, 1240, 1400, 1560, 1700, 1900),
         // Maxor 263-1498 (n 74), Storm 820-1624 (n 72): a perfect fight is ~263-277 and ~820-829.
-        // The limits from here down are the team's own picks (7 Oct 2026), not percentiles.
-        "split.maxor" to ticks(263, 265, 276, 290, 328, 384),
-        "split.storm" to ticks(820, 822, 836, 850, 910, 1000),
+        "split.maxor" to ticks(263, 272, 280, 300, 340, 400),
+        "split.storm" to ticks(820, 824, 840, 870, 960, 1080),
         // Goldor's line to "The Core entrance is opening!": 34.00-91.80 s (n 49). The floor is below
         // the fastest recorded so a faster run than any yet can still set a best.
         "split.terms" to real(25000, 28000, 31000, 37000, 41000, 48000),
         // The core opening to Necron's line: 96-269 (n 49).
-        "split.goldor" to ticks(96, 105, 119, 130, 149, 186),
+        "split.goldor" to ticks(96, 100, 126, 140, 160, 180),
         // Necron's first line to the run's end (EXTRA STATS): 409-425 on time (36 of 49), 430-440 one
         // 20-tick check late (10), 541-714 later (3).
         "split.necron" to ticks(409, 425, 436, 447, 490, 540),
@@ -153,7 +159,7 @@ object SubSplitGrades {
 
     /** Odin's split names (colour codes stripped) to their ids here. */
     val MAIN_SPLITS = mapOf(
-        "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Maxor" to "split.maxor", "Storm" to "split.storm",
+        "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Portal Entry" to "split.portal", "Boss Entry" to "split.enter", "Maxor" to "split.maxor", "Storm" to "split.storm",
         "Terminals" to "split.terms", "Goldor" to "split.goldor", "Necron" to "split.necron",
     )
 
@@ -188,11 +194,8 @@ object SubSplitGrades {
         return COLOURS[if (i < 0) COLOURS.lastIndex else i]
     }
 
-    /**
-     * Splits with no bands whose best is still kept, for Pace (your PB as its target): their floor,
-     * in ticks. The portal: anything under 2 s is a missed line, not a time.
-     */
-    private val UNGRADED_BESTS = mapOf("split.portal" to 40L)
+    /** Splits with no bands whose best is still kept, for Pace (your PB as its target): their floor, in ticks. */
+    private val UNGRADED_BESTS = emptyMap<String, Long>()
 
     /** Whether a finished [value] can stand as a best: banded (not filler) and not under the floor. */
     fun canBeBest(id: String, value: Long): Boolean {

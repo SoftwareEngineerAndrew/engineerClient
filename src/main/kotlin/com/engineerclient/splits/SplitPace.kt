@@ -50,18 +50,17 @@ object SplitPace {
 
     /**
      * Dark green per split: what Pace counts a split as with no target and no PB. Each split with
-     * bands is its band's dark green limit; the portal has none and uses the recorded runs' fastest
-     * 5% (76 ticks of 74, F7 since Hypixel's boss update of 5 Oct 2026). There is no end animation
-     * since the update: Necron runs to EXTRA STATS.
+     * bands is its band's dark green limit (SubSplitGrades; keep the two together). There is no end
+     * animation since Hypixel's boss update of 5 Oct 2026: Necron runs to EXTRA STATS.
      */
     private val SPLIT_REFS: Map<String, Clocks> = mapOf(
         SplitTracker.OPEN to ticks(160),
-        SplitTracker.BLOOD to ticks(936),
+        SplitTracker.BLOOD to ticks(920),
         SplitTracker.PORTAL to ticks(76),
-        SplitTracker.MAXOR to ticks(265),
-        SplitTracker.STORM to ticks(822),
+        SplitTracker.MAXOR to ticks(272),
+        SplitTracker.STORM to ticks(824),
         SplitTracker.TERMS to real(28_000),
-        SplitTracker.GOLDOR to ticks(105),
+        SplitTracker.GOLDOR to ticks(100),
         SplitTracker.NECRON to ticks(425),
     )
 

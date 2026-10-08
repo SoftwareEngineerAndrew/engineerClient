@@ -123,7 +123,11 @@ object EngineerLook {
             if (opts.bossEntry && i == 2 && rows.size > 3 && (entered || !opts.enterAfterEntry)) {
                 val ms = segments.take(3).sumOf { it.ms }
                 val ticks = segments.take(3).sumOf { it.ticks }
-                if (ms != 0L || opts.show0) out += line(label(BOSS_ENTRY, place, master), ms, ticks, opts, SplitFormat::minutes)
+                if (ms != 0L || opts.show0) {
+                    val l = line(label(BOSS_ENTRY, place, master), ms, ticks, opts, SplitFormat::minutes)
+                    // Graded like a split (SubSplitGrades' split.enter), finished once all three are over.
+                    out += grade?.invoke(BOSS_ENTRY, ms, ticks, entered && ms != 0L)?.let { l.copy(colour = it) } ?: l
+                }
             }
         }
         return out
