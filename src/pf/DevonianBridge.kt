@@ -51,6 +51,20 @@ object DevonianBridge {
         guarded("onResult") { Impl.onResult(consumer) }
     }
 
+    private val FORMATTING = Regex("[&§][0-9a-fk-or]")
+
+    /**
+     * A chat line Devonian is about to send (from `DevonianChatMixin`). Its stats fetches failing
+     * ("DungeonsApi failed to fetch data for user X (Rate Limited)") are expected - our lookups make
+     * its API rate-limit often - so those go to the game log only: true keeps the line out of chat.
+     */
+    fun quietChat(message: String): Boolean {
+        val text = message.replace(FORMATTING, "")
+        if (!text.startsWith("DungeonsApi failed to fetch data for user")) return false
+        EngineerClient.logger.info("[ec] Devonian (kept out of chat): {}", text)
+        return true
+    }
+
     private object Impl {
 
         fun cached(name: String): PlayerStats.Stats? =
