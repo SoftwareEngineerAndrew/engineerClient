@@ -11,6 +11,7 @@ import org.tukaani.xz.XZOutputStream
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.BufferedWriter
+import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
@@ -18,6 +19,7 @@ import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.GZIPInputStream
+import org.slf4j.LoggerFactory
 
 /**
  * What a saved run (.jsonl.gz, as written while recording) is turned into to upload:
@@ -57,6 +59,13 @@ import java.util.zip.GZIPInputStream
  *    they can't be, by start time, [COVER_MARGIN]. The viewer fills a player from any
  *    recording that has them at that tick, so nothing it shows changes. If that recording is the
  *    player's own, their equipment, skin and held head go too: the viewer takes those from it.
+ *    Only when the two line up by block changes: by start time alone, nothing is left out.
+ *
+ *  - Private chat (see [privateChat]) never goes up, whatever the recording has in it: runs
+ *    recorded with Hide Private Chats off, or from before it, are sent through Upload Missing Runs.
+ *
+ * A party member's upload is anyone's say: read with limits on everything, and if anything about
+ * it is off - or packing with it fails - the run goes up whole, as if there were none.
  *
  * Two reads of the file: [scan] (also the summary the site lists it by), then [pack]. Runs on an
  * upload thread, never the game's. The local file is left as it is.
@@ -83,6 +92,52 @@ object UploadPacker {
     private const val CAM_GAP = 1.95
     private const val COVER_MARGIN = 600
     private const val ALIGNED_MARGIN = 40
+
+    // Limits on a party member's upload (a real one is a few MB, 100-odd thousand lines, 50-odd
+    // thousand block changes, a few hours of ticks at the very most). Past one: no sibling.
+    private const val XZ_MEMORY_KIB = 65536 // the decoder's memory: preset 6 needs about 9 MB
+    private const val SIB_MAX_CHARS = 300_000_000L
+    private const val SIB_MAX_LINES = 3_000_000
+    private const val SIB_MAX_LINE = 1 shl 20 // (the site takes lines up to 128 KB)
+    private const val SIB_MAX_IDS = 500_000
+    private const val SIB_MAX_ROWS = 5_000_000
+    private const val SIB_MAX_TICK = 1_000_000L
+    private const val MAX_BLOCKS = 1_000_000
+    private const val MAX_PAL = 65_536
+    /** Block pairs [lineUp] compares at most (the same block changing over and over is many). */
+    private const val MAX_COMPARES = 20_000_000
+
+    private val log = LoggerFactory.getLogger("engineerclient")
+
+    /** Something in a recording that isn't what it should be. */
+    private class Malformed(what: String) : IOException(what)
+
+    private fun obj(line: String): JsonObject = JsonParser.parseString(line).takeIf { it.isJsonObject }?.asJsonObject ?: throw Malformed("not an object")
+    private fun arr(e: JsonElement?): JsonArray = (e as? JsonArray) ?: throw Malformed("not an array")
+    private fun at(a: JsonArray, i: Int): JsonElement = if (i in 0 until a.size()) a[i] else throw Malformed("index $i of ${a.size()}")
+    private fun str(e: JsonElement?): String = (e as? JsonPrimitive)?.takeIf { it.isString }?.asString ?: throw Malformed("not a string")
+    /** A whole number, written as one (1.5, 1e3 and anything past a long aren't). */
+    private fun long(e: JsonElement?): Long = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.asString?.toLongOrNull() ?: throw Malformed("not a whole number")
+    private fun int(e: JsonElement?): Int = long(e).let { if (it in Int.MIN_VALUE..Int.MAX_VALUE) it.toInt() else throw Malformed("$it isn't an int") }
+
+    /**
+     * Chat that is nobody else's business: private messages both ways, guild, officer and co-op
+     * chat and notices, friends coming online, friend requests, and what /g online, /g info and
+     * /f list show. Hypixel writes them "From [RANK] name: ...", "To name: ...", "Guild > ...",
+     * "Officer > ...", "Co-op > ...", "Friend > ...", or as boxes of several lines - any line of a
+     * message being one of these leaves the whole message out. Party chat stays: the viewer uses it.
+     * Used both while recording (Hide Private Chats) and on upload (always).
+     */
+    private val PRIVATE_LINE = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > |Friend request from |You are now friends with |-*\s*Friends \(Page |Guild Name: |Total Members: |Online Members: |Offline Members: |-- .+ --$)""")
+    private val PRIVATE_ANYWHERE = Regex("""(?i)\bco-op\b|\b(?:joined|left) the guild\b|\bto join (?:their|the|your) guild\b|\bremoved you from your friends\b""")
+    fun privateChat(text: String): Boolean = text.lineSequence().any { raw ->
+        val l = raw.trim()
+        PRIVATE_LINE.containsMatchIn(l) || (!l.startsWith("Party > ") && PRIVATE_ANYWHERE.containsMatchIn(l))
+    }
+
+    /** A "chat" line whose message is private (see [privateChat]); one that can't be read is left out too. */
+    private fun privateChatLine(line: String): Boolean =
+        runCatching { (JsonParser.parseString(line).asJsonObject["m"] as? JsonPrimitive)?.asString?.let(::privateChat) ?: false }.getOrDefault(true)
 
     /** A projectile, followed through the file for its "proj" line. */
     internal class Proj(val spawn: JsonObject) {
@@ -247,9 +302,10 @@ object UploadPacker {
         private val raw = ArrayList<Triple<Long, String, Int>>()
         fun read(kind: String, line: String) {
             if (kind != "pal" && kind != "block") return
-            val l = JsonParser.parseString(line).asJsonObject
-            if (kind == "pal") pal[l["i"].asInt] = l["s"].asString
-            else raw += Triple(l["t"].asLong, "${l["x"].asInt},${l["y"].asInt},${l["z"].asInt}", l["s"].asInt)
+            val l = obj(line)
+            // (past the limits the rest is left out: lining up needs only some of them)
+            if (kind == "pal") { val i = int(l["i"]); if (pal.size < MAX_PAL || i in pal) pal[i] = str(l["s"]) }
+            else if (raw.size < MAX_BLOCKS) raw += Triple(long(l["t"]), "${int(l["x"])},${int(l["y"])},${int(l["z"])}", int(l["s"]))
         }
         fun changes() = raw.map { (t, at, s) -> t to at + "," + (pal[s] ?: "?") }
     }
@@ -260,13 +316,19 @@ object UploadPacker {
      * what the start times say - or failing that the start times.
      */
     private fun lineUp(scan: Scan, sib: Sibling): Pair<Long, Int> {
+        // (a recording of the same run starts within minutes of this one)
+        if (Math.abs(sib.startMs - scan.startMs) > 3_600_000L) return 0L to COVER_MARGIN
         val guess = (sib.startMs - scan.startMs) / 50
         val theirs = HashMap<String, MutableList<Long>>()
         for ((t, k) in sib.blocks) theirs.getOrPut(k) { ArrayList() } += t
         val diffs = ArrayList<Long>()
-        for ((t, k) in scan.blocks) {
-            for (ts in theirs[k] ?: continue) { val d = t - ts; if (Math.abs(d - guess) <= 400) diffs += d }
-            if (diffs.size > 2000) break
+        var compares = 0
+        // (one block changing thousands of times in both would be millions of pairs: stops at enough)
+        pairs@ for ((t, k) in scan.blocks) {
+            for (ts in theirs[k] ?: continue) {
+                val d = t - ts; if (Math.abs(d - guess) <= 400) diffs += d
+                if (diffs.size > 2000 || ++compares > MAX_COMPARES) break@pairs
+            }
         }
         if (diffs.size < 3) return guess to COVER_MARGIN
         diffs.sort()
@@ -279,11 +341,40 @@ object UploadPacker {
      * low-priority thread, after the run) and about 100 MB while it packs.
      */
     fun pack(file: Path, scan: Scan, sibling: ByteArray?): Pair<Path, Int> {
-        val sib = sibling?.let { readSibling(it.inputStream()) }
+        // Whatever is wrong with a party member's upload, this one goes up - whole, if need be.
+        val sib = sibling?.let { b ->
+            runCatching { readSibling(b.inputStream()) }.onFailure { log.warn("[ec] betterpf: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
+        }
+        if (sib != null) {
+            try {
+                return write(file, scan, sib)
+            } catch (e: Exception) {
+                log.warn("[ec] betterpf: packing with a party member's upload failed, packing it whole", e)
+            }
+        }
+        return write(file, scan, null)
+    }
+
+    private fun write(file: Path, scan: Scan, sibling: Sibling?): Pair<Path, Int> {
+        // Nothing is left out unless the two recordings line up by their block changes: by start
+        // time alone (or a recording that only claims to be of this run) is too unsure to trust.
+        val aligned = sibling?.let { lineUp(scan, it) }
+        val sib = sibling?.takeIf { aligned?.second == ALIGNED_MARGIN }
+        if (sibling != null && sib == null) log.info("[ec] betterpf: a party member's upload doesn't line up with this one, nothing left out")
         val drop = sib?.let { s -> scan.counts.filter { (id, n) -> (s.counts[id] ?: 0) >= n }.keys } ?: emptySet()
-        val players = sib?.let { Players(scan, it) }
-        var camLine = 0
+        val players = sib?.let { Players(scan, it, aligned!!) }
         val out = Files.createTempFile("betterpf-upload-", ".jsonl.xz")
+        try {
+            writeTo(file, scan, out, drop, players)
+        } catch (t: Throwable) {
+            Files.deleteIfExists(out)
+            throw t
+        }
+        return out to drop.size
+    }
+
+    private fun writeTo(file: Path, scan: Scan, out: Path, drop: Set<Int>, players: Players?) {
+        var camLine = 0
         val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             val cols = Columns(w)
@@ -303,12 +394,13 @@ object UploadPacker {
                         for (l in scan.world) put(l, timed = false)
                         continue
                     }
-                    if (kindOf(line) !in WORLD) put(line)
+                    val kind = kindOf(line)
+                    if (kind == "chat" && privateChatLine(line)) continue
+                    if (kind !in WORLD) put(line)
                 }
             }
             cols.end()
         }
-        return out to drop.size
     }
 
     /** A line with the dropped mobs taken out, or null if nothing of it is left. */
@@ -467,8 +559,7 @@ object UploadPacker {
      * lines; when that starts, a "pgone" so this recording's view of them doesn't hold still on the
      * last row it had; when it ends, the row they're at then, as the recording would have had it.
      */
-    private class Players(private val scan: Scan, private val sib: Sibling) {
-        private val aligned = lineUp(scan, sib)
+    private class Players(private val scan: Scan, private val sib: Sibling, private val aligned: Pair<Long, Int>) {
         /** Ticks (this recording's) the sibling surely has each player. */
         private val covered = sib.players.mapValues { (_, list) ->
             val (offset, margin) = aligned
@@ -527,50 +618,75 @@ object UploadPacker {
         }
     }
 
-    /** What leaving things out needs from a party member's upload (or a saved run). */
+    /**
+     * What leaving things out needs from a party member's upload (or a saved run). Anyone can upload
+     * anything, so every field is checked and everything is limited (see [SIB_MAX_CHARS] and on);
+     * anything off throws, and the run goes up as if there were no sibling.
+     */
     private fun readSibling(input: InputStream): Sibling {
         val out = HashMap<Int, Int>()
         var self = ""
         var startMs = 0L
-        var maxT = 0L
+        var minT = Long.MAX_VALUE
+        var maxT = -1L
+        var rows = 0
         val seen = HashMap<String, MutableList<Long>>() // name -> ticks it had a row at, and pgone ticks as -(t + 1)
         val blocks = BlockReader()
-        fun row(name: String, t: Long) { seen.getOrPut(name) { ArrayList() } += t }
+        fun tick(t: Long): Long { if (t !in 0..SIB_MAX_TICK) throw Malformed("tick $t"); if (t < minT) minT = t; if (t > maxT) maxT = t; return t }
+        fun row(name: String, t: Long) { if (++rows > SIB_MAX_ROWS) throw Malformed("too many player rows"); seen.getOrPut(name) { ArrayList() } += t }
+        fun count(id: Int, n: Int) {
+            out.merge(id, n) { a, b -> minOf(a.toLong() + b, Int.MAX_VALUE.toLong()).toInt() }
+            if (out.size > SIB_MAX_IDS) throw Malformed("too many mobs")
+        }
         lines(input).use { r ->
-            for (line in r.lineSequence()) {
-                val kind = KIND.find(line.take(24))?.groupValues?.get(1) ?: continue
-                HEAD.find(line)?.groupValues?.get(2)?.toLong()?.let { if (kind !in WORLD && it > maxT) maxT = it }
+            for (line in capped(r)) {
+                val kind = kindOf(line) ?: continue
+                HEAD.find(line)?.let { if (kind !in WORLD) tick(it.groupValues[2].toLongOrNull() ?: throw Malformed("tick")) }
                 blocks.read(kind, line)
                 when (kind) {
-                    "meta" -> JsonParser.parseString(line).asJsonObject.let { self = it["self"]?.asString ?: ""; startMs = it["startMs"]?.asLong ?: 0L }
-                    "p" -> { val l = JsonParser.parseString(line).asJsonObject; val t = l["t"].asLong; for (x in l.getAsJsonArray("d")) row(x.asJsonArray[0].asString, t) }
-                    "pgone" -> { val l = JsonParser.parseString(line).asJsonObject; row(l["name"].asString, -(l["t"].asLong + 1)) }
-                }
-                when {
-                    kind == "e" -> for (m in ROW_ID.findAll(line)) out.merge(m.groupValues[1].toInt(), 1, Int::plus)
-                    kind == "cols" -> {
-                        val l = JsonParser.parseString(line).asJsonObject
-                        if (l["of"]?.asString == "e") for (t in l.getAsJsonArray("tr")) t.asJsonArray.let { out.merge(it[0].asInt, it[1].asJsonArray.size(), Int::plus) }
-                        if (l["of"]?.asString == "p") {
-                            var acc = 0L
-                            val ticks = l.getAsJsonArray("t").map { acc += it.asLong; acc }
-                            for (tr in l.getAsJsonArray("tr")) {
-                                val a = tr.asJsonArray
-                                var li = 0
-                                for (d in a[1].asJsonArray) { li += d.asInt; row(a[0].asString, ticks[li]) }
+                    "meta" -> obj(line).let { m ->
+                        self = runCatching { str(m["self"]) }.getOrDefault("").takeIf { it.length <= 16 } ?: ""
+                        startMs = runCatching { long(m["startMs"]) }.getOrDefault(0L)
+                    }
+                    "p" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) row(str(at(arr(x), 0)), t) }
+                    "pgone" -> { val l = obj(line); row(str(l["name"]), -(tick(long(l["t"])) + 1)) }
+                    "e" -> for (m in ROW_ID.findAll(line)) count(m.groupValues[1].toIntOrNull() ?: throw Malformed("id"), 1)
+                    "cols" -> {
+                        val l = obj(line)
+                        var acc = 0L
+                        val ticks = arr(l["t"]).map { acc += long(it); tick(acc) }
+                        // Which of the line's ticks each mob (player) has a row in: each one once, in order -
+                        // so a mob's count is at most the lines there are, not however many times it is listed.
+                        fun inLines(a: JsonArray): List<Int> {
+                            var li = 0L
+                            return arr(at(a, 1)).mapIndexed { k, d ->
+                                val step = long(d)
+                                if (step < 0 || (k > 0 && step == 0L)) throw Malformed("line order")
+                                li += step
+                                if (li >= ticks.size) throw Malformed("line $li of ${ticks.size}")
+                                li.toInt()
                             }
                         }
+                        when (l["of"]?.let(::str)) {
+                            "e" -> for (t in arr(l["tr"])) arr(t).let { count(int(at(it, 0)), inLines(it).size) }
+                            "p" -> for (tr in arr(l["tr"])) { val a = arr(tr); val name = str(at(a, 0)); for (li in inLines(a)) row(name, ticks[li]) }
+                        }
                     }
-                    kind == "proj" -> {
-                        val l = JsonParser.parseString(line).asJsonObject
-                        val n = 1 + (l["arcs"]?.asJsonArray?.size() ?: 0) + (if (l.has("s")) 1 else 0) + (if (l.has("g")) 1 else 0)
-                        out.merge(l["id"].asInt, n, Int::plus)
+                    "proj" -> {
+                        val l = obj(line)
+                        val n = 1 + (l["arcs"]?.let { arr(it).size() } ?: 0) + (if (l.has("s")) 1 else 0) + (if (l.has("g")) 1 else 0)
+                        count(int(l["id"]), n)
                     }
-                    kind in ENTITY_KINDS || (kind == "eq" && line.contains("\"id\":")) ->
-                        ID.find(line)?.groupValues?.get(1)?.toInt()?.let { out.merge(it, 1, Int::plus) }
+                    else -> if (kind in ENTITY_KINDS || (kind == "eq" && line.contains("\"id\":")))
+                        ID.find(line)?.groupValues?.get(1)?.let { count(it.toIntOrNull() ?: throw Malformed("id"), 1) }
                 }
             }
         }
+        if (maxT < 0) maxT = 0
+        // A mob can't have more than about one line a tick: a count past the ticks the recording
+        // spans is made up, and capped there so it can't win every mob.
+        val span = if (minT > maxT) 0L else maxT - minT + 1
+        val counts = out.mapValues { (_, n) -> minOf(n.toLong(), span).toInt() }
         // When it had each player: from a row until their "pgone" (rows only come when something changed).
         val players = seen.mapValues { (_, events) ->
             val ranges = ArrayList<LongRange>()
@@ -582,16 +698,43 @@ object UploadPacker {
             from?.let { ranges += it..maxT }
             ranges
         }
-        return Sibling(self, startMs, out, players, blocks.changes())
+        return Sibling(self, startMs, counts, players, blocks.changes())
     }
 
-    /** A recording's lines, gzip or xz (told apart by their first bytes, as the site and viewer do). */
+    /**
+     * A party member's recording's lines, with [SIB_MAX_LINE] chars a line, [SIB_MAX_LINES] lines
+     * and [SIB_MAX_CHARS] in all at most (a few KB of xz or gzip can unpack to gigabytes).
+     */
+    private fun capped(r: BufferedReader): Sequence<String> = sequence {
+        val buf = CharArray(1 shl 16)
+        val sb = StringBuilder()
+        var chars = 0L
+        var lines = 0
+        fun line(): String { if (++lines > SIB_MAX_LINES) throw Malformed("too many lines"); if (sb.endsWith('\r')) sb.setLength(sb.length - 1); return sb.toString().also { sb.setLength(0) } }
+        while (true) {
+            val n = r.read(buf)
+            if (n < 0) break
+            chars += n
+            if (chars > SIB_MAX_CHARS) throw Malformed("too big")
+            var from = 0
+            for (i in 0 until n) if (buf[i] == '\n') { sb.appendRange(buf, from, i); from = i + 1; yield(line()) }
+            sb.appendRange(buf, from, n)
+            if (sb.length > SIB_MAX_LINE) throw Malformed("line too long")
+        }
+        if (sb.isNotEmpty()) yield(line())
+    }
+
+    /**
+     * A recording's lines, gzip or xz (told apart by their first bytes, as the site and viewer do).
+     * xz with a memory limit: its header says how big a dictionary to make, and a made-up one would
+     * have it allocate gigabytes.
+     */
     private fun lines(raw: InputStream): BufferedReader {
         val input = BufferedInputStream(raw, 1 shl 16)
         input.mark(6)
-        val head = ByteArray(6).also { input.read(it) }
+        val head = input.readNBytes(6)
         input.reset()
-        val xz = head[0] == 0xFD.toByte() && head[1] == '7'.code.toByte() && head[2] == 'z'.code.toByte()
-        return BufferedReader(InputStreamReader(if (xz) XZInputStream(input) else GZIPInputStream(input), Charsets.UTF_8), 1 shl 16)
+        val xz = head.size >= 3 && head[0] == 0xFD.toByte() && head[1] == '7'.code.toByte() && head[2] == 'z'.code.toByte()
+        return BufferedReader(InputStreamReader(if (xz) XZInputStream(input, XZ_MEMORY_KIB) else GZIPInputStream(input), Charsets.UTF_8), 1 shl 16)
     }
 }

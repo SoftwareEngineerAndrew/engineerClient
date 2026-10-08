@@ -193,6 +193,8 @@ object RandomStuff : Module(
     }
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
+    private const val BLESS_COOLDOWN_MS = 10_000L
+    private var lastBless = 0L
 
     // Auto join state. All in-memory, never saved - "only the first time" is just "once per game
     // launch", no config plumbing needed to enforce it.
@@ -358,7 +360,11 @@ object RandomStuff : Module(
 
         on<MessageEvent.Chat> {
             bossTimerChat(message)
-            if (blessOnLeave && partyLeaveRegex.matches(message)) sendCommand("pc bless")
+            // At most once per [BLESS_COOLDOWN_MS]: a party filling and emptying (or someone joining and
+            // leaving over and over) would otherwise have the server mute you for spam.
+            if (blessOnLeave && partyLeaveRegex.matches(message) && System.currentTimeMillis() - lastBless >= BLESS_COOLDOWN_MS) {
+                lastBless = System.currentTimeMillis(); sendCommand("pc bless")
+            }
         }
 
         // Auto join Hypixel. Hooked directly to raw Fabric events rather than Odin's own

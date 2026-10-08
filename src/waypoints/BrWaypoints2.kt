@@ -903,12 +903,12 @@ object BrWaypoints2 : Module(
 
     private fun adopt(body: String) {
         val site = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
-        val at = site["updatedAt"]?.asLong ?: 0L
+        val at = runCatching { site["updatedAt"]?.asLong }.getOrNull() ?: 0L
         if (at != 0L && at <= siteVersion) return
         savedFile.value // load this file's boxes before its age is compared with the site's
         if (at == 0L || (file.exists() && file.lastModified() > at)) return
-        val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
-        val rooms = runCatching { gson.fromJson<MutableMap<String, MutableList<IntArray>>>(site["rooms"], type) }.getOrNull() ?: return
+        val type = object : TypeToken<Map<String?, List<IntArray?>?>>() {}.type
+        val rooms = runCatching { siteBoxes(gson.fromJson<Map<String?, List<IntArray?>?>>(site["rooms"], type)) }.getOrNull() ?: return
         siteVersion = at
         saved.clear(); saved.putAll(rooms)
         runCatching { file.parentFile.mkdirs(); file.writeText(gson.toJson(saved)); file.setLastModified(at) }
@@ -916,6 +916,26 @@ object BrWaypoints2 : Module(
         boxes.removeAll { it.saved }
         loadedRooms.clear()
     }
+
+    /**
+     * The site's boxes that make sense, the rest left out: each x1 y1 z1 x2 y2 z2 and its number,
+     * at most [SITE_MAX_SIZE] blocks across, in rooms with sensible names, [SITE_MAX_BOXES] in all -
+     * so a bad copy can't put huge boxes in the world or fill memory.
+     */
+    private fun siteBoxes(rooms: Map<String?, List<IntArray?>?>): MutableMap<String, MutableList<IntArray>> {
+        val out = HashMap<String, MutableList<IntArray>>()
+        var n = 0
+        for ((name, list) in rooms) {
+            if (n >= SITE_MAX_BOXES) break
+            if (name.isNullOrEmpty() || name.length > 64 || list == null) continue
+            val ok = list.filterNotNull().filter { b -> b.size == 7 && (0..2).all { Math.abs(b[it + 3].toLong() - b[it]) <= SITE_MAX_SIZE } }.take(SITE_MAX_BOXES - n)
+            n += ok.size
+            if (ok.isNotEmpty()) out[name] = ok.toMutableList()
+        }
+        return out
+    }
+    private const val SITE_MAX_SIZE = 64
+    private const val SITE_MAX_BOXES = 5000
 
     /** Whether the wand is in hand, for [PosMsgEditor], which shares it. */
     internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand

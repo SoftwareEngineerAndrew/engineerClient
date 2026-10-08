@@ -66,7 +66,7 @@ object BetterPF : Module(
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Records each run's doorways (two blocks per door spot) - the rooms themselves come from the viewer's room library, which has them all.")
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed. Turn on Private Runs to keep them off the public list.")
     private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them. /betterpf gives you a link to all your runs, private ones included.")
-    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, and friends coming online out of recordings, so they are never saved or uploaded. Party chat stays in.")
+    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved. They are never uploaded either way. Party chat stays in.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
@@ -179,7 +179,7 @@ object BetterPF : Module(
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
             val colored = legacyText(content)
-            if (hidePrivateChats && PRIVATE_CHAT.containsMatchIn(text)) return@onReceive
+            if (hidePrivateChats && UploadPacker.privateChat(text)) return@onReceive
             val n = session?.serverTickCount
             EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored, n) } }
         }
@@ -304,15 +304,30 @@ object BetterPF : Module(
      * what it has: its bytes, or null.
      */
     private fun siblingOf(summary: JsonObject): ByteArray? {
-        // (The site only offers public runs.)
+        // (The site only offers public runs - anyone's upload, so it is only read up to a size, and
+        // UploadPacker trusts nothing in it.)
         return runCatching {
             val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofString())
-            val id = JsonParser.parseString(res.body()).asJsonObject["id"]?.takeIf { !it.isJsonNull }?.asString ?: return null
-            val got = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/$id")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofByteArray())
-            got.body().takeIf { got.statusCode() == 200 }
+                .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofInputStream())
+            val body = res.body().use { s -> s.readNBytes(64 * 1024).toString(Charsets.UTF_8) }
+            if (res.statusCode() != 200) return null
+            val id = JsonParser.parseString(body).asJsonObject["id"]?.takeIf { !it.isJsonNull }?.asString ?: return null
+            if (!RUN_ID.matches(id)) return null
+            val got = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/$id")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofInputStream())
+            got.body().use { s ->
+                if (got.statusCode() != 200) return null
+                // (the request's timeout is only until the headers: one sent a byte a minute isn't waited out)
+                val bytes = java.util.concurrent.CompletableFuture.supplyAsync({ s.readNBytes(SIBLING_MAX + 1) }, { Thread.ofVirtual().start(it) })
+                    .get(2, java.util.concurrent.TimeUnit.MINUTES)
+                if (bytes.size > SIBLING_MAX) { EngineerClient.logger.warn("[ec] betterpf: a party member's upload is over ${SIBLING_MAX shr 20} MB, nothing left out"); return null }
+                bytes
+            }
         }.onFailure { EngineerClient.logger.warn("[ec] betterpf: sibling lookup failed", it) }.getOrNull()
     }
+
+    /** A party member's upload bigger than this (a real one is a few MB) is left alone. */
+    private const val SIBLING_MAX = 16 shl 20
+    private val RUN_ID = Regex("""[A-Za-z0-9_-]{1,64}""")
 
     /** Sends one run, on the calling thread. Its id on the site. */
     private fun send(file: Path, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns)): String {
@@ -369,7 +384,7 @@ object BetterPF : Module(
                 if (old.isEmpty()) return@start
                 val keys = old.associateWith { runKey(it) }
                 val ask = JsonArray().also { arr -> keys.values.filterNotNull().forEach { arr.add(it) } }
-                val have = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/have")).header("Content-Type", "application/json")
+                val have = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/have")).header("Content-Type", "application/json").header("X-Run-Owner", token())
                     .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(ask.toString())).build(), HttpResponse.BodyHandlers.ofString())
                 if (have.statusCode() != 200) return@start
                 val onSite = JsonParser.parseString(have.body()).asJsonArray.mapTo(HashSet()) { it.asString }
@@ -410,23 +425,10 @@ object BetterPF : Module(
         EngineerClient.logger.info("[ec] betterpf: saved $lines lines of an unfinished recording as ${target.fileName}")
     }
 
-    /**
-     * /betterpf: the link to every run this install has uploaded, private ones included. Local runs
-     * are claimed for the owner token first - named by recorder and start time, which only this
-     * computer knows - so runs uploaded without the token are listed too.
-     */
+    /** /betterpf: the link to every run this install has uploaded (with its owner token), private ones included. */
     fun myRunsLink() {
         val token = token()
         Thread.ofVirtual().name("betterpf-mine").start {
-            try {
-                val local = Files.list(runsDir).use { s -> s.filter { it.fileName.toString().endsWith(".jsonl.gz") }.toList() }
-                val runs = JsonArray().also { arr -> local.mapNotNull { runKey(it) }.forEach { arr.add(it) } }
-                val body = JsonObject().apply { addProperty("owner", token); add("runs", runs) }
-                http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/claim")).header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString())
-            } catch (t: Throwable) {
-                EngineerClient.logger.warn("[ec] betterpf: claiming older runs failed", t)
-            }
             val url = "https://$SITE/betterpf/?mine=$token"
             EngineerClient.msg(Component.literal("§7Better PF: ").append(
                 Component.literal("§b§nyour runs").withStyle { s ->
@@ -441,7 +443,8 @@ object BetterPF : Module(
 
     /**
      * Uploads every finished run in the runs folder the site doesn't have. A run is on the site if a
-     * run there has the same recorder and start time — private ones included, asked for by name.
+     * run there has the same recorder and start time - private ones included: the site says so only
+     * to their owner, so the owner token goes with the question.
      * The one being recorded is still a .part file, so it is never picked up. Runs even with Upload
      * Runs off - pressing the button is the ask.
      */
@@ -451,11 +454,12 @@ object BetterPF : Module(
         catchingUp = true
         Thread.ofVirtual().name("betterpf-catch-up").start {
             try {
-                // Asks by name rather than reading the run list, which leaves private runs off.
+                // Asks by name rather than reading the run list, which leaves private runs off; with the
+                // owner token, without which the site doesn't say whether it has a private run.
                 val local = Files.list(runsDir).use { s -> s.filter { it.fileName.toString().endsWith(".jsonl.gz") }.sorted().toList() }
                 val keys = local.associateWith { runKey(it) }
                 val ask = JsonArray().also { arr -> keys.values.filterNotNull().forEach { arr.add(it) } }
-                val have = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/have")).header("Content-Type", "application/json")
+                val have = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/have")).header("Content-Type", "application/json").header("X-Run-Owner", token())
                     .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(ask.toString())).build(), HttpResponse.BodyHandlers.ofString())
                 if (have.statusCode() != 200) throw Refused("run check ${have.statusCode()}")
                 val onSite = JsonParser.parseString(have.body()).asJsonArray.mapTo(HashSet()) { it.asString }
@@ -495,13 +499,6 @@ object BetterPF : Module(
             meta["self"].asString + "|" + meta["startMs"].asLong
         }
     }.getOrNull()
-
-    /**
-     * Chat that is nobody else's business: private messages both ways, guild, officer and co-op
-     * chat, and friends coming online. Hypixel writes them "From [RANK] name: ...", "To name: ...",
-     * "Guild > ...", "Officer > ...", "Co-op > ...", "Friend > ...".
-     */
-    private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > )""")
 
     override fun onDisable() {
         session?.finish()

@@ -197,11 +197,17 @@ object BrRoles {
     }
 
     private fun adopt(body: String) {
-        val doc = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
+        // All read before any of it is taken (and the fetch counted as done): a malformed document
+        // leaves the roles as they were, and the next world load tries again.
+        val got = runCatching {
+            val doc = JsonParser.parseString(body).asJsonObject
+            val rooms = read(doc["rooms"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return)
+            val m7 = doc["m7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { read(it) } ?: emptyMap()
+            val mn = doc["mini"]?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.filter { it.value.isJsonPrimitive && it.value.asBoolean }?.map { it.key }?.toSet() ?: emptySet()
+            Triple(rooms, m7, mn)
+        }.onFailure { EngineerClient.logger.warn("[ec] brroles: the site's roles couldn't be read: ${it.message}") }.getOrNull() ?: return
+        plans = got.first; m7Plans = got.second; mini = got.third
         fetched = true
-        plans = read(doc["rooms"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return)
-        m7Plans = doc["m7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { read(it) } ?: emptyMap()
-        mini = doc["mini"]?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.filter { it.value.isJsonPrimitive && it.value.asBoolean }?.map { it.key }?.toSet() ?: emptySet()
     }
 
     private fun read(rooms: com.google.gson.JsonObject): Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> {
