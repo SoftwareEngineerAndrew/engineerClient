@@ -105,6 +105,14 @@ object P3Plan {
 
     fun jobsIn(s: Int): List<String> = Station.all().filter { it.section == s }.map { it.id } + (if (s <= 3) listOf("gate $s") else emptyList())
 
+    /** A job as the menus show it: "Gate", "LL", "RL", else its id without the section ("2", "SS"). */
+    fun short(job: String): String {
+        if (job.startsWith("gate")) return "Gate"
+        if (job in Roles.LEFT.values) return "LL"
+        if (job in Roles.RIGHT.values) return "RL"
+        return job.substringAfter(' ')
+    }
+
     /** The bots' classes in leap slot order (fills in, drops your class). */
     fun botOrder(): List<DungeonClass> {
         val mineClass = P3Sim.myClass
