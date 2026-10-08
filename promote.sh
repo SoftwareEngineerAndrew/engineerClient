@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # promote.sh [-n] "<commit message>": copies this repo's committed HEAD to the public
-# undonecoffee/engineerclient, without the extras that only ship in this dev build:
+# undonecoffee/EngineerClient, without the extras that only ship in this dev build:
 #   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
 #   promote.sh    this script
@@ -67,4 +67,4 @@ fi
 git -C "$PUB" -c user.name=undonecoffee -c user.email=58919771+undonecoffee@users.noreply.github.com \
   commit -q -m "$MSG"
 git -C "$PUB" push -q origin main
-echo "promote: pushed $(git -C "$PUB" rev-parse --short HEAD) to undonecoffee/engineerclient"
+echo "promote: pushed $(git -C "$PUB" rev-parse --short HEAD) to undonecoffee/EngineerClient"
