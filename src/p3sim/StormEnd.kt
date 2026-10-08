@@ -20,8 +20,8 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * A P3 start's lead-in: the 102 ticks (5.1 s) from Storm's death line to Goldor's "Who dares
- * trespass" (death + 102 in nearly every run). You're on your P3 spot with the P3 hotbar; the party
+ * A P3 start's lead-in: 3 s from Storm's death line to Goldor's "Who dares
+ * trespass" (the game has 102 ticks, 5.1 s; cut short to get going). You're on your P3 spot with the P3 hotbar; the party
  * has already leapt down to the SS (they leave Yellow 5-20 ticks after the line and land on
  * (108, 120, 94)). Storm's body spins at Yellow, where he nearly always
  * dies, under its lightning storm ([StormCorpse]), and his last lines play.
@@ -48,14 +48,14 @@ class StormEnd : Fight.Phase("Storm end") {
     override fun tick() {
         when (t) {
             4 -> BossBar.progress(0f)
-            62 -> StormFx.line(body, "At least my son died by your hands.")
+            36 -> StormFx.line(body, "At least my son died by your hands.")
             // 3 ticks early: the first lever credit can land 1-2 ticks before "Who dares"; the line itself still lands at LEAD.
             LEAD - 3 -> Fight.begin(GoldorPhase(1, arrived = true))
         }
     }
 
     companion object {
-        const val LEAD = 102
+        const val LEAD = 60
         /** Where he dies: pinned under Yellow (the median of recorded bodies). */
         val DEATH_AT = Vec3(44.6, 172.9, 65.2)
         /** The party after its leap onto the SS player. */
