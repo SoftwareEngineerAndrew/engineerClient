@@ -8,29 +8,44 @@ import net.minecraft.client.gui.screens.Screen
 
 /**
  * The sim's main menu: Esc > P3 Sim Menu, the SkyBlock Menu star (hotbar), `/p3sim` or the
- * keybind. Restart P3 in the middle (where the cursor already is from the Esc menu), your jobs per
- * section on the left, the skill on the right. Everything else is the full menu ([SimScreen]).
+ * keybind. Restart P3 in the middle (where the cursor already is from the Esc menu), each
+ * section's jobs on its left (click: yours or a bot's, as in the full menu's Plan tab), the skill on
+ * its right. Everything else is the full menu ([SimScreen]).
  */
 class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     override fun init() {
         super.init()
+        val cx = width / 2
+        val cy = height / 2
         addRenderableWidget(Button.builder(Component.literal("§aRestart P3")) {
             mc.gui.setScreen(null)
             SimServer.run("restart") { Fight.start(Fight.Start.P3) }
-        }.bounds(width / 2 - 50, height / 2 - 10, 100, 20).build())
+        }.bounds(cx - RESTART_W / 2, cy - 10, RESTART_W, 20).build())
 
-        // Left: what you do in each section.
-        val left = 10
-        var y = height / 2 - 2 * ROW
+        // Left: every job of each section, right-aligned against Restart. Green: yours; grey and a
+        // letter: the bot's that does it; * a stack.
+        val leftEdge = cx - RESTART_W / 2 - GAP
+        val widest = (1..4).maxOf { P3Plan.jobsIn(it).size }
+        val jobW = ((leftEdge - 4 - LABEL_W) / widest - 2).coerceIn(22, 48)
+        var y = cy - 2 * ROW + 2
         for (s in 1..4) {
-            val mine = P3Plan.jobsIn(s).filter { P3Plan.isMine(it) }.joinToString(", ") { P3Plan.short(it) }
-            addRenderableWidget(StringWidget(left, y, 160, 20, Component.literal("§6§lS$s §f" + mine.ifEmpty { "§8—" }), font))
+            val jobs = P3Plan.jobsIn(s)
+            var x = leftEdge - jobs.size * (jobW + 2) + 2
+            addRenderableWidget(StringWidget(x - LABEL_W, y, LABEL_W, 20, Component.literal("§6§lS$s"), font))
+            for (job in jobs) {
+                val stack = if (P3Plan.isStack(job)) "*" else ""
+                val text = if (P3Plan.isMine(job)) "§a${P3Plan.short(job)}$stack"
+                    else "§7${P3Plan.short(job)}$stack§8${P3Plan.doer(job)?.let { Roles.label(it).take(1) } ?: "?"}"
+                addRenderableWidget(Button.builder(Component.literal(text)) { P3Plan.toggle(job); rebuildWidgets() }
+                    .bounds(x, y, jobW, 20).build())
+                x += jobW + 2
+            }
             y += ROW
         }
 
-        // Right: the skill, the chosen one highlighted.
-        val right = width - 10 - SKILL_W
-        y = height / 2 - P3Plan.SKILLS.size * ROW / 2
+        // Right: the skill, against Restart, the chosen one highlighted.
+        val right = cx + RESTART_W / 2 + GAP
+        y = cy - P3Plan.SKILLS.size * ROW / 2 + 2
         P3Plan.SKILLS.forEachIndexed { i, name ->
             addRenderableWidget(Button.builder(Component.literal(if (i == P3Plan.skill) "§a§n$name" else name)) {
                 P3Plan.chooseSkill(i)
@@ -43,6 +58,9 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     override fun isPauseScreen(): Boolean = false
 
     private companion object {
+        const val RESTART_W = 100
+        const val GAP = 10
+        const val LABEL_W = 18
         const val ROW = 24
         const val SKILL_W = 90
     }
