@@ -13,7 +13,7 @@ plugins {
 apply(plugin = "net.fabricmc.fabric-loom")
 
 group = "com.engineerclient"
-// ec-release sets EC_VERSION (2026.10.8+abc1234); ec-build sets GITHUB_REF_NAME.
+// The release workflow sets EC_VERSION (2026.10.8+abc1234); local builds (ec-build) use GITHUB_REF_NAME.
 version = providers.environmentVariable("EC_VERSION").orElse(providers.environmentVariable("GITHUB_REF_NAME").map { it.removePrefix("v") }).getOrElse("dev")
 
 base {
