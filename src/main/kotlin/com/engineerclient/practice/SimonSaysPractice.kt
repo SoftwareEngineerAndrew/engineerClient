@@ -77,7 +77,7 @@ object SimonSaysPractice : Module(
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
     key = null,
 ) {
-    private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: Odin's numbers terminal simulator instead, one after another.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
+    private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
     private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
     private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")

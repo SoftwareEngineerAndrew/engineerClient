@@ -86,7 +86,7 @@ object EngineerLook {
               grade: ((String, Long, Long, Boolean) -> String?)? = null,
               /** Pace against the dark green times ([SplitPace], ms and ticks), in place of the targets' pace. */
               pace: Pair<Long, Long>? = null,
-              /** Time lost to lag so far ([SplitPace.lag]): the top line, above Pace, once it is 0.01 s or more. */
+              /** Time lost to lag so far ([SplitPace.lag]): the top line, above Pace, once it has reached a tick (null before). */
               lagMs: Long? = null): List<Line> {
         if (rows.isEmpty()) return emptyList()
         val segments = segments(rows, place, master)
@@ -94,8 +94,8 @@ object EngineerLook {
 
         val current = segments.indexOfFirst { it.current }
         val started = current >= 0 || rows.any { it.ms > 0 }
-        // Only once lag has cost something that shows (0.01 s), coloured by how much: gray, yellow, red.
-        if (opts.showLag && lagMs != null && lagMs >= 10 && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null)
+        // Once lag has cost a tick (DungeonSplits.lag, which then keeps it up), coloured by how much: gray, yellow, red.
+        if (opts.showLag && lagMs != null && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null)
         // Pace from load-in where there are targets (your PBs added up), else once the run starts.
         if (opts.showPace && (started || opts.show0 || targets != null)) {
             var ms = 0L; var ticks = 0L

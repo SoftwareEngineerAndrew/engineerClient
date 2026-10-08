@@ -31,7 +31,6 @@
     "GuiRenderStateAccessor",
     "GuiItemNameMixin",
     "ItemFoilMixin",
-    "LeapTermsimMixin",
     "LeapTermsimProtMixin",
     "LivingEntityAccessor",
     "LocalPlayerDropMixin",

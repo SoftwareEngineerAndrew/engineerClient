@@ -152,6 +152,7 @@ object DungeonSplits : Module(
     /** Forgets the run (world load, or a P3 Sim restart). */
     private fun resetRun() {
         bestsChecked.clear(); realRun = true
+        synchronized(lagSamples) { lagShown = false; lagSamples.clear() }
         tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); necronCue.reset(); pinnedStorm = null
         goldorAt = null; goldorMoved = false; necronAt = null; necronId = null; goldorBar = null
         portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
@@ -207,7 +208,7 @@ object DungeonSplits : Module(
         }
 
         // Odin's server tick: the server's own clock, which falls behind when it lags.
-        on<TickEvent.Server> { serverTicks++; subs.onServerTick() }
+        on<TickEvent.Server> { serverTicks++; subs.onServerTick(); sampleLag() }
 
         // Chat straight off the network, before any mod can hide it — chat cleaners drop exactly
         // the terminal and gate lines the splits are timed from.
@@ -841,8 +842,28 @@ object DungeonSplits : Module(
         }
     }
 
-    /** Time lost to lag so far on the tick-timed splits, or null before the run starts. */
-    fun lag(now: Stamp = now()): Long? = tracker.splits().takeIf { it.isNotEmpty() }?.let { SplitPace.lag(it, now) }
+    /** Lag as of each of the last second's server ticks, newest last (server ticks come on the network thread). */
+    private val lagSamples = ArrayDeque<Long>()
+    /** Lag has reached a tick (50 ms) this run: it stays up from then on. */
+    private var lagShown = false
+
+    /**
+     * Time lost to lag so far on the tick-timed splits, or null while it isn't shown (before the
+     * run starts, and until it first reaches a tick). Taken as each server tick comes, not as of
+     * now - between ticks it climbed by up to 50 ms and fell back on each, flickering on and off -
+     * and the lowest of the last second's, since a tick arriving late over the network isn't lag.
+     */
+    fun lag(): Long? = synchronized(lagSamples) { lagSamples.minOrNull()?.takeIf { lagShown } }
+
+    private fun sampleLag() {
+        val splits = tracker.splits().takeIf { it.isNotEmpty() } ?: return
+        val ms = SplitPace.lag(splits, now())
+        synchronized(lagSamples) {
+            lagSamples.addLast(ms)
+            while (lagSamples.size > 20) lagSamples.removeFirst()
+            if ((lagSamples.minOrNull() ?: 0) >= 50) lagShown = true
+        }
+    }
 
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
     fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id])
