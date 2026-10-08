@@ -72,6 +72,16 @@ object SimOdinSplits {
         tick()
     }
 
+    /**
+     * The sim's Stop: Odin's run gone, as a world load leaves it (no rows, no clock), and a start
+     * still waiting on it dropped.
+     */
+    fun stop() {
+        pending = null
+        needStart = false
+        runCatching { groupField?.set(null, SplitsGroup(emptyList(), null)) }
+    }
+
     /** Every client tick: starts Odin's run once it can (the dungeon bridge up), and fills it in. */
     fun tick() {
         val name = pending ?: return

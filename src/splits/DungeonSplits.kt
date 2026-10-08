@@ -127,15 +127,15 @@ object DungeonSplits : Module(
         }
         val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
         val headClock = SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt())
-        // A P3 / S1 start plays Storm's end first (5.1 s to Goldor's "Who dares" line), and on
-        // Hypixel Odin's Storm row runs through it: start Odin that far into Storm (the Storm Pace
-        // target, or its dark green time of 41.3 s, less the lead-in) so "Storm took" reads a real
-        // time. The 5.1 s is the sim's lead-in; the game's is 3.1 s since Hypixel's boss update.
+        // A P3 / S1 start plays Storm's end first (StormEnd.LEAD, 3 s, to Goldor's "Who dares"
+        // line; the game's is 3.1 s since Hypixel's boss update), and on Hypixel Odin's Storm row
+        // runs through it: start Odin that far into Storm (the Storm Pace target, or its dark green
+        // time of 41.3 s, less the lead-in) so "Storm took" reads a real time.
         if (label == SplitTracker.TERMS && termsDone == 0) {
             val storm = SimOdinSplits.odinName(SplitTracker.STORM)
             if (storm != null) {
                 val whole = SimOdinSplits.target(storm).takeIf { it > 0 } ?: SplitPace.ref(SplitTracker.STORM)?.ms ?: 41_300L
-                SimOdinSplits.start(storm, (whole - 5_100L).coerceAtLeast(0L))
+                SimOdinSplits.start(storm, (whole - com.engineerclient.p3sim.StormEnd.LEAD * 50L).coerceAtLeast(0L))
             }
         } else SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headClock.ms) }
         if (termsDone > 0) {
@@ -148,6 +148,12 @@ object DungeonSplits : Module(
                 subs.startTerms(termsDone + 1, back.map { at.minus(it) })
             }
         } else tracker.startAt(label, before)
+    }
+
+    /** The P3 Sim's Stop (client thread): this run and Odin's both gone, as a world load leaves them. */
+    fun simStop() {
+        resetRun()
+        SimOdinSplits.stop()
     }
 
     private fun Stamp.minus(ticks: Int) = Stamp(realMs - ticks * 50L, tick - ticks)

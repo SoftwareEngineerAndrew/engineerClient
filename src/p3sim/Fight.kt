@@ -300,6 +300,9 @@ object Fight {
         Sim.clearEntities()
         Blocks.restoreAll()
         Party.clear()
+        // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
+        // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
+        EngineerClient.mc.execute { EngineerClient.safely("p3sim splits stop") { com.engineerclient.splits.DungeonSplits.simStop() } }
     }
 
     fun tick(server: MinecraftServer) {

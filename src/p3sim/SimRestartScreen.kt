@@ -36,7 +36,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         // Below Restart and the skills: every job of each section, centred. Green: yours; grey and
         // a letter: the bot's that does it; * a stack.
         val jobW = 34
-        var y = cy + 2 * ROW + GAP
+        var y = cy + 3 * ROW + GAP
         for (s in 1..4) {
             val jobs = P3Plan.jobsIn(s)
             var x = cx - (LABEL_W + jobs.size * (jobW + 2)) / 2 + LABEL_W
