@@ -15,7 +15,8 @@
     "PanelOrderMixin",
     "PersonalBestSimMixin",
     "SimonSaysBlocksMixin",
-    "SimonSaysTicksMixin"
+    "SimonSaysTicksMixin",
+    "TickTimersGoldorMixin"
   ],
   "injectors": {
     "defaultRequire": 0

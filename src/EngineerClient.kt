@@ -107,6 +107,7 @@ object EngineerClient : ClientModInitializer {
         // exist yet.
         safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
         safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
+        safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
