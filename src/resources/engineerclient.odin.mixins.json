@@ -4,18 +4,21 @@
   "package": "com.engineerclient.mixin.odin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ArrowsDeviceAimMixin",
+    "BlockUpdateServerThreadMixin",
+    "ClickGuiSizeMixin",
     "HudElementMixin",
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",
+    "LeapMenuClickMixin",
+    "LeapMenuQuadrantMixin",
+    "LeapMenuReleaseMixin",
     "LeapMenuRenderMixin",
-    "PersonalBestSimMixin",
-    "BlockUpdateServerThreadMixin",
-    "SimonSaysBlocksMixin",
-    "SimonSaysTicksMixin",
-    "ArrowsDeviceAimMixin",
     "NumbersPreviewMixin",
     "PanelOrderMixin",
-    "ClickGuiSizeMixin"
+    "PersonalBestSimMixin",
+    "SimonSaysBlocksMixin",
+    "SimonSaysTicksMixin"
   ],
   "injectors": {
     "defaultRequire": 0
