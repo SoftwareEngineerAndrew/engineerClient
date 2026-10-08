@@ -123,8 +123,8 @@ object P3Plan {
         return if (odinSort) odinOrder(order) ?: order else order
     }
 
-    /** The leap menu sorted as Odin does by default: by class priority, into Odin's quadrants. */
-    var odinSort = false
+    /** The leap menu sorted as Odin does by default: by class priority, into Odin's quadrants. On unless you choose your own order. */
+    var odinSort = true
 
     private fun odinOrder(classes: List<DungeonClass>): List<DungeonClass>? = runCatching {
         val players = classes.map { com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer(Roles.label(it), it, 50, null) }.sortedBy { it.clazz.priority }

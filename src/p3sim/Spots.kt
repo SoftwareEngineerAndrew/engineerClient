@@ -54,6 +54,13 @@ object Spots {
         else -> 180f to 0f
     }
 
-    /** The menu's teleports, in order. */
-    val teleports = listOf(P3_DROP, S1, SS, S2, LIGHTS, S3, S4, CORE, PURPLE_PAD, YELLOW_PAD, GREEN_PAD, RED_PAD, P1, P2, P4)
+    /** The menus' teleports, by group (the main menu's Teleport shows the groups). */
+    val teleportGroups = listOf(
+        "P3" to listOf(P3_DROP, S1, SS, S2, LIGHTS, S3, S4, CORE),
+        "Pads" to listOf(PURPLE_PAD, YELLOW_PAD, GREEN_PAD, RED_PAD),
+        "Phases" to listOf(P1, P2, P4),
+    )
+
+    /** The menus' teleports, in order. */
+    val teleports = teleportGroups.flatMap { it.second }
 }
