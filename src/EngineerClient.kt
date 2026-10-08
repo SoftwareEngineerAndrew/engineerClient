@@ -50,6 +50,30 @@ object EngineerClient : ClientModInitializer {
      * it was restored, so it keeps skipping its frames. Auto-minimize off, and a window that is
      * already stuck minimized is restored.
      */
+    /** [noExclusiveFullscreen] has run. */
+    private var exclusiveChecked = false
+
+    /**
+     * Exclusive fullscreen (a video mode change) on Wayland goes through Xwayland, and once the game
+     * loses focus KDE never shows its window again, focused or not. Borderless fullscreen looks the
+     * same and doesn't break, so on Wayland exclusive is turned off. The window took its mode at
+     * startup and keeps it until a restart, so a window in it now goes windowed (F11 after a restart
+     * is borderless).
+     */
+    private fun noExclusiveFullscreen() {
+        exclusiveChecked = true
+        if (System.getenv("XDG_SESSION_TYPE") != "wayland") return
+        val o = mc.options
+        if (!o.exclusiveFullscreen().get()) return
+        o.exclusiveFullscreen().set(false)
+        if (mc.window.isFullscreen) {
+            mc.window.toggleFullScreen()
+            o.fullscreen().set(false)
+        }
+        o.save()
+        logger.info("[ec] exclusive fullscreen off (it breaks on Wayland once the game loses focus)")
+    }
+
     private fun keepWindowUp() {
         val h = mc.window.handle()
         if (h == 0L) return
@@ -102,6 +126,7 @@ object EngineerClient : ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register {
             if (++tickCounter % 20 == 0) safely("classPoll") { ClassDetect.poll() }
             if (!windowKept) safely("window") { keepWindowUp() }
+            if (!exclusiveChecked) safely("exclusive fullscreen") { noExclusiveFullscreen() }
         }
 
         LeapHighlight.register()
