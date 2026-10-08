@@ -10031,7 +10031,7 @@
   },
   "p1end": {
     "event": "[BOSS] Storm: Pathetic Maxor, just like expected.",
-    "chance": "A 6th frame element is the chance the frame happens (rolled per fight). The platforms crumble at random: of their 1174 blocks that go in >=10% of 101 runs (2026-10-01..04), 552 go in >=95%, the rest in 50-70% (per run 63% of them, median), a different set each fight. tools/p3sim/research/scripts/world_p1end.mjs, research/world.md.",
+    "chance": "A 6th frame element is the chance the frame happens (rolled per fight). The platforms crumble at random: of their 1174 blocks that go in >=10% of 101 runs (2026-10-01..04), 552 go in >=95%, the rest in 50-70% (per run 63% of them, median), a different set each fight.",
     "source": "2026-10-01_19-47-15_F7.jsonl.gz",
     "consistency": "Burst starts 22-24 ticks before Storm's first line in 8/8 runs (-23 in 6); Maxor's last line varies (\"I'M TOO YOUNG TO DIE AGAIN!\" is missing in half the runs, and is 1-45 ticks before the burst when present), so Storm's line is the reference. 92-94% of (pos,state) changes match the representative run with dt within +-2 ticks; frames kept only if the same (pos,state) appears in >=5/8 runs (2678 kept of 2820). dt -24: both crystal platforms (x46-64 / x82-100, y215-224) + the y220 centre floor go to air at once; dt -18..-6: the centre hole x68-78 z32-49 'falling' animation (blocks re-appear one layer lower, then turn to air, y219->212). No falling_block entities are spawned (0 in all runs): it is all block changes. 1931 frames are in the centre-hole box.",
     "frames": [
