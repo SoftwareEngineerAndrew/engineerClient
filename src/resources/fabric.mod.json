@@ -7,10 +7,13 @@
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
-  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json"],
+  "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
+  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json", "coffeeclient.mixins.json", "devgineerclient.mixins.json"],
   "entrypoints": {
     "client": [
-      { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" }
+      { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
+      { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
+      { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
     ]
   },
   "depends": {
