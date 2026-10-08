@@ -89,6 +89,7 @@ object EngineerClient : ClientModInitializer {
         }
 
         LeapHighlight.register()
+        com.engineerclient.misc.Witherborn.register()
         com.engineerclient.misc.I4Complete.register()
         com.engineerclient.practice.I4Aims.register()
         RoleVignette.register()

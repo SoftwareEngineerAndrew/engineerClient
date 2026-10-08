@@ -1,6 +1,7 @@
 package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.misc.Witherborn
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
@@ -357,7 +358,8 @@ object DungeonSplits : Module(
             if (entity is WitherBoss && open(SplitTracker.NECRON) && entity.id == necronId && distanceTo(entity) <= 48) {
                 necronDead(now().minus(NECRON_GONE), "his wither going, $NECRON_GONE ticks after his death - its TNT burst wasn't seen")
             }
-            if (entity is WitherBoss && open(SplitTracker.MAXOR)) {
+            // A Witherborn wither (full Storm armor) going is not Maxor's death.
+            if (Witherborn.isBoss(entity) && open(SplitTracker.MAXOR)) {
                 card.onMaxorGone(now())
                 val d = distanceTo(entity)
                 if (d <= 48) subs.onMaxorDead(now())
@@ -374,6 +376,7 @@ object DungeonSplits : Module(
             val id = entityId()
             EngineerClient.mc.execute {
                 val e = EngineerClient.mc.level?.getEntity(id) as? WitherBoss ?: return@execute
+                if (Witherborn.isMinion(e)) return@execute
                 val at = now()
                 if (open(SplitTracker.GOLDOR)) { boss.onBossHit(SplitTracker.GOLDOR, at); goldorHit(at, "damage packet (he was in view)") }
                 else if (open(SplitTracker.NECRON) && e.isAlive) boss.onBossHit(SplitTracker.NECRON, at)
@@ -404,7 +407,11 @@ object DungeonSplits : Module(
         onReceive<ClientboundSoundPacket> {
             val id = sound.value().location().path
             if (id != "entity.wither.hurt") return@onReceive
-            EngineerClient.mc.execute { if (open(SplitTracker.GOLDOR)) goldorHit(now(), "a wither hurt sound") }
+            val sx = x; val sy = y; val sz = z
+            EngineerClient.mc.execute {
+                // A Witherborn wither (full Storm armor) hurt, not Goldor.
+                if (open(SplitTracker.GOLDOR) && !Witherborn.soundFromMinion(sx, sy, sz)) goldorHit(now(), "a wither hurt sound")
+            }
         }
     }
 
@@ -503,7 +510,7 @@ object DungeonSplits : Module(
 
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
     private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
-        val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>()
+        val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { Witherborn.isBoss(it) }
         val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
         val anchor = tag ?: mc.player ?: return null
         val found = withers.minByOrNull { it.distanceToSqr(anchor) }

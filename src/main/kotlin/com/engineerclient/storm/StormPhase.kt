@@ -170,7 +170,7 @@ object StormPhase : Module(
     private fun check(now: Int) {
         val level = mc.level ?: return
         val storm = level.entitiesForRendering().filterIsInstance<WitherBoss>()
-            .filter { it.isAlive && ARENA.contains(it.position()) }
+            .filter { it.isAlive && ARENA.contains(it.position()) && com.engineerclient.misc.Witherborn.isBoss(it) }
             .minByOrNull { it.distanceToSqr(70.0, 180.0, 53.0) }
         if (storm == null) return
         val fromServer = storm.positionCodec.base != Vec3.ZERO

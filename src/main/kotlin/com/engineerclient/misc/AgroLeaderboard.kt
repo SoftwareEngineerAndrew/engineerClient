@@ -97,7 +97,7 @@ object AgroLeaderboard : Module(
             val name = bossName ?: run { entries = emptyList(); boss = null; return@on }
             val me = mc.player ?: return@on
 
-            val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { it.isAlive }
+            val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { it.isAlive && Witherborn.isBoss(it) }
             val boss = withers.filter { it.name.string.contains(name, true) }.minByOrNull { it.distanceToSqr(me) }
                 ?: withers.minByOrNull { it.distanceToSqr(me) }
             bossFound = boss != null
