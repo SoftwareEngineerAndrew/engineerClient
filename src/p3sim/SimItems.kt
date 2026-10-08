@@ -1739,7 +1739,7 @@ object SimItems {
         veilAngle = 0.0
         for (i in 0 until 6) {
             val e = VeilCreeper(Sim.level)
-            e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
+            e.setNoAi(true); e.isSilent = true; e.isPermanentlyInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
             // Vanilla clears a mob's invisible flag without the effect: a permanent effect keeps it (no particles).
             e.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
             // Powered, as on Hypixel: the lightning hit sets the flag; its fire is put out again.
@@ -1859,7 +1859,7 @@ object SimItems {
             (ub is net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock && up.getValue(face) == net.minecraft.world.level.block.state.properties.AttachFace.FLOOR) ||
             (ub is net.minecraft.world.level.block.BaseTorchBlock && ub !is net.minecraft.world.level.block.WallTorchBlock && ub !is net.minecraft.world.level.block.RedstoneWallTorchBlock) ||
             ub is net.minecraft.world.level.block.BaseFireBlock || ub is net.minecraft.world.level.block.SkullBlock || ub is net.minecraft.world.level.block.StandingSignBlock ||
-            ub is net.minecraft.world.level.block.BannerBlock || ub is net.minecraft.world.level.block.BaseRailBlock || ub is net.minecraft.world.level.block.RedStoneWireBlock ||
+            ub is net.minecraft.world.level.block.BannerBlock || ub is net.minecraft.world.level.block.BaseRailBlock || ub is net.minecraft.world.level.block.RedstoneWireBlock ||
             ub is net.minecraft.world.level.block.SnowLayerBlock || ub is net.minecraft.world.level.block.DoorBlock || ub is net.minecraft.world.level.block.TripWireBlock ||
             ub is net.minecraft.world.level.block.VegetationBlock || ub is net.minecraft.world.level.block.FlowerPotBlock
         if (onTop) return true

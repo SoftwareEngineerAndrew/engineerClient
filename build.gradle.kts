@@ -33,27 +33,27 @@ repositories {
 }
 
 dependencies {
-    "minecraft"("com.mojang:minecraft:26.2")
+    "minecraft"("com.mojang:minecraft:26.3")
     implementation("net.fabricmc:fabric-loader:0.19.5")
     implementation("net.fabricmc:fabric-language-kotlin:1.14.1+kotlin.2.4.20")
-    implementation("net.fabricmc.fabric-api:fabric-api:0.161.0+26.2")
+    implementation("net.fabricmc.fabric-api:fabric-api:0.162.0+26.3")
 
     // xz (LZMA2) for Better PF recordings: about half the size of gzip. Pure Java, shipped inside
     // the mod jar.
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json); compiled against its Modrinth
-    // release (0.3.6 for 26.2).
-    compileOnly("maven.modrinth:odin:9bsBi70Z")
+    // Odin is a required runtime mod (declared in fabric.mod.json). 0.3.7 for 26.3 is not released
+    // yet: compiled against the 26.3 port build (OdinFabric PR #164), kept out of git in libs/.
+    compileOnly(files("libs/Odin-0.3.7.jar"))
 
     // Sodium replaces the terrain renderer on every team client. Since 26.2 it culls from inside the
     // level extract, so the POV previews no longer call it; optional at runtime.
-    compileOnly("maven.modrinth:sodium:xJZxADzI")
+    compileOnly("maven.modrinth:sodium:bAZQdGpg")
 
     // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
-    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.2.
-    compileOnly("maven.modrinth:devonian:oRqT0YaC")
+    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
+    compileOnly("maven.modrinth:devonian:k8Mog4wx")
 }
 
 tasks {

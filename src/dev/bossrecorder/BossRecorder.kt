@@ -13,7 +13,7 @@ import com.odtheking.odin.features.Module
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
-import net.minecraft.network.protocol.game.ServerboundSwingPacket
+import net.minecraft.network.protocol.game.ServerboundPunchPacket
 import java.util.Locale
 
 /**
@@ -35,7 +35,7 @@ object BossRecorder : Module(
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         DevgineerClient.safely("boss recorder folder") {
             java.nio.file.Files.createDirectories(dir)
-            net.minecraft.util.Util.getPlatform().openPath(dir)
+            com.mojang.blaze3d.Blaze3D.openPath(dir)
         }
     }
 
@@ -87,7 +87,8 @@ object BossRecorder : Module(
             val entry = "\"me\",$pos,$rot,${if (isOnGround()) 1 else 0}"
             DevgineerClient.mc.execute { if (current === s) s.net(n, entry) }
         }
-        onSend<ServerboundSwingPacket> {
+        // 26.3 sends a punch only for a left click (attack or mining); right-click swings send nothing.
+        onSend<ServerboundPunchPacket> {
             val s = current ?: return@onSend
             if (!s.focus) return@onSend
             val n = s.serverTicks

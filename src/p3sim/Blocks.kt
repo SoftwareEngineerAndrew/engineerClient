@@ -119,7 +119,7 @@ object Blocks {
         repeat(35) {
             val b = net.minecraft.world.entity.ambient.Bat(net.minecraft.world.entity.EntityTypes.BAT, Sim.level)
             // Invisible, as Hypixel's are.
-            b.isSilent = true; b.isInvulnerable = true; b.isInvisible = true; b.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
+            b.isSilent = true; b.isPermanentlyInvulnerable = true; b.isInvisible = true; b.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
             // No flying of its own: it is placed each tick below.
             b.setNoAi(true); b.setNoGravity(true)
             val x = 52.0 + Random.nextDouble() * 4.0
