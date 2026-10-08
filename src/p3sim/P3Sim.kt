@@ -171,21 +171,34 @@ object P3Sim : Module(
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
                     .bounds(realms.x + realms.width - half, realms.y, half, realms.height).build())
             }
-            // In the sim, Esc has the menu too: right under Save and Quit (the bottom button if that isn't found).
+            // In the sim, Esc has the menu too, in Open to LAN's place (right under Save and Quit if that
+            // isn't there), and the whole menu shifts so the cursor, which opening it puts in the middle
+            // of the screen, is already on it.
             if (screen is net.minecraft.client.gui.screens.PauseScreen && inSim) EngineerClient.safely("p3sim pause button") {
                 val widgets = Screens.getWidgets(screen)
                 val buttons = widgets.filterIsInstance<Button>()
-                val quit = buttons.firstOrNull { (it.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key in QUIT_KEYS }
-                    ?: buttons.maxByOrNull { it.y }
-                val b = if (quit != null) Button.builder(Component.literal("§6P3 Sim Menu")) { mc.gui.setScreen(SimScreen()) }.bounds(quit.x, quit.y + quit.height + 4, quit.width, 20)
-                    else Button.builder(Component.literal("§6P3 Sim Menu")) { mc.gui.setScreen(SimScreen()) }.bounds(4, 4, 90, 20)
-                widgets.add(b.build())
+                fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
+                val lan = buttons.firstOrNull { key(it) in LAN_KEYS }
+                val quit = buttons.firstOrNull { key(it) in QUIT_KEYS } ?: buttons.maxByOrNull { it.y }
+                val menu = Button.builder(Component.literal("§6P3 Sim Menu")) { mc.gui.setScreen(SimScreen()) }
+                val b = when {
+                    lan != null -> { widgets.remove(lan); menu.bounds(lan.x, lan.y, lan.width, lan.height) }
+                    quit != null -> menu.bounds(quit.x, quit.y + quit.height + 4, quit.width, 20)
+                    else -> menu.bounds(4, 4, 90, 20)
+                }.build()
+                widgets.add(b)
+                if (lan != null || quit != null) {
+                    val dy = screen.height / 2 - (b.y + b.height / 2)
+                    for (w in widgets) if (w is net.minecraft.client.gui.components.AbstractWidget) w.y += dy
+                }
             }
         }
     }
 
     /** The Esc menu's Save and Quit button (Disconnect if it's shown that way). */
     private val QUIT_KEYS = setOf("menu.returnToMenu", "menu.disconnect")
+    /** Open to LAN: vanilla's, or Clean Menus' multiplayer options in its place. */
+    private val LAN_KEYS = setOf("menu.shareToLan", "menu.multiplayerOptions.button")
 
     fun openMenuOrSim() {
         if (inSim) mc.execute { mc.gui.setScreen(SimScreen()) } else SimWorld.open()
