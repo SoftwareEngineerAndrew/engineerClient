@@ -32,6 +32,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             P3Plan.save()
             rebuildWidgets()
         }.bounds(cx - RESTART_W / 2 - GAP - SKILL_W, cy - 10, SKILL_W, 20).build())
+        // Above it, level with Stop: the leap menu's sorting (Odin's, or your own slot order from the full menu).
+        addRenderableWidget(Button.builder(Component.literal("Leap Sort: " + if (P3Plan.odinSort) "§bOdin" else "§fCustom")) {
+            P3Plan.odinSort = !P3Plan.odinSort
+            P3Plan.save()
+            rebuildWidgets()
+        }.bounds(cx - RESTART_W / 2 - GAP - SKILL_W, cy - 34, SKILL_W, 20).build())
 
         // Below Restart and the skills: every job of each section, in columns that mean the same in
         // every section (terminals 1-5, then L, R, D, G), the grid centred. Green: yours; grey and a
