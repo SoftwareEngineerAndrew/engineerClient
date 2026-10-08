@@ -30,7 +30,7 @@ import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import org.lwjgl.glfw.GLFW
+import com.mojang.blaze3d.platform.InputConstants
 
 /**
  * Dungeon Recorder: everything that happens in a dungeon, losslessly, for building mods with an LLM.
@@ -89,9 +89,9 @@ object DungeonRecorder : Module(
     internal val odinInternals by BooleanSetting("Odin Internals", true, desc = "Odin's private solver/tracker state via reflection (version-fragile, read-only).")
     private val thumbs by BooleanSetting("Frame Thumbnails", false, desc = "Small JPEGs of the screen as you saw it (what other mods draw: HUDs, waypoints, custom GUIs). They show private chat too and cannot be redacted; none are taken while you type (unless Typed Chat is on). Adds 100-400 MB an hour and a little frame time.")
     private val thumbFps by NumberSetting("Thumbnail FPS", 1.0, 0.5..4.0, 0.5, desc = "Frame thumbnails a second (plus one on each screen open and title).")
-    private val bookmark by KeybindSetting("Bookmark", GLFW.GLFW_KEY_UNKNOWN, "Marks this moment in the recording (also /dcrec mark [note]).").onPress { DevgineerClient.safely("recorder bookmark") { Rec.mark(null) } }
+    private val bookmark by KeybindSetting("Bookmark", InputConstants.UNKNOWN, "Marks this moment in the recording (also /dcrec mark [note]).").onPress { DevgineerClient.safely("recorder bookmark") { Rec.mark(null) } }
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
-        DevgineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); net.minecraft.util.Util.getPlatform().openPath(dir) }
+        DevgineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
     }
 
     /** The recordings folder's name, under the game directory. */

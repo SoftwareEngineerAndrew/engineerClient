@@ -23,7 +23,7 @@ import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.network.chat.Component
-import org.lwjgl.glfw.GLFW
+import com.mojang.blaze3d.platform.InputConstants
 
 /**
  * P3 Sim: F7's boss fight in a singleplayer world of its own ("p3sim"), to practice it alone.
@@ -42,8 +42,8 @@ object P3Sim : Module(
     description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
     key = null,
 ) {
-    val menuKey by KeybindSetting("Menu Keybind", GLFW.GLFW_KEY_UNKNOWN, "Opens the P3 Sim menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
-    val restartKey by KeybindSetting("Restart Keybind", GLFW.GLFW_KEY_UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch.").onPress {
+    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
+    val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch.").onPress {
         if (inSim) SimServer.run("restart") { Fight.start(Fight.lastStart) }
     }
     enum class ClassOption { HEALER, BERSERK, ARCHER, TANK, MAGE }

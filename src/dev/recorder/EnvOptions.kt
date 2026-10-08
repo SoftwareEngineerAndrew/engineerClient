@@ -100,7 +100,7 @@ object EnvOptions {
         for (src in SoundSource.entries) m["volume.${src.getName()}"] = value(runCatching { o.getSoundSourceVolume(src) }.getOrNull())
         for (k in o.keyMappings) m["key:${k.name}"] = value(k.saveString())
         val w = mc.window
-        m["win"] = "[${w.width},${w.height},${w.guiScaledWidth},${w.guiScaledHeight},${w.guiScale},${w.isFullscreen},${w.refreshRate}]"
+        m["win"] = "[${w.width},${w.height},${w.guiScaledWidth},${w.guiScaledHeight},${w.guiScale},${o.fullscreen().get()},${w.activeVideoMode?.refreshRate ?: 0}]" // 26.3: fullscreen from the option, the rate from the video mode
         m["packs"] = mc.resourcePackRepository.selectedIds.joinToString(",", "[", "]") { RecorderFiles.q(it) }
         return m
     }

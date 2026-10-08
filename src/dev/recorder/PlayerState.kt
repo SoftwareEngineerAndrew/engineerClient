@@ -72,10 +72,12 @@ object PlayerState {
             sb.append("{\"item\":").append(RichJson.itemNow(p.useItem)).append(",\"left\":").append(p.useItemRemainingTicks)
                 .append(",\"hand\":").append(RecorderFiles.q(p.usedItemHand.name)).append('}')
         } else sb.append("null")
-        sb.append(",\"swing\":").append(p.swinging)
-        sb.append(",\"swingArm\":").append(RecorderFiles.q(p.swingingArm?.name))
-        sb.append(",\"swingTime\":").append(p.swingTime)
-        sb.append(",\"atkAnim\":"); n(sb, p.attackAnim)
+        // 26.3: the swing lives in a SwingState; swingTime is its ticks since the start (0, not -1).
+        val swing = (p as com.devgineerclient.mixin.RecLivingEntityAccessor).`dc$recSwingState`() as com.devgineerclient.mixin.RecSwingStateAccessor
+        sb.append(",\"swing\":").append(p.isSwinging)
+        sb.append(",\"swingArm\":").append(RecorderFiles.q(p.currentSwing?.hand?.name))
+        sb.append(",\"swingTime\":").append(swing.`dc$recTicks`())
+        sb.append(",\"atkAnim\":"); n(sb, swing.`dc$recAnimation`())
         sb.append(",\"hurt\":").append(p.hurtTime)
         sb.append(",\"hp\":"); n(sb, p.health)
         sb.append(",\"abs\":"); n(sb, p.absorptionAmount)

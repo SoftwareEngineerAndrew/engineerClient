@@ -9,8 +9,8 @@ import com.engineerclient.rotation.EcLog
 import com.mojang.blaze3d.pipeline.RenderTarget
 import com.mojang.blaze3d.pipeline.TextureTarget
 import com.mojang.blaze3d.systems.RenderSystem
-import com.mojang.blaze3d.textures.FilterMode
-import com.mojang.blaze3d.GpuFormat
+import com.mojang.renderpearl.api.textures.FilterMode
+import com.mojang.renderpearl.api.GpuFormat
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.CameraType
@@ -97,6 +97,9 @@ object PovCapture {
 
     private val feeds = arrayOfNulls<RenderTarget>(FEEDS)
 
+    /** Feed-sized stand-in for GameRenderer.hud3DTarget (26.3), shared by the passes. */
+    private var feedHud3D: RenderTarget? = null
+
     /** Quadrant has no teammate at all (fewer than four in the party) — nothing is blitted there. */
     private val empty = BooleanArray(FEEDS) { true }
 
@@ -135,6 +138,7 @@ object PovCapture {
         val eyeHeight: Float,
         val eyeHeightOld: Float,
         val target: RenderTarget,
+        val hud3D: RenderTarget,
     )
 
     /**
@@ -411,6 +415,7 @@ object PovCapture {
             eyeHeight = cameraAccess.`ec$getEyeHeight`(),
             eyeHeightOld = cameraAccess.`ec$getEyeHeightOld`(),
             target = gameRenderer.mainRenderTarget(),
+            hud3D = invoker.`ec$getHud3DTarget`(),
         )
         var pose: PovPose.Restore? = null
         var cullingWas: Boolean? = null
@@ -432,6 +437,9 @@ object PovCapture {
             cameraAccess.`ec$setEyeHeight`(eyeHeight)
             cameraAccess.`ec$setEyeHeightOld`(eyeHeight)
             invoker.`ec$setMainRenderTarget`(feed)
+            // 26.3 draws the hand and screen effects against this depth whenever post effects run
+            // (always: end_of_frame) and it is window-sized: a feed-sized one stands in.
+            invoker.`ec$setHud3DTarget`(feedHud3D ?: saved.hud3D)
 
             camera.update(deltaTracker)
             // Terrain is culled inside the level extract. Lending the camera a captured frustum
@@ -444,14 +452,15 @@ object PovCapture {
 
             invoker.`ec$extractWindow`()
             invoker.`ec$extractOptions`()
-            invoker.`ec$extractCamera`(deltaTracker, worldPartialTicks, camera.getCameraEntityPartialTicks(deltaTracker))
+            invoker.`ec$extractCamera`(deltaTracker, worldPartialTicks)
             mc.levelExtractor.extract(deltaTracker, camera, worldPartialTicks)
             carried?.into(gameRenderer.gameRenderState().levelRenderState)
             carried = null
 
-            gameRenderer.renderLevel(deltaTracker)
+            gameRenderer.renderLevel()
         } finally {
             invoker.`ec$setMainRenderTarget`(saved.target)
+            invoker.`ec$setHud3DTarget`(saved.hud3D)
             window.setWidth(saved.windowWidth)
             window.setHeight(saved.windowHeight)
             options.cameraType = saved.cameraType
@@ -479,7 +488,7 @@ object PovCapture {
         val worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false)
         invoker.`ec$extractWindow`()
         invoker.`ec$extractOptions`()
-        invoker.`ec$extractCamera`(deltaTracker, worldPartialTicks, camera.getCameraEntityPartialTicks(deltaTracker))
+        invoker.`ec$extractCamera`(deltaTracker, worldPartialTicks)
     }
 
     // --------------------------------------------------------------- feeds
@@ -490,12 +499,13 @@ object PovCapture {
         feedWidth = width
         feedHeight = height
         for (index in 0 until FEEDS) {
-            val feed = TextureTarget("ec:pov$index", width, height, true, GpuFormat.RGBA8_UNORM)
+            val feed = TextureTarget("ec:pov$index", width, height, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT)
             // A fresh target's contents are undefined; make the first frame a dark quadrant rather
             // than whatever was last in that piece of VRAM.
             feed.colorTexture?.let { RenderSystem.getDevice().createCommandEncoder().clearColorTexture(it, OUT_OF_RANGE) }
             feeds[index] = feed
         }
+        feedHud3D = TextureTarget("ec:pov_hud_3d_depth", width, height, null, GpuFormat.D32_FLOAT)
         outOfRange.fill(false)
         nextFeed = 0
     }
@@ -507,6 +517,8 @@ object PovCapture {
             feeds[index]?.destroyBuffers()
             feeds[index] = null
         }
+        feedHud3D?.destroyBuffers()
+        feedHud3D = null
         feedWidth = 0
         feedHeight = 0
         nextFeed = 0
