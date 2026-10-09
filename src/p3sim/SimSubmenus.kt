@@ -241,6 +241,11 @@ class SimSettingsScreen : SimSubmenu("Settings") {
             change("Terror At Terms: ${onOff(P3Sim.terrorAtTerms)}", 140,
                 "Every P3 start puts the Terror loadout on (Terror armour, Bonzo's Mask, Black Cat) over your saved gear.") { P3Sim.toggleTerrorAtTerms() },
         ))
+        row(listOf(
+            label("§eBots", LABEL_W, "How the P3 bots get about."),
+            change("Real Movement: ${onOff(P3Sim.realMoves)}", 140,
+                "Bots move as real players do: along routes recorded in Better PF runs (sprints, jumps, lava bounces, Bonzo boosts, stonks), sped up only when a job's time needs it. Off: the old straight walk and Hyperion blinks.") { P3Sim.toggleRealMoves() },
+        ))
     }
 
     private fun setSpeed(v: Int) {
