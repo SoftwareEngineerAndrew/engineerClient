@@ -371,7 +371,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             Sim.chat("§aThe gate will open in 5 seconds!")
             Sim.title("", "§aThe gate will open in 5 seconds!", 0, 40, 0)
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
-            autoGateAt[s] = n + 100
+            // Practice: the gate stays until you blow it (a gate job is yours to do).
+            if (!practice) autoGateAt[s] = n + 100
             // The door's stairs and iron blocks (upper part, y118+) go 1 tick later; the barriers and portcullis wait for the gate.
             // Practice: the arena stays as it was (no gate or door moves when a section ends).
             if (!practice) Fight.later(1, "door top") {
