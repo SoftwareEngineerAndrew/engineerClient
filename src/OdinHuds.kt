@@ -15,19 +15,25 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  *  - Random Stuff's Hide Health/Mana Above %: Odin's Health HUD and Mana HUD draw nothing while the
  *    stat is above the threshold. The HUD editor (example = true) always draws them.
  *  - The Engineer Splits look: for Odin's two Splits HUDs, [OdinSplitsLook.render] draws instead.
+ *  - P3 Sim practice: the P3 tick timers and Term Info draw nothing ([PRACTICE_HIDDEN]).
  * It is also what POV Previews calls to draw a kept HUD a second time, above the previews.
  */
 object OdinHuds {
 
     class Draw(private val block: (GuiGraphicsExtractor, Boolean) -> Pair<Int, Int>) : (GuiGraphicsExtractor, Boolean) -> Pair<Int, Int> {
         var hud: HudElement? = null
+        var name = ""
 
         override fun invoke(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
             val h = hud ?: return block(g, example)
             if (!example && HealthMana.hidesOdinHud(h)) return 0 to 0
+            if (!example && name in PRACTICE_HIDDEN && com.engineerclient.p3sim.Practice.active && com.engineerclient.p3sim.P3Sim.inSim) return 0 to 0
             return OdinSplitsLook.render(h, g, example) ?: block(g, example)
         }
     }
+
+    /** Hidden in P3 Sim practice: Term Info's two, our Goldor Tick and Odin's Goldor Hud. */
+    private val PRACTICE_HIDDEN = setOf("Term Info", "Section Time", "Goldor Tick", "Goldor Hud")
 
     private val draws = HashMap<HUDSetting, Draw>()
     private var pending: Draw? = null
@@ -43,6 +49,7 @@ object OdinHuds {
         val draw = pending ?: return
         pending = null
         draw.hud = setting.value
+        draw.name = setting.name
         draws[setting] = draw
     }
 
