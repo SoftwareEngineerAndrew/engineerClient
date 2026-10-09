@@ -32,6 +32,9 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     private lateinit var panel: LinearLayout
 
+    // Each time the menu opens: no tab, the section plan.
+    init { tab = Tab.PLAN }
+
     override fun init() {
         super.init()
         val cx = width / 2
@@ -340,7 +343,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         for ((group, spots) in Spots.teleportGroups) {
             spots.chunked(4).forEachIndexed { i, chunk ->
                 cols += stack(if (i == 0) "§e$group" else "", SPOT_W, "Teleports: $group.", chunk.map { spot ->
-                    act(spot.name, SPOT_W, "To ${spot.name}: ${xyz(spot.x, spot.y, spot.z)}, facing ${facing(spot.yaw)}.") { tp(spot.x, spot.y, spot.z, spot.yaw, spot.pitch) }
+                    act(spot.name.substringBefore(" (").trim(), SPOT_W, "To ${spot.name}: ${xyz(spot.x, spot.y, spot.z)}, facing ${facing(spot.yaw)}.") { tp(spot.x, spot.y, spot.z, spot.yaw, spot.pitch) }
                 })
             }
         }
@@ -365,9 +368,9 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     /** Section starts, and the drills to come (placeholders for now). */
     private fun practicePanel() {
-        row(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
+        row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
             act(s.label.lowercase(), 50, "Starts P3 at ${s.label}, the sections before done.") { server { Fight.start(s) } }
-        })
+        })))
         row(DRILLS.map { d ->
             act(d, 50, "Practice: $d (not set up yet).") { EngineerClient.msg("§7Practice §f$d§7 isn't set up yet.") }
         })
@@ -449,7 +452,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         const val MIN_SPEED = 100
         const val MAX_SPEED = 750
 
-        /** The tab you were on (kept between openings). */
+        /** The tab open (the plan each time the menu opens). */
         private var tab = Tab.PLAN
 
         /** The type a terminal type pick last chose. */
