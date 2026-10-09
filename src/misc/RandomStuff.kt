@@ -57,7 +57,6 @@ object RandomStuff : Module(
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
-    private val itemSwingSpeed by NumberSetting("Item Swing Speed", 1.0, 0.05..2.0, 0.05, desc = "How fast your arm and held item swing: below 1x slower, above faster. Only the animation; attacks and clicks are unchanged.", unit = "x")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
 
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
@@ -271,9 +270,6 @@ object RandomStuff : Module(
 
     /** Radius for [blursGui], on the same 1..10 scale as vanilla's Menu Background Blur slider. */
     fun blurRadius(): Int = blurStrength.toInt()
-
-    /** Item Swing Speed: read by SwingSpeedMixin; 1 when Random Stuff is off. */
-    fun swingSpeed(): Float = if (enabled) itemSwingSpeed.toFloat() else 1f
 
     /** Hide Item Names: read by GuiItemNameMixin. */
     fun hidesItemNames(): Boolean = enabled && hideItemNames
