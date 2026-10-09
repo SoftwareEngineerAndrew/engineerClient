@@ -39,6 +39,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     override val restart get() = when (from) { 2 -> Fight.Start.S2; 3 -> Fight.Start.S3; 4 -> Fight.Start.S4; 5 -> Fight.Start.CORE; else -> Fight.Start.P3 }
 
     val stations = Station.all()
+    /** A section practice ([Practice]): only your role's part of this section is left to do. */
+    private val practice = Practice.section == from && from in 1..4
     /** The section in progress (1-4), 5 once the core is open. */
     var section = 1
         private set
@@ -98,6 +100,12 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             sectionEnd[s] = startN
         }
         if (from >= 2) Blocks.finish("p3start")
+        // Practice: the rest of the party's part of this section done, its gate too unless it's yours.
+        if (practice) {
+            val jobs = Practice.jobs(from)
+            stations.filter { it.section == from && it.id !in jobs }.forEach { doneAlready(it) }
+            if (from <= 3 && "gate $from" !in jobs) { gateDown[from] = true; Blocks.finish("gate$from${from + 1}") }
+        }
         section = from.coerceAtMost(5)
         sectionStart[section] = startN
         goldor.spawn(startN, bar = !(from == 1 && arrived))
@@ -105,7 +113,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         GhostCapture.start(this)
         Sim.player?.let { player ->
             if (!arrived) {
-                val spot = Spots.p3Start(from)
+                val spot = if (practice) Practice.spot(from) else Spots.p3Start(from)
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
             } else {
@@ -144,7 +152,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         } else {
             com.engineerclient.practice.TermInfo.simStart(from)
             maybeTaunt()
-            Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
+            if (!practice) Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
+        }
+        if (practice) {
+            Practice.begin(from)
+            if (count(from) >= Station.total(from)) sectionDone(from)
         }
     }
 
@@ -195,6 +207,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
+        if (practice) Practice.tick(this)
         GhostCapture.tick(this)
         if (handOff) { handOff = false; handDialogueOver(); Fight.begin(P4Necron(fromP3 = true)) }
     }

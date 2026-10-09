@@ -369,10 +369,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     /** Section starts, and the drills to come (placeholders for now). */
     private fun practicePanel() {
         row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
-            act(s.label.lowercase(), 50, "Starts P3 at ${s.label}, the sections before done.") { server { Fight.start(s) } }
+            act(s.label.lowercase(), 50, "Practice ${s.label}: your role's part of it (the rest done), from your early enter for it, each task timed.") { server { Practice.start(s.ordinal - Fight.Start.S1.ordinal + 1) } }
         })))
         row(DRILLS.map { d ->
-            act(d, 50, "Practice: $d (not set up yet).") { EngineerClient.msg("§7Practice §f$d§7 isn't set up yet.") }
+            act(d, 50, "Practice: $d (not set up yet).") { server { Practice.drill(d) } }
         })
     }
 

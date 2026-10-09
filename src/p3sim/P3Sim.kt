@@ -9,6 +9,7 @@ import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.Island
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
@@ -43,8 +44,11 @@ object P3Sim : Module(
     key = null,
 ) {
     val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
-    val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch.").onPress {
-        if (inSim) SimServer.run("restart") { Fight.start(Fight.lastStart) }
+    val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
+        if (inSim) SimServer.run("restart") { if (Practice.active) Practice.restart() else Fight.start(Fight.lastStart) }
+    }
+    val practiceKey by KeybindSetting("Practice Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts your practice (the menu's Practice tab) again. A left click with the Infinileap or in its menu does too.").onPress {
+        if (inSim) SimServer.run("practice restart") { Practice.restart() }
     }
     enum class ClassOption { HEALER, BERSERK, ARCHER, TANK, MAGE }
     enum class DeathTickOption { OFF, WARN, MASKS }
@@ -77,6 +81,32 @@ object P3Sim : Module(
     val p3OnlyS = +BooleanSetting("Stop After P3", false, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimesS = +BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
+
+    /** Practice: each task's time as you do it (like the Simon Says sim's). */
+    private val practiceHud by HUD("Practice Splits", "In practice (the menu's Practice tab): the time, and each of your tasks with the time it was done.", true, 10, 210, 1.5f) { example ->
+        val lines = if (example) listOf("§6Practice S2 §f6.45", "§7Lights §a2.10", "§7T3 §a4.85", "§7EE3 §e...")
+        else {
+            val mode = Practice.mode
+            if (!inSim || mode == null || Practice.tasks.isEmpty()) return@HUD 0 to 0
+            val next = Practice.tasks.firstOrNull { it.at < 0 }
+            listOf("§6Practice $mode ${if (Practice.endTicks >= 0) "§a" else "§f"}${Practice.secs(Practice.ticks)}") +
+                Practice.tasks.map { t -> "§7${t.label} " + if (t.at >= 0) "§a${Practice.secs(t.at)}" else if (t === next) "§e..." else "§8-" }
+        }
+        lines.forEachIndexed { i, l -> text(l, 0, i * 10, com.odtheking.odin.utils.Colors.WHITE, shadow = true) }
+        (lines.maxOf { mc.font.width(it) }) to lines.size * 10
+    }
+
+    /** Practice: the final time, large, as Term Info's section times look. */
+    private val practiceTimeHud by HUD("Practice Time", "A practice's final time, large (as Term Info's Section Time), until it starts again.", true, 420, 300, 5f) { example ->
+        val t = if (example) "§514.35" else Practice.endTicks.takeIf { inSim && Practice.active && it >= 0 }?.let { "§5${Practice.secs(it)}" } ?: return@HUD 0 to 0
+        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        mc.font.width(t) to 10
+    }
+
+    init {
+        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
+        practiceHud.enabled = true; practiceTimeHud.enabled = true
+    }
 
     val autoStart: Boolean get() = autoStartS.value
     val showTimes: Boolean get() = showTimesS.value
@@ -231,6 +261,8 @@ object P3Sim : Module(
             return
         }
         bridged = true
+        // On in the sim, so its HUDs (practice) show: the module's switch does nothing else.
+        if (!enabled) toggle()
         val me = mc.player?.name?.string ?: return
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7
