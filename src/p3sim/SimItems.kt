@@ -1918,7 +1918,20 @@ object SimItems {
     private val window = ArrayDeque<Broken>()
     private var refusedSaidAt = -100 // one 20-tick throttle shared by the refusal and no-charges lines
 
-    private fun resetBreaker() { charges = MAX_CHARGES; refillStep = 0; broken.clear(); window.clear(); refusedSaidAt = -100 }
+    private fun resetBreaker() {
+        charges = MAX_CHARGES; refillStep = 0; window.clear(); refusedSaidAt = -100
+        // Perma Break: the blocks stay broken through a restart ([rebreak] after the world is rebuilt).
+        if (!P3Sim.breakerPerma) broken.clear()
+    }
+
+    /** Perma Break, after a start rebuilt the world: the blocks broken before are broken again. */
+    fun rebreak() {
+        if (!P3Sim.breakerPerma) return
+        broken.forEach { Blocks.set(it.pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) }
+    }
+
+    /** Perma Break turned off: every block it kept broken comes back now. */
+    fun unPerma() { broken.forEach { restore(it) }; broken.clear(); window.clear() }
 
     /**
      * A hit with the Dungeonbreaker reaching the server (after the ping): breaks that one block for
@@ -1936,13 +1949,13 @@ object SimItems {
             else if (why.isNotEmpty() && now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(why) }
             return
         }
-        charges--
+        if (!P3Sim.breakerInfinite) charges--
         Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
         broken.addLast(Broken(pos, s, now))
         // The 21st block broken brings the oldest back 41 ticks later, never past the regen timer.
         val b = broken.last()
         window.addLast(b)
-        if (window.size > MAX_CHARGES) { val o = window.removeFirst(); o.restoreAt = minOf(o.restoreAt, now + 41) }
+        if (window.size > MAX_CHARGES) { val o = window.removeFirst(); if (!P3Sim.breakerPerma) o.restoreAt = minOf(o.restoreAt, now + 41) }
     }
 
     private fun restore(b: Broken) {
@@ -1962,6 +1975,8 @@ object SimItems {
         }
         // The regen setting (221 ticks on main, as the client sees it); ping is added on top by the delayed block update.
         val regen = Math.round(P3Sim.breakerRegen * 20).toInt()
+        // Perma Break: nothing comes back (until it's turned off: [unPerma]).
+        if (P3Sim.breakerPerma) return
         broken.removeAll { if (now - it.at >= regen || now >= it.restoreAt) { restore(it); true } else false }
     }
 

@@ -271,8 +271,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 stepper("Goldor kill", "${P3Sim.goldorKill}t", P3Sim.goldorKillS.description, { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) }),
                 stepper("Shortbow", "${P3Sim.shortbowCooldown}t", P3Sim.shortbowCooldownS.description, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown - 1).coerceAtLeast(1) }, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown + 1).coerceAtMost(20) }),
                 stepper("Hydra", "${P3Sim.hydraStart}", P3Sim.hydraStartS.description, { P3Sim.hydraStartS.value = (P3Sim.hydraStart - 1).coerceAtLeast(0) }, { P3Sim.hydraStartS.value = (P3Sim.hydraStart + 1).coerceAtMost(10) }),
-                stepper("Breaker", "${P3Sim.breakerRefill}/s", P3Sim.breakerRefillS.description, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill - 1).coerceAtLeast(1) }, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill + 1).coerceAtMost(10) }),
-                stepper("Blocks back", "${P3Sim.breakerRegen}s", P3Sim.breakerRegenS.description, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen - 0.5).coerceAtLeast(1.0) }, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen + 0.5).coerceAtMost(30.0) }),
+                toggle("Infinite Charges", P3Sim.breakerInfinite, 106, "On (green): the Dungeonbreaker never runs out of charges.") { P3Sim.toggleBreakerInfinite() },
+                toggle("Perma Break", P3Sim.breakerPerma, 106, "On (green): blocks the Dungeonbreaker breaks stay broken (through restarts too) until you turn it off; then they all come back.") {
+                    P3Sim.toggleBreakerPerma()
+                    if (!P3Sim.breakerPerma) server { SimItems.unPerma() }
+                },
             )),
             stack("§eFight", 92, "How the fight goes on.", listOf(
                 toggle("Lava Bounce", P3Sim.lava, 92, P3Sim.lavaS.description) { P3Sim.lavaS.value = !P3Sim.lava },
