@@ -374,36 +374,38 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
         // Custom: your start, the section's jobs you pick, checkpoints in order.
         val start = Practice.customStart
-        val sec = Practice.customSection
         val cps = Practice.checkpoints.size
+        // The row: the start's section once it's set, else the one you're in now.
+        val sec = if (start != null) Practice.customSection else mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
+        val picked = Practice.customJobsIn(sec)
         row(listOf(label("§eCustom", LABEL_W, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.")))
         row(listOf(
             ClickButton(100, if (start != null) "§aStart Position" else "Start Position",
-                tip("Left click: the custom practice starts where you stand, facing as you are; its section is the one you're in, its jobs your ${Roles.label(P3Sim.myClass)}'s there. " +
-                    (start?.let { "Now: S$sec, ${at(it)}. " } ?: "Not set. ") + "Right click: clear it all (start, jobs, checkpoints)."),
+                tip("Left click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
+                    (start?.let { "Now: S${Practice.customSection}, ${at(it)}. " } ?: "Not set. ") + "Right click: clear it all (start, jobs, checkpoints)."),
                 left = {
-                    val h = here()
-                    if (h != null && !Practice.setStart(h)) EngineerClient.msg("§cStand in one of the four sections to set the start.")
+                    here()?.let { h -> val n = Practice.setStart(h); EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}.") }
                     rebuildWidgets()
                 },
-                right = { Practice.clearCustom(); rebuildWidgets() }),
+                right = { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared."); rebuildWidgets() }),
             ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
                 tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: the last one off. Now: $cps."),
-                left = { here()?.let { Practice.addCheckpoint(it) }; rebuildWidgets() },
+                left = { here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }; rebuildWidgets() },
                 right = { Practice.removeCheckpoint(); rebuildWidgets() }),
         ))
-        if (start == null || sec !in 1..4) return
         row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         val cells = arrayOfNulls<String>(COLUMNS.size)
         for (job in P3Plan.jobsIn(sec)) cells[column(job)] = job
-        row(listOf(label("§6§lS$sec", SEC_W, "The custom practice's section: where its start is.")) + cells.map { job ->
+        row(listOf(label("§6§lS$sec", SEC_W, if (start != null) "The custom practice's section: where its start is." else "The section you're in (the start's, once it's set).")) + cells.map { job ->
             if (job == null) label("", JOB_W)
             else {
-                val on = job in Practice.customJobs
-                change(if (on) "§aYou" else "§8Done", JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job) }
+                val on = job in picked
+                change(if (on) "§aYou" else "§8Done", JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job, sec) }
             }
         })
-        row(listOf(act("§aStart Custom", 100, "Starts the custom practice: S$sec, from your start position, your jobs then the $cps checkpoint(s), timed.") { server { Practice.startCustom() } }))
+        row(listOf(act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
+            if (start != null) "Starts the custom practice: S$sec, from your start position, your jobs then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
+            .also { it.active = start != null }))
     }
 
     // ------------------------------------------------------------------ pieces
