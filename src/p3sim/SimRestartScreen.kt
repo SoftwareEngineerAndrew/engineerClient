@@ -130,15 +130,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
      * yours: a stack, its bot does it too with Helpers on (whoever's first).
      */
     private fun planPanel() {
-        val skill = P3Plan.skillName()
-        text("§7$skill §8· §7your role as ${Roles.label(P3Sim.myClass)}: §f${P3Plan.preset().roles[P3Sim.myClass] ?: "none"}")
         row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         for (s in 1..4) {
             val cells = arrayOfNulls<String>(COLUMNS.size)
             for (job in P3Plan.jobsIn(s)) cells[column(job)] = job
             row(listOf(label("§6§lS$s", SEC_W, "Section $s's jobs.")) + cells.map { job -> if (job == null) label("", JOB_W) else jobButton(job) })
         }
-        text("§8Left click: yours or a bot's §7· §8right click: which bot, or (yours) a stack §e+")
         row(listOf(tabCell(Tab.ADVANCED, "Advanced", "Spawn and early-enter spots, the leap menu, the bots' options.")))
     }
 
