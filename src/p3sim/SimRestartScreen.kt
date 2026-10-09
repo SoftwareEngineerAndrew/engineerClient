@@ -402,14 +402,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             change("§cClear", 40, "Clears the custom practice: start, jobs and checkpoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
             DelaySlider(96),
         ))
-        row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         val cells = arrayOfNulls<String>(COLUMNS.size)
         for (job in P3Plan.jobsIn(sec)) cells[column(job)] = job
         row(listOf(label("§6§lS$sec", SEC_W, if (start != null) "The custom practice's section: where its start is." else "The section you're in (the start's, once it's set).")) + cells.map { job ->
             if (job == null) label("", JOB_W)
             else {
                 val on = job in picked
-                change(if (on) "§aYou" else "§8Done", JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job, sec) }
+                change((if (on) "§a" else "§8") + COLUMNS[column(job)].first, JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job, sec) }
             }
         })
         row(listOf(act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
