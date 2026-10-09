@@ -72,6 +72,8 @@ object P3Sim : Module(
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1..10, 1, unit = "/s", desc = "Charges back each second (20 max), in irregular +2 steps. Main server: ~6 a second; alpha ~2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0..30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")
+    val breakerInfiniteS = +BooleanSetting("Infinite Breaker Charges", false, desc = "The Dungeonbreaker never runs out: every break is free (20 charges always).")
+    val breakerPermaS = +BooleanSetting("Perma Break", false, desc = "Blocks the Dungeonbreaker breaks stay broken (through restarts too) until this is turned off; then they all come back.")
     val realMasksS = +BooleanSetting("Real Masks", true, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
     val wornMaskS = +SelectorSetting("Starting Mask", MaskOption.SPIRIT, desc = "Real Masks: the mask you wear (/stats swaps it).")
     val phoenixS = +BooleanSetting("Phoenix Pet", false, desc = "Your pet: Phoenix (saves you from a death, no Black Cat speed bonus) or Black Cat (+100 speed). The Pet Rod swaps them.")
@@ -150,6 +152,11 @@ object P3Sim : Module(
     }
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
+    // Null-safe: a hotswapped game has new settings null until it is relaunched.
+    val breakerInfinite: Boolean get() = (breakerInfiniteS as BooleanSetting?)?.value == true
+    val breakerPerma: Boolean get() = (breakerPermaS as BooleanSetting?)?.value == true
+    fun toggleBreakerInfinite() { (breakerInfiniteS as BooleanSetting?)?.let { it.value = !it.value } }
+    fun toggleBreakerPerma() { (breakerPermaS as BooleanSetting?)?.let { it.value = !it.value } }
     val realMasks: Boolean get() = realMasksS.value
     val phoenix: Boolean get() = phoenixS.value
     // Null-safe: a hotswapped game has the setting null until it is relaunched (off till then).
