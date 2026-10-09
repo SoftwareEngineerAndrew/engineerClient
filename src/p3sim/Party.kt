@@ -102,7 +102,7 @@ object Party {
             ees[into] = when {
                 c == null -> null
                 f != null -> Ee(into, base?.label ?: "EE$into", Vec3(f.p.x, f.p.y, f.p.z), f.yaw, f.pitch, c)
-                base != null && spot != null -> Ee(into, base.label, spot.pos, spot.yaw, spot.pitch, c)
+                base != null && spot != null -> Ee(into, base.label, Vec3(spot.x, spot.y, spot.z), spot.yaw, spot.pitch, c)
                 else -> null
             }
         }

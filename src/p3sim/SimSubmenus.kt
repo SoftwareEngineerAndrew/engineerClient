@@ -135,11 +135,11 @@ class SimRolesScreen : SimSubmenu("Roles") {
     }
 
     /** Where you stand and look now (a tenth of a block; y to the hundredth, so a slab's height stays). */
-    private fun here(): P3Plan.Placed? = mc.player?.let {
-        P3Plan.Placed(net.minecraft.world.phys.Vec3(Math.round(it.x * 10) / 10.0, Math.floor(it.y * 100) / 100.0, Math.round(it.z * 10) / 10.0), it.yRot, it.xRot)
+    private fun here(): Spots.Spot? = mc.player?.let {
+        Spots.Spot("set", Math.round(it.x * 10) / 10.0, Math.floor(it.y * 100) / 100.0, Math.round(it.z * 10) / 10.0, it.yRot, it.xRot)
     }
 
-    private fun at(p: P3Plan.Placed) = "%.1f, %.1f, %.1f".format(Locale.ROOT, p.pos.x, p.pos.y, p.pos.z)
+    private fun at(p: Spots.Spot) = "%.1f, %.1f, %.1f".format(Locale.ROOT, p.x, p.y, p.z)
 
     private fun jobButton(job: String): Button {
         val mine = P3Plan.isMine(job)
@@ -304,8 +304,8 @@ class SimTeleportScreen : SimSubmenu("Teleport") {
         row(P3Plan.earlyEnters.map { ee ->
             val who = ee.owner?.let { if (ee.byYou) "yours" else "the ${Roles.label(it)}'s" } ?: "nobody's in this skill"
             val s = P3Plan.eeSpot(ee)
-            act(ee.label, 60, "To the ${ee.label} spot (${who}): ${xyz(s.pos.x, s.pos.y, s.pos.z)}. Set it in Roles.") {
-                tp(s.pos.x, s.pos.y, s.pos.z, s.yaw, s.pitch)
+            act(ee.label, 60, "To the ${ee.label} spot (${who}): ${xyz(s.x, s.y, s.z)}. Set it in Roles.") {
+                tp(s.x, s.y, s.z, s.yaw, s.pitch)
             }
         })
     }
