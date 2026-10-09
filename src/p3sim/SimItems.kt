@@ -981,6 +981,7 @@ object SimItems {
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Loadouts.applySaved(p)  // your saved gear and pet, else the defaults: Maxor + mask (+ Black Cat)
+        if (p3 && P3Sim.terrorAtTerms) Loadouts.wearTerror(p)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
