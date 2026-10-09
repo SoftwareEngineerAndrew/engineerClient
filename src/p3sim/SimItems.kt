@@ -1112,8 +1112,8 @@ object SimItems {
         val player = mc.player ?: return
         val level = mc.level ?: return
         if (!simClient(level)) return
-        // Practice: a left click with the Infinileap starts it again.
-        if (Practice.active && idOf(player.mainHandItem) == "INFINITE_SPIRIT_LEAP") { SimServer.run("practice restart") { Practice.restart() }; return }
+        // Practice: a left click with the Infinileap starts it again; once it's done (0.25 s on), a left click with anything.
+        if (Practice.clickRestarts() || Practice.active && idOf(player.mainHandItem) == "INFINITE_SPIRIT_LEAP") { SimServer.run("practice restart") { Practice.restart() }; return }
         val id = idOf(player.mainHandItem)?.takeIf { it in Bows.SHORTBOWS } ?: return
         SimServer.run("left click") { Sim.player?.let { p -> Bows.click(p, id, left = true) } }
     }

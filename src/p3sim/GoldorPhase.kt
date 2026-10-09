@@ -102,7 +102,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (from >= 2) Blocks.finish("p3start")
         // Practice: the rest of the party's part of this section done, its gate too unless it's yours.
         if (practice) {
-            val jobs = Practice.jobs(from)
+            val jobs = Practice.practiceJobs()
             stations.filter { it.section == from && it.id !in jobs }.forEach { doneAlready(it) }
             if (from <= 3 && "gate $from" !in jobs) { gateDown[from] = true; Blocks.finish("gate$from${from + 1}") }
         }
@@ -113,7 +113,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         GhostCapture.start(this)
         Sim.player?.let { player ->
             if (!arrived) {
-                val spot = if (practice) Practice.spot(from) else Spots.p3Start(from)
+                val spot = if (practice) Practice.startSpot() else Spots.p3Start(from)
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
             } else {

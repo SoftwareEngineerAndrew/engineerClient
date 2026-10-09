@@ -168,6 +168,7 @@ object P3Sim : Module(
     fun init() {
         SimServer.register()
         P3Plan.load()
+        Practice.load()
         // /p3sim: the menu in the sim (or opens the sim); /p3sim <start> starts it; /p3sim rebuild remakes the world.
         // /stats: Hypixel's equipment window, here to swap masks. On the sim's own server only (a
         // server command, so Hypixel's /stats is never touched).
