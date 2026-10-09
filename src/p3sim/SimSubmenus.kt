@@ -118,20 +118,21 @@ class SimRolesScreen : SimSubmenu("Roles") {
 
         // Spots, for this skill and class only: stand there, look the way you want, click.
         val me = Roles.label(P3Sim.myClass)
-        text("§eSpots §8· §7as $me in $skill §8(green: set; stand there, look, click)")
+        text("§eSpots §8· §7as $me in $skill §8(green: set for it, else the default; stand there, look, click)")
         val spawn = P3Plan.customSpot("spawn")
+        val spawnSet = P3Plan.hasCustomSpot("spawn")
         row(listOf(
             label("§eSpawn", LABEL_W, "Where Restart P3 puts you."),
-            change(if (spawn != null) "§aSet here" else "Set here", 80,
+            change(if (spawnSet) "§aSet here" else "Set here", 80,
                 "Restart P3 puts you where you stand now, facing as you are (as $me in $skill). Now: ${spawn?.let { at(it) } ?: "your first S1 job's spot"}.") { here()?.let { P3Plan.setCustomSpot("spawn", it) } },
-            change("Default", 60, "Back to your first S1 job's spot (as $me in $skill).") { P3Plan.setCustomSpot("spawn", null) },
+            change("Default", 60, "Back to the default spawn (Normal PF's, as $me).") { P3Plan.setCustomSpot("spawn", null) },
         ))
         row(listOf<LayoutElement>(label("§eEarly enters", LABEL_W, "Where each early enter stands, whoever does it.")) + P3Plan.earlyEnters.map { ee ->
-            val set = P3Plan.customSpot(ee.key) != null
+            val set = P3Plan.hasCustomSpot(ee.key)
             val who = ee.owner?.let { if (ee.byYou) "you" else "the ${Roles.label(it)} bot" } ?: "nobody in $skill"
             change(if (set) "§a${ee.label}" else ee.label, 48,
                 "${ee.label} (${who}) stands where you stand now, facing as you are (as $me in $skill). Now: ${at(P3Plan.eeSpot(ee))}.") { here()?.let { P3Plan.setCustomSpot(ee.key, it) } }
-        } + change("Defaults", 60, "Every early enter back to its usual spot (as $me in $skill).") { P3Plan.earlyEnters.forEach { P3Plan.setCustomSpot(it.key, null) } })
+        } + change("Defaults", 60, "Every early enter back to its default spot (Normal PF's) for $me in $skill.") { P3Plan.earlyEnters.forEach { P3Plan.setCustomSpot(it.key, null) } })
     }
 
     /** Where you stand and look now (a tenth of a block; y to the hundredth, so a slab's height stays). */

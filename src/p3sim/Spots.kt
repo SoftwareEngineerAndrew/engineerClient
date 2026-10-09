@@ -28,7 +28,7 @@ object Spots {
     val LIGHTS = Spot("Lights device", 60.5, 132.0, 140.0, 0f)
 
     /**
-     * Where a P3 start puts you: [from] 1 = the spawn set in Roles for this skill and class, else your first S1 terminal in your role's order (Tank's 21: T2, Archer's 43: T4), else your first S1 job's spot (the target plate if it's yours) (fast parties leap into S1 before
+     * Where a P3 start puts you: [from] 1 = your spawn (set in Roles for this skill and class, else the default: P3Plan.defaultSpot), else your first S1 terminal in your role's order (Tank's 21: T2, Archer's 43: T4), else your first S1 job's spot (the target plate if it's yours) (fast parties leap into S1 before
      * Goldor speaks), 2-4 = that section's door, 5 = the core.
      */
     fun p3Start(from: Int): Spot = when (from) {

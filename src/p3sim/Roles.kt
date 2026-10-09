@@ -49,24 +49,29 @@ object Roles {
      */
     class Help(val section: Int, val yours: String, val by: String, val jobs: List<String>, val at: Double)
 
+    // Normal PF and Quality PF as the user plays them (2026-10-09). Roles listed mage, archer, healer, tank, bers: in a
+    // stack the first listed bot does it (S3's levers and gate: the archer, before the tank). The S2 device (Lights) is
+    // the ee2 mage's, done in S1; S2's ll is the ee3 player's (the gate follows it).
     val PF = Preset(
         "PF",
         roles = linkedMapOf(
+            MAGE to "bl ee2 / dev 2 / core / recore",
+            ARCHER to "43 / 4 rl / 4 bl / 2",
             HEALER to "ss / ll ee3 / 2 dev / 4 bl",
-            MAGE to "43 / 2 core / core / recore",
-            BERSERK to "i4 / 53 / 3 dev / 3 bl",
             TANK to "21 / 13 / 1 bl / 1",
-            ARCHER to "bl ee2 / dev 4 rl / 4 bl / 2",
+            BERSERK to "i4 / 53 / 3 / 3 bl",
         ),
         times = listOf(
-            "levers 2.2 | gate 2.4 | i4 7.3 | terms 9.0 | lights 10.0 | ss 13.5",
-            "1 2 4 5 ll 4.4 | gate 4.6 | 3 rl 6.5",
-            "1 2.4 | 2 3 4 3.5 | dev 4.2 | gate 5.0 | levers 5.2",
-            "terms 4.5 | levers 5.2",
+            // ll 0.35, rl 2.15, gate 2.85 (into S2 at 3.15), i4 5.1, Lights 7.1, the four terms by 9, SS 9.6.
+            "ll 0.35 | rl 2.15 | gate 2.85 | i4 5.1 | lights 7.1 | terms 9.0 | ss 9.6",
+            "ll 2.8 | 1 4 5 3.0 | gate 3.4 | 2 3 rl 7.0",
+            "1 4 3.0 | 2 3 5.0 | levers gate 8.0 | dev 9.0",
+            "1 2 4.0 | 3 4 6.0 | levers 8.0",
         ),
         moves = listOf(
-            "i4 leaps 8.1 | ee2 spot 11.2 | leap ee2 12.1 | hold 2",
-            "ee3 waits 1 2 3 4",
+            // The i4 bot leaps out to the tank at 5.8; the mage on the ee2 spot by 7.8; everyone but SS leapt there by 9.5.
+            "i4 leaps 5.8 | ee2 spot 7.8 | leap ee2 9.4",
+            "ee3 spot 5.0 | ee3 waits 1 2 3 4",
             "", "",
         ),
     )
@@ -74,22 +79,24 @@ object Roles {
     val QUALITY_PF = Preset(
         "Quality PF",
         roles = linkedMapOf(
-            HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
-            // S2's dev: the mage does it (dev at 8.3, on the ee2 spot at 8.6).
-            MAGE to "bl ee2 / dev 2 3 core / core / recore",
-            BERSERK to "i4 / 53 / 3 dev / 3 bl",
-            TANK to "21 / ll ee3 / 1 bl / 1",
+            MAGE to "bl ee2 / dev 2 3 / core / recore",
             ARCHER to "43 / 4 rl / 4 bl / 2",
+            HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
+            TANK to "21 / ll ee3 / 1 bl / 1",
+            BERSERK to "i4 / 53 / 3 / 3 bl",
         ),
         times = listOf(
-            "levers 1.1 | gate 1.3 | i4 6.8 | terms 8.1 | lights 8.3 | ss 12.3",
-            "1 2 4 5 ll 1.9 | gate 2.1 | 3 rl 4.2",
-            "2 3 4 2.1 | 1 2.8 | dev 3.7 | gate 3.9 | levers 4.1",
-            "terms 3.1 | levers 4.2",
+            // ll 0.15, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
+            "ll 0.15 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
+            "ll 0.8 | gate 1.0 | 1 4 5 2.1 | 2 3 rl 5.0",
+            "1 3 4 2.1 | 2 4.0 | levers gate 6.0 | dev 6.5",
+            "1 3 4 2.1 | 2 4.0 | levers 5.2",
         ),
         moves = listOf(
-            "i4 leaps 7.2 | ee2 spot 8.6 | leap ee2 9.1 | ee2 waits ee3 4 5",
-            "ee3 waits 1 2 3 4",
+            // The i4 bot leaps out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone but SS leapt there by 6.4,
+            // and the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
+            "i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
+            "ee3 spot 3.2 | ee3 waits 1 2 3 4",
             "", "",
         ),
         // Stack help: S3 4 bl -> 1st term gets rl, 1 bl -> 4th term gets ll and the
