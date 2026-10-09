@@ -241,7 +241,7 @@ object BrWaypoints2 : Module(
             if (ticks % 10 == 0) mapPath()
             trackMyDoor()
             if (debug && (rushing || allRooms)) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
-            traceRoom()
+            if (debug) traceRoom()
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -516,7 +516,7 @@ object BrWaypoints2 : Module(
 
     private var tracedRoom: String? = null
 
-    /** Temporary (26.3): one log line per room change with each link the boxes need, to find why none show. */
+    /** With Debug: one log line per room change with each link the boxes need. */
     private fun traceRoom() {
         val cur = DungeonUtils.currentRoom
         val key = cur?.name ?: "none"

@@ -42,5 +42,12 @@ jobs:
         run: |
           gh release delete "release-$CHANNEL" --yes --cleanup-tag || true
           if [ "$CHANNEL" = main ]; then latest=--latest; else latest=--latest=false; fi
-          gh release create "release-$CHANNEL" build/libs/*.jar --target "$GITHUB_SHA" \
-            --title "$CHANNEL (Minecraft $MC)" --notes "$EC_VERSION for Minecraft $MC" $latest
+          # One jar with a fixed name per Minecraft version, so its download link never changes:
+          # releases/download/release-<channel>/EngineerClient-<mc>.jar
+          jar="EngineerClient-$MC.jar"
+          cp build/libs/*.jar "$jar"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$CHANNEL/$jar"
+          notes="$(printf '**[Download EngineerClient for Minecraft %s](%s)** · %s\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API, Fabric Language Kotlin and Odin.' "$MC" "$url" "$EC_VERSION")"
+          gh release create "release-$CHANNEL" "$jar" --target "$GITHUB_SHA" \
+            --title "EngineerClient for Minecraft $MC" \
+            --notes "$notes" $latest
