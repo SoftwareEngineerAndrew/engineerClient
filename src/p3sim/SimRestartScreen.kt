@@ -35,8 +35,9 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     override fun init() {
         super.init()
         val cx = width / 2
-        val r0 = TOP + 12
-        val restartY = r0 + 2 * ROW
+        // Restart in the middle of the screen; the rest hangs off it.
+        val restartY = height / 2 - 10
+        val r0 = restartY - 2 * ROW
         val left = cx - RESTART_W / 2 - GAP - SIDE_W
         val right = cx + RESTART_W / 2 + GAP
         val roleX = right + SIDE_W + GAP
@@ -118,7 +119,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     /** A column's title, centred over it. */
     private fun title(t: String, x: Int, w: Int) {
         val c = Component.literal(t)
-        addRenderableWidget(StringWidget(c, font).also { it.setPosition(x + (w - font.width(c)) / 2, TOP) })
+        addRenderableWidget(StringWidget(c, font).also { it.setPosition(x + (w - font.width(c)) / 2, height / 2 - 10 - 2 * ROW - 12) })
     }
 
     // ------------------------------------------------------------------ the plan (default)
@@ -428,7 +429,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     }
 
     private companion object {
-        const val TOP = 6
         const val RESTART_W = 100
         const val GAP = 10
         const val ROW = 22
