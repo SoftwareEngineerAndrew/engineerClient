@@ -1112,6 +1112,8 @@ object SimItems {
         val player = mc.player ?: return
         val level = mc.level ?: return
         if (!simClient(level)) return
+        // Practice: a left click with the Infinileap starts it again.
+        if (Practice.active && idOf(player.mainHandItem) == "INFINITE_SPIRIT_LEAP") { SimServer.run("practice restart") { Practice.restart() }; return }
         val id = idOf(player.mainHandItem)?.takeIf { it in Bows.SHORTBOWS } ?: return
         SimServer.run("left click") { Sim.player?.let { p -> Bows.click(p, id, left = true) } }
     }
@@ -2105,6 +2107,8 @@ object SimItems {
         private var inClick = false
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
+            // Practice: a left click in the leap menu starts it again (there's nobody to leap to).
+            if (Practice.active && button == 0) { (p as? ServerPlayer)?.let { sp -> Fight.later(0, "practice restart") { sp.closeContainer(); Practice.restart() } }; return }
             if (slot !in 11..16) return
             val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
             val bot = bots.firstOrNull { it.name == name } ?: return

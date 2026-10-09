@@ -185,7 +185,7 @@ object Party {
     fun busyAt(st: Station) = bots.any { it.working === st }
 
     /** Everyone (the bots) inside [box]. */
-    fun allIn(box: AABB) = !P3Sim.bots || bots.all { it.entity == null || box.contains(it.pos) }
+    fun allIn(box: AABB) = !botsOn || bots.all { it.entity == null || box.contains(it.pos) }
 
     // ------------------------------------------------------------------ P3
 
@@ -227,15 +227,18 @@ object Party {
     /** Everyone's leaping onto the core early enterer by the core (the core open). */
     private var coreEeLeaps = false
 
+    /** Bots in P3: the setting, never in practice (only your part is left there). */
+    private val botsOn get() = P3Sim.bots && !Practice.active
+
     fun startP3(phase: GoldorPhase) {
         clear()
         youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
         eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false
         planned = 0
         lastLeap = 0
-        if (P3Sim.bots) { bots(); if (phase.from == 1) startGhosts(phase) }
+        if (botsOn) { bots(); if (phase.from == 1) startGhosts(phase) }
         resolveEes()
-        if (!P3Sim.bots) return
+        if (!botsOn) return
         if (P3Sim.realMoves) Routes.preload()
         val from = phase.from.coerceIn(1, 5)
         // No early enter into the section you start in (or before).
@@ -442,7 +445,7 @@ object Party {
 
     fun tickP3(phase: GoldorPhase) {
         trackYou(phase)
-        if (!P3Sim.bots) return
+        if (!botsOn) return
         val n = phase.n
         val s = phase.section
         dbgN = n; dbgS = s; curPhase = phase
@@ -1097,7 +1100,7 @@ object Party {
     /** The bots standing still at [spots] (P1, P2: leap targets). */
     fun standAt(spots: List<Vec3>) {
         clear()
-        if (!P3Sim.bots) return
+        if (!botsOn) return
         bots().forEachIndexed { i, b -> spawn(b, spots[i % spots.size]); place(b) }
     }
 
@@ -1107,7 +1110,7 @@ object Party {
      * drop in from the core over ~3 s (at 3 s most are still at y 69-75), so they land one by one.
      */
     fun startP4(fromP3: Boolean) {
-        if (!P3Sim.bots) return
+        if (!botsOn) return
         leaps.clear(); jobs.clear(); bots.forEach { it.ghost = null }
         val gen = generation
         bots().forEachIndexed { i, b ->

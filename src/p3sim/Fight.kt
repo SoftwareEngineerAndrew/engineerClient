@@ -231,9 +231,10 @@ object Fight {
     @Volatile var lastStart = Start.P3
         private set
 
-    /** Starts [what] from its beginning (stopping whatever ran). */
-    fun start(what: Start) {
+    /** Starts [what] from its beginning (stopping whatever ran). [practice]: a section practice's start ([Practice]); any other start ends practice mode. */
+    fun start(what: Start, practice: Boolean = false) {
         val player = Sim.player ?: return
+        if (!practice) Practice.exit()
         lastStart = what
         stop()
         later.clear()
@@ -274,7 +275,9 @@ object Fight {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()
             // From Storm's death: 3.1 s to Goldor's line, as in the game since the boss update.
-            Start.P3, Start.S1 -> StormEnd()
+            Start.P3 -> StormEnd()
+            // S1's practice starts at Goldor's line, you on your spawn.
+            Start.S1 -> if (practice) GoldorPhase(1) else StormEnd()
             Start.S2 -> GoldorPhase(2)
             Start.S3 -> GoldorPhase(3)
             Start.S4 -> GoldorPhase(4)
@@ -295,6 +298,7 @@ object Fight {
 
     /** Ends the fight (the menu's Stop): everything back to how it was built. */
     fun end() {
+        Practice.exit()
         Recorder.finish()
         stop()
         Sim.clearEntities()
