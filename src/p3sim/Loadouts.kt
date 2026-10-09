@@ -60,6 +60,9 @@ object Loadouts {
         return s
     }
 
+    /** [this] with its lore's helmet line as [line] (the Terror loadout shows Bonzo's Mask). */
+    private fun Entry.withHelmet(line: String) = Entry(slot, item, name, lore.map { if (it.startsWith("§r§7Helmet: ")) line else it }, tex, dye, glint, style, id)
+
     /** Terror Helmet as recorded; worn with the set it is Hydra Strike 4/4. */
     private fun terrorHelmet(): ItemStack {
         val e = entries[54] ?: return ItemStack.EMPTY
@@ -74,7 +77,8 @@ object Loadouts {
     private val defs = listOf(
         Def(24, "Cat terms", SimItems.ArmorSet.WISE, Helm.RACING, false),
         Def(23, "Phoenix terms", SimItems.ArmorSet.WISE, Helm.RACING, true),
-        Def(34, "Terror", SimItems.ArmorSet.TERROR, Helm.TERROR, false),
+        // Terror with Bonzo's Mask on, not the recorded Terror Helmet (Hydra Strike 3/4).
+        Def(34, "Terror", SimItems.ArmorSet.TERROR, Helm.MASK, false, "BONZO_MASK"),
         // The recorded one wears the Necrotic Spirit Mask.
         Def(41, "Mask terms", SimItems.ArmorSet.MAXOR, Helm.MASK, false, "SPIRIT_MASK"),
     )
@@ -274,7 +278,7 @@ object Loadouts {
         private fun draw() {
             val c = container
             for (i in 0 until 54) c.setItem(i, Terminals.FILLER)
-            for ((slot, e) in entries) if (slot < 54) c.setItem(slot, e.stack())
+            for ((slot, e) in entries) if (slot < 54) c.setItem(slot, (if (slot == 34) e.withHelmet("§r§7Helmet: §r§9Bonzo's Mask") else e).stack())
             val head = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
             c.setItem(11, if (head.isEmpty) Terminals.named(Items.STAINED_GLASS_PANE.gray(), "§7Empty Helmet Slot") else head)
             for ((slot, eq) in listOf(20 to EquipmentSlot.CHEST, 29 to EquipmentSlot.LEGS, 38 to EquipmentSlot.FEET)) {
