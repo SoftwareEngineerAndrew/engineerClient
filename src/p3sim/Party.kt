@@ -94,15 +94,15 @@ object Party {
             val owner = GhostPlayer.eeOwner(plan.ee[k]?.name, P3Sim.myClass?.name,
                 bots.filter { it.ghost?.earlyEnters(k) == true }.map { it.clazz.name }, bots.filter { it.ghost != null }.map { it.clazz.name }.toSet())
             val c = CLASSES.firstOrNull { it.name == owner }
-            // The preset's own spot for it, if it has one (else the menu's).
-            val spot = base?.let { P3Plan.preset().spots[it.key] } ?: base?.spot
+            // The one set in Roles for this skill and class, else the preset's own, else the Early Enters tab's.
+            val spot = base?.let { P3Plan.eeSpot(it) }
             val g = bots.firstOrNull { it.clazz == c }?.ghost
             // A ghost's spot is where it stood in its run (the recore: the plan's).
             val f = if (into == 6) null else g?.eeSpot(k)
             ees[into] = when {
                 c == null -> null
                 f != null -> Ee(into, base?.label ?: "EE$into", Vec3(f.p.x, f.p.y, f.p.z), f.yaw, f.pitch, c)
-                base != null -> Ee(into, base.label, spot!!, base.yaw, base.pitch, c)
+                base != null && spot != null -> Ee(into, base.label, spot.pos, spot.yaw, spot.pitch, c)
                 else -> null
             }
         }
