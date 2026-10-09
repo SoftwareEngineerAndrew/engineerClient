@@ -1,15 +1,17 @@
 name: Release
 
-# One rolling release: every push to main replaces the "main" release.
+# One rolling release per Minecraft version: main is the newest (26.3, release "main"); each older
+# version lives on an mc/<version> branch with its own release ("26.2", "26.1.2"). Every push
+# replaces that branch's release.
 on:
   push:
-    branches: [main]
+    branches: [main, "mc/**"]
 
 permissions:
   contents: write
 
 concurrency:
-  group: release
+  group: release-${{ github.ref_name }}
 
 jobs:
   release:
@@ -24,15 +26,21 @@ jobs:
         with:
           gradle-version: 9.6.1
       - name: Odin 0.3.7 (26.3 port, not released yet)
+        if: github.ref_name == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 37808382947 -R odtheking/OdinFabric -n Odin-0.3.7.jar -D libs/odin
       - name: Version
-        run: echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        run: |
+          echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "CHANNEL=${GITHUB_REF_NAME#mc/}" >> "$GITHUB_ENV"
+          echo "MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)" >> "$GITHUB_ENV"
       - run: gradle build --console=plain -Dorg.gradle.jvmargs=-Xmx2G
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete release-main --yes --cleanup-tag || true
-          gh release create release-main build/libs/*.jar --target "$GITHUB_SHA" --title main --notes "$EC_VERSION" --latest
+          gh release delete "release-$CHANNEL" --yes --cleanup-tag || true
+          if [ "$CHANNEL" = main ]; then latest=--latest; else latest=--latest=false; fi
+          gh release create "release-$CHANNEL" build/libs/*.jar --target "$GITHUB_SHA" \
+            --title "$CHANNEL (Minecraft $MC)" --notes "$EC_VERSION for Minecraft $MC" $latest
