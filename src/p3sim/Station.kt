@@ -50,7 +50,7 @@ class Station(
             s.snapTo(at.x, y, at.z, 0f, 0f)
             s.isInvisible = true
             // Gravity is on in Hypixel's packets (noGravity false); SimStand never moves by itself.
-            s.isPermanentlyInvulnerable = true
+            s.isInvulnerable = true
             s.isSilent = true
             // Styled from the start, as Hypixel's names are.
             s.setCustomName(if (name.isEmpty()) null else Sim.legacy(name))
@@ -160,7 +160,7 @@ object Corpse {
         EngineerClient.safely("p3sim corpse") {
             val m = net.minecraft.world.entity.decoration.Mannequin(EntityTypes.MANNEQUIN, Sim.level)
             m.setComponent(net.minecraft.core.component.DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(p.gameProfile))
-            m.isPermanentlyInvulnerable = true
+            m.isInvulnerable = true
             m.setNoGravity(true)
             m.isSilent = true
             for (slot in listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET))
@@ -172,7 +172,7 @@ object Corpse {
                 val s = SimStand(Sim.level)
                 s.snapTo(x, y, p.z, 0f, 0f)
                 s.isInvisible = invisible
-                s.isPermanentlyInvulnerable = true
+                s.isInvulnerable = true
                 s.isSilent = true
                 Station.setMarker(s)
                 if (name != null) { s.setCustomName(Sim.legacy(name)); s.isCustomNameVisible = true }

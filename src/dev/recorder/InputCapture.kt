@@ -378,9 +378,8 @@ object InputCapture {
             "\"cancelled\":$cancelled,\"screen\":${screenName(s)}")
     }
 
-    // 26.3 (SDL): code is already the scancode; the layout key it typed is keycode (no raw scancode now).
     private fun keyMembers(ev: KeyEvent) =
-        "\"key\":${q(InputConstants.getKey(ev).name)},\"code\":${ev.key()},\"keycode\":${ev.keycode()},\"mods\":${ev.modifiers()}"
+        "\"key\":${q(InputConstants.getKey(ev).name)},\"code\":${ev.key()},\"scan\":${ev.scancode()},\"mods\":${ev.modifiers()}"
 
     /** Names of the key mappings [match] picks (what this key or button is bound to). */
     private inline fun maps(match: (net.minecraft.client.KeyMapping) -> Boolean): String =

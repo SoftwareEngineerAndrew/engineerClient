@@ -45,7 +45,7 @@ object EngineerClient : ClientModInitializer {
     private var windowKept = false
 
     /**
-     * Fullscreen game windows minimize themselves when they lose focus (Alt-Tab, a click on another
+     * Fullscreen GLFW windows minimize themselves when they lose focus (Alt-Tab, a click on another
      * screen), and on KDE Wayland a window minimized that way comes back blank: the game never hears
      * it was restored, so it keeps skipping its frames. Auto-minimize off, and a window that is
      * already stuck minimized is restored.
@@ -56,8 +56,9 @@ object EngineerClient : ClientModInitializer {
     /**
      * Exclusive fullscreen (a video mode change) on Wayland goes through Xwayland, and once the game
      * loses focus KDE never shows its window again, focused or not. Borderless fullscreen looks the
-     * same and doesn't break, so on Wayland exclusive is turned off. Since 26.3 the option applies
-     * live, so a window in exclusive fullscreen goes straight to borderless.
+     * same and doesn't break, so on Wayland exclusive is turned off. The window took its mode at
+     * startup and keeps it until a restart, so a window in it now goes windowed (F11 after a restart
+     * is borderless).
      */
     private fun noExclusiveFullscreen() {
         exclusiveChecked = true
@@ -65,6 +66,10 @@ object EngineerClient : ClientModInitializer {
         val o = mc.options
         if (!o.exclusiveFullscreen().get()) return
         o.exclusiveFullscreen().set(false)
+        if (mc.window.isFullscreen) {
+            mc.window.toggleFullScreen()
+            o.fullscreen().set(false)
+        }
         o.save()
         logger.info("[ec] exclusive fullscreen off (it breaks on Wayland once the game loses focus)")
     }
@@ -72,9 +77,8 @@ object EngineerClient : ClientModInitializer {
     private fun keepWindowUp() {
         val h = mc.window.handle()
         if (h == 0L) return
-        // 26.3 windows are SDL3: auto-minimize is a hint, read at every focus loss.
-        org.lwjgl.sdl.SDLHints.SDL_SetHint(org.lwjgl.sdl.SDLHints.SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0")
-        if ((org.lwjgl.sdl.SDLVideo.SDL_GetWindowFlags(h) and org.lwjgl.sdl.SDLVideo.SDL_WINDOW_MINIMIZED) != 0L) org.lwjgl.sdl.SDLVideo.SDL_RestoreWindow(h)
+        org.lwjgl.glfw.GLFW.glfwSetWindowAttrib(h, org.lwjgl.glfw.GLFW.GLFW_AUTO_ICONIFY, org.lwjgl.glfw.GLFW.GLFW_FALSE)
+        if (org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(h, org.lwjgl.glfw.GLFW.GLFW_ICONIFIED) == org.lwjgl.glfw.GLFW.GLFW_TRUE) org.lwjgl.glfw.GLFW.glfwRestoreWindow(h)
         windowKept = true
     }
 

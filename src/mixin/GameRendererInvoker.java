@@ -37,18 +37,10 @@ public interface GameRendererInvoker {
     void ec$extractOptions();
 
     @Invoker("extractCamera")
-    void ec$extractCamera(DeltaTracker deltaTracker, float worldPartialTicks);
+    void ec$extractCamera(DeltaTracker deltaTracker, float worldPartialTicks, float cameraEntityPartialTicks);
 
     /** Swapped around a POV pass: {@code renderLevel} and {@code LevelRenderer.render} read it on every call. */
     @Mutable
     @Accessor("mainRenderTarget")
     void ec$setMainRenderTarget(RenderTarget target);
-
-    /** Swapped for a feed-sized depth around a POV pass: 26.3's {@code render3dHud} draws against it. */
-    @Accessor("hud3DTarget")
-    RenderTarget ec$getHud3DTarget();
-
-    @Mutable
-    @Accessor("hud3DTarget")
-    void ec$setHud3DTarget(RenderTarget target);
 }

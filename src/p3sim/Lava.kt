@@ -81,7 +81,7 @@ object Lava {
         val p3Lava = (p.y < 108.5 && p.y > 104.0) || necronLava(p)
         val vy = if (p3Lava && pitches[(now - PITCH_LAG).mod(pitches.size)] <= HIGH_PITCH) 3.038 else 2.25
         p.deltaMovement = Vec3(0.0, vy, 0.0)
-        p.syncVelocity = true
+        p.hurtMarked = true
         p.fallDistance = 0.0
         // On Hypixel 16% of bounces are silent (no hurt tilt, no sound); otherwise the hurt sound lands a tick after the
         // bounce 69% of the time, with it the rest.

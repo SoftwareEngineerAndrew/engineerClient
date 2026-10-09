@@ -180,7 +180,7 @@ object Fight {
         applySpeed(player)
         player.getAttribute(Attributes.KNOCKBACK_RESISTANCE)?.baseValue = 1.0
         player.getAttribute(Attributes.STEP_HEIGHT)?.baseValue = 0.6
-        player.isPermanentlyInvulnerable = true
+        player.isInvulnerable = true
         // Hypixel main: 40 hp with 16 absorption.
         player.getAttribute(Attributes.MAX_HEALTH)?.baseValue = 40.0
         player.health = 40f

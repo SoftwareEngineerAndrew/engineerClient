@@ -66,7 +66,7 @@ object EntityMirror {
         return when (p) {
             is ClientboundLoginPacket, is ClientboundRespawnPacket -> { reset(); null }
             is ClientboundAddEntityPacket -> { added(p.id, BuiltInRegistries.ENTITY_TYPE.getKey(p.type).toString(), p.x, p.y, p.z); null }
-            is ClientboundEntityPositionSyncPacket -> sync(p.id(), p.position().endPosition())
+            is ClientboundEntityPositionSyncPacket -> sync(p.id(), p.values().position())
             is ClientboundMoveEntityPacket -> move((p as MoveEntityPacketAccessor).ec_getEntityId(), p)
             is ClientboundRotateHeadPacket -> rotateHead(p)
             is ClientboundRemoveEntitiesPacket -> { val ids = p.entityIds; for (i in 0 until ids.size) removed(ids.getInt(i)); null }
@@ -98,7 +98,7 @@ object EntityMirror {
             val c = codecs[id]
             if (c == null) sb.append("\"abs\":null,\"why\":\"no base\"")
             else {
-                val v = p.positionDelta.decode(c).endPosition()
+                val v = c.decode(p.xa.toLong(), p.ya.toLong(), p.za.toLong())
                 c.setBase(v)
                 sb.append(abs(v))
             }

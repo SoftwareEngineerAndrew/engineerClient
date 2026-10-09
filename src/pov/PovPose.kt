@@ -79,9 +79,10 @@ object PovPose {
      * rotation packet), else the settled `yHeadRot`.
      */
     private fun packetTarget(entity: LivingEntity): PovInterpolator.Pose {
-        val target = entity.interpolation.target() // 26.3: null unless interpolating
-        val pos = target?.position() ?: entity.position()
-        val pitch = target?.xRot() ?: entity.xRot
+        val interp = entity.interpolation
+        val active = interp != null && interp.hasActiveInterpolation()
+        val pos = if (active) interp!!.position() else entity.position()
+        val pitch = if (active) interp!!.xRot() else entity.xRot
         val accessor = entity as LivingEntityAccessor
         val headYaw =
             if (accessor.ec_getLerpHeadSteps() > 0) accessor.ec_getLerpYHeadRot().toFloat()
