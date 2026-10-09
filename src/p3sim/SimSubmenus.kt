@@ -115,7 +115,31 @@ class SimRolesScreen : SimSubmenu("Roles") {
         }
         text("§aYou§7: yours  §8·  §7a class: its bot does it  §8·  §e*§7: a stack (two roles have it)")
         row(listOf(change("Reset to my role", 110, "Your jobs back to the ${Roles.label(P3Sim.myClass)}'s $skill role, as if you had never clicked one.") { P3Plan.resetMine() }))
+
+        // Spots, for this skill and class only: stand there, look the way you want, click.
+        val me = Roles.label(P3Sim.myClass)
+        text("§eSpots §8· §7as $me in $skill §8(green: set; stand there, look, click)")
+        val spawn = P3Plan.customSpot("spawn")
+        row(listOf(
+            label("§eSpawn", LABEL_W, "Where Restart P3 puts you."),
+            change(if (spawn != null) "§aSet here" else "Set here", 80,
+                "Restart P3 puts you where you stand now, facing as you are (as $me in $skill). Now: ${spawn?.let { at(it) } ?: "your first S1 job's spot"}.") { here()?.let { P3Plan.setCustomSpot("spawn", it) } },
+            change("Default", 60, "Back to your first S1 job's spot (as $me in $skill).") { P3Plan.setCustomSpot("spawn", null) },
+        ))
+        row(listOf<LayoutElement>(label("§eEarly enters", LABEL_W, "Where each early enter stands, whoever does it.")) + P3Plan.earlyEnters.map { ee ->
+            val set = P3Plan.customSpot(ee.key) != null
+            val who = ee.owner?.let { if (ee.byYou) "you" else "the ${Roles.label(it)} bot" } ?: "nobody in $skill"
+            change(if (set) "§a${ee.label}" else ee.label, 48,
+                "${ee.label} (${who}) stands where you stand now, facing as you are (as $me in $skill). Now: ${at(P3Plan.eeSpot(ee))}.") { here()?.let { P3Plan.setCustomSpot(ee.key, it) } }
+        } + change("Defaults", 60, "Every early enter back to its usual spot (as $me in $skill).") { P3Plan.earlyEnters.forEach { P3Plan.setCustomSpot(it.key, null) } })
     }
+
+    /** Where you stand and look now (a tenth of a block; y to the hundredth, so a slab's height stays). */
+    private fun here(): P3Plan.Placed? = mc.player?.let {
+        P3Plan.Placed(net.minecraft.world.phys.Vec3(Math.round(it.x * 10) / 10.0, Math.floor(it.y * 100) / 100.0, Math.round(it.z * 10) / 10.0), it.yRot, it.xRot)
+    }
+
+    private fun at(p: P3Plan.Placed) = "%.1f, %.1f, %.1f".format(Locale.ROOT, p.pos.x, p.pos.y, p.pos.z)
 
     private fun jobButton(job: String): Button {
         val mine = P3Plan.isMine(job)
@@ -279,8 +303,9 @@ class SimTeleportScreen : SimSubmenu("Teleport") {
         text("§eEarly Enters")
         row(P3Plan.earlyEnters.map { ee ->
             val who = ee.owner?.let { if (ee.byYou) "yours" else "the ${Roles.label(it)}'s" } ?: "nobody's in this skill"
-            act(ee.label, 60, "To the ${ee.label} spot (${who}): ${xyz(ee.spot.x, ee.spot.y, ee.spot.z)}. Set it in the full menu's Early Enters tab.") {
-                tp(ee.spot.x, ee.spot.y, ee.spot.z, null, null)
+            val s = P3Plan.eeSpot(ee)
+            act(ee.label, 60, "To the ${ee.label} spot (${who}): ${xyz(s.pos.x, s.pos.y, s.pos.z)}. Set it in Roles.") {
+                tp(s.pos.x, s.pos.y, s.pos.z, s.yaw, s.pitch)
             }
         })
     }
