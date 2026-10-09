@@ -380,7 +380,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     // ------------------------------------------------------------------ practice
 
-    /** Section practice. */
+    /** Practice: your custom one, then the presets. */
     private fun practicePanel() {
         // Custom: your start, the section's jobs you pick, checkpoints in order.
         val start = Practice.customStart
@@ -415,9 +415,15 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             if (start != null) "Starts the custom practice: S$sec, from your start position, your jobs then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
             .also { it.active = start != null }))
 
-        row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
-            act(s.label.lowercase(), 50, "Practice ${s.label}: your role's part of it (the rest done), from your early enter for it, each task timed.") { server { Practice.start(s.ordinal - Fight.Start.S1.ordinal + 1) } }
-        })))
+        // Presets, a column for each section that has some.
+        row(listOf(label("§ePresets", LABEL_W, "Set practices: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.")))
+        row(Practice.presets().groupBy { it.section }.toSortedMap().map { (sec, list) ->
+            stack("§6S$sec", 60, "Section $sec's presets.", list.map { p ->
+                act(p.name, 60, "Practice ${p.name} (S$sec): ${p.jobs.joinToString(", ") { jobName(it) }}" +
+                    (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
+                    (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ".")) { server { Practice.startPreset(p.name) } }
+            })
+        })
     }
 
     // ------------------------------------------------------------------ pieces

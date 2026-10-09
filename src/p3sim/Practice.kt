@@ -46,19 +46,47 @@ object Practice {
         private set
 
     val active get() = mode != null
-    private val custom get() = mode == "Custom"
+
+    /**
+     * A set practice: [name], its [section], where you start, the jobs left to you (the rest of the section done; a
+     * later section's device done early counts too), checkpoints to reach in order, and its start timer (null: the slider's).
+     */
+    class Setup(val name: String, val section: Int, val start: Spots.Spot, val jobs: List<String>, val checkpoints: List<Spots.Spot> = emptyList(), val delay: Double? = null)
+
+    /** The preset or custom practice running (null: a role's section practice). */
+    @Volatile private var setup: Setup? = null
+    private val custom get() = setup != null
+    private val checkpointsNow get() = setup?.checkpoints.orEmpty()
+
+    private fun p(x: Double, y: Double, z: Double, yaw: Float, pitch: Float) = Spots.Spot("Start", x, y, z, yaw, pitch)
+
+    /** The presets, by section (the menu's columns). */
+    fun presets(): List<Setup> = listOf(
+        Setup("4 3", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 T4", "S1 T3"), delay = 3.0),
+        Setup("2 1", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 T2", "S1 T1"), delay = 3.0),
+        Setup("ee2", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 west lever", "S1 east lever", "gate 1", "S2 Lights"),
+            listOf(Spots.Spot("EE2", 60.53, 132.00, 138.98, 0f)), delay = 3.0),
+        Setup("2 -> 1", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T1"), listOf(Spots.Spot("Checkpoint", 69.70, 109.00, 122.43, 0f)), delay = 0.0),
+        Setup("2 -> 3", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T3"), delay = 0.0),
+    )
+
+    /** Starts preset [name] (again). */
+    fun startPreset(name: String) { presets().firstOrNull { it.name == name }?.let { launch(it) } }
 
     private var ee: P3Plan.EarlyEnter? = null
 
-    /** Starts section [s]'s practice (again). */
-    fun start(s: Int) = launch("S$s", s)
+    /** Starts section [s]'s practice (again): your role's part of it. */
+    fun start(s: Int) { setup = null; launch("S$s", s) }
 
     /** Starts the custom practice (again). */
     fun startCustom() {
         val s = customSection
-        if (customStart == null || s !in 1..4) { Sim.note("Set the custom practice's §fStart Position§7 first (Practice tab)."); return }
-        launch("Custom", s)
+        val at = customStart
+        if (at == null || s !in 1..4) { Sim.note("Set the custom practice's §fStart Position§7 first (Practice tab)."); return }
+        launch(Setup("Custom", s, at, P3Plan.jobsIn(s).filter { it in customJobs }, checkpoints.toList()))
     }
+
+    private fun launch(set: Setup) { setup = set; launch(set.name, set.section) }
 
     private fun launch(m: String, s: Int) {
         mode = m; section = s
@@ -67,13 +95,20 @@ object Practice {
     }
 
     /** The same practice again (the Restart keybinds, the Infinileap, a left click once done). */
-    fun restart() { if (custom) startCustom() else if (section in 1..4) start(section) }
+    fun restart() {
+        val set = setup
+        when {
+            set?.name == "Custom" -> startCustom()
+            set != null -> launch(set)
+            section in 1..4 -> start(section)
+        }
+    }
 
     /** A left click with anything, 0.25 s after it's done, starts it again. Client thread. */
     fun clickRestarts() = active && endTicks >= 0 && System.currentTimeMillis() - endMs >= 250
 
     /** Out of practice mode (any other start, Stop). */
-    fun exit() { mode = null; section = 0; tasks = emptyList(); endTicks = -1 }
+    fun exit() { mode = null; section = 0; setup = null; tasks = emptyList(); endTicks = -1 }
 
     /** Your jobs that are section [s]'s in practice: done in it, as the plan times them, in that order. */
     fun jobs(s: Int): List<String> {
@@ -83,12 +118,12 @@ object Practice {
     }
 
     /** What's left to do in this practice's section (the rest is done at the start). */
-    fun practiceJobs(): List<String> = if (custom) P3Plan.jobsIn(section).filter { it in customJobs } else jobs(section)
+    fun practiceJobs(): List<String> = setup?.jobs ?: jobs(section)
 
     private fun sectionOf(job: String) = job.removePrefix("gate ").toIntOrNull() ?: job.removePrefix("S").substringBefore(' ').toIntOrNull() ?: 0
 
     /** Where the practice puts you: the custom start; your spawn (S1), the early enter into it, else its start. */
-    fun startSpot(): Spots.Spot = customStart.takeIf { custom } ?: when (val s = section) {
+    fun startSpot(): Spots.Spot = setup?.start ?: when (val s = section) {
         1 -> P3Plan.customSpot("spawn") ?: Spots.p3Start(1)
         else -> P3Plan.earlyEnters.firstOrNull { it.into == s }?.let { P3Plan.eeSpot(it) } ?: Spots.p3Start(s)
     }
@@ -96,7 +131,7 @@ object Practice {
     /** The start timer (the menu's slider): seconds you stand placed before anything is up and the clock runs. */
     @Volatile var startDelay = 0.0
         private set
-    val holdTicks get() = Math.round(startDelay * 20).toInt()
+    val holdTicks get() = Math.round((setup?.delay ?: startDelay) * 20).toInt()
     fun setStartDelay(v: Double) { startDelay = v.coerceIn(0.0, 5.0); save() }
 
     /** The phase's tick its practice really started (after the start timer). */
@@ -111,7 +146,7 @@ object Practice {
         startT = t
         val list = practiceJobs().map { Task(it, label(it)) }.toMutableList()
         ee = null
-        if (custom) checkpoints.forEachIndexed { i, _ -> list += Task("cp $i", "Checkpoint ${i + 1}") }
+        if (custom) checkpointsNow.forEachIndexed { i, c -> list += Task("cp $i", if (c.name.startsWith("Checkpoint") || c.name == "set") "Checkpoint ${i + 1}" else c.name) }
         else {
             ee = P3Plan.ee(if (s == 4) 5 else s + 1)?.takeIf { it.byYou }
             ee?.let { list += Task("ee ${it.key}", it.label) }
@@ -140,7 +175,7 @@ object Practice {
                     ee?.let { onSpot(P3Plan.eeSpot(it), 1.5, p.x, p.y, p.z) } == true
                 // Checkpoints: in order.
                 task.id.startsWith("cp ") -> p != null && tasks.subList(0, i).none { it.id.startsWith("cp ") && it.at < 0 } &&
-                    checkpoints.getOrNull(task.id.removePrefix("cp ").toInt())?.let { onSpot(it, 1.0, p.x, p.y, p.z) } == true
+                    checkpointsNow.getOrNull(task.id.removePrefix("cp ").toInt())?.let { onSpot(it, 1.0, p.x, p.y, p.z) } == true
                 else -> phase.stations.firstOrNull { it.id == task.id }?.done == true
             }
             if (done) task.at = now
