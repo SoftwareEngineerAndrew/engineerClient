@@ -332,19 +332,22 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     // ------------------------------------------------------------------ teleport
 
+    /** A column for each group (a long one split in two), early enters last. */
     private fun teleportPanel() {
+        val cols = ArrayList<LayoutElement>()
         for ((group, spots) in Spots.teleportGroups) {
-            spots.chunked(5).forEachIndexed { i, chunk ->
-                row(listOf(label(if (i == 0) "§e$group" else "", LABEL_W)) + chunk.map { spot ->
+            spots.chunked(4).forEachIndexed { i, chunk ->
+                cols += stack(if (i == 0) "§e$group" else "", SPOT_W, "Teleports: $group.", chunk.map { spot ->
                     act(spot.name, SPOT_W, "To ${spot.name}: ${xyz(spot.x, spot.y, spot.z)}, facing ${facing(spot.yaw)}.") { tp(spot.x, spot.y, spot.z, spot.yaw, spot.pitch) }
                 })
             }
         }
-        row(listOf(label("§eEarly enters", LABEL_W)) + P3Plan.earlyEnters.map { ee ->
+        cols += stack("§eEarly Enters", 70, "The early-enter spots (set in Advanced).", P3Plan.earlyEnters.map { ee ->
             val who = ee.owner?.let { if (ee.byYou) "yours" else "the ${Roles.label(it)}'s" } ?: "nobody's in this skill"
             val s = P3Plan.eeSpot(ee)
-            act(ee.label, 60, "To the ${ee.label} spot (${who}): ${xyz(s.x, s.y, s.z)}. Set it in Advanced.") { tp(s.x, s.y, s.z, s.yaw, s.pitch) }
+            act(ee.label, 70, "To the ${ee.label} spot (${who}): ${xyz(s.x, s.y, s.z)}. Set it in Advanced.") { tp(s.x, s.y, s.z, s.yaw, s.pitch) }
         })
+        row(cols)
     }
 
     private fun tp(x: Double, y: Double, z: Double, yaw: Float?, pitch: Float?) = server {
