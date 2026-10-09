@@ -191,6 +191,8 @@ object ArenaFixes {
             val cur = Blocks.get(pos) ?: return
             // Block entities (heads, dispensers) are left alone: replacing one would drop its data.
             if (cur.hasBlockEntity() && !s.isAir) return
+            // Goldor breaks nothing in P3: no block the arena was built with goes (a built TNT cube stays).
+            if (s.isAir && cur == Arena.data.get(x, y, z)) return
             if (s.isAir && cur.`is`(B.TNT) && !catchUp) { primeCube(pos); return }
             Blocks.set(pos, s)
         }

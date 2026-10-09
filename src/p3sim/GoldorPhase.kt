@@ -189,7 +189,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Main re-sends Goldor's bar (name, style, progress) once a second all P3 long.
         if (n > 0 && n % 20 == 0) BossBar.resend()
         if (section in 1..4 && goldorSeg() == section) goldorReached[section] = true
-        // His carving of the walkway is Blocks' (carveTick). The TNT cubes (one 27-block cube per 200-tick slot in about
+        // He breaks no blocks (no carving; the replay takes no built block). The TNT cubes (one 27-block cube per 200-tick slot in about
         // half the runs), the granite blobs, the lantern burst and the S4 plate follow one recorded run.
         arenaReplay?.tick(n)
         // The core: everyone in, then Goldor flies in and dies.
