@@ -241,6 +241,7 @@ object BrWaypoints2 : Module(
             if (ticks % 10 == 0) mapPath()
             trackMyDoor()
             if (debug && (rushing || allRooms)) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
+            traceRoom()
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
@@ -511,6 +512,23 @@ object BrWaypoints2 : Module(
             links.getOrPut(a) { mutableListOf() } += b to (gx to gz)
             links.getOrPut(b) { mutableListOf() } += a to (gx to gz)
         }
+    }
+
+    private var tracedRoom: String? = null
+
+    /** Temporary (26.3): one log line per room change with each link the boxes need, to find why none show. */
+    private fun traceRoom() {
+        val cur = DungeonUtils.currentRoom
+        val key = cur?.name ?: "none"
+        if (key == tracedRoom) return
+        tracedRoom = key
+        val name = cur?.name
+        EngineerClient.logger.info(
+            "[ec] br trace: room=$name checkmark=${cur?.checkmark} rushing=$rushing rushRoom=$rushRoom onRush=${onRush(name)} " +
+                "placed=${name?.let { placed(it) != null }} scanRooms=${DungeonScan.rooms.size} path=${path.size} boxes=${boxes.size} " +
+                "inRoom=${boxes.count { it.room == name }} shownRooms=${shownRooms().map { it.name }} shown=${shown().size} drawn=${drawn().size} " +
+                "roles=${BrRoles.describe()} active=${BrRoles.active}"
+        )
     }
 
     /** For Debug: the room you walked into on the rush, its door, your role, and what it shows you. */
