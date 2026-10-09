@@ -95,8 +95,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             Tab.PRACTICE -> practicePanel()
         }
         panel.arrangeElements()
-        panel.setPosition(cx - panel.width / 2, r0 + 5 * ROW + 8)
+        val top = r0 + 5 * ROW + 8
+        panel.setPosition(cx - panel.width / 2, top)
         panel.visitWidgets(this::addRenderableWidget)
+        // Advanced: the same place in the plan and in Advanced (both are 5 rows tall).
+        if (tab == Tab.PLAN || tab == Tab.ADVANCED)
+            addRenderableWidget(tabCell(Tab.ADVANCED, "Advanced", if (tab == Tab.ADVANCED) "Back to the section plan." else "Spawn and early-enter spots, the leap menu, the bots' options.")
+                .also { it.setPosition(cx - it.width / 2, top + PANEL_H) })
     }
 
     override fun isPauseScreen(): Boolean = false
@@ -136,7 +141,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             for (job in P3Plan.jobsIn(s)) cells[column(job)] = job
             row(listOf(label("§6§lS$s", SEC_W, "Section $s's jobs.")) + cells.map { job -> if (job == null) label("", JOB_W) else jobButton(job) })
         }
-        row(listOf(tabCell(Tab.ADVANCED, "Advanced", "Spawn and early-enter spots, the leap menu, the bots' options.")))
     }
 
     private fun jobButton(job: String): Button {
@@ -170,7 +174,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     private fun advancedPanel() {
         val skill = P3Plan.skillName()
         val me = Roles.label(P3Sim.myClass)
-        text("§eSpots §8· §7as $me in $skill §8(green: set; stand there, look, click)")
         val spawn = P3Plan.customSpot("spawn")
         row(listOf(
             label("§eSpawn", LABEL_W, "Where Restart P3 puts you."),
@@ -216,7 +219,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             toggle("Real Movement", P3Sim.realMoves, 90, P3Sim.realMovesS.description) { P3Sim.toggleRealMoves() },
             change("Reset Role", 70, "Your jobs, the bots you picked and your stacks back to the ${Roles.label(P3Sim.myClass)}'s $skill role.") { P3Plan.resetMine() },
         ))
-        row(listOf(tabCell(Tab.ADVANCED, "Advanced", "Back to the section plan.")))
     }
 
     /** Where you stand and look now (a tenth of a block; y to the hundredth, so a slab's height stays). */
@@ -229,73 +231,74 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     // ------------------------------------------------------------------ settings
 
     private fun settingsPanel() {
-        panel.defaultCellSetting().alignHorizontallyLeft()
-        row(listOf(label("§eDeath Ticks", LABEL_W, P3Sim.deathTicksS.description)) + DEATH_TICKS.mapIndexed { i, (name, about) ->
-            change(pick(name, P3Sim.deathTicks == i), 50, about) { P3Sim.deathTicksS.index = i }
-        } + toggle("Real Masks", P3Sim.realMasks, 70, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } }
-            + change("Mask: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 72, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index; server { Sim.player?.let { Masks.equip(it) } } }
-            + change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 90, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } })
-
-        // Terminals: random (melodies or not) or one type for all.
         val forced = P3Sim.forcedTerminal
         if (forced != null) lastType = forced
-        row(listOf(
-            label("§eTerminals", LABEL_W, P3Sim.terminalS.description),
-            change(pick("Random", forced == null), 50, "Each terminal a random type, as on Hypixel.") { P3Sim.terminalS.index = 0 },
-        ) + Terminals.Type.entries.map { t ->
-            change(pick(TYPE_NAMES.getValue(t).first, forced == t), 46, TYPE_NAMES.getValue(t).second) { lastType = t; P3Sim.terminalS.index = t.ordinal + 1 }
-        } + toggle("No Melodies", P3Sim.noMelodies, 74, P3Sim.noMelodiesS.description) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies }
-            + toggle("Click Limit", P3Sim.clickLimitS.value, 64, P3Sim.clickLimitS.description) { P3Sim.clickLimitS.value = !P3Sim.clickLimitS.value })
-
-        row(listOf(
-            label("§eSpeed", LABEL_W, P3Sim.speedS.description),
-            change("-", 16, "10 less speed.") { setSpeed(P3Sim.speed - 10) },
-            SpeedSlider(170),
-            change("+", 16, "10 more speed.") { setSpeed(P3Sim.speed + 10) },
-            change("Ping: ${P3Sim.ping}ms", 72, P3Sim.pingS.description) { P3Sim.pingS.value = PINGS[(PINGS.indexOf(P3Sim.ping) + 1).mod(PINGS.size)] },
-            toggle("Jitter", P3Sim.jitterS.value, 44, P3Sim.jitterS.description) { P3Sim.jitterS.value = !P3Sim.jitterS.value },
-        ))
-        row(listOf(
-            label("§eTimings", LABEL_W, "The fight's numbers."),
-            stepper("Goldor kill", "${P3Sim.goldorKill}t", P3Sim.goldorKillS.description, { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) }),
-            stepper("Shortbow", "${P3Sim.shortbowCooldown}t", P3Sim.shortbowCooldownS.description, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown - 1).coerceAtLeast(1) }, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown + 1).coerceAtMost(20) }),
-            stepper("Hydra", "${P3Sim.hydraStart}", P3Sim.hydraStartS.description, { P3Sim.hydraStartS.value = (P3Sim.hydraStart - 1).coerceAtLeast(0) }, { P3Sim.hydraStartS.value = (P3Sim.hydraStart + 1).coerceAtMost(10) }),
-        ))
-        row(listOf(
-            label("§eBreaker", LABEL_W, "The Dungeonbreaker."),
-            stepper("Refill", "${P3Sim.breakerRefill}/s", P3Sim.breakerRefillS.description, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill - 1).coerceAtLeast(1) }, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill + 1).coerceAtMost(10) }),
-            stepper("Blocks back", "${P3Sim.breakerRegen}s", P3Sim.breakerRegenS.description, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen - 0.5).coerceAtLeast(1.0) }, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen + 0.5).coerceAtMost(30.0) }),
-        ))
-        row(listOf(
-            label("§eFight", LABEL_W, "How the fight goes on."),
-            toggle("Lava Bounce", P3Sim.lava, 70, P3Sim.lavaS.description) { P3Sim.lavaS.value = !P3Sim.lava },
-            toggle("Stop After P3", P3Sim.p3Only, 80, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
-            toggle("Section Times", P3Sim.showTimes, 80, P3Sim.showTimesS.description) { P3Sim.showTimesS.value = !P3Sim.showTimes },
-            toggle("Start On Join", P3Sim.autoStart, 80, P3Sim.autoStartS.description) { P3Sim.autoStartS.value = !P3Sim.autoStart },
-            toggle("Terror At Terms", P3Sim.terrorAtTerms, 94, P3Sim.terrorAtTermsS.description) { P3Sim.toggleTerrorAtTerms() },
-        ))
-        row(listOf(
-            label("§eOther", LABEL_W, "The rest."),
-            toggle("Hide Players", P3Sim.hidePlayers, 74, "On (green): other players out of sight.") { P3Sim.toggleHidePlayers() },
-            toggle("Debug Bots", P3Sim.debugBots, 68, P3Sim.debugBotsS.description) { P3Sim.debugBotsS.value = !P3Sim.debugBots },
-            toggle("Record", P3Sim.record, 50, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
-            act("Reset Items", 70, "Your hotbar back as it is at a start.") { server { Sim.player?.let { SimItems.giveHotbar(it, Fight.phase !is P1Maxor && Fight.phase !is P2Storm) } } },
-            act("§7Leave", 46, "Leaves the sim world.") { SimWorld.leave() },
-        ))
+        val speedRow = LinearLayout.horizontal().spacing(2)
+        speedRow.addChild(change("-", 54, "10 less speed.") { setSpeed(P3Sim.speed - 10) })
+        speedRow.addChild(change("+", 54, "10 more speed.") { setSpeed(P3Sim.speed + 10) })
         // Your hotbar: P1/P2's or P3's, whichever part of the fight you are in (HotbarLayout).
         val p3Part = Fight.phase !is P1Maxor && Fight.phase !is P2Storm
         val part = if (p3Part) "P3" else "P1/P2"
         val saved = HotbarLayout.has(p3Part)
         row(listOf(
-            label("§eHotbar", LABEL_W, "Your own item layout: every $part hotbar reset (a start, Reset Items) lays your items out as you saved them." +
-                if (saved) " Saved." else " Not saved yet: the sim's default."),
-            act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 110, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet. Arrange them first.") {
-                server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } }
-            },
-            act("Default", 50, "Forgets your saved $part layout: its resets go back to the sim's default.") {
-                server { EngineerClient.msg(HotbarLayout.reset(p3Part)) }
-            }.also { it.active = saved },
+            stack("§eDeath Ticks", 84, P3Sim.deathTicksS.description, DEATH_TICKS.mapIndexed { i, (name, about) ->
+                change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.index = i }
+            } + listOf(
+                toggle("Real Masks", P3Sim.realMasks, 84, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
+                change("Mask: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index; server { Sim.player?.let { Masks.equip(it) } } },
+                change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 84, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
+            )),
+            // Terminals: random or one type for all.
+            stack("§eTerminals", 66, P3Sim.terminalS.description, listOf(
+                change(pick("Random", forced == null), 66, "Each terminal a random type, as on Hypixel.") { P3Sim.terminalS.index = 0 },
+            ) + Terminals.Type.entries.map { t ->
+                change(pick(TYPE_NAMES.getValue(t).first, forced == t), 66, TYPE_NAMES.getValue(t).second) { lastType = t; P3Sim.terminalS.index = t.ordinal + 1 }
+            }),
+            stack("§eSpeed", 110, P3Sim.speedS.description, listOf(
+                SpeedSlider(110),
+                speedRow,
+                change("Ping: ${P3Sim.ping}ms", 110, P3Sim.pingS.description) { P3Sim.pingS.value = PINGS[(PINGS.indexOf(P3Sim.ping) + 1).mod(PINGS.size)] },
+                toggle("Jitter", P3Sim.jitterS.value, 110, P3Sim.jitterS.description) { P3Sim.jitterS.value = !P3Sim.jitterS.value },
+                toggle("No Melodies", P3Sim.noMelodies, 110, P3Sim.noMelodiesS.description) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
+                toggle("Click Limit", P3Sim.clickLimitS.value, 110, P3Sim.clickLimitS.description) { P3Sim.clickLimitS.value = !P3Sim.clickLimitS.value },
+            )),
+            stack("§eTimings", 106, "The fight's numbers.", listOf(
+                stepper("Goldor kill", "${P3Sim.goldorKill}t", P3Sim.goldorKillS.description, { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) }),
+                stepper("Shortbow", "${P3Sim.shortbowCooldown}t", P3Sim.shortbowCooldownS.description, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown - 1).coerceAtLeast(1) }, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown + 1).coerceAtMost(20) }),
+                stepper("Hydra", "${P3Sim.hydraStart}", P3Sim.hydraStartS.description, { P3Sim.hydraStartS.value = (P3Sim.hydraStart - 1).coerceAtLeast(0) }, { P3Sim.hydraStartS.value = (P3Sim.hydraStart + 1).coerceAtMost(10) }),
+                stepper("Breaker", "${P3Sim.breakerRefill}/s", P3Sim.breakerRefillS.description, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill - 1).coerceAtLeast(1) }, { P3Sim.breakerRefillS.value = (P3Sim.breakerRefill + 1).coerceAtMost(10) }),
+                stepper("Blocks back", "${P3Sim.breakerRegen}s", P3Sim.breakerRegenS.description, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen - 0.5).coerceAtLeast(1.0) }, { P3Sim.breakerRegenS.value = (P3Sim.breakerRegen + 0.5).coerceAtMost(30.0) }),
+            )),
+            stack("§eFight", 92, "How the fight goes on.", listOf(
+                toggle("Lava Bounce", P3Sim.lava, 92, P3Sim.lavaS.description) { P3Sim.lavaS.value = !P3Sim.lava },
+                toggle("Stop After P3", P3Sim.p3Only, 92, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
+                toggle("Start On Join", P3Sim.autoStart, 92, P3Sim.autoStartS.description) { P3Sim.autoStartS.value = !P3Sim.autoStart },
+                toggle("Terror At Terms", P3Sim.terrorAtTerms, 92, P3Sim.terrorAtTermsS.description) { P3Sim.toggleTerrorAtTerms() },
+                toggle("Section Times", P3Sim.showTimes, 92, P3Sim.showTimesS.description) { P3Sim.showTimesS.value = !P3Sim.showTimes },
+                toggle("Hide Players", P3Sim.hidePlayers, 92, "On (green): other players out of sight.") { P3Sim.toggleHidePlayers() },
+                toggle("Debug Bots", P3Sim.debugBots, 92, P3Sim.debugBotsS.description) { P3Sim.debugBotsS.value = !P3Sim.debugBots },
+            )),
+            stack("§eOther", 100, "Your hotbar, recording, leaving.", listOf(
+                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet: every $part hotbar reset (a start, Reset Items) lays them out so. Arrange them first.") {
+                    server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } }
+                },
+                act("Default Hotbar", 100, "Forgets your saved $part layout: its resets go back to the sim's default.") {
+                    server { EngineerClient.msg(HotbarLayout.reset(p3Part)) }
+                }.also { it.active = saved },
+                act("Reset Items", 100, "Your hotbar back as it is at a start.") { server { Sim.player?.let { SimItems.giveHotbar(it, p3Part) } } },
+                toggle("Record", P3Sim.record, 100, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
+                act("§7Leave", 100, "Leaves the sim world.") { SimWorld.leave() },
+            )),
         ))
+    }
+
+    /** A column: its title, then [items] one under another. */
+    private fun stack(title: String, w: Int, about: String, items: List<LayoutElement>): LayoutElement {
+        val c = LinearLayout.vertical().spacing(2)
+        c.defaultCellSetting().alignHorizontallyCenter()
+        c.addChild(label(title, w, about))
+        items.forEach { c.addChild(it) }
+        return c
     }
 
     private fun stepper(name: String, value: String, about: String, down: () -> Unit, up: () -> Unit): LayoutElement {
@@ -427,6 +430,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     private companion object {
         const val RESTART_W = 100
+        /** The plan's and Advanced's height (5 rows) plus a gap: where the Advanced button goes. */
+        const val PANEL_H = 5 * 20 + 4 * 2 + 4
         const val GAP = 10
         const val ROW = 22
         const val SIDE_W = 90
