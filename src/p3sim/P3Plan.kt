@@ -120,8 +120,13 @@ object P3Plan {
 
     fun isMine(job: String) = job in mine()
     fun toggle(job: String) { mine(); if (!mine.remove(job)) mine += job; save() }
-    /** Back to your class's role. */
-    fun resetMine() { mineFor = ""; mine(); save() }
+    /** Back to your class's role: your jobs, the bots picked and your stacks for this skill and class. */
+    fun resetMine() {
+        mineFor = ""; mine()
+        val prefix = "$skill/${P3Sim.myClass?.name}/"
+        pickMap().keys.removeIf { it.startsWith(prefix) }; stackSet().removeIf { it.startsWith(prefix) }
+        save()
+    }
     fun chooseSkill(i: Int) { skill = i.coerceIn(0, SKILLS.size - 1); mine(); save() }
 
     fun ee(into: Int) = earlyEnters.firstOrNull { it.into == into && it.on }
@@ -129,8 +134,36 @@ object P3Plan {
     /** Jobs two classes share (whoever gets there first; yours if one of them is you). */
     fun isStack(job: String) = (plan().owners[job]?.size ?: 0) > 1
 
-    /** Who does [job]: you if it's yours, else its role's bot (a stack: the first listed), null: whichever bot is least busy. */
-    fun doer(job: String): DungeonClass? = if (isMine(job)) P3Sim.myClass else plan().owners[job]?.firstOrNull { it != P3Sim.myClass }
+    /** Who does [job]: you if it's yours, else the bot you picked for it (right click), else its role's (a stack: the first listed), null: whichever bot is least busy. */
+    fun doer(job: String): DungeonClass? = if (isMine(job)) P3Sim.myClass else picked(job) ?: roleDoer(job)
+
+    /** [job]'s bot by the roles (a stack: the first listed that isn't you). */
+    fun roleDoer(job: String): DungeonClass? = plan().owners[job]?.firstOrNull { it != P3Sim.myClass }
+
+    /** Bots picked for jobs (skill/your class/job -> class), and your jobs a bot does too with the Helper on: for this skill and class. */
+    private var picks: HashMap<String, String>? = HashMap()
+    private var stacked: HashSet<String>? = HashSet()
+    private fun pickMap() = picks ?: HashMap<String, String>().also { picks = it }
+    private fun stackSet() = stacked ?: HashSet<String>().also { stacked = it }
+    private fun jobKey(job: String) = "$skill/${P3Sim.myClass?.name}/$job"
+
+    private fun picked(job: String): DungeonClass? =
+        pickMap()[jobKey(job)]?.let { n -> Party.CLASSES.firstOrNull { it.name == n && it != P3Sim.myClass } }
+
+    /** A bot's job goes to the next bot (back to its role's: the pick is dropped). */
+    fun cycleDoer(job: String) {
+        val bots = Party.CLASSES.filter { it != P3Sim.myClass }
+        val next = bots[(bots.indexOf(doer(job)) + 1) % bots.size]
+        if (next == roleDoer(job)) pickMap().remove(jobKey(job)) else pickMap()[jobKey(job)] = next.name
+        save()
+    }
+
+    /** One of your jobs a bot does too, with the Helper on (whoever's first): a stack you made. */
+    fun isStacked(job: String) = jobKey(job) in stackSet()
+    fun toggleStacked(job: String) { if (!stackSet().remove(jobKey(job))) stackSet() += jobKey(job); save() }
+
+    /** The bot that helps on your stacked [job]: the one you picked, its role's, else the first bot. */
+    fun helperOf(job: String): DungeonClass? = picked(job) ?: roleDoer(job) ?: Party.CLASSES.firstOrNull { it != P3Sim.myClass }
 
     /** Every job, in menu order: each section's terminals, levers, device, then its gate. */
     fun allJobs(): List<String> = (1..4).flatMap { s -> jobsIn(s) }
@@ -163,13 +196,13 @@ object P3Plan {
         com.odtheking.odin.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
     }.getOrNull()?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
 
-    /** Slot [slot] (1-4) takes the next class: swaps with the slot that had it. */
-    fun cycleSlot(slot: Int) {
+    /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */
+    fun cycleSlot(slot: Int, back: Boolean = false) {
         // From Odin's order to your own, starting from what it showed.
         val order = botOrder().toMutableList()
         odinSort = false
         val i = slot - 1
-        val j = (i + 1) % order.size
+        val j = (i + (if (back) order.size - 1 else 1)) % order.size
         val t = order[i]; order[i] = order[j]; order[j] = t
         leapOrder.clear(); leapOrder += order
         save()
@@ -186,6 +219,9 @@ object P3Plan {
         val ghosts: List<String>? = null,
         /** [custom]: key -> [x, y, z, yaw, pitch]. */
         val custom: Map<String, List<Double>>? = null,
+        /** Bots picked for jobs ([doer]) and your stacked jobs ([isStacked]), keyed skill/class/job. */
+        val picks: Map<String, String>? = null,
+        val stacked: List<String>? = null,
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -208,6 +244,8 @@ object P3Plan {
             s.helper?.let { helper = it }
             s.ghosts?.let { ghosts.clear(); ghosts += it }
             s.custom?.forEach { (k, v) -> if (v.size >= 5) spots()[k] = Spots.Spot(k, v[0], v[1], v[2], v[3].toFloat(), v[4].toFloat()) }
+            s.picks?.let { pickMap().clear(); pickMap() += it }
+            s.stacked?.let { stackSet().clear(); stackSet() += it }
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
@@ -226,7 +264,7 @@ object P3Plan {
         EngineerClient.safely("p3sim plan save") {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
                 earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList(),
-                spots().mapValues { (_, p) -> listOf(p.x, p.y, p.z, p.yaw.toDouble(), p.pitch.toDouble()) })
+                spots().mapValues { (_, p) -> listOf(p.x, p.y, p.z, p.yaw.toDouble(), p.pitch.toDouble()) }, HashMap(pickMap()), stackSet().toList())
             file.parentFile.mkdirs()
             // A backup of the file before this session's first save, should a save ever lose something.
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }

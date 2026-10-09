@@ -253,13 +253,28 @@ object Party {
             val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
             if (s < from) continue
             var (ts, sec) = plan.times[job] ?: (s to 5.0)
-            val bot = plan.owners[job]?.firstNotNullOfOrNull { c -> botOf(c)?.takeIf { it.ghost == null } }
+            // The bot picked for it in the menu (right click), else its role's.
+            val bot = P3Plan.doer(job)?.let { c -> botOf(c)?.takeIf { it.ghost == null } }
+                ?: plan.owners[job]?.firstNotNullOfOrNull { c -> botOf(c)?.takeIf { it.ghost == null } }
                 ?: crew.minByOrNull { b -> jobs.count { it.bot === b && it.timeSection == ts } } ?: continue
             if (P3Plan.skill == P3Plan.RANDOM) sec = P3Plan.botMin + Random.nextDouble() * (P3Plan.botMax - P3Plan.botMin).coerceAtLeast(0.0)
             if (ts < from) { ts = from; sec = 0.5 }
             jobs += Job(job, bot, ts, sec)
         }
         spread(plan)
+        // Helper: your jobs you made stacks (right click) are done by their bot too, at the plan's time (whoever's first).
+        if (P3Plan.helper) for (job in P3Plan.allJobs()) {
+            if (!P3Plan.isMine(job) || !P3Plan.isStacked(job)) continue
+            val st = phase.stations.firstOrNull { it.id == job }
+            if (st?.done == true) continue
+            val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
+            if (s < from) continue
+            val bot = P3Plan.helperOf(job)?.let { botOf(it) }?.takeIf { it.ghost == null } ?: continue
+            var (ts, sec) = plan.times[job] ?: (s to 5.0)
+            if (ts < from) { ts = from; sec = 0.5 }
+            jobs += Job(job, bot, ts, sec)
+            dbg("helper: §e${bot.name}§7 does your stacked $job too, by ${sec}s into S$ts")
+        }
         // Helper: bots help on your stacks (both try; whoever's first).
         if (P3Plan.helper) for (h in P3Plan.preset().helps) {
             if (h.section < from || !P3Plan.isMine(h.yours) || !h.jobs.all { P3Plan.isMine(it) }) continue
