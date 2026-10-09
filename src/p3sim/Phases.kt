@@ -33,7 +33,7 @@ import net.minecraft.world.level.block.Blocks as B
  */
 class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = true, tagDelay: Int = 0) {
     val e: WitherBoss = SimWither(Sim.level).also { w ->
-        w.setNoAi(true); w.isSilent = true; w.isPermanentlyInvulnerable = true; w.setNoGravity(true)
+        w.setNoAi(true); w.isSilent = true; w.isInvulnerable = true; w.setNoGravity(true)
         w.invulnerableTicks = inv
         w.health = if (armoured) 1f else w.maxHealth
         w.snapTo(at.x, at.y, at.z, 0f, 0f)
@@ -59,7 +59,7 @@ class BossWither(val name: String, at: Vec3, inv: Int = 1, armoured: Boolean = t
     }
 
     private fun marker(text: String, dy: Double) = ArmorStand(EntityTypes.ARMOR_STAND, Sim.level).also { s ->
-        s.isInvisible = true; s.setNoGravity(true); s.isPermanentlyInvulnerable = true; s.isSilent = true
+        s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         Station.setMarker(s)
         s.setCustomName(Sim.legacy(text))
         s.isCustomNameVisible = true
@@ -413,7 +413,7 @@ class P1Maxor : Fight.Phase("P1") {
     private fun spawnCrystal(at: Vec3): EndCrystal {
         val c = EndCrystal(EntityTypes.END_CRYSTAL, Sim.level)
         c.setShowBottom(false)
-        c.isPermanentlyInvulnerable = true
+        c.isInvulnerable = true
         c.snapTo(at.x, at.y, at.z, 0f, 0f)
         return Sim.spawn(c)
     }
@@ -421,7 +421,7 @@ class P1Maxor : Fight.Phase("P1") {
     /** A crystal's name stand: invisible, not a marker (you click them), as Hypixel's (flags 2). */
     private fun label(at: Vec3, text: String): ArmorStand {
         val s = ArmorStand(EntityTypes.ARMOR_STAND, Sim.level)
-        s.isInvisible = true; s.setNoGravity(true); s.isPermanentlyInvulnerable = true; s.isSilent = true
+        s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         rename(s, text)
         s.snapTo(at.x, at.y, at.z, 0f, 0f)
         return Sim.spawn(s)

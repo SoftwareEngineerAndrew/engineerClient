@@ -48,12 +48,12 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand
-import net.minecraft.world.entity.monster.Enderman
+import net.minecraft.world.entity.monster.EnderMan
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import com.mojang.blaze3d.platform.InputConstants
+import org.lwjgl.glfw.GLFW
 import java.io.File
 
 /**
@@ -88,7 +88,7 @@ object BrWaypoints2 : Module(
 
     private var editMode by BooleanSetting("Edit Mode", false, desc = "Edits only happen while this is on. Off, the wand is just an item.")
 
-    private val editKey by KeybindSetting("Edit Mode Keybind", InputConstants.UNKNOWN, "Toggles Edit Mode.").onPress {
+    private val editKey by KeybindSetting("Edit Mode Keybind", GLFW.GLFW_KEY_UNKNOWN, "Toggles Edit Mode.").onPress {
         editMode = !editMode
         EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
     }
@@ -96,7 +96,7 @@ object BrWaypoints2 : Module(
     /** Read by PosMsgEditor every tick. */
     val posmsgRetrigger by BooleanSetting("Posmsg Re-trigger", false, desc = "Each /posmsg is sent once per world. On: leaving a box (or its radius) re-arms it, so walking back in sends it again. Only your own client.")
 
-    private val posmsgKey by KeybindSetting("Posmsg Here Keybind", InputConstants.UNKNOWN, "Adds a /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
+    private val posmsgKey by KeybindSetting("Posmsg Here Keybind", GLFW.GLFW_KEY_UNKNOWN, "Adds a /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
         PosMsgEditor.addHere("entered box")
     }
 
@@ -696,7 +696,7 @@ object BrWaypoints2 : Module(
     private fun isMob(e: Entity): Boolean = when (e) {
         is ArmorStand -> false
         is WitherBoss -> false
-        is Enderman -> true
+        is EnderMan -> true
         is Player -> e.uuid.version() == 2 && e != mc.player
         else -> !e.isInvisible
     }

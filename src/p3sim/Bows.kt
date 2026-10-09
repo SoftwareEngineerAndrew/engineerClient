@@ -285,7 +285,7 @@ class SimArrow(level: Level, x: Double, y: Double, z: Double, private val whenHi
     override fun canHitEntity(entity: Entity): Boolean = removeAt < 0 && entity is WitherBoss && entity.isAlive && entity.entityTags().contains(Sim.TAG)
 
     override fun findHitEntities(from: Vec3, to: Vec3): Collection<EntityHitResult> =
-        ProjectileUtil.getManyEntityHitResult(level(), this, from, to, boundingBox.expandTowards(deltaMovement).inflate(1.0), { canHitEntity(it) }, 0.3f, ClipContext.Block.COLLIDER, false, true)
+        ProjectileUtil.getManyEntityHitResult(level(), this, from, to, boundingBox.expandTowards(deltaMovement).inflate(1.0), { canHitEntity(it) }, 0.3f, ClipContext.Block.COLLIDER, false)
 
     override fun hitTargetOrDeflectSelf(hitResult: HitResult): ProjectileDeflection {
         if (removeAt >= 0) return ProjectileDeflection.NONE   // already spent: ignore anything it still touches

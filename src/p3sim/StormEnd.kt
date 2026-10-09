@@ -138,7 +138,7 @@ internal object StormFx {
         Sim.sound(SoundEvents.WITHER_AMBIENT, 5f, 1.19f, w?.pos)
         w ?: return
         val s = ArmorStand(EntityTypes.ARMOR_STAND, Sim.level)
-        s.isInvisible = true; s.setNoGravity(true); s.isPermanentlyInvulnerable = true; s.isSilent = true
+        s.isInvisible = true; s.setNoGravity(true); s.isInvulnerable = true; s.isSilent = true
         Station.setMarker(s)
         s.setCustomName(Sim.legacy("§4§l$text"))
         s.isCustomNameVisible = true
@@ -176,8 +176,7 @@ internal object StormFx {
         val bx = floor(x).toInt(); val bz = floor(z).toInt()
         var y = floor(fromY).toInt()
         repeat(15) {
-            // 26.3 dropped blocksMotion() for the blocks_motion tag.
-            if (Sim.level.getBlockState(BlockPos(bx, y, bz)).`is`(net.minecraft.tags.BlockTags.BLOCKS_MOTION)) return y + 1.0
+            if (Sim.level.getBlockState(BlockPos(bx, y, bz)).blocksMotion()) return y + 1.0
             y--
         }
         return fromY

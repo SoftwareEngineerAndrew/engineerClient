@@ -133,8 +133,8 @@ object GhostCapture {
         r.section(p.section, n)
         val pos = player.position()
         r.frame(n, GhostRun.Frame(P(pos.x, pos.y, pos.z), player.yRot, player.xRot, heldKey(SimItems.idOf(player.mainHandItem))))
-        if (player.isSwinging && !wasSwinging) r.event(n, "swing")
-        wasSwinging = player.isSwinging
+        if (player.swinging && !wasSwinging) r.event(n, "swing")
+        wasSwinging = player.swinging
         if (p.section >= 5) {
             if (GoldorPhase.CORE_BOX.contains(pos)) inCoreFor++
             if (inCoreFor >= KEEP_IN_CORE || n - r.sectionN[5] >= KEEP_MAX) keep()

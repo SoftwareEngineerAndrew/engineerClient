@@ -300,7 +300,7 @@ class Devices(val phase: GoldorPhase) {
                 if (solution[i] < 0 && wool == null) continue
                 val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
                 val f = ItemFrame(EntityTypes.ITEM_FRAME, Sim.level, pos, Direction.EAST)
-                f.isPermanentlyInvulnerable = true
+                f.isInvulnerable = true
                 if (solution[i] >= 0) {
                     f.setItem(ItemStack(Items.ARROW), false)
                     f.setRotation(solution[i])

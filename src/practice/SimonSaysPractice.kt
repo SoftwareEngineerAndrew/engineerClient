@@ -44,7 +44,7 @@ import net.minecraft.world.level.block.Rotation
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
-import com.mojang.blaze3d.platform.InputConstants
+import org.lwjgl.glfw.GLFW
 import java.util.Locale
 
 /**
@@ -77,7 +77,7 @@ object SimonSaysPractice : Module(
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
     key = null,
 ) {
-    private val summonKey by KeybindSetting("Summon Keybind", InputConstants.UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
+    private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
     private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
     private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")
@@ -470,9 +470,9 @@ object SimonSaysPractice : Module(
         val real = button.east().relative(side)
         p.set(real, Blocks.OAK_WALL_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.WallSignBlock.FACING, side))
         val be = p.level.getBlockEntity(p.at(real)) as? net.minecraft.world.level.block.entity.SignBlockEntity ?: return
-        be.setText(net.minecraft.world.level.block.entity.SignText.EMPTY.asMutable()
-            .setLine(1, net.minecraft.network.chat.Component.literal(line1))
-            .setLine(2, net.minecraft.network.chat.Component.literal(line2)).asImmutable(), net.minecraft.world.level.block.entity.SignTextSlot.FRONT)
+        be.setText(net.minecraft.world.level.block.entity.SignText()
+            .setMessage(1, net.minecraft.network.chat.Component.literal(line1))
+            .setMessage(2, net.minecraft.network.chat.Component.literal(line2)), true)
     }
 
     // ------------------------------------------------------------------ Start on r3 / r4
@@ -569,7 +569,7 @@ object SimonSaysPractice : Module(
         val due = if (Inf.on) Inf.queue.firstOrNull() else if (accepting) expected.getOrNull(next) else null
         if (cell != due) return
         press(cell)
-        mc.player?.let { it.swing(InteractionHand.MAIN_HAND, it.mainHandItem.interactAnimation, false) }
+        mc.player?.swing(InteractionHand.MAIN_HAND, false)
     }
 
     private fun press(cell: Int) {
@@ -770,7 +770,7 @@ object SimonSaysPractice : Module(
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
         }
         // Your arm moves for a button, as in the game; not for the obsidian or wool. Nothing is sent.
-        if (button) mc.player?.let { it.swing(InteractionHand.MAIN_HAND, it.mainHandItem.interactAnimation, false) }
+        if (button) mc.player?.swing(InteractionHand.MAIN_HAND, false)
         (mc as MinecraftAccessor).`ec$setRightClickDelay`(4) // holding right click repeats like the game's own
         return true
     }
@@ -782,7 +782,7 @@ object SimonSaysPractice : Module(
         val p = placed ?: return false
         // A left click on the grid (obsidian, lantern or button) restarts: a new run, started as the last one was.
         if ((0 until 16).any { p.at(lampAt(it)) == pos || p.at(buttonAt(it)) == pos }) EngineerClient.safely("ss practice restart") { restart() }
-        mc.player?.let { it.swing(InteractionHand.MAIN_HAND, it.mainHandItem.attackAnimation, false) }
+        mc.player?.swing(InteractionHand.MAIN_HAND, false)
         return true
     }
 
