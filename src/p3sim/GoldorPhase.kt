@@ -85,12 +85,34 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     fun station(section: Int, label: String) = stations.first { it.section == section && it.label == label }
     fun count(section: Int) = stations.count { it.section == section && it.done }
 
+    /** Practice's start timer: you're placed, and nothing (stands, Goldor, credits) is up until it ends. */
+    private var holding = false
+    private var holdFor = 0
+    private var held = false
+
     override fun start() {
+        holdFor = if (practice) Practice.holdTicks else 0
+        if (holdFor > 0) {
+            holding = true; held = true
+            Sim.player?.let { player ->
+                val spot = Practice.startSpot()
+                Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
+                SimItems.giveHotbar(player, p3 = true)
+            }
+            Practice.hold(holdFor)
+            return
+        }
+        begin()
+    }
+
+    /** The phase's real start (after a practice's start timer). */
+    private fun begin() {
         stations.forEach { it.spawnStands() }
         devices.start()
         Stats.reset(from)
         val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
-        nOffset = startN
+        // n = startN now, whenever that is (a start timer's ticks don't count).
+        nOffset = startN - t
         arenaReplay?.begin(startN)
         // Earlier sections: done, their gates and doors open, as if a party had just done them.
         for (s in 1 until from.coerceAtMost(5)) {
@@ -113,9 +135,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         GhostCapture.start(this)
         Sim.player?.let { player ->
             if (!arrived) {
-                val spot = if (practice) Practice.startSpot() else Spots.p3Start(from)
-                Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
-                SimItems.giveHotbar(player, p3 = true)
+                if (!held) {
+                    val spot = if (practice) Practice.startSpot() else Spots.p3Start(from)
+                    Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
+                    SimItems.giveHotbar(player, p3 = true)
+                }
             } else {
                 // From Storm: the Superboom onto the bar where the Hyperion was (a swap: with a saved
                 // layout slot 1 holds something else, and after StormEnd the P3 bar is already given).
@@ -155,7 +179,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             if (!practice) Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
         }
         if (practice) {
-            Practice.begin(from)
+            Practice.begin(from, t)
             if (count(from) >= Station.total(from)) sectionDone(from)
         }
     }
@@ -178,6 +202,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     override fun tick() {
+        if (holding) {
+            if (t < holdFor) { Practice.holdTick(t, holdFor); return }
+            holding = false
+            begin()
+        }
         val n = n
         if (n == -1) goldor.tick(this)   // he moves from n=-1
         if (n < 0) return
@@ -284,7 +313,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     // ------------------------------------------------------------------ completions
 
     fun complete(st: Station, by: String, twice: Boolean = false) {
-        if (st.done) return
+        if (st.done || holding) return
         val inProgress = st.section == section
         val early = st.kind == Station.Kind.DEVICE && st.section > section
         if (!inProgress && !early) return
@@ -377,7 +406,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     /** Blows gate [s] (between S[s] and S[s+1]) if it can go now. [by]: who, null when it goes by itself. */
     fun blowGate(s: Int, by: String?): Boolean {
-        if (s !in 1..3 || gateDown[s]) return false
+        if (s !in 1..3 || gateDown[s] || holding) return false
         if (by != null && section < s) return false
         gateDown[s] = true
         gateAt[s] = n
@@ -793,6 +822,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
      */
     fun pullLever(st: Station, by: String, left: Boolean = false) {
         val lever = st.lever ?: return
+        if (holding) return
         if (st.done) { if (by == Sim.me) refuseLever(lever, left); return }
         // Another section's lever is vanilla's toggle with the click sound; no chat, no credit.
         if (st.section != section) { if (by == Sim.me && !left) SimItems.vanillaLeverToggle(lever); return }
@@ -825,6 +855,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     fun useTerminal(st: Station) {
         val p = Sim.player ?: return
         // Red components, a tick after the click. No "already using" lock on Hypixel.
+        if (holding) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal doesn't seem to be responsive at the moment.") }; return }
         if (st.done) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal has already been completed!") }; return }
         if (st.section != section) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal doesn't seem to be responsive at the moment.") }; return }
         // The window opens a tick after the click (almost always on Hypixel), on top of the ping.

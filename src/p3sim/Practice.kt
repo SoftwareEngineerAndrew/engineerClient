@@ -92,8 +92,22 @@ object Practice {
         else -> P3Plan.earlyEnters.firstOrNull { it.into == s }?.let { P3Plan.eeSpot(it) } ?: Spots.p3Start(s)
     }
 
-    /** GoldorPhase's start, in practice: the tasks. */
-    fun begin(s: Int) {
+    /** The start timer (the menu's slider): seconds you stand placed before anything is up and the clock runs. */
+    @Volatile var startDelay = 0.0
+        private set
+    val holdTicks get() = Math.round(startDelay * 20).toInt()
+    fun setStartDelay(v: Double) { startDelay = v.coerceIn(0.0, 5.0); save() }
+
+    /** The phase's tick its practice really started (after the start timer). */
+    private var startT = 0
+
+    /** A start timer of [n] ticks begins. */
+    fun hold(n: Int) { tasks = emptyList(); ticks = -n; endTicks = -1 }
+    fun holdTick(t: Int, n: Int) { ticks = t - n }
+
+    /** GoldorPhase's start, in practice (at phase tick [t]): the tasks. */
+    fun begin(s: Int, t: Int) {
+        startT = t
         val list = practiceJobs().map { Task(it, label(it)) }.toMutableList()
         ee = null
         if (custom) checkpoints.forEachIndexed { i, _ -> list += Task("cp $i", "Checkpoint ${i + 1}") }
@@ -113,7 +127,8 @@ object Practice {
 
     fun tick(phase: GoldorPhase) {
         if (endTicks >= 0 || tasks.isEmpty()) return
-        ticks = phase.t
+        val now = phase.t - startT
+        ticks = now
         val p = Sim.player
         for ((i, task) in tasks.withIndex()) {
             if (task.at >= 0) continue
@@ -127,7 +142,7 @@ object Practice {
                     checkpoints.getOrNull(task.id.removePrefix("cp ").toInt())?.let { onSpot(it, 1.0, p.x, p.y, p.z) } == true
                 else -> phase.stations.firstOrNull { it.id == task.id }?.done == true
             }
-            if (done) task.at = phase.t
+            if (done) task.at = now
         }
         if (tasks.all { it.at >= 0 }) finish()
     }
@@ -195,7 +210,7 @@ object Practice {
     fun addCheckpoint(spot: Spots.Spot) { checkpoints += spot; save() }
     fun removeCheckpoint() { if (checkpoints.isNotEmpty()) checkpoints.removeAt(checkpoints.size - 1); save() }
 
-    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null)
+    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-practice.json")
@@ -210,6 +225,7 @@ object Practice {
             customStart = s.start?.takeIf { it.size >= 5 }?.let { spot("Start", it) }
             customSection = s.section ?: 0
             customJobs.clear(); s.jobs?.let { customJobs += it }
+            startDelay = s.startDelay ?: 0.0
             checkpoints.clear(); s.checkpoints?.forEachIndexed { i, v -> if (v.size >= 5) checkpoints += spot("Checkpoint ${i + 1}", v) }
         }
     }
@@ -217,7 +233,7 @@ object Practice {
     private fun save() {
         EngineerClient.safely("p3sim practice save") {
             file.parentFile.mkdirs()
-            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) })))
+            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay)))
         }
     }
 }

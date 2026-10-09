@@ -87,8 +87,10 @@ object P3Sim : Module(
         val lines = if (example) listOf("§6Practice S2 §f6.45", "§7Lights §a2.10", "§7T3 §a4.85", "§7EE3 §e...")
         else {
             val mode = Practice.mode
-            if (!inSim || mode == null || Practice.tasks.isEmpty()) return@HUD 0 to 0
+            if (!inSim || mode == null || (Practice.tasks.isEmpty() && Practice.ticks >= 0)) return@HUD 0 to 0
             val next = Practice.tasks.firstOrNull { it.at < 0 }
+            // The start timer: counting down.
+            if (Practice.ticks < 0) listOf("§6Practice $mode §cin ${Practice.secs(-Practice.ticks)}") else
             listOf("§6Practice $mode ${if (Practice.endTicks >= 0) "§a" else "§f"}${Practice.secs(Practice.ticks)}") +
                 Practice.tasks.map { t -> "§7${t.label} " + if (t.at >= 0) "§a${Practice.secs(t.at)}" else if (t === next) "§e..." else "§8-" }
         }
