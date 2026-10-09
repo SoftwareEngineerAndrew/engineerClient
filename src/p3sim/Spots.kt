@@ -33,7 +33,7 @@ object Spots {
      */
     fun p3Start(from: Int): Spot = when (from) {
         2 -> S2; 3 -> S3; 4 -> S4; 5 -> CORE
-        else -> P3Plan.customSpot("spawn")?.let { Spot("Your spawn", it.pos.x, it.pos.y, it.pos.z, it.yaw, it.pitch) } ?: run {
+        else -> P3Plan.customSpot("spawn") ?: run {
             // Your first S1 terminal as your role lists it (Tank's 21: T2), else your first S1 job in menu order (the Mage's levers).
             val first = if (P3Plan.isMine("S4 Target")) "S4 Target"
                 else P3Plan.mine().firstOrNull { it.startsWith("S1 T") } ?: P3Plan.jobsIn(1).firstOrNull { P3Plan.isMine(it) }
