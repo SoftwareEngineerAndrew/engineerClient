@@ -68,6 +68,18 @@ object Practice {
             listOf(Spots.Spot("EE2", 60.53, 132.00, 138.98, 0f)), delay = 3.0),
         Setup("2 -> 1", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T1"), listOf(Spots.Spot("Checkpoint", 69.70, 109.00, 122.43, 0f)), delay = 0.0),
         Setup("2 -> 3", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T3"), delay = 0.0),
+        // S3 (BL: both levers; no start timer of their own: the slider's).
+        Setup("1 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T1", "S3 west lever", "S3 east lever")),
+        Setup("4 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T4", "S3 west lever", "S3 east lever", "gate 3")),
+        Setup("2 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T2", "S3 Arrows")),
+        Setup("3 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T3", "S3 Arrows")),
+        Setup("h -> 1", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T1")),
+        Setup("h -> 2", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T2")),
+        Setup("h -> i3 4", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4")),
+        Setup("h -> 3 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T3", "S3 west lever", "S3 east lever")),
+        Setup("h -> i3 4 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4", "S3 west lever", "S3 east lever")),
+        Setup("4 -> 4 BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 T4", "S3 west lever", "S3 east lever")),
+        Setup("4 -> BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 west lever", "S3 east lever")),
     )
 
     /** Starts preset [name] (again). */
