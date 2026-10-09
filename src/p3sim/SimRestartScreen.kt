@@ -335,6 +335,17 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         override fun applyValue() = setSpeed(speed())
     }
 
+    /** Practice's start timer, 0 to 5 s in tenths. */
+    private inner class DelaySlider(w: Int) : AbstractSliderButton(0, 0, w, 20, Component.empty(), Practice.startDelay / 5.0) {
+        init {
+            updateMessage()
+            setTooltip(tip("Every practice start: you stand on its start this long before anything is up (terminals, levers, Goldor) and the clock runs. 0: at once."))
+        }
+        private fun delay() = Math.round(value * 50) / 10.0
+        override fun updateMessage() { message = Component.literal("Start Timer: ${"%.1f".format(Locale.ROOT, delay())}s") }
+        override fun applyValue() = Practice.setStartDelay(delay())
+    }
+
     // ------------------------------------------------------------------ teleport
 
     /** A column for each group (a long one split in two), early enters last. */
@@ -368,6 +379,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     /** Section practice. */
     private fun practicePanel() {
+        row(listOf(DelaySlider(204)))
         // Custom: your start, the section's jobs you pick, checkpoints in order.
         val start = Practice.customStart
         val cps = Practice.checkpoints.size
