@@ -17,7 +17,8 @@
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
-    "HighlightRenderMixin"
+    "HighlightRenderMixin",
+    "TermGuiButtonMixin"
   ],
   "injectors": {
     "defaultRequire": 0
