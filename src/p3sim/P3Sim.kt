@@ -188,6 +188,8 @@ object P3Sim : Module(
             cmd.then(ClientCommands.literal("stop").executes { SimServer.run("cmd stop") { Fight.end() }; 1 })
             cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
             dispatcher.register(cmd)
+            // /pos: where you stand and look (and the block you look at), copied, to set spots from.
+            dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
         ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick() } }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
@@ -241,6 +243,19 @@ object P3Sim : Module(
     private val QUIT_KEYS = setOf("menu.returnToMenu", "menu.disconnect")
     /** Open to LAN: vanilla's, or Clean Menus' multiplayer options in its place. */
     private val LAN_KEYS = setOf("menu.shareToLan", "menu.multiplayerOptions.button")
+
+    /** Your position (y to the hundredth, as spots are set), yaw and pitch, and the block you look at: in chat and copied. */
+    private fun pos() {
+        val p = mc.player ?: return
+        val f = { v: Double -> String.format(java.util.Locale.ROOT, "%.2f", v) }
+        val y = Math.floor(p.y * 100 + 1e-6) / 100
+        var line = "${f(p.x)}, ${f(y)}, ${f(p.z)}, yaw ${f(net.minecraft.util.Mth.wrapDegrees(p.yRot).toDouble())}, pitch ${f(p.xRot.toDouble())}"
+        (mc.hitResult as? net.minecraft.world.phys.BlockHitResult)?.takeIf { it.type == net.minecraft.world.phys.HitResult.Type.BLOCK }?.blockPos?.let { b ->
+            line += ", looking at ${b.x}, ${b.y}, ${b.z}"
+        }
+        mc.keyboardHandler.clipboard = line
+        EngineerClient.msg("§f$line §8(copied)")
+    }
 
     fun openMenuOrSim() {
         if (inSim) mc.execute { mc.gui.setScreen(SimRestartScreen()) } else SimWorld.open()

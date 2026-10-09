@@ -366,14 +366,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     // ------------------------------------------------------------------ practice
 
-    /** Section starts, and the drills to come (placeholders for now). */
+    /** Section practice. */
     private fun practicePanel() {
         row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
             act(s.label.lowercase(), 50, "Practice ${s.label}: your role's part of it (the rest done), from your early enter for it, each task timed.") { server { Practice.start(s.ordinal - Fight.Start.S1.ordinal + 1) } }
         })))
-        row(DRILLS.map { d ->
-            act(d, 50, "Practice: $d (not set up yet).") { server { Practice.drill(d) } }
-        })
     }
 
     // ------------------------------------------------------------------ pieces
@@ -459,9 +456,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         var lastType = Terminals.Type.ORDER
 
         val PINGS = listOf(0, 50, 100, 150, 200, 300)
-
-        /** The practice drills to come. */
-        val DRILLS = listOf("ss -> 4", "bl ee2", "ee3", "hee3", "4 bl")
 
         /** Terminals 1-5, then L, R, D, G, as [P3Plan.short] names them. */
         val COLUMNS = (1..5).map { "$it" to "Terminal $it." } + listOf(
