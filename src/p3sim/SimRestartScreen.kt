@@ -345,7 +345,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             setTooltip(tip("Every practice start: you stand on its start this long before anything is up (terminals, levers, Goldor) and the clock runs. 0: at once."))
         }
         private fun delay() = Math.round(value * 50) / 10.0
-        override fun updateMessage() { message = Component.literal("Start Timer: ${"%.1f".format(Locale.ROOT, delay())}s") }
+        override fun updateMessage() { message = Component.literal("Timer: ${"%.1f".format(Locale.ROOT, delay())}s") }
         override fun applyValue() = Practice.setStartDelay(delay())
     }
 
@@ -382,7 +382,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     /** Section practice. */
     private fun practicePanel() {
-        row(listOf(DelaySlider(204)))
         // Custom: your start, the section's jobs you pick, checkpoints in order.
         val start = Practice.customStart
         val cps = Practice.checkpoints.size
@@ -401,6 +400,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }
             },
             change("§cClear", 40, "Clears the custom practice: start, jobs and checkpoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
+            DelaySlider(96),
         ))
         row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         val cells = arrayOfNulls<String>(COLUMNS.size)
