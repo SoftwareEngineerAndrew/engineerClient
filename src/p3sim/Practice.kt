@@ -43,14 +43,6 @@ object Practice {
         Fight.start(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4)[s - 1], practice = true)
     }
 
-    /** A drill that isn't made yet: practice mode, nothing to do. */
-    fun drill(name: String) {
-        Fight.end()
-        mode = name; section = 0
-        tasks = emptyList(); ticks = 0; endTicks = -1
-        Sim.note("Practice §f$name§7 isn't set up yet.")
-    }
-
     /** The same practice again (the Restart keybinds, the Infinileap). */
     fun restart() {
         val s = section
