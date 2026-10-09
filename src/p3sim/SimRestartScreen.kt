@@ -417,12 +417,15 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
         // Presets, a column for each section that has some.
         row(listOf(label("§ePresets", LABEL_W, "Set practices: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.")))
-        row(Practice.presets().groupBy { it.section }.toSortedMap().map { (sec, list) ->
-            stack("§6S$sec", 60, "Section $sec's presets.", list.map { p ->
-                act(p.name, 60, "Practice ${p.name} (S$sec): ${p.jobs.joinToString(", ") { jobName(it) }}" +
-                    (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
-                    (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ".")) { server { Practice.startPreset(p.name) } }
-            })
+        // A long section takes more than one column (6 a column), its title over the first.
+        row(Practice.presets().groupBy { it.section }.toSortedMap().flatMap { (sec, list) ->
+            list.chunked(6).mapIndexed { i, part ->
+                stack(if (i == 0) "§6S$sec" else "", 64, "Section $sec's presets.", part.map { p ->
+                    act(p.name, 64, "Practice ${p.name} (S$sec): ${p.jobs.joinToString(", ") { jobName(it) }}" +
+                        (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
+                        (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { server { Practice.startPreset(p.name) } }
+                })
+            }
         })
     }
 
