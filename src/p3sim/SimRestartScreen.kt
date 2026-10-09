@@ -56,10 +56,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             SimServer.run("stop") { Fight.end() }
         }.tooltip(tip("Ends the run: the fight stops and the splits clear.")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
 
-        // Left: the tabs, Settings level with Restart, Teleport and Practice above it.
-        tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY)
+        // Left: the tabs, Practice level with Restart, Teleport and Settings above it.
+        tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 2 * ROW)
         tabButton(Tab.TELEPORT, "Teleport", "Every place in the arena: section starts, devices, pads, phases, early-enter spots.", left, restartY - ROW)
-        tabButton(Tab.PRACTICE, "Practice", "Practice starts: a section, or a piece of one.", left, restartY - 2 * ROW)
+        tabButton(Tab.PRACTICE, "Practice", "Practice: a section (your role's part of it), or your own custom one; timed.", left, restartY)
 
         // Right: the skill level, the chosen one highlighted (its P3 time on hover). Shown names only: the presets keep theirs.
         title("§eSkill Level", right, SIDE_W, skillY)
@@ -371,6 +371,39 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
             act(s.label.lowercase(), 50, "Practice ${s.label}: your role's part of it (the rest done), from your early enter for it, each task timed.") { server { Practice.start(s.ordinal - Fight.Start.S1.ordinal + 1) } }
         })))
+
+        // Custom: your start, the section's jobs you pick, checkpoints in order.
+        val start = Practice.customStart
+        val sec = Practice.customSection
+        val cps = Practice.checkpoints.size
+        row(listOf(label("§eCustom", LABEL_W, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.")))
+        row(listOf(
+            ClickButton(100, if (start != null) "§aStart Position" else "Start Position",
+                tip("Left click: the custom practice starts where you stand, facing as you are; its section is the one you're in, its jobs your ${Roles.label(P3Sim.myClass)}'s there. " +
+                    (start?.let { "Now: S$sec, ${at(it)}. " } ?: "Not set. ") + "Right click: clear it all (start, jobs, checkpoints)."),
+                left = {
+                    val h = here()
+                    if (h != null && !Practice.setStart(h)) EngineerClient.msg("§cStand in one of the four sections to set the start.")
+                    rebuildWidgets()
+                },
+                right = { Practice.clearCustom(); rebuildWidgets() }),
+            ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
+                tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: the last one off. Now: $cps."),
+                left = { here()?.let { Practice.addCheckpoint(it) }; rebuildWidgets() },
+                right = { Practice.removeCheckpoint(); rebuildWidgets() }),
+        ))
+        if (start == null || sec !in 1..4) return
+        row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
+        val cells = arrayOfNulls<String>(COLUMNS.size)
+        for (job in P3Plan.jobsIn(sec)) cells[column(job)] = job
+        row(listOf(label("§6§lS$sec", SEC_W, "The custom practice's section: where its start is.")) + cells.map { job ->
+            if (job == null) label("", JOB_W)
+            else {
+                val on = job in Practice.customJobs
+                change(if (on) "§aYou" else "§8Done", JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job) }
+            }
+        })
+        row(listOf(act("§aStart Custom", 100, "Starts the custom practice: S$sec, from your start position, your jobs then the $cps checkpoint(s), timed.") { server { Practice.startCustom() } }))
     }
 
     // ------------------------------------------------------------------ pieces
