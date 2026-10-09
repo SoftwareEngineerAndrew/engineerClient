@@ -1,7 +1,7 @@
 package com.engineerclient.pov
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
@@ -35,7 +35,7 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
  */
 object PovPreviews : Module(
     name = "POV Previews",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "Renders each teammate's first-person view into their quarter of Odin's Spirit Leap menu.",
     key = null,
 ) {
@@ -45,14 +45,14 @@ object PovPreviews : Module(
      * which at 100+ fps is 30 ms old — invisible for judging where somebody is standing, and it
      * keeps the cost at one extra quarter-screen render per frame.
      */
-    val previewsPerFrame by NumberSetting("Previews Per Frame", 1, 1..4, 1, desc = "Feeds refreshed each frame; the rest keep their last image. Higher is smoother and costs more.")
+    val previewsPerFrame by NumberSetting("Previews Per Frame", 1, 1, 4, 1, desc = "Feeds refreshed each frame; the rest keep their last image. Higher is smoother and costs more.")
 
     /**
      * Fraction of the quadrant each feed is rendered at; the blit scales it back up. Half
      * resolution is a quarter of the fragments and, on a preview you are reading for position
      * rather than detail, hard to notice.
      */
-    val resolution by NumberSetting("Resolution", 0.75f, 0.25..1.0, 0.05f, desc = "Render scale of each feed, as a fraction of its quadrant. Lower is cheaper and softer.", unit = "x")
+    val resolution by NumberSetting("Resolution", 0.75f, 0.25, 1.0, 0.05f, desc = "Render scale of each feed, as a fraction of its quadrant. Lower is cheaper and softer.", unit = "x")
 
     /**
      * Sodium's render lists hold whatever the last cull produced — your own frustum — so without a
@@ -67,12 +67,12 @@ object PovPreviews : Module(
      * keeps rendering underneath regardless of [skipOwnView], since there's something to see
      * through to.
      */
-    val opacity by NumberSetting("Opacity", 1f, 0.1..1.0, 0.05f, desc = "How opaque the previews are. Below 1 you can see your own game through them (your own view keeps rendering, so this costs a world render).", unit = "x")
+    val opacity by NumberSetting("Opacity", 1f, 0.1, 1.0, 0.05f, desc = "How opaque the previews are. Below 1 you can see your own game through them (your own view keeps rendering, so this costs a world render).", unit = "x")
 
     // Separate from [opacity]: these apply to Odin's own leap boxes (colour, head, name, class)
     // drawn on top of the previews, only while the previews are actually up.
-    val leapBoxScale by NumberSetting("Leap Box Size", 0.5f, 0.3..1.0, 0.05f, desc = "Shrinks Odin's leap boxes toward the centre while the previews are showing.", unit = "x")
-    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 0.2f, 0.1..1.0, 0.05f, desc = "Fades the background of Odin's leap boxes (not the head or name) while the previews are showing.", unit = "x")
+    val leapBoxScale by NumberSetting("Leap Box Size", 0.5f, 0.3, 1.0, 0.05f, desc = "Shrinks Odin's leap boxes toward the centre while the previews are showing.", unit = "x")
+    val leapBoxOpacity by NumberSetting("Leap Box Opacity", 0.2f, 0.1, 1.0, 0.05f, desc = "Fades the background of Odin's leap boxes (not the head or name) while the previews are showing.", unit = "x")
 
     /**
      * With four previews tiling the screen, your own view is behind all of them. Skipping it is a
@@ -86,12 +86,10 @@ object PovPreviews : Module(
      * Raw = the last packet, no smoothing (lowest latency, 20 Hz steps).
      * Custom = EC's own time-based replay, [smoothingTicks] ticks in the past.
      */
-    enum class HeadSmoothing { VANILLA, RAW, CUSTOM }
+    val headSmoothing by SelectorSetting("Head Smoothing", "Vanilla", arrayListOf("Vanilla", "Raw", "Custom"), desc = "How a teammate's head movement is interpolated for their preview.")
 
-    val headSmoothing by SelectorSetting("Head Smoothing", HeadSmoothing.VANILLA, desc = "How a teammate's head movement is interpolated for their preview.")
-
-    val smoothingTicks by NumberSetting("Smoothing Ticks", 3, 0..6, 1, desc = "How far in the past Custom renders the pose, in ticks (50 ms each). 0 is the same as Raw.")
-        .withDependency { headSmoothing.ordinal == 2 }
+    val smoothingTicks by NumberSetting("Smoothing Ticks", 3, 0, 6, 1, desc = "How far in the past Custom renders the pose, in ticks (50 ms each). 0 is the same as Raw.")
+        .withDependency { headSmoothing == 2 }
 
     // ---- which HUDs survive on top of a preview -------------------------------------------
     //
@@ -99,7 +97,7 @@ object PovPreviews : Module(
     // covers the lot. These are the ones you cannot afford to lose while a leap menu is up; each
     // is simply submitted a second time, above the previews. Odin's leap boxes and the player
     // names need no entry — Odin draws them after us anyway.
-    private val keepHuds by DropdownSetting("Keep HUDs On Top", desc = "")
+    private val keepHuds by DropdownSetting("Keep HUDs On Top")
     private val keepTickTimers by BooleanSetting("Keep Tick Timers", true, desc = "Redraws Odin's Necron / Goldor / Storm / Secrets tick timers over the previews.").withDependency { keepHuds }
     private val keepInvincibility by BooleanSetting("Keep Invincibility Timer", true, desc = "Redraws Odin's Invincibility Timer HUD over the previews.").withDependency { keepHuds }
     private val keepMelody by BooleanSetting("Keep Melody Display", true, desc = "Redraws Odin's Melody progress GUI over the previews.").withDependency { keepHuds }
@@ -138,7 +136,7 @@ object PovPreviews : Module(
     val showCost by BooleanSetting("Show Cost", true, desc = "HUD line with the milliseconds the previews added to the last frame.")
 
     val mode: PovPose.Mode
-        get() = when (headSmoothing.ordinal) {
+        get() = when (headSmoothing) {
             1 -> PovPose.Mode.RAW
             2 -> PovPose.Mode.CUSTOM
             else -> PovPose.Mode.VANILLA
@@ -224,7 +222,7 @@ object PovPreviews : Module(
         if (!enabled || PovCapture.disabledForSession) return false
         if (!LeapMenu.enabled) return false
         if (!ShowIn.allows(places())) return false
-        val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*> ?: return false
+        val screen = Minecraft.getInstance().screen as? AbstractContainerScreen<*> ?: return false
         return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
     }
 }

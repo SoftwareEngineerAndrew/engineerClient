@@ -115,14 +115,14 @@ object ThumbCapture {
         if (due) whys += "fps"
         lastNs = now
         // Typed Chat off: a picture of a text field being typed into would show what is redacted everywhere else.
-        if (InputCapture.redactKeys(DevgineerClient.mc.gui.screen())) { skippedTyping.incrementAndGet(); return }
+        if (InputCapture.redactKeys(DevgineerClient.mc.screen)) { skippedTyping.incrementAndGet(); return }
 
         val session = Rec.session ?: return
-        val target = DevgineerClient.mc.gameRenderer.mainRenderTarget()
+        val target = DevgineerClient.mc.mainRenderTarget
         val fw = target.width
         val fh = target.height
         val tex = target.colorTexture ?: return
-        if (fw <= 0 || fh <= 0 || tex.format.blockSize() != 4) return
+        if (fw <= 0 || fh <= 0 || tex.format.pixelSize() != 4) return
         val (ow, oh) = ThumbMath.outSize(fw, fh)
         val seq = Rec.nextSeq()
         val env = Rec.envelope("thumb", seq)
@@ -157,7 +157,7 @@ object ThumbCapture {
         var abgr: IntArray? = null
         try {
             if (Rec.session === session && session.running) {
-                buf.map(true, false).use { view -> abgr = IntArray(fw * fh).also { view.data().asIntBuffer().get(it) } }
+                RenderSystem.getDevice().createCommandEncoder().mapBuffer(buf, true, false).use { view -> abgr = IntArray(fw * fh).also { view.data().asIntBuffer().get(it) } }
             }
         } catch (t: Throwable) {
             DevgineerClient.logger.error("[dc] recorder thumb read failed", t)

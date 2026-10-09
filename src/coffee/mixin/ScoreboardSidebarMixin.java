@@ -7,13 +7,13 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import net.minecraft.client.gui.Hud;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.world.scores.Objective;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 /** The movable scoreboard's hooks: vanilla's sidebar call is skipped and its objective kept for the HUD (ScoreboardMove). */
-@Mixin(Hud.class)
+@Mixin(Gui.class)
 public class ScoreboardSidebarMixin {
 
     /** A new frame: no sidebar until vanilla asks for one. */

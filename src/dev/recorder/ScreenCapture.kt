@@ -141,7 +141,7 @@ object ScreenCapture {
     private fun tick() {
         val session = Rec.session
         if (session !== lastSession) { lastSession = session; resetDiff(current) }
-        val screen = DevgineerClient.mc.gui.screen()
+        val screen = DevgineerClient.mc.screen
         if (screen !== current) {
             // Opened or closed while no hook saw it (before the recording started, say): catch up now.
             current?.let { closed(it) }
@@ -203,7 +203,7 @@ object ScreenCapture {
     }
 
     private fun keyframe() {
-        val screen = current ?: DevgineerClient.mc.gui.screen() ?: return
+        val screen = current ?: DevgineerClient.mc.screen ?: return
         current = screen
         Rec.emit("screen", kf(true) + openBody(screen, screen.width, screen.height, false))
         (screen as? AbstractContainerScreen<*>)?.let { containerState(it, full = true) }
@@ -248,7 +248,7 @@ object ScreenCapture {
         tooltipTick = Rec.tick
         if (again) return
         tooltipHash = hash
-        val slot = (DevgineerClient.mc.gui.screen() as? RecContainerScreenAccessor)?.let { runCatching { it.`dc$recHoveredSlot`()?.index }.getOrNull() }
+        val slot = (DevgineerClient.mc.screen as? RecContainerScreenAccessor)?.let { runCatching { it.`dc$recHoveredSlot`()?.index }.getOrNull() }
         val sb = StringBuilder(256)
         sb.append("\"slot\":").append(slot ?: "null").append(",\"x\":").append(x).append(",\"y\":").append(y).append(",\"lines\":[")
         lines.forEachIndexed { i, c -> if (i > 0) sb.append(','); RichJson.component(sb, c) }

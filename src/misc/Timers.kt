@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
@@ -37,7 +37,7 @@ import net.minecraft.world.entity.boss.wither.WitherBoss
  */
 object Timers : Module(
     name = "Timers",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "Countdowns through a run: clear, Maxor moving, crystals, Storm, Goldor, Necron and relics.",
     key = null,
 ) {

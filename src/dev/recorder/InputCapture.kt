@@ -120,7 +120,7 @@ object InputCapture {
         on<InputEvent>(priority = Int.MIN_VALUE) {
             if (!on()) return@on
             DevgineerClient.safely("recorder bind") {
-                val body = if (redactKeys(mc.gui.screen())) "\"redacted\":true" else "\"key\":${q(key.name)}"
+                val body = if (redactKeys(mc.screen)) "\"redacted\":true" else "\"key\":${q(key.name)}"
                 event("bind", "$body,\"cancelled\":$isCancelled")
             }
         }
@@ -172,7 +172,7 @@ object InputCapture {
     /** KeyboardHandler.keyPress, HEAD. [action] 0 release, 1 press, 2 repeat. */
     @JvmStatic fun key(action: Int, ev: KeyEvent) {
         if (!on()) return
-        val screen = mc.gui.screen()
+        val screen = mc.screen
         val body = if (redactKeys(screen)) "\"redacted\":true,\"screen\":${screenName(screen)}"
             else "${keyMembers(ev)},\"act\":$action,\"screen\":${screenName(screen)},\"maps\":${maps { it.matches(ev) }}"
         event("key", body)
@@ -182,8 +182,8 @@ object InputCapture {
     @JvmStatic fun charTyped(ev: CharacterEvent) {
         if (!on() || !Rec.typedChat) return
         // A private message being written (Hide Private Chats) keeps its characters out even so.
-        if (redactKeys(mc.gui.screen())) { event("char", "\"redacted\":true,\"screen\":${screenName(mc.gui.screen())}"); return }
-        event("char", "\"cp\":${ev.codepoint()},\"s\":${q(ev.codepointAsString())},\"screen\":${screenName(mc.gui.screen())}")
+        if (redactKeys(mc.screen)) { event("char", "\"redacted\":true,\"screen\":${screenName(mc.screen)}"); return }
+        event("char", "\"cp\":${ev.codepoint()},\"s\":${q(ev.codepointAsString())},\"screen\":${screenName(mc.screen)}")
     }
 
     /** MouseHandler.onButton, HEAD. [action] 0 release, 1 press. gx/gy are the cursor in window pixels. */
@@ -191,13 +191,13 @@ object InputCapture {
         if (!on()) return
         val ev = MouseButtonEvent(gx, gy, info)
         event("btn", "\"b\":${info.button()},\"act\":$action,\"mods\":${info.modifiers()},\"gx\":${n(gx)},\"gy\":${n(gy)}," +
-            "\"screen\":${screenName(mc.gui.screen())},\"maps\":${maps { it.matchesMouse(ev) }}")
+            "\"screen\":${screenName(mc.screen)},\"maps\":${maps { it.matchesMouse(ev) }}")
     }
 
     /** MouseHandler.onScroll, HEAD (ahead of anything that cancels it, like the wand scroll). */
     @JvmStatic fun scroll(dx: Double, dy: Double) {
         if (!on()) return
-        event("scroll", "\"dx\":${n(dx)},\"dy\":${n(dy)},\"screen\":${screenName(mc.gui.screen())}")
+        event("scroll", "\"dx\":${n(dx)},\"dy\":${n(dy)},\"screen\":${screenName(mc.screen)}")
     }
 
     /** MouseHandler.onMove, HEAD: one [ns,x,y,grabbed] sample, written with the tick's batch. */

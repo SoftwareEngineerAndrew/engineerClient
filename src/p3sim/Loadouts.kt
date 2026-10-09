@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import net.minecraft.core.component.DataComponents
@@ -102,11 +101,11 @@ object Loadouts {
         }
         val h = helmFor(w.head)
         if (h == Helm.MASK) {
-            P3Sim.wornMaskS.index = if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1
+            P3Sim.wornMaskS.value = if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1
             val cur = SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))
             if (cur?.endsWith("_MASK") == true) {
                 if (P3Sim.realMasks) Masks.equip(p)
-                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMaskS.index == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
+                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
             } else wearHelmet(p, h)
         } else if (h != null) wearHelmet(p, h)
         P3Sim.phoenixS.value = w.phoenix
@@ -116,7 +115,7 @@ object Loadouts {
     /** A hotbar reset's gear: the saved worn loadout ([HotbarLayout.worn]) or, with none, Maxor + mask (the pet stays as it is: Black Cat). */
     fun applySaved(p: ServerPlayer) {
         val w = HotbarLayout.worn()
-        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.wornMaskS.index = if (w.head.endsWith("SPIRIT_MASK")) 0 else 1
+        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.wornMaskS.value = if (w.head.endsWith("SPIRIT_MASK")) 0 else 1
         Masks.equip(p)
         SimItems.equipArmor(p, SimItems.ArmorSet.MAXOR)
         if (w != null) applyWorn(p, w)
@@ -208,7 +207,7 @@ object Loadouts {
         val inv = p.inventory
         val old = p.getItemBySlot(EquipmentSlot.HEAD).copy()
         if (wearsHelm(h, old)) return
-        val wantMask = if (P3Sim.wornMaskS.index == 0) "SPIRIT_MASK" else "BONZO_MASK"
+        val wantMask = if (P3Sim.wornMaskS.value == 0) "SPIRIT_MASK" else "BONZO_MASK"
         val candidates = (0 until 36).filter { wearsHelm(h, inv.getItem(it)) }
         val from = (if (h == Helm.MASK) candidates.firstOrNull { SimItems.idOf(inv.getItem(it))?.removePrefix("STARRED_") == wantMask } else null) ?: candidates.firstOrNull()
         if (from != null) {
@@ -226,7 +225,7 @@ object Loadouts {
                 if (slot != null) inv.setItem(slot, old)
             }
         }
-        if (h == Helm.MASK) SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.let { P3Sim.wornMaskS.index = if (it.endsWith("SPIRIT_MASK")) 0 else 1 }
+        if (h == Helm.MASK) SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.let { P3Sim.wornMaskS.value = if (it.endsWith("SPIRIT_MASK")) 0 else 1 }
     }
 
     private fun sound(id: String, vol: Float, pitch: Float, src: SoundSource) {
@@ -264,13 +263,13 @@ object Loadouts {
             for (i in 0 until 54) c.setItem(i, Terminals.FILLER)
             for ((slot, e) in entries) if (slot < 54) c.setItem(slot, e.stack())
             val head = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
-            c.setItem(11, if (head.isEmpty) Terminals.named(Items.STAINED_GLASS_PANE.gray(), "§7Empty Helmet Slot") else head)
+            c.setItem(11, if (head.isEmpty) Terminals.named(Items.GRAY_STAINED_GLASS_PANE, "§7Empty Helmet Slot") else head)
             for ((slot, eq) in listOf(20 to EquipmentSlot.CHEST, 29 to EquipmentSlot.LEGS, 38 to EquipmentSlot.FEET)) {
                 val s = sp.getItemBySlot(eq).copy()
                 if (!s.isEmpty) c.setItem(slot, s)
             }
             for ((i, cu) in customs().withIndex()) if (i < CUSTOM_SLOTS.size) c.setItem(CUSTOM_SLOTS[i], cu.stack())
-            c.setItem(SAVE_SLOT, Terminals.named(Items.DYE.lime(), "§aSave current as loadout").also {
+            c.setItem(SAVE_SLOT, Terminals.named(Items.LIME_DYE, "§aSave current as loadout").also {
                 it.set(DataComponents.LORE, ItemLore(listOf("§7Saves what you wear and your pet", "§7as a new loadout.", "", "§eClick to save!").map { l -> Component.literal(l).withStyle { s -> s.withItalic(false) } }))
             })
             if (P3Sim.phoenix) c.setItem(21, SimItems.head(Masks.PHOENIX_TEX, "§7[Lvl 100] §5Phoenix"))

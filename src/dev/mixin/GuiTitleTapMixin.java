@@ -1,7 +1,7 @@
 package com.devgineerclient.mixin;
 
 import com.devgineerclient.recorder.HudCapture;
-import net.minecraft.client.gui.Hud;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * themselves (Odin's and ours). Read only; require = 0 so a changed target can never stop the game
  * from starting.
  */
-@Mixin(Hud.class)
+@Mixin(Gui.class)
 public class GuiTitleTapMixin {
 
     @Inject(method = "setOverlayMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), require = 0, expect = 0)

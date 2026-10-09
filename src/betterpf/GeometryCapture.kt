@@ -49,7 +49,7 @@ class GeometryCapture(private val emit: (String) -> Unit) {
             val what = when {
                 top.isAir -> "-"
                 door == Blocks.COAL_BLOCK -> "w"
-                door == Blocks.DYED_TERRACOTTA.red() -> "b"
+                door == Blocks.RED_TERRACOTTA -> "b"
                 door is InfestedBlock -> "e"
                 door == Blocks.BARRIER -> "f"
                 else -> "n"

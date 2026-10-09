@@ -35,7 +35,7 @@ import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket
 import net.minecraft.sounds.SoundEvent
 import net.minecraft.world.BossEvent
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.PositionMoveRotation
 import net.minecraft.world.level.block.state.BlockState
 import java.util.Locale
@@ -129,12 +129,12 @@ object BossLog {
             is ClientboundSetEntityMotionPacket -> if (watched(p.id())) add("\"v\",${p.id()},${v(p.movement().x)},${v(p.movement().y)},${v(p.movement().z)}")
 
             is ClientboundAddEntityPacket -> {
-                if (p.type == EntityTypes.WITHER) s.bossIds += p.id
-                if (!(focus || p.type == EntityTypes.WITHER)) return
+                if (p.type == EntityType.WITHER) s.bossIds += p.id
+                if (!(focus || p.type == EntityType.WITHER)) return
                 val m = p.movement
                 val entry = "\"a\",${p.id},${js(BuiltInRegistries.ENTITY_TYPE.getKey(p.type).toString())},${b(p.x)},${b(p.y)},${b(p.z)}," +
                     "${v(m.x)},${v(m.y)},${v(m.z)},${a(p.yRot)},${a(p.xRot)},${a(p.yHeadRot)},${p.data}"
-                if (p.type != EntityTypes.PLAYER) { add(entry); return }
+                if (p.type != EntityType.PLAYER) { add(entry); return }
                 // Players (and Hypixel's player-shaped NPCs): their name, from the tab list the server
                 // fills before it adds them.
                 val uuid = p.uuid

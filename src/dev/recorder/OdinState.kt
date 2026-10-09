@@ -170,7 +170,7 @@ object OdinState {
             o.n("secretsFound", st.secretsFound).n("secretsPercent", st.secretsPercent).n("knownSecrets", st.knownSecrets)
                 .n("crypts", st.crypts).n("openedRooms", st.openedRooms).n("completedRooms", st.completedRooms)
                 .n("deaths", st.deaths).n("percentCleared", st.percentCleared).s("elapsed", st.elapsedTime)
-                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", st.batKilled > 0).n("batKills", st.batKilled)
+                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", st.batKilled).n("batKills", if (st.batKilled) 1 else 0)
                 .s("doorOpener", st.doorOpener).b("bloodDone", st.bloodDone).n("puzzleCount", st.puzzleCount)
             out.append('{').append(o.sb).append('}')
         }
@@ -464,7 +464,8 @@ object OdinState {
     private val saving: Class<*>? by lazy { runCatching { Class.forName("com.odtheking.odin.clickgui.settings.Saving") }.getOrNull() }
     private val savingWrite by lazy { runCatching { saving?.getMethod("write", com.google.gson.Gson::class.java) }.getOrNull() }
 
-    private fun hidden(s: Setting<*>): Boolean = (s as? RenderableSetting<*>)?.hidden ?: false
+    private val getHidden by lazy { runCatching { Setting::class.java.getDeclaredMethod("getHidden").apply { isAccessible = true } }.getOrNull() }
+    private fun hidden(s: Setting<*>): Boolean = runCatching { getHidden?.invoke(s) as? Boolean }.getOrNull() ?: false
 
     /**
      * Every module (Odin's and ours, which register through Odin), on or off, with every setting's

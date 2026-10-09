@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import net.minecraft.world.entity.EntityTypes
 import com.engineerclient.EngineerClient
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
@@ -145,7 +144,7 @@ class Station(
  * A status stand as Hypixel's: gravity on (noGravity false in Hypixel's stand data) yet
  * it stays where it is put, as there. Vanilla would let it fall, so its own movement is dropped.
  */
-class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.ARMOR_STAND, level) {
+class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityType.ARMOR_STAND, level) {
     override fun travel(travelVector: Vec3) {}
 }
 
@@ -158,7 +157,7 @@ object Corpse {
     fun spawn(p: net.minecraft.server.level.ServerPlayer, ticks: Int) {
         val made = ArrayList<net.minecraft.world.entity.Entity>()
         EngineerClient.safely("p3sim corpse") {
-            val m = net.minecraft.world.entity.decoration.Mannequin(EntityTypes.MANNEQUIN, Sim.level)
+            val m = net.minecraft.world.entity.decoration.Mannequin(EntityType.MANNEQUIN, Sim.level)
             m.setComponent(net.minecraft.core.component.DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(p.gameProfile))
             m.isInvulnerable = true
             m.setNoGravity(true)

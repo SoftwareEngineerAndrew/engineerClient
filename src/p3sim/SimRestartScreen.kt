@@ -21,11 +21,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         val left = cx - RESTART_W / 2 - GAP - SIDE_W
         val right = cx + RESTART_W / 2 + GAP
         addRenderableWidget(Button.builder(Component.literal("§aRestart P3")) {
-            mc.gui.setScreen(null)
+            mc.setScreen(null)
             SimServer.run("restart") { Fight.start(Fight.Start.P3) }
         }.tooltip(tip("Starts P3 over from its beginning, everything reset (Stop: ends it).")).bounds(cx - RESTART_W / 2, cy - 10, RESTART_W, 20).build())
         addRenderableWidget(Button.builder(Component.literal("§cStop")) {
-            mc.gui.setScreen(null)
+            mc.setScreen(null)
             SimServer.run("stop") { Fight.end() }
         }.tooltip(tip("Ends the run: the fight stops and the splits clear.")).bounds(cx - RESTART_W / 2, cy - 34, RESTART_W, 20).build())
 
@@ -61,11 +61,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
         // Under it all, one under each column: the three menus.
         y += GAP - 4
-        addRenderableWidget(Button.builder(Component.literal("Roles")) { mc.gui.setScreen(SimRolesScreen()) }
+        addRenderableWidget(Button.builder(Component.literal("Roles")) { mc.setScreen(SimRolesScreen()) }
             .tooltip(tip("Your class, and which of each section's jobs are yours or a bot's.")).bounds(left, y, SIDE_W, 20).build())
-        addRenderableWidget(Button.builder(Component.literal("Settings")) { mc.gui.setScreen(SimSettingsScreen()) }
+        addRenderableWidget(Button.builder(Component.literal("Settings")) { mc.setScreen(SimSettingsScreen()) }
             .tooltip(tip("Death ticks, terminals, your speed and your hotbar.")).bounds(cx - RESTART_W / 2, y, RESTART_W, 20).build())
-        addRenderableWidget(Button.builder(Component.literal("Teleport")) { mc.gui.setScreen(SimTeleportScreen()) }
+        addRenderableWidget(Button.builder(Component.literal("Teleport")) { mc.setScreen(SimTeleportScreen()) }
             .tooltip(tip("Every place in the arena: section starts, devices, pads, phases, early-enter spots.")).bounds(right, y, SIDE_W, 20).build())
     }
 
