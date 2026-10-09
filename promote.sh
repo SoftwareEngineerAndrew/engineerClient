@@ -5,8 +5,9 @@
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
 #   promote.sh    this script
 # fabric.mod.json loses their entrypoints, mixin configs and the "breaks" line. The result must
-# compile on its own before it is committed. One squashed commit lands on the public main and is
-# pushed, which rebuilds the public "main" release. -n: stop before the commit and leave the
+# compile on its own before it is committed. One squashed commit lands on the public branch of the
+# same name (main, or mc/<version> for an older Minecraft; run it from that branch's worktree) and
+# is pushed, which rebuilds that branch's release. -n: stop before the commit and leave the
 # change in the public clone to look at.
 set -euo pipefail
 export PATH="$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
@@ -22,8 +23,12 @@ GRADLE="$HOME/.cache/ec-build/gradle-9.6.1/bin/gradle"
 
 [ -z "$(git -C "$PUB" status --porcelain)" ] || { echo "promote: $PUB has uncommitted changes" >&2; exit 1; }
 git -C "$PUB" fetch -q origin
-git -C "$PUB" checkout -q main
-git -C "$PUB" merge -q --ff-only origin/main
+BRANCH="$(git -C "$TEAM" branch --show-current)"
+if git -C "$PUB" rev-parse -q --verify "origin/$BRANCH" >/dev/null; then
+  git -C "$PUB" checkout -q -B "$BRANCH" "origin/$BRANCH"
+else
+  git -C "$PUB" checkout -q -B "$BRANCH" origin/main
+fi
 
 # Replace the public tree with the dev HEAD, then drop the extras.
 git -C "$PUB" rm -rq --ignore-unmatch .
@@ -68,5 +73,6 @@ fi
 
 git -C "$PUB" -c user.name=undonecoffee -c user.email=58919771+undonecoffee@users.noreply.github.com \
   commit -q -m "$MSG"
-git -C "$PUB" push -q origin main
-echo "promote: pushed $(git -C "$PUB" rev-parse --short HEAD) to undonecoffee/EngineerClient"
+git -C "$PUB" push -q origin "$BRANCH"
+git -C "$PUB" checkout -q main
+echo "promote: pushed $(git -C "$PUB" rev-parse --short "$BRANCH") to undonecoffee/EngineerClient $BRANCH"
