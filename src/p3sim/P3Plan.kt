@@ -37,7 +37,6 @@ object P3Plan {
         // On S2's device (Lights): the EE2 player does it early and waits there for the leaps.
         EarlyEnter("ee2", "EE2", 2, Vec3(60.6, 132.0, 139.0)),
         EarlyEnter("ee3", "EE3", 3, Vec3(1.9, 109.0, 104.6)),
-        EarlyEnter("ee4", "EE4", 4, Vec3(41.3, 109.0, 32.6)),
         // Just outside the core in S4; then inside it.
         EarlyEnter("core", "Core", 5, Vec3(54.5, 115.06, 50.5)),
         EarlyEnter("recore", "Recore", 6, Vec3(54.4, 115.0, 57.6)),
