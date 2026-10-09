@@ -248,15 +248,23 @@ object Loadouts {
         BuiltInRegistries.SOUND_EVENT.getValue(Identifier.parse(id))?.let { Sim.sound(it, vol, pitch, null, src) }
     }
 
+    /** [d]'s gear, helmet, pet and speed on at once, quietly. */
+    private fun wear(p: ServerPlayer, d: Def) {
+        SimItems.equipArmor(p, d.set, d.helm == Helm.TERROR)
+        d.mask?.let { P3Sim.wornMaskS.index = if (it == "SPIRIT_MASK") 0 else 1 }
+        wearHelmet(p, d.helm)
+        P3Sim.phoenixS.value = d.phoenix
+        Fight.applySpeed(p)
+    }
+
+    /** Terror At Terms: a P3 start's gear is the Terror loadout (over your saved gear). */
+    fun wearTerror(p: ServerPlayer) { defs.firstOrNull { it.name == "Terror" }?.let { wear(p, it) } }
+
     /** Equips [d] as Hypixel does: a tick after the click the lever clicks, the green chat line prints and the saddle creaks. */
     private fun equip(p: ServerPlayer, d: Def) {
         if (matches(p, d)) { Sim.chatStyled("§c${d.name} is already equipped!"); return }
         Fight.later(1, "loadout ${d.name}") {
-            SimItems.equipArmor(p, d.set, d.helm == Helm.TERROR)
-            d.mask?.let { P3Sim.wornMaskS.index = if (it == "SPIRIT_MASK") 0 else 1 }
-            wearHelmet(p, d.helm)
-            P3Sim.phoenixS.value = d.phoenix
-            Fight.applySpeed(p)
+            wear(p, d)
             sound("minecraft:block.lever.click", 0.5f, 1f, SoundSource.BLOCKS)
             Sim.chatStyled("§aYou equipped ${d.name}!")
             sound("minecraft:entity.horse.saddle", 1f, 1f, SoundSource.NEUTRAL)

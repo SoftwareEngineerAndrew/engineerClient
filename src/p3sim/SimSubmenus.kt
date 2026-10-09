@@ -235,6 +235,11 @@ class SimSettingsScreen : SimSubmenu("Settings") {
                 server { EngineerClient.msg(HotbarLayout.reset(p3Part)) }
             }.also { it.active = saved },
         ))
+        row(listOf(
+            label("§eGear", LABEL_W, "What you wear when P3 starts."),
+            change("Terror At Terms: ${onOff(P3Sim.terrorAtTerms)}", 140,
+                "Every P3 start puts the Terror loadout on (Terror armour, Bonzo's Mask, Black Cat) over your saved gear.") { P3Sim.toggleTerrorAtTerms() },
+        ))
     }
 
     private fun setSpeed(v: Int) {
