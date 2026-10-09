@@ -27,9 +27,15 @@ object Masks {
         // The exact lines (Bonzo's with Hypixel's glyph).
         Item("SPIRIT_MASK", "Spirit Mask", 600, 60, "§6Second Wind Activated§r§a! Your Spirit Mask saved your life!"),
         Item("BONZO_MASK", "Bonzo's Mask", 3600, 60, "§aYour §r§9 Bonzo's Mask §r§asaved your life!"),
-        // Phoenix covers no longer than a mask (3 s, not its lore's 4 s): on Hypixel the next death tick, 60 ticks on, still hits.
+        // Item.safe is no longer read: every proc covers SAFE ticks (Phoenix too, not its lore's 4 s).
         Item("PHOENIX", "Phoenix", 1200, 60, "§eYour §r§cPhoenix Pet §r§esaved you from certain death!"),
     )
+
+    /**
+     * How long a proc keeps you alive: just under 3 s, so the next death tick always hits. They land on tick 58
+     * or 59 of each 60 at random, so one can come only 59 ticks after a proc; 60 let that one through.
+     */
+    private const val SAFE = 58
 
     // Skins as on Hypixel.
     private const val BONZO_TEX = "eyJ0aW1lc3RhbXAiOjE1ODc5MDgzMDU4MjYsInByb2ZpbGVJZCI6IjJkYzc3YWU3OTQ2MzQ4MDI5NDI4MGM4NDIyNzRiNTY3IiwicHJvZmlsZU5hbWUiOiJzYWR5MDYxMCIsInNpZ25hdHVyZVJlcXVpcmVkIjp0cnVlLCJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTI3MTZlY2JmNWI4ZGEwMGIwNWYzMTZlYzZhZjYxZThiZDAyODA1YjIxZWI4ZTQ0MDE1MTQ2OGRjNjU2NTQ5YyJ9fX0="
@@ -233,7 +239,7 @@ object Masks {
             item.readyAt = now + item.cooldown
             // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
             if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.phoenixS.value = true; Fight.applySpeed(p) }
-            safeUntil = now + item.safe
+            safeUntil = now + SAFE
             // Proc particles as recorded: explosion x3 at your feet, Phoenix adds lava x18.
             Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
             if (item.id == "PHOENIX") Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA, p.x, p.y, p.z, 18, 0.1, 0.1, 0.1, 0.08)

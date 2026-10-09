@@ -37,7 +37,7 @@ import net.minecraft.world.phys.Vec3
  *   everyone free has
  * Bots that pre-leapt walk on to their next terminals; at the core, everyone leaps in at once.
  *
- * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `ee4`, `core`).
+ * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `core`).
  */
 object Roles {
     class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap())
@@ -107,14 +107,14 @@ object Roles {
 
     /**
      * A route planner's prototype roles (a 399-tick P3), times from its simulation. The tank pre-does Lights and waits on S2's high path for the archer, mage and bers;
-     * the bers waits on S3 T3 for the healer, tank and archer; the mage waits by the core (EE4) for the S4
-     * leaps. (The planner's bers also leaps onto the archer at T4 for S3's levers: the bots walk it.)
+     * the bers waits on S3 T3 for the healer, tank and archer; nobody early-enters S4 (no EE4: never needed).
+     * (The planner's bers also leaps onto the archer at T4 for S3's levers: the bots walk it.)
      */
     val PROTOTYPE_1 = Preset(
         "Prototype 1",
         roles = linkedMapOf(
             HEALER to "ss (leap archer) / 1 (leap bers) / 1 (leap mage) / 1 recore",
-            MAGE to "bl 43 / 53 / ee4 / 4 recore",
+            MAGE to "bl 43 / 53 / / 4 recore",
             BERSERK to "i4 / ee3 / 3 bl / bl",
             ARCHER to "21 / 2 / dev 4 (leap healer) / 2 recore",
             TANK to "ee2 / dev bl 4 / 2 / 3 recore",
@@ -128,13 +128,12 @@ object Roles {
         moves = listOf(
             "ee2 waits 2 5 ee3",
             "ee3 waits 1 2 4",
-            "ee4 waits 1 2 3",
+            "",
             "",
         ),
         spots = mapOf(
             "ee2" to Vec3(34.05, 131.0, 139.05),
             "ee3" to Vec3(16.5, 123.0, 93.7),
-            "ee4" to Vec3(54.55, 115.06, 51.05),
         ),
     )
 
