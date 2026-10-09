@@ -101,8 +101,8 @@ object P3Sim : Module(
     }
 
     /** Practice: the final time, large, as Term Info's section times look. */
-    private val practiceTimeHud by HUD("Practice Time", "A practice's final time, large (as Term Info's Section Time), until it starts again.", true, 420, 300, 5f) { example ->
-        val t = if (example) "§514.35" else Practice.endTicks.takeIf { inSim && Practice.active && it >= 0 }?.let { "§5${Practice.secs(it)}" } ?: return@HUD 0 to 0
+    private val practiceTimeHud by HUD("Practice Time", "A practice's final time, large (as Term Info's Section Time), for 4 seconds.", true, 420, 300, 5f) { example ->
+        val t = if (example) "§514.35" else Practice.endTicks.takeIf { inSim && Practice.active && it >= 0 && System.currentTimeMillis() - Practice.endMs < 4000 }?.let { "§5${Practice.secs(it)}" } ?: return@HUD 0 to 0
         text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
         mc.font.width(t) to 10
     }
