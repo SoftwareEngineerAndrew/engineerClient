@@ -380,18 +380,16 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         val picked = Practice.customJobsIn(sec)
         row(listOf(label("§eCustom", LABEL_W, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.")))
         row(listOf(
-            ClickButton(100, if (start != null) "§aStart Position" else "Start Position",
-                tip("Left click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
-                    (start?.let { "Now: S${Practice.customSection}, ${at(it)}. " } ?: "Not set. ") + "Right click: clear it all (start, jobs, checkpoints)."),
-                left = {
-                    here()?.let { h -> val n = Practice.setStart(h); EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}.") }
-                    rebuildWidgets()
-                },
-                right = { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared."); rebuildWidgets() }),
-            ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
-                tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: the last one off. Now: $cps."),
-                left = { here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }; rebuildWidgets() },
-                right = { Practice.removeCheckpoint(); rebuildWidgets() }),
+            change(if (start != null) "§aStart Position" else "Start Position", 100,
+                "Click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
+                    (start?.let { "Now: S${Practice.customSection}, ${at(it)}." } ?: "Not set.")) {
+                here()?.let { h -> val n = Practice.setStart(h); EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}.") }
+            },
+            change(if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint", 100,
+                "Click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Now: $cps.") {
+                here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }
+            },
+            change("§cClear", 40, "Clears the custom practice: start, jobs and checkpoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
         ))
         row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         val cells = arrayOfNulls<String>(COLUMNS.size)
@@ -461,7 +459,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         Button(0, 0, w, 20, Component.literal(text), { left() }, { it.get() }) {
         init { setTooltip(tooltip) }
         override fun isValidClickButton(info: MouseButtonInfo) = info.button() == 0 || info.button() == 1
-        override fun onClick(event: MouseButtonEvent, doubleClick: Boolean) { if (event.button() == 1) right() else left() }
+        override fun onClick(event: MouseButtonEvent, doubleClick: Boolean) {
+            EngineerClient.logger.info("[ec] p3sim menu click: button ${event.button()} on ${message.string}")
+            if (event.button() == 1) right() else left()
+        }
         override fun extractContents(g: net.minecraft.client.gui.GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partial: Float) {
             extractDefaultSprite(g)
             extractDefaultLabel(g.textRendererForWidget(this, net.minecraft.client.gui.GuiGraphicsExtractor.HoveredTextEffects.NONE))
