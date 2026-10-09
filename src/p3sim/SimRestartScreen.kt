@@ -37,7 +37,9 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         val cx = width / 2
         // Restart in the middle of the screen; the rest hangs off it.
         val restartY = height / 2 - 10
-        val r0 = restartY - 2 * ROW
+        // The skill and role columns end level with Restart's bottom.
+        val skillY = restartY - 3 * ROW
+        val roleY = restartY - 4 * ROW
         val left = cx - RESTART_W / 2 - GAP - SIDE_W
         val right = cx + RESTART_W / 2 + GAP
         val roleX = right + SIDE_W + GAP
@@ -57,7 +59,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         tabButton(Tab.PRACTICE, "Practice", "Practice starts: a section, or a piece of one.", left, restartY - 2 * ROW)
 
         // Right: the skill level, the chosen one highlighted (its P3 time on hover). Shown names only: the presets keep theirs.
-        title("§eSkill Level", right, SIDE_W)
+        title("§eSkill Level", right, SIDE_W, skillY)
         val skills = listOf(
             Triple(0, "Normal PF", "The bots play at a normal party finder pace: P3 in about 34 s."),
             Triple(1, "Quality PF", "The bots play at a quality party finder pace: P3 in about 28 s."),
@@ -69,11 +71,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             addRenderableWidget(Button.builder(Component.literal(if (i == P3Plan.skill) "§a§n$name" else name)) {
                 P3Plan.chooseSkill(i)
                 rebuildWidgets()
-            }.tooltip(tip("$about Your jobs become your class's role in it.")).bounds(right, r0 + k * ROW, SIDE_W, 20).build())
+            }.tooltip(tip("$about Your jobs become your class's role in it.")).bounds(right, skillY + k * ROW, SIDE_W, 20).build())
         }
 
         // Right of it: your role (class), one above the other; a bot plays each of the others.
-        title("§eRole", roleX, CLASS_W)
+        title("§eRole", roleX, CLASS_W, roleY)
         val roles = P3Plan.preset().roles
         Party.CLASSES.forEachIndexed { i, c ->
             addRenderableWidget(Button.builder(Component.literal(if (c == P3Sim.myClass) "§a§n${Roles.label(c)}" else Roles.label(c))) {
@@ -81,7 +83,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 ModuleManager.saveConfigurations()
                 rebuildWidgets()
             }.tooltip(tip("Play as ${Roles.label(c)}: your jobs become its ${P3Plan.skillName()} role (${roles[c] ?: "none"}); a bot plays each of the other classes."))
-                .bounds(roleX, r0 + i * ROW, CLASS_W, 20).build())
+                .bounds(roleX, roleY + i * ROW, CLASS_W, 20).build())
         }
 
         // The bottom half: the tab.
@@ -95,7 +97,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             Tab.PRACTICE -> practicePanel()
         }
         panel.arrangeElements()
-        val top = r0 + 5 * ROW + 8
+        val top = restartY + 20 + 10
         panel.setPosition(cx - panel.width / 2, top)
         panel.visitWidgets(this::addRenderableWidget)
         // Advanced: the same place in the plan and in Advanced (both are 5 rows tall).
@@ -121,10 +123,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         }.tooltip(tip("$about Click again: back to the section plan.")).bounds(x, y, SIDE_W, 20).build())
     }
 
-    /** A column's title, centred over it. */
-    private fun title(t: String, x: Int, w: Int) {
+    /** A column's title, centred over it (its first button at [y]). */
+    private fun title(t: String, x: Int, w: Int, y: Int) {
         val c = Component.literal(t)
-        addRenderableWidget(StringWidget(c, font).also { it.setPosition(x + (w - font.width(c)) / 2, height / 2 - 10 - 2 * ROW - 12) })
+        addRenderableWidget(StringWidget(c, font).also { it.setPosition(x + (w - font.width(c)) / 2, y - 12) })
     }
 
     // ------------------------------------------------------------------ the plan (default)
