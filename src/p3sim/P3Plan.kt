@@ -73,11 +73,28 @@ object P3Plan {
     private fun spots() = custom ?: HashMap<String, Spots.Spot>().also { custom = it }
     private fun customKey(key: String) = "$skill/${P3Sim.myClass?.name}/$key"
 
-    fun customSpot(key: String): Spots.Spot? = spots()[customKey(key)]
+    /** The spot set for this skill and class, else the default ([defaultSpot]: Normal PF's, for every skill). */
+    fun customSpot(key: String): Spots.Spot? = spots()[customKey(key)] ?: defaultSpot(P3Sim.myClass, key)
+    /** Whether this skill and class has its own [key] spot (set in Roles), not the default. */
+    fun hasCustomSpot(key: String) = spots().containsKey(customKey(key))
     /** null: back to the default. */
     fun setCustomSpot(key: String, p: Spots.Spot?) { if (p == null) spots().remove(customKey(key)) else spots()[customKey(key)] = p; save() }
 
-    /** Where [e] is stood on with this skill and class: the one set for them, else the preset's, else the Early Enters tab's. */
+    /**
+     * Every skill's default spawn and early-enter spots, by your class: the ones set for Normal PF (2026-10-09). The early
+     * enters are the same whatever your class; the spawn is S1's terminal side for all but the Berserk (at i4).
+     */
+    fun defaultSpot(c: DungeonClass?, key: String): Spots.Spot? = when (key) {
+        "spawn" -> if (c == DungeonClass.BERSERK) Spots.Spot("Spawn", 63.5, 127.0, 35.5, -11.18f, 0.33f)
+            else Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
+        "ee2" -> Spots.Spot("EE2", 60.5, 132.0, 139.0, 90.47f, 1.64f)
+        "ee3" -> Spots.Spot("EE3", 2.0, 109.0, 102.0, -175.24f, 5.83f)
+        "core" -> Spots.Spot("Core", 54.5, 115.06, 50.5, 179.91f, 0.57f)
+        "recore" -> Spots.Spot("Recore", 52.5, 115.0, 57.6, -159.12f, 2.63f)
+        else -> null
+    }
+
+    /** Where [e] is stood on with this skill and class: the one set for them, else the default, else the preset's, else the Early Enters tab's. */
     fun eeSpot(e: EarlyEnter): Spots.Spot = customSpot(e.key) ?: (preset().spots[e.key] ?: e.spot).let { Spots.Spot(e.label, it.x, it.y, it.z, e.yaw, e.pitch) }
 
     fun ghostOn(c: DungeonClass) = c.name in ghosts
