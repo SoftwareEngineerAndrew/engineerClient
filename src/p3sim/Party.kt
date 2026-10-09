@@ -71,6 +71,15 @@ object Party {
         var heldKey = ""
         /** Playing your best run as this class instead of the bot's role (P3 from S1 only). */
         var ghost: GhostPlayer? = null
+        /** Ticks before [due] it wants to be there (a terminal: time to do it). */
+        var lead = 0
+        /** Going as a real player went ([Routes]): the route to [routeTo] and how far along it is (ticks at a player's pace); null: none (it walks). */
+        var route: Routes.Route? = null
+        var routeTo: Vec3? = null
+        var routeT = 0.0
+        /** What the route has it hold (a Bonzo staff, a Superboom...) until n = [routeHeldUntil]. */
+        var routeHeld: String? = null
+        var routeHeldUntil = -1
     }
 
     /** An early enter as this run has it: whose (a ghost's: as in its run, on its spot), where. [into] 6: the recore. */
@@ -142,9 +151,10 @@ object Party {
 
     private fun Vec3.short() = "%.1f %.1f %.1f".format(x, y, z)
 
-    /** Off to [to] (from n = [at], there by [due]; -1: walking pace), for [why]. */
-    private fun go(b: Bot, to: Vec3, at: Int, due: Int, why: String, face: Pair<Float, Float>? = null) {
+    /** Off to [to] (from n = [at], there by [due] less [lead] ticks; -1: a player's pace), for [why]. */
+    private fun go(b: Bot, to: Vec3, at: Int, due: Int, why: String, face: Pair<Float, Float>? = null, lead: Int = 0) {
         b.face = face
+        b.lead = lead
         if (b.to != to) dbg("§e${b.name}§7 -> $why (${to.short()}, ${"%.0f".format(b.pos.distanceTo(to))} blocks${if (due >= 0) ", due in ${(due - dbgN) / 20.0}s" else ""}${if (at > dbgN) ", leaves in ${(at - dbgN) / 20.0}s" else ""})")
         b.to = to; b.goAt = at; b.due = due
     }
@@ -168,6 +178,7 @@ object Party {
         bots.forEach {
             it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0
             it.vy = 0.0; it.blinkReady = 0; it.blinkAt = -100; it.leaptAt = -100; it.heldKey = ""; it.ghost = null
+            it.route = null; it.routeTo = null; it.routeHeld = null; it.routeHeldUntil = -1
         }
     }
 
@@ -225,6 +236,7 @@ object Party {
         if (P3Sim.bots) { bots(); if (phase.from == 1) startGhosts(phase) }
         resolveEes()
         if (!P3Sim.bots) return
+        if (P3Sim.realMoves) Routes.preload()
         val from = phase.from.coerceIn(1, 5)
         // No early enter into the section you start in (or before).
         for (i in 0..from) eeArrived[i] = true
@@ -269,6 +281,10 @@ object Party {
             val first = next(b)?.takeIf { sectionOf(it.job) == from }
             spawn(b, when {
                 core -> CORE_EE
+                // The i4 bot starts on the S4 device, as an i4 player does (nobody walks there from S1).
+                from == 1 && next(b)?.job == "S4 Target" -> STANDS.getValue("S4 Target")
+                // A job due in the first second (a lever at 0.35 s): it starts on it, as its player does.
+                from == 1 && next(b)?.let { it.timeSection == 1 && it.sec <= 1.0 } == true -> spotOf(next(b)!!.job)
                 from == 1 -> startPos(1)
                 first != null -> spotOf(first.job)
                 else -> eeOf(from)?.spot ?: startPos(from)
@@ -434,7 +450,7 @@ object Party {
             if (j.at < 0 || n < j.at) return@removeAll false
             // Done where it's done: not while holding (at an early enter, waiting), not before the bot is there.
             if (j.bot.hold || lateForEe(j.bot, s)) return@removeAll false
-            if (j.bot.pos.distanceTo(spotOf(j.job)) > 2.5) {
+            if (!inReach(j.bot, j.job)) {
                 if (j.bot.to == null) go(j.bot, spotOf(j.job), n, n, "${j.job} (due now, not there)")
                 return@removeAll false
             }
@@ -514,7 +530,10 @@ object Party {
         val ee = eeOf(s)
         val eeBot = ee?.takeIf { !it.byYou && s > phase.from }?.let { botOf(it.owner) }
         if (eeBot != null && !eeArrived[s]) dbg("§e${eeBot.name}§7 isn't on its ${ee.label} spot yet: going on there, the others leap to it")
-        val onto = eeBot
+        // Nobody early-enters S4 (there's no EE4): everyone leaps onto the core early enterer holding by the core, and walks on from there.
+        val coreHold = if (s == 4 && ee == null) coreBot()?.takeIf { it.ghost == null && eeArrived[5] && it.hold } else null
+        val coreYou = s == 4 && ee == null && eeOf(5)?.let { it.byYou && Sim.player?.position()?.let { p -> p.distanceTo(it.spot) <= 3.0 } == true } == true
+        val onto = eeBot ?: coreHold
         var i = 0
         for (b in bots) {
             // A ghost goes as you went.
@@ -528,6 +547,7 @@ object Party {
             if (b.inSection >= s) { walkOn(b, n); continue }
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.pos }
+            else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { Sim.player?.position() }
             else walkOn(b, n)
         }
     }
@@ -563,7 +583,8 @@ object Party {
                 continue
             }
             // Straight there once free, at etherwarp pace: on the spot (ready for leaps) as early as it can be.
-            if (b.to != ee.spot) go(b, ee.spot, phase.n, phase.n, "its ${ee.label} spot", ee.yaw to ee.pitch)
+            // By the preset's "spot" time if it has one, else at a player's pace (the old walker: etherwarp pace).
+            if (b.to != ee.spot) go(b, ee.spot, phase.n, if (P3Sim.realMoves) eeSpotBy[into] else phase.n, "its ${ee.label} spot", ee.yaw to ee.pitch)
             break
         }
     }
@@ -783,7 +804,25 @@ object Party {
     private fun walkOn(b: Bot, n: Int) {
         if (b.ghost != null || b.hold || lateForEe(b, planned)) return
         val j = next(b) ?: return
-        if (j.at >= 0 || sectionOf(j.job) <= b.inSection) go(b, spotOf(j.job), n, j.at, "${j.job}${if (j.at < 0) " (its section not started)" else ""}")
+        // A gate it can throw at from here: it stays.
+        if (j.job.startsWith("gate") && inReach(b, j.job)) return
+        if (j.at >= 0 || sectionOf(j.job) <= b.inSection) go(b, spotOf(j.job), n, j.at, "${j.job}${if (j.at < 0) " (its section not started)" else ""}", lead = leadOf(j.job))
+    }
+
+    /**
+     * How long before its time a job's doer is there: a terminal ~2 s (players reach theirs a median
+     * 46 ticks before its line, p25 35), a lever or device as it's done (medians 2-4 ticks).
+     */
+    private fun leadOf(job: String) = if (job.length == 5 && job.startsWith("S") && job[3] == 'T') TERMINAL_LEAD else 2
+    private const val TERMINAL_LEAD = 40
+    /** The least time at its terminal a bot takes (a fast solver) before it hurries instead. */
+    private const val MIN_LEAD = 12
+
+    /** Near enough to do [job]: on its stand, or for a gate within 10 blocks of its wall (a Superboom's throw). */
+    private fun inReach(b: Bot, job: String): Boolean {
+        val g = job.removePrefix("gate ").toIntOrNull()
+        return if (g != null) GoldorPhase.GATE_BOXES.getOrNull(g)?.let { it.distanceToSqr(b.pos) <= 100.0 } ?: false
+        else b.pos.distanceTo(spotOf(job)) <= 2.5
     }
 
     private fun sectionOf(job: String) = job.removePrefix("gate ").toIntOrNull() ?: job.substring(1, 2).toInt()
@@ -800,6 +839,7 @@ object Party {
      */
     private fun move(b: Bot, n: Int) {
         val to = b.to
+        if (to != null && n >= b.goAt && follow(b, to, n)) { place(b); return }
         if (to != null && n >= b.goAt) {
             val d = to.subtract(b.pos)
             val len = d.length()
@@ -828,6 +868,71 @@ object Party {
         place(b)
     }
 
+    /** The fastest a route plays: to be at a job by its time at all (later than that: the job's late). */
+    private const val HURRY = 4.0
+    /** What a route shows the bot holding where the player held it (anything else: what it holds anyway). */
+    private val ROUTE_ITEMS = setOf("STARRED_BONZO_STAFF", "BONZO_STAFF", "JERRY_STAFF", "SUPERBOOM_TNT", "HYPERION", "ASPECT_OF_THE_VOID", "ENDER_PEARL")
+
+    /**
+     * A tick along the way a real player went to [to] ([Routes]: sprints, jumps, lava bounces, boosts,
+     * stonks), found when it sets off; false: Real Movement is off or there's no route (it walks). At a
+     * player's pace ([pace]), faster only when that would be late.
+     */
+    private fun follow(b: Bot, to: Vec3, n: Int): Boolean {
+        if (!P3Sim.realMoves) return false
+        if (b.routeTo != to) {
+            b.routeTo = to; b.routeT = 0.0
+            val r = Routes.find(b.pos, to, ::closed)
+            b.route = r
+            if (r == null) dbg("§e${b.name}§7: no real route to ${to.short()}, walking")
+            else dbg("§e${b.name}§7: route ${"%.1f".format(r.ticks / 20)}s at a player's pace" +
+                if (b.due >= 0) ", ${"%.1f".format((b.due - b.lead - n) / 20.0)}s to be there" else "")
+        }
+        val r = b.route ?: return false
+        b.routeT += pace(b, r.ticks - b.routeT, n)
+        if (b.routeT >= r.ticks) { arrive(b, to); return true }
+        val p = r.pos(b.routeT)
+        val i = r.frameAt(b.routeT)
+        // Looking where the player looked there (turning at most 40° a tick), else the way it goes.
+        val ry = r.yaw[i]
+        if (!ry.isNaN()) {
+            b.yaw += net.minecraft.util.Mth.wrapDegrees(ry - b.yaw).coerceIn(-40f, 40f)
+            b.pitch += (r.pitch[i] - b.pitch).coerceIn(-30f, 30f)
+        } else if (Math.hypot(p.x - b.pos.x, p.z - b.pos.z) > 0.05) b.yaw = Math.toDegrees(Math.atan2(-(p.x - b.pos.x), p.z - b.pos.z)).toFloat()
+        // The item the player had out; a boost (rising a block or more in a tick) starts with its click.
+        val rise = p.y - b.pos.y
+        r.held[i]?.takeIf { it in ROUTE_ITEMS }?.let { h ->
+            b.routeHeld = h; b.routeHeldUntil = n + 8
+            if (rise > 1.0 && b.vy <= 0.5 && h != "HYPERION") swing(b)
+        }
+        b.vy = rise
+        b.pos = p
+        return true
+    }
+
+    /**
+     * Route ticks to play this tick, [left] still to go: a player's pace if that gets it there [Bot.lead]
+     * before its time, or at least [MIN_LEAD] (a terminal: a fast solve); else as fast as it must for
+     * that (up to [HURRY]).
+     */
+    private fun pace(b: Bot, left: Double, n: Int): Double {
+        if (b.due < 0 || left <= 0) return 1.0
+        val min = minOf(b.lead, MIN_LEAD)
+        if (n + left <= b.due - min) return 1.0
+        val by = b.due - min - n
+        return if (by <= 0) HURRY else (left / by).coerceIn(1.0, HURRY)
+    }
+
+    /** An opening bots can't go through yet (by [Routes] id): a gate standing, a door or the core shut. */
+    private fun closed(id: Int): Boolean {
+        val ph = curPhase ?: return false
+        return when (id) {
+            in 1..3 -> !ph.gateIsDown(id)
+            Routes.CORE_DOOR -> ph.section < 5
+            else -> ph.section <= id - 4
+        }
+    }
+
     /** To ([x], [z]) on floor [g]: up onto it at once (a step or jump), down to it at vanilla gravity. */
     private fun fall(b: Bot, x: Double, z: Double, g: Double) {
         if (g >= b.pos.y - 0.01) { b.pos = Vec3(x, g, z); b.vy = 0.0; return }
@@ -837,7 +942,7 @@ object Party {
     }
 
     private fun arrive(b: Bot, to: Vec3) {
-        b.pos = to; b.to = null; b.vy = 0.0
+        b.pos = to; b.to = null; b.vy = 0.0; b.route = null; b.routeTo = null
         b.face?.let { b.yaw = it.first; b.pitch = it.second }
     }
 
@@ -908,7 +1013,7 @@ object Party {
             p != null && p.position().distanceTo(at) < 1.0 -> Sim.me to p.yRot
             else -> bots.firstOrNull { it !== b && it.pos.distanceTo(at) < 1.0 }?.let { it.name to it.yaw }
         }
-        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n
+        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null
         onto?.let { b.yaw = it.second }
         Sim.sound(net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, at)
         // Most teammates' leaps are announced, usually 1 tick after the tp.
@@ -932,6 +1037,7 @@ object Party {
     private fun hold(b: Bot, n: Int) {
         val key = when {
             leaps.any { it.bot === b && it.at - n in 0..10 } || n - b.leaptAt < 20 -> "leap"
+            n < b.routeHeldUntil -> b.routeHeld ?: "breaker"
             n - b.blinkAt < 15 -> "hyperion"
             else -> "breaker"
         }
@@ -949,7 +1055,7 @@ object Party {
             "terminator", "TERMINATOR" -> SimItems.TERMINATOR
             "SUPERBOOM_TNT" -> SimItems.SUPERBOOM
             "ASPECT_OF_THE_VOID" -> SimItems.AOTV
-            "STARRED_BONZO_STAFF" -> SimItems.BONZO
+            "STARRED_BONZO_STAFF", "BONZO_STAFF" -> SimItems.BONZO
             "JERRY_STAFF" -> SimItems.JERRY
             "ITEM_SPIRIT_BOW" -> SimItems.SPIRIT_BOW
             "MOSQUITO_BOW" -> SimItems.MOSQUITO
@@ -1068,16 +1174,20 @@ object Party {
 
     // ------------------------------------------------------------------ places
 
-    /** Where a player stands to do each job (medians from recorded runs). */
+    /**
+     * Where a player stands to do each job: the most central of the spots players were on when its line
+     * came (Better PF runs, all five players). Levers are pulled mid-jump on the way past; a lever's is
+     * the most-used floor spot in reach of it (eyes within 4 of the lever).
+     */
     val STANDS: Map<String, Vec3> = mapOf(
-        "S1 T1" to Vec3(110.3, 113.0, 73.8), "S1 T2" to Vec3(109.1, 119.0, 79.6), "S1 T3" to Vec3(92.1, 112.0, 92.7), "S1 T4" to Vec3(92.5, 122.0, 100.5),
-        "S1 east lever" to Vec3(106.9, 122.0, 111.7), "S1 west lever" to Vec3(95.4, 123.0625, 113.6), "S1 SS" to Vec3(108.3, 120.0, 94.0),
-        "S2 T1" to Vec3(69.0, 109.0, 124.7), "S2 T2" to Vec3(59.7, 120.0, 125.3), "S2 T3" to Vec3(46.4, 109.0, 122.6), "S2 T4" to Vec3(39.2, 109.0, 140.5), "S2 T5" to Vec3(40.5, 124.0, 125.5),
-        "S2 low lever" to Vec3(28.3, 123.0625, 128.7), "S2 high lever" to Vec3(24.5, 131.0625, 137.5), "S2 Lights" to Vec3(60.6, 132.0, 139.0),
-        "S3 T1" to Vec3(0.0, 109.0, 112.2), "S3 T2" to Vec3(1.0, 119.0, 93.6), "S3 T3" to Vec3(16.5, 123.0, 93.7), "S3 T4" to Vec3(0.8, 109.0, 77.5),
-        "S3 west lever" to Vec3(2.5, 122.0, 55.5), "S3 east lever" to Vec3(13.0, 121.0625, 55.7), "S3 Arrows" to Vec3(0.5, 120.0, 77.5),
-        "S4 T1" to Vec3(41.3, 109.0, 32.6), "S4 T2" to Vec3(45.1, 121.0, 31.2), "S4 T3" to Vec3(67.1, 109.0, 33.1), "S4 T4" to Vec3(72.6, 115.0, 45.5),
-        "S4 low lever" to Vec3(84.4, 121.0, 34.9), "S4 high lever" to Vec3(85.5, 127.0, 45.5), "S4 Target" to Vec3(63.5, 127.0, 35.5),
+        "S1 T1" to Vec3(110.56, 113.0, 75.07), "S1 T2" to Vec3(108.91, 119.0, 79.53), "S1 T3" to Vec3(92.45, 112.0, 92.74), "S1 T4" to Vec3(92.99, 122.0, 100.87),
+        "S1 east lever" to Vec3(106.74, 122.0, 111.7), "S1 west lever" to Vec3(94.46, 122.0, 111.43), "S1 SS" to Vec3(108.3, 120.0, 94.0),
+        "S2 T1" to Vec3(69.69, 109.0, 122.4), "S2 T2" to Vec3(59.57, 120.0, 125.24), "S2 T3" to Vec3(45.86, 109.0, 122.43), "S2 T4" to Vec3(39.5, 109.0, 140.53), "S2 T5" to Vec3(39.69, 124.0, 125.53),
+        "S2 low lever" to Vec3(27.33, 124.0, 127.68), "S2 high lever" to Vec3(23.3, 132.0, 138.47), "S2 Lights" to Vec3(60.6, 132.0, 139.0),
+        "S3 T1" to Vec3(0.89, 109.0, 112.44), "S3 T2" to Vec3(1.0, 119.0, 93.6), "S3 T3" to Vec3(18.7, 121.5, 91.3), "S3 T4" to Vec3(0.45, 109.0, 78.24),
+        "S3 west lever" to Vec3(2.44, 122.0, 55.68), "S3 east lever" to Vec3(14.67, 122.0, 55.44), "S3 Arrows" to Vec3(0.36, 117.0, 79.63),
+        "S4 T1" to Vec3(41.12, 109.0, 32.96), "S4 T2" to Vec3(43.96, 121.0, 31.14), "S4 T3" to Vec3(66.85, 109.0, 32.04), "S4 T4" to Vec3(72.78, 115.0, 45.45),
+        "S4 low lever" to Vec3(83.48, 120.0625, 35.81), "S4 high lever" to Vec3(85.15, 126.0, 44.7), "S4 Target" to Vec3(63.5, 127.0, 35.5),
     )
     val GATES = arrayOf(Vec3.ZERO, Vec3(95.8, 123.9, 121.0), Vec3(19.3, 123.6, 127.9), Vec3(12.4, 116.8, 52.7))
     val STRIP = Vec3(54.6, 115.0, 51.5)
