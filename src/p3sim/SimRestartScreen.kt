@@ -368,10 +368,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     /** Section practice. */
     private fun practicePanel() {
-        row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
-            act(s.label.lowercase(), 50, "Practice ${s.label}: your role's part of it (the rest done), from your early enter for it, each task timed.") { server { Practice.start(s.ordinal - Fight.Start.S1.ordinal + 1) } }
-        })))
-
         // Custom: your start, the section's jobs you pick, checkpoints in order.
         val start = Practice.customStart
         val cps = Practice.checkpoints.size
@@ -404,6 +400,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         row(listOf(act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
             if (start != null) "Starts the custom practice: S$sec, from your start position, your jobs then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
             .also { it.active = start != null }))
+
+        row(listOf(stack("§eSections", 50, "Start P3 at a section.", listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4).map { s ->
+            act(s.label.lowercase(), 50, "Practice ${s.label}: your role's part of it (the rest done), from your early enter for it, each task timed.") { server { Practice.start(s.ordinal - Fight.Start.S1.ordinal + 1) } }
+        })))
     }
 
     // ------------------------------------------------------------------ pieces
