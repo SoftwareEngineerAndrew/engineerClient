@@ -157,20 +157,41 @@ object Practice {
     val customJobs = LinkedHashSet<String>()
     val checkpoints = ArrayList<Spots.Spot>()
 
-    /** The start where you stand: its section is where it is, its jobs your role's there. False: not in a section. */
-    fun setStart(spot: Spots.Spot): Boolean {
-        val s = GoldorPhase.dtZone(net.minecraft.world.phys.Vec3(spot.x, spot.y, spot.z))
-        if (s !in 1..4) return false
-        customStart = spot; customSection = s
-        customJobs.clear(); customJobs += P3Plan.jobsIn(s).filter { P3Plan.isMine(it) }
+    /** The section (1-4) [x], [y], [z] is in, else the nearest one (the middle, the core, a gap between two). */
+    fun sectionAt(x: Double, y: Double, z: Double): Int {
+        val v = net.minecraft.world.phys.Vec3(x, y, z)
+        return GoldorPhase.dtZone(v).takeIf { it in 1..4 }
+            ?: GoldorPhase.DT_ZONES.minBy { (_, box) -> box.distanceToSqr(v) }.first
+    }
+
+    /** Your role's jobs in section [s], for a custom practice there. */
+    fun roleJobs(s: Int) = P3Plan.jobsIn(s).filter { P3Plan.isMine(it) }
+
+    /** The jobs the custom practice's row shows for section [s]: the ones picked there, else your role's. */
+    fun customJobsIn(s: Int): Set<String> = if (s == customSection) customJobs else roleJobs(s).toSet()
+
+    /**
+     * The start where you stand; its section is where it is (or the nearest). Jobs already picked for that
+     * section stay; another section's start takes your role's jobs there. Returns the section.
+     */
+    fun setStart(spot: Spots.Spot): Int {
+        val s = sectionAt(spot.x, spot.y, spot.z)
+        if (s != customSection) { customSection = s; customJobs.clear(); customJobs += roleJobs(s) }
+        customStart = spot
         save()
-        return true
+        return s
+    }
+
+    /** Picks or drops [job] of section [s] (moving the custom practice's jobs to [s], from your role's, first). */
+    fun toggleJob(job: String, s: Int) {
+        if (s != customSection) { customSection = s; customJobs.clear(); customJobs += roleJobs(s); if (customStart != null && sectionAt(customStart!!.x, customStart!!.y, customStart!!.z) != s) customStart = null }
+        if (!customJobs.remove(job)) customJobs += job
+        save()
     }
 
     /** No custom practice: start, jobs and checkpoints gone. */
     fun clearCustom() { customStart = null; customSection = 0; customJobs.clear(); checkpoints.clear(); save() }
 
-    fun toggleJob(job: String) { if (!customJobs.remove(job)) customJobs += job; save() }
     fun addCheckpoint(spot: Spots.Spot) { checkpoints += spot; save() }
     fun removeCheckpoint() { if (checkpoints.isNotEmpty()) checkpoints.removeAt(checkpoints.size - 1); save() }
 
