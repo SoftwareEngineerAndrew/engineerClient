@@ -917,16 +917,21 @@ object BrWaypoints2 : Module(
      * Takes the site's copy if it is newer than this file; boxes saved here since stay here (the
      * site is edited on its own page). Boxes edited on the site show up here from the next world load.
      */
-    private fun pull() = BoxSync.pull { body -> mc.execute { adopt(body) } }
+    private fun pull() {
+        EngineerClient.logger.info("[ec] brboxes: pulling")
+        BoxSync.pull { body -> mc.execute { adopt(body) } }
+    }
 
     private fun adopt(body: String) {
-        val site = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return
+        val log = EngineerClient.logger
+        val site = runCatching { JsonParser.parseString(body).asJsonObject }.onFailure { log.info("[ec] brboxes: not JSON: ${it.message}") }.getOrNull() ?: return
         val at = runCatching { site["updatedAt"]?.asLong }.getOrNull() ?: 0L
-        if (at != 0L && at <= siteVersion) return
+        if (at != 0L && at <= siteVersion) return log.info("[ec] brboxes: already have $at")
         savedFile.value // load this file's boxes before its age is compared with the site's
-        if (at == 0L || (file.exists() && file.lastModified() > at)) return
+        if (at == 0L || (file.exists() && file.lastModified() > at)) return log.info("[ec] brboxes: kept the local file (site $at, file ${file.lastModified()})")
         val type = object : TypeToken<Map<String?, List<IntArray?>?>>() {}.type
-        val rooms = runCatching { siteBoxes(gson.fromJson<Map<String?, List<IntArray?>?>>(site["rooms"], type)) }.getOrNull() ?: return
+        val rooms = runCatching { siteBoxes(gson.fromJson<Map<String?, List<IntArray?>?>>(site["rooms"], type)) }.onFailure { log.info("[ec] brboxes: rooms unreadable: $it") }.getOrNull() ?: return
+        log.info("[ec] brboxes: took the site's ${rooms.size} rooms, ${rooms.values.sumOf { it.size }} boxes")
         siteVersion = at
         saved.clear(); saved.putAll(rooms)
         runCatching { file.parentFile.mkdirs(); file.writeText(gson.toJson(saved)); file.setLastModified(at) }
