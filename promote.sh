@@ -44,7 +44,9 @@ if grep -rniE 'coffeeclient|devgineerclient' "$PUB/src" "$PUB/build.gradle.kts";
   echo "promote: the lines above still reference the extras" >&2; exit 1
 fi
 
-# Must build without the extras.
+# Must build without the extras. Untracked compile-only jars (libs/, e.g. the Odin 26.3 port, which
+# CI downloads itself) are borrowed for the check and never committed.
+[ -d "$TEAM/libs" ] && cp -r "$TEAM/libs" "$PUB/"
 (
   cd "$PUB"
   export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
@@ -53,7 +55,7 @@ fi
   fi
 )
 rm -f "$PUB/build.log"
-rm -rf "$PUB/build" "$PUB/.gradle" "$PUB/.kotlin"
+rm -rf "$PUB/build" "$PUB/.gradle" "$PUB/.kotlin" "$PUB/libs"
 
 git -C "$PUB" add -A
 if git -C "$PUB" diff --cached --quiet; then echo "promote: nothing new to promote"; exit 0; fi
