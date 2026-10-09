@@ -47,7 +47,7 @@ object P3Sim : Module(
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
         if (inSim) SimServer.run("restart") { if (Practice.active) Practice.restart() else Fight.start(Fight.lastStart) }
     }
-    val practiceKey by KeybindSetting("Practice Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts your practice (the menu's Practice tab) again. A left click with the Infinileap or in its menu does too.").onPress {
+    val practiceKey by KeybindSetting("Practice Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts your practice (the menu's Practice tab) again. A left click with the Infinileap does too.").onPress {
         if (inSim) SimServer.run("practice restart") { Practice.restart() }
     }
     enum class ClassOption { HEALER, BERSERK, ARCHER, TANK, MAGE }

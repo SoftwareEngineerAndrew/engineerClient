@@ -2,13 +2,14 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.client.Minecraft
 import java.io.File
 import java.util.Locale
 
 /**
  * Practice mode (the menu's Practice tab): a short drill, timed, restarted as often as you like (the
- * Restart or Practice Restart keybind, a left click with the Infinileap or in its menu, or once it's
+ * Restart or Practice Restart keybind, a left click with the Infinileap, or once it's
  * done, a left click with anything).
  *
  * Section practice (s1-s4): P3 at that section with everything but your role's part of it done (its
@@ -161,6 +162,48 @@ object Practice {
     }
 
     fun secs(ticks: Int) = String.format(Locale.ROOT, "%.2f", ticks / 20.0)
+
+    /** Where a leap onto [c] lands in practice: where that class normally is in the section in progress (no bots there). */
+    fun leapSpot(c: DungeonClass): Spots.Spot? {
+        val s = ((Fight.phase as? GoldorPhase)?.section ?: section).coerceIn(1, 4)
+        return leapSpots()[s - 1][c]
+    }
+
+    /** Each class's usual spot in each section (S1-S4), set in game with /pos (2026-10-09). */
+    private fun leapSpots(): List<Map<DungeonClass, Spots.Spot>> = listOf(
+        // S1
+        mapOf(
+            DungeonClass.ARCHER to Spots.Spot("Archer", 94.04, 112.00, 99.26, 60.01f, -3.13f),
+            DungeonClass.BERSERK to Spots.Spot("Berserk", 93.56, 112.00, 93.29, 103.97f, 15.53f),
+            DungeonClass.MAGE to Spots.Spot("Mage", 106.77, 122.00, 111.70, 8.30f, -19.24f),
+            DungeonClass.TANK to Spots.Spot("Tank", 110.70, 113.00, 75.34, -178.85f, 22.77f),
+            DungeonClass.HEALER to Spots.Spot("Healer", 108.30, 120.00, 94.01, -90.08f, -0.99f),
+        ),
+        // S2
+        mapOf(
+            DungeonClass.ARCHER to Spots.Spot("Archer", 39.12, 109.00, 139.87, -6.83f, 33.13f),
+            DungeonClass.BERSERK to Spots.Spot("Berserk", 40.78, 109.00, 123.30, -176.88f, 26.63f),
+            DungeonClass.MAGE to Spots.Spot("Mage", 59.46, 120.00, 125.78, -179.76f, 22.20f),
+            DungeonClass.TANK to Spots.Spot("Tank", 68.46, 109.00, 125.21, -179.43f, 18.33f),
+            DungeonClass.HEALER to Spots.Spot("Healer", 24.95, 131.06, 138.57, 90.40f, 18.91f),
+        ),
+        // S3
+        mapOf(
+            DungeonClass.ARCHER to Spots.Spot("Archer", 1.01, 109.00, 77.81, 95.00f, 19.81f),
+            DungeonClass.BERSERK to Spots.Spot("Berserk", 15.67, 123.00, 93.65, -90.00f, 19.40f),
+            DungeonClass.MAGE to Spots.Spot("Mage", 18.70, 121.50, 91.30, 0.58f, -4.61f),
+            DungeonClass.TANK to Spots.Spot("Tank", 1.35, 109.00, 112.32, 87.20f, 18.41f),
+            DungeonClass.HEALER to Spots.Spot("Healer", 0.87, 119.00, 93.41, 89.42f, 19.15f),
+        ),
+        // S4
+        mapOf(
+            DungeonClass.ARCHER to Spots.Spot("Archer", 44.45, 121.00, 31.81, -177.77f, 30.98f),
+            DungeonClass.BERSERK to Spots.Spot("Berserk", 67.23, 109.00, 33.09, -178.02f, 18.65f),
+            DungeonClass.MAGE to Spots.Spot("Mage", 54.53, 115.06, 50.51, -179.57f, 2.38f),
+            DungeonClass.TANK to Spots.Spot("Tank", 41.49, 109.00, 33.04, 179.43f, 18.16f),
+            DungeonClass.HEALER to Spots.Spot("Healer", 72.46, 115.00, 45.79, 0.18f, 27.20f),
+        ),
+    )
 
     // ------------------------------------------------------------------ the custom practice
 

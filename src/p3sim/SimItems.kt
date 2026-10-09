@@ -2055,7 +2055,8 @@ object SimItems {
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             Sim.chat("§cThis ability is on cooldown for ${(leapReady - now + 19) / 20}s."); return
         }
-        val bots = Party.bots().filter { it.entity != null }
+        // Practice: no bots, but every class is there to leap to (Practice.leapSpot).
+        val bots = if (Practice.active) Party.bots() else Party.bots().filter { it.entity != null }
         // The menu opens one RTT after the use.
         Fight.afterPing("leapOpen") { p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap"))) }
     }
@@ -2122,8 +2123,6 @@ object SimItems {
         private var inClick = false
 
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
-            // Practice: a left click in the leap menu starts it again (there's nobody to leap to).
-            if (Practice.active && button == 0) { (p as? ServerPlayer)?.let { sp -> Fight.later(0, "practice restart") { sp.closeContainer(); Practice.restart() } }; return }
             if (slot !in 11..16) return
             val name = net.minecraft.ChatFormatting.stripFormatting(container.getItem(slot).hoverName.string)
             val bot = bots.firstOrNull { it.name == name } ?: return
@@ -2145,8 +2144,10 @@ object SimItems {
             sp.closeContainer()
             val e = bot.pos
             leapReady = Fight.serverTick + 40
-            // You land on them exactly, facing as they face.
-            Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
+            // You land on them exactly, facing as they face. Practice: where that class normally is in this section.
+            val ps = if (Practice.active) Practice.leapSpot(bot.clazz) else null
+            if (ps != null) Sim.tp(sp, ps.x, ps.y, ps.z, ps.yaw, ps.pitch)
+            else Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             Sim.chatStyled("§aYou have teleported to §r${rankColour(bot.name)}${bot.name}§r§a!")
             sp.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))
