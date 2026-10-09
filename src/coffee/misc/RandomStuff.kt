@@ -42,6 +42,11 @@ object RandomStuff : Module(
     private val partyPing = PartyPing()
 
     /** Off: the sidebar is the game's own, where the game puts it, whatever the Scoreboard HUD says. */
+    private val forceCursorReset by BooleanSetting("Force Cursor Reset", true, desc = "Opening a menu always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again.")
+
+    /** Force Cursor Reset: read by CursorReset. */
+    fun forcesCursorReset(): Boolean = enabled && forceCursorReset
+
     private val movableScoreboard by BooleanSetting("Movable Scoreboard", true, desc = "The sidebar drawn by the Scoreboard HUD, where you put it and at its scale. Off: the normal scoreboard, where the game puts it.")
 
     /** The sidebar where you put it: vanilla's own drawing, moved (ScoreboardMove). Off: where vanilla puts it. */

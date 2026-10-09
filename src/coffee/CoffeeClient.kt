@@ -44,6 +44,7 @@ object CoffeeClient : ClientModInitializer {
         safely("speed hud default") { SpeedHud.enableByDefault() }
         safely("termsim default") { Termsim.enableByDefault() }
         safely("witherborn") { com.coffeeclient.misc.Witherborn.register() }
+        safely("cursor reset") { com.coffeeclient.misc.CursorReset.register() }
 
         logger.info("[cc] initialized")
     }
