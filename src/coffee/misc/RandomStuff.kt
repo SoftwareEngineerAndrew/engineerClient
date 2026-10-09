@@ -6,7 +6,7 @@ import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.features.impl.boss.TerminalSounds
 import com.odtheking.odin.utils.playSoundAtPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
@@ -21,7 +21,7 @@ import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.phys.Vec3
 
@@ -29,7 +29,7 @@ import net.minecraft.world.phys.Vec3
 object RandomStuff : Module(
     name = "Random Stuff",
     key = null,
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "A collection of small unrelated QoL toggles."
 ) {
     private val hideDamage by BooleanSetting("Hide Damage Indicators", false, desc = "Suppresses the red hurt-flash overlay when you take damage.")
@@ -143,10 +143,10 @@ object RandomStuff : Module(
         on<EntityEvent.Add> {
             if (!hideArmorStands || !DungeonUtils.inDungeons) return@on
             when (entity.type) {
-                EntityTypes.ARMOR_STAND -> pendingArmorStands.add(entity as ArmorStand)
+                EntityType.ARMOR_STAND -> pendingArmorStands.add(entity as ArmorStand)
                 // The cheapest way to kill a fishing line stretched across the room: no bobber left
                 // to draw it to. On the same toggle rather than a setting of its own.
-                EntityTypes.FISHING_BOBBER -> entity.remove(Entity.RemovalReason.DISCARDED)
+                EntityType.FISHING_BOBBER -> entity.remove(Entity.RemovalReason.DISCARDED)
                 else -> {}
             }
         }

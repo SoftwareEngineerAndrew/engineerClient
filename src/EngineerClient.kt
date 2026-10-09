@@ -88,7 +88,7 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, com.engineerclient.waypoints.PositionalMessages, AgroLeaderboard, DungeonSplits,
+            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, AgroLeaderboard, DungeonSplits,
             P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers,
         )
     }
@@ -166,11 +166,11 @@ object EngineerClient : ClientModInitializer {
     }
 
     fun chat(msg: String) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(Component.literal(msg)) }
+        mc.schedule { mc.gui.chat.addClientSystemMessage(Component.literal(msg)) }
     }
 
     fun chat(msg: Component) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(msg) }
+        mc.schedule { mc.gui.chat.addClientSystemMessage(msg) }
     }
 
     /** What every line the mod says in chat starts with. */
@@ -218,8 +218,6 @@ object EngineerClient : ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /betterpf: the link to all your uploaded runs, private ones included.
             for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 })
-            // /posmsg: Positional Messages (removed from Odin in 0.3.6) is provided here.
-            com.engineerclient.waypoints.PositionalMessages.registerCommand(dispatcher)
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // Same tree registered under the formal name (both casings, since Brigadier
@@ -287,8 +285,3 @@ object EngineerClient : ClientModInitializer {
         }
     }
 }
-
-/** A selector's place in its option list (Odin's selectors hold the enum constant); setting it wraps around. */
-var <E : Enum<E>> com.odtheking.odin.clickgui.settings.impl.SelectorSetting<E>.index: Int
-    get() = options.indexOf(value)
-    set(i) { value = options[Math.floorMod(i, options.size)] }

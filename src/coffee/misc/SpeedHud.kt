@@ -19,7 +19,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes
 object SpeedHud : Module(
     name = "Speed HUD",
     key = null,
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "Shows your SkyBlock speed."
 ) {
     private val actual by BooleanSetting("Show Actual", false, desc = "Also your measured horizontal speed, blocks a second.")

@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import net.minecraft.world.entity.EntityTypes
 import com.mojang.authlib.GameProfile
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.component.DataComponents
@@ -1010,7 +1009,7 @@ object Party {
     )
 
     private fun spawn(b: Bot, at: Vec3) {
-        val m = Mannequin(EntityTypes.MANNEQUIN, Sim.level)
+        val m = Mannequin(EntityType.MANNEQUIN, Sim.level)
         m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(profile(b)))
         m.setCustomName(Component.literal("§a${b.name}"))
         m.isCustomNameVisible = true

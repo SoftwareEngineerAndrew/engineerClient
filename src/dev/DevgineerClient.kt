@@ -40,11 +40,11 @@ object DevgineerClient : ClientModInitializer {
     }
 
     fun chat(msg: String) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(Component.literal(msg)) }
+        mc.schedule { mc.gui.chat.addClientSystemMessage(Component.literal(msg)) }
     }
 
     fun chat(msg: Component) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(msg) }
+        mc.schedule { mc.gui.chat.addClientSystemMessage(msg) }
     }
 
     /** What every line the mod says in chat starts with. */

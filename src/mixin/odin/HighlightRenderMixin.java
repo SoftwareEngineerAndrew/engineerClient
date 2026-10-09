@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "com.odtheking.odin.features.impl.dungeon.Highlight$2", remap = false)
 public class HighlightRenderMixin {
 
-    @Inject(method = "invoke(Lcom/odtheking/odin/events/RenderExtractEvent;)V", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "invoke(Lcom/odtheking/odin/events/RenderEvent$Extract;)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void ec$bladeLook(CallbackInfo ci) {
         if (OdinHighlightLook.replacesOdin()) ci.cancel();
     }

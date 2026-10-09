@@ -71,7 +71,7 @@ object Sim {
                 if (f != null) {
                     flush()
                     style = if (f == net.minecraft.ChatFormatting.RESET) net.minecraft.network.chat.Style.EMPTY
-                        else if (net.minecraft.network.chat.TextColor.fromLegacyFormat(f) != null) net.minecraft.network.chat.Style.EMPTY.withColor(f) else style.applyFormat(f)
+                        else if (f.isColor) net.minecraft.network.chat.Style.EMPTY.withColor(f) else style.applyFormat(f)
                     i += 2; continue
                 }
             }

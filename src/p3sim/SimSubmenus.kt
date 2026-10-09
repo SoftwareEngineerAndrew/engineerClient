@@ -41,7 +41,7 @@ abstract class SimSubmenu(name: String) : Screen(Component.literal(name)) {
     }
 
     /** Esc and Back: the main menu, not the game. */
-    override fun onClose() = mc.gui.setScreen(SimRestartScreen())
+    override fun onClose() = mc.setScreen(SimRestartScreen())
 
     override fun repositionElements() {
         layout.arrangeElements()
@@ -79,7 +79,7 @@ abstract class SimSubmenu(name: String) : Screen(Component.literal(name)) {
 
     /** Closes the menu, back in the game, and does it. */
     protected fun act(label: String, w: Int, about: String, run: () -> Unit): Button =
-        Button.builder(Component.literal(label)) { mc.gui.setScreen(null); run() }.tooltip(tip(about)).width(w).build()
+        Button.builder(Component.literal(label)) { mc.setScreen(null); run() }.tooltip(tip(about)).width(w).build()
 
     /** One of a few choices: the chosen one green and underlined. */
     protected fun pick(name: String, on: Boolean) = if (on) "§a§n$name" else name

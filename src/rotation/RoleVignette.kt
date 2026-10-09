@@ -55,7 +55,7 @@ object RoleVignette {
     }
 
     private fun render(gfx: GuiGraphicsExtractor, delta: DeltaTracker) {
-        if (ticksLeft <= 0 || EngineerClient.mc.gui.hud.isHidden) return
+        if (ticksLeft <= 0 || EngineerClient.mc.options.hideGui) return
         val mc = EngineerClient.mc
         val w = mc.window.guiScaledWidth
         val h = mc.window.guiScaledHeight

@@ -1,13 +1,14 @@
 package com.coffeeclient.misc
 
+import com.engineerclient.enumSelector
 import com.coffeeclient.CoffeeClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
@@ -16,7 +17,8 @@ import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.customData
 import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.render.BoxStyle
+import com.engineerclient.BoxStyle
+import com.engineerclient.drawStyledBox
 import com.odtheking.odin.utils.render.drawStyledBox
 import com.odtheking.odin.utils.renderBoundingBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -41,11 +43,11 @@ import net.minecraft.world.item.Items
 object Termsim : Module(
     name = "Termsim",
     key = null,
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "Where new things go: No Rotate and Wither Highlight.",
 ) {
     private val noRotate by BooleanSetting("No Rotate", true, desc = "A teleport item's teleport (etherwarp, AOTV, Hype) doesn't turn your camera. Not in the F7 boss, traps, Teleport Maze or Boulder.")
-    private val timeLimit by NumberSetting("Time Limit", 300.0, 0.0..3000.0, 10.0, unit = "ms", desc = "How long after the right click a teleport's rotation is still ignored.")
+    private val timeLimit by NumberSetting("Time Limit", 300.0, 0.0, 3000.0, 10.0, unit = "ms", desc = "How long after the right click a teleport's rotation is still ignored.")
         .withDependency { noRotate }
     private val allowHype by BooleanSetting("Allow Hype", true, desc = "Wither blades with 2+ scrolls count too.")
         .withDependency { noRotate }
@@ -55,7 +57,7 @@ object Termsim : Module(
     private val witherHighlight by BooleanSetting("Wither Highlight", true, desc = "A box on the withers in the F7/M7 boss: Maxor, Storm, Goldor and Necron.")
     private val witherColor by ColorSetting("Wither Color", Color(255, 85, 255, 1f), true, desc = "The box's colour.")
         .withDependency { witherHighlight }
-    private val witherStyle by SelectorSetting("Wither Style", BoxStyle.OUTLINE, desc = "Outline, filled, or both.")
+    private val witherStyle by enumSelector("Wither Style", BoxStyle.OUTLINE, desc = "Outline, filled, or both.")
         .withDependency { witherHighlight }
     private val witherThroughWalls by BooleanSetting("Wither Through Walls", true, desc = "Shows the box through blocks.")
         .withDependency { witherHighlight }
@@ -83,7 +85,7 @@ object Termsim : Module(
         onSend<ServerboundUseItemOnPacket> { onRightClick() }
         on<LevelEvent.Load> { lastClick = -1L }
 
-        on<RenderExtractEvent> {
+        on<RenderEvent.Extract> {
             if (!witherHighlight || !DungeonUtils.isFloor(7) || !DungeonUtils.inBoss) return@on
             for (e in CoffeeClient.mc.level?.entitiesForRendering() ?: return@on) {
                 if (e is WitherBoss && e.isAlive && Witherborn.isBoss(e)) drawStyledBox(e.renderBoundingBox, witherColor, witherStyle, !witherThroughWalls)
