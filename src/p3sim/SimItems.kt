@@ -1114,13 +1114,15 @@ object SimItems {
         if (!simClient(level)) return
         // Practice: a left click with the Infinileap starts it again; once it's done (0.25 s on), a left click with anything.
         if (Practice.clickRestarts() || Practice.active && idOf(player.mainHandItem) == "INFINITE_SPIRIT_LEAP") { SimServer.run("practice restart") { Practice.restart() }; return }
+        // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
+        if (Mage.isMage() && Mage.beamItem(idOf(player.mainHandItem))) { SimServer.run("mage beam") { Sim.player?.let { p -> Fight.afterPing("mage beam") { Mage.click(p) } } }; return }
         val id = idOf(player.mainHandItem)?.takeIf { it in Bows.SHORTBOWS } ?: return
         SimServer.run("left click") { Sim.player?.let { p -> Bows.click(p, id, left = true) } }
     }
 
     /**
      * The drop key in the sim (ArcherDropSimMixin): never drops an item; as Archer, Ctrl+Q (the whole stack) is
-     * Explosive Shot ([volley]). Plain Q is the ultimate (Rapid Fire), not in the sim: nothing.
+     * Explosive Shot ([volley]); as Mage, Guided Sheep ([Mage]). Plain Q is the ultimate (Rapid Fire), not in the sim: nothing.
      * True: the drop is cancelled.
      */
     @JvmStatic
@@ -1130,6 +1132,8 @@ object SimItems {
         if (!simClient(level)) return false
         if (fullStack && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
             SimServer.run("archer ability") { Sim.player?.let { p -> asClicked(p, "archer ability") { volley(p) } } }
+        // The Mage's: Guided Sheep.
+        if (fullStack && Mage.isMage()) SimServer.run("mage ability") { Sim.player?.let { p -> Fight.afterPing("guided sheep") { Mage.ability(p) } } }
         return true
     }
 
@@ -1157,7 +1161,7 @@ object SimItems {
     private var clickPos: Vec3? = null
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset()
+    fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset()
         if (liveRockets.isNotEmpty()) { Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(it.unimi.dsi.fastutil.ints.IntArrayList(liveRockets))); liveRockets.clear() }
     }
 
@@ -2015,6 +2019,7 @@ object SimItems {
         val level = SimServer.level ?: return
         tickBreaker()
         tickVeil()
+        EngineerClient.safely("p3sim mage") { Mage.tick() }
         EngineerClient.safely("p3sim slot 9") { tickSlot9() }
         Sim.player?.let { p -> EngineerClient.safely("p3sim mining effects") { miningEffects(p) } }
         // Vanilla bow arrows (anything shot that isn't one of Bows'). Each one's path since last tick (and a
