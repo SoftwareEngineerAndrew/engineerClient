@@ -373,7 +373,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
             autoGateAt[s] = n + 100
             // The door's stairs and iron blocks (upper part, y118+) go 1 tick later; the barriers and portcullis wait for the gate.
-            Fight.later(1, "door top") {
+            // Practice: the arena stays as it was (no gate or door moves when a section ends).
+            if (!practice) Fight.later(1, "door top") {
                 if (Fight.phase !== this || doorOpen[s]) return@later
                 Blocks.anim("door$s")?.frames?.forEach { f ->
                     if (f.dt != 0 || f.pos.y < 118) return@forEach
@@ -388,8 +389,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (doorOpen[s]) return
         doorOpen[s] = true
         // Blocks change 1 tick after the chat line (gates, doors and the core alike).
-        Blocks.play("door$s", delay = 1)
-        if (s == 1) Blocks.play("ss_s1done", delay = 1)
+        if (!practice) {
+            Blocks.play("door$s", delay = 1)
+            if (s == 1) Blocks.play("ss_s1done", delay = 1)
+        }
         // His section line is queued with the door (the later of the last completion and the gate).
         say(SECTION_LINES.random())
         section = s + 1
@@ -417,7 +420,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The progress pling comes with this line too.
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
         SimItems.gatePuffs(GATE_CENTRES[s], GATE_BOXES[s])
-        Blocks.play("gate$s${s + 1}", delay = 1)
+        // Practice: only your own blowing it takes it down (not the 5 s auto gate).
+        if (!practice || by == Sim.me) Blocks.play("gate$s${s + 1}", delay = 1)
         if (sectionEnd[s] >= 0) openDoor(s)
         return true
     }
@@ -474,7 +478,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.title("", "§aThe Core entrance is opening!", 0, 40, 0)
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
         if (from != 5) Stats.section(4, n - sectionStart[4])
-        Blocks.play("core", delay = 1)
+        if (!practice) Blocks.play("core", delay = 1)
         Stats.p3(n)
     }
 
