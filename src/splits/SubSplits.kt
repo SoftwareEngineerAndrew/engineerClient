@@ -54,6 +54,9 @@ class SubSplitTracker {
     var watchingCore = false
         private set
 
+    /** When S4 started (S3's door / its last completion and gate), or null. */
+    val s4Start: Stamp? get() = starts[T_S4]
+
     fun reset() {
         java.util.Arrays.fill(starts, null)
         current = -1; ticks = 0; lightning = null; bloodMobs = 0
