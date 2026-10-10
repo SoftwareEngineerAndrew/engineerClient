@@ -2,6 +2,7 @@ package com.engineerclient.betterpf
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
@@ -85,8 +86,8 @@ object UploadPacker {
     private const val RUN_START = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private val RUN_END = Regex("""^\s*☠ Defeated """)
 
-    /** Ticks of mob and player lines a "cols" line holds; a stretch bigger than [COLS_MAX] is split. */
-    private const val COLS_TICKS = 200
+    /** Ticks a stretch of columns holds (see [Stretch]); a line bigger than [COLS_MAX] is split. */
+    private const val COLS_TICKS = 600
     private const val COLS_MAX = 100_000 // (the site takes lines up to 128 KB)
     private const val NL = "\n" // never newLine(): on Windows that is "\r\n"
     private const val CAM_TOLERANCE = 0.05
@@ -382,7 +383,7 @@ object UploadPacker {
         var camLine = 0
         val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
-            val cols = Columns(w)
+            val cols = Stretch(w)
             fun put(line: String, timed: Boolean = true) {
                 var kept = (if (drop.isEmpty()) line else keep(line, drop) ?: return).let { fold(it, scan) ?: return }
                 if (kept.startsWith("{\"k\":\"cam\"")) kept = thin(kept, scan.camKeep.getOrNull(camLine++)) ?: return
@@ -461,39 +462,78 @@ object UploadPacker {
         return line
     }
 
-    /** Mob ("e") and player ("p") lines into "cols" lines, a stretch of [COLS_TICKS] at a time, each ahead of the rest of its stretch. */
-    private class Columns(private val w: BufferedWriter) {
-        private class Item(val t: Int, val rows: JsonArray, val idx: Int, val ord: Int)
+    /**
+     * Everything timed, a stretch of [COLS_TICKS] at a time, as fewer and denser lines, each stretch's
+     * ahead of the rest of it (the viewer turns them back into the lines they were):
+     *  - mob ("e") and player ("p") lines as "cols": per mob/player its values one after another
+     *    as differences (mob ids too, in order);
+     *  - mob events (spawn, tag, stand, frame, eq, name, gone) and the server tick, map and swing
+     *    lines as "grp": per kind, a column per field the same way;
+     *  - block changes as "blocks": each tick's sorted by place, every one a difference from the one
+     *    before;
+     *  - camera frames as "cams": columns of hundredths, the turns as differences.
+     * The order they come in keeps each tick's events in the order the viewer needs them (a mob's
+     * spawn before its moves, its tag before them, gone after).
+     */
+    private class Stretch(private val w: BufferedWriter) {
+        private class Item(val t: Int, val rows: JsonArray)
         private var end = -1
         private val others = ArrayList<String>()
         private val items = mapOf("e" to ArrayList<Item>(), "p" to ArrayList<Item>())
-        private var ord = 0
+        private val groups = LinkedHashMap<String, ArrayList<JsonObject>>()
+        private val blocks = ArrayList<IntArray>() // t, x, y, z, s
+        private val cams = ArrayList<Pair<Int, JsonArray>>()
 
         fun put(line: String) {
             val head = HEAD.find(line)
             val t = head?.groupValues?.get(2)?.toInt()
             if (t != null && t >= end) { flush(); end = (t / COLS_TICKS + 1) * COLS_TICKS }
             if (end < 0) { w.write(line); w.write(NL); return }
-            val list = items[head?.groupValues?.get(1)]
-            if (list != null && t != null) list += Item(t, JsonParser.parseString(line).asJsonObject.getAsJsonArray("d"), others.size, ord++)
-            else others += line
+            val kind = head?.groupValues?.get(1)
+            if (t == null || kind == null || !take(kind, t, line)) others += line
         }
+
+        /** Whether the line went into this stretch's columns (one that doesn't fit their shape stays a line). */
+        private fun take(kind: String, t: Int, line: String): Boolean = runCatching {
+            when {
+                kind in items -> { items.getValue(kind) += Item(t, JsonParser.parseString(line).asJsonObject.getAsJsonArray("d")); true }
+                kind == "block" -> {
+                    val l = JsonParser.parseString(line).asJsonObject
+                    if (l.keySet() != BLOCK_KEYS) return false
+                    blocks += intArrayOf(t, int(l["x"]), int(l["y"]), int(l["z"]), int(l["s"])); true
+                }
+                kind == "cam" -> {
+                    val l = JsonParser.parseString(line).asJsonObject
+                    val d = l.getAsJsonArray("d")
+                    if (l.keySet() != CAM_KEYS || d.any { f -> f !is JsonArray || f.size() != 3 || f.any { hundredths(it) == null } }) return false
+                    cams += t to d; true
+                }
+                kind in GROUPED || (kind == "eq" && line.contains("\"id\":")) -> { groups.getOrPut(kind) { ArrayList() } += JsonParser.parseString(line).asJsonObject; true }
+                else -> false
+            }
+        }.getOrDefault(false)
 
         fun end() = flush()
 
         private fun flush() {
-            for ((kind, list) in items) if (list.isNotEmpty()) { write(kind, list); list.clear() }
+            for (kind in BEFORE_MOVES) groups[kind]?.let { write(it) { part -> group(kind, part) } }
+            for ((kind, list) in items) if (list.isNotEmpty()) write(list) { encode(kind, it) }
+            for ((kind, list) in groups) if (kind !in BEFORE_MOVES) write(list) { part -> group(kind, part) }
+            if (blocks.isNotEmpty()) write(blocks) { blockLine(it) }
+            if (cams.isNotEmpty()) write(cams) { camLine(it) }
             for (l in others) { w.write(l); w.write(NL) }
-            others.clear(); ord = 0
+            for (list in items.values) list.clear()
+            groups.clear(); blocks.clear(); cams.clear(); others.clear()
         }
 
-        private fun write(kind: String, list: List<Item>) {
-            val line = encode(kind, list)
-            if (line.length > COLS_MAX && list.size > 1) { write(kind, list.subList(0, list.size / 2)); write(kind, list.subList(list.size / 2, list.size)); return }
+        /** One line of [list], or two of its halves (and so on) while it's longer than [COLS_MAX]. */
+        private fun <T> write(list: List<T>, encode: (List<T>) -> String) {
+            val line = encode(list)
+            if (line.length > COLS_MAX && list.size > 1) { write(list.subList(0, list.size / 2), encode); write(list.subList(list.size / 2, list.size), encode); return }
             w.write(line); w.write(NL)
         }
 
-        /** One "cols" line: the lines' ticks, places and order, then per mob/player the lines it's in, its rows' lengths and its columns. */
+        /** One "cols" line: the lines' ticks, then per mob/player (mobs by id, as differences) the lines it's in, its rows' lengths and its columns. */
         private fun encode(kind: String, list: List<Item>): String {
             val tracks = LinkedHashMap<String, MutableList<Pair<Int, JsonArray>>>()
             val keys = HashMap<String, JsonElement>()
@@ -505,20 +545,61 @@ object UploadPacker {
                     tracks.getOrPut(key) { ArrayList() } += li to row
                 }
             }
+            // Mobs in id order, each id the difference from the one before ("kd").
+            val byId = kind == "e" && keys.values.all { (it as? JsonPrimitive)?.isNumber == true && it.asString.toLongOrNull() != null }
+            val order = if (byId) tracks.keys.sortedBy { keys.getValue(it).asLong } else tracks.keys.toList()
             val tr = JsonArray()
-            for ((key, rows) in tracks) {
+            var prevKey = 0L
+            for (key in order) {
+                val rows = tracks.getValue(key)
                 val width = rows.maxOf { it.second.size() }
                 val cols = JsonArray()
                 for (c in 1 until width) cols.add(column(rows.filter { it.second.size() > c }.map { it.second[c] }))
+                val k: JsonElement = if (byId) keys.getValue(key).asLong.let { id -> JsonPrimitive(id - prevKey).also { prevKey = id } } else keys.getValue(key)
                 tr.add(JsonArray().apply {
-                    add(keys[key]); add(deltas(rows.map { it.first.toLong() })); add(column(rows.map { JsonPrimitive(it.second.size()) })); add(cols)
+                    add(k); add(deltas(rows.map { it.first.toLong() })); add(column(rows.map { JsonPrimitive(it.second.size()) })); add(cols)
                 })
             }
             return JsonObject().apply {
                 addProperty("k", "cols"); addProperty("of", kind)
-                add("t", deltas(list.map { it.t.toLong() })); add("i", deltas(list.map { it.idx.toLong() })); add("o", deltas(list.map { it.ord.toLong() }))
+                if (byId) addProperty("kd", 1)
+                add("t", deltas(list.map { it.t.toLong() }))
                 add("tr", tr)
             }.toString()
+        }
+
+        /** A "grp" line: one kind's lines, a column per field ("n" of them; null where a line hasn't the field). */
+        private fun group(kind: String, list: List<JsonObject>): String {
+            val fields = LinkedHashSet<String>()
+            for (o in list) for (f in o.keySet()) if (f != "k") fields += f
+            val c = JsonObject()
+            for (f in fields) c.add(f, column(list.map { it[f] ?: JsonNull.INSTANCE }))
+            return JsonObject().apply { addProperty("k", "grp"); addProperty("of", kind); addProperty("n", list.size); add("c", c) }.toString()
+        }
+
+        /** A "blocks" line: [dt, dx, dy, dz, state] each, from the one before; a tick's changes by place (one block's in the order they came). */
+        private fun blockLine(list: List<IntArray>): String {
+            val sorted = list.sortedWith(compareBy<IntArray>({ it[0] }, { it[2] }, { it[3] }, { it[1] }))
+            val d = JsonArray()
+            var p = IntArray(4)
+            for (b in sorted) { d.add(JsonArray().apply { for (i in 0 until 4) add(b[i] - p[i]); add(b[4]) }); p = b }
+            return JsonObject().apply { addProperty("k", "blocks"); add("d", d) }.toString()
+        }
+
+        /** A "cams" line: each line's tick (differences) and frame count, then per frame its partial tick, yaw and pitch in hundredths (yaw and pitch as differences). */
+        private fun camLine(list: List<Pair<Int, JsonArray>>): String {
+            val t = JsonArray(); val n = JsonArray(); val pt = JsonArray(); val yaw = JsonArray(); val pitch = JsonArray()
+            var pT = 0; var pY = 0L; var pP = 0L
+            for ((tick, d) in list) {
+                t.add(tick - pT); pT = tick; n.add(d.size())
+                for (f in d) {
+                    val a = f.asJsonArray
+                    pt.add(hundredths(a[0])!!)
+                    val y = hundredths(a[1])!!; val p = hundredths(a[2])!!
+                    yaw.add(y - pY); pitch.add(p - pP); pY = y; pP = p
+                }
+            }
+            return JsonObject().apply { addProperty("k", "cams"); add("t", t); add("n", n); add("pt", pt); add("yaw", yaw); add("pitch", pitch) }.toString()
         }
 
         private fun deltas(v: List<Long>) = JsonArray().apply { var prev = 0L; for (x in v) { add(x - prev); prev = x } }
@@ -546,6 +627,18 @@ object UploadPacker {
             }
             if (n > 0) { r.add(last); r.add(n) }
             return JsonObject().apply { add("r", r) }
+        }
+
+        companion object {
+            private val BLOCK_KEYS = setOf("k", "t", "x", "y", "z", "s")
+            private val CAM_KEYS = setOf("k", "t", "d")
+            /** Kinds that go in "grp" lines; the first ones go ahead of the moves, the rest after. */
+            private val BEFORE_MOVES = listOf("spawn", "tag", "stand", "frame", "eq", "name")
+            private val GROUPED = BEFORE_MOVES.toSet() + setOf("gone", "st", "mp", "sw")
+            /** A number with at most 2 decimals, in hundredths (exactly), else null. */
+            fun hundredths(e: JsonElement): Long? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.let { p ->
+                runCatching { BigDecimal(p.asString).movePointRight(2).longValueExact() }.getOrNull()
+            }
         }
     }
 
