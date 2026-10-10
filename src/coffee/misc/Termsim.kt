@@ -9,14 +9,17 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.dungeon.SecretClicked
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.customData
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.level.block.Blocks
 
 /**
  * Termsim (the name only - nothing to do with terminals): where new things go, each its own
@@ -27,12 +30,14 @@ import net.minecraft.world.item.Items
  *    ignored - you keep looking where you were, and the server is told you took its rotation
  *    (NoRotateMixin). Never in F7/M7's boss, trap rooms, Teleport Maze or Boulder, where the
  *    server's facing matters.
+ *  - Lever Clicks: left clicking a lever in a dungeon gets Odin's Secret Clicked chime and box, as
+ *    a right click does - its own (private) chime and box, so its settings and its on/off apply.
  */
 object Termsim : Module(
     name = "Termsim",
     key = null,
     category = Category.custom("Coffee Client", 860, 10),
-    description = "Where new things go: No Rotate.",
+    description = "Where new things go: No Rotate and Lever Clicks.",
 ) {
     private val noRotate by BooleanSetting("No Rotate", true, desc = "A teleport item's teleport (etherwarp, AOTV, Hype) doesn't turn your camera. Not in the F7 boss, traps, Teleport Maze or Boulder.")
     private val timeLimit by NumberSetting("Time Limit", 300.0, 0.0..3000.0, 10.0, unit = "ms", desc = "How long after the right click a teleport's rotation is still ignored.")
@@ -41,6 +46,8 @@ object Termsim : Module(
         .withDependency { noRotate }
     private val allowInstant by BooleanSetting("Allow Instant Transmission", true, desc = "AOTE/AOTV right clicks count, not only etherwarps (sneaking with Etherwarp Merger).")
         .withDependency { noRotate }
+
+    private val leverClicks by BooleanSetting("Lever Clicks", true, desc = "Left clicking a lever in a dungeon plays Odin's Secret Clicked chime and draws its box, the same as right clicking it. Uses Secret Clicked's settings (and needs it on).")
 
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
 
@@ -64,6 +71,22 @@ object Termsim : Module(
         onSend<ServerboundUseItemPacket> { onRightClick() }
         onSend<ServerboundUseItemOnPacket> { onRightClick() }
         on<LevelEvent.Load> { lastClick = -1L }
+    }
+
+    // --- Lever Clicks ------------------------------------------------------------------------------
+
+    private val secretBox by lazy { SecretClicked::class.java.getDeclaredMethod("secretBox", BlockPos::class.java).apply { isAccessible = true } }
+    private val secretChime by lazy { SecretClicked::class.java.getDeclaredMethod("secretChime").apply { isAccessible = true } }
+
+    /** A left click on [pos] (LeverClickMixin), before the game handles it. Client thread. */
+    @JvmStatic
+    fun onLeftClickBlock(pos: BlockPos) {
+        if (!enabled || !leverClicks || !SecretClicked.enabled || !DungeonUtils.inDungeons) return
+        if (CoffeeClient.mc.level?.getBlockState(pos)?.`is`(Blocks.LEVER) != true) return
+        CoffeeClient.safely("lever click") {
+            secretBox.invoke(SecretClicked, pos)
+            secretChime.invoke(SecretClicked)
+        }
     }
 
     private fun onRightClick() {
