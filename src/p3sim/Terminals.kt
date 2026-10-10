@@ -40,6 +40,18 @@ object Terminals {
         return w.last().first
     }
 
+    /**
+     * Terminal Luck: of 1 draw at 0 up to [most] at full luck (a fractional count by chance), the one [cost]
+     * likes best (fewest clicks, closest numbers).
+     */
+    fun <T> lucky(most: Int, cost: (T) -> Int, draw: () -> T): T {
+        val luck = P3Sim.termLuck
+        if (luck <= 0.0) return draw()
+        val want = 1 + luck * (most - 1)
+        val n = want.toInt() + if (Random.nextDouble() < want - want.toInt()) 1 else 0
+        return List(n.coerceAtLeast(1)) { draw() }.minBy(cost)
+    }
+
     /** Item with a non-italic name (in [color] if given, as Hypixel colours most terminal items) and [count]. */
     fun named(item: Item, name: String, count: Int = 1, glint: Boolean = false, color: net.minecraft.ChatFormatting? = null): ItemStack {
         val s = ItemStack(item, count)
@@ -98,7 +110,9 @@ object Terminals {
         private val slots = (11..15) + (20..24)
         private var next = 1
         init {
-            slots.shuffled().forEachIndexed { i, s -> items[s] = named(Items.STAINED_GLASS_PANE.red(), "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
+            // Luck: the numbers closer together (the shortest walk 1 to 10).
+            val order = lucky(400, { o: List<Int> -> o.zipWithNext().sumOf { (a, b) -> Math.abs(a % 9 - b % 9) + Math.abs(a / 9 - b / 9) } }) { slots.shuffled() }
+            order.forEachIndexed { i, s -> items[s] = named(Items.STAINED_GLASS_PANE.red(), "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
             val it = items[slot]
@@ -116,7 +130,7 @@ object Terminals {
         private val slots = (11..15) + (20..24) + (29..33)
         init {
             // 0-9 start On, median 3 (measured).
-            val on = weighted(listOf(0 to 8, 1 to 24, 2 to 36, 3 to 44, 4 to 40, 5 to 16, 6 to 5, 7 to 4, 8 to 3, 9 to 1))
+            val on = lucky(10, { n: Int -> -n }) { weighted(listOf(0 to 8, 1 to 24, 2 to 36, 3 to 44, 4 to 40, 5 to 16, 6 to 5, 7 to 4, 8 to 3, 9 to 1)) }
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
@@ -139,7 +153,7 @@ object Terminals {
         init {
             // Boards follow Hypixel's measured fewest-clicks spread (mean ~7.2, easier than 9 free draws'
             // 8.1): free draws until one needs the drawn count.
-            val want = weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2))
+            val want = lucky(10, { n: Int -> n }) { weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2)) }
             do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
             slots.forEach { set(it) }
         }
@@ -168,7 +182,7 @@ object Terminals {
             val right = STARTS_POOL.filter { it.second[0] == letter }
             val wrong = STARTS_POOL.filter { it.second[0] != letter }
             // Items with the letter per window, as measured; each slot's item is uniform.
-            val n = weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4))
+            val n = lucky(10, { n: Int -> n }) { weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4)) }
             val picks = (List(n) { right.random() } + List(slots.size - n) { wrong.random() }).shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
@@ -196,7 +210,8 @@ object Terminals {
         override val title = "Select all the ${target.title} items!"
         init {
             val families = listOf(target) + (COLOURS - target).shuffled().take(4)
-            val sixes = families.shuffled().take(3).toSet()
+            // Luck: the target more likely one of the two colours with 5.
+            val sixes = lucky(10, { s: Set<Colour> -> if (target in s) 1 else 0 }) { families.shuffled().take(3).toSet() }
             val picks = families.flatMap { c -> List(if (c in sixes) 6 else 5) { c.items.random() } }.shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
@@ -226,7 +241,8 @@ object Terminals {
     class Melody : Term(Type.MELODY) {
         override val title = "Click the button on time!"
         private var row = 0
-        private var target = Random.nextInt(1, 6)
+        /** Always First Click Melody: the first row's purple where the green starts. */
+        private var target = if (P3Sim.firstClickMelody) 1 else Random.nextInt(1, 6)
         private var lime = 1
         private var dir = 1
         private var locked = false

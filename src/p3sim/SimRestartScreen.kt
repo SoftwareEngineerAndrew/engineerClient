@@ -266,6 +266,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 toggle("Jitter", P3Sim.jitterS.value, 110, P3Sim.jitterS.description) { P3Sim.jitterS.value = !P3Sim.jitterS.value },
                 toggle("No Melodies", P3Sim.noMelodies, 110, P3Sim.noMelodiesS.description) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
                 toggle("Click Limit", P3Sim.clickLimitS.value, 110, P3Sim.clickLimitS.description) { P3Sim.clickLimitS.value = !P3Sim.clickLimitS.value },
+                LuckSlider(110),
+                toggle("1st Click Melody", P3Sim.firstClickMelody, 110, "Always First Click Melody: " + P3Sim.firstClickMelodyS.description) { P3Sim.firstClickMelodyS.value = !P3Sim.firstClickMelody },
             )),
             stack("§eTimings", 106, "The fight's numbers.", listOf(
                 stepper("Goldor kill", "${P3Sim.goldorKill}t", P3Sim.goldorKillS.description, { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) }),
@@ -336,6 +338,17 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             message = Component.literal("Speed: ${speed()}" + if (P3Sim.phoenix) " §8(Phoenix out)" else " §8(${speed() + 100} with Black Cat)")
         }
         override fun applyValue() = setSpeed(speed())
+    }
+
+    /** Terminal Luck, 0 to 100% in fives. */
+    private inner class LuckSlider(w: Int) : AbstractSliderButton(0, 0, w, 20, Component.empty(), P3Sim.termLuck) {
+        init {
+            updateMessage()
+            setTooltip(tip(P3Sim.termLuckS.description))
+        }
+        private fun luck() = Math.round(value * 20).toInt() * 5
+        override fun updateMessage() { message = Component.literal("Luck: ${luck()}%") }
+        override fun applyValue() { P3Sim.termLuckS.value = luck(); ModuleManager.saveConfigurations() }
     }
 
     /** Practice's start timer, 0 to 5 s in tenths. */
