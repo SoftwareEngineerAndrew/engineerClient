@@ -93,12 +93,12 @@ object DungeonSplits : Module(
     private val core = GoldorCore()
     private val goldorHud = registerSetting(
         HUD("Goldor Sub Split", "From the core opening after S4: when each player leapt into the core and when Goldor started moving, in exact server ticks. Up until 10 s into Necron.", true, 750, 10, 1f) { example ->
-            if (example) return@HUD draw(this, listOf("§eCore", "§fYou §a0.05s", "§7Teammate §a0.50s", "§7Another §61.35s", "§eGoldor moved §f0.20s"))
+            if (example) return@HUD draw(this, listOf("§eCore", "§fYou §a0.05s", "§7Teammate §a0.50s", "§7Another §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
             draw(this, core.lines(serverTicks, mc.player?.name?.string, teamNames().size))
         }
     )
-    /** Goldor and where he stood when the core opened, for his first move after it. */
-    private var coreGoldor: Pair<Int, net.minecraft.world.phys.Vec3>? = null
+    /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
+    private var coreGoldor: Triple<Int, net.minecraft.world.phys.Vec3, Int>? = null
 
     // What the world shows, watched only while it can matter.
     private val barriers = mutableListOf<Pair<Int, Int>>()
@@ -307,9 +307,11 @@ object DungeonSplits : Module(
 
     /**
      * The Goldor sub split each tick while it is open: every teammate inside the core box, and
-     * Goldor's first move from where he stood at the core opening. Both where the server last put
-     * them (not where they are drawn, a few ticks behind); you where you are. A jump of blocks at
-     * once is Goldor coming into view, not moving, and starts the watch again.
+     * Goldor setting off for the core. Both where the server last put them (not where they are
+     * drawn, a few ticks behind); you where you are. He creeps along his track at ~0.05 blocks a
+     * tick until everyone is in, then goes at ~0.65: setting off is the first step faster than
+     * [GOLDOR_GO] a tick, timed from the step's start. A jump of blocks at once is him coming into
+     * view, not moving.
      */
     private fun watchCore(level: net.minecraft.client.multiplayer.ClientLevel) {
         val me = mc.player
@@ -323,11 +325,15 @@ object DungeonSplits : Module(
         }
         if (core.goldorMoved != null) return
         val g = coreGoldor
-        if (g == null) { bossWither(level, "Goldor")?.let { coreGoldor = it.id to it.positionCodec.base }; return }
+        if (g == null) { bossWither(level, "Goldor")?.let { coreGoldor = Triple(it.id, it.positionCodec.base, serverTicks) }; return }
         val e = level.getEntity(g.first) ?: run { coreGoldor = null; return }
-        val d = e.positionCodec.base.distanceTo(g.second)
-        if (d > 8) coreGoldor = e.id to e.positionCodec.base
-        else if (d > 0.1) core.onGoldorMoved(serverTicks)
+        val at = e.positionCodec.base
+        if (at == g.second) return
+        val dx = at.x - g.second.x; val dz = at.z - g.second.z
+        val d = Math.sqrt(dx * dx + dz * dz)
+        val ticks = (serverTicks - g.third).coerceAtLeast(1)
+        if (d < 8 && d / ticks > GOLDOR_GO) core.onGoldorMoved(g.third)
+        else coreGoldor = Triple(e.id, at, serverTicks)
     }
 
     private fun inCoreBox(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y < 155.5 && z >= 54 && z < 118
@@ -443,6 +449,8 @@ object DungeonSplits : Module(
     private const val SECTION_DOOR_BLOCKS = 100
     private val sectionDoor = IntArray(3)
     private val NECRON_MID = net.minecraft.world.phys.Vec3(54.0, 66.0, 76.0)
+    /** Blocks a tick: faster is Goldor setting off for the core (he creeps at ~0.05, goes at ~0.65). */
+    private const val GOLDOR_GO = 0.25
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val NECRON_LINE = "[BOSS] Necron: "
     private val KEY = Regex("""(?:Wither|Blood) Key""")

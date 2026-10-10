@@ -6,9 +6,9 @@ import java.util.Locale
  * The Goldor sub split: from "The Core entrance is opening!" (after S4), each teammate's leap into
  * the core and Goldor starting to move, in server ticks from that line.
  *
- * Since Hypixel's boss update Goldor doesn't wait for everyone: in 17 recorded F7 runs he set off
- * 3-5 ticks after the line in most, while the last player came in 11-159 ticks after it, so the
- * two are timed apart. Kept free of Minecraft (the module feeds it), so it tests headlessly.
+ * Goldor creeps along his track (~0.05 blocks a tick) until the last player is in, then sets off
+ * for the core (~0.65 a tick): in 18 recorded F7 runs, 0-3 ticks after the last one came in. The
+ * Goldor line also shows that gap. Kept free of Minecraft (the module feeds it), so it tests headlessly.
  */
 class GoldorCore {
     /** The server tick the core opened on; null before it (or after a reset). */
@@ -48,7 +48,8 @@ class GoldorCore {
             val colour = if (done && name == last) "§6" else "§a"
             out += "${if (name == me) "§f" else "§7"}$name $colour${secs(t)}"
         }
-        out += "§eGoldor moved " + (goldorMoved?.let { "§f" + secs(it) } ?: "§8...")
+        val gap = goldorMoved?.let { g -> inside.values.maxOrNull()?.let { " §8(" + (if (g >= it) "+" else "-") + secs(Math.abs(g - it)) + " after the last in)" } }.orEmpty()
+        out += "§eGoldor moved " + (goldorMoved?.let { "§f" + secs(it) + gap } ?: "§8...")
         return out
     }
 
