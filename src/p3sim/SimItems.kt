@@ -2158,8 +2158,9 @@ object SimItems {
             sp.closeContainer()
             val e = bot.pos
             leapReady = Fight.serverTick + 40
-            // You land on them exactly, facing as they face. Practice: where that class normally is in this section.
-            val ps = if (Practice.active) Practice.leapSpot(bot.clazz) else null
+            // You land on them exactly, facing as they face. Practice: where that class normally is in this section; a custom
+            // practice's leap waypoint for that class's quadrant (top left, top right, bottom left, bottom right) first.
+            val ps = if (Practice.active) Practice.leapWaypoint(P3Plan.botOrder().indexOf(bot.clazz)) ?: Practice.leapSpot(bot.clazz) else null
             if (ps != null) Sim.tp(sp, ps.x, ps.y, ps.z, ps.yaw, ps.pitch)
             else Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)

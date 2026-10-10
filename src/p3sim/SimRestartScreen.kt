@@ -430,7 +430,14 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 "Click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Now: $cps.") {
                 here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }
             },
-            change("§cClear", 100, "Clears the custom practice: start, jobs and checkpoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
+            change(if (Practice.leapWaypoints.isNotEmpty()) "§aLeap Waypoint §7(${Practice.leapWaypoints.size}/4)" else "Leap Waypoint", 100,
+                "Click: where you stand becomes a leap's landing in the custom practice: the 1st click the leap menu's top left, then top right, bottom left, bottom right. Now: ${Practice.leapWaypoints.size}/4 (Clear starts over).") {
+                here()?.let { h ->
+                    val n = Practice.addLeapWaypoint(h)
+                    EngineerClient.msg(if (n == 0) "§7All 4 leap waypoints are set (Clear starts over)." else "§7Leap waypoint §f$n§7 (${listOf("top left", "top right", "bottom left", "bottom right")[n - 1]}): ${at(h)}.")
+                }
+            },
+            change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
             DelaySlider(100),
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
                 if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
