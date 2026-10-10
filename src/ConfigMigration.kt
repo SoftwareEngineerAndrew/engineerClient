@@ -26,6 +26,7 @@ object ConfigMigration {
      *  - Positional Messages was removed from Odin in 0.3.6 and is provided here: Odin's module
      *    (on/off, settings and the saved boxes) is copied over as it was;
      *  - POV Previews' Show In choice is its matching Only In checkbox (Everywhere: none ticked).
+     *  - Sub Splits' Blood Rush Sub Splits HUD is the BR Sub Split;
      *  - Agro Leaderboard is Agro Sphere (on only if its Sphere Mode was);
      *  - BR Roles' Posmsg Re-trigger and Posmsg Here Keybind are Positional Messages' Re-trigger and
      *    Box Here Keybind.
@@ -87,6 +88,13 @@ object ConfigMigration {
             if (moved.isEmpty()) return@let
             val to = settings(module(modules, "Positional Messages") ?: ensure("Positional Messages").also { it.addProperty("enabled", false) })
             for ((old, new) in moved) br.remove(old).let { if (!to.has(new)) to.add(new, it) }
+            changed = true
+        }
+
+        // The Blood Rush Sub Splits HUD is the BR Sub Split.
+        module(modules, "Sub Splits")?.let(::settings)?.let { sub ->
+            val old = sub.remove("Blood Rush Sub Splits") ?: return@let
+            if (!sub.has("BR Sub Split")) sub.add("BR Sub Split", old)
             changed = true
         }
 

@@ -3,7 +3,6 @@ package com.devgineerclient.splits
 import com.devgineerclient.DevgineerClient
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
@@ -104,12 +103,6 @@ object DungeonSplits : Module(
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
     private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
     private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "", placeholder = "").hide()
-    private val resetBests by ActionSetting("Reset Sub Split Bests", desc = "Forgets every boss sub split's best time (the gold ones), on F7 and M7 (Engineer Client's too: they are one set).") {
-        bestsF7 = ""; bestsM7 = ""
-        ecBests("F7")?.value = ""; ecBests("M7")?.value = ""
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
-        DevgineerClient.msg("§7Sub split bests cleared.")
-    }
 
     private val cardDebug by BooleanSetting("Scorecard Debug", false, desc = "Says in chat each moment the scorecard picks up, and what it read it from (portal, leaps, Goldor's first hit, Storm breaking free).")
     private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) DevgineerClient.msg("§8[scorecard] §7$what") } }
