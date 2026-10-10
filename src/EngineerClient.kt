@@ -128,6 +128,7 @@ object EngineerClient : ClientModInitializer {
         }
 
         LeapHighlight.register()
+        DeadPlayers.register()
         com.engineerclient.misc.Witherborn.register()
         com.engineerclient.misc.I4Complete.register()
         com.engineerclient.practice.I4Aims.register()

@@ -17,6 +17,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.level.block.Blocks
+import com.engineerclient.DeadPlayers
 import com.engineerclient.storm.StormCrush
 
 /**
@@ -28,7 +29,7 @@ import com.engineerclient.storm.StormCrush
  *    to the boss. Gone at 4 s left if the Watcher hasn't let you go by then; when he does ("You
  *    may pass" - the portal, which you are typically through about 4 s later) it is set to 4 s.
  *  - Exit Core Text: "EXIT CORE", as the PORTAL text, for 0.8 s once the core has opened and every
- *    teammate alive is inside it (the inner chamber, as the splits' core box).
+ *    teammate alive is inside it (the inner chamber, as the splits' core box); the dead count as in.
  *  - Maxor Move: Maxor starts moving 85 ticks after his first line (80-87 in 38 recorded runs).
  *  - Crystal Spawn: after a laser hit (Maxor becoming damageable) the top crystals come back 40
  *    ticks later.
@@ -295,15 +296,16 @@ object Timers : Module(
 
     /**
      * Once the core is open: you and every teammate alive inside it, others where the server last put
-     * them. Someone out of view holds it back. Client thread.
+     * them; the dead count as in ([DeadPlayers]: a ghost can be anywhere). Someone alive out of view
+     * holds it back. Client thread.
      */
     private fun watchCore() {
         if (!coreOpen) return
         val level = mc.level ?: return
         val me = mc.player ?: return
-        if (!inCore(me.x, me.y, me.z)) return
+        if (!DeadPlayers.isDead(me.name.string) && !inCore(me.x, me.y, me.z)) return
         for (mate in DungeonUtils.dungeonTeammates) {
-            if (mate.isDead || mate.name == me.name.string) continue
+            if (DeadPlayers.isDead(mate) || mate.name == me.name.string) continue
             val p = mate.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == mate.name } ?: return
             val at = p.positionCodec.base
             if (!inCore(at.x, at.y, at.z)) return
