@@ -3,26 +3,18 @@ package com.coffeeclient.misc
 import com.coffeeclient.CoffeeClient
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.customData
 import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.render.BoxStyle
-import com.odtheking.odin.utils.render.drawStyledBox
-import com.odtheking.odin.utils.renderBoundingBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket
-import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 
@@ -35,14 +27,12 @@ import net.minecraft.world.item.Items
  *    ignored - you keep looking where you were, and the server is told you took its rotation
  *    (NoRotateMixin). Never in F7/M7's boss, trap rooms, Teleport Maze or Boulder, where the
  *    server's facing matters.
- *  - Wither Highlight: a box on the withers in F7/M7's boss - the bosses themselves (Maxor, Storm,
- *    Goldor, Necron), the only withers there.
  */
 object Termsim : Module(
     name = "Termsim",
     key = null,
     category = Category.custom("Coffee Client", 860, 10),
-    description = "Where new things go: No Rotate and Wither Highlight.",
+    description = "Where new things go: No Rotate.",
 ) {
     private val noRotate by BooleanSetting("No Rotate", true, desc = "A teleport item's teleport (etherwarp, AOTV, Hype) doesn't turn your camera. Not in the F7 boss, traps, Teleport Maze or Boulder.")
     private val timeLimit by NumberSetting("Time Limit", 300.0, 0.0..3000.0, 10.0, unit = "ms", desc = "How long after the right click a teleport's rotation is still ignored.")
@@ -51,14 +41,6 @@ object Termsim : Module(
         .withDependency { noRotate }
     private val allowInstant by BooleanSetting("Allow Instant Transmission", true, desc = "AOTE/AOTV right clicks count, not only etherwarps (sneaking with Etherwarp Merger).")
         .withDependency { noRotate }
-
-    private val witherHighlight by BooleanSetting("Wither Highlight", true, desc = "A box on the withers in the F7/M7 boss: Maxor, Storm, Goldor and Necron.")
-    private val witherColor by ColorSetting("Wither Color", Color(255, 85, 255, 1f), true, desc = "The box's colour.")
-        .withDependency { witherHighlight }
-    private val witherStyle by SelectorSetting("Wither Style", BoxStyle.OUTLINE, desc = "Outline, filled, or both.")
-        .withDependency { witherHighlight }
-    private val witherThroughWalls by BooleanSetting("Wither Through Walls", true, desc = "Shows the box through blocks.")
-        .withDependency { witherHighlight }
 
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
 
@@ -82,13 +64,6 @@ object Termsim : Module(
         onSend<ServerboundUseItemPacket> { onRightClick() }
         onSend<ServerboundUseItemOnPacket> { onRightClick() }
         on<LevelEvent.Load> { lastClick = -1L }
-
-        on<RenderExtractEvent> {
-            if (!witherHighlight || !DungeonUtils.isFloor(7) || !DungeonUtils.inBoss) return@on
-            for (e in CoffeeClient.mc.level?.entitiesForRendering() ?: return@on) {
-                if (e is WitherBoss && e.isAlive && Witherborn.isBoss(e)) drawStyledBox(e.renderBoundingBox, witherColor, witherStyle, !witherThroughWalls)
-            }
-        }
     }
 
     private fun onRightClick() {
