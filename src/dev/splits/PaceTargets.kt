@@ -41,7 +41,7 @@ object PaceTargets {
         val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.let { SplitPace.clocks(sid, it) } }
         val odin = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
             ?.let { secs(it.toDouble()) }
-            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks)) else c.ms >= 1000 }
+            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks), floor) else c.ms >= 1000 }
         return listOfNotNull(ours, odin).minByOrNull { it.ms }
     }
 
