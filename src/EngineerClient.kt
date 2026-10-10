@@ -1,7 +1,7 @@
 package com.engineerclient
 
 import com.engineerclient.betterpf.BetterPF
-import com.engineerclient.misc.AgroLeaderboard
+import com.engineerclient.misc.AgroSphere
 import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
 import com.engineerclient.rotation.LeapHighlight
@@ -84,7 +84,7 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, com.engineerclient.waypoints.PositionalMessages, AgroLeaderboard, DungeonSplits,
+            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, com.engineerclient.waypoints.PositionalMessages, AgroSphere, DungeonSplits,
             P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers,
         )
     }
@@ -112,7 +112,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroLeaderboard, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
