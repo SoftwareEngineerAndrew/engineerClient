@@ -426,17 +426,27 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                     (start?.let { "Now: S${Practice.customSection}, ${at(it)}." } ?: "Not set.")) {
                 here()?.let { h -> val n = Practice.setStart(h); EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}.") }
             },
-            change(if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint", 100,
-                "Click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Now: $cps.") {
-                here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }
-            },
-            change(if (Practice.leapWaypoints.isNotEmpty()) "§aLeap Waypoint §7(${Practice.leapWaypoints.size}/4)" else "Leap Waypoint", 100,
-                "Click: where you stand becomes a leap's landing in the custom practice: the 1st click the leap menu's top left, then top right, bottom left, bottom right. Now: ${Practice.leapWaypoints.size}/4 (Clear starts over).") {
-                here()?.let { h ->
-                    val n = Practice.addLeapWaypoint(h)
-                    EngineerClient.msg(if (n == 0) "§7All 4 leap waypoints are set (Clear starts over)." else "§7Leap waypoint §f$n§7 (${listOf("top left", "top right", "bottom left", "bottom right")[n - 1]}): ${at(h)}.")
-                }
-            },
+            ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
+                tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: removes the last one. Now: $cps."),
+                left = { here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }; rebuildWidgets() },
+                right = {
+                    EngineerClient.msg(if (Practice.checkpoints.isEmpty()) "§7No checkpoints to remove." else "§7Checkpoint §f${Practice.checkpoints.size}§7 removed.")
+                    Practice.removeCheckpoint(); rebuildWidgets()
+                }),
+            ClickButton(100, if (Practice.leapWaypoints.isNotEmpty()) "§aLeap Waypoint §7(${Practice.leapWaypoints.size}/4)" else "Leap Waypoint",
+                tip("Left click: where you stand becomes a leap's landing in the custom practice: the 1st the leap menu's top left, then top right, bottom left, bottom right. Right click: removes the last one. Now: ${Practice.leapWaypoints.size}/4."),
+                left = {
+                    here()?.let { h ->
+                        val n = Practice.addLeapWaypoint(h)
+                        EngineerClient.msg(if (n == 0) "§7All 4 leap waypoints are set (right click removes the last)." else "§7Leap waypoint §f$n§7 (${QUADRANTS[n - 1]}): ${at(h)}.")
+                    }
+                    rebuildWidgets()
+                },
+                right = {
+                    val n = Practice.leapWaypoints.size
+                    EngineerClient.msg(if (n == 0) "§7No leap waypoints to remove." else "§7Leap waypoint §f$n§7 (${QUADRANTS[n - 1]}) removed.")
+                    Practice.removeLeapWaypoint(); rebuildWidgets()
+                }),
             change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
             DelaySlider(100),
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
@@ -525,7 +535,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         override fun isValidClickButton(info: MouseButtonInfo) = info.button() == 0 || info.button() == 1
         override fun onClick(event: MouseButtonEvent, doubleClick: Boolean) {
             EngineerClient.logger.info("[ec] p3sim menu click: button ${event.button()} on ${message.string}")
-            if (event.button() == 1) right() else left()
+            // Right only when SDL has the right button down and not the left (a left click once came through as button 1 here).
+            val isRight = runCatching {
+                val s = org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?)
+                (s and 4) != 0 && (s and 1) == 0
+            }.getOrElse { event.button() == 1 }
+            if (isRight) right() else left()
         }
         override fun extractContents(g: net.minecraft.client.gui.GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partial: Float) {
             extractDefaultSprite(g)
@@ -535,6 +550,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     private companion object {
         const val RESTART_W = 100
+        val QUADRANTS = listOf("top left", "top right", "bottom left", "bottom right")
         /** The plan's and Advanced's height (5 rows) plus a gap: where the Advanced button goes. */
         const val PANEL_H = 6 * 20 + 5 * 2 + 4
         const val GAP = 10
