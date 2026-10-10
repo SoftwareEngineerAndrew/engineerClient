@@ -18,7 +18,7 @@ import java.util.Locale
  * into the next section are the tasks, each timed from the start; the last one's time is the
  * practice's, large on screen (the Practice Time HUD) and in chat with your best.
  *
- * Custom practice: your own start position, the jobs you pick (any sections', so it can run across
+ * Custom practice (leap waypoints: where the leap menu's slots 1-4 land in it): your own start position, the jobs you pick (any sections', so it can run across
  * several; it starts in the earliest of them and the start's) and checkpoints to reach in order
  * (within 1 block across, the same height), all timed the same way. Saved in config/engineerclient/p3sim-practice.json.
  *
@@ -297,12 +297,25 @@ object Practice {
     }
 
     /** No custom practice: start, jobs and checkpoints gone. */
-    fun clearCustom() { customStart = null; customSection = 0; customJobs.clear(); checkpoints.clear(); save() }
+    fun clearCustom() { customStart = null; customSection = 0; customJobs.clear(); checkpoints.clear(); leapWaypoints.clear(); save() }
+
+    /** Leap waypoints: the leap menu's slots 1-4 (top left, top right, bottom left, bottom right) land here in a custom practice. */
+    val leapWaypoints = ArrayList<Spots.Spot>()
+
+    /** The next leap slot (1-4) gets [spot]; 0: all four are set already. */
+    fun addLeapWaypoint(spot: Spots.Spot): Int {
+        if (leapWaypoints.size >= 4) return 0
+        leapWaypoints += spot; save()
+        return leapWaypoints.size
+    }
+
+    /** Where leap menu slot [i] (0-3) lands in the custom practice running, null: as usual. */
+    fun leapWaypoint(i: Int): Spots.Spot? = if (setup?.name == "Custom") leapWaypoints.getOrNull(i) else null
 
     fun addCheckpoint(spot: Spots.Spot) { checkpoints += spot; save() }
     fun removeCheckpoint() { if (checkpoints.isNotEmpty()) checkpoints.removeAt(checkpoints.size - 1); save() }
 
-    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null)
+    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null, val leaps: List<List<Double>>? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-practice.json")
@@ -319,13 +332,14 @@ object Practice {
             customJobs.clear(); s.jobs?.let { customJobs += it }
             startDelay = s.startDelay ?: 0.0
             checkpoints.clear(); s.checkpoints?.forEachIndexed { i, v -> if (v.size >= 5) checkpoints += spot("Checkpoint ${i + 1}", v) }
+            leapWaypoints.clear(); s.leaps?.forEachIndexed { i, v -> if (v.size >= 5 && i < 4) leapWaypoints += spot("Leap ${i + 1}", v) }
         }
     }
 
     private fun save() {
         EngineerClient.safely("p3sim practice save") {
             file.parentFile.mkdirs()
-            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay)))
+            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) })))
         }
     }
 }
