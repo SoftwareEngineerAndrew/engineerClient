@@ -140,6 +140,8 @@ object BrWaypoints2 : Module(
 
     private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
 
+    private val doorerKills by BooleanSetting("Doorer Kills", false, desc = "The door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by.")
+
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
     /** Which item is the wand, saved with the config so it survives a restart. */
@@ -239,6 +241,7 @@ object BrWaypoints2 : Module(
         on<TickEvent.End> {
             BrRoles.settingKilling = killers.ordinal + 2
             BrRoles.settingRole = when (myRole.ordinal) { 0 -> null; 1 -> 0; else -> myRole.ordinal - 1 }
+            BrRoles.doorerKills = doorerKills
             wandUser?.tick()
             if (!DungeonUtils.inDungeons) return@on
             wasInDungeon = true
@@ -442,6 +445,9 @@ object BrWaypoints2 : Module(
     /** Rooms on the rush's path by the map, and the door each is entered by (world x, z; none for Entrance). */
     private var path: Map<String, Pair<Int, Int>?> = emptyMap()
 
+    /** Each room on the rush path and its door out along it (world x, z): its wither door (Blood's room, the blood door). */
+    private var exits: Map<String, Pair<Int, Int>> = emptyMap()
+
     /** Every room the layout reaches, and its door on the Entrance side: what its roles go by off the rush too. */
     private var entrances: Map<String, Pair<Int, Int>> = emptyMap()
 
@@ -480,6 +486,7 @@ object BrWaypoints2 : Module(
             for ((next, at) in links[r].orEmpty()) if (next !== entrance && next !in back) { back[next] = r to at; queue += next }
         }
         val out = HashMap<String, Pair<Int, Int>?>()
+        val outOf = HashMap<String, Pair<Int, Int>>()
         entrance.name?.let { out[it] = null }
         val ends = witherSides + DungeonScan.rooms.filter { it.type == RoomType.BLOOD || it.name in rushed }
         for (end in ends) {
@@ -487,10 +494,12 @@ object BrWaypoints2 : Module(
             while (r !== entrance) {
                 val (prev, at) = back[r] ?: break
                 r.name?.let { out[it] = at }
+                prev.name?.let { outOf[it] = at }
                 r = prev
             }
         }
         path = out
+        exits = outOf
         entrances = back.entries.mapNotNull { (r, b) -> r.name?.let { it to b.second } }.toMap()
     }
 
@@ -552,12 +561,13 @@ object BrWaypoints2 : Module(
         val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)") + " §8· $how"
         val role = "§7you: §f" + BrRoles.describe()
         val inRoom = boxes.filter { it.room == name }
-        val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z)
+        val wither = room?.let { witherOf(name, it) }
+        val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z, wither)
         val shows = when {
             inRoom.isEmpty() -> "§8no boxes in this room"
             !BrRoles.active -> "§7showing §fall ${inRoom.size}"
-            plan == null -> "§7no plan §8— showing §fall ${inRoom.size}"
-            BrRoles.youOnDoor -> "§7on the door §8— showing §fnone"
+            plan == null -> "§7no plan" + (if (BrRoles.doorerKills && wither == null) " §8(wither door not known)" else "") + " §8— showing §fall ${inRoom.size}"
+            BrRoles.playing == null -> "§7on the door §8— showing §fnone"
             else -> {
                 val looks = inRoom.map { number(it) to BrRoles.look(plan, number(it)) }
                 val mine = looks.mapNotNull { (n, l) -> (l as? BrRoles.Look.Mine)?.let { n to it.order } }.sortedBy { it.second }.map { it.first }
@@ -630,7 +640,7 @@ object BrWaypoints2 : Module(
                 list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false, it !in liveSet) }
                 continue
             }
-            if (BrRoles.youOnDoor) continue
+            if (BrRoles.playing == null) continue
             val looks = list.map { it to BrRoles.look(plan, number(it)) }
             val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
             // The next to kill: your first box still alive.
@@ -652,15 +662,19 @@ object BrWaypoints2 : Module(
         // A miniboss room (one mob, marked on the site): everyone kills its box, from any door.
         if (BrRoles.isMini(name)) {
             val all = boxes.filter { it.room == name }.map { number(it) }
-            return BrRoles.Plan(List(maxOf(1, BrRoles.count)) { all }, List(maxOf(1, BrRoles.count)) { emptyList() })
+            return BrRoles.Plan(List(maxOf(1, BrRoles.planCount)) { all }, List(maxOf(1, BrRoles.planCount)) { emptyList() })
         }
         val door = entryOf(name) ?: return null
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
-        val plan = BrRoles.planFor(name, rel.x to rel.z)
+        val plan = BrRoles.planFor(name, rel.x to rel.z, witherOf(name, room))
         if (plan == null && debug && noPlanSaid.add("$name $door")) EngineerClient.msg("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
         return plan
     }
+
+    /** The room's wither door in its own coordinates (Doorer Kills plans go by it), if the rush path has it. */
+    private fun witherOf(name: String, room: DungeonRoom): Pair<Int, Int>? =
+        exits[name]?.let { room.getRelativeCoords(BlockPos(it.first, 0, it.second)) }?.let { it.x to it.z }
 
     private fun tileRoom(t: Pair<Int, Int>): DungeonRoom? =
         if (t.first !in 0..5 || t.second !in 0..5) null else DungeonScan.tiles[t.first + t.second * 6].room
