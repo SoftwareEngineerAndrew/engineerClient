@@ -20,6 +20,7 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.texture
+import com.odtheking.odin.utils.sendCommand
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal
@@ -97,6 +98,10 @@ object DungeonSplits : Module(
             draw(this, core.lines(serverTicks, mc.player?.name?.string, teamNames().size))
         }
     )
+    private val pasteCore = registerSetting(
+        BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when you could see all 4 teammates the whole time, so the time is exact.")
+    )
+
     /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
     private var coreGoldor: Triple<Int, net.minecraft.world.phys.Vec3, Int>? = null
 
@@ -318,11 +323,13 @@ object DungeonSplits : Module(
         if (me != null && inCoreBox(me.x, me.y, me.z)) core.onInside(me.name.string, serverTicks)
         for (mate in DungeonUtils.dungeonTeammates) {
             if (mate.isDead) continue
-            val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name } ?: continue
+            val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
             if (p === me) continue
+            if (p == null) { core.onUnseen(mate.name); continue }
             val at = p.positionCodec.base
             if (inCoreBox(at.x, at.y, at.z)) core.onInside(mate.name, serverTicks)
         }
+        pasteLastIn()
         if (core.goldorMoved != null) return
         val g = coreGoldor
         if (g == null) { bossWither(level, "Goldor")?.let { coreGoldor = Triple(it.id, it.positionCodec.base, serverTicks) }; return }
@@ -334,6 +341,21 @@ object DungeonSplits : Module(
         val ticks = (serverTicks - g.third).coerceAtLeast(1)
         if (d < 8 && d / ticks > GOLDOR_GO) core.onGoldorMoved(g.third)
         else coreGoldor = Triple(e.id, at, serverTicks)
+    }
+
+    /**
+     * Paste Last In Core: once all five are in, the last one and their time in party chat - only
+     * with four teammates all alive and each in render distance from the core opening until they
+     * were in (an unseen one's time could be late). Not in singleplayer (the P3 Sim).
+     */
+    private fun pasteLastIn() {
+        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer()) return
+        val mates = DungeonUtils.dungeonTeammates.filter { it.name != mc.player?.name?.string }
+        if (mates.size != 4 || core.count < 5) return
+        core.pasted = true
+        if (core.unseen || mates.any { it.isDead }) return
+        val (name, ticks) = core.last() ?: return
+        sendCommand("pc Last in core: $name " + GoldorCore.secs(ticks))
     }
 
     private fun inCoreBox(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y < 155.5 && z >= 54 && z < 118

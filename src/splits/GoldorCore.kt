@@ -16,12 +16,17 @@ class GoldorCore {
     /** Who came in, in order, with the ticks after the core opened. */
     private val inside = LinkedHashMap<String, Int>()
     var goldorMoved: Int? = null; private set
+    /** A teammate not yet in was out of render distance at some point: their time could be late. */
+    var unseen = false; private set
+    /** The last one in has been pasted in party chat. */
+    var pasted = false
+
     /** The server tick it stops showing on (Necron's first line + [LINGER]). */
     private var hideAt: Int? = null
 
     val watching get() = openTick != null && hideAt == null
 
-    fun reset() { openTick = null; inside.clear(); goldorMoved = null; hideAt = null }
+    fun reset() { openTick = null; inside.clear(); goldorMoved = null; hideAt = null; unseen = false; pasted = false }
 
     fun onCoreOpen(tick: Int) { reset(); openTick = tick }
 
@@ -30,6 +35,15 @@ class GoldorCore {
         val open = openTick ?: return
         if (hideAt == null && name !in inside) inside[name] = tick - open
     }
+
+    /** Teammate [name] couldn't be seen this tick: if not in yet, their time could be late. */
+    fun onUnseen(name: String) { if (openTick != null && hideAt == null && name !in inside) unseen = true }
+
+    /** How many are in. */
+    val count get() = inside.size
+
+    /** The last one in and their ticks after the core opened. */
+    fun last(): Pair<String, Int>? = inside.entries.lastOrNull()?.let { it.key to it.value }
 
     fun onGoldorMoved(tick: Int) {
         val open = openTick ?: return
