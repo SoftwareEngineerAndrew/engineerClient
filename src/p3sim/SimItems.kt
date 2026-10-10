@@ -1045,9 +1045,18 @@ object SimItems {
     /** The block the held left click last hit (null once the button is up): [clientHitBlock] handles it once a press. */
     private var hitHeld: BlockPos? = null
 
-    /** Client tick: a released attack key ends the press. */
+    /**
+     * Client tick: a released attack key ends the press. Held on a block with the Dungeonbreaker, it keeps swinging as
+     * mining does (our cancelled break gives vanilla nothing to swing for).
+     */
     @JvmStatic
-    fun clientTick() { if (!mc.options.keyAttack.isDown) hitHeld = null }
+    fun clientTick() {
+        if (!mc.options.keyAttack.isDown) { hitHeld = null; return }
+        val player = mc.player ?: return
+        val level = mc.level ?: return
+        if (mc.gui.screen() != null || player.isUsingItem || !simClient(level) || idOf(player.mainHandItem) != "DUNGEONBREAKER") return
+        if (mc.hitResult?.type == net.minecraft.world.phys.HitResult.Type.BLOCK) player.swing(net.minecraft.world.InteractionHand.MAIN_HAND, player.mainHandItem.attackAnimation, false)
+    }
 
     /**
      * A block hit on the client (DungeonbreakerSimMixin: adventure mode drops it before Fabric's
