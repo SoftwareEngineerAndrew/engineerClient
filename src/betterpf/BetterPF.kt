@@ -65,7 +65,7 @@ object BetterPF : Module(
 ) {
     private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Records each run's doorways (two blocks per door spot) - the rooms themselves come from the viewer's room library, which has them all.")
     private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed. Turn on Private Runs to keep them off the public list.")
-    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them. /betterpf gives you a link to all your runs, private ones included.")
+    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /betterpf gives you a link to all your runs, private ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way), and party chat too.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
