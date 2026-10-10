@@ -51,17 +51,20 @@ fi
 
 # Must build without the extras. Untracked compile-only jars (libs/, e.g. the Odin 26.3 port, which
 # CI downloads itself) are borrowed for the check and never committed.
-[ -d "$TEAM/libs" ] && cp -r "$TEAM/libs" "$PUB/"
+# The compile check runs in a copy kept between runs (per branch), with the Gradle daemon: only
+# what changed since the last promote is recompiled, instead of the whole tree from cold.
+CHECK="${XDG_CACHE_HOME:-$HOME/.cache}/ec-promote/${BRANCH//\//_}"
+mkdir -p "$CHECK"
+rsync -a --delete --exclude .git --exclude build --exclude .gradle --exclude .kotlin --exclude libs "$PUB/" "$CHECK/"
+[ -d "$TEAM/libs" ] && rsync -a --delete "$TEAM/libs/" "$CHECK/libs/"
 (
-  cd "$PUB"
+  cd "$CHECK"
   export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
   # The default 512 MB heap runs out on EngineerLook's tables.
-  if ! GRADLE_OPTS="-Xmx3g" "$GRADLE" -q --no-daemon -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava > build.log 2>&1; then
+  if ! "$GRADLE" -q -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava > build.log 2>&1; then
     grep -v '^w:' build.log >&2; echo "promote: the public tree does not compile" >&2; exit 1
   fi
 )
-rm -f "$PUB/build.log"
-rm -rf "$PUB/build" "$PUB/.gradle" "$PUB/.kotlin" "$PUB/libs"
 
 git -C "$PUB" add -A
 if git -C "$PUB" diff --cached --quiet; then echo "promote: nothing new to promote"; exit 0; fi
