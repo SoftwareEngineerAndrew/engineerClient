@@ -122,11 +122,14 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             sectionEnd[s] = startN
         }
         if (from >= 2) Blocks.finish("p3start")
-        // Practice: the rest of the party's part of this section done, its gate too unless it's yours.
+        // Practice: the rest of the party's part done, in this section and on to the practice's last (a custom one can
+        // run across several), the gates too unless they're yours.
         if (practice) {
             val jobs = Practice.practiceJobs()
-            stations.filter { it.section == from && it.id !in jobs }.forEach { doneAlready(it) }
-            if (from <= 3 && "gate $from" !in jobs) { gateDown[from] = true; Blocks.finish("gate$from${from + 1}") }
+            for (s in from..Practice.lastSection().coerceIn(from, 4)) {
+                stations.filter { it.section == s && it.id !in jobs }.forEach { doneAlready(it) }
+                if (s <= 3 && "gate $s" !in jobs) { gateDown[s] = true; Blocks.finish("gate$s${s + 1}") }
+            }
         }
         section = from.coerceAtMost(5)
         sectionStart[section] = startN
@@ -389,8 +392,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun openDoor(s: Int) {
         if (doorOpen[s]) return
         doorOpen[s] = true
-        // Blocks change 1 tick after the chat line (gates, doors and the core alike).
-        if (!practice) {
+        // Blocks change 1 tick after the chat line (gates, doors and the core alike). Practice: only a door on the
+        // way (before its last section) opens.
+        if (!practice || s < Practice.lastSection()) {
             Blocks.play("door$s", delay = 1)
             if (s == 1) Blocks.play("ss_s1done", delay = 1)
         }
