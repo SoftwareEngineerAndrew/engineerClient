@@ -21,7 +21,7 @@ import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.phys.Vec3
 
@@ -148,10 +148,10 @@ object RandomStuff : Module(
         on<EntityEvent.Add> {
             if (!hideArmorStands || !DungeonUtils.inDungeons) return@on
             when (entity.type) {
-                EntityTypes.ARMOR_STAND -> pendingArmorStands.add(entity as ArmorStand)
+                EntityType.ARMOR_STAND -> pendingArmorStands.add(entity as ArmorStand)
                 // The cheapest way to kill a fishing line stretched across the room: no bobber left
                 // to draw it to. On the same toggle rather than a setting of its own.
-                EntityTypes.FISHING_BOBBER -> entity.remove(Entity.RemovalReason.DISCARDED)
+                EntityType.FISHING_BOBBER -> entity.remove(Entity.RemovalReason.DISCARDED)
                 else -> {}
             }
         }

@@ -77,7 +77,7 @@ object CoffeeClient : ClientModInitializer {
     }
 
     fun chat(msg: String) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(Component.literal(msg)) }
+        mc.schedule { mc.gui.chat.addClientSystemMessage(Component.literal(msg)) }
     }
 
     /** What every line the mod says in chat starts with. */

@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
@@ -24,12 +24,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  */
 object HealthMana : Module(
     name = "Health & Mana",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "Health and mana bars in Odin's Player Display colours, and hiding Odin's Health/Mana HUDs until the stat runs low.",
     key = null,
 ) {
     private val hideUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
-    private val threshold by NumberSetting("Threshold", 50, 1, 100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideUnlessLow }
+    private val threshold by NumberSetting("Threshold", 50, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideUnlessLow }
 
     private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
         val (current, max) = when {
@@ -40,8 +40,8 @@ object HealthMana : Module(
         }
         statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth, healthBarHeight)
     }
-    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20, 200, 5, desc = "Width of the health bar.")
-    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2, 30, 1, desc = "Height of the health bar.")
+    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
+    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
 
     private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
         val (current, max) = when {
@@ -52,12 +52,12 @@ object HealthMana : Module(
         }
         statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth, manaBarHeight)
     }
-    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20, 200, 5, desc = "Width of the mana bar.")
-    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2, 30, 1, desc = "Height of the mana bar.")
+    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.")
+    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.")
 
     /**
      * Whether Odin's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
-     * % is on and the stat is above the threshold. Read by HudElementMixin for every Odin HUD element; only
+     * % is on and the stat is above the threshold. Read by OdinHuds for every Odin HUD element; only
      * those two are ever skipped.
      */
     fun hidesOdinHud(hud: HudElement): Boolean {

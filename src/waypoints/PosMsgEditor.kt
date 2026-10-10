@@ -2,11 +2,10 @@ package com.engineerclient.waypoints
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.features.impl.dungeon.PositionalMessages
-import com.odtheking.odin.features.impl.dungeon.PositionalMessages.PosMessage
+import com.engineerclient.waypoints.PositionalMessages.PosMessage
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.render.drawCylinder
 import com.odtheking.odin.utils.render.drawFilledBox
@@ -15,7 +14,7 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
 /**
- * Edits Odin's positional-message shapes (/posmsg) in game with the same wand and feel as
+ * Edits the positional-message shapes (/posmsg) in game with the same wand and feel as
  * [BrWaypoints2]'s role boxes. Toggled with `/ec posmsg edit`; the wand is BR Roles' ("Make Held
  * Item Wand"). With it on and the wand in hand:
  *
@@ -25,9 +24,9 @@ import net.minecraft.world.phys.Vec3
  *  - A cylinder (/posmsg at: a point and a radius, no corners): select it by looking at it; it has
  *    one "face", its rim, so every push/pull grows/shrinks the radius a block (min 1). Drop deletes.
  *
- * Edits replace the entry in Odin's own [PositionalMessages.posMessageStrings] (PosMessage is
+ * Edits replace the entry in [PositionalMessages.posMessageStrings] (PosMessage is
  * immutable; message, delay, colour and send flag are kept) and call Odin's config save, so the
- * stored format is Odin's, unchanged. Creating boxes stays with /posmsg (they need a message).
+ * stored format is the one Odin's module had, unchanged. Creating boxes stays with /posmsg (they need a message).
  */
 object PosMsgEditor {
 
@@ -61,16 +60,10 @@ object PosMsgEditor {
         if (BrWaypoints2.posmsgRetrigger) rearm()
     }
 
-    /** Odin's private once-per-world set of sent posmsgs (cleared only on a world load). */
-    private val sentField by lazy {
-        runCatching { PositionalMessages::class.java.getDeclaredField("sentMessages").apply { isAccessible = true } }.getOrNull()
-    }
-
-    /** Re-arms every sent posmsg you are no longer in (Odin's own tests: box contains your position, radius by 3D distance). */
+    /** Re-arms every sent posmsg you are no longer in (the module's own tests: box contains your position, radius by 3D distance). */
     private fun rearm() {
         val p = mc.player ?: return
-        @Suppress("UNCHECKED_CAST")
-        val sent = sentField?.get(null) as? MutableSet<PosMessage> ?: return
+        val sent = PositionalMessages.sentMessages
         if (sent.isEmpty()) return
         val pos = p.position()
         sent.removeIf { m ->
@@ -83,9 +76,9 @@ object PosMsgEditor {
     private fun editing() = editMode && mc.screen == null && BrWaypoints2.wandInHand()
 
     init {
-        on<RenderEvent.Extract> {
+        on<RenderExtractEvent> {
             if (!editMode) return@on
-            // Odin draws the shapes itself while Show Positions is on; if it is off, show them here.
+            // The module draws the shapes itself while Show Positions is on; if it is off, show them here.
             val odinDraws = PositionalMessages.settings["Show Positions"]?.value == true
             if (!odinDraws) for (s in shapes()) {
                 if (s.isBox) drawWireFrameBox(AABB(s.min[0], s.min[1], s.min[2], s.max[0], s.max[1], s.max[2]), s.msg.color, 1f, false)

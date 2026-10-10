@@ -204,7 +204,7 @@ object HudCapture {
     private fun tab(full: Boolean) {
         val mc = DevgineerClient.mc
         if (mc.player == null) return
-        val overlay = mc.gui.hud.tabList
+        val overlay = mc.gui.tabList
         val acc = overlay as RecTabOverlayAccessor
         val infos = acc.`dc$recPlayerInfos`()
         if (full) tabCache.clear()
@@ -294,7 +294,7 @@ object HudCapture {
 
     /** Boss bars as held by the HUD (progress as drawn, mid-animation), and whether Odin's listeners let it draw. */
     private fun bars(full: Boolean) {
-        val events = (DevgineerClient.mc.gui.hud.bossOverlay as RecBossOverlayAccessor).`dc$recEvents`()
+        val events = (DevgineerClient.mc.gui.bossOverlay as RecBossOverlayAccessor).`dc$recEvents`()
         drawn.keys.retainAll(events.keys)
         val sb = StringBuilder(256)
         var i = 0
@@ -325,7 +325,7 @@ object HudCapture {
 
     /** What the title and action bar show right now, with their timers. */
     private fun hudState() {
-        val g = DevgineerClient.mc.gui.hud as RecGuiAccessor
+        val g = DevgineerClient.mc.gui as RecGuiAccessor
         val sb = StringBuilder(256)
         sb.append(kf(true)).append("\"what\":\"state\",\"title\":"); comp(sb, g.`dc$recTitle`())
         sb.append(",\"subtitle\":"); comp(sb, g.`dc$recSubtitle`())
@@ -349,7 +349,7 @@ object HudCapture {
             RichJson.component(sb, t.displayName); sb.append(',')
             RichJson.component(sb, t.playerPrefix); sb.append(',')
             RichJson.component(sb, t.playerSuffix); sb.append(',')
-            sb.append(RecorderFiles.q(t.color.map { it.serializedName }.orElse("reset"))).append(",[")
+            sb.append(RecorderFiles.q(t.color.serializedName)).append(",[")
             t.players.sorted().forEachIndexed { k, p -> if (k > 0) sb.append(','); sb.append(RecorderFiles.q(p)) }
             sb.append("]]")
         }

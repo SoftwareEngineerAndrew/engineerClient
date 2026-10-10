@@ -3,7 +3,7 @@ package com.engineerclient.practice
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.mixin.MinecraftAccessor
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
@@ -15,11 +15,12 @@ import com.odtheking.odin.features.impl.boss.SimonSays
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.createSoundSettings
 import com.odtheking.odin.utils.playSoundSettings
+import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
 import net.minecraft.world.phys.AABB
 import com.odtheking.odin.events.TickEvent
@@ -72,13 +73,13 @@ import java.util.Locale
  */
 object SimonSaysPractice : Module(
     name = "SS Practice",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
     key = null,
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", GLFW.GLFW_KEY_UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
-    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
+    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
     private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")
     private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one. Here and on the real device in P3 (turns Odin's own Custom Click Sounds off).")
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown", desc = "").withDependency { clickSounds }
@@ -798,13 +799,13 @@ object SimonSaysPractice : Module(
             jobs.removeAll(due.toSet())
             for (j in due) if (j.gen == gen) EngineerClient.safely("ss practice") { j.run() }
         }
-        on<RenderEvent.Extract> {
+        on<RenderExtractEvent> {
             val p = placed ?: return@on
             if (!solver || p.level !== mc.level) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
-                    drawStyledBox(solverBox(p, lamp), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, 2, true)
+                    drawStyledBox(solverBox(p, lamp), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, BoxStyle.FILLED_OUTLINE, true)
                 }
                 return@on
             }
@@ -812,7 +813,7 @@ object SimonSaysPractice : Module(
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
                 val lamp = lampAt(revealed[i])
-                drawStyledBox(solverBox(p, lamp), colour, 2, true)
+                drawStyledBox(solverBox(p, lamp), colour, BoxStyle.FILLED_OUTLINE, true)
             }
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution. After

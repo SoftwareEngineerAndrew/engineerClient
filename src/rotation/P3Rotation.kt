@@ -5,7 +5,7 @@ import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.PacketEvent
 import net.minecraft.network.chat.Component
@@ -43,7 +43,7 @@ import net.minecraft.sounds.SoundEvents
  */
 object P3Rotation : Module(
     name = "Dynamic Term Roles",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "Tracks the phase-3 terminal rotation and shows the role you are on.",
     key = null,
 ) {
@@ -81,9 +81,9 @@ object P3Rotation : Module(
 
     /** Odin's `createSoundSettings`, plus a default pitch. Same four settings, same Play button. */
     private fun soundSettings(name: String, sound: String, pitchDefault: Float, deps: () -> Boolean): () -> Triple<String, Float, Float> {
-        val id = +StringSetting(name, sound, desc = "Sound id, as /playsound takes it.", length = 64).withDependency { deps() }
-        val pitch = +NumberSetting("$name Pitch", pitchDefault, 0.1f, 2f, 0.01f, desc = "Pitch.").withDependency { deps() }
-        val volume = +NumberSetting("$name Volume", 1f, 0.1f, 1f, 0.01f, desc = "Volume.").withDependency { deps() }
+        val id = +StringSetting(name, sound, desc = "Sound id, as /playsound takes it.", length = 64, placeholder = "").withDependency { deps() }
+        val pitch = +NumberSetting("$name Pitch", pitchDefault, 0.1..2.0, 0.01f, desc = "Pitch.").withDependency { deps() }
+        val volume = +NumberSetting("$name Volume", 1f, 0.1..1.0, 0.01f, desc = "Volume.").withDependency { deps() }
         val get = { Triple(id.value, volume.value, pitch.value) }
         +ActionSetting("Play $name", desc = "Plays it.") { playSoundSettings(get()) }.withDependency { deps() }
         return get

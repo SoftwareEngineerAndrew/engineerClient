@@ -91,7 +91,7 @@ object BetterPFMenu : Module(
             return
         }
         inWorldAt = now
-        val screen = CoffeeClient.mc.gui.screen() as? AbstractContainerScreen<*>
+        val screen = CoffeeClient.mc.screen as? AbstractContainerScreen<*>
         val open = screen != null && clean(screen.title.string).startsWith("Party Finder")
         if (open) lastOpen = now
         if (now - lastRead >= 1_000L) {

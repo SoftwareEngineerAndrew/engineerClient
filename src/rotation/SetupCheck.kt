@@ -3,7 +3,7 @@ package com.engineerclient.rotation
 import com.engineerclient.EngineerClient
 import com.engineerclient.EcConfig
 import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.features.impl.dungeon.PositionalMessages
+import com.engineerclient.waypoints.PositionalMessages
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.GraphicsPreset
 
@@ -24,12 +24,12 @@ object SetupCheck {
     fun run(): List<Item> {
         val items = mutableListOf<Item>()
 
-        fun moduleOn(name: String, why: String) {
+        fun moduleOn(name: String, why: String, owner: String = "Odin") {
             val m = module(name)
             items += when {
-                m == null -> Item(false, "Odin $name: not found", "is Odin loaded?")
-                m.enabled -> Item(true, "Odin $name on")
-                else -> Item(false, "Odin $name is OFF", why)
+                m == null -> Item(false, "$owner $name: not found", "is Odin loaded?")
+                m.enabled -> Item(true, "$owner $name on")
+                else -> Item(false, "$owner $name is OFF", why)
             }
         }
         fun settingOn(module: String, setting: String, why: String) {
@@ -45,7 +45,7 @@ object SetupCheck {
         moduleOn("Invincibility Timer", "it is what announces your procs")
         settingOn("Invincibility Timer", "Announce Invincibility", "the mask gate needs everyone's procs in party chat")
         moduleOn("Dungeon Waypoints", "EC's waypoints do not render without it")
-        moduleOn("Positional Messages", "the arrival texts come from its boxes")
+        moduleOn("Positional Messages", "the arrival texts come from its boxes", "EC")
 
         // The exact texts the rotation waits on must exist as boxes.
         val have = PositionalMessages.posMessageStrings

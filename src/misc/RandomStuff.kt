@@ -1,7 +1,7 @@
 package com.engineerclient.misc
 
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
@@ -36,7 +36,7 @@ import net.minecraft.world.item.ItemDisplayContext
  */
 object RandomStuff : Module(
     name = "Random Stuff",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "A collection of small unrelated QoL toggles.",
     key = null,
 ) {
@@ -56,7 +56,7 @@ object RandomStuff : Module(
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
-    private val itemSwingSpeed by NumberSetting("Item Swing Speed", 1.0, 0.05, 2.0, 0.05, desc = "How fast your arm and held item swing: below 1x slower, above faster. Only the animation; attacks and clicks are unchanged.", unit = "x")
+    private val itemSwingSpeed by NumberSetting("Item Swing Speed", 1.0, 0.05..2.0, 0.05, desc = "How fast your arm and held item swing: below 1x slower, above faster. Only the animation; attacks and clicks are unchanged.", unit = "x")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
 
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
@@ -74,7 +74,7 @@ object RandomStuff : Module(
     // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
     // — six full-screen passes — and only for the frames a screen is actually open.
     private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
-    private val blurStrength by NumberSetting("Blur Strength", 4, 1, 10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
+    private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
 
     // --- Enchantment glint ---------------------------------------------------------------------
     //
@@ -105,7 +105,7 @@ object RandomStuff : Module(
 
     private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
     private val skipLoadingScreen by BooleanSetting("Skip Loading Screen", true, desc = "No \"Loading terrain\" screen when joining or changing world: the world shows as it loads in.")
-    private val clickGuiScale by NumberSetting("Click GUI Size", 1.55f, 1.0, 4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.").hide()
+    private val clickGuiScale by NumberSetting("Click GUI Size", 1.55f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
     private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
 
     // --- Scoreboard lines ----------------------------------------------------------------------
@@ -162,7 +162,7 @@ object RandomStuff : Module(
     fun cleansMenus(): Boolean = enabled && cleanMenus
 
     /** Click GUI Size: read by ClickGuiSizeMixin each time Odin's menu opens; 0 leaves Odin's own size. */
-    fun clickGuiSize(): Float = 0f  // Odin 0.3.4 (Minecraft 26.1.2): no menu scale to set; the setting is hidden
+    fun clickGuiSize(): Float = if (enabled) clickGuiScale else 0f
 
     /**
      * Whether text drawn at pose scale [scale] should be sampled smoothly (ClickGuiTextMixin): only in

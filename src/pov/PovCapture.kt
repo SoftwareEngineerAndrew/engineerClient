@@ -1,6 +1,7 @@
 package com.engineerclient.pov
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.OdinHuds
 import com.engineerclient.mixin.CameraAccessor
 import com.engineerclient.mixin.GameRendererInvoker
 import com.engineerclient.mixin.MinecraftAccessor
@@ -240,17 +241,9 @@ object PovCapture {
     private fun redrawKeptHuds(gfx: GuiGraphicsExtractor) {
         val keep = PovPreviews.keptHudNames()
         if (keep.isEmpty()) return
-        val scale = EngineerClient.mc.window.guiScale.toFloat()
-        if (scale <= 0f) return
-        gfx.pose().pushMatrix()
-        gfx.pose().scale(1f / scale, 1f / scale)
-        try {
-            for (hud in ModuleManager.hudSettingsCache) {
-                if (!hud.isEnabled || hud.name !in keep) continue
-                EngineerClient.safely("pov keep hud ${hud.name}") { hud.value.draw(gfx, false) }
-            }
-        } finally {
-            gfx.pose().popMatrix()
+        for (hud in ModuleManager.hudSettingsCache) {
+            if (!hud.isEnabled || hud.name !in keep) continue
+            EngineerClient.safely("pov keep hud ${hud.name}") { OdinHuds.redraw(gfx, hud) }
         }
     }
 

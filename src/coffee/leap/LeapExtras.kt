@@ -129,7 +129,7 @@ object LeapExtras : Module(
      * way). Grey where nobody is, or outside a dungeon.
      */
     private fun drawOutline(g: GuiGraphicsExtractor) {
-        if (!enabled || !leapOutline || !LeapMenu.enabled || CoffeeClient.mc.gui.screen() != null || !ShowIn.allows(showIn.ordinal)) return
+        if (!enabled || !leapOutline || !LeapMenu.enabled || CoffeeClient.mc.screen != null || !ShowIn.allows(showIn.ordinal)) return
         val window = CoffeeClient.mc.window
         val halfW = window.guiScaledWidth / 2
         val halfH = window.guiScaledHeight / 2

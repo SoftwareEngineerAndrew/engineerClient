@@ -92,7 +92,7 @@ object EnvOptions {
         }
         m["effectiveRenderDistance"] = runCatching { o.effectiveRenderDistance.toString() }.getOrDefault("null")
         m["cameraType"] = value(o.cameraType)
-        m["hideGui"] = mc.gui.hud.isHidden.toString()
+        m["hideGui"] = o.hideGui.toString()
         m["smoothCamera"] = o.smoothCamera.toString()
         m["pauseOnLostFocus"] = o.pauseOnLostFocus.toString()
         m["advancedItemTooltips"] = o.advancedItemTooltips.toString()

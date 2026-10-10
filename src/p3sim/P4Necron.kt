@@ -1,5 +1,7 @@
 package com.engineerclient.p3sim
 
+import net.minecraft.world.entity.EntityType
+import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import net.minecraft.core.BlockPos
@@ -8,7 +10,6 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LightningBolt
 import net.minecraft.world.entity.item.PrimedTnt
 import net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball
@@ -244,7 +245,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private fun stats(first: Boolean) {
         val bar = "§a§l" + "▬".repeat(64)
         val classes = CLASSES.split(",")
-        val mine = classes[P3Sim.classS.value.coerceIn(0, 4)]
+        val mine = classes[P3Sim.classS.index.coerceIn(0, 4)]
         val total = Stats.runTicks()
         val scoreLine = "Team Score: §r§a${score} §r§f(§r§b§lS+§r§f)"
         val defeated = if (total > 0) "§r§c☠ §r§eDefeated §r§cMaxor, Storm, Goldor, and Necron §r§ein §r§a%02dm %02ds".format(total / 1200, total / 20 % 60) else null

@@ -8,7 +8,7 @@ import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -59,7 +59,7 @@ import java.util.zip.GZIPInputStream
  */
 object BetterPF : Module(
     name = "Better PF",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
     key = null,
 ) {
@@ -76,7 +76,7 @@ object BetterPF : Module(
      * A secret this install sends with every upload, so the site can list this player's runs -
      * private ones included - for whoever has it: the link /betterpf gives. Made on first use.
      */
-    private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /betterpf's link.").hide()
+    private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /betterpf's link.", placeholder = "").hide()
 
     private fun token(): String {
         if (ownerToken.length < 32) {
@@ -87,7 +87,7 @@ object BetterPF : Module(
         return ownerToken
     }
 
-    private val cameraFpsSetting by NumberSetting("Camera FPS", 30, 20, 160, 10, desc = "How many times a second your view is saved (at most - never more than the game draws). Higher makes your POV in the viewer smoother on a high refresh rate screen; each 60 more adds about 3% to a run.")
+    private val cameraFpsSetting by NumberSetting("Camera FPS", 30, 20..160, 10, desc = "How many times a second your view is saved (at most - never more than the game draws). Higher makes your POV in the viewer smoother on a high refresh rate screen; each 60 more adds about 3% to a run.")
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
@@ -125,7 +125,7 @@ object BetterPF : Module(
         }
 
         // Every rendered frame: your own camera, so POV replays show exactly what you saw.
-        on<RenderEvent.Last> {
+        on<RenderExtractEvent> {
             val s = session ?: return@on
             val player = EngineerClient.mc.player ?: return@on
             val pt = EngineerClient.mc.deltaTracker.getGameTimeDeltaPartialTick(true)

@@ -1,9 +1,8 @@
 package com.engineerclient.splits
 
-import com.engineerclient.enumSelector
 import com.engineerclient.EngineerClient
 import com.engineerclient.misc.Witherborn
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
@@ -44,7 +43,7 @@ import net.minecraft.world.level.block.Blocks
  */
 object DungeonSplits : Module(
     name = "Sub Splits",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "The blood rush sub splits, room by room. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
@@ -58,8 +57,8 @@ object DungeonSplits : Module(
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
-    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "").hide()
-    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "").hide()
+    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
+    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "", placeholder = "").hide()
     private val resetBests by ActionSetting("Reset Sub Split Bests", desc = "Forgets every boss sub split's best time (the gold ones), on F7 and M7.") {
         bestsF7 = ""; bestsM7 = ""
         com.odtheking.odin.features.ModuleManager.saveConfigurations()
@@ -87,11 +86,11 @@ object DungeonSplits : Module(
     /** The HUD is on: its detail settings only show then. */
     private fun hudOn() = bloodHud.value.enabled
 
-    private val bloodLevel = registerSetting(enumSelector("Blood Rush Detail", BloodRunDetail.Level.COMPACT, desc = "How much the Blood Rush sub-split HUD shows. Debug adds every extra moment known about it."))
+    private val bloodLevel = registerSetting(SelectorSetting("Blood Rush Detail", BloodRunDetail.Level.COMPACT, desc = "How much the Blood Rush sub-split HUD shows. Debug adds every extra moment known about it."))
         .withDependency { hudOn() }
     private val totalRow = registerSetting(
         BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
-    ).withDependency { hudOn() && bloodLevel.value == BloodRunDetail.Level.COMPACT.ordinal }
+    ).withDependency { hudOn() && bloodLevel.value == BloodRunDetail.Level.COMPACT }
     private val bloodHideInBoss = registerSetting(
         BooleanSetting("Blood Rush Hide In Boss", false, desc = "Hides the blood rush sub splits once you are in the boss.")
     ).withDependency { hudOn() }
@@ -447,7 +446,7 @@ object DungeonSplits : Module(
     /** The blood rush HUD's lines, at its detail level; none in the boss with Hide In Boss on. */
     private fun bloodLines(): List<String> {
         if (bloodHideInBoss.enabled && DungeonUtils.inBoss) return emptyList()
-        return blood.lines(BloodRunDetail.Level.entries[bloodLevel.value], now(), totalRow.enabled)
+        return blood.lines(bloodLevel.value, now(), totalRow.enabled)
     }
 
     /**

@@ -2,7 +2,7 @@ package com.coffeeclient.misc
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.Minecraft
-import org.lwjgl.sdl.SDLMouse
+import org.lwjgl.glfw.GLFW
 
 /**
  * Random Stuff's Force Cursor Reset. Opening a menu warps the cursor to the middle of the window
@@ -26,9 +26,9 @@ object CursorReset {
         val mc = Minecraft.getInstance()
         if (mc.mouseHandler.isMouseGrabbed) return
         val window = mc.window
-        SDLMouse.SDL_HideCursor()
-        SDLMouse.SDL_WarpMouseInWindow(window.handle(), window.screenWidth / 2f, window.screenHeight / 2f)
-        SDLMouse.SDL_ShowCursor()
+        GLFW.glfwSetInputMode(window.handle(), GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_HIDDEN)
+        GLFW.glfwSetCursorPos(window.handle(), window.screenWidth / 2.0, window.screenHeight / 2.0)
+        GLFW.glfwSetInputMode(window.handle(), GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL)
     }
 
     fun register() {

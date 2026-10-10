@@ -6,7 +6,8 @@ import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.equalsOneOf
-import com.odtheking.odin.utils.render.roundedFill
+import com.odtheking.odin.utils.render.roundedRect
+import com.odtheking.odin.utils.render.roundedRectOutlined
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.ui.widget.CustomGUIImpl
@@ -76,7 +77,7 @@ object LeapHighlight {
             if (player.name == "Empty") continue
             val r = odinBox(i)
             if (i == index) outline(gfx, r[0], r[1], r[2], r[3], color, 9)
-            else if (P3Rotation.dimOthers) gfx.roundedFill(r[0], r[1], r[2], r[3], DIM.rgba, 9)
+            else if (P3Rotation.dimOthers) gfx.roundedRect(r[0], r[1], r[2], r[3], DIM.rgba, 9f)
         }
     }
 
@@ -113,7 +114,7 @@ object LeapHighlight {
             val y0 = (i / 2) * (PH + PGAP)
             val name = names[i]
             if (i == index) outline(gfx, x0, y0, x0 + PW, y0 + PH, color, 4)
-            else gfx.roundedFill(x0, y0, x0 + PW, y0 + PH, PBOX.rgba, 4)
+            else gfx.roundedRect(x0, y0, x0 + PW, y0 + PH, PBOX.rgba, 4f)
             if (name == "Empty") continue
             val shown = if (font.width(name) > PW - 6) font.plainSubstrByWidth(name, PW - 10) + "…" else name
             val text = (if (i == index) "§f§l" else "§7") + shown
@@ -150,6 +151,6 @@ object LeapHighlight {
     private fun outline(gfx: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int, color: Color, radius: Int) {
         // A translucent wash plus a hard ring: the wash reads at a glance, the ring survives
         // being drawn over Odin's own coloured box.
-        gfx.roundedFill(x0, y0, x1, y1, color.withAlpha(0.18f).rgba, radius, color.rgba, 2.5f)
+        gfx.roundedRectOutlined(x0, y0, x1, y1, color.withAlpha(0.18f).rgba, color.rgba, 2.5f, radius.toFloat())
     }
 }

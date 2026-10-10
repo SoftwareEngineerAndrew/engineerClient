@@ -21,7 +21,7 @@ import net.minecraft.network.protocol.game.ClientboundRespawnPacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.BlockState
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -114,9 +114,9 @@ object MaxorCrystals : Module(
             is ClientboundSystemChatPacket -> if (!p.overlay) chat(p.content.string.replace(CONTROL_CODES, ""))
             is ClientboundAddEntityPacket -> {
                 // Not a Witherborn wither (full Storm armor): it is never Maxor.
-                if (p.type == EntityTypes.WITHER && !com.devgineerclient.splits.Witherborn.onSpawn(p.id, p.x, p.y, p.z)) withers += p.id
+                if (p.type == EntityType.WITHER && !com.devgineerclient.splits.Witherborn.onSpawn(p.id, p.x, p.y, p.z)) withers += p.id
                 val m = model ?: return
-                if (p.type != EntityTypes.END_CRYSTAL) return
+                if (p.type != EntityType.END_CRYSTAL) return
                 if (p.y > 231) { m.crystalsBack(ticks); return }
                 val side = PYLONS.entries.firstOrNull { (_, c) -> kotlin.math.abs(p.x - c[0]) < 1.5 && kotlin.math.abs(p.z - c[2]) < 1.5 }?.key ?: return
                 m.placed(side, ticks)

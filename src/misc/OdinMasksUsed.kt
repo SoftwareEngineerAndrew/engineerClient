@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.events.LevelEvent
@@ -20,7 +20,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 object OdinMasksUsed {
 
     private val onlyUsed = BooleanSetting("Only Used", false, desc = "Only show the masks and Phoenix that have saved you this run. Added by engineerClient.")
-        .withDependency { (InvincibilityTimer.settings["Invincibility Hud"] as? DropdownSetting)?.value ?: true }
+        .withDependency { (InvincibilityTimer.settings["Displayed Items"] as? DropdownSetting)?.value ?: true }
 
     /** Same messages Odin procs on: Spirit, Bonzo, Phoenix. */
     private val PROCS = listOf(
