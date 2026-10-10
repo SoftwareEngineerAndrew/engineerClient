@@ -309,6 +309,8 @@ object Practice {
         return leapWaypoints.size
     }
 
+    fun removeLeapWaypoint() { if (leapWaypoints.isNotEmpty()) leapWaypoints.removeAt(leapWaypoints.size - 1); save() }
+
     /** Where leap menu slot [i] (0-3) lands in the custom practice running, null: as usual. */
     fun leapWaypoint(i: Int): Spots.Spot? = if (setup?.name == "Custom") leapWaypoints.getOrNull(i) else null
 
