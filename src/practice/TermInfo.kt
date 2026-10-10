@@ -72,6 +72,8 @@ object TermInfo : Module(
     private val timeHud by HUD("Section Time", "The last terminal section's time, for a few seconds after it's done.", true, 420, 330, 5f) { example ->
         if (example) return@HUD lines(this, listOf("§514.35"))
         if (!sectionTimes) return@HUD 0 to 0
+        // P3 Sim practice: the Practice Time HUD has the screen while it shows a practice's end.
+        if (com.engineerclient.p3sim.Practice.endTicks >= 0 && System.currentTimeMillis() - com.engineerclient.p3sim.Practice.endMs < 4000) return@HUD 0 to 0
         val (text, at) = shownTime ?: return@HUD 0 to 0
         if (System.currentTimeMillis() - at > sectionSeconds * 1000) return@HUD 0 to 0
         lines(this, listOf(text))
@@ -140,6 +142,18 @@ object TermInfo : Module(
         sectionStart = serverTicks
     }
 
+    private fun inPractice() = com.engineerclient.p3sim.Practice.active && com.engineerclient.p3sim.P3Sim.inSim
+
+    /**
+     * P3 Sim practice: a section's time as the sim measured it ([ticks], server ticks), shown as
+     * Section Time. Term Info can't follow a practice itself: the rest of the section is done
+     * without chat.
+     */
+    @JvmStatic
+    fun simSectionTime(ticks: Int) {
+        if (inPractice()) shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
+    }
+
     /** Devonian's TerminalSection.onChat, for the active section only. */
     private fun onTaskChat(msg: String) {
         val cur = current() ?: return
@@ -182,8 +196,8 @@ object TermInfo : Module(
         }
 
         if (cur.termsDone >= cur.terms && cur.leversDone >= 2 && cur.deviceDone && cur.gateDestroyed) {
-            val now = System.currentTimeMillis()
-            shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to now
+            // In P3 Sim practice the sim times the sections itself ([simSectionTime]).
+            if (!inPractice()) shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to System.currentTimeMillis()
             sectionStart = serverTicks
             active++
         }

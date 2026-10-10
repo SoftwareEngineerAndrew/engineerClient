@@ -15,7 +15,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  *  - Random Stuff's Hide Health/Mana Above %: Odin's Health HUD and Mana HUD draw nothing while the
  *    stat is above the threshold. The HUD editor (example = true) always draws them.
  *  - The Engineer Splits look: for Odin's two Splits HUDs, [OdinSplitsLook.render] draws instead.
- *  - P3 Sim practice: the P3 tick timers and Term Info draw nothing ([PRACTICE_HIDDEN]).
+ *  - P3 Sim practice: the P3 tick timers and Term Info's progress draw nothing ([PRACTICE_HIDDEN]).
  * It is also what POV Previews calls to draw a kept HUD a second time, above the previews.
  */
 object OdinHuds {
@@ -32,8 +32,8 @@ object OdinHuds {
         }
     }
 
-    /** Hidden in P3 Sim practice: Term Info's two, our Goldor Tick and Odin's Goldor Hud. */
-    private val PRACTICE_HIDDEN = setOf("Term Info", "Section Time", "Goldor Tick", "Goldor Hud")
+    /** Hidden in P3 Sim practice: Term Info (Section Time stays: the sim feeds it), our Goldor Tick and Odin's Goldor Hud. */
+    private val PRACTICE_HIDDEN = setOf("Term Info", "Goldor Tick", "Goldor Hud")
 
     private val draws = HashMap<HUDSetting, Draw>()
     private var pending: Draw? = null

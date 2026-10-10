@@ -22,6 +22,7 @@ object Stats {
         sections[s] = ticks
         val best = best("S$s", ticks)
         if (P3Sim.showTimes) Sim.note("§fS$s§7 ${s(ticks)}$best")
+        com.engineerclient.practice.TermInfo.simSectionTime(ticks)
     }
 
     // ------------------------------------------------------------------ personal bests
