@@ -88,6 +88,7 @@ object UploadPacker {
     /** Ticks of mob and player lines a "cols" line holds; a stretch bigger than [COLS_MAX] is split. */
     private const val COLS_TICKS = 200
     private const val COLS_MAX = 100_000 // (the site takes lines up to 128 KB)
+    private const val NL = "\n" // never newLine(): on Windows that is "\r\n"
     private const val CAM_TOLERANCE = 0.05
     private const val CAM_GAP = 1.95
     private const val COVER_MARGIN = 600
@@ -125,7 +126,8 @@ object UploadPacker {
      * chat and notices, friends coming online, friend requests, and what /g online, /g info and
      * /f list show. Hypixel writes them "From [RANK] name: ...", "To name: ...", "Guild > ...",
      * "Officer > ...", "Co-op > ...", "Friend > ...", or as boxes of several lines - any line of a
-     * message being one of these leaves the whole message out. Party chat stays: the viewer uses it.
+     * message being one of these leaves the whole message out. Party chat is only left out with Hide
+     * Private Chats on ([partyChat]): the viewer uses it.
      * Used both while recording (Hide Private Chats) and on upload (always).
      */
     private val PRIVATE_LINE = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > |Friend request from |You are now friends with |-*\s*Friends \(Page |Guild Name: |Total Members: |Online Members: |Offline Members: |-- .+ --$)""")
@@ -135,9 +137,12 @@ object UploadPacker {
         PRIVATE_LINE.containsMatchIn(l) || (!l.startsWith("Party > ") && PRIVATE_ANYWHERE.containsMatchIn(l))
     }
 
-    /** A "chat" line whose message is private (see [privateChat]); one that can't be read is left out too. */
-    private fun privateChatLine(line: String): Boolean =
-        runCatching { (JsonParser.parseString(line).asJsonObject["m"] as? JsonPrimitive)?.asString?.let(::privateChat) ?: false }.getOrDefault(true)
+    /** Party chat ("Party > [RANK] name: ..."): left out too with Hide Private Chats on. */
+    fun partyChat(text: String): Boolean = text.lineSequence().any { it.trim().startsWith("Party > ") }
+
+    /** A "chat" line whose message is private (see [privateChat]), or party chat with [party]; one that can't be read is left out too. */
+    private fun privateChatLine(line: String, party: Boolean): Boolean =
+        runCatching { (JsonParser.parseString(line).asJsonObject["m"] as? JsonPrimitive)?.asString?.let { privateChat(it) || (party && partyChat(it)) } ?: false }.getOrDefault(true)
 
     /** A projectile, followed through the file for its "proj" line. */
     internal class Proj(val spawn: JsonObject) {
@@ -340,22 +345,22 @@ object UploadPacker {
      * Preset 6: 17% smaller than 3 for about three times the CPU (a few seconds, on the upload's
      * low-priority thread, after the run) and about 100 MB while it packs.
      */
-    fun pack(file: Path, scan: Scan, sibling: ByteArray?): Pair<Path, Int> {
+    fun pack(file: Path, scan: Scan, sibling: ByteArray?, hideParty: Boolean = false): Pair<Path, Int> {
         // Whatever is wrong with a party member's upload, this one goes up - whole, if need be.
         val sib = sibling?.let { b ->
             runCatching { readSibling(b.inputStream()) }.onFailure { log.warn("[ec] betterpf: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
         }
         if (sib != null) {
             try {
-                return write(file, scan, sib)
+                return write(file, scan, sib, hideParty)
             } catch (e: Exception) {
                 log.warn("[ec] betterpf: packing with a party member's upload failed, packing it whole", e)
             }
         }
-        return write(file, scan, null)
+        return write(file, scan, null, hideParty)
     }
 
-    private fun write(file: Path, scan: Scan, sibling: Sibling?): Pair<Path, Int> {
+    private fun write(file: Path, scan: Scan, sibling: Sibling?, hideParty: Boolean): Pair<Path, Int> {
         // Nothing is left out unless the two recordings line up by their block changes: by start
         // time alone (or a recording that only claims to be of this run) is too unsure to trust.
         val aligned = sibling?.let { lineUp(scan, it) }
@@ -365,7 +370,7 @@ object UploadPacker {
         val players = sib?.let { Players(scan, it, aligned!!) }
         val out = Files.createTempFile("betterpf-upload-", ".jsonl.xz")
         try {
-            writeTo(file, scan, out, drop, players)
+            writeTo(file, scan, out, drop, players, hideParty)
         } catch (t: Throwable) {
             Files.deleteIfExists(out)
             throw t
@@ -373,7 +378,7 @@ object UploadPacker {
         return out to drop.size
     }
 
-    private fun writeTo(file: Path, scan: Scan, out: Path, drop: Set<Int>, players: Players?) {
+    private fun writeTo(file: Path, scan: Scan, out: Path, drop: Set<Int>, players: Players?, hideParty: Boolean) {
         var camLine = 0
         val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
@@ -382,7 +387,7 @@ object UploadPacker {
                 var kept = (if (drop.isEmpty()) line else keep(line, drop) ?: return).let { fold(it, scan) ?: return }
                 if (kept.startsWith("{\"k\":\"cam\"")) kept = thin(kept, scan.camKeep.getOrNull(camLine++)) ?: return
                 // (the world's lines carry ticks, but aren't in the timeline: none of them start a stretch)
-                if (!timed) { if (players?.keepsWorld(kept) != false) { w.write(kept); w.newLine() }; return }
+                if (!timed) { if (players?.keepsWorld(kept) != false) { w.write(kept); w.write(NL) }; return }
                 if (players == null) cols.put(kept) else players.put(kept, cols::put)
             }
             // The first line (meta), the layout and the world's lines; then everything else.
@@ -390,12 +395,14 @@ object UploadPacker {
                 var first = true
                 for (line in r.lineSequence()) {
                     if (first) {
-                        first = false; put(line, timed = false); scan.layout?.let { w.write(it); w.newLine() }
+                        first = false; put(line, timed = false); scan.layout?.let { w.write(it); w.write(NL) }
                         for (l in scan.world) put(l, timed = false)
                         continue
                     }
+                    // A line cut short (a crash part way through writing it) would get the whole run refused.
+                    if (!line.startsWith("{") || !line.endsWith("}")) continue
                     val kind = kindOf(line)
-                    if (kind == "chat" && privateChatLine(line)) continue
+                    if (kind == "chat" && privateChatLine(line, hideParty)) continue
                     if (kind !in WORLD) put(line)
                 }
             }
@@ -466,7 +473,7 @@ object UploadPacker {
             val head = HEAD.find(line)
             val t = head?.groupValues?.get(2)?.toInt()
             if (t != null && t >= end) { flush(); end = (t / COLS_TICKS + 1) * COLS_TICKS }
-            if (end < 0) { w.write(line); w.newLine(); return }
+            if (end < 0) { w.write(line); w.write(NL); return }
             val list = items[head?.groupValues?.get(1)]
             if (list != null && t != null) list += Item(t, JsonParser.parseString(line).asJsonObject.getAsJsonArray("d"), others.size, ord++)
             else others += line
@@ -476,14 +483,14 @@ object UploadPacker {
 
         private fun flush() {
             for ((kind, list) in items) if (list.isNotEmpty()) { write(kind, list); list.clear() }
-            for (l in others) { w.write(l); w.newLine() }
+            for (l in others) { w.write(l); w.write(NL) }
             others.clear(); ord = 0
         }
 
         private fun write(kind: String, list: List<Item>) {
             val line = encode(kind, list)
             if (line.length > COLS_MAX && list.size > 1) { write(kind, list.subList(0, list.size / 2)); write(kind, list.subList(list.size / 2, list.size)); return }
-            w.write(line); w.newLine()
+            w.write(line); w.write(NL)
         }
 
         /** One "cols" line: the lines' ticks, places and order, then per mob/player the lines it's in, its rows' lengths and its columns. */
