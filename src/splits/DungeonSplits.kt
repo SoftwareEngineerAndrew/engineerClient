@@ -93,13 +93,13 @@ object DungeonSplits : Module(
     /** The Goldor sub split: each leap into the core after S4 and Goldor starting to move ([GoldorCore]). */
     private val core = GoldorCore()
     private val goldorHud = registerSetting(
-        HUD("Goldor Sub Split", "From the core opening after S4: when each player leapt into the core and when Goldor started moving, in exact server ticks. Up until 10 s into Necron.", true, 750, 10, 1f) { example ->
-            if (example) return@HUD draw(this, listOf("§eCore", "§fYou §a0.05s", "§7Teammate §a0.50s", "§7Another §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
-            draw(this, core.lines(serverTicks, mc.player?.name?.string, teamNames().size))
+        HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Up until 10 s into Necron.", true, 750, 10, 1f) { example ->
+            if (example) return@HUD draw(this, listOf("§eCore", "§7Teammate §3-2.40s", "§fYou §a0.05s", "§7Another §8~0.50s", "§7Last §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
+            draw(this, core.lines(serverTicks, mc.player?.name?.string, aliveNames()))
         }
     )
     private val pasteCore = registerSetting(
-        BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when you could see all 4 teammates the whole time, so the time is exact.")
+        BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died.")
     )
 
     /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
@@ -259,7 +259,9 @@ object DungeonSplits : Module(
             // starting to move, which he does once everyone is in.
             if (open(SplitTracker.GOLDOR) && moments.waitingForCore) watchGoldor(level, trusted = inCore == null) else goldorAt = null
 
-            if (core.watching) watchCore(level)
+            // The Goldor sub split: watched from S4's start (or the core opening).
+            subs.s4Start?.let { core.onS4(it.tick) }
+            if (core.active) watchCore(level)
 
             // The Watcher moving off his starting spot, once his first spawns are out.
             if (open(SplitTracker.BLOOD) && moments.waitingForWatcher) watchWatcher(level)
@@ -319,18 +321,19 @@ object DungeonSplits : Module(
      * view, not moving.
      */
     private fun watchCore(level: net.minecraft.client.multiplayer.ClientLevel) {
-        val me = mc.player
-        if (me != null && inCoreBox(me.x, me.y, me.z)) core.onInside(me.name.string, serverTicks)
-        for (mate in DungeonUtils.dungeonTeammates) {
-            if (mate.isDead) continue
-            val p = mate.entity ?: level.players().firstOrNull { it.name.string == mate.name }
-            if (p === me) continue
-            if (p == null) { core.onUnseen(mate.name); continue }
-            val at = p.positionCodec.base
-            if (inCoreBox(at.x, at.y, at.z)) core.onInside(mate.name, serverTicks)
+        if (core.look(serverTicks)) {
+            val me = mc.player
+            val alive = aliveNames()
+            if (me != null && me.name.string in alive) core.observe(me.name.string, inCoreBox(me.x, me.y, me.z), serverTicks)
+            for (mate in DungeonUtils.dungeonTeammates) {
+                if (mate.name !in alive || mate.name == me?.name?.string) continue
+                val p = mate.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == mate.name }
+                val at = p?.positionCodec?.base
+                core.observe(mate.name, at?.let { inCoreBox(it.x, it.y, it.z) }, serverTicks)
+            }
+            pasteLastIn()
         }
-        pasteLastIn()
-        if (core.goldorMoved != null) return
+        if (core.openTick == null || core.goldorMoved != null) return
         val g = coreGoldor
         if (g == null) { bossWither(level, "Goldor")?.let { coreGoldor = Triple(it.id, it.positionCodec.base, serverTicks) }; return }
         val e = level.getEntity(g.first) ?: run { coreGoldor = null; return }
@@ -344,21 +347,37 @@ object DungeonSplits : Module(
     }
 
     /**
-     * Paste Last In Core: once all five are in, the last one and their time in party chat - only
-     * with four teammates all alive and each in render distance from the core opening until they
-     * were in (an unseen one's time could be late). Not in singleplayer (the P3 Sim).
+     * Paste Last In Core: once all five are in, the last one and their time in party chat, once -
+     * only with four teammates all alive and every time exact ([GoldorCore.pasteLine]). Not in
+     * singleplayer (the P3 Sim).
      */
     private fun pasteLastIn() {
         if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer()) return
-        val mates = DungeonUtils.dungeonTeammates.filter { it.name != mc.player?.name?.string }
-        if (mates.size != 4 || core.count < 5) return
+        val me = mc.player?.name?.string ?: return
+        val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
+        if (mates.size != 4 || mates.any { it.isDead }) return
+        val alive = aliveNames()
+        if (core.lastIn(alive) == null) return
         core.pasted = true
-        if (core.unseen || mates.any { it.isDead }) return
-        val (name, ticks) = core.last() ?: return
-        sendCommand("pc Last in core: $name " + GoldorCore.secs(ticks))
+        core.pasteLine(alive)?.let { sendCommand("pc $it") }
     }
 
-    private fun inCoreBox(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y < 155.5 && z >= 54 && z < 118
+    /** You and your teammates still alive: a dead one is no longer waited for. */
+    private fun aliveNames(): List<String> {
+        val me = mc.player?.name?.string
+        val mates = DungeonUtils.dungeonTeammates
+        val out = mates.filter { !it.isDead }.mapTo(ArrayList()) { it.name }
+        if (me != null && mates.none { it.name == me }) out += me
+        return out.distinct()
+    }
+
+    /**
+     * The inner chamber: the core and the space at its door (z >= 54). From S4's start nobody
+     * leaves it (Hypixel snaps you back): in 79 recorded F7 runs no one was seen out of it again
+     * before the core opened. Its floor is y 115 (nobody below 110 before Goldor set off); under it
+     * is the drop to Necron, which a wipe can put people in.
+     */
+    private fun inCoreBox(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y >= 110 && y < 155.5 && z >= 54 && z < 118
 
     /** The TNT seen in the last 2 server ticks of Necron's fight, for his death's burst. */
     private val necronTnt = ArrayDeque<Stamp>()
