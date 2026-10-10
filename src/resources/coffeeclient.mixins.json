@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.coffeeclient.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "CameraOffsetMixin",
+    "CursorResetMixin",
+    "LocalPlayerRotationAccessor",
+    "NoRotateMixin",
+    "GuiSidebarInvoker",
+    "ScoreboardSidebarMixin",
+    "SoundChannelMixin",
+    "SoundVolumeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
