@@ -4,8 +4,8 @@ import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.utils.sendCommand
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
@@ -66,6 +66,29 @@ object BrRoles {
     /** The role whose boxes are yours: [mine], or on the door with [doorerKills] the last one. */
     val playing: Int? get() = mine ?: planCount.takeIf { doorerKills && youOnDoor && it > 0 }
 
+    /** In master mode: the site's M7 roles, where each is a class. */
+    val master: Boolean get() = DungeonUtils.floor?.isMM == true
+
+    /**
+     * Your role before party chat: in master mode your class's (the site's M7 roles: 1 Archer,
+     * 2 Mage, 3 Berserk, 4 Tank, the Healer on the door) once the tab list has it, else the
+     * setting. All Boxes keeps roles off either way.
+     */
+    private val baseRole: Int?
+        get() {
+            val s = settingRole ?: return null
+            if (!master) return s
+            val cls = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(me, ignoreCase = true) }?.clazz
+            return when (cls) {
+                DungeonClass.ARCHER -> 1
+                DungeonClass.MAGE -> 2
+                DungeonClass.BERSERK -> 3
+                DungeonClass.TANK -> 4
+                DungeonClass.HEALER -> 0
+                else -> s
+            }
+        }
+
     /** What party chat said this run, over the settings. */
     private var chatCount: Int? = null
     private var chatMine: Int? = null
@@ -75,11 +98,11 @@ object BrRoles {
      * setting is All Boxes, or a role the team size doesn't have.
      */
     val count: Int
-        get() = chatCount ?: settingRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
+        get() = chatCount ?: baseRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
 
     /** Whether you are on the door: you said so in chat, or it is your setting and chat hasn't given you a role. */
     val youOnDoor: Boolean
-        get() = doorClaim?.equals(me, ignoreCase = true) ?: (settingRole == 0 && chatMine == null)
+        get() = doorClaim?.equals(me, ignoreCase = true) ?: (baseRole == 0 && chatMine == null)
 
     /** Whether roles decide what you see: there is a team size and you have a role or the door. */
     val active: Boolean
@@ -90,7 +113,7 @@ object BrRoles {
         get() {
             if (youOnDoor) return null
             chatMine?.let { return it }
-            return settingRole?.takeIf { it in 1..count }
+            return baseRole?.takeIf { it in 1..count }
         }
     /** Who has which role, in the order they said so. */
     private val taken = LinkedHashMap<String, Int>()
@@ -176,7 +199,7 @@ object BrRoles {
 
     /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". */
     fun describe(): String {
-        val from = if (chatCount != null || doorClaim != null) "party chat" else "settings"
+        val from = (if (chatCount != null || doorClaim != null) "party chat" else if (master) "class" else "settings") + if (master) ", M7 roles" else ""
         return when {
             count == 0 -> "roles off"
             youOnDoor -> (if (doorerKills) "door (kills, role $planCount)" else "door") + ", $count killing ($from)"
@@ -271,11 +294,11 @@ object BrRoles {
         if (count == 0) return null
         if (doorerKills) {
             if (wither == null) return null
-            if (DungeonUtils.floor == Floor.M7) doorerIn(doorerM7Plans, room, door, wither)?.let { return it }
+            if (master) doorerIn(doorerM7Plans, room, door, wither)?.let { return it }
             return doorerIn(doorerPlans, room, door, wither)
         }
-        // In M7 its own roles, else (none set for this room yet) the other floors'.
-        if (DungeonUtils.floor == Floor.M7) planIn(m7Plans, room, door)?.let { return it }
+        // In master mode the M7 roles, else (none set for this room yet) the other floors'.
+        if (master) planIn(m7Plans, room, door)?.let { return it }
         return planIn(plans, room, door)
     }
 

@@ -38,7 +38,8 @@ object PosMsgSetup {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             PositionalMessages.registerCommand(dispatcher)
             // Brigadier merges this into /posmsg's tree.
-            dispatcher.register(literal("posmsg").then(literal("edit").executes { DevgineerClient.mc.execute { PosMsgEditor.toggle() }; 1 }))
+            dispatcher.register(literal("posmsg").then(literal("edit").executes { DevgineerClient.mc.execute { PosMsgEditor.toggle() }; 1 })
+                .then(literal("wand").executes { DevgineerClient.mc.execute { com.engineerclient.waypoints.BrWaypoints2.makeWand() }; 1 }))
         }
     }
 
