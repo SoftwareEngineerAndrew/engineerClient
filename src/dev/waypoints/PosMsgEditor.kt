@@ -1,11 +1,15 @@
-package com.engineerclient.waypoints
+package com.devgineerclient.waypoints
 
-import com.engineerclient.EngineerClient
-import com.engineerclient.EngineerClient.mc
+import com.engineerclient.waypoints.BoxFaces
+import com.engineerclient.waypoints.BrWaypoints2
+import com.engineerclient.waypoints.Face
+
+import com.devgineerclient.DevgineerClient
+import com.devgineerclient.DevgineerClient.mc
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.ModuleManager
-import com.engineerclient.waypoints.PositionalMessages.PosMessage
+import com.devgineerclient.waypoints.PositionalMessages.PosMessage
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.render.drawCylinder
 import com.odtheking.odin.utils.render.drawFilledBox
@@ -15,7 +19,7 @@ import net.minecraft.world.phys.Vec3
 
 /**
  * Edits the positional-message shapes (/posmsg) in game with the same wand and feel as
- * [BrWaypoints2]'s role boxes. Toggled with `/ec posmsg edit`; the wand is BR Roles' ("Make Held
+ * [BrWaypoints2]'s role boxes. Toggled with `/posmsg edit`; the wand is BR Roles' ("Make Held
  * Item Wand"). With it on and the wand in hand:
  *
  *  - A box (/posmsg in): look through it to select the side behind, stand inside and look up to
@@ -28,7 +32,7 @@ import net.minecraft.world.phys.Vec3
  * immutable; message, delay, colour and send flag are kept) and call Odin's config save, so the
  * stored format is the one Odin's module had, unchanged. Creating boxes stays with /posmsg (they need a message).
  */
-object PosMsgEditor {
+object PosMsgEditor : BrWaypoints2.WandUser {
 
     private var editMode = false
     private var useHeld = false
@@ -51,11 +55,11 @@ object PosMsgEditor {
 
     fun toggle() {
         editMode = !editMode
-        EngineerClient.msg("§dPosMsg §7edit mode " + if (editMode) "§aon§7 (wand in hand; BR Roles' wand)" else "§coff")
-        if (editMode && !BrWaypoints2.wandInHand()) EngineerClient.msg("§7Set the wand first: BR Roles > Edit Mode > Make Held Item Wand.")
+        DevgineerClient.msg("§dPosMsg §7edit mode " + if (editMode) "§aon§7 (wand in hand; BR Roles' wand)" else "§coff")
+        if (editMode && !BrWaypoints2.wandInHand()) DevgineerClient.msg("§7Set the wand first: BR Roles > Edit Mode > Make Held Item Wand.")
     }
 
-    fun tick() {
+    override fun tick() {
         if (!mc.options.keyUse.isDown) useHeld = false
         if (PositionalMessages.retrigger) rearm()
     }
@@ -117,8 +121,7 @@ object PosMsgEditor {
     }
 
     /** Scroll up / left click (+1) or scroll down / right click (-1). True swallows the input. */
-    @JvmStatic
-    fun onMove(by: Int): Boolean {
+    override fun onMove(by: Int): Boolean {
         if (!editing()) return false
         val (s, face) = target(1f) ?: return false
         val m = s.msg
@@ -142,24 +145,21 @@ object PosMsgEditor {
         return true
     }
 
-    @JvmStatic
-    fun blocksContinueAttack(): Boolean = editing() && target(1f) != null
+    override fun blocksContinueAttack(): Boolean = editing() && target(1f) != null
 
-    @JvmStatic
-    fun onUse(): Boolean {
+    override fun onUse(): Boolean {
         if (!editing() || target(1f) == null) return false
         if (!useHeld) { useHeld = true; onMove(-1) }
         return true
     }
 
     /** Drop: delete the shape you are looking at. True means the drop must not happen. */
-    @JvmStatic
-    fun onDrop(): Boolean {
+    override fun onDrop(): Boolean {
         if (!editing()) return false
         val (s, _) = target(1f) ?: return false
         list().removeAt(s.i)
         ModuleManager.saveConfigurations()
-        EngineerClient.msg("§dPosMsg §7deleted: §f${s.msg.message}")
+        DevgineerClient.msg("§dPosMsg §7deleted: §f${s.msg.message}")
         return true
     }
 
@@ -169,6 +169,6 @@ object PosMsgEditor {
         val x = Math.floor(p.x); val y = Math.floor(p.y); val z = Math.floor(p.z)
         list().add(PosMessage(x, y, z, x + 1, y + 1, z + 1, 0, null, com.odtheking.odin.utils.Colors.WHITE, text, false))
         ModuleManager.saveConfigurations()
-        com.engineerclient.EngineerClient.msg("§dPosmsg §7added §f\"$text\" §7at ${x.toInt()}, ${y.toInt()}, ${z.toInt()}")
+        DevgineerClient.msg("§dPosmsg §7added §f\"$text\" §7at ${x.toInt()}, ${y.toInt()}, ${z.toInt()}")
     }
 }
