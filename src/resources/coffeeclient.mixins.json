@@ -6,8 +6,6 @@
   "client": [
     "CameraOffsetMixin",
     "CursorResetMixin",
-    "LocalPlayerRotationAccessor",
-    "NoRotateMixin",
     "OldBlockingMixin",
     "GuiSidebarInvoker",
     "LeverClickMixin",
