@@ -4,7 +4,7 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonElement
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
@@ -897,9 +897,21 @@ object BrWaypoints2 : Module(
 
     /** The saved boxes: per room, each as x1 y1 z1 x2 y2 z2 and its number (its place in the room). */
     private fun read(): MutableMap<String, MutableList<IntArray>> = runCatching {
-        val type = object : TypeToken<MutableMap<String, MutableList<IntArray>>>() {}.type
-        gson.fromJson<MutableMap<String, MutableList<IntArray>>>(file.readText(), type)
-    }.getOrNull() ?: mutableMapOf()
+        rooms(JsonParser.parseString(file.readText())).mapValues { it.value.orEmpty().filterNotNull().toMutableList() }.toMutableMap()
+    }.onFailure { if (file.exists()) EngineerClient.logger.info("[ec] brboxes: file unreadable: $it") }.getOrNull() ?: mutableMapOf()
+
+    /**
+     * Rooms of int arrays, by hand: Gson's reflective path can't make an int[] inside a generic
+     * List (26.3's Gson calls it an abstract class), so nothing loaded.
+     */
+    private fun rooms(json: JsonElement?): Map<String, List<IntArray?>?> {
+        val obj = json?.takeIf { it.isJsonObject }?.asJsonObject ?: return emptyMap()
+        return obj.entrySet().associate { (name, list) ->
+            name to list.takeIf { it.isJsonArray }?.asJsonArray?.map { b ->
+                b.takeIf { it.isJsonArray }?.asJsonArray?.let { a -> runCatching { IntArray(a.size()) { a[it].asInt } }.getOrNull() }
+            }
+        }
+    }
 
     private fun write() {
         runCatching {
@@ -929,8 +941,7 @@ object BrWaypoints2 : Module(
         if (at != 0L && at <= siteVersion) return log.info("[ec] brboxes: already have $at")
         savedFile.value // load this file's boxes before its age is compared with the site's
         if (at == 0L || (file.exists() && file.lastModified() > at)) return log.info("[ec] brboxes: kept the local file (site $at, file ${file.lastModified()})")
-        val type = object : TypeToken<Map<String?, List<IntArray?>?>>() {}.type
-        val rooms = runCatching { siteBoxes(gson.fromJson<Map<String?, List<IntArray?>?>>(site["rooms"], type)) }.onFailure { log.info("[ec] brboxes: rooms unreadable: $it") }.getOrNull() ?: return
+        val rooms = runCatching { siteBoxes(rooms(site["rooms"])) }.onFailure { log.info("[ec] brboxes: rooms unreadable: $it") }.getOrNull() ?: return
         log.info("[ec] brboxes: took the site's ${rooms.size} rooms, ${rooms.values.sumOf { it.size }} boxes")
         siteVersion = at
         saved.clear(); saved.putAll(rooms)
@@ -945,12 +956,12 @@ object BrWaypoints2 : Module(
      * at most [SITE_MAX_SIZE] blocks across, in rooms with sensible names, [SITE_MAX_BOXES] in all -
      * so a bad copy can't put huge boxes in the world or fill memory.
      */
-    private fun siteBoxes(rooms: Map<String?, List<IntArray?>?>): MutableMap<String, MutableList<IntArray>> {
+    private fun siteBoxes(rooms: Map<String, List<IntArray?>?>): MutableMap<String, MutableList<IntArray>> {
         val out = HashMap<String, MutableList<IntArray>>()
         var n = 0
         for ((name, list) in rooms) {
             if (n >= SITE_MAX_BOXES) break
-            if (name.isNullOrEmpty() || name.length > 64 || list == null) continue
+            if (name.isEmpty() || name.length > 64 || list == null) continue
             val ok = list.filterNotNull().filter { b -> b.size == 7 && (0..2).all { Math.abs(b[it + 3].toLong() - b[it]) <= SITE_MAX_SIZE } }.take(SITE_MAX_BOXES - n)
             n += ok.size
             if (ok.isNotEmpty()) out[name] = ok.toMutableList()
