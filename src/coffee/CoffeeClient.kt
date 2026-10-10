@@ -2,6 +2,7 @@ package com.coffeeclient
 
 import com.coffeeclient.leap.LeapExtras
 import com.coffeeclient.misc.CameraOffset
+import com.coffeeclient.misc.OldBlocking
 import com.coffeeclient.misc.EntityDistance
 import com.coffeeclient.misc.Termsim
 import com.coffeeclient.misc.PreRequeue
@@ -30,7 +31,7 @@ object CoffeeClient : ClientModInitializer {
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, BetterPFMenu, CameraOffset, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, BetterPFMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
