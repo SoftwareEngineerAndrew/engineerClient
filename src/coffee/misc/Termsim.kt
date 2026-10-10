@@ -8,6 +8,9 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.SecretClicked
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
+import net.minecraft.sounds.SoundEvents
+import net.minecraft.sounds.SoundSource
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.Blocks
 
 /**
@@ -40,14 +43,31 @@ object Termsim : Module(
     private val secretBox by lazy { SecretClicked::class.java.getDeclaredMethod("secretBox", BlockPos::class.java).apply { isAccessible = true } }
     private val secretChime by lazy { SecretClicked::class.java.getDeclaredMethod("secretChime").apply { isAccessible = true } }
 
-    /** A left click on [pos] (LeverClickMixin), before the game handles it. Client thread. */
+    /**
+     * A left click on [pos] (LeverClickMixin), before the game handles it. Client thread. True when
+     * it is a lever this takes: the click then goes no further - no dig packet, no block-hit sound -
+     * and it sounds as a right click does, the lever's click and the chime.
+     */
     @JvmStatic
-    fun onLeftClickBlock(pos: BlockPos) {
-        if (!enabled || !leverClicks || !SecretClicked.enabled || !DungeonUtils.inDungeons) return
-        if (CoffeeClient.mc.level?.getBlockState(pos)?.`is`(Blocks.LEVER) != true) return
+    fun onLeftClickBlock(pos: BlockPos): Boolean {
+        if (!takesLever(pos)) return false
         CoffeeClient.safely("lever click") {
             secretBox.invoke(SecretClicked, pos)
             secretChime.invoke(SecretClicked)
+            val level = CoffeeClient.mc.level ?: return@safely
+            // The pitch a right click's toggle would make: 0.6 turning it on, 0.5 off.
+            val on = level.getBlockState(pos).getValue(BlockStateProperties.POWERED)
+            level.playLocalSound(pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.3f, if (on) 0.5f else 0.6f, false)
         }
+        return true
+    }
+
+    /** Holding left click on a lever this takes: kept from mining it (hit sounds, dig packets). */
+    @JvmStatic
+    fun holdsLever(pos: BlockPos): Boolean = takesLever(pos)
+
+    private fun takesLever(pos: BlockPos): Boolean {
+        if (!enabled || !leverClicks || !SecretClicked.enabled || !DungeonUtils.inDungeons) return false
+        return CoffeeClient.mc.level?.getBlockState(pos)?.`is`(Blocks.LEVER) == true
     }
 }
