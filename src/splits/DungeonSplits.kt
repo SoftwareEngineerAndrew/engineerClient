@@ -93,7 +93,7 @@ object DungeonSplits : Module(
     /** The Goldor sub split: each leap into the core after S4 and Goldor starting to move ([GoldorCore]). */
     private val core = GoldorCore()
     private val goldorHud = registerSetting(
-        HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Up until 10 s into Necron.", true, 750, 10, 1f) { example ->
+        HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Shown until the run ends.", true, 750, 10, 1f) { example ->
             if (example) return@HUD draw(this, listOf("§eCore", "§7Teammate §3-2.40s", "§fYou §a0.05s", "§7Another §8~0.50s", "§7Last §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
             draw(this, core.lines(serverTicks, mc.player?.name?.string, aliveNames()))
         }
@@ -192,7 +192,7 @@ object DungeonSplits : Module(
                     subs.onChat(text, at)
                     blood.onChat(text, at)
                     if (text == CORE_OPEN) core.onCoreOpen(at.tick)
-                    else if (text.startsWith(NECRON_LINE)) core.onNecron(at.tick)
+                    else if (text.startsWith(NECRON_LINE)) core.onNecron()
                 }
             }
         }

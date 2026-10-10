@@ -29,18 +29,18 @@ class GoldorCore {
     /** The last look ([round]) each player was in view in: a look is a client tick, so server lag can't fake a gap. */
     private val seen = HashMap<String, Int>()
     private var round = 0
-    /** The server tick it stops showing on (Necron's first line + [LINGER]). */
-    private var hideAt: Int? = null
+    /** Necron has spoken: nothing more to watch (it keeps showing until the run ends). */
+    private var necron = false
 
     /** The server tick of the latest [look]. */
     private var now = 0
 
     /** Watching who comes in: from the start until [GRACE] ticks after Goldor sets off. */
-    val watching get() = startTick != null && hideAt == null && goldorMoved.let { g -> g == null || now < openTick!! + g + GRACE }
-    /** Showing (from the start until [LINGER] into Necron). */
-    val active get() = startTick != null && hideAt == null
+    val watching get() = startTick != null && !necron && goldorMoved.let { g -> g == null || now < openTick!! + g + GRACE }
+    /** Following Goldor and the core (from the start until Necron). */
+    val active get() = startTick != null && !necron
 
-    fun reset() { startTick = null; openTick = null; goldorMoved = null; pasted = false; inside.clear(); seen.clear(); round = 0; hideAt = null }
+    fun reset() { startTick = null; openTick = null; goldorMoved = null; pasted = false; inside.clear(); seen.clear(); round = 0; necron = false }
 
     /** S4 started on [tick]. */
     fun onS4(tick: Int) { if (startTick == null) startTick = tick }
@@ -77,7 +77,7 @@ class GoldorCore {
         if (goldorMoved == null) goldorMoved = tick - open
     }
 
-    fun onNecron(tick: Int) { if (startTick != null && hideAt == null) hideAt = tick + LINGER }
+    fun onNecron() { if (startTick != null) necron = true }
 
     fun entry(name: String): Entry? = inside[name]
 
@@ -109,7 +109,7 @@ class GoldorCore {
      * view the tick before) grey with ~; who of [alive] isn't in yet, with "...".
      */
     fun lines(now: Int, me: String?, alive: Collection<String>): List<String> {
-        if (startTick == null || hideAt?.let { now >= it } == true) return emptyList()
+        if (startTick == null) return emptyList()
         val open = openTick
         val out = mutableListOf(if (open == null) "§eCore §8(S4)" else "§eCore")
         val last = lastIn(alive)
@@ -145,7 +145,6 @@ class GoldorCore {
     }
 
     companion object {
-        const val LINGER = 200
         /**
          * Server ticks still watched after Goldor sets off: his setting off is seen from his
          * position, which can come in a tick or two before the last one's (in 35 recorded runs, up
