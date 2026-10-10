@@ -425,8 +425,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The progress pling comes with this line too.
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
         SimItems.gatePuffs(GATE_CENTRES[s], GATE_BOXES[s])
-        // Practice: only your own blowing it takes it down (not the 5 s auto gate).
-        if (!practice || by == Sim.me) Blocks.play("gate$s${s + 1}", delay = 1)
+        // Practice: the gate's blocks stay, even when you blow it (it still counts as blown).
+        if (!practice) Blocks.play("gate$s${s + 1}", delay = 1)
         if (sectionEnd[s] >= 0) openDoor(s)
         return true
     }
