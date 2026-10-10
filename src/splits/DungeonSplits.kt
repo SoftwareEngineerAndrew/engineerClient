@@ -300,7 +300,8 @@ object DungeonSplits : Module(
      * floor, since players stand as low as y 64 during the fight.
      */
     private fun everyoneInCore(level: net.minecraft.client.multiplayer.ClientLevel): Boolean? {
-        val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
+        // The dead count as in: a ghost can be anywhere (DeadPlayers has them before the tab list does).
+        val alive = DungeonUtils.dungeonTeammates.filter { !com.engineerclient.DeadPlayers.isDead(it) }
         if (alive.isEmpty()) return false
         var unseen = false
         for (mate in alive) {
