@@ -24,6 +24,8 @@ import net.minecraft.world.entity.boss.wither.WitherBoss
  *  - Clear Countdown: from the Watcher's first line (blood open), 50 s of camp and 4 s of portal
  *    to the boss. Gone at 4 s left if the Watcher hasn't let you go by then; when he does ("You
  *    may pass" - the portal, which you are typically through about 4 s later) it is set to 4 s.
+ *  - Exit Core Text: "EXIT CORE", as the PORTAL text, for 0.8 s once the core has opened and every
+ *    teammate alive is inside it (the inner chamber, as the splits' core box).
  *  - Maxor Move: Maxor starts moving 85 ticks after his first line (80-87 in 38 recorded runs).
  *  - Crystal Spawn: after a laser hit (Maxor becoming damageable) the top crystals come back 40
  *    ticks later.
@@ -36,7 +38,7 @@ import net.minecraft.world.entity.boss.wither.WitherBoss
 object Timers : Module(
     name = "Timers",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Countdowns through a run: clear, Maxor moving, crystals, Storm, Necron and relics (Goldor's death tick: Odin's Goldor Hud).",
+    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Storm, Necron and relics (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {
     private val showTicks by BooleanSetting("Show Ticks", false, desc = "The timers below the Clear Countdown in server ticks instead of seconds.")
@@ -53,6 +55,10 @@ object Timers : Module(
         draw("§d§lPORTAL")
     }
     private val portalChime by BooleanSetting("Portal Chime", true, desc = "A chime when the portal spawns.")
+    private val exitCoreHud by HUD("Exit Core Text", "\"EXIT CORE\" in pink on screen for 0.8 s once the core has opened and everyone has leapt in.", true, 400, 160, 4f) { example ->
+        if (!example && (!enabled || exitCoreUntil - serverTicks <= 0)) return@HUD 0 to 0
+        draw("§d§lEXIT CORE")
+    }
 
     // --- Boss timers -------------------------------------------------------------------------------
 
@@ -88,6 +94,7 @@ object Timers : Module(
     private const val CAMP_TICKS = 50 * 20
     private const val PORTAL_TICKS = 4 * 20
     private const val PORTAL_TEXT = 36
+    private const val EXIT_CORE_TEXT = 16
     private const val MAXOR_MOVE = 85
     private const val CRYSTALS_BACK = 40
     private const val CRUSH_PERIOD = 20
@@ -105,6 +112,7 @@ object Timers : Module(
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
     private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
+    private const val CORE_OPENING = "The Core entrance is opening!"
     private const val NECRON_DROP_LINE = "[BOSS] Necron: I'm afraid, your journey ends now."
     private const val NECRON_DEAD = "[BOSS] Necron: All this, for nothing..."
 
@@ -115,6 +123,10 @@ object Timers : Module(
     private var portalOpen = false
     /** Server tick the PORTAL text goes off on. */
     private var portalUntil = 0
+    /** From the core opening until everyone is in it. */
+    private var coreOpen = false
+    /** Server tick the EXIT CORE text goes off on. */
+    private var exitCoreUntil = 0
     private var maxorMoveAt: Int? = null
     private var inMaxor = false
     private var crystalsAt: Int? = null
@@ -172,6 +184,7 @@ object Timers : Module(
             message == STORM_START -> { inMaxor = false; crystalsAt = null; stormStart = serverTicks - 1; stormDead = false }
             message == STORM_DEAD -> stormDead = true
             message == GOLDOR_START -> stormStart = null
+            message == CORE_OPENING -> coreOpen = true
             message == NECRON_DROP_LINE -> necronDropAt = serverTicks + NECRON_DROP
             message == NECRON_DEAD -> if (DungeonUtils.floor?.name?.startsWith("M") == true) relicsAt = serverTicks + RELICS
         }
@@ -199,8 +212,30 @@ object Timers : Module(
         maxorHealth = hp
     }
 
+    /**
+     * Once the core is open: you and every teammate alive inside it, others where the server last put
+     * them. Someone out of view holds it back. Client thread.
+     */
+    private fun watchCore() {
+        if (!coreOpen) return
+        val level = mc.level ?: return
+        val me = mc.player ?: return
+        if (!inCore(me.x, me.y, me.z)) return
+        for (mate in DungeonUtils.dungeonTeammates) {
+            if (mate.isDead || mate.name == me.name.string) continue
+            val p = mate.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == mate.name } ?: return
+            val at = p.positionCodec.base
+            if (!inCore(at.x, at.y, at.z)) return
+        }
+        coreOpen = false
+        exitCoreUntil = serverTicks + EXIT_CORE_TEXT
+    }
+
+    /** The inner chamber: the core and the space at its door (DungeonSplits' core box). */
+    private fun inCore(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y >= 110 && y < 155.5 && z >= 54 && z < 118
+
     private fun reset() {
-        bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0
+        bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
         stormStart = null; stormDead = false; necronDropAt = null; relicsAt = null
     }
@@ -220,7 +255,7 @@ object Timers : Module(
             else if (at - serverTicks <= 0) bossAt = null
         }
 
-        on<TickEvent.End> { watchMaxor() }
+        on<TickEvent.End> { watchMaxor(); watchCore() }
 
         on<LevelEvent.Load> { reset() }
     }
