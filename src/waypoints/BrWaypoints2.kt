@@ -57,20 +57,12 @@ import com.mojang.blaze3d.platform.InputConstants
 import java.io.File
 
 /**
- * Boxes that group a room's starred mobs, drawn and sized in game with a "wand" — any item you pick
- * with "Make Held Item Wand". With Edit Mode on and the wand in hand:
- *
- *  - Drop places a 1x1x1 box on the block at your feet, or deletes the box you are looking at.
- *  - Look through a box to select the side behind ([BoxFaces]); stand inside it and look up to
- *    select its top. Left click or scroll up pushes it out a block, right click or scroll down
- *    pulls it in. A box never
- *    gets thinner than a block, and its bottom never moves.
+ * Boxes that group a room's starred mobs, made on undonecoffee.com/brroles and pulled from there.
  *
  * A starred mob whose body overlaps a box where it was first seen is claimed by that box (the box
  * it overlaps most, if several); one in no box goes to the nearest box in its room within 5
  * blocks. Boxes are purple and show only in the room you are in; a box hides once all its mobs
- * are dead or the map shows the room cleared (never deleted), unless Keep All Boxes or Edit Mode
- * is on.
+ * are dead or the map shows the room cleared (never deleted).
  *
  * Boxes are saved per room, relative to the room, so they come back in any run and any rotation.
  *
@@ -82,20 +74,13 @@ import java.io.File
 object BrWaypoints2 : Module(
     name = "BR Roles",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made in game with a wand.",
+    description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made on undonecoffee.com/brroles.",
     key = null,
 ) {
 
-    private var editMode by BooleanSetting("Edit Mode", false, desc = "Edits only happen while this is on. Off, the wand is just an item.")
-
-    private val editKey by KeybindSetting("Edit Mode Keybind", InputConstants.UNKNOWN, "Toggles Edit Mode.").onPress {
-        editMode = !editMode
-        EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
-    }
-
     /**
-     * Another editor sharing the wand (the /posmsg editor, where it is installed): each tick, and
-     * asked first about every wand click, scroll and drop - true when it took it.
+     * An editor using the wand (the /posmsg editor, where it is installed; `/posmsg wand` sets it):
+     * each tick, and asked about every wand click, scroll and drop - true when it took it.
      */
     interface WandUser {
         fun tick()
@@ -107,23 +92,15 @@ object BrWaypoints2 : Module(
 
     @Volatile var wandUser: WandUser? = null
 
-    private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
+    /** Makes the item in your hand the wand, for a [wandUser]. */
+    fun makeWand() {
         val held = mc.player?.mainHandItem
-        if (held == null || held.isEmpty) return@ActionSetting EngineerClient.msg("§cHold the item you want as the wand first.")
+        if (held == null || held.isEmpty) return EngineerClient.msg("§cHold the item you want as the wand first.")
         wand = identity(held)
         EngineerClient.msg("§aWand set: §f${held.hoverName.string}")
-    }.withDependency { editMode }
+    }
 
-    private val clearRoom by ActionSetting("Clear Room", desc = "Deletes every box in the room you are standing in, saved ones included.") {
-        val room = DungeonUtils.currentRoom?.name ?: return@ActionSetting EngineerClient.msg("§cYou are not in a dungeon room.")
-        val gone = boxes.count { it.room == room }
-        boxes.removeAll { it.room == room }
-        saved.remove(room)
-        write()
-        EngineerClient.msg("§aCleared §f$gone §abox${if (gone == 1) "" else "es"} from §f$room§a.")
-    }.withDependency { editMode }
-
-    private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through. Edit Mode always shows them.")
+    private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through.")
 
     private val fadeDone by BooleanSetting("Fade Done Boxes", false, desc = "A box whose mobs are all dead, or in a room the map shows cleared, stays up very faint instead of disappearing.")
     private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing. Wins over Fade Done Boxes.")
@@ -138,7 +115,7 @@ object BrWaypoints2 : Module(
 
     private val killers by SelectorSetting("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
 
-    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Party chat (!br 2, !br d) overrides it for a run.")
+    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. In master mode the site's M7 roles are used and your class picks the role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door). Party chat (!br 2, !br d) overrides it for a run.")
 
     private val doorerKills by BooleanSetting("Doorer Kills", false, desc = "The door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by.")
 
@@ -192,8 +169,6 @@ object BrWaypoints2 : Module(
     private val MOB_NAMES = listOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
     private val STARRED = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
 
-    private var useHeld = false
-
     private val PURPLE = Color(170, 0, 170, 1f)
     private val GOLD = Color(255, 170, 0, 1f)
     private val GREEN = Color(85, 255, 85, 1f)
@@ -202,9 +177,6 @@ object BrWaypoints2 : Module(
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private const val BLOOD_DOOR = "The BLOOD DOOR has been opened!"
     private val WITHER_DOOR = Regex("""^\w+ opened a WITHER door!$""")
-
-    /** How far away a box can be selected from. */
-    private const val REACH = 48.0
 
     /** A nearest box further than this from a mob does not claim it. */
     private const val CLAIM_REACH = 5.0
@@ -255,8 +227,6 @@ object BrWaypoints2 : Module(
             loadRooms()
             if (DungeonUtils.inClear) findStarred()
             watchDeaths()
-            // Right click repeats every few ticks while held; a pull is one per press.
-            if (!mc.options.keyUse.isDown) useHeld = false
         }
 
         on<RenderExtractEvent> {
@@ -281,11 +251,6 @@ object BrWaypoints2 : Module(
                 drawFilledBox(bb, colour.withAlpha(if (next) (opacity * 3).coerceIn(opacity + 0.15f, 1f) else opacity), depth = false)
                 drawWireFrameBox(bb, colour, depth = false)
                 drawText(label, Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
-            }
-
-            // The selected face, only with the wand in hand, when it can actually be edited.
-            if (editing()) target(mc.deltaTracker.getGameTimeDeltaPartialTick(true))?.let { (box, face) ->
-                drawFilledBox(faceSlab(box.aabb(), face), PURPLE.withAlpha(0.35f), depth = false)
             }
 
             if (spawnMarkers) {
@@ -366,15 +331,12 @@ object BrWaypoints2 : Module(
 
     /**
      * The boxes on screen, only ever the room you are in (or the next on the rush), and without All
-     * Rooms only if it is on the blood rush's path. With Edit Mode on, all of that room's boxes.
-     * Otherwise none once the map shows the room cleared, and a box hides once every mob it claimed
+     * Rooms only if it is on the blood rush's path. None once the map shows the room cleared, and a box hides once every mob it claimed
      * is known dead, showing until then — before any of its mobs are in view, too. Hidden is only
      * hidden: the box stays saved and comes back with its room next run.
      */
     private fun shown(): List<Box> {
         val rooms = shownRooms()
-        // Edit Mode shows them all too: a box being drawn has no mobs yet.
-        if (editMode) return boxes.filter { box -> rooms.any { it.name == box.room } }
         val sig = boxesSig()
         val claimed = HashSet<Box>(); val alive = HashSet<Box>()
         for (mob in mobs) {
@@ -394,7 +356,7 @@ object BrWaypoints2 : Module(
      */
     private fun shownRooms() = listOfNotNull(DungeonUtils.currentRoom, rushRoom?.takeIf { rushing }?.let { n -> DungeonScan.rooms.firstOrNull { it.name == n } })
         .distinctBy { it.name }
-        .filter { allRooms || editMode || onRush(it.name) }
+        .filter { allRooms || onRush(it.name) }
 
     // --- blood rush ------------------------------------------------------------------------------
 
@@ -632,10 +594,10 @@ object BrWaypoints2 : Module(
         val out = ArrayList<Drawn>()
         val live = shown()
         // With Fade or Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
-        val all = if ((fadeDone || recolorDone) && !editMode) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
+        val all = if (fadeDone || recolorDone) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
         val liveSet = live.toHashSet()
         for ((room, list) in all.groupBy { it.room }) {
-            val plan = if (editMode || !BrRoles.active) null else planOf(room)
+            val plan = if (!BrRoles.active) null else planOf(room)
             if (plan == null) {
                 list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false, it !in liveSet) }
                 continue
@@ -742,91 +704,25 @@ object BrWaypoints2 : Module(
 
     // --- input, called from the mixins -----------------------------------------------------------
 
-    /** Drop: delete the box you are looking at, or place one. True means the drop must not happen. */
+    /** Drop, with the wand: for a [wandUser]. True means the drop must not happen. */
     @JvmStatic
-    fun onDrop(): Boolean {
-        if (wandUser?.onDrop() == true) return true
-        if (!editing()) return false
-        val player = mc.player ?: return false
-        target(1f)?.let { (box, _) ->
-            boxes -= box
-            save(box.room)
-            return true
-        }
-        val feet = BlockPos.containing(player.x, player.y, player.z)
-        val c = intArrayOf(feet.x, feet.y, feet.z, feet.x + 1, feet.y + 1, feet.z + 1)
-        if (boxes.any { it.c.contentEquals(c) }) return true
-        val box = Box(c, roomAt(player.x, player.z)?.name)
-        boxes += box
-        if (!save(box.room)) EngineerClient.msg("§eOdin has not worked out this room yet; the box saves once it has.")
-        return true
-    }
+    fun onDrop(): Boolean = wandUser?.onDrop() == true
 
     /** Left click: push the selected face out. True cancels the swing. */
     @JvmStatic
-    fun onAttack(): Boolean = wandUser?.onMove(+1) == true || move(+1)
+    fun onAttack(): Boolean = wandUser?.onMove(+1) == true
 
     /** Holding left click: swallowed while a face is selected, so the block behind is not mined. */
     @JvmStatic
-    fun blocksContinueAttack(): Boolean = wandUser?.blocksContinueAttack() == true || (editing() && target(1f) != null)
+    fun blocksContinueAttack(): Boolean = wandUser?.blocksContinueAttack() == true
 
-    /** Right click: pull the selected face in, once per press. True cancels using the wand. */
+    /** Right click: pull the selected face in. True cancels using the wand. */
     @JvmStatic
-    fun onUse(): Boolean {
-        if (wandUser?.onUse() == true) return true
-        if (!editing() || target(1f) == null) return false
-        if (!useHeld) { useHeld = true; move(-1) }
-        return true
-    }
+    fun onUse(): Boolean = wandUser?.onUse() == true
 
     /** Scroll: up pushes out, down pulls in. True keeps the hotbar from switching off the wand. */
     @JvmStatic
-    fun onScroll(y: Double): Boolean = if (y == 0.0) false else wandUser?.onMove(if (y > 0) +1 else -1) == true || move(if (y > 0) +1 else -1)
-
-    private fun move(by: Int): Boolean {
-        if (!editing()) return false
-        val (box, face) = target(1f) ?: return false
-        // Sneaking: the whole box moves up or down a block instead.
-        if (mc.player?.isShiftKeyDown == true) { box.c[1] += by; box.c[4] += by; save(box.room); return true }
-        if (BoxFaces.move(box.c, face, by)) save(box.room)
-        return true
-    }
-
-    private fun editing(): Boolean {
-        if (!enabled || !editMode || wand.isEmpty() || mc.gui.screen() != null) return false
-        return identity(mc.player?.mainHandItem ?: return false) == wand
-    }
-
-    // --- selection -------------------------------------------------------------------------------
-
-    /** The box under the crosshair, nearest first, and the face of it that is selected. */
-    private fun target(partial: Float): Pair<Box, Face>? {
-        val player = mc.player ?: return null
-        val e = player.getEyePosition(partial)
-        val v = player.getViewVector(partial)
-        val eye = doubleArrayOf(e.x, e.y, e.z)
-        val dir = doubleArrayOf(v.x, v.y, v.z)
-        // Standing in a box and looking up: its top, whatever the view passes through.
-        val feet = doubleArrayOf(player.x, player.y, player.z)
-        val pitch = player.getViewXRot(partial)
-        for (box in shown()) {
-            val min = doubleArrayOf(box.c[0].toDouble(), box.c[1].toDouble(), box.c[2].toDouble())
-            val max = doubleArrayOf(box.c[3].toDouble(), box.c[4].toDouble(), box.c[5].toDouble())
-            if (BoxFaces.editsTop(feet, pitch, min, max)) return box to Face.UP
-        }
-        var best: Pair<Box, Face>? = null
-        var bestT = REACH
-        for (box in shown()) {
-            val min = doubleArrayOf(box.c[0].toDouble(), box.c[1].toDouble(), box.c[2].toDouble())
-            val max = doubleArrayOf(box.c[3].toDouble(), box.c[4].toDouble(), box.c[5].toDouble())
-            val t = BoxFaces.distance(eye, dir, min, max) ?: continue
-            if (t > bestT) continue
-            val face = BoxFaces.select(eye, dir, min, max) ?: continue
-            best = box to face
-            bestT = t
-        }
-        return best
-    }
+    fun onScroll(y: Double): Boolean = y != 0.0 && wandUser?.onMove(if (y > 0) +1 else -1) == true
 
     /** A thin slab lying on one face of a box, to show which face is selected. */
     internal fun faceSlab(bb: AABB, face: Face): AABB {
@@ -947,8 +843,8 @@ object BrWaypoints2 : Module(
     private var siteVersion = 0L
 
     /**
-     * Takes the site's copy if it is newer than this file; boxes saved here since stay here (the
-     * site is edited on its own page). Boxes edited on the site show up here from the next world load.
+     * Takes the site's copy (boxes are only edited there), kept in this file for when the site can't
+     * be reached. Boxes edited on the site show up here from the next world load.
      */
     private fun pull() {
         EngineerClient.logger.info("[ec] brboxes: pulling")
@@ -961,7 +857,7 @@ object BrWaypoints2 : Module(
         val at = runCatching { site["updatedAt"]?.asLong }.getOrNull() ?: 0L
         if (at != 0L && at <= siteVersion) return log.info("[ec] brboxes: already have $at")
         savedFile.value // load this file's boxes before its age is compared with the site's
-        if (at == 0L || (file.exists() && file.lastModified() > at)) return log.info("[ec] brboxes: kept the local file (site $at, file ${file.lastModified()})")
+        if (at == 0L) return log.info("[ec] brboxes: the site's copy has no date")
         val rooms = runCatching { siteBoxes(rooms(site["rooms"])) }.onFailure { log.info("[ec] brboxes: rooms unreadable: $it") }.getOrNull() ?: return
         log.info("[ec] brboxes: took the site's ${rooms.size} rooms, ${rooms.values.sumOf { it.size }} boxes")
         siteVersion = at

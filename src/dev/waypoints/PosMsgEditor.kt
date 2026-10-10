@@ -19,8 +19,7 @@ import net.minecraft.world.phys.Vec3
 
 /**
  * Edits the positional-message shapes (/posmsg) in game with the same wand and feel as
- * [BrWaypoints2]'s role boxes. Toggled with `/posmsg edit`; the wand is BR Roles' ("Make Held
- * Item Wand"). With it on and the wand in hand:
+ * [BrWaypoints2]'s role boxes. Toggled with `/posmsg edit`; the wand is set with `/posmsg wand`. With it on and the wand in hand:
  *
  *  - A box (/posmsg in): look through it to select the side behind, stand inside and look up to
  *    select its top ([BoxFaces]). Left click or scroll up pushes the face out a block, right click
@@ -55,8 +54,8 @@ object PosMsgEditor : BrWaypoints2.WandUser {
 
     fun toggle() {
         editMode = !editMode
-        DevgineerClient.msg("§dPosMsg §7edit mode " + if (editMode) "§aon§7 (wand in hand; BR Roles' wand)" else "§coff")
-        if (editMode && !BrWaypoints2.wandInHand()) DevgineerClient.msg("§7Set the wand first: BR Roles > Edit Mode > Make Held Item Wand.")
+        DevgineerClient.msg("§dPosMsg §7edit mode " + if (editMode) "§aon§7 (wand in hand)" else "§coff")
+        if (editMode && !BrWaypoints2.wandInHand()) DevgineerClient.msg("§7Set the wand first: hold an item and §f/posmsg wand§7.")
     }
 
     override fun tick() {
