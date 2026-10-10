@@ -29,6 +29,7 @@ sourceSets.main {
 
 repositories {
     mavenCentral()
+    mavenLocal { content { includeGroup("com.odtheking") } }
     maven("https://api.modrinth.com/maven") { content { includeGroup("maven.modrinth") } }
 }
 
@@ -43,9 +44,10 @@ dependencies {
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json); compiled against its Modrinth
-    // release (0.3.4 for 26.1).
-    compileOnly("maven.modrinth:odin:7FcnBdo7")
+    // Odin is a required runtime mod (declared in fabric.mod.json). Compiled against Odin 0.3.6 ported
+    // to 26.1.2 (OdinFabric branch mc26.1.2-port, published with publishToMavenLocal), since Odin
+    // only releases 0.3.6 for 26.2. Like the Modrinth jar, without its dependencies.
+    compileOnly("com.odtheking:Odin:0.3.6+mc26.1.2") { isTransitive = false }
 
     // Sodium replaces the terrain renderer on every team client; the POV previews drive its
     // terrain pass directly. Optional at runtime (guarded by FabricLoader.isModLoaded).
