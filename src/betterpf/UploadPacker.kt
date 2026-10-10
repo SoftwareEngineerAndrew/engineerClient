@@ -45,10 +45,11 @@ import org.slf4j.LoggerFactory
  *    gone - is one "proj" line where it spawned (most arrows are shot point-blank into a wall and
  *    stick a tick later: three lines and a move, for one arrow).
  *
- *  - Mob moves ("e") and player lines ("p") as columns ("cols"): each 10 s, every mob's (player's)
+ *  - Mob moves ("e") and player lines ("p") as columns ("cols"): each 30 s, every mob's (player's)
  *    values one after another, as differences from the last - mostly 0, 1 and -1, which pack to a
- *    fraction of the numbers written out (over a third smaller overall on an F7 run). The viewer puts each
- *    line back where it was.
+ *    fraction of the numbers written out (over a third smaller overall on an F7 run). Mob events,
+ *    block changes and camera frames the same way ([Stretch]); the viewer turns them all back into
+ *    the lines they were.
  *
  *  - The recording player's camera frames thinned: one is left out where the frames either side of it, as the
  *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (under a pixel), never
@@ -307,11 +308,21 @@ object UploadPacker {
         private val pal = HashMap<Int, String>()
         private val raw = ArrayList<Triple<Long, String, Int>>()
         fun read(kind: String, line: String) {
-            if (kind != "pal" && kind != "block") return
+            if (kind != "pal" && kind != "block" && kind != "blocks") return
             val l = obj(line)
             // (past the limits the rest is left out: lining up needs only some of them)
             if (kind == "pal") { val i = int(l["i"]); if (pal.size < MAX_PAL || i in pal) pal[i] = str(l["s"]) }
-            else if (raw.size < MAX_BLOCKS) raw += Triple(long(l["t"]), "${int(l["x"])},${int(l["y"])},${int(l["z"])}", int(l["s"]))
+            else if (kind == "block") { if (raw.size < MAX_BLOCKS) raw += Triple(long(l["t"]), "${int(l["x"])},${int(l["y"])},${int(l["z"])}", int(l["s"])) }
+            else {
+                // A "blocks" line (Stretch): each change from the one before.
+                var t = 0L; var x = 0; var y = 0; var z = 0
+                for (e in arr(l["d"])) {
+                    if (raw.size >= MAX_BLOCKS) break
+                    val b = arr(e)
+                    t += long(at(b, 0)); x += int(at(b, 1)); y += int(at(b, 2)); z += int(at(b, 3))
+                    raw += Triple(t, "$x,$y,$z", int(at(b, 4)))
+                }
+            }
         }
         fun changes() = raw.map { (t, at, s) -> t to at + "," + (pal[s] ?: "?") }
     }
@@ -431,6 +442,22 @@ object UploadPacker {
         return line
     }
 
+    /**
+     * A projectile's new flights with each one that is the same as the one before it (the spawn's,
+     * first) as just its [dt]: a client that hasn't moved a projectile yet has it launched again
+     * where it was, tick after tick.
+     */
+    private fun sameAgain(spawn: JsonObject, arcs: JsonArray): JsonArray {
+        var prev: List<JsonElement>? = spawn["v"]?.takeIf { it is JsonArray }?.let { v -> listOfNotNull(spawn["x"], spawn["y"], spawn["z"]) + v.asJsonArray.toList() }
+        val out = JsonArray()
+        for (a in arcs) {
+            val flight = a.asJsonArray.toList().drop(1)
+            out.add(if (flight == prev) JsonArray().apply { add(a.asJsonArray[0]) } else a)
+            prev = flight
+        }
+        return out
+    }
+
     /** A line as it goes up: a projectile's spawn becomes its "proj" line, the rest of its lines go (null). */
     private fun fold(line: String, scan: Scan): String? {
         val kind = kindOf(line) ?: return line
@@ -444,7 +471,7 @@ object UploadPacker {
                 o.addProperty("k", "proj"); o.add("t", s["t"]); o.add("id", s["id"])
                 s["type"]?.takeIf { it.asString != "minecraft:arrow" }?.let { o.add("type", it) }
                 for (k in listOf("x", "y", "z", "v", "a", "i")) s[k]?.let { o.add(k, it) }
-                if (p.arcs.size() > 0) o.add("arcs", p.arcs)
+                if (p.arcs.size() > 0) o.add("arcs", sameAgain(s, p.arcs))
                 p.stuck?.let { o.add("s", it) }
                 p.gone?.let { o.addProperty("g", it - p.t0) }
                 return o.toString()
@@ -767,10 +794,21 @@ object UploadPacker {
                                 li.toInt()
                             }
                         }
+                        val byId = l.has("kd")
+                        var id = 0L
                         when (l["of"]?.let(::str)) {
-                            "e" -> for (t in arr(l["tr"])) arr(t).let { count(int(at(it, 0)), inLines(it).size) }
+                            "e" -> for (t in arr(l["tr"])) arr(t).let { id = if (byId) id + long(at(it, 0)) else long(at(it, 0)); count(id.toInt().takeIf { i -> i.toLong() == id } ?: throw Malformed("id"), inLines(it).size) }
                             "p" -> for (tr in arr(l["tr"])) { val a = arr(tr); val name = str(at(a, 0)); for (li in inLines(a)) row(name, ticks[li]) }
                         }
+                    }
+                    "grp" -> {
+                        // Mob events as columns (Stretch): each one's id, and its tick.
+                        val l = obj(line)
+                        val of = str(l["of"])
+                        val n = int(l["n"]).also { if (it !in 0..SIB_MAX_ROWS) throw Malformed("rows") }
+                        val c = l["c"] as? JsonObject ?: throw Malformed("columns")
+                        c["t"]?.let { col -> for (t in longs(col, n)) tick(t) }
+                        if (of in ENTITY_KINDS || of == "eq") c["id"]?.let { col -> for (id in longs(col, n)) count(id.toInt().takeIf { it.toLong() == id } ?: throw Malformed("id"), 1) }
                     }
                     "proj" -> {
                         val l = obj(line)
@@ -799,6 +837,27 @@ object UploadPacker {
             ranges
         }
         return Sibling(self, startMs, counts, players, blocks.changes())
+    }
+
+    /** A whole-number column (Stretch.column) as its values, at most [n]; null (a line without the field) left out. */
+    private fun longs(col: JsonElement, n: Int): List<Long> {
+        val out = ArrayList<Long>()
+        if (col is JsonArray) {
+            if (col.size() == 0 || long(col[0]) != 0L) throw Malformed("not whole numbers")
+            var q = 0L
+            for (i in 1 until col.size()) { if (out.size >= n) break; q += long(col[i]); out += q }
+            return out
+        }
+        val r = arr((col as? JsonObject ?: throw Malformed("column"))["r"])
+        var i = 0
+        while (i + 1 < r.size() && out.size < n) {
+            val v = r[i]; val k = long(r[i + 1])
+            if (k < 0) throw Malformed("run")
+            val x = if (v is JsonNull) null else long(v)
+            for (j in 0 until minOf(k, (n - out.size).toLong())) if (x != null) out += x else break
+            i += 2
+        }
+        return out
     }
 
     /**

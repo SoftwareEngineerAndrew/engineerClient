@@ -85,7 +85,11 @@ class RunRecorder(
         // ([accel]) and keep [inertia] of their speed each tick.
         var px = 0.0; var py = 0.0; var pz = 0.0; var vx = 0.0; var vy = 0.0; var vz = 0.0
         var accel = 0.0; var inertia = 0.0
+        // Where the client had it when it was last launched: until the client moves it (it only does
+        // when the server says, every few ticks for skulls), it hasn't strayed - it just hasn't moved yet.
+        var lx = Double.NaN; var ly = Double.NaN; var lz = Double.NaN
         fun launch(x: Double, y: Double, z: Double, v: net.minecraft.world.phys.Vec3) {
+            lx = x; ly = y; lz = z
             px = r(x, 1000.0); py = r(y, 1000.0); pz = r(z, 1000.0); vx = r(v.x, 10000.0); vy = r(v.y, 10000.0); vz = r(v.z, 10000.0)
         }
         /** The viewer's projectile, a tick on. */
@@ -653,6 +657,7 @@ class RunRecorder(
                 // Stuck in a block (the game's own flag, from the server): an ordinary entity from here.
                 if (!(e is AbstractArrow && (e as ArrowInGroundInvoker).`ec$isInGround`())) {
                     t.fly()
+                    if (e.x == t.lx && e.y == t.ly && e.z == t.lz) continue
                     val dx = e.x - t.px; val dy = e.y - t.py; val dz = e.z - t.pz
                     if (dx * dx + dy * dy + dz * dz > ARC_SLACK * ARC_SLACK) {
                         t.launch(e.x, e.y, e.z, e.deltaMovement)
