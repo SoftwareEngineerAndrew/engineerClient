@@ -84,7 +84,7 @@ object DungeonSplits : Module(
 
     private val scorecardHud by HUD("Scorecard Splits", "The whole run as a table: each split's total, then its sub splits.", true, 633, 110, 1f) { example ->
         if (example) return@HUD scorecard(this, listOf(
-            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§e63.40\t§e22.60\t§e4.10\t§e36.30\t§e0.40", "§d3.1\t§53.0\t§60.0",
+            "§a21.2\t§c3.5\t§c6.3\t§c2.2\t§c4.7\t§64.6", "§e50.85\t§e15.15\t§e35.70", "§d3.1\t§53.0\t§60.0",
             "§e25.85\t§29.75\t§20.55\t§210.15\t§e0.30\t§75.10", "§c46.40\t§734.35\t§20.60\t§c0.45\t§e4.60\t§e1.30\t§60.10\t§75.10",
             "§e47.20\t§e12.90\t§a9.40\t§c13.80\t§e8.90", "§e7.90\t§03.40\t§24.50",
             "§230.35\t§77.95\t§e0.70\t§77.85\t§e3.30\t§60.05\t§77.55\t§73.10",
@@ -318,7 +318,7 @@ object DungeonSplits : Module(
                     val name = e.name.string.trim()
                     val at = now()
                     if (watchedMobs.put(e.id, name to at) == null) {
-                        boss.onMobSpawn(at, name, distanceTo(e)); subs.onBloodMobSpawn(at)
+                        boss.onMobSpawn(at, name, distanceTo(e))
                     }
                 }
             }
@@ -632,7 +632,6 @@ object DungeonSplits : Module(
         if (prev == null || prev.first != e.id || serverTicks - handle.tick < 45) return
         if (e.position().distanceTo(prev.second) > 0.001) {
             card.onWatcherMoved(now(), "seen")
-            subs.onWatcherMoved(now())
             boss.extra(SplitTracker.BLOOD, now(), "§5watcher moved", "seen, " + (serverTicks - handle.tick) + " ticks after \"handle this\" - " + BossDetail.blocks(distanceTo(e)) + " away")
         }
     }
@@ -724,10 +723,10 @@ object DungeonSplits : Module(
             val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
             // A step ended by a moment further on (the ones between unseen) is not a real time.
             val finished = st.stop != null && !end.contains("never seen")
-            if (finished && floor != null && SubSplitGrades.canBeBest(id, value) && value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) {
+            if (finished && floor != null && SubSplitGrades.canBeBest(id, value, floor) && value < (validBest(id, bests[id], floor) ?: Long.MAX_VALUE)) {
                 bests[id] = value; newBest = true
             }
-            val grade = SubSplitGrades.colour(id, value, finished, validBest(id, bests[id]), floor == "F7", st.label.take(2).replace('&', '§'))
+            val grade = SubSplitGrades.colour(id, value, finished, validBest(id, bests[id], floor), floor, st.label.take(2).replace('&', '§'))
             Row(st.label, st.start, ms, ticks, note = "ended by $end", grade = grade, real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL)
         }
         if (newBest) saveBests(floor, bests)
@@ -747,7 +746,7 @@ object DungeonSplits : Module(
         val ticks = (stop.tick - split.start.tick).toLong()
         val value = SubSplitGrades.value(id, ms, ticks)
         val real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL
-        val total = SubSplitGrades.colour(id, value, split.stop != null, validBest(id, bests(floor)[id]), floor == "F7", split.label.take(2).replace('&', '§')) +
+        val total = SubSplitGrades.colour(id, value, split.stop != null, validBest(id, bests(floor)[id], floor), floor, split.label.take(2).replace('&', '§')) +
             SplitFormat.seconds(if (real) ms else ticks * 50).removeSuffix("s")
         return listOf(total) + gradedSteps(split.label, split, now).map {
             it.grade + SplitFormat.seconds(if (it.real) it.ms else it.ticks * 50).removeSuffix("s")
@@ -811,17 +810,17 @@ object DungeonSplits : Module(
     fun lag(now: Stamp = now()): Long? = tracker.splits().takeIf { it.isNotEmpty() }?.let { SplitPace.lag(it, now) }
 
     /** A best, kept with Engineer Client's when it is installed (one set of bests for both). */
-    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id])
+    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id], floor)
 
     /** Records a finished [value] of [id] as the best on [floor] when it is one. */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
-        if (!finished || !SubSplitGrades.canBeBest(id, value)) return
+        if (!finished || !SubSplitGrades.canBeBest(id, value, floor)) return
         val bests = bests(floor)
-        if (value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
+        if (value < (validBest(id, bests[id], floor) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
     }
 
     /** A kept best, unless it is under its step's floor (e.g. saved before the floor was raised): then none. */
-    private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
+    private fun validBest(id: String, best: Long?, floor: String?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it, floor) }
 
     /** Engineer Client's store of [floor]'s bests (its Sub Splits module), when it is installed. */
     private fun ecBests(floor: String?): StringSetting? =
