@@ -47,7 +47,6 @@
     "ScoreboardSidebarMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",
-    "SsFullBlockMixin",
     "SsPracticeInputMixin",
     "TerminalNumberMixin",
     "WandInputMixin",
