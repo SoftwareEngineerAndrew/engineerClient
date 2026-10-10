@@ -1,7 +1,7 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.mojang.renderpearl.api.buffers.GpuBuffer
+import com.mojang.blaze3d.buffers.GpuBuffer
 import com.mojang.blaze3d.systems.RenderSystem
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.onReceive

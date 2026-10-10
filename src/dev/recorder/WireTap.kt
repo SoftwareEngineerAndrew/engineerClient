@@ -240,7 +240,7 @@ object WireTap {
         }
         sb.append(",\"seaLevel\":").append(spawn.seaLevel())
         sb.append(",\"gameType\":").append(RecorderFiles.q(spawn.gameType().getName()))
-        sb.append(",\"previousGameType\":").append(RecorderFiles.q(spawn.previousGameType().orElse(null)?.getName()))
+        sb.append(",\"previousGameType\":").append(RecorderFiles.q(spawn.previousGameType()?.getName()))
         sb.append(",\"debug\":").append(spawn.isDebug()).append(",\"flat\":").append(spawn.isFlat())
         chunkRadius?.let { sb.append(",\"chunkRadius\":").append(it) }
         simDist?.let { sb.append(",\"simDistance\":").append(it) }
@@ -401,7 +401,7 @@ object WireTap {
                 .append(",\"salt\":").append(PacketJson.writeNow(p.salt()))
                 .append(",\"lastSeen\":").append(PacketJson.writeNow(p.lastSeenMessages()))
             is ServerboundSignUpdatePacket -> sb.append("{\"redacted\":true,\"pos\":").append(PacketJson.writeNow(p.pos))
-                .append(",\"isFrontText\":").append(p.slot() == net.minecraft.world.level.block.entity.SignTextSlot.FRONT)
+                .append(",\"isFrontText\":").append(p.isFrontText)
                 .append(",\"lens\":").append(p.lines.joinToString(",", "[", "]") { it.length.toString() })
             is ServerboundRenameItemPacket -> sb.append("{\"redacted\":true,\"len\":").append(p.name.length)
             is ServerboundEditBookPacket -> sb.append("{\"redacted\":true,\"slot\":").append(p.slot()).append(",\"pages\":").append(p.pages().size)

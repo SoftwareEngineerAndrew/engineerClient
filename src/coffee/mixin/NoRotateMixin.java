@@ -8,7 +8,7 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.Relative;
@@ -25,8 +25,8 @@ import java.util.Set;
 
 /**
  * Termsim's No Rotate (devoniansolo's ClientPacketListenerMixin, MC 26.2): while {@link Termsim#noRotateActive()}, a
- * teleport's position is taken but not its rotation - the camera stays put - and the rotation sent
- * back with the accept (a PosRot after it up to 26.2) is the server's, as if it had been taken.
+ * teleport's position is taken but not its rotation - the camera stays put - and the PosRot sent
+ * back after accepting it carries the server's rotation, as if it had been taken.
  */
 @Mixin(ClientPacketListener.class)
 public abstract class NoRotateMixin {
@@ -66,16 +66,16 @@ public abstract class NoRotateMixin {
         original.call(entity, pos, player.yRotO, player.xRotO);
     }
 
-    /** The teleport accept (26.3 folded the PosRot after it into this one packet): the server's rotation, not ours. */
-    @WrapOperation(method = "handleMovePlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/Connection;send(Lnet/minecraft/network/protocol/Packet;)V"))
+    /** The PosRot after accepting the teleport (handleMovePlayer's 2nd send): the server's rotation, not ours. */
+    @WrapOperation(method = "handleMovePlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/Connection;send(Lnet/minecraft/network/protocol/Packet;)V", ordinal = 1))
     private void cc$confirmServerRotation(Connection connection, Packet<?> packet, Operation<Void> original) {
         var player = Minecraft.getInstance().player;
-        if (player == null || cc$serverRotation == null || !Termsim.noRotateActive() || !(packet instanceof ServerboundAcceptTeleportationPacket accept)) {
+        if (player == null || cc$serverRotation == null || !Termsim.noRotateActive()) {
             original.call(connection, packet);
             return;
         }
-        original.call(connection, new ServerboundAcceptTeleportationPacket(accept.id(), accept.x(), accept.y(), accept.z(),
-            cc$serverRotation.yRot(), cc$serverRotation.xRot()));
+        original.call(connection, new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(),
+            cc$serverRotation.yRot(), cc$serverRotation.xRot(), false, false));
         cc$sent = true;
     }
 
