@@ -393,9 +393,12 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (doorOpen[s]) return
         doorOpen[s] = true
         // Blocks change 1 tick after the chat line (gates, doors and the core alike). Practice: only a door on the
-        // way (before its last section) opens.
+        // way (before its last section) opens, and never takes the gate's blocks with it (they stay in practice).
         if (!practice || s < Practice.lastSection()) {
-            Blocks.play("door$s", delay = 1)
+            val gate = if (!practice || s > 3) emptySet() else
+                (Blocks.anim("gate$s${s + 1}")?.frames?.map { it.pos }.orEmpty() +
+                    BlockPos.betweenClosedStream(GATE_BOXES[s].inflate(0.5)).map { it.immutable() }.toList()).toSet()
+            Blocks.play("door$s", exclude = gate, delay = 1)
             if (s == 1) Blocks.play("ss_s1done", delay = 1)
         }
         // His section line is queued with the door (the later of the last completion and the gate).
