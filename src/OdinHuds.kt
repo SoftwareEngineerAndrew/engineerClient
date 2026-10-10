@@ -32,8 +32,8 @@ object OdinHuds {
         }
     }
 
-    /** Hidden in P3 Sim practice: Term Info (Section Time stays: the sim feeds it), our Goldor Tick and Odin's Goldor Hud. */
-    private val PRACTICE_HIDDEN = setOf("Term Info", "Goldor Tick", "Goldor Hud")
+    /** Hidden in P3 Sim practice: Term Info (Section Time stays: the sim feeds it) and Odin's Goldor Hud. */
+    private val PRACTICE_HIDDEN = setOf("Term Info", "Goldor Hud")
 
     private val draws = HashMap<HUDSetting, Draw>()
     private var pending: Draw? = null
