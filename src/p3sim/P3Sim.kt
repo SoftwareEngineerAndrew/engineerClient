@@ -108,9 +108,16 @@ object P3Sim : Module(
         mc.font.width(t) to 10
     }
 
+    /** Practice: the start timer counting down, large. */
+    private val practiceStartHud by HUD("Practice Start Timer", "A practice's start timer counting down, large, until terminals and the rest are up.", true, 440, 250, 4f) { example ->
+        val t = if (example) "§e2.4" else Practice.ticks.takeIf { inSim && Practice.active && it < 0 }?.let { "§e${"%.1f".format(java.util.Locale.ROOT, -it / 20.0)}" } ?: return@HUD 0 to 0
+        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        mc.font.width(t) to 10
+    }
+
     init {
         // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
-        practiceHud.enabled = true; practiceTimeHud.enabled = true
+        practiceHud.enabled = true; practiceTimeHud.enabled = true; practiceStartHud.enabled = true
     }
 
     val autoStart: Boolean get() = autoStartS.value

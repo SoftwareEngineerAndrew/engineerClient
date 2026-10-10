@@ -416,8 +416,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         // Custom: your start, the section's jobs you pick, checkpoints in order.
         val start = Practice.customStart
         val cps = Practice.checkpoints.size
-        // The jobs: the start's section once it's set, else the one you're in now.
-        val sec = if (start != null) Practice.customSection else mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
+        // The jobs: always the section you're in now (picks from other sections stay).
+        val sec = mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
         val picked = Practice.customJobsIn(sec)
         val cols = ArrayList<LayoutElement>()
         cols += stack("§eCustom", 100, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
@@ -433,15 +433,17 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             change("§cClear", 100, "Clears the custom practice: start, jobs and checkpoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
             DelaySlider(100),
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
-                if (start != null) "Starts the custom practice: S$sec, from your start position, your jobs then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
+                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
                 .also { it.active = start != null },
         ))
+        val others = (1..4).filter { it != sec }.mapNotNull { s -> Practice.customJobsIn(s).takeIf { it.isNotEmpty() }?.let { j -> "S$s ${j.joinToString(" ") { COLUMNS[column(it)].first }}" } }.joinToString(", ")
         // The section's jobs, in the plan's column order, 6 a column.
         val jobs = P3Plan.jobsIn(sec).sortedBy { column(it) }
         jobs.chunked(6).forEachIndexed { i, part ->
-            cols += stack(if (i == 0) "§6§lS$sec" else "", JOB_W, if (start != null) "The custom practice's section: where its start is." else "The section you're in (the start's, once it's set).", part.map { job ->
+            cols += stack(if (i == 0) "§6§lS$sec" else "", JOB_W, "The section you're in: go to another to pick its jobs too (the picks of every section stay)." +
+                    (others.takeIf { it.isNotEmpty() }?.let { " Picked elsewhere: $it." } ?: ""), part.map { job ->
                 val on = job in picked
-                change((if (on) "§a" else "§8") + COLUMNS[column(job)].first, JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job, sec) }
+                change((if (on) "§a" else "§8") + COLUMNS[column(job)].first, JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job) }
             })
         }
         cols += label("", 16)

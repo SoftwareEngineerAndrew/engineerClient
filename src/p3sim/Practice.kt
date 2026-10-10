@@ -18,9 +18,9 @@ import java.util.Locale
  * into the next section are the tasks, each timed from the start; the last one's time is the
  * practice's, large on screen (the Practice Time HUD) and in chat with your best.
  *
- * Custom practice: your own start position (its section: where it is), the jobs of that section you
- * pick (your role's to begin with) and checkpoints to reach in order (within 1 block across, the same
- * height), all timed the same way. Saved in config/engineerclient/p3sim-practice.json.
+ * Custom practice: your own start position, the jobs you pick (any sections', so it can run across
+ * several; it starts in the earliest of them and the start's) and checkpoints to reach in order
+ * (within 1 block across, the same height), all timed the same way. Saved in config/engineerclient/p3sim-practice.json.
  *
  * Server thread, except what the HUDs and the menu read ([mode], [tasks], [ticks], [endTicks], the custom setup).
  */
@@ -92,10 +92,12 @@ object Practice {
 
     /** Starts the custom practice (again). */
     fun startCustom() {
-        val s = customSection
         val at = customStart
-        if (at == null || s !in 1..4) { Sim.note("Set the custom practice's §fStart Position§7 first (Practice tab)."); return }
-        launch(Setup("Custom", s, at, P3Plan.jobsIn(s).filter { it in customJobs }, checkpoints.toList()))
+        if (at == null || customSection !in 1..4) { Sim.note("Set the custom practice's §fStart Position§7 first (Practice tab)."); return }
+        // The jobs in plan order, section by section; the fight starts at the earliest section (the start's or a job's).
+        val jobs = (1..4).flatMap { s -> P3Plan.jobsIn(s).filter { it in customJobs } }
+        val s = (jobs.map { sectionOf(it) }.filter { it in 1..4 } + customSection).min()
+        launch(Setup("Custom", s, at, jobs, checkpoints.toList()))
     }
 
     private fun launch(set: Setup) { setup = set; launch(set.name, set.section) }
@@ -132,7 +134,10 @@ object Practice {
     /** What's left to do in this practice's section (the rest is done at the start). */
     fun practiceJobs(): List<String> = setup?.jobs ?: jobs(section)
 
-    private fun sectionOf(job: String) = job.removePrefix("gate ").toIntOrNull() ?: job.removePrefix("S").substringBefore(' ').toIntOrNull() ?: 0
+    /** The last section with a job of this practice (a custom one can run across several): the ones before it end as usual. */
+    fun lastSection(): Int = (practiceJobs().map { sectionOf(it) }.filter { it in 1..4 } + section).max()
+
+    fun sectionOf(job: String) = job.removePrefix("gate ").toIntOrNull() ?: job.removePrefix("S").substringBefore(' ').toIntOrNull() ?: 0
 
     /** Where the practice puts you: the custom start; your spawn (S1), the early enter into it, else its start. */
     fun startSpot(): Spots.Spot = setup?.start ?: when (val s = section) {
@@ -272,24 +277,21 @@ object Practice {
     /** Your role's jobs in section [s], for a custom practice there. */
     fun roleJobs(s: Int) = P3Plan.jobsIn(s).filter { P3Plan.isMine(it) }
 
-    /** The jobs the custom practice's row shows for section [s]: the ones picked there, else your role's. */
-    fun customJobsIn(s: Int): Set<String> = if (s == customSection) customJobs else roleJobs(s).toSet()
+    /** The custom practice's jobs picked in section [s]. */
+    fun customJobsIn(s: Int): Set<String> = P3Plan.jobsIn(s).filter { it in customJobs }.toSet()
 
-    /**
-     * The start where you stand; its section is where it is (or the nearest). Jobs already picked for that
-     * section stay; another section's start takes your role's jobs there. Returns the section.
-     */
+    /** The start where you stand; its section is where it is (or the nearest). Nothing picked yet: your role's jobs there. Returns the section. */
     fun setStart(spot: Spots.Spot): Int {
         val s = sectionAt(spot.x, spot.y, spot.z)
-        if (s != customSection) { customSection = s; customJobs.clear(); customJobs += roleJobs(s) }
+        customSection = s
+        if (customJobs.isEmpty()) customJobs += roleJobs(s)
         customStart = spot
         save()
         return s
     }
 
-    /** Picks or drops [job] of section [s] (moving the custom practice's jobs to [s], from your role's, first). */
-    fun toggleJob(job: String, s: Int) {
-        if (s != customSection) { customSection = s; customJobs.clear(); customJobs += roleJobs(s); if (customStart != null && sectionAt(customStart!!.x, customStart!!.y, customStart!!.z) != s) customStart = null }
+    /** Picks or drops [job] (any section's; the others' picks stay). */
+    fun toggleJob(job: String) {
         if (!customJobs.remove(job)) customJobs += job
         save()
     }
