@@ -8,6 +8,7 @@
     "CursorResetMixin",
     "LocalPlayerRotationAccessor",
     "NoRotateMixin",
+    "OldBlockingMixin",
     "GuiSidebarInvoker",
     "ScoreboardSidebarMixin",
     "SoundChannelMixin",
