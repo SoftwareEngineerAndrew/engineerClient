@@ -224,6 +224,24 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             toggle("Real Movement", P3Sim.realMoves, 90, P3Sim.realMovesS.description) { P3Sim.toggleRealMoves() },
             change("Reset Role", 70, "Your jobs, the bots you picked and your stacks back to the ${Roles.label(P3Sim.myClass)}'s $skill role.") { P3Plan.resetMine() },
         ))
+
+        // Your best runs: a class's bot can play your fastest P3 as it (S1 starts) instead of its role.
+        val ghosts = P3Plan.botOrder().map { c ->
+            val best = GhostStore.best(skill, c.name)
+            val t = best?.let { "%.2f".format(Locale.ROOT, it.time / 20.0) }
+            toggle(Roles.label(c), P3Plan.ghostOn(c), 56, "On (green): the ${Roles.label(c)} bot plays your fastest $skill P3 as ${Roles.label(c)} (S1 starts) instead of its role. " +
+                (t?.let { "Yours: ${it}s." } ?: "No run of yours yet: it plays its role.")) { P3Plan.toggleGhost(c) }
+        }
+        val times = if (P3Plan.skill != P3Plan.RANDOM) emptyList() else listOf<LayoutElement>(
+            label("§eBot times", 56, "Random skill: each bot job takes between these two."),
+            change("-", 14, "Shorter.") { P3Plan.botMin = (P3Plan.botMin - 0.5).coerceAtLeast(0.0); P3Plan.save() },
+            label("§f${"%.1f".format(Locale.ROOT, P3Plan.botMin)}s", 30),
+            change("+", 14, "Longer.") { P3Plan.botMin = (P3Plan.botMin + 0.5).coerceAtMost(P3Plan.botMax); P3Plan.save() },
+            change("-", 14, "Shorter.") { P3Plan.botMax = (P3Plan.botMax - 0.5).coerceAtLeast(P3Plan.botMin); P3Plan.save() },
+            label("§f${"%.1f".format(Locale.ROOT, P3Plan.botMax)}s", 30),
+            change("+", 14, "Longer.") { P3Plan.botMax = (P3Plan.botMax + 0.5).coerceAtMost(60.0); P3Plan.save() },
+        )
+        row(listOf<LayoutElement>(label("§dYour best", LABEL_W, "A bot plays your fastest run as its class.")) + ghosts + times)
     }
 
     /** Where you stand and look now (a tenth of a block; y to the hundredth, so a slab's height stays). */
@@ -509,7 +527,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     private companion object {
         const val RESTART_W = 100
         /** The plan's and Advanced's height (5 rows) plus a gap: where the Advanced button goes. */
-        const val PANEL_H = 5 * 20 + 4 * 2 + 4
+        const val PANEL_H = 6 * 20 + 5 * 2 + 4
         const val GAP = 10
         const val ROW = 22
         const val SIDE_W = 90

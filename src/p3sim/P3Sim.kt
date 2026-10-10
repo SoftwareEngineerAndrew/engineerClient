@@ -31,7 +31,7 @@ import com.mojang.blaze3d.platform.InputConstants
  *
  * The world is the real arena at Hypixel's coordinates; the fight runs on the world's own
  * (integrated) server ([SimServer], [Fight]): Goldor, terminals, levers, devices, gates, death
- * ticks, and Maxor/Storm/Necron around it. The menu ([SimScreen]: the keybind, `/p3sim`, or the
+ * ticks, and Maxor/Storm/Necron around it. The menu ([SimRestartScreen]: the keybind, `/p3sim`, or the
  * SkyBlock Menu star in the hotbar) starts any phase or section and teleports anywhere.
  *
  * Nothing of it exists anywhere else: every piece checks [inSim] (the client) or
@@ -68,7 +68,7 @@ object P3Sim : Module(
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0..10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer.")
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
-    val termLuckS = +NumberSetting("Terminal Luck", 0, 0..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together, and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick). Melody is untouched.")
+    val termLuckS = +NumberSetting("Terminal Luck", 0, 0..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick). Up to 50% it picks Hypixel's easiest deals; past it, easier than Hypixel ever deals, down to 1 or 2 clicks at 100%. Melody is untouched.")
     val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
     val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
@@ -224,10 +224,9 @@ object P3Sim : Module(
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
                     .bounds(realms.x + realms.width - half, realms.y, half, realms.height).build())
             }
-            // In the sim, Esc has two menus. P3 Sim Menu (the big Restart) takes Open to LAN's place (right
-            // under Save and Quit if that isn't there), and the whole menu shifts so the cursor, which
-            // opening it puts in the middle of the screen, is already on it. P3 Sim Full Menu (every tab)
-            // goes under Save and Quit.
+            // In the sim, Esc's P3 Sim Menu takes Open to LAN's place (right under Save and Quit if that
+            // isn't there), and the whole menu shifts so the cursor, which opening it puts in the middle of
+            // the screen, is already on it.
             if (screen is net.minecraft.client.gui.screens.PauseScreen && inSim) EngineerClient.safely("p3sim pause button") {
                 val widgets = Screens.getWidgets(screen)
                 val buttons = widgets.filterIsInstance<Button>()
@@ -245,10 +244,6 @@ object P3Sim : Module(
                     val dy = screen.height / 2 - (b.y + b.height / 2)
                     for (w in widgets) w.y += dy
                 }
-                // Under Save and Quit, or under the main one when that took Save and Quit's spot.
-                val above = if (lan != null && quit != null) quit else b
-                widgets.add(Button.builder(Component.literal("§6P3 Sim Full Menu")) { mc.gui.setScreen(SimScreen()) }
-                    .bounds(above.x, above.y + above.height + 4, above.width, 20).build())
             }
         }
     }

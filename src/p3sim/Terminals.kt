@@ -52,6 +52,16 @@ object Terminals {
         return List(n.coerceAtLeast(1)) { draw() }.minBy(cost)
     }
 
+    /**
+     * Terminal Luck past 50%: luckier than Hypixel ever deals. [clicks] shrinks, down to 15% of it (at
+     * least 1) at 100%. Below 50% it stays as drawn.
+     */
+    fun beyond(clicks: Int): Int {
+        val f = ((P3Sim.termLuck - 0.5) / 0.5).coerceIn(0.0, 1.0)
+        if (f <= 0.0) return clicks
+        return Math.round(clicks * (1 - 0.85 * f)).toInt().coerceIn(1, clicks)
+    }
+
     /** Item with a non-italic name (in [color] if given, as Hypixel colours most terminal items) and [count]. */
     fun named(item: Item, name: String, count: Int = 1, glint: Boolean = false, color: net.minecraft.ChatFormatting? = null): ItemStack {
         val s = ItemStack(item, count)
@@ -110,8 +120,17 @@ object Terminals {
         private val slots = (11..15) + (20..24)
         private var next = 1
         init {
-            // Luck: the numbers closer together (the shortest walk 1 to 10).
-            val order = lucky(400, { o: List<Int> -> o.zipWithNext().sumOf { (a, b) -> Math.abs(a % 9 - b % 9) + Math.abs(a / 9 - b / 9) } }) { slots.shuffled() }
+            // Luck: the numbers closer together. Swaps that shorten the walk 1 to 10 (or keep it) are kept;
+            // more of them the luckier, up to a neat path (each next one beside the last) at 100%.
+            val order = slots.shuffled().toMutableList()
+            val steps = (Math.pow(P3Sim.termLuck, 3.0) * 1500).toInt()
+            var cost = walk(order)
+            repeat(steps) {
+                val i = Random.nextInt(10); val j = Random.nextInt(10)
+                java.util.Collections.swap(order, i, j)
+                val c = walk(order)
+                if (c <= cost) cost = c else java.util.Collections.swap(order, i, j)
+            }
             order.forEachIndexed { i, s -> items[s] = named(Items.STAINED_GLASS_PANE.red(), "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
@@ -122,6 +141,8 @@ object Terminals {
             return true
         }
         override fun solved() = next > 10
+        /** Steps from each number to the next (across plus down). */
+        private fun walk(o: List<Int>) = o.zipWithNext().sumOf { (a, b) -> Math.abs(a % 9 - b % 9) + Math.abs(a / 9 - b / 9) }
     }
 
     /** "Correct all the panes!": 15 panes, Off (red) or On (lime), clicks toggle. */
@@ -131,6 +152,7 @@ object Terminals {
         init {
             // 0-9 start On, median 3 (measured).
             val on = lucky(10, { n: Int -> -n }) { weighted(listOf(0 to 8, 1 to 24, 2 to 36, 3 to 44, 4 to 40, 5 to 16, 6 to 5, 7 to 4, 8 to 3, 9 to 1)) }
+                .let { 15 - beyond(15 - it) }
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
@@ -153,8 +175,20 @@ object Terminals {
         init {
             // Boards follow Hypixel's measured fewest-clicks spread (mean ~7.2, easier than 9 free draws'
             // 8.1): free draws until one needs the drawn count.
-            val want = lucky(10, { n: Int -> n }) { weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2)) }
-            do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
+            val want = beyond(lucky(10, { n: Int -> n }) { weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2)) })
+            if (want >= 4) do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
+            else do {
+                // Luckier than Hypixel deals (1-3): one colour, a few panes a step or two off it.
+                val t = Random.nextInt(5)
+                slots.forEach { colour[it] = t }
+                var left = want
+                for (s in slots.shuffled()) {
+                    if (left == 0) break
+                    val d = if (left >= 2 && Random.nextBoolean()) 2 else 1
+                    colour[s] = (t + if (Random.nextBoolean()) d else 5 - d) % 5
+                    left -= d
+                }
+            } while (solved() || minClicks() != want)
             slots.forEach { set(it) }
         }
         private fun set(slot: Int) { val (i, n) = cycle[colour[slot]]; items[slot] = named(i, n, color = net.minecraft.ChatFormatting.GREEN) }
@@ -183,6 +217,7 @@ object Terminals {
             val wrong = STARTS_POOL.filter { it.second[0] != letter }
             // Items with the letter per window, as measured; each slot's item is uniform.
             val n = lucky(10, { n: Int -> n }) { weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4)) }
+                .let { beyond(it) }
             val picks = (List(n) { right.random() } + List(slots.size - n) { wrong.random() }).shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
@@ -212,7 +247,12 @@ object Terminals {
             val families = listOf(target) + (COLOURS - target).shuffled().take(4)
             // Luck: the target more likely one of the two colours with 5.
             val sixes = lucky(10, { s: Set<Colour> -> if (target in s) 1 else 0 }) { families.shuffled().take(3).toSet() }
-            val picks = families.flatMap { c -> List(if (c in sixes) 6 else 5) { c.items.random() } }.shuffled()
+            // Past 50% luck: fewer of the target, the others sharing the rest of the 28.
+            val mine = beyond(if (target in sixes) 6 else 5)
+            val others = families - target
+            val sizes = if (mine == (if (target in sixes) 6 else 5)) families.associateWith { if (it in sixes) 6 else 5 }
+                else (others.mapIndexed { i, c -> c to (28 - mine) / 4 + if (i < (28 - mine) % 4) 1 else 0 } + (target to mine)).toMap()
+            val picks = families.flatMap { c -> List(sizes.getValue(c)) { c.items.random() } }.shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
         private val wanted = target.items.map { item(it.first) }.toSet()
