@@ -717,9 +717,10 @@ object SimonSaysPractice : Module(
 
     /**
      * After the game's pick (each frame and tick): the device's blocks raycast within your block
-     * reach. One hit wins over the world's blocks (as if the space in front of it were clear) but not
-     * over a nearer entity; the game's own pick then becomes a miss, so it neither outlines nor
-     * acts on the real block behind.
+     * reach. One hit wins over the world's blocks (as if the space in front of it were clear) and
+     * over players (clicks go through them), but not over a nearer other entity. The game's own
+     * pick then becomes a miss with no entity under the crosshair, so it neither outlines nor acts
+     * on the real block or player in front.
      */
     @JvmStatic
     fun afterPick(partialTicks: Float) {
@@ -740,9 +741,10 @@ object SimonSaysPractice : Module(
             }
             val b = best ?: return@safely
             val game = mc.hitResult
-            if (game is net.minecraft.world.phys.EntityHitResult && game.location.distanceToSqr(eye) < bestD) return@safely
+            if (game is net.minecraft.world.phys.EntityHitResult && game.entity !is net.minecraft.world.entity.player.Player && game.location.distanceToSqr(eye) < bestD) return@safely
             hit = b
             mc.hitResult = BlockHitResult.miss(b.location, b.direction, b.blockPos)
+            mc.crosshairPickEntity = null
         }
     }
 
