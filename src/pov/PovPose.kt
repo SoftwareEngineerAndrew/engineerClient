@@ -69,6 +69,9 @@ object PovPose {
         interpolator.evict(now)
     }
 
+    /** The last pose sampled for this player and when (System.nanoTime), while it is still kept. */
+    fun lastSeen(id: java.util.UUID): PovInterpolator.Sample? = interpolator.newest(id)
+
     /** Forgets all history — world change, or the feature being switched off. */
     fun reset() = interpolator.clear()
 
