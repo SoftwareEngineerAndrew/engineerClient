@@ -93,6 +93,20 @@ object BrWaypoints2 : Module(
         EngineerClient.msg("§dBR Roles §7edit mode " + if (editMode) "§aon" else "§coff")
     }
 
+    /**
+     * Another editor sharing the wand (the /posmsg editor, where it is installed): each tick, and
+     * asked first about every wand click, scroll and drop - true when it took it.
+     */
+    interface WandUser {
+        fun tick()
+        fun onDrop(): Boolean
+        fun onMove(by: Int): Boolean
+        fun blocksContinueAttack(): Boolean
+        fun onUse(): Boolean
+    }
+
+    @Volatile var wandUser: WandUser? = null
+
     private val makeWand by ActionSetting("Make Held Item Wand", desc = "Makes the item in your hand the wand, the tool the editor is used with.") {
         val held = mc.player?.mainHandItem
         if (held == null || held.isEmpty) return@ActionSetting EngineerClient.msg("§cHold the item you want as the wand first.")
@@ -225,7 +239,7 @@ object BrWaypoints2 : Module(
         on<TickEvent.End> {
             BrRoles.settingKilling = killers.ordinal + 2
             BrRoles.settingRole = when (myRole.ordinal) { 0 -> null; 1 -> 0; else -> myRole.ordinal - 1 }
-            PosMsgEditor.tick()
+            wandUser?.tick()
             if (!DungeonUtils.inDungeons) return@on
             wasInDungeon = true
             ticks++
@@ -717,7 +731,7 @@ object BrWaypoints2 : Module(
     /** Drop: delete the box you are looking at, or place one. True means the drop must not happen. */
     @JvmStatic
     fun onDrop(): Boolean {
-        if (PosMsgEditor.onDrop()) return true
+        if (wandUser?.onDrop() == true) return true
         if (!editing()) return false
         val player = mc.player ?: return false
         target(1f)?.let { (box, _) ->
@@ -736,16 +750,16 @@ object BrWaypoints2 : Module(
 
     /** Left click: push the selected face out. True cancels the swing. */
     @JvmStatic
-    fun onAttack(): Boolean = PosMsgEditor.onMove(+1) || move(+1)
+    fun onAttack(): Boolean = wandUser?.onMove(+1) == true || move(+1)
 
     /** Holding left click: swallowed while a face is selected, so the block behind is not mined. */
     @JvmStatic
-    fun blocksContinueAttack(): Boolean = PosMsgEditor.blocksContinueAttack() || (editing() && target(1f) != null)
+    fun blocksContinueAttack(): Boolean = wandUser?.blocksContinueAttack() == true || (editing() && target(1f) != null)
 
     /** Right click: pull the selected face in, once per press. True cancels using the wand. */
     @JvmStatic
     fun onUse(): Boolean {
-        if (PosMsgEditor.onUse()) return true
+        if (wandUser?.onUse() == true) return true
         if (!editing() || target(1f) == null) return false
         if (!useHeld) { useHeld = true; move(-1) }
         return true
@@ -753,7 +767,7 @@ object BrWaypoints2 : Module(
 
     /** Scroll: up pushes out, down pulls in. True keeps the hotbar from switching off the wand. */
     @JvmStatic
-    fun onScroll(y: Double): Boolean = if (y == 0.0) false else PosMsgEditor.onMove(if (y > 0) +1 else -1) || move(if (y > 0) +1 else -1)
+    fun onScroll(y: Double): Boolean = if (y == 0.0) false else wandUser?.onMove(if (y > 0) +1 else -1) == true || move(if (y > 0) +1 else -1)
 
     private fun move(by: Int): Boolean {
         if (!editing()) return false
@@ -964,7 +978,7 @@ object BrWaypoints2 : Module(
     private const val SITE_MAX_SIZE = 64
     private const val SITE_MAX_BOXES = 5000
 
-    /** Whether the wand is in hand, for [PosMsgEditor], which shares it. */
+    /** Whether the wand is in hand, for a [wandUser], which shares it. */
     internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand
 
     /**

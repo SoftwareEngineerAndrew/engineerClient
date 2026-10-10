@@ -1,6 +1,7 @@
-package com.engineerclient.waypoints
+package com.devgineerclient.waypoints
 
-import com.engineerclient.EngineerClient
+
+import com.devgineerclient.DevgineerClient
 import com.mojang.brigadier.arguments.BoolArgumentType
 import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -46,7 +47,7 @@ import kotlin.math.floor
  */
 object PositionalMessages : Module(
     name = "Positional Messages",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Devgineer Client", 860, 10),
     description = "Sends a message when you're near a certain position. /posmsg",
 ) {
     private val onlyDungeons by BooleanSetting("Only in Dungeons", true, desc = "Only sends messages when you're in a dungeon.")
@@ -142,7 +143,7 @@ object PositionalMessages : Module(
         "lightpurple" to Colors.MINECRAFT_LIGHT_PURPLE, "yellow" to Colors.MINECRAFT_YELLOW, "white" to Colors.WHITE, "black" to Colors.BLACK,
     )
 
-    private fun say(text: String) = EngineerClient.msg(text)
+    private fun say(text: String) = DevgineerClient.msg(text)
 
     private fun suggest(values: () -> List<String>) = SuggestionProvider<FabricClientCommandSource> { _, b ->
         values().filter { it.startsWith(b.remaining, true) }.forEach(b::suggest)
