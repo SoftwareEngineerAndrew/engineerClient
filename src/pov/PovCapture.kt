@@ -270,15 +270,13 @@ object PovCapture {
      *
      * Odin draws its HUDs from a `HudElementRegistry` element in the HUD phase, which is *before*
      * the screen phase we are in, so a preview covers them. Rather than move the previews down
-     * (they have to be above the vanilla hotbar and scoreboard), the few that matter mid-fight are
-     * simply drawn a second time here, through the draw function `OdinHuds` keeps for each.
+     * (they have to be above the vanilla hotbar and scoreboard), every HUD that is on (Keep All HUDs) or
+     * the few ticked are simply drawn a second time here, through the draw function `OdinHuds` keeps for each.
      * Drawing a HUD twice in one frame is safe: it only renders and returns its size.
      */
     private fun redrawKeptHuds(gfx: GuiGraphicsExtractor) {
-        val keep = PovPreviews.keptHudNames()
-        if (keep.isEmpty()) return
         for (hud in ModuleManager.hudSettingsCache) {
-            if (!hud.isEnabled || hud.name !in keep) continue
+            if (!hud.isEnabled || !PovPreviews.keepsHud(hud.name)) continue
             EngineerClient.safely("pov keep hud ${hud.name}") { OdinHuds.redraw(gfx, hud) }
         }
     }

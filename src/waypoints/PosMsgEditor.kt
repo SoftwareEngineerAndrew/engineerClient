@@ -57,7 +57,7 @@ object PosMsgEditor {
 
     fun tick() {
         if (!mc.options.keyUse.isDown) useHeld = false
-        if (BrWaypoints2.posmsgRetrigger) rearm()
+        if (PositionalMessages.retrigger) rearm()
     }
 
     /** Re-arms every sent posmsg you are no longer in (the module's own tests: box contains your position, radius by 3D distance). */

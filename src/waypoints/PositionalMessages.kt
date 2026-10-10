@@ -10,6 +10,8 @@ import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.SuggestionProvider
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
+import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.impl.ListSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
@@ -52,6 +54,13 @@ object PositionalMessages : Module(
     private val cylinderHeight by NumberSetting("Height", 0.2f, 0.1..5.0, 0.1, desc = "Height of the cylinder for in messages.").withDependency { showPositions }
     private val displayMessage by BooleanSetting("Show Message", true, desc = "Whether or not to display the message in the box.").withDependency { showPositions }
     private val messageSize by NumberSetting("Message Size", 1f, 0.1..4.0, 0.1f, desc = "The size at which to display the message in the box.").withDependency { showPositions && displayMessage }
+
+    /** Read by PosMsgEditor every tick. */
+    val retrigger by BooleanSetting("Re-trigger", false, desc = "Each /posmsg is sent once per world. On: leaving a box (or its radius) re-arms it, so walking back in sends it again. Only your own client.")
+
+    private val hereKey by KeybindSetting("Box Here Keybind", InputConstants.UNKNOWN, "Adds a /posmsg box, 1x1x1 on the block you stand in, that sends \"entered box\".").onPress {
+        PosMsgEditor.addHere("entered box")
+    }
 
     data class PosMessage(val x: Double, val y: Double, val z: Double, val x2: Double?, val y2: Double?, val z2: Double?, val delay: Int, val distance: Double?, val color: Color, val message: String?, val dontSend: Boolean) {
         @Transient
