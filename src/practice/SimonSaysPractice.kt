@@ -43,15 +43,15 @@ import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.Rotation
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.BlockHitResult
-import net.minecraft.world.phys.HitResult
 import com.mojang.blaze3d.platform.InputConstants
 import java.util.Locale
 
 /**
  * SS Practice: F7's first device, Simon Says, summoned in front of you with a keybind (press it
- * again to take it away), to practice anywhere. Entirely client side: the blocks are set in your
- * own copy of the world only, and clicks on them are handled here and cancelled before the game
- * would send anything (no use, no swing, no mining packets).
+ * again to take it away), to practice anywhere. Entirely visual: no block of the world is changed,
+ * not even in your own copy of it. The device's blocks are only drawn ([Placement.blocks]), what
+ * you look at on it is raycast after the game's own pick ([afterPick]), and clicks on it are
+ * handled here and cancelled before the game would send anything (no use, no swing, no mining).
  *
  * The device is its 4x4 obsidian grid in a wall of black wool, with the start button on the wool
  * left of the grid, placed where it is from the spot healers stand on to do it (108, 120, 94 in the
@@ -115,9 +115,6 @@ object SimonSaysPractice : Module(
 
     // ------------------------------------------------------------------ placement
 
-    /** Only ever sets blocks in this client's copy of the world: no shape updates, nothing sent. */
-    private const val FLAGS = Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE
-
     private class Placement(val level: ClientLevel, val origin: BlockPos, val forward: Direction) {
         val right: Direction = forward.clockWise
         /** The real device faces -x (you look +x); turned to face you. */
@@ -131,11 +128,14 @@ object SimonSaysPractice : Module(
         fun at(dx: Int, dy: Int, dz: Int): BlockPos =
             origin.offset(forward.stepX * dx + right.stepX * dz, dy, forward.stepZ * dx + right.stepZ * dz)
         fun at(real: BlockPos) = at(real.x - AX, real.y - AY, real.z - AZ)
-        /** What was there before: put back on removal. */
-        val saved = LinkedHashMap<BlockPos, BlockState>()
+        /** The device's blocks, by world position, turned to face you: drawn, never set in the world. Air: none. */
+        val blocks = LinkedHashMap<BlockPos, BlockState>()
+        /** The signs' block entities (in no world's list: only for drawing them). */
+        val signs = LinkedHashMap<BlockPos, net.minecraft.world.level.block.entity.SignBlockEntity>()
+        /** Where the device takes its light from: the spot you stood on to summon it, at head height. */
+        val lightPos: BlockPos = origin.above()
         fun setWorld(pos: BlockPos, state: BlockState) {
-            saved.putIfAbsent(pos.immutable(), level.getBlockState(pos))
-            level.setBlock(pos, state.rotate(rotation), FLAGS)
+            if (state.isAir) blocks.remove(pos) else blocks[pos.immutable()] = state.rotate(rotation)
         }
         fun set(real: BlockPos, state: BlockState) = setWorld(at(real), state)
         /** A box given in the real device's frame, turned into the world like the blocks are. */
@@ -149,7 +149,7 @@ object SimonSaysPractice : Module(
 
     private var placed: Placement? = null
 
-    /** The practice device is out (its blocks are client-side, and not the real one's). */
+    /** The practice device is out (drawn only: the blocks around are the real ones). */
     val practicing: Boolean get() = placed != null
 
     private fun summonOrRemove() {
@@ -158,8 +158,6 @@ object SimonSaysPractice : Module(
         val level = mc.level ?: return
         val p = Placement(level, player.blockPosition(), player.direction)
         EngineerClient.safely("ss practice summon") {
-            // Clear the space between you and the buttons first, so nothing blocks a click.
-            for (dx in 0..2) for (dy in 0..3) for (dz in -4..3) p.setWorld(p.at(dx, dy, dz), Blocks.AIR.defaultBlockState())
             // The wall: the grid (x 111, y 120-123, z 92-95) in a ring of black wool, start button on its left.
             for (y in 119..124) for (z in 91..96) {
                 val grid = y in 120..123 && z in 92..95
@@ -190,12 +188,12 @@ object SimonSaysPractice : Module(
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private val CONTROL_CODES = Regex("§.")
 
+    /** Nothing in the world to put back: it's no longer drawn, and that's all. */
     private fun remove() {
-        val p = placed ?: return
+        placed ?: return
         placed = null
+        hit = null
         reset()
-        if (p.level !== mc.level) return
-        EngineerClient.safely("ss practice remove") { for ((pos, state) in p.saved) p.level.setBlock(pos, state, FLAGS) }
     }
 
     // ------------------------------------------------------------------ the device
@@ -299,12 +297,15 @@ object SimonSaysPractice : Module(
         else p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7)
 
     /**
-     * For ButtonBlock.getShape: with Full Block on, a practice grid button is the whole face of its
-     * block (16x16) at a button's depth (2 px, 1 pressed), against the block it's on. Else null.
+     * A device block's hitbox (and outline): its own shape, except with Full Block on a grid button
+     * is the whole face of its block (16x16) at a button's depth (2 px, 1 pressed), against the
+     * block it's on.
      */
-    @JvmStatic
-    fun fullBlockShape(state: BlockState, pos: BlockPos): net.minecraft.world.phys.shapes.VoxelShape? {
-        if (!fullBlock || placed == null || pos !in gridCells) return null
+    private fun shapeOf(pos: BlockPos, state: BlockState): net.minecraft.world.phys.shapes.VoxelShape =
+        fullBlockShape(state, pos) ?: state.getShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, pos)
+
+    private fun fullBlockShape(state: BlockState, pos: BlockPos): net.minecraft.world.phys.shapes.VoxelShape? {
+        if (!fullBlock || state.block !is ButtonBlock || pos !in gridCells) return null
         val d = if (state.getValue(ButtonBlock.POWERED)) 1.0 else 2.0
         return when (state.getValue(BlockStateProperties.HORIZONTAL_FACING)) {
             Direction.WEST -> Block.box(16 - d, 0.0, 0.0, 16.0, 16.0, 16.0)
@@ -469,7 +470,11 @@ object SimonSaysPractice : Module(
     private fun sign(p: Placement, button: BlockPos, line1: String, line2: String, side: Direction = Direction.NORTH) {
         val real = button.east().relative(side)
         p.set(real, Blocks.OAK_WALL_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.WallSignBlock.FACING, side))
-        val be = p.level.getBlockEntity(p.at(real)) as? net.minecraft.world.level.block.entity.SignBlockEntity ?: return
+        val pos = p.at(real)
+        val be = net.minecraft.world.level.block.entity.SignBlockEntity(pos, p.blocks[pos] ?: return)
+        // Its level is only read for drawing (the renderer skips one without); it isn't added to it.
+        be.setLevel(p.level)
+        p.signs[pos] = be
         be.setText(net.minecraft.world.level.block.entity.SignText.EMPTY.asMutable()
             .setLine(1, net.minecraft.network.chat.Component.literal(line1))
             .setLine(2, net.minecraft.network.chat.Component.literal(line2)).asImmutable(), net.minecraft.world.level.block.entity.SignTextSlot.FRONT)
@@ -654,14 +659,91 @@ object SimonSaysPractice : Module(
         mc.level?.playLocalSound(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.3f, 0.6f, false)
     }
 
+    // ------------------------------------------------------------------ drawing
+
+    /**
+     * A block drawn as a falling block is (all of its model, no world needed), lit from the
+     * device's [Placement.lightPos], so one summoned into a wall or the ground isn't drawn dark.
+     */
+    private class DeviceBlock(val lightPos: BlockPos) : net.minecraft.client.renderer.block.MovingBlockRenderState() {
+        override fun getBrightness(layer: net.minecraft.world.level.LightLayer, pos: BlockPos): Int =
+            lightEngine.getLayerListener(layer).getLightValue(lightPos)
+        override fun getRawBrightness(pos: BlockPos, darkening: Int): Int = lightEngine.getRawBrightness(lightPos, darkening)
+    }
+
+    /** The device: its blocks, its signs (text and all), and the outline of the one you look at, as the game outlines a block. */
+    private fun draw(p: Placement, context: net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext) {
+        val pose = context.poseStack()
+        val out = context.submitNodeCollector()
+        val cam = mc.gameRenderer.mainCamera().position()
+        val level = p.level
+        val light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, p.lightPos)
+        fun at(pos: BlockPos, draw: () -> Unit) {
+            pose.pushPose()
+            pose.translate(pos.x - cam.x, pos.y - cam.y, pos.z - cam.z)
+            draw()
+            pose.popPose()
+        }
+        for ((pos, state) in p.blocks) {
+            if (pos in p.signs) continue
+            val s = DeviceBlock(p.lightPos)
+            s.randomSeedPos = pos; s.blockPos = pos; s.blockState = state
+            s.biome = level.getBiome(pos); s.cardinalLighting = level.cardinalLighting(); s.lightEngine = level.lightEngine
+            at(pos) { out.submitMovingBlock(pose, s, 0) }
+        }
+        val signs = mc.blockEntityRenderDispatcher
+        val camera = context.levelState().cameraRenderState
+        for ((pos, be) in p.signs) {
+            val s = signs.tryExtractRenderState<net.minecraft.world.level.block.entity.SignBlockEntity, net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState>(be, 0f, null, false) ?: continue
+            s.lightCoords = light
+            at(pos) { signs.submit(s, pose, out, camera) }
+        }
+        val target = target() ?: return
+        val state = p.blocks[target] ?: return
+        val width = mc.gameRenderer.gameRenderState().windowRenderState.appropriateLineWidth
+        at(target) { out.submitShapeOutline(pose, shapeOf(target, state), net.minecraft.client.renderer.rendertype.RenderTypes.linesTranslucent(), net.minecraft.util.ARGB.black(102), width, false) }
+    }
+
     // ------------------------------------------------------------------ input (from the mixin)
+
+    /** The device block you're looking at, from the last [afterPick]. */
+    private var hit: BlockHitResult? = null
 
     /** The block you're looking at, if it's part of the practice device. */
     private fun target(): BlockPos? {
         val p = placed ?: return null
-        val hit = mc.hitResult as? BlockHitResult ?: return null
-        if (hit.type != HitResult.Type.BLOCK) return null
-        return hit.blockPos.takeIf { it in p.saved }
+        return hit?.blockPos?.takeIf { it in p.blocks }
+    }
+
+    /**
+     * After the game's pick (each frame and tick): the device's blocks raycast within your block
+     * reach. One hit wins over the world's blocks (as if the space in front of it were clear) but not
+     * over a nearer entity; the game's own pick then becomes a miss, so it neither outlines nor
+     * acts on the real block behind.
+     */
+    @JvmStatic
+    fun afterPick(partialTicks: Float) {
+        hit = null
+        val p = placed ?: return
+        if (p.level !== mc.level) return
+        val player = mc.player ?: return
+        if (mc.cameraEntity !== player) return
+        EngineerClient.safely("ss practice pick") {
+            val eye = player.getEyePosition(partialTicks)
+            val end = eye.add(player.getViewVector(partialTicks).scale(player.blockInteractionRange()))
+            var best: BlockHitResult? = null
+            var bestD = Double.MAX_VALUE
+            for ((pos, state) in p.blocks) {
+                val r = shapeOf(pos, state).clip(eye, end, pos) ?: continue
+                val d = r.location.distanceToSqr(eye)
+                if (d < bestD) { bestD = d; best = r }
+            }
+            val b = best ?: return@safely
+            val game = mc.hitResult
+            if (game is net.minecraft.world.phys.EntityHitResult && game.location.distanceToSqr(eye) < bestD) return@safely
+            hit = b
+            mc.hitResult = BlockHitResult.miss(b.location, b.direction, b.blockPos)
+        }
     }
 
     // ------------------------------------------------------------------ the real device's sounds
@@ -759,7 +841,7 @@ object SimonSaysPractice : Module(
     fun onUse(): Boolean {
         val pos = target() ?: return false
         val p = placed ?: return false
-        val button = mc.level?.getBlockState(pos)?.block is ButtonBlock
+        val button = p.blocks[pos]?.block is ButtonBlock
         EngineerClient.safely("ss practice use") {
             val from = (3..4).firstOrNull { pos == p.at(fromButton(it)) }
             val rngPick = (-1..2).firstOrNull { pos == p.at(rngButton(it)) }
@@ -801,7 +883,9 @@ object SimonSaysPractice : Module(
         }
         on<RenderExtractEvent> {
             val p = placed ?: return@on
-            if (!solver || p.level !== mc.level) return@on
+            if (p.level !== mc.level) return@on
+            EngineerClient.safely("ss practice draw") { draw(p, context) }
+            if (!solver) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
@@ -833,7 +917,7 @@ object SimonSaysPractice : Module(
             mc.execute { if (placed != null) EngineerClient.safely("ss practice countdown") { remove(); EngineerClient.msg("§7SS Practice: removed (terminals starting).") } }
         }
         // A new world has none of it: nothing to put back.
-        on<LevelEvent.Unload> { placed = null; gen++; jobs.clear(); phase = Phase.IDLE }
+        on<LevelEvent.Unload> { placed = null; hit = null; gen++; jobs.clear(); phase = Phase.IDLE }
     }
 
     override fun onDisable() {
