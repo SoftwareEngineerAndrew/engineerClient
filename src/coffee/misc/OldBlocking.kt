@@ -1,10 +1,8 @@
 package com.coffeeclient.misc
 
 import com.coffeeclient.CoffeeClient.mc
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import net.minecraft.core.component.DataComponents
 import net.minecraft.tags.ItemTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.HumanoidArm
@@ -12,7 +10,8 @@ import net.minecraft.world.item.ItemStack
 import org.joml.Matrix4f
 
 /**
- * Old Blocking: while you hold use with a sword, your first-person sword is drawn in 1.8.9's
+ * Old Blocking: while you hold use with a sword (an actual sword item - not a SkyBlock "SWORD"
+ * that's a flower, stick or bone), your first-person sword is drawn in 1.8.9's
  * blocking pose (OldBlockingMixin), without the swing, as 1.8.9 drew it. Drawing only: nothing
  * is sent, no input is taken or changed, and the item is used exactly as it would be anyway.
  *
@@ -27,22 +26,13 @@ object OldBlocking : Module(
     category = Category.custom("Coffee Client", 860, 10),
     description = "Visual only: holding right click with a sword shows 1.8.9's sword blocking in first person. Changes nothing in game.",
 ) {
-    private val hypixelSwords by BooleanSetting("SkyBlock Swords", true, desc = "Also SkyBlock items whose rarity line says SWORD (e.g. LEGENDARY DUNGEON SWORD), whatever item they are.")
-
     /** Whether [stack] in [hand] is drawn blocking right now. Render thread. */
     @JvmStatic
     fun blocking(stack: ItemStack, hand: InteractionHand): Boolean {
         if (!enabled || hand != InteractionHand.MAIN_HAND || stack.isEmpty) return false
         val player = mc.player ?: return false
         if (mc.gui.screen() != null || !mc.options.keyUse.isDown || player.isUsingItem) return false
-        return isSword(stack)
-    }
-
-    private fun isSword(stack: ItemStack): Boolean {
-        if (stack.`is`(ItemTags.SWORDS)) return true
-        if (!hypixelSwords) return false
-        val rarity = stack.get(DataComponents.LORE)?.lines()?.lastOrNull { it.string.isNotBlank() }?.string ?: return false
-        return rarity.contains(" SWORD")
+        return stack.`is`(ItemTags.SWORDS)
     }
 
     /** The 1.8.9 blocking pose as one matrix, to apply right after the arm transform. */
