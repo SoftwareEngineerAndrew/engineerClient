@@ -172,6 +172,8 @@ object Mage {
                 Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 0.8f + kotlin.random.Random.nextFloat() * 0.18f, at, SoundSource.MASTER)
                 Sim.level.sendParticles(ParticleTypes.EXPLOSION, at.x, at.y + 0.5, at.z, 1, 0.0, 0.0, 0.0, 0.0)
                 if (mob != null) Sim.chat("§7Your Guided Sheep hit §c1 §7enemy for §c0 §7damage.")
+                // Like Explosive Shot: a blast within 2 blocks of a gate blows it.
+                (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
             }
         }
     }
