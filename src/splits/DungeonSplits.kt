@@ -60,6 +60,16 @@ object DungeonSplits : Module(
     private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
     private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "", placeholder = "").hide()
 
+    /**
+     * Each split's last [RECENT] whole times, per floor, oldest first, on both clocks:
+     * `split.open=ms:ticks|ms:ticks,split.blood=...`. Pace From Recent Runs projects from their median.
+     */
+    private var recentF7 by StringSetting("Recent Splits F7", "", 8192, desc = "", placeholder = "").hide()
+    private var recentM7 by StringSetting("Recent Splits M7", "", 8192, desc = "", placeholder = "").hide()
+    private const val RECENT = 20
+    /** Fewer kept than this and a split has no typical time yet (Pace falls back to its target). */
+    private const val RECENT_MIN = 5
+
     /** Tracks the in-boss moments (the Watcher's dialog, everyone in the core) the watchers below key off. */
     private val moments = BossMoments()
 
@@ -574,6 +584,7 @@ object DungeonSplits : Module(
             val id = SplitPace.SPLIT_IDS[split.label] ?: return@forEachIndexed
             if (!whole) return@forEachIndexed
             recordBest(floor, id, SubSplitGrades.value(id, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()), true)
+            recordRecent(floor, id, SplitPace.Clocks(stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()))
         }
     }
 
@@ -612,6 +623,36 @@ object DungeonSplits : Module(
 
     /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
     private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
+
+    private fun recent(floor: String?): MutableMap<String, MutableList<SplitPace.Clocks>> =
+        (when (floor) { "F7" -> recentF7; "M7" -> recentM7; else -> "" }).split(',').mapNotNull { e ->
+            val (k, v) = e.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+            k.trim() to v.split('|').mapNotNull { c ->
+                val (ms, ticks) = c.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+                SplitPace.Clocks(ms.toLongOrNull() ?: return@mapNotNull null, ticks.toLongOrNull() ?: return@mapNotNull null)
+            }.toMutableList()
+        }.toMap(HashMap())
+
+    private fun recordRecent(floor: String, id: String, c: SplitPace.Clocks) {
+        val all = recent(floor)
+        val list = all.getOrPut(id) { mutableListOf() }
+        list += c
+        while (list.size > RECENT) list.removeAt(0)
+        val text = all.entries.sortedBy { it.key }.joinToString(",") { (k, v) -> k + "=" + v.joinToString("|") { "${it.ms}:${it.ticks}" } }
+        when (floor) { "F7" -> recentF7 = text; "M7" -> recentM7 = text; else -> return }
+        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+    }
+
+    /**
+     * [label]'s (SplitTracker's) typical time on [floor]: the median of its last [RECENT] whole times,
+     * each clock on its own; null with fewer than [RECENT_MIN] kept.
+     */
+    fun typical(floor: String, label: String): SplitPace.Clocks? {
+        val id = SplitPace.SPLIT_IDS[label] ?: return null
+        val list = recent(floor)[id]?.takeIf { it.size >= RECENT_MIN } ?: return null
+        fun median(v: List<Long>) = v.sorted().let { if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2 }
+        return SplitPace.Clocks(median(list.map { it.ms }), median(list.map { it.ticks }))
+    }
 
     private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
         when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })
