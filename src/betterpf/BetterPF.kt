@@ -15,6 +15,7 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
 import com.engineerclient.mixin.ContainerScreenAccessor
@@ -74,7 +75,7 @@ object BetterPF : Module(
      */
     private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /betterpf's link.", placeholder = "").hide()
 
-    private fun token(): String {
+    internal fun token(): String {
         if (ownerToken.length < 32) {
             val r = java.security.SecureRandom()
             ownerToken = (1..32).joinToString("") { "0123456789abcdef"[r.nextInt(16)].toString() }
@@ -87,9 +88,7 @@ object BetterPF : Module(
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
-    private val webSignIn by ActionSetting("Copy Web Sign-in Code", desc = "Signs you in to the web party finder (undonecoffee.com/betterpf/menu): copies a code to paste at the top of that page - it's never shown. Each new code signs the last one out everywhere. Signed in, the page can show who's looking to play, invite and join from anywhere, and your game takes the party commands you press there (only yours).") { WebParty.newCode() }
-    /** The web party finder's sign-in code (WebParty), kept between games. */
-    internal var webCode by StringSetting("Web Code", "", 64, desc = "Your web party finder sign-in.", placeholder = "").hide()
+    private val openOnline by ActionSetting("Open Online Page", desc = "Opens Better PF Online (undonecoffee.com/betterpf/online) in your browser, signed in as you: everyone online with Better PF and the party they are in, and your own looking-to-play settings. Each time signs the last browser out.") { OnlineLink.openPage() }
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed. One at a time, with progress in chat.") { uploadMissing() }
 
     const val SITE = "undonecoffee.com"
@@ -110,7 +109,10 @@ object BetterPF : Module(
             }
         }
 
-        on<TickEvent.End> { EngineerClient.safely("betterpf web") { WebParty.tick() } }
+        // Better PF Online: your party, tracked from chat, and the link to the site.
+        on<TickEvent.End> { EngineerClient.safely("betterpf online") { PartyTracker.tick(); OnlineLink.tick() } }
+        ClientPlayConnectionEvents.JOIN.register { _, _, _ -> EngineerClient.safely("betterpf party join") { PartyTracker.onJoin() } }
+        ClientPlayConnectionEvents.DISCONNECT.register { _, _ -> EngineerClient.safely("betterpf party leave") { PartyTracker.onDisconnect() } }
 
         on<LevelEvent.Unload> {
             EngineerClient.safely("betterpf end") { session?.finish(); session = null }
@@ -179,8 +181,11 @@ object BetterPF : Module(
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
-            WebParty.onChat(text)
             val colored = legacyText(content)
+            // The answer to a /p list Better PF sent itself: read, and kept out of chat.
+            var hide = false
+            EngineerClient.safely("betterpf party") { hide = PartyTracker.onChat(text, colored) }
+            if (hide) it.cancel()
             if (hidePrivateChats && (UploadPacker.privateChat(text) || UploadPacker.partyChat(text))) return@onReceive
             val n = session?.serverTickCount
             EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored, n) } }
@@ -520,7 +525,7 @@ object BetterPF : Module(
     override fun onDisable() {
         session?.finish()
         session = null
-        WebParty.close()
+        OnlineLink.close()
         super.onDisable()
     }
 }
