@@ -29,6 +29,9 @@ object PaceTargets {
     /** [label]'s (SplitTracker's) Pace target for SplitPace: its box, else the PB, else null (its dark green). */
     fun paceTarget(label: String, master: Boolean): SplitPace.Clocks? {
         val i = SplitPace.ORDER.indexOf(label).takeIf { it >= 0 } ?: return null
+        // Engineer Client's Pace From Recent Runs: its typical time for the split, when it has one.
+        if ((Splits.settings["Pace From"] as? com.odtheking.odin.clickgui.settings.impl.SelectorSetting<*>)?.value?.toString() == "Recent Runs")
+            com.engineerclient.splits.DungeonSplits.typical(if (master) "M7" else "F7", label)?.let { return SplitPace.Clocks(it.ms, it.ticks) }
         val box = LABELS.getOrNull(i)?.let { Splits.settings["${if (master) "M7" else "F7"} $it"] as? StringSetting }
         box?.value?.let { parseSeconds(it) }?.let { return secs(it) }
         return pb(i, master)

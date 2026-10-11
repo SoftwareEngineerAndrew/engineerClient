@@ -36,6 +36,7 @@ object OdinSplitsLook {
 
     private enum class Look { ODIN_SPLITS, ENGINEER_SPLITS }
     private enum class PaceFloor { F7, M7 }
+    enum class PaceFrom(private val label: String) { RECENT("Recent Runs"), TARGETS("Targets"); override fun toString() = label }
 
     private val look = SelectorSetting("Look", Look.ENGINEER_SPLITS,
         desc = "Odin Splits, or Engineer Splits: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
@@ -59,6 +60,10 @@ object OdinSplitsLook {
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }
+
+    private val paceFrom = SelectorSetting("Pace From", PaceFrom.RECENT,
+        desc = "What Pace counts each split still to come as. Recent Runs: your typical time for it, the median of your last 20 (until 5 are kept, its target), so Pace is where this run will likely finish. Targets: the boxes below (or PBs), which add up to faster than you usually run.")
+        .withDependency { engineer && pace.value }
 
     private val paceFloor = SelectorSetting("Pace Targets", PaceFloor.F7,
         desc = "Which floor's targets the boxes below are for. Pace uses the ones for the floor you are on; other floors and Kuudra have no targets, so there Pace is the time so far.")
@@ -87,7 +92,7 @@ object OdinSplitsLook {
     fun install() {
         SubSplitGrades.byTime = { colourByTime.value }
         SubSplitGrades.showBest = { showPb.value }
-        for (s in listOf(look, colourByTime, showPb, showLag, showPace, enterAfterEntry, pace, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        for (s in listOf(look, colourByTime, showPb, showLag, showPace, enterAfterEntry, pace, paceFrom, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
         val all = LinkedHashMap(Splits.settings)
         val last = all.remove(CURRENT_SPLIT_HUD)
@@ -190,7 +195,7 @@ object OdinSplitsLook {
     private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? {
         if (place != EngineerLook.Place.FLOOR7) return null
         return (if (master) m7 else f7).indices.map { i ->
-            (target(i, master) ?: darkGreen(i, master))?.let { it.ms / 1000.0 }
+            (typical(i, master) ?: target(i, master) ?: darkGreen(i, master))?.let { it.ms / 1000.0 }
         }
     }
 
@@ -205,7 +210,14 @@ object OdinSplitsLook {
 
     /** [label]'s (SplitTracker's) Pace target for SplitPace: its box, else the PB, else null (its dark green). */
     fun paceTarget(label: String, master: Boolean): SplitPace.Clocks? =
-        SplitPace.ORDER.indexOf(label).takeIf { it >= 0 }?.let { target(it, master) }
+        SplitPace.ORDER.indexOf(label).takeIf { it >= 0 }?.let { typical(it, master) ?: target(it, master) }
+
+    /** With Pace From Recent Runs, split [i]'s typical time (the median of your recent ones), else null. */
+    private fun typical(i: Int, master: Boolean): SplitPace.Clocks? {
+        if (paceFrom.value != PaceFrom.RECENT) return null
+        val label = SplitPace.ORDER.getOrNull(i) ?: return null
+        return DungeonSplits.typical(if (master) "M7" else "F7", label)
+    }
 
     /**
      * The PB for split [i]: the faster of the best kept by Sub Splits (timed by its own tracker, on
