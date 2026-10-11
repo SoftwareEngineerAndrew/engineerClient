@@ -21,6 +21,9 @@ object P3Plan {
      */
     const val RANDOM = 3
     val SKILLS = Roles.PRESETS.take(RANDOM).map { it.name } + "Random" + Roles.PRESETS.drop(RANDOM).map { it.name }
+    /** The menu's Theoretical (Prototype 1, before it, isn't shown: a saved choice of it becomes this). */
+    val THEORETICAL = SKILLS.indexOf("Theoretical")
+    private val PROTOTYPE_1 = SKILLS.indexOf("Prototype 1")
 
     /**
      * Where each early enter stands (into: 5 = the core, just outside it in S4; 6 = the recore,
@@ -239,8 +242,8 @@ object P3Plan {
             val f = file
             if (!f.exists()) return@safely
             val s = gson.fromJson(f.readText(), Saved::class.java) ?: return@safely
-            s.skill?.let { skill = it.coerceIn(0, SKILLS.size - 1) }
-            if (s.mine != null && s.mineFor != null) { mine.clear(); mine += s.mine; mineFor = s.mineFor }
+            s.skill?.let { skill = (if (it == PROTOTYPE_1) THEORETICAL else it).coerceIn(0, SKILLS.size - 1) }
+            if (s.mine != null && s.mineFor != null && s.skill != PROTOTYPE_1) { mine.clear(); mine += s.mine; mineFor = s.mineFor }
             s.botMin?.let { botMin = it }
             s.botMax?.let { botMax = it }
             s.waitForYou?.let { waitForYou = it }
