@@ -186,7 +186,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 "Restart P3 puts you where you stand now, facing as you are (as $me in $skill). Now: ${spawn?.let { at(it) } ?: "your first S1 job's spot"}.") { here()?.let { P3Plan.setCustomSpot("spawn", it) } },
             change("Default", 50, "Back to the default spawn (Normal PF's, as $me).") { P3Plan.setCustomSpot("spawn", null) },
         ))
-        row(listOf<LayoutElement>(label("§eEarly enters", LABEL_W, "Where each early enter stands, whoever does it.")) + P3Plan.earlyEnters.map { ee ->
+        row(listOf<LayoutElement>(label("§eEarly enters", LABEL_W, "Where each early enter stands, whoever does it.")) + P3Plan.earlyEnters.filter { it.into != 4 || it.on }.map { ee ->
             val who = ee.owner?.let { if (ee.byYou) "you" else "the ${Roles.label(it)} bot" } ?: "nobody in $skill"
             change(if (P3Plan.hasCustomSpot(ee.key)) "§a${ee.label}" else ee.label, 48,
                 "${ee.label} (${who}) stands where you stand now, facing as you are (as $me in $skill). Now: ${at(P3Plan.eeSpot(ee))}.") { here()?.let { P3Plan.setCustomSpot(ee.key, it) } }
@@ -392,7 +392,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 })
             }
         }
-        cols += stack("§eEarly Enters", 70, "The early-enter spots (set in Advanced).", P3Plan.earlyEnters.map { ee ->
+        cols += stack("§eEarly Enters", 70, "The early-enter spots (set in Advanced).", P3Plan.earlyEnters.filter { it.into != 4 || it.on }.map { ee ->
             val who = ee.owner?.let { if (ee.byYou) "yours" else "the ${Roles.label(it)}'s" } ?: "nobody's in this skill"
             val s = P3Plan.eeSpot(ee)
             act(ee.label, 70, "To the ${ee.label} spot (${who}): ${xyz(s.x, s.y, s.z)}. Set it in Advanced.") { tp(s.x, s.y, s.z, s.yaw, s.pitch) }

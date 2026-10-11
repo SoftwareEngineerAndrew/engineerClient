@@ -142,7 +142,7 @@ object Practice {
     /** Where the practice puts you: the custom start; your spawn (S1), the early enter into it, else its start. */
     fun startSpot(): Spots.Spot = setup?.start ?: when (val s = section) {
         1 -> P3Plan.customSpot("spawn") ?: Spots.p3Start(1)
-        else -> P3Plan.earlyEnters.firstOrNull { it.into == s }?.let { P3Plan.eeSpot(it) } ?: Spots.p3Start(s)
+        else -> P3Plan.earlyEnters.firstOrNull { it.into == s && (s != 4 || it.on) }?.let { P3Plan.eeSpot(it) } ?: Spots.p3Start(s)
     }
 
     /** The start timer (the menu's slider): seconds you stand placed before anything is up and the clock runs. */
