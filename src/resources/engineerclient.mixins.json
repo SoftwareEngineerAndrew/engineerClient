@@ -15,6 +15,7 @@
     "QuiverSimMixin",
     "PressurePlateSimMixin",
     "LastBreathSimMixin",
+    "SimPartyLanMixin",
     "ArcherDropSimMixin",
     "BlurRadiusMixin",
     "CameraAccessor",

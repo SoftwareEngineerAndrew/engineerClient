@@ -37,7 +37,7 @@ object SimServer {
 
     val level: ServerLevel? get() = server?.overworld()
 
-    /** The (only) player in the sim. */
+    /** The sim's player: the one whose game it is (a party's joiners come after). */
     val player: ServerPlayer? get() = server?.playerList?.players?.firstOrNull()
 
     /** Runs [block] on the sim server's thread (from the client's menu, say), if it is running. */
@@ -63,7 +63,7 @@ object SimServer {
         ServerLifecycleEvents.SERVER_STOPPING.register { s ->
             if (s !== server) return@register
             // Saved as built: no fight entities, every changed block back.
-            EngineerClient.safely("p3sim stopping") { Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
+            EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
         }
         ServerLifecycleEvents.SERVER_STOPPED.register { s ->
             if (s !== server) return@register
