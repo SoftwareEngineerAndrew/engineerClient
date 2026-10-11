@@ -105,7 +105,25 @@ object TermInfo : Module(
     @Volatile private var sectionStart = 0
     @Volatile private var shownTime: Pair<String, Long>? = null
 
-    private fun current() = sections.getOrNull(active)
+    private fun current() = simSection() ?: if (com.engineerclient.p3sim.P3Sim.inSim) null else sections.getOrNull(active)
+
+    /**
+     * P3 Sim: the section in progress straight off the sim, not its chat: a restart, a later section's or a timed start
+     * and a practice do part of P3 without chat, and a restart starts again in the same world.
+     */
+    private fun simSection(): Section? {
+        if (!com.engineerclient.p3sim.P3Sim.inSim) return null
+        val g = com.engineerclient.p3sim.Fight.phase as? com.engineerclient.p3sim.GoldorPhase ?: return null
+        val n = g.section.takeIf { it in 1..4 } ?: return null
+        val st = g.stations.filter { it.section == n }
+        val kind = com.engineerclient.p3sim.Station.Kind.TERMINAL
+        return Section(st.count { it.kind == kind }, n).apply {
+            termsDone = st.count { it.kind == kind && it.done }
+            leversDone = st.count { it.kind == com.engineerclient.p3sim.Station.Kind.LEVER && it.done }
+            deviceDone = st.any { it.kind == com.engineerclient.p3sim.Station.Kind.DEVICE && it.done }
+            gateDestroyed = n == 4 || g.gateIsDown(n)
+        }
+    }
 
     private fun colourFor(n: Int, max: Int) = when (n) { max -> "§a"; 0 -> "§c"; else -> "§e" }
 
@@ -142,16 +160,13 @@ object TermInfo : Module(
         sectionStart = serverTicks
     }
 
-    private fun inPractice() = com.engineerclient.p3sim.Practice.active && com.engineerclient.p3sim.P3Sim.inSim
-
     /**
-     * P3 Sim practice: a section's time as the sim measured it ([ticks], server ticks), shown as
-     * Section Time. Term Info can't follow a practice itself: the rest of the section is done
-     * without chat.
+     * P3 Sim: a section's time as the sim measured it ([ticks], server ticks), shown as Section Time. Term Info
+     * can't follow the sim by its chat: restarts, later starts and practices do part of P3 without it.
      */
     @JvmStatic
     fun simSectionTime(ticks: Int) {
-        if (inPractice()) shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
+        if (com.engineerclient.p3sim.P3Sim.inSim) shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
     }
 
     /** Devonian's TerminalSection.onChat, for the active section only. */
@@ -196,8 +211,8 @@ object TermInfo : Module(
         }
 
         if (cur.termsDone >= cur.terms && cur.leversDone >= 2 && cur.deviceDone && cur.gateDestroyed) {
-            // In P3 Sim practice the sim times the sections itself ([simSectionTime]).
-            if (!inPractice()) shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to System.currentTimeMillis()
+            // In P3 Sim the sim times the sections itself ([simSectionTime]).
+            if (!com.engineerclient.p3sim.P3Sim.inSim) shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to System.currentTimeMillis()
             sectionStart = serverTicks
             active++
         }
@@ -237,6 +252,6 @@ object TermInfo : Module(
         val text = raw.replace(CONTROL_CODES, "")
         // The gate and core titles: by their text, whenever (the core one comes as terminals end).
         if (GATE_CORE_TITLE.containsMatchIn(text)) return true
-        return active in 0..3 && TITLE.matches(text)
+        return (active in 0..3 || simSection() != null) && TITLE.matches(text)
     }
 }
