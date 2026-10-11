@@ -19,8 +19,8 @@ import kotlin.math.hypot
  *    cleaners hide; chat's last completion plus "The gate has been destroyed!" is the other way;
  *  - things the module sees in the world: Maxor's beacon turning to bedrock (the kill), his placed
  *    crystals vanishing (42 ticks after a hit, for a hit an ability kept quiet), Storm leaving his
- *    spot and reaching Yellow, Necron leaving and coming back to mid, Necron's death (the burst of
- *    TNT he dies in), the Watcher's move, and the camp's last mob appearing;
+ *    spot and reaching Yellow, Necron leaving and coming back to mid, and Necron's death (the burst
+ *    of TNT he dies in);
  *  - one count on the server's ticks: Storm leaves his spot 99 ticks after his lightning line.
  *
  * Nothing here touches Minecraft; the module feeds the world's moments in.
@@ -45,9 +45,6 @@ class SubSplitTracker {
     private var ticks = 0
     private var lightning: Stamp? = null
 
-    /** The Watcher's mobs seen appearing so far: the 19th is the last. */
-    private var bloodMobs = 0
-
     /** The gate and the last completion can arrive in either order; a section ends on the second. */
     private var gateBlown = false
     private var gateWaiting = false
@@ -59,7 +56,7 @@ class SubSplitTracker {
     fun reset() {
         java.util.Arrays.fill(starts, null)
         java.util.Arrays.fill(sources, null)
-        current = -1; ticks = 0; lightning = null; bloodMobs = 0
+        current = -1; ticks = 0; lightning = null
         gateBlown = false; gateWaiting = false; watchingCore = false
     }
 
@@ -115,17 +112,6 @@ class SubSplitTracker {
             lightning = null
             jumpTo(S_CRUSH1, from.plus(STORM_LEAVES), "$STORM_LEAVES server ticks after the lightning line - he wasn't seen leaving, so counted")
         }
-    }
-
-    /** The Watcher seen starting his move, the first leg after his dialogue. */
-    fun onWatcherMoved(at: Stamp) {
-        if (current == W_WAIT) jumpTo(W_CAMP, at, "the Watcher seen starting his move")
-    }
-
-    /** A blood mob appearing: the 19th (17 regulars, the Giant and a mini-boss) is the camp's last. */
-    fun onBloodMobSpawn(at: Stamp) {
-        if (current !in W_DIALOGUE..W_CAMP) return
-        if (++bloodMobs >= BLOOD_MOBS) jumpTo(W_CLEAR, at, "the ${BLOOD_MOBS}th blood mob seen appearing")
     }
 
     /** Maxor's beacon at (73, 221, 73) turning to bedrock: he is dead. */
@@ -216,8 +202,8 @@ class SubSplitTracker {
         when {
             // The Watcher: any line of his starts the camp, as it starts the Blood split.
             msg.startsWith(WATCHER) && current < W_DIALOGUE -> { reset(); jumpTo(W_DIALOGUE, at, said(msg)) }
-            msg == WATCHER_HANDLE -> if (current == W_DIALOGUE) jumpTo(W_WAIT, at, said(msg))
-            msg == WATCHER_DONE -> if (current in W_DIALOGUE..W_CLEAR) jumpTo(W_END, at, said(msg))
+            msg == WATCHER_HANDLE -> if (current == W_DIALOGUE) jumpTo(W_CAMP, at, said(msg))
+            msg == WATCHER_DONE -> if (current in W_DIALOGUE..W_CAMP) jumpTo(W_END, at, said(msg))
 
             // A jump rather than a step, so a missed moment earlier cannot leave the rest misaligned.
             msg == MAXOR_START -> jumpTo(M_CRYSTALS, at, said(msg))
@@ -309,9 +295,6 @@ class SubSplitTracker {
             "[BOSS] Necron: You went further than any human before, congratulations.",
         )
 
-        /** The camp is always 19 mobs: 17 regulars, the Giant and one mini-boss. */
-        const val BLOOD_MOBS = 19
-
         /**
          * Maxor's top crystals come back 41-42 ticks after a hit (less from the stun line when the
          * line itself was held back). His wither goes about 54 ticks after the kill (bedrock to the
@@ -343,16 +326,19 @@ class SubSplitTracker {
         const val ON_MID = 0.05
 
         // Step indices into [SEQUENCE].
-        const val W_DIALOGUE = 0; const val W_WAIT = 1; const val W_CAMP = 2; const val W_CLEAR = 3; const val W_END = 4
-        const val M_CRYSTALS = 5; const val M_LURE = 6; const val M_COOLDOWN = 7; const val M_KILL = 8; const val M_ANIMATION = 9
-        const val S_OPENING = 10; const val S_CRUSH1 = 11; const val S_PIN = 12; const val S_FLIGHT = 13
-        const val S_CRUSH2 = 14; const val S_KILL = 15; const val S_ANIMATION = 16
-        const val T_S1 = 17; const val T_S4 = 20; const val T_S3 = 19
-        const val G_LEAPS = 21; const val G_KILL = 22
-        const val N_INTRO = 23; const val N_TRIP1 = 24; const val N_LOCK1 = 25; const val N_KILL = 26; const val N_END = 27
+        const val W_DIALOGUE = 0; const val W_CAMP = 1; const val W_END = 2
+        const val M_CRYSTALS = 3; const val M_LURE = 4; const val M_COOLDOWN = 5; const val M_KILL = 6; const val M_ANIMATION = 7
+        const val S_OPENING = 8; const val S_CRUSH1 = 9; const val S_PIN = 10; const val S_FLIGHT = 11
+        const val S_CRUSH2 = 12; const val S_KILL = 13; const val S_ANIMATION = 14
+        const val T_S1 = 15; const val T_S4 = 18; const val T_S3 = 17
+        const val G_LEAPS = 19; const val G_KILL = 20
+        const val N_INTRO = 21; const val N_TRIP1 = 22; const val N_LOCK1 = 23; const val N_KILL = 24; const val N_END = 25
 
         /**
-         * The steps, in order. Fixed steps (the game's script): Dialogue, Wait, Animation, Opening,
+         * The steps, in order. Blood is the Watcher's dialogue, then his camp: "handle this" to
+         * "proven yourself" (since the boss update his camp is 12-14 mobs, and he starts moving the
+         * moment he may, 45 ticks after "handle this", so neither marks a step of its own).
+         * Fixed steps (the game's script): Dialogue, Animation, Opening,
          * Flight, Intro, Lock. The rest are the party's. Storm repeats a name on purpose: it is the
          * second crush that tells you whether the first was slow.
          *
@@ -362,8 +348,7 @@ class SubSplitTracker {
          * animation) or the TNT burst he dies in on M7.
          */
         val SEQUENCE: List<Step> = listOf(
-            Step(SplitTracker.BLOOD, "&7Dialogue", "watcher.dialogue"), Step(SplitTracker.BLOOD, "&5Wait", "watcher.wait"), Step(SplitTracker.BLOOD, "&cCamp", "watcher.camp"),
-            Step(SplitTracker.BLOOD, "&aClear", "watcher.clear"), Step(SplitTracker.BLOOD, null),
+            Step(SplitTracker.BLOOD, "&7Dialogue", "watcher.dialogue"), Step(SplitTracker.BLOOD, "&cCamp", "watcher.fight"), Step(SplitTracker.BLOOD, null),
 
             Step(SplitTracker.MAXOR, "&dCrystals", "maxor.crystals"), Step(SplitTracker.MAXOR, "&6Lure", "maxor.lure"), Step(SplitTracker.MAXOR, "&5Cooldown", "maxor.cooldown"),
             Step(SplitTracker.MAXOR, "&cKill", "maxor.kill"), Step(SplitTracker.MAXOR, "&dAnimation", "maxor.animation"),

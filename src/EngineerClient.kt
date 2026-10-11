@@ -1,7 +1,7 @@
 package com.engineerclient
 
 import com.engineerclient.betterpf.BetterPF
-import com.engineerclient.misc.AgroLeaderboard
+import com.engineerclient.misc.AgroSphere
 import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
 import com.engineerclient.rotation.LeapHighlight
@@ -88,7 +88,7 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, com.engineerclient.waypoints.PositionalMessages, AgroLeaderboard, DungeonSplits,
+            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
             P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers,
         )
     }
@@ -116,7 +116,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroLeaderboard, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -132,6 +132,7 @@ object EngineerClient : ClientModInitializer {
         }
 
         LeapHighlight.register()
+        DeadPlayers.register()
         com.engineerclient.misc.Witherborn.register()
         com.engineerclient.misc.I4Complete.register()
         com.engineerclient.practice.I4Aims.register()
@@ -186,7 +187,6 @@ object EngineerClient : ClientModInitializer {
         "${PREFIX}§7commands:",
         "§f /ec role <role>|clear§7 — your P3 starting role; §f/ec roles§7 — everyone's",
         "§f /ec setup§7 — checks the Odin setup Dynamic Term Roles relies on",
-        "§f /ec posmsg edit§7 — BR Roles position messages",
         "§f /ec log§7 [mark <note>] — the session log; §f/ec debug§7, §f/ec memreport",
     )
 
@@ -218,8 +218,6 @@ object EngineerClient : ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /betterpf: the link to all your uploaded runs, private ones included.
             for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 })
-            // /posmsg: Positional Messages (removed from Odin in 0.3.6) is provided here.
-            com.engineerclient.waypoints.PositionalMessages.registerCommand(dispatcher)
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // Same tree registered under the formal name (both casings, since Brigadier
@@ -282,7 +280,6 @@ object EngineerClient : ClientModInitializer {
                             P3Rotation.announceMyRole()
                             1
                         }))
-                    .then(literal("posmsg").then(literal("edit").executes { mc.execute { com.engineerclient.waypoints.PosMsgEditor.toggle() }; 1 }))
             )
         }
     }

@@ -14,7 +14,16 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.darker
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
+import com.odtheking.odin.features.impl.dungeon.LeapMenu
+import com.odtheking.odin.utils.render.roundedRect
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.PlayerFaceExtractor
+import net.minecraft.resources.Identifier
+import net.minecraft.util.ARGB
+import net.minecraft.world.entity.player.Player
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -31,6 +40,8 @@ import java.util.Locale
  *    colours the 4th and 5th too, continuing Odin's fade (NumbersPreviewMixin).
  *  - Section Times: when a section is done, how long it took, in purple, for a few seconds (server ticks). S1 runs
  *    from Goldor's first line, each next one from the last one's end.
+ *  - Core Leap: once S3 is done, the leap menu box of the first teammate inside the core, drawn faintly in
+ *    gold where Odin's Leap Menu will put it, so you're already on it when you open the menu.
  *
  * Terminals run from Goldor's first line (or the first task message) to "The Core entrance is
  * opening!". Chat and titles are read straight off the network.
@@ -45,6 +56,7 @@ object TermInfo : Module(
     private val hideTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening titles.")
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
     private val sectionSeconds by NumberSetting("Section Time Seconds", 1.5, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
+    private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the leap menu box of the first teammate inside the core, faintly in gold where Odin's Leap Menu will show it. Hidden once the menu (or any screen) is open or you're in the core.")
     private val numbersPreview by BooleanSetting("Numbers 4th/5th Preview", false, desc = "Odin's terminal solver shows the next 3 clicks in Numbers; this colours the 4th and 5th too.")
     private val order4 by ColorSetting("Order 4", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Color of the Numbers solver for the 4th item.").withDependency { numbersPreview }
     private val order5 by ColorSetting("Order 5", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Color of the Numbers solver for the 5th item.").withDependency { numbersPreview }
@@ -72,6 +84,8 @@ object TermInfo : Module(
     private val timeHud by HUD("Section Time", "The last terminal section's time, for a few seconds after it's done.", true, 420, 330, 5f) { example ->
         if (example) return@HUD lines(this, listOf("§514.35"))
         if (!sectionTimes) return@HUD 0 to 0
+        // P3 Sim practice: the Practice Time HUD has the screen while it shows a practice's end.
+        if (com.engineerclient.p3sim.Practice.endTicks >= 0 && System.currentTimeMillis() - com.engineerclient.p3sim.Practice.endMs < 4000) return@HUD 0 to 0
         val (text, at) = shownTime ?: return@HUD 0 to 0
         if (System.currentTimeMillis() - at > sectionSeconds * 1000) return@HUD 0 to 0
         lines(this, listOf(text))
@@ -103,7 +117,25 @@ object TermInfo : Module(
     @Volatile private var sectionStart = 0
     @Volatile private var shownTime: Pair<String, Long>? = null
 
-    private fun current() = sections.getOrNull(active)
+    private fun current() = simSection() ?: if (com.engineerclient.p3sim.P3Sim.inSim) null else sections.getOrNull(active)
+
+    /**
+     * P3 Sim: the section in progress straight off the sim, not its chat: a restart, a later section's or a timed start
+     * and a practice do part of P3 without chat, and a restart starts again in the same world.
+     */
+    private fun simSection(): Section? {
+        if (!com.engineerclient.p3sim.P3Sim.inSim) return null
+        val g = com.engineerclient.p3sim.Fight.phase as? com.engineerclient.p3sim.GoldorPhase ?: return null
+        val n = g.section.takeIf { it in 1..4 } ?: return null
+        val st = g.stations.filter { it.section == n }
+        val kind = com.engineerclient.p3sim.Station.Kind.TERMINAL
+        return Section(st.count { it.kind == kind }, n).apply {
+            termsDone = st.count { it.kind == kind && it.done }
+            leversDone = st.count { it.kind == com.engineerclient.p3sim.Station.Kind.LEVER && it.done }
+            deviceDone = st.any { it.kind == com.engineerclient.p3sim.Station.Kind.DEVICE && it.done }
+            gateDestroyed = n == 4 || g.gateIsDown(n)
+        }
+    }
 
     private fun colourFor(n: Int, max: Int) = when (n) { max -> "§a"; 0 -> "§c"; else -> "§e" }
 
@@ -112,7 +144,64 @@ object TermInfo : Module(
         return (lines.maxOfOrNull { mc.font.width(it) } ?: 0) to lines.size * 10
     }
 
+    /** S3 done: watching for the first teammate in the core, until Necron or a new world. */
+    @Volatile private var coreWatch = false
+    /** Teammates inside the core box, by name, with when they were first seen there (ms). */
+    private val inCoreSince = LinkedHashMap<String, Long>()
+    private val CORE_GOLD = Color(255, 170, 0, 0.25f)
+
+    /** DungeonSplits' core box (and P3 Sim's CORE_BOX): reaches down to the core's floor. */
+    private fun inCore(p: Player) = p.x >= 39 && p.x < 71 && p.y < 155.5 && p.z >= 54 && p.z < 118
+
+    private fun watchingCore() = coreWatch || simSection()?.number == 4
+
+    /**
+     * Core Leap: Odin's leap menu box for the first teammate seen in the core, alone, gold at 0.25 opacity, laid
+     * out as LeapMenu does (24px off the centre, its Render Scale from the near corner).
+     */
+    private fun drawCoreLeap(gfx: GuiGraphicsExtractor) {
+        if (!enabled || !coreLeap || !watchingCore()) { inCoreSince.clear(); return }
+        val level = mc.level ?: return
+        val self = mc.player ?: return
+        val mates = DungeonUtils.leapTeammates
+        val now = System.currentTimeMillis()
+        for (m in mates) {
+            if (m.name == "Empty") continue
+            val p = m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == m.name }
+            // Unseen (out of render distance) keeps its place; dead or out of the box loses it.
+            if (p == null) continue
+            if (com.engineerclient.DeadPlayers.isDead(m) || !inCore(p)) inCoreSince.remove(m.name)
+            else inCoreSince.putIfAbsent(m.name, now)
+        }
+        if (mc.gui.hud.isHidden || mc.gui.screen() != null || inCore(self)) return
+        val first = inCoreSince.minByOrNull { it.value }?.key ?: return
+        val i = mates.indexOfFirst { it.name == first }.takeIf { it in 0..3 } ?: return
+        val player = mates[i]
+
+        val w = LeapMenu.BOX_WIDTH
+        val h = LeapMenu.BOX_HEIGHT
+        val col = i % 2
+        val row = i / 2
+        val nearX = mc.window.guiScaledWidth / 2 + if (col == 0) -24 else 24
+        val nearY = mc.window.guiScaledHeight / 2 + if (row == 0) -24 else 24
+        val localX = if (col == 0) -w else 0
+        val localY = if (row == 0) -h else 0
+        val scale = com.engineerclient.rotation.LeapHighlight.odinScale()
+
+        gfx.pose().pushMatrix()
+        gfx.pose().translate(nearX.toFloat(), nearY.toFloat())
+        gfx.pose().scale(scale, scale)
+        gfx.roundedRect(localX, localY, localX + w, localY + h, CORE_GOLD.rgba, 9f)
+        val face = (h * 0.76).toInt()
+        (player.playerSkin ?: self.skin).let { PlayerFaceExtractor.extractRenderState(gfx, it, localX + 9, localY + 9, face, ARGB.color(64, 255, 255, 255)) }
+        gfx.text(player.name, localX + 15 + face, localY + (h / 2.5).toInt(), CORE_GOLD, shadow = false)
+        gfx.text(player.clazz.name.lowercase(), localX + 15 + face, localY + (h / 1.7).toInt(), CORE_GOLD, shadow = false)
+        gfx.pose().popMatrix()
+    }
+
     private fun reset() {
+        coreWatch = false
+        inCoreSince.clear()
         for (s in sections) with(s) {
             termsDone = 0; deviceDone = false; leversDone = 0; gateDestroyed = number == 4
             lastIgn = ""; lastIndex = 0; lastType = ""
@@ -138,6 +227,15 @@ object TermInfo : Module(
         for (i in 0 until section - 1) with(sections[i]) { termsDone = terms; leversDone = 2; deviceDone = true; gateDestroyed = true }
         active = section - 1
         sectionStart = serverTicks
+    }
+
+    /**
+     * P3 Sim: a section's time as the sim measured it ([ticks], server ticks), shown as Section Time. Term Info
+     * can't follow the sim by its chat: restarts, later starts and practices do part of P3 without it.
+     */
+    @JvmStatic
+    fun simSectionTime(ticks: Int) {
+        if (com.engineerclient.p3sim.P3Sim.inSim) shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
     }
 
     /** Devonian's TerminalSection.onChat, for the active section only. */
@@ -182,10 +280,11 @@ object TermInfo : Module(
         }
 
         if (cur.termsDone >= cur.terms && cur.leversDone >= 2 && cur.deviceDone && cur.gateDestroyed) {
-            val now = System.currentTimeMillis()
-            shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to now
+            // In P3 Sim the sim times the sections itself ([simSectionTime]).
+            if (!com.engineerclient.p3sim.P3Sim.inSim) shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to System.currentTimeMillis()
             sectionStart = serverTicks
             active++
+            if (active == 3) coreWatch = true
         }
     }
 
@@ -194,6 +293,9 @@ object TermInfo : Module(
         infoHud.enabled = true; timeHud.enabled = true
         on<LevelEvent.Load> { reset(); shownTime = null }
         on<TickEvent.Server> { serverTicks++ }
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "core_leap")) { gfx, _ ->
+            com.engineerclient.EngineerClient.safely("core leap") { drawCoreLeap(gfx) }
+        }
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
@@ -202,7 +304,8 @@ object TermInfo : Module(
                 // A lever can be flicked the tick before Goldor speaks: its message has started
                 // terminals already, and starting again here would lose it.
                 msg == GOLDOR_START -> if (active == -1) start()
-                msg == CORE_OPEN -> active = -1
+                msg == CORE_OPEN -> { active = -1; coreWatch = true }
+                msg.startsWith("[BOSS] Necron:") -> coreWatch = false
                 else -> {
                     // The first task message starts terminals too (Goldor's line missed).
                     if (active == -1 && TASK.matches(msg)) start()
@@ -223,6 +326,6 @@ object TermInfo : Module(
         val text = raw.replace(CONTROL_CODES, "")
         // The gate and core titles: by their text, whenever (the core one comes as terminals end).
         if (GATE_CORE_TITLE.containsMatchIn(text)) return true
-        return active in 0..3 && TITLE.matches(text)
+        return (active in 0..3 || simSection() != null) && TITLE.matches(text)
     }
 }

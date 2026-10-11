@@ -94,6 +94,9 @@ class PovInterpolator(
         }
     }
 
+    /** The last sample of [id], if any is still kept. */
+    fun newest(id: UUID): Sample? = rings[id]?.lastOrNull()
+
     fun clear() = rings.clear()
 
     private fun pose(s: Sample) = Pose(s.x, s.y, s.z, s.headYaw, s.pitch)

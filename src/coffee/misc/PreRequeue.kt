@@ -140,7 +140,11 @@ object PreRequeue : Module(
     /** "Party > [MVP++] name: message", the rank bracket absent for unranked players. */
     private val PARTY = Regex("^Party > (?:\\[[^]]*] )?(\\w{1,16}): (.*)$")
 
-    private fun inF7() = DungeonUtils.inDungeons && DungeonUtils.floor?.name == "F7"
+    /**
+     * F7, or a dungeon whose floor Odin hasn't read yet (its scoreboard can lag the boss lines): only
+     * a floor known to be another one (M7) keeps the plan off.
+     */
+    private fun inF7() = DungeonUtils.inDungeons && DungeonUtils.floor?.name.let { it == null || it == "F7" }
 
     init {
         on<LevelEvent.Load> { plan.reset() }
@@ -168,6 +172,8 @@ object PreRequeue : Module(
             // The score teleports everyone up to the chest room (y 166); Necron's arena is far below.
             if (chestFallback && (mc.player?.y ?: 0.0) > 150) plan.onChestRoom(serverTicks)
             val why = plan.onClientTick(serverTicks, freezeGuard) ?: return@on
+            // Armed before Odin knew the floor, and it has turned out not to be F7.
+            if (!inF7()) return@on
             if (leaderOnly && PartyUtils.isInParty && !PartyUtils.isLeader()) return@on
             if (downtime.active) {
                 CoffeeClient.msg("§7Not requeueing: §c!dt §7from " + downtime.who() + ".")

@@ -22,6 +22,7 @@ object Stats {
         sections[s] = ticks
         val best = best("S$s", ticks)
         if (P3Sim.showTimes) Sim.note("§fS$s§7 ${s(ticks)}$best")
+        com.engineerclient.practice.TermInfo.simSectionTime(ticks)
     }
 
     // ------------------------------------------------------------------ personal bests
@@ -30,7 +31,7 @@ object Stats {
     private val bests: java.util.Properties by lazy { java.util.Properties().also { p -> runCatching { bestFile.inputStream().use { p.load(it) } } } }
 
     /** Records [ticks] for [key] if it's a best; the chat suffix. */
-    private fun best(what: String, ticks: Int): String {
+    fun best(what: String, ticks: Int): String {
         val key = "$what @ ${P3Plan.skillName()} ${Roles.label(P3Sim.myClass)}" + if (P3Plan.skill == P3Plan.RANDOM) " ${P3Plan.botMin}-${P3Plan.botMax}s" else ""
         val old = bests.getProperty(key)?.toIntOrNull()
         if (old != null && ticks >= old) return " §8PB ${s(old)}"

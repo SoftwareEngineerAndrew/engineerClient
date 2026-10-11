@@ -23,27 +23,24 @@ object ConfigMigration {
      *  - a former engineerClient Splits HUD that was on becomes Odin's Splits in the Engineer
      *    Splits look (written into Odin's config, read once the look's settings exist - see
      *    OdinSplitsLook.install);
-     *  - Positional Messages was removed from Odin in 0.3.6 and is provided here: Odin's module
-     *    (on/off, settings and the saved boxes) is copied over as it was;
      *  - POV Previews' Show In choice is its matching Only In checkbox (Everywhere: none ticked).
+     *  - Sub Splits' Blood Rush Sub Splits HUD is the BR Sub Split;
+     *  - Agro Leaderboard is Agro Sphere (on only if its Sphere Mode was);
+     *  - BR Roles' Posmsg Re-trigger and Posmsg Here Keybind are Positional Messages' Re-trigger and
+     *    Box Here Keybind (Positional Messages itself is
+     *    looked after where it is installed).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
     fun run(odinDir: Path): Boolean {
         val file = odinDir.resolve("addons").resolve("engineerclient.json")
         val odinFile = odinDir.resolve("odin-config.json")
-        val oldPosMsgs = if (Files.exists(odinFile)) module(JsonParser.parseString(Files.readString(odinFile)).asJsonArray, "Positional Messages") else null
-        if (!Files.exists(file) && oldPosMsgs == null) return false
-        val modules = if (Files.exists(file)) JsonParser.parseString(Files.readString(file)).asJsonArray else JsonArray()
+        if (!Files.exists(file)) return false
+        val modules = JsonParser.parseString(Files.readString(file)).asJsonArray
         fun ensure(name: String) = module(modules, name) ?: JsonObject().apply {
             addProperty("name", name); addProperty("enabled", true); add("settings", JsonObject())
         }.also { modules.add(it) }
         var changed = false
-
-        if (oldPosMsgs != null && module(modules, "Positional Messages") == null) {
-            modules.add(oldPosMsgs.deepCopy())
-            changed = true
-        }
 
         module(modules, "BR Waypoints 2")?.let {
             if (module(modules, "BR Roles") == null) { it.addProperty("name", "BR Roles"); changed = true }
@@ -64,6 +61,33 @@ object ConfigMigration {
             if (moved.isEmpty() || module(modules, "Timers") != null) return@let
             val to = settings(ensure("Timers").also { it.addProperty("enabled", rs["enabled"]?.asBoolean ?: true) })
             for ((old, new) in moved) to.add(new, from.remove(old))
+            changed = true
+        }
+
+        // Agro Leaderboard is Agro Sphere: the list went, so it's on only if its sphere was.
+        module(modules, "Agro Leaderboard")?.let {
+            if (module(modules, "Agro Sphere") != null) return@let
+            val s = settings(it)
+            val sphere = s.remove("Sphere Mode")?.takeIf { v -> v.isJsonPrimitive }?.asBoolean ?: true
+            s.remove("Agro Leaderboard")
+            it.addProperty("name", "Agro Sphere")
+            it.addProperty("enabled", (it["enabled"]?.asBoolean ?: true) && sphere)
+            changed = true
+        }
+
+        // The /posmsg settings moved from BR Roles to Positional Messages.
+        module(modules, "BR Roles")?.let(::settings)?.let { br ->
+            val moved = POSMSG_KEYS.filterKeys { br.has(it) }
+            if (moved.isEmpty()) return@let
+            val to = settings(module(modules, "Positional Messages") ?: ensure("Positional Messages").also { it.addProperty("enabled", false) })
+            for ((old, new) in moved) br.remove(old).let { if (!to.has(new)) to.add(new, it) }
+            changed = true
+        }
+
+        // The Blood Rush Sub Splits HUD is the BR Sub Split.
+        module(modules, "Sub Splits")?.let(::settings)?.let { sub ->
+            val old = sub.remove("Blood Rush Sub Splits") ?: return@let
+            if (!sub.has("BR Sub Split")) sub.add("BR Sub Split", old)
             changed = true
         }
 
@@ -119,6 +143,8 @@ object ConfigMigration {
         }
         return changed
     }
+
+    private val POSMSG_KEYS = mapOf("Posmsg Re-trigger" to "Re-trigger", "Posmsg Here Keybind" to "Box Here Keybind")
 
     private val TIMERS_KEYS = mapOf("Boss Enter Timer" to "Clear Countdown", "Portal Text" to "Portal Text", "Portal Chime" to "Portal Chime")
 

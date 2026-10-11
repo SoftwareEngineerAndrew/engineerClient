@@ -14,7 +14,9 @@ import java.io.File
  * the rest, by item id - and which hotbar slot you hold. From then on every hotbar reset (a fight
  * starting, each phase's start, Reset Items) lays the items out that way through [SimItems.giveHotbar].
  * P1/P2 and P3 have different items on the bar (Hyperion or Superboom), so each has its own layout,
- * saved from whichever part of the fight you are in. "Default Hotbar" forgets that part's layout.
+ * saved from whichever part of the fight you are in, and each class (role) its own (the Explosive Bow
+ * for one, a Terminator for another); a class with none uses the one saved before layouts were per
+ * class. "Default Hotbar" forgets that part's layout for your class.
  *
  * Masks stay out of it: the spare one always goes in [Masks.SPARE_SLOT], which no item is laid into.
  * An item the saved layout doesn't place (one added to the sim later) goes to its default slot, or
@@ -24,7 +26,7 @@ object HotbarLayout {
 
     private class Layout(val slots: Map<String, Int> = emptyMap(), val selected: Int = 3)
     /** [worn]: what you wear and your pet, saved with the hotbar (one for both parts); null in older files = the defaults. */
-    private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null)
+    private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null, val roles: Map<String, Layout>? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-hotbar.json")
@@ -38,7 +40,10 @@ object HotbarLayout {
         s
     }
 
-    private fun layout(p3: Boolean): Layout? = if (p3) saved().p3 else saved().p12
+    /** "P3/ARCHER", "P12/MAGE": a part's layout for your class. */
+    private fun key(p3: Boolean) = "${if (p3) "P3" else "P12"}/${P3Sim.myClass?.name}"
+
+    private fun layout(p3: Boolean): Layout? = saved().roles?.get(key(p3)) ?: if (p3) saved().p3 else saved().p12
 
     /** The saved worn loadout (armour, helmet, pet), or null: the defaults. */
     fun worn(): Loadouts.Worn? = saved().worn
@@ -80,7 +85,7 @@ object HotbarLayout {
         if (slots.isEmpty()) return "§cnothing to save: no sim items in your inventory"
         val l = Layout(slots, inv.selectedSlot)
         val s = saved()
-        write(if (p3) s.copy(p3 = l, worn = Loadouts.capture(p)) else s.copy(p12 = l, worn = Loadouts.capture(p)))
+        write(s.copy(roles = s.roles.orEmpty() + (key(p3) to l), worn = Loadouts.capture(p)))
         return "§7saved your §f${part(p3)}§7 hotbar (${slots.size} items, holding slot ${l.selected + 1}) with your armour, helmet and pet; every hotbar reset uses it now"
     }
 
@@ -88,12 +93,17 @@ object HotbarLayout {
     fun reset(p3: Boolean): String {
         if (!has(p3)) return "§7the ${part(p3)} hotbar is already the default"
         val s = saved()
+        // Your class's own first (the shared one from before, if there is one, takes over).
+        if (s.roles?.containsKey(key(p3)) == true) {
+            write(s.copy(roles = s.roles - key(p3)))
+            return "§7${part(p3)} hotbar back to the ${if (has(p3)) "one saved for every class" else "default"}"
+        }
         val otherLeft = if (p3) s.p12 != null else s.p3 != null
         write(if (p3) s.copy(p3 = null, worn = if (otherLeft) s.worn else null) else s.copy(p12 = null, worn = if (otherLeft) s.worn else null))
         return "§7${part(p3)} hotbar back to the default"
     }
 
-    private fun part(p3: Boolean) = if (p3) "P3" else "P1/P2"
+    private fun part(p3: Boolean) = (if (p3) "P3" else "P1/P2") + " " + Roles.label(P3Sim.myClass)
 
     private fun write(s: Saved) {
         saved = s

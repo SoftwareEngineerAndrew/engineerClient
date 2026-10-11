@@ -21,6 +21,9 @@ object P3Plan {
      */
     const val RANDOM = 3
     val SKILLS = Roles.PRESETS.take(RANDOM).map { it.name } + "Random" + Roles.PRESETS.drop(RANDOM).map { it.name }
+    /** The menu's Theoretical (Prototype 1, before it, isn't shown: a saved choice of it becomes this). */
+    val THEORETICAL = SKILLS.indexOf("Theoretical")
+    private val PROTOTYPE_1 = SKILLS.indexOf("Prototype 1")
 
     /**
      * Where each early enter stands (into: 5 = the core, just outside it in S4; 6 = the recore,
@@ -37,7 +40,8 @@ object P3Plan {
         // On S2's device (Lights): the EE2 player does it early and waits there for the leaps.
         EarlyEnter("ee2", "EE2", 2, Vec3(60.6, 132.0, 139.0)),
         EarlyEnter("ee3", "EE3", 3, Vec3(1.9, 109.0, 104.6)),
-        EarlyEnter("ee4", "EE4", 4, Vec3(41.3, 109.0, 32.6)),
+        // Into S4 (by the core, Theoretical's archer: only shown when a preset has it).
+        EarlyEnter("ee4", "EE4", 4, Vec3(54.5, 115.06, 50.5)),
         // Just outside the core in S4; then inside it.
         EarlyEnter("core", "Core", 5, Vec3(54.5, 115.06, 50.5)),
         EarlyEnter("recore", "Recore", 6, Vec3(54.4, 115.0, 57.6)),
@@ -65,6 +69,40 @@ object P3Plan {
     /** Classes whose bot plays your best run as that class (P3 from S1, when one is saved: [GhostStore]). */
     val ghosts = LinkedHashSet<String>()
 
+    /**
+     * Spots set in the Roles menu (where, and which way you or the bot face) for one skill and one class of yours ("1/MAGE/spawn", "1/MAGE/ee3"...): your P3
+     * spawn ("spawn") and each early enter's spot ([EarlyEnter.key]), whoever does it.
+     */
+    private var custom: HashMap<String, Spots.Spot>? = HashMap()
+    /** [custom], made if it isn't there (a hotswapped game starts it null). */
+    private fun spots() = custom ?: HashMap<String, Spots.Spot>().also { custom = it }
+    private fun customKey(key: String) = "$skill/${P3Sim.myClass?.name}/$key"
+
+    /** The spot set for this skill and class, else the default ([defaultSpot]: Normal PF's, for every skill). */
+    fun customSpot(key: String): Spots.Spot? = spots()[customKey(key)] ?: defaultSpot(P3Sim.myClass, key)
+    /** Whether this skill and class has its own [key] spot (set in Roles), not the default. */
+    fun hasCustomSpot(key: String) = spots().containsKey(customKey(key))
+    /** null: back to the default. */
+    fun setCustomSpot(key: String, p: Spots.Spot?) { if (p == null) spots().remove(customKey(key)) else spots()[customKey(key)] = p; save() }
+
+    /**
+     * Every skill's default spawn and early-enter spots, by your class: the ones set for Normal PF (2026-10-09). The early
+     * enters are the same whatever your class; the spawn is S1's terminal side for all but the Berserk (at i4).
+     */
+    fun defaultSpot(c: DungeonClass?, key: String): Spots.Spot? = preset().defaults["$key/${c?.name}"] ?: preset().defaults[key] ?: when (key) {
+        "spawn" -> if (c == DungeonClass.BERSERK) Spots.Spot("Spawn", 63.5, 127.0, 35.5, -11.18f, 0.33f)
+            else Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
+        "ee2" -> Spots.Spot("EE2", 60.5, 132.0, 139.0, 90.47f, 1.64f)
+        "ee3" -> Spots.Spot("EE3", 2.0, 109.0, 102.0, -175.24f, 5.83f)
+        "ee4" -> Spots.Spot("EE4", 54.5, 115.06, 50.5, 179.91f, 0.57f)
+        "core" -> Spots.Spot("Core", 54.5, 115.06, 50.5, 179.91f, 0.57f)
+        "recore" -> Spots.Spot("Recore", 52.5, 115.0, 57.6, -159.12f, 2.63f)
+        else -> null
+    }
+
+    /** Where [e] is stood on with this skill and class: the one set for them, else the default, else the preset's, else the Early Enters tab's. */
+    fun eeSpot(e: EarlyEnter): Spots.Spot = customSpot(e.key) ?: (preset().spots[e.key] ?: e.spot).let { Spots.Spot(e.label, it.x, it.y, it.z, e.yaw, e.pitch) }
+
     fun ghostOn(c: DungeonClass) = c.name in ghosts
     fun toggleGhost(c: DungeonClass) { if (!ghosts.remove(c.name)) ghosts += c.name; save() }
 
@@ -88,8 +126,13 @@ object P3Plan {
 
     fun isMine(job: String) = job in mine()
     fun toggle(job: String) { mine(); if (!mine.remove(job)) mine += job; save() }
-    /** Back to your class's role. */
-    fun resetMine() { mineFor = ""; mine(); save() }
+    /** Back to your class's role: your jobs, the bots picked and your stacks for this skill and class. */
+    fun resetMine() {
+        mineFor = ""; mine()
+        val prefix = "$skill/${P3Sim.myClass?.name}/"
+        pickMap().keys.removeIf { it.startsWith(prefix) }; stackSet().removeIf { it.startsWith(prefix) }
+        save()
+    }
     fun chooseSkill(i: Int) { skill = i.coerceIn(0, SKILLS.size - 1); mine(); save() }
 
     fun ee(into: Int) = earlyEnters.firstOrNull { it.into == into && it.on }
@@ -97,8 +140,36 @@ object P3Plan {
     /** Jobs two classes share (whoever gets there first; yours if one of them is you). */
     fun isStack(job: String) = (plan().owners[job]?.size ?: 0) > 1
 
-    /** Who does [job]: you if it's yours, else its role's bot (a stack: the first listed), null: whichever bot is least busy. */
-    fun doer(job: String): DungeonClass? = if (isMine(job)) P3Sim.myClass else plan().owners[job]?.firstOrNull { it != P3Sim.myClass }
+    /** Who does [job]: you if it's yours, else the bot you picked for it (right click), else its role's (a stack: the first listed), null: whichever bot is least busy. */
+    fun doer(job: String): DungeonClass? = if (isMine(job)) P3Sim.myClass else picked(job) ?: roleDoer(job)
+
+    /** [job]'s bot by the roles (a stack: the first listed that isn't you). */
+    fun roleDoer(job: String): DungeonClass? = plan().owners[job]?.firstOrNull { it != P3Sim.myClass }
+
+    /** Bots picked for jobs (skill/your class/job -> class), and your jobs a bot does too with the Helper on: for this skill and class. */
+    private var picks: HashMap<String, String>? = HashMap()
+    private var stacked: HashSet<String>? = HashSet()
+    private fun pickMap() = picks ?: HashMap<String, String>().also { picks = it }
+    private fun stackSet() = stacked ?: HashSet<String>().also { stacked = it }
+    private fun jobKey(job: String) = "$skill/${P3Sim.myClass?.name}/$job"
+
+    private fun picked(job: String): DungeonClass? =
+        pickMap()[jobKey(job)]?.let { n -> Party.CLASSES.firstOrNull { it.name == n && it != P3Sim.myClass } }
+
+    /** A bot's job goes to the next bot (back to its role's: the pick is dropped). */
+    fun cycleDoer(job: String) {
+        val bots = Party.CLASSES.filter { it != P3Sim.myClass }
+        val next = bots[(bots.indexOf(doer(job)) + 1) % bots.size]
+        if (next == roleDoer(job)) pickMap().remove(jobKey(job)) else pickMap()[jobKey(job)] = next.name
+        save()
+    }
+
+    /** One of your jobs a bot does too, with the Helper on (whoever's first): a stack you made. */
+    fun isStacked(job: String) = jobKey(job) in stackSet()
+    fun toggleStacked(job: String) { if (!stackSet().remove(jobKey(job))) stackSet() += jobKey(job); save() }
+
+    /** The bot that helps on your stacked [job]: the one you picked, its role's, else the first bot. */
+    fun helperOf(job: String): DungeonClass? = picked(job) ?: roleDoer(job) ?: Party.CLASSES.firstOrNull { it != P3Sim.myClass }
 
     /** Every job, in menu order: each section's terminals, levers, device, then its gate. */
     fun allJobs(): List<String> = (1..4).flatMap { s -> jobsIn(s) }
@@ -131,13 +202,13 @@ object P3Plan {
         com.odtheking.odin.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
     }.getOrNull()?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
 
-    /** Slot [slot] (1-4) takes the next class: swaps with the slot that had it. */
-    fun cycleSlot(slot: Int) {
+    /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */
+    fun cycleSlot(slot: Int, back: Boolean = false) {
         // From Odin's order to your own, starting from what it showed.
         val order = botOrder().toMutableList()
         odinSort = false
         val i = slot - 1
-        val j = (i + 1) % order.size
+        val j = (i + (if (back) order.size - 1 else 1)) % order.size
         val t = order[i]; order[i] = order[j]; order[j] = t
         leapOrder.clear(); leapOrder += order
         save()
@@ -152,6 +223,11 @@ object P3Plan {
         val spots: Map<String, List<Double>>? = null,
         val helper: Boolean? = null,
         val ghosts: List<String>? = null,
+        /** [custom]: key -> [x, y, z, yaw, pitch]. */
+        val custom: Map<String, List<Double>>? = null,
+        /** Bots picked for jobs ([doer]) and your stacked jobs ([isStacked]), keyed skill/class/job. */
+        val picks: Map<String, String>? = null,
+        val stacked: List<String>? = null,
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -166,13 +242,16 @@ object P3Plan {
             val f = file
             if (!f.exists()) return@safely
             val s = gson.fromJson(f.readText(), Saved::class.java) ?: return@safely
-            s.skill?.let { skill = it.coerceIn(0, SKILLS.size - 1) }
-            if (s.mine != null && s.mineFor != null) { mine.clear(); mine += s.mine; mineFor = s.mineFor }
+            s.skill?.let { skill = (if (it == PROTOTYPE_1) THEORETICAL else it).coerceIn(0, SKILLS.size - 1) }
+            if (s.mine != null && s.mineFor != null && s.skill != PROTOTYPE_1) { mine.clear(); mine += s.mine; mineFor = s.mineFor }
             s.botMin?.let { botMin = it }
             s.botMax?.let { botMax = it }
             s.waitForYou?.let { waitForYou = it }
             s.helper?.let { helper = it }
             s.ghosts?.let { ghosts.clear(); ghosts += it }
+            s.custom?.forEach { (k, v) -> if (v.size >= 5) spots()[k] = Spots.Spot(k, v[0], v[1], v[2], v[3].toFloat(), v[4].toFloat()) }
+            s.picks?.let { pickMap().clear(); pickMap() += it }
+            s.stacked?.let { stackSet().clear(); stackSet() += it }
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
             s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
@@ -190,7 +269,8 @@ object P3Plan {
     fun save() {
         EngineerClient.safely("p3sim plan save") {
             val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
-                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList())
+                earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList(),
+                spots().mapValues { (_, p) -> listOf(p.x, p.y, p.z, p.yaw.toDouble(), p.pitch.toDouble()) }, HashMap(pickMap()), stackSet().toList())
             file.parentFile.mkdirs()
             // A backup of the file before this session's first save, should a save ever lose something.
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }

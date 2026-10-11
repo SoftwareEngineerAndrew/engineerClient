@@ -4,8 +4,6 @@ import com.engineerclient.EngineerClient
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import net.minecraft.core.BlockPos
-import net.minecraft.world.level.block.ButtonBlock
-import net.minecraft.world.level.block.LeverBlock
 import net.minecraft.world.level.block.state.BlockState
 import kotlin.random.Random
 import net.minecraft.world.level.block.Blocks as B
@@ -15,7 +13,7 @@ import net.minecraft.world.level.block.Blocks as B
  * arena back exactly as built. Also plays the arena's scripted animations (gates, doors, the core,
  * the floors between phases) frame by frame as recorded on Hypixel (`anims-*.json`, extracted from
  * Better PF runs), and the world's own rules that are not fixed frames: Maxor's conveyor strip
- * after its recording ends, and Goldor eating the walkway as he walks.
+ * after its recording ends.
  */
 object Blocks {
     private val touched = LinkedHashSet<BlockPos>()
@@ -36,7 +34,6 @@ object Blocks {
         anims.clear()
         done.clear()
         conveyor = null
-        carvedFor = null
         touched.forEach { Arena.restore(level, it) }
         touched.clear()
     }
@@ -157,7 +154,6 @@ object Blocks {
             anims.removeAll { it.next >= it.anim.frames.size }
         }
         EngineerClient.safely("p3sim strip") { conveyorTick() }
-        EngineerClient.safely("p3sim carve") { carveTick() }
     }
 
     private fun advance(p: Playing) {
@@ -207,9 +203,8 @@ object Blocks {
         if (start == Fight.Start.P2) return
         stormPillars()
         if (start != Fight.Start.P4) return
-        // P3 done: the drop hole, every gate and door, the core open, Goldor's walk eaten into the walkway.
+        // P3 done: the drop hole, every gate and door, the core open (Goldor breaks nothing on his walk).
         for (a in listOf("p3start", "gate12", "door1", "ss_s1done", "gate23", "door2", "gate34", "door3", "core")) finish(a)
-        replayCarve(CORE_N)
     }
 
     /**
@@ -271,61 +266,9 @@ object Blocks {
         }
     }
 
-    // ------------------------------------------------------------------ Goldor's carving
-
-    /**
-     * Goldor eats the walkway as he walks: every 40 server ticks from n 37 (n = 37 + 40k, ±1), every block in the 11x11x11 box round
-     * his block (x, z ±5, y ±5) goes with a 60% chance, rolled again each pass, so the walls and
-     * floor along his path thin out over a few passes. Barriers (the walkway's invisible walls) and
-     * gold blocks always stay; TNT cubes are never carved (ArenaFixes.Replay takes them whole); the
-     * cobblestone portcullis at the S1 entrance (cobblestone, walls, nether brick fences) always goes. Levers, buttons and blocks with a block entity are left for
-     * the devices (never seen carved).
-     */
-    private var carvedFor: GoldorPhase? = null
-
-    private fun carveTick() {
-        val ph = Fight.phase as? GoldorPhase ?: run { carvedFor = null; return }
-        if (carvedFor !== ph) {
-            // A start past n 37: the passes Goldor's walk so far would have made.
-            carvedFor = ph
-            replayCarve(ph.n)
-        }
-        val n = ph.n
-        if (ph.goldor.flying || n < CARVE_FIRST || (n - CARVE_FIRST) % CARVE_PERIOD != 0) return
-        carve(ph.goldor.position.x, ph.goldor.position.y, ph.goldor.position.z)
-    }
-
-    /** The carving passes before [untilN], along his walk from (80, 119, 40) (no catch-up sprints). */
-    private fun replayCarve(untilN: Int) {
-        var n = CARVE_FIRST
-        while (n < untilN) {
-            val at = GoldorPhase.Goldor.trackPos((GoldorPhase.Goldor.START_S + GoldorPhase.Goldor.WALK * n) % GoldorPhase.Goldor.LOOP)
-            carve(at.x, at.y, at.z)
-            n += CARVE_PERIOD
-        }
-    }
-
-    private fun carve(x: Double, y: Double, z: Double) {
-        val level = SimServer.level ?: return
-        val cx = Math.floor(x).toInt(); val cy = Math.floor(y).toInt(); val cz = Math.floor(z).toInt()
-        val pos = BlockPos.MutableBlockPos()
-        for (dx in -CARVE_R..CARVE_R) for (dy in -CARVE_R..CARVE_R) for (dz in -CARVE_R..CARVE_R) {
-            val s = level.getBlockState(pos.set(cx + dx, cy + dy, cz + dz))
-            if (s.isAir || !s.fluidState.isEmpty || s.hasBlockEntity() || s.`is`(B.BARRIER) || s.`is`(B.GOLD_BLOCK) || s.`is`(B.TNT) || s.block is LeverBlock || s.block is ButtonBlock) continue
-            val sure = s.`is`(B.COBBLESTONE) || s.`is`(B.COBBLESTONE_WALL) || s.`is`(B.NETHER_BRICK_FENCE)
-            if (sure || Random.nextFloat() < CARVE_CHANCE) set(pos.immutable(), B.AIR.defaultBlockState())
-        }
-    }
-
     private const val STRIP = "p1strip"
     private const val STRIP_PERIOD = 10
     private const val PILLAR_BOTTOM = 183
-    private const val CARVE_FIRST = 37
-    private const val CARVE_PERIOD = 40
-    private const val CARVE_R = 5
-    private const val CARVE_CHANCE = 0.6f
-    /** n of a Core start (GoldorPhase's median fast run): how far Goldor walked before P4. */
-    private const val CORE_N = 797
 }
 
 /**

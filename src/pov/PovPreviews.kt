@@ -100,18 +100,22 @@ object PovPreviews : Module(
     // is simply submitted a second time, above the previews. Odin's leap boxes and the player
     // names need no entry — Odin draws them after us anyway.
     private val keepHuds by DropdownSetting("Keep HUDs On Top", desc = "")
-    private val keepTickTimers by BooleanSetting("Keep Tick Timers", true, desc = "Redraws Odin's Necron / Goldor / Storm / Secrets tick timers over the previews.").withDependency { keepHuds }
-    private val keepInvincibility by BooleanSetting("Keep Invincibility Timer", true, desc = "Redraws Odin's Invincibility Timer HUD over the previews.").withDependency { keepHuds }
-    private val keepMelody by BooleanSetting("Keep Melody Display", true, desc = "Redraws Odin's Melody progress GUI over the previews.").withDependency { keepHuds }
-    private val keepRoleHud by BooleanSetting("Keep Role HUD", true, desc = "Redraws EC's own role HUD over the previews.").withDependency { keepHuds }
-    private val keepTermInfo by BooleanSetting("Keep Term Info", true, desc = "Redraws EC's Term Info HUD (and its Section Time) over the previews.").withDependency { keepHuds }
+    private val keepAll by BooleanSetting("Keep All HUDs", true, desc = "Redraws every HUD and GUI that is on (Odin's and EC's) over the previews. Off: only the ones ticked below.").withDependency { keepHuds }
+    private val keepTickTimers by BooleanSetting("Keep Tick Timers", true, desc = "Redraws Odin's Necron / Goldor / Storm / Secrets tick timers over the previews.").withDependency { keepHuds && !keepAll }
+    private val keepInvincibility by BooleanSetting("Keep Invincibility Timer", true, desc = "Redraws Odin's Invincibility Timer HUD over the previews.").withDependency { keepHuds && !keepAll }
+    private val keepMelody by BooleanSetting("Keep Melody Display", true, desc = "Redraws Odin's Melody progress GUI over the previews.").withDependency { keepHuds && !keepAll }
+    private val keepRoleHud by BooleanSetting("Keep Role HUD", true, desc = "Redraws EC's own role HUD over the previews.").withDependency { keepHuds && !keepAll }
+    private val keepTermInfo by BooleanSetting("Keep Term Info", true, desc = "Redraws EC's Term Info HUD (and its Section Time) over the previews.").withDependency { keepHuds && !keepAll }
 
     private val TICK_TIMER_HUDS = listOf(
         "Necron Hud", "Goldor Hud", "Storm Pad Hud", "Storm Lightning Hud", "Storm PY Hud", "Storm Tick Hud", "Secrets Hud",
     )
 
+    /** Whether the HUD named [name] (as its HUDSetting is) is drawn again above the previews. */
+    fun keepsHud(name: String): Boolean = keepAll || name in keptHudNames()
+
     /** HUDSetting names, exactly as the owning module declares them. */
-    fun keptHudNames(): Set<String> {
+    private fun keptHudNames(): Set<String> {
         val names = HashSet<String>()
         if (keepTickTimers) names += TICK_TIMER_HUDS
         if (keepInvincibility) names += "Invincibility Timer"

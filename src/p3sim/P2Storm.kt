@@ -23,12 +23,17 @@ import net.minecraft.world.level.block.Blocks as B
  * 5 blocks, one per 4 ticks; the floor cycle (28 wait, drawn up to 189, 24, back to 186 armed); a
  * step onto his hitbox pushes him down; lightning at 548 with Giga Lightning at +10/+19-20
  * for everyone (a 40-bolt ring round a pillar you hide under, else 31 bolts around you; again at
- * +940, strikes +36/+46); he leaves at lightning + 139 chasing the 3D-closest player; a check with
+ * +940, strikes +36/+46); he leaves at lightning + [LEAVE] chasing the 3D-closest player; a check with
  * him in a pillar's zone, head at its bottom and the pillar stepped within 60 crushes him. A crush
  * pins him until a Mage beam (a Hyperion at him, or the party's Mage bot); 2-3 after
  * the enrage line he flies to Yellow (Purple crush) or chases slower, skulls in pairs every 5
  * ticks; the pillar resets 20 after and is spent. Crush 2 pins for good, dead 0-30 later, and
- * his body and its lightning storm go on into P3 ([StormCorpse]). Taunts from ~899.
+ * his body and its lightning storm go on into P3 ([StormCorpse]). Taunts from ~847.
+ *
+ * Since Hypixel's boss update (main from 2026-10-05/06) he leaves the parking spot 40 ticks sooner
+ * (lightning + 99-100 in 120 post-update recordings, + 139-140 in 61 before), so crush 1 comes on
+ * the t 659 check (699 before) and his taunts ~45 ticks sooner; his lines and the lightning itself
+ * are where they were.
  */
 class P2Storm : Fight.Phase("P2") {
     override val restart get() = Fight.Start.P2
@@ -77,6 +82,8 @@ class P2Storm : Fight.Phase("P2") {
     private var flyingToYellow = false
     private var deadAt = -1
     private var lightningAt = 548
+    /** He leaves his parking spot this long after the lightning line (139 before the boss update). */
+    private val LEAVE = 99
     /** The second strike at line +19 or +20, about equally often. */
     private val giga2 = 19 + Random.nextInt(2)
     /** A second line ~940 after the first if he lives, strikes at +36/+46. */
@@ -112,9 +119,9 @@ class P2Storm : Fight.Phase("P2") {
         startBots()
         val r = Random.nextDouble()
         gigaDamage = Math.round(if (r < 0.5) 1783 + r * 2 * (9350 - 1783) else 9350 + (r - 0.5) * 2 * (18194 - 9350)).toDouble()
-        // First taunt t 882-999, median 899.
+        // First taunt t 844-901, median 847 (52 post-update runs; 882-999, median 899, before).
         val q = Random.nextDouble()
-        nextTaunt = if (q < 0.5) Random.nextInt(882, 900) else if (q < 0.85) Random.nextInt(900, 921) else Random.nextInt(921, 1000)
+        nextTaunt = if (q < 0.5) Random.nextInt(844, 848) else if (q < 0.85) Random.nextInt(848, 882) else Random.nextInt(882, 902)
         // The first fireball at t 71-252, median 113.
         nextFireball = 75 + (Random.nextDouble().pow(2.0) * 150).toInt()
     }
@@ -146,8 +153,9 @@ class P2Storm : Fight.Phase("P2") {
         if (deadAt >= 0 && t >= deadAt) {
             when (t - deadAt) {
                 0 -> { line("I should have known that I stood no chance."); handed = true; StormCorpse(storm).start() }
-                62 -> line("At least my son died by your hands.")
-                102 -> Fight.begin(GoldorPhase(1, arrived = true))
+                StormEnd.SON -> line("At least my son died by your hands.")
+                // As from StormEnd: the phase starts LEAD_IN early, so "Who dares" lands at LEAD.
+                StormEnd.LEAD - GoldorPhase.LEAD_IN -> Fight.begin(GoldorPhase(1, arrived = true))
             }
             return
         }
@@ -228,7 +236,7 @@ class P2Storm : Fight.Phase("P2") {
             if (storm.pos.distanceTo(ROUTE[leg]) < 1.0) { leg++; if (leg == ROUTE.size) storm.moveTo(PARK) }
             if (leg < ROUTE.size) storm.step(ROUTE[leg], 0.40)
         }
-        if (t >= lightningAt + 139) { chasing = true; chaseSince = t }
+        if (t >= lightningAt + LEAVE) { chasing = true; chaseSince = t }
     }
 
     private fun check() {
@@ -488,8 +496,8 @@ class P2Storm : Fight.Phase("P2") {
      * The bots play a real party's P2: Archer on
      * Yellow's pad, Tank on Purple's for the opening drop; the Healer pre-devs in P3; Berserk and
      * Mage about mid. They hide under Yellow and Purple for the lightning, then the lure stands
-     * 35-45 out south of Purple, the Purple pad is held for the t 639 check (186 -> 181, crush 1
-     * at 699) and Yellow's for the two checks from ~enrage + 35 (-> 171), with the bait on Yellow
+     * 35-45 out south of Purple, the Purple pad is held for the t 599 check (186 -> 181, crush 1
+     * at 659) and Yellow's for the two checks from ~enrage + 35 (-> 171), with the bait on Yellow
      * at (46, 170, 66). A job of your class goes to the next bot in line, so P2 plays out whoever
      * you are.
      */
@@ -520,8 +528,8 @@ class P2Storm : Fight.Phase("P2") {
             40 -> { send("yellow", Vec3(32.5, 169.0, 86.5)); send("purple", Vec3(114.5, 169.0, 86.5)) }
             520 -> { send("yellow", Vec3(46.5, 169.0, 65.5)); send("lure", Vec3(45.0, 169.0, 67.0)); send("purple", Vec3(100.5, 169.0, 65.5)); send("other", Vec3(99.0, 169.0, 67.0)) }
             575 -> { send("yellow", YELLOW_WAIT);send("lure", LURE); send("purple", PURPLE_WAIT); send("other", Vec3(58.0, 169.0, 68.0)) }
-            635 -> send("purple", Vec3(114.5, 170.0, 94.5))
-            641 -> send("purple", PURPLE_WAIT)
+            595 -> send("purple", Vec3(114.5, 170.0, 94.5))
+            601 -> send("purple", PURPLE_WAIT)
         }
         if (yellowPress >= 0 && crushes == 1) {
             if (t == yellowPress - 12) send("yellow", Vec3(32.5, 170.0, 94.5))
