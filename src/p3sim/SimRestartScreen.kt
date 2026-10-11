@@ -67,7 +67,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             Triple(0, "Normal PF", "The bots play at a normal party finder pace: P3 in about 34 s."),
             Triple(1, "Quality PF", "The bots play at a quality party finder pace: P3 in about 28 s."),
             Triple(2, "Optimal PF", "The bots play at an optimal party finder pace: P3 in about 22 s."),
-            Triple(P3Plan.RANDOM + 1, "Theoretical", "The bots play a route planner's roles and times: P3 in about 18 s."),
+            Triple(P3Plan.THEORETICAL, "Theoretical", "The fastest terms, in theory: a far EE2, a high EE3, an EE4 by the core."),
         )
         for ((k, s) in skills.withIndex()) {
             val (i, name, about) = s
