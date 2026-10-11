@@ -89,7 +89,7 @@ object SimonSaysPractice : Module(
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
     private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
-    private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns to face you when you turn to another side (every 90 degrees). Off: it stays where you summoned it.")
+    private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
     private val size by NumberSetting("Size", 1.0, 1.0..3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
     private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
 
@@ -180,6 +180,7 @@ object SimonSaysPractice : Module(
                 sign(p, rngButton(level), a, b, Direction.SOUTH)
             }        }
         placed = p
+        turned = 0
         gridCells = (0 until 16).map { p.at(buttonAt(it)) }.toSet()
         reset()
         markMode(0)
@@ -669,7 +670,7 @@ object SimonSaysPractice : Module(
     /**
      * Where the device is right now. It's kept (blocks, hitboxes, solver boxes) as it was summoned, in
      * front of [Placement.eye]; it's drawn [s] times as big about the eye, turned [k] quarter turns
-     * clockwise and moved to [eye] - with Follow You, your eye now and k from the side you face.
+     * clockwise and moved to [eye] - with Follow You, your eye now, and turned around (k 2) once you turn around.
      * Seen from the eye it looks as it did at summon, at any size.
      */
     private class View(val p: Placement, val eye: Vec3, val k: Int, val s: Double) {
@@ -699,9 +700,16 @@ object SimonSaysPractice : Module(
     private fun view(p: Placement, partialTicks: Float, eye: Vec3? = null): View {
         val player = mc.player
         if (!follow || player == null) return View(p, p.eye, 0, size)
-        val k = (player.direction.get2DDataValue() - p.forward.get2DDataValue() + 4) % 4
-        return View(p, eye ?: player.getEyePosition(partialTicks), k, size)
+        // It only turns around: once you face more than [TURN_AROUND] degrees away from it, it goes behind
+        // you, in front again (past 90, so looking along its side doesn't flip it back and forth).
+        val facing = Direction.from2DDataValue(p.forward.get2DDataValue() + turned)
+        if (Math.abs(net.minecraft.util.Mth.wrapDegrees(player.yRot - facing.toYRot())) > TURN_AROUND) turned = (turned + 2) % 4
+        return View(p, eye ?: player.getEyePosition(partialTicks), turned, size)
     }
+
+    /** Follow You: quarter turns the device has made from how it was summoned (0, or 2 once turned around). */
+    private var turned = 0
+    private const val TURN_AROUND = 100.0
 
     // ------------------------------------------------------------------ drawing
 
