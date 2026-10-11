@@ -37,6 +37,8 @@ object P3Plan {
         // On S2's device (Lights): the EE2 player does it early and waits there for the leaps.
         EarlyEnter("ee2", "EE2", 2, Vec3(60.6, 132.0, 139.0)),
         EarlyEnter("ee3", "EE3", 3, Vec3(1.9, 109.0, 104.6)),
+        // Into S4 (by the core, Theoretical's archer: only shown when a preset has it).
+        EarlyEnter("ee4", "EE4", 4, Vec3(54.5, 115.06, 50.5)),
         // Just outside the core in S4; then inside it.
         EarlyEnter("core", "Core", 5, Vec3(54.5, 115.06, 50.5)),
         EarlyEnter("recore", "Recore", 6, Vec3(54.4, 115.0, 57.6)),
@@ -84,11 +86,12 @@ object P3Plan {
      * Every skill's default spawn and early-enter spots, by your class: the ones set for Normal PF (2026-10-09). The early
      * enters are the same whatever your class; the spawn is S1's terminal side for all but the Berserk (at i4).
      */
-    fun defaultSpot(c: DungeonClass?, key: String): Spots.Spot? = when (key) {
+    fun defaultSpot(c: DungeonClass?, key: String): Spots.Spot? = preset().defaults["$key/${c?.name}"] ?: preset().defaults[key] ?: when (key) {
         "spawn" -> if (c == DungeonClass.BERSERK) Spots.Spot("Spawn", 63.5, 127.0, 35.5, -11.18f, 0.33f)
             else Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
         "ee2" -> Spots.Spot("EE2", 60.5, 132.0, 139.0, 90.47f, 1.64f)
         "ee3" -> Spots.Spot("EE3", 2.0, 109.0, 102.0, -175.24f, 5.83f)
+        "ee4" -> Spots.Spot("EE4", 54.5, 115.06, 50.5, 179.91f, 0.57f)
         "core" -> Spots.Spot("Core", 54.5, 115.06, 50.5, 179.91f, 0.57f)
         "recore" -> Spots.Spot("Recore", 52.5, 115.0, 57.6, -159.12f, 2.63f)
         else -> null
