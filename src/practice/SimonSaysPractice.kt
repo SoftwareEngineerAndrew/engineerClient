@@ -23,6 +23,7 @@ import com.odtheking.odin.utils.playSoundSettings
 import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
 import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -88,6 +89,8 @@ object SimonSaysPractice : Module(
     private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
     private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
+    private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns to face you when you turn to another side (every 90 degrees). Off: it stays where you summoned it.")
+    private val size by NumberSetting("Size", 1.0, 1.0..3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
     private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
 
     // ------------------------------------------------------------------ the real device
@@ -115,7 +118,7 @@ object SimonSaysPractice : Module(
 
     // ------------------------------------------------------------------ placement
 
-    private class Placement(val level: ClientLevel, val origin: BlockPos, val forward: Direction) {
+    private class Placement(val level: ClientLevel, val origin: BlockPos, val forward: Direction, val eye: Vec3) {
         val right: Direction = forward.clockWise
         /** The real device faces -x (you look +x); turned to face you. */
         val rotation: Rotation = when (forward) {
@@ -156,7 +159,7 @@ object SimonSaysPractice : Module(
         if (placed != null) { remove(); EngineerClient.msg("§7SS Practice: removed."); return }
         val player = mc.player ?: return
         val level = mc.level ?: return
-        val p = Placement(level, player.blockPosition(), player.direction)
+        val p = Placement(level, player.blockPosition(), player.direction, player.getEyePosition(1f))
         EngineerClient.safely("ss practice summon") {
             // The wall: the grid (x 111, y 120-123, z 92-95) in a ring of black wool, start button on its left.
             for (y in 119..124) for (z in 91..96) {
@@ -656,7 +659,48 @@ object SimonSaysPractice : Module(
 
     /** The click you'd hear from the real button, in your own ears only. */
     private fun click(pos: BlockPos) {
-        mc.level?.playLocalSound(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.3f, 0.6f, false)
+        val p = placed
+        val w = if (p == null) Vec3(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5) else view(p, 1f).toWorld(Vec3(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5))
+        mc.level?.playLocalSound(w.x, w.y, w.z, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.3f, 0.6f, false)
+    }
+
+    // ------------------------------------------------------------------ where it's drawn
+
+    /**
+     * Where the device is right now. It's kept (blocks, hitboxes, solver boxes) as it was summoned, in
+     * front of [Placement.eye]; it's drawn [s] times as big about the eye, turned [k] quarter turns
+     * clockwise and moved to [eye] - with Follow You, your eye now and k from the side you face.
+     * Seen from the eye it looks as it did at summon, at any size.
+     */
+    private class View(val p: Placement, val eye: Vec3, val k: Int, val s: Double) {
+        private fun turn(x: Double, z: Double, steps: Int): Pair<Double, Double> {
+            var a = x; var b = z
+            repeat(steps) { val t = a; a = -b; b = t }
+            return a to b
+        }
+        fun toWorld(v: Vec3): Vec3 {
+            val (x, z) = turn(v.x - p.eye.x, v.z - p.eye.z, k)
+            return Vec3(eye.x + x * s, eye.y + (v.y - p.eye.y) * s, eye.z + z * s)
+        }
+        fun toDevice(v: Vec3): Vec3 {
+            val (x, z) = turn(v.x - eye.x, v.z - eye.z, (4 - k) % 4)
+            return Vec3(p.eye.x + x / s, p.eye.y + (v.y - eye.y) / s, p.eye.z + z / s)
+        }
+        fun dirToDevice(v: Vec3): Vec3 { val (x, z) = turn(v.x, v.z, (4 - k) % 4); return Vec3(x, v.y, z) }
+        fun box(b: AABB) = AABB(toWorld(Vec3(b.minX, b.minY, b.minZ)), toWorld(Vec3(b.maxX, b.maxY, b.maxZ)))
+        /** Where it takes its light from: around your head, or where it was summoned. */
+        val lightPos: BlockPos get() = BlockPos.containing(eye)
+    }
+
+    /**
+     * The device's view this frame ([partialTicks] for your eye between ticks). Drawing in first
+     * person passes the camera as [eye], which is exactly where it draws from (sneaking included).
+     */
+    private fun view(p: Placement, partialTicks: Float, eye: Vec3? = null): View {
+        val player = mc.player
+        if (!follow || player == null) return View(p, p.eye, 0, size)
+        val k = (player.direction.get2DDataValue() - p.forward.get2DDataValue() + 4) % 4
+        return View(p, eye ?: player.getEyePosition(partialTicks), k, size)
     }
 
     // ------------------------------------------------------------------ drawing
@@ -672,21 +716,25 @@ object SimonSaysPractice : Module(
     }
 
     /** The device: its blocks, its signs (text and all), and the outline of the one you look at, as the game outlines a block. */
-    private fun draw(p: Placement, context: net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext) {
+    private fun draw(p: Placement, v: View, context: net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext) {
         val pose = context.poseStack()
         val out = context.submitNodeCollector()
         val cam = mc.gameRenderer.mainCamera().position()
         val level = p.level
-        val light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, p.lightPos)
+        val lightPos = if (follow) v.lightPos else p.lightPos
+        val light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, lightPos)
         fun at(pos: BlockPos, draw: () -> Unit) {
+            val w = v.toWorld(Vec3(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble()))
             pose.pushPose()
-            pose.translate(pos.x - cam.x, pos.y - cam.y, pos.z - cam.z)
+            pose.translate(w.x - cam.x, w.y - cam.y, w.z - cam.z)
+            if (v.k != 0) pose.mulPose(org.joml.Matrix4f().rotateY(Math.toRadians(-90.0 * v.k).toFloat()))
+            if (v.s != 1.0) pose.scale(v.s.toFloat(), v.s.toFloat(), v.s.toFloat())
             draw()
             pose.popPose()
         }
         for ((pos, state) in p.blocks) {
             if (pos in p.signs) continue
-            val s = DeviceBlock(p.lightPos)
+            val s = DeviceBlock(lightPos)
             s.randomSeedPos = pos; s.blockPos = pos; s.blockState = state
             s.biome = level.getBiome(pos); s.cardinalLighting = level.cardinalLighting(); s.lightEngine = level.lightEngine
             at(pos) { out.submitMovingBlock(pose, s, 0) }
@@ -730,8 +778,11 @@ object SimonSaysPractice : Module(
         val player = mc.player ?: return
         if (mc.cameraEntity !== player) return
         EngineerClient.safely("ss practice pick") {
-            val eye = player.getEyePosition(partialTicks)
-            val end = eye.add(player.getViewVector(partialTicks).scale(player.blockInteractionRange()))
+            // The ray in the device's own frame, as long as your reach there (so it reaches as at 1x).
+            val v = view(p, partialTicks)
+            val worldEye = player.getEyePosition(partialTicks)
+            val eye = v.toDevice(worldEye)
+            val end = eye.add(v.dirToDevice(player.getViewVector(partialTicks)).scale(player.blockInteractionRange()))
             var best: BlockHitResult? = null
             var bestD = Double.MAX_VALUE
             for ((pos, state) in p.blocks) {
@@ -740,10 +791,11 @@ object SimonSaysPractice : Module(
                 if (d < bestD) { bestD = d; best = r }
             }
             val b = best ?: return@safely
+            val at = v.toWorld(b.location)
             val game = mc.hitResult
-            if (game is net.minecraft.world.phys.EntityHitResult && game.entity !is net.minecraft.world.entity.player.Player && game.location.distanceToSqr(eye) < bestD) return@safely
+            if (game is net.minecraft.world.phys.EntityHitResult && game.entity !is net.minecraft.world.entity.player.Player && game.location.distanceToSqr(worldEye) < at.distanceToSqr(worldEye)) return@safely
             hit = b
-            mc.hitResult = BlockHitResult.miss(b.location, b.direction, b.blockPos)
+            mc.hitResult = BlockHitResult.miss(at, b.direction, b.blockPos)
             mc.crosshairPickEntity = null
         }
     }
@@ -886,12 +938,14 @@ object SimonSaysPractice : Module(
         on<RenderExtractEvent> {
             val p = placed ?: return@on
             if (p.level !== mc.level) return@on
-            EngineerClient.safely("ss practice draw") { draw(p, context) }
+            val v = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
+                mc.gameRenderer.mainCamera().position().takeIf { mc.options.cameraType.isFirstPerson })
+            EngineerClient.safely("ss practice draw") { draw(p, v, context) }
             if (!solver) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
-                    drawStyledBox(solverBox(p, lamp), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, BoxStyle.FILLED_OUTLINE, true)
+                    drawStyledBox(v.box(solverBox(p, lamp)), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, BoxStyle.FILLED_OUTLINE, true)
                 }
                 return@on
             }
@@ -899,7 +953,7 @@ object SimonSaysPractice : Module(
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
                 val lamp = lampAt(revealed[i])
-                drawStyledBox(solverBox(p, lamp), colour, BoxStyle.FILLED_OUTLINE, true)
+                drawStyledBox(v.box(solverBox(p, lamp)), colour, BoxStyle.FILLED_OUTLINE, true)
             }
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution. After
