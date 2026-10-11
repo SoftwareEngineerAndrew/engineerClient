@@ -19,9 +19,10 @@ object BoxSync {
 
     /** Fetches the site's copy; [done] gets its JSON, off the game thread, or nothing if it failed. */
     fun pull(done: (String) -> Unit) {
-        Thread.ofVirtual().name("brboxes-pull").start {
+        Thread.ofPlatform().daemon().name("brboxes-pull").start {
             runCatching {
                 val res = http.send(HttpRequest.newBuilder(URI.create(URL)).timeout(Duration.ofSeconds(20)).GET().build(), HttpResponse.BodyHandlers.ofString())
+                EngineerClient.logger.info("[ec] brboxes pull: HTTP ${res.statusCode()}, ${res.body().length} chars")
                 if (res.statusCode() == 200) done(res.body())
             }.onFailure { EngineerClient.logger.warn("[ec] brboxes pull failed: ${it.message}") }
         }

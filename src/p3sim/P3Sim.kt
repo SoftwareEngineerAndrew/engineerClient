@@ -9,6 +9,7 @@ import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.Island
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
@@ -23,14 +24,14 @@ import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.network.chat.Component
-import org.lwjgl.glfw.GLFW
+import com.mojang.blaze3d.platform.InputConstants
 
 /**
  * P3 Sim: F7's boss fight in a singleplayer world of its own ("p3sim"), to practice it alone.
  *
  * The world is the real arena at Hypixel's coordinates; the fight runs on the world's own
  * (integrated) server ([SimServer], [Fight]): Goldor, terminals, levers, devices, gates, death
- * ticks, and Maxor/Storm/Necron around it. The menu ([SimScreen]: the keybind, `/p3sim`, or the
+ * ticks, and Maxor/Storm/Necron around it. The menu ([SimRestartScreen]: the keybind, `/p3sim`, or the
  * SkyBlock Menu star in the hotbar) starts any phase or section and teleports anywhere.
  *
  * Nothing of it exists anywhere else: every piece checks [inSim] (the client) or
@@ -42,9 +43,12 @@ object P3Sim : Module(
     description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
     key = null,
 ) {
-    val menuKey by KeybindSetting("Menu Keybind", GLFW.GLFW_KEY_UNKNOWN, "Opens the P3 Sim menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
-    val restartKey by KeybindSetting("Restart Keybind", GLFW.GLFW_KEY_UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch.").onPress {
-        if (inSim) SimServer.run("restart") { Fight.start(Fight.lastStart) }
+    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
+    val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
+        if (inSim) SimServer.run("restart") { if (Practice.active) Practice.restart() else Fight.start(Fight.lastStart) }
+    }
+    val practiceKey by KeybindSetting("Practice Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts your practice (the menu's Practice tab) again. A left click with the Infinileap does too.").onPress {
+        if (inSim) SimServer.run("practice restart") { Practice.restart() }
     }
     enum class ClassOption { HEALER, BERSERK, ARCHER, TANK, MAGE }
     enum class DeathTickOption { OFF, WARN, MASKS }
@@ -64,17 +68,57 @@ object P3Sim : Module(
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0, 10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer.")
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
+    val termLuckS = +NumberSetting("Terminal Luck", 0, 0, 100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick). Up to 50% it picks Hypixel's easiest deals; past it, easier than Hypixel ever deals, down to 1 or 2 clicks at 100%. Melody is untouched.")
+    val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
     val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1, 10, 1, unit = "/s", desc = "Charges back each second (20 max), in irregular +2 steps. Main server: ~6 a second; alpha ~2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")
+    val breakerInfiniteS = +BooleanSetting("Infinite Breaker Charges", false, desc = "The Dungeonbreaker never runs out: every break is free (20 charges always).")
+    val breakerPermaS = +BooleanSetting("Perma Break", false, desc = "Blocks the Dungeonbreaker breaks stay broken (through restarts too) until this is turned off; then they all come back.")
     val realMasksS = +BooleanSetting("Real Masks", true, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
     val wornMaskS = +enumSelector("Starting Mask", MaskOption.SPIRIT, desc = "Real Masks: the mask you wear (/stats swaps it).")
     val phoenixS = +BooleanSetting("Phoenix Pet", false, desc = "Your pet: Phoenix (saves you from a death, no Black Cat speed bonus) or Black Cat (+100 speed). The Pet Rod swaps them.")
+    val realMovesS = +BooleanSetting("Real Bot Movement", true, desc = "P3 bots move as real players do: along routes recorded in Better PF runs (sprints, jumps, lava bounces, Bonzo boosts, stonks), sped up only when a job's time needs it. Off: the old straight walk and Hyperion blinks.")
+    val terrorAtTermsS = +BooleanSetting("Terror At Terms", false, desc = "Every P3 start puts the Terror loadout on (Terror armour, Bonzo's Mask, Black Cat) over your saved gear.")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
     val p3OnlyS = +BooleanSetting("Stop After P3", false, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimesS = +BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
+
+    /** Practice: each task's time as you do it (like the Simon Says sim's). */
+    private val practiceHud by HUD("Practice Splits", "In practice (the menu's Practice tab): the time, and each of your tasks with the time it was done.", true, 10, 210, 1.5f) { example ->
+        val lines = if (example) listOf("§6Practice S2 §f6.45", "§7Lights §a2.10", "§7T3 §a4.85", "§7EE3 §e...")
+        else {
+            val mode = Practice.mode
+            // Nothing during the start timer.
+            if (!inSim || mode == null || Practice.ticks < 0 || Practice.tasks.isEmpty()) return@HUD 0 to 0
+            val next = Practice.tasks.firstOrNull { it.at < 0 }
+            listOf("§6Practice $mode ${if (Practice.endTicks >= 0) "§a" else "§f"}${Practice.secs(Practice.ticks)}") +
+                Practice.tasks.map { t -> "§7${t.label} " + if (t.at >= 0) "§a${Practice.secs(t.at)}" else if (t === next) "§e..." else "§8-" }
+        }
+        lines.forEachIndexed { i, l -> text(l, 0, i * 10, com.odtheking.odin.utils.Colors.WHITE, shadow = true) }
+        (lines.maxOf { mc.font.width(it) }) to lines.size * 10
+    }
+
+    /** Practice: the final time, large, as Term Info's section times look. */
+    private val practiceTimeHud by HUD("Practice Time", "A practice's final time, large (as Term Info's Section Time), for 4 seconds.", true, 420, 300, 5f) { example ->
+        val t = if (example) "§514.35" else Practice.endTicks.takeIf { inSim && Practice.active && it >= 0 && System.currentTimeMillis() - Practice.endMs < 4000 }?.let { "§5${Practice.secs(it)}" } ?: return@HUD 0 to 0
+        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        mc.font.width(t) to 10
+    }
+
+    /** Practice: the start timer counting down, large. */
+    private val practiceStartHud by HUD("Practice Start Timer", "A practice's start timer counting down, large, until terminals and the rest are up.", true, 440, 250, 4f) { example ->
+        val t = if (example) "§e2.4" else Practice.ticks.takeIf { inSim && Practice.active && it < 0 }?.let { "§e${"%.1f".format(java.util.Locale.ROOT, -it / 20.0)}" } ?: return@HUD 0 to 0
+        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        mc.font.width(t) to 10
+    }
+
+    init {
+        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
+        practiceHud.enabled = true; practiceTimeHud.enabled = true; practiceStartHud.enabled = true
+    }
 
     val autoStart: Boolean get() = autoStartS.value
     val showTimes: Boolean get() = showTimesS.value
@@ -96,6 +140,9 @@ object P3Sim : Module(
     val hydraStart: Int get() = hydraStartS.value.toInt()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
+    /** Terminal Luck, 0 to 1 (null-safe: a hotswapped field starts null). */
+    val termLuck: Double get() = ((termLuckS as NumberSetting<*>?)?.value?.toDouble() ?: 0.0) / 100.0
+    val firstClickMelody: Boolean get() = (firstClickMelodyS as BooleanSetting?)?.value == true
     val clickLimit: Boolean get() = clickLimitS.value
     val debugBots: Boolean get() = debugBotsS.value
     val record: Boolean get() = recordS.value
@@ -116,8 +163,18 @@ object P3Sim : Module(
     }
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
+    // Null-safe: a hotswapped game has new settings null until it is relaunched.
+    val breakerInfinite: Boolean get() = (breakerInfiniteS as BooleanSetting?)?.value == true
+    val breakerPerma: Boolean get() = (breakerPermaS as BooleanSetting?)?.value == true
+    fun toggleBreakerInfinite() { (breakerInfiniteS as BooleanSetting?)?.let { it.value = !it.value } }
+    fun toggleBreakerPerma() { (breakerPermaS as BooleanSetting?)?.let { it.value = !it.value } }
     val realMasks: Boolean get() = realMasksS.value
     val phoenix: Boolean get() = phoenixS.value
+    // Null-safe: a hotswapped game has the setting null until it is relaunched (off till then).
+    val realMoves: Boolean get() = (realMovesS as BooleanSetting?)?.value != false
+    fun toggleRealMoves() { (realMovesS as BooleanSetting?)?.let { it.value = !it.value } }
+    val terrorAtTerms: Boolean get() = (terrorAtTermsS as BooleanSetting?)?.value == true
+    fun toggleTerrorAtTerms() { (terrorAtTermsS as BooleanSetting?)?.let { it.value = !it.value } }
     val forcedTerminal: Terminals.Type? get() = terminalS.value.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
 
     /** True only in the p3sim singleplayer world (client side). */
@@ -131,6 +188,7 @@ object P3Sim : Module(
     fun init() {
         SimServer.register()
         P3Plan.load()
+        Practice.load()
         // /p3sim: the menu in the sim (or opens the sim); /p3sim <start> starts it; /p3sim rebuild remakes the world.
         // /stats: Hypixel's equipment window, here to swap masks. On the sim's own server only (a
         // server command, so Hypixel's /stats is never touched).
@@ -151,6 +209,8 @@ object P3Sim : Module(
             cmd.then(ClientCommands.literal("stop").executes { SimServer.run("cmd stop") { Fight.end() }; 1 })
             cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
             dispatcher.register(cmd)
+            // /pos: where you stand and look (and the block you look at), copied, to set spots from.
+            dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
         ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick() } }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
@@ -171,10 +231,9 @@ object P3Sim : Module(
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
                     .bounds(realms.x + realms.width - half, realms.y, half, realms.height).build())
             }
-            // In the sim, Esc has two menus. P3 Sim Menu (the big Restart) takes Open to LAN's place (right
-            // under Save and Quit if that isn't there), and the whole menu shifts so the cursor, which
-            // opening it puts in the middle of the screen, is already on it. P3 Sim Full Menu (every tab)
-            // goes under Save and Quit.
+            // In the sim, Esc's P3 Sim Menu takes Open to LAN's place (right under Save and Quit if that
+            // isn't there), and the whole menu shifts so the cursor, which opening it puts in the middle of
+            // the screen, is already on it.
             if (screen is net.minecraft.client.gui.screens.PauseScreen && inSim) EngineerClient.safely("p3sim pause button") {
                 val widgets = Screens.getWidgets(screen)
                 val buttons = widgets.filterIsInstance<Button>()
@@ -192,10 +251,6 @@ object P3Sim : Module(
                     val dy = screen.height / 2 - (b.y + b.height / 2)
                     for (w in widgets) w.y += dy
                 }
-                // Under Save and Quit, or under the main one when that took Save and Quit's spot.
-                val above = if (lan != null && quit != null) quit else b
-                widgets.add(Button.builder(Component.literal("§6P3 Sim Full Menu")) { mc.setScreen(SimScreen()) }
-                    .bounds(above.x, above.y + above.height + 4, above.width, 20).build())
             }
         }
     }
@@ -204,6 +259,19 @@ object P3Sim : Module(
     private val QUIT_KEYS = setOf("menu.returnToMenu", "menu.disconnect")
     /** Open to LAN: vanilla's, or Clean Menus' multiplayer options in its place. */
     private val LAN_KEYS = setOf("menu.shareToLan", "menu.multiplayerOptions.button")
+
+    /** Your position (y to the hundredth, as spots are set), yaw and pitch, and the block you look at: in chat and copied. */
+    private fun pos() {
+        val p = mc.player ?: return
+        val f = { v: Double -> String.format(java.util.Locale.ROOT, "%.2f", v) }
+        val y = Math.floor(p.y * 100 + 1e-6) / 100
+        var line = "${f(p.x)}, ${f(y)}, ${f(p.z)}, yaw ${f(net.minecraft.util.Mth.wrapDegrees(p.yRot).toDouble())}, pitch ${f(p.xRot.toDouble())}"
+        (mc.hitResult as? net.minecraft.world.phys.BlockHitResult)?.takeIf { it.type == net.minecraft.world.phys.HitResult.Type.BLOCK }?.blockPos?.let { b ->
+            line += ", looking at ${b.x}, ${b.y}, ${b.z}"
+        }
+        mc.keyboardHandler.clipboard = line
+        EngineerClient.msg("§f$line §8(copied)")
+    }
 
     fun openMenuOrSim() {
         if (inSim) mc.execute { mc.setScreen(SimRestartScreen()) } else SimWorld.open()
@@ -224,6 +292,8 @@ object P3Sim : Module(
             return
         }
         bridged = true
+        // On in the sim, so its HUDs (practice) show: the module's switch does nothing else.
+        if (!enabled) toggle()
         val me = mc.player?.name?.string ?: return
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7

@@ -2,41 +2,29 @@ package com.coffeeclient.misc
 
 import com.engineerclient.enumSelector
 import com.coffeeclient.CoffeeClient
-import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color
-import com.engineerclient.BoxStyle
-import com.engineerclient.drawStyledBox
-import com.odtheking.odin.utils.render.drawStyledBox
-import com.odtheking.odin.utils.renderBoundingBox
+import com.odtheking.odin.features.impl.dungeon.SecretClicked
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import net.minecraft.world.entity.boss.wither.WitherBoss
+import net.minecraft.core.BlockPos
+import net.minecraft.world.level.block.Blocks
 
 /**
  * Termsim (the name only - nothing to do with terminals): where new things go, each its own
  * toggle with its settings under it.
  *
- *  - Wither Highlight: a box on the withers in F7/M7's boss - the bosses themselves (Maxor, Storm,
- *    Goldor, Necron), the only withers there.
+ *  - Lever Clicks: left clicking a lever in a dungeon gets Odin's Secret Clicked chime and box, as
+ *    a right click does - its own (private) chime and box, so its settings and its on/off apply.
  */
 object Termsim : Module(
     name = "Termsim",
     key = null,
     category = Category.custom("Coffee Client"),
-    description = "Where new things go: Wither Highlight.",
+    description = "Where new things go: Lever Clicks.",
 ) {
-    private val witherHighlight by BooleanSetting("Wither Highlight", true, desc = "A box on the withers in the F7/M7 boss: Maxor, Storm, Goldor and Necron.")
-    private val witherColor by ColorSetting("Wither Color", Color(255, 85, 255, 1f), true, desc = "The box's colour.")
-        .withDependency { witherHighlight }
-    private val witherStyle by enumSelector("Wither Style", BoxStyle.OUTLINE, desc = "Outline, filled, or both.")
-        .withDependency { witherHighlight }
-    private val witherThroughWalls by BooleanSetting("Wither Through Walls", true, desc = "Shows the box through blocks.")
-        .withDependency { witherHighlight }
+    private val leverClicks by BooleanSetting("Lever Clicks", true, desc = "Left clicking a lever in a dungeon plays Odin's Secret Clicked chime and draws its box, the same as right clicking it. Uses Secret Clicked's settings (and needs it on).")
 
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
 
@@ -48,12 +36,19 @@ object Termsim : Module(
         com.odtheking.odin.features.ModuleManager.saveConfigurations()
     }
 
-    init {
-        on<RenderEvent.Extract> {
-            if (!witherHighlight || !DungeonUtils.isFloor(7) || !DungeonUtils.inBoss) return@on
-            for (e in CoffeeClient.mc.level?.entitiesForRendering() ?: return@on) {
-                if (e is WitherBoss && e.isAlive && Witherborn.isBoss(e)) drawStyledBox(e.renderBoundingBox, witherColor, witherStyle, !witherThroughWalls)
-            }
+    // --- Lever Clicks ------------------------------------------------------------------------------
+
+    private val secretBox by lazy { SecretClicked::class.java.getDeclaredMethod("secretBox", BlockPos::class.java).apply { isAccessible = true } }
+    private val secretChime by lazy { SecretClicked::class.java.getDeclaredMethod("secretChime").apply { isAccessible = true } }
+
+    /** A left click on [pos] (LeverClickMixin), before the game handles it. Client thread. */
+    @JvmStatic
+    fun onLeftClickBlock(pos: BlockPos) {
+        if (!enabled || !leverClicks || !SecretClicked.enabled || !DungeonUtils.inDungeons) return
+        if (CoffeeClient.mc.level?.getBlockState(pos)?.`is`(Blocks.LEVER) != true) return
+        CoffeeClient.safely("lever click") {
+            secretBox.invoke(SecretClicked, pos)
+            secretChime.invoke(SecretClicked)
         }
     }
 }

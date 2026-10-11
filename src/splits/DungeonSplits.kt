@@ -5,7 +5,6 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.misc.Witherborn
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
@@ -22,6 +21,7 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.texture
+import com.odtheking.odin.utils.sendCommand
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal
@@ -32,7 +32,7 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.Blocks
 
 /**
- * The Blood Rush sub-split HUD, plus the run tracking behind the Engineer Splits look (the splits
+ * The BR (blood rush) and Goldor sub-split HUDs, plus the run tracking behind the Engineer Splits look (the splits
  * themselves are drawn by Odin's Splits module, see [OdinSplitsLook]): bests, Pace and lag.
  *
  * [SplitTracker] times the splits, [SubSplitTracker] the boss steps (Pace's targets) and
@@ -45,7 +45,7 @@ import net.minecraft.world.level.block.Blocks
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("Engineer Client"),
-    description = "The blood rush sub splits, room by room. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
+    description = "The blood rush sub splits, room by room, and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
 
@@ -60,11 +60,16 @@ object DungeonSplits : Module(
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
     private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "").hide()
     private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "").hide()
-    private val resetBests by ActionSetting("Reset Sub Split Bests", desc = "Forgets every boss sub split's best time (the gold ones), on F7 and M7.") {
-        bestsF7 = ""; bestsM7 = ""
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
-        EngineerClient.msg("§7Sub split bests cleared.")
-    }
+
+    /**
+     * Each split's last [RECENT] whole times, per floor, oldest first, on both clocks:
+     * `split.open=ms:ticks|ms:ticks,split.blood=...`. Pace From Recent Runs projects from their median.
+     */
+    private var recentF7 by StringSetting("Recent Splits F7", "", 8192, desc = "").hide()
+    private var recentM7 by StringSetting("Recent Splits M7", "", 8192, desc = "").hide()
+    private const val RECENT = 20
+    /** Fewer kept than this and a split has no typical time yet (Pace falls back to its target). */
+    private const val RECENT_MIN = 5
 
     /** Tracks the in-boss moments (the Watcher's dialog, everyone in the core) the watchers below key off. */
     private val moments = BossMoments()
@@ -75,7 +80,7 @@ object DungeonSplits : Module(
      * The HUD is made up front because a HUD has to exist before the run that fills it.
      */
     private val bloodHud = registerSetting(
-        HUD("Blood Rush Sub Splits", "What happened inside Blood Rush.", true, 780, 229, 0.9f) { example ->
+        HUD("BR Sub Split", "What happened inside Blood Rush, room by room.", true, 780, 229, 0.9f) { example ->
             if (example) return@HUD draw(this, listOf(
                 "§70.52s §8| \t§c1.73s \t§5Hallway: \t§62.31s",
                 "\t§411.73s \t§dDino: \t§622.31s",
@@ -96,6 +101,21 @@ object DungeonSplits : Module(
         BooleanSetting("Blood Rush Hide In Boss", false, desc = "Hides the blood rush sub splits once you are in the boss.")
     ).withDependency { hudOn() }
 
+    /** The Goldor sub split: each leap into the core after S4 and Goldor starting to move ([GoldorCore]). */
+    private val core = GoldorCore()
+    private val goldorHud = registerSetting(
+        HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Shown until the run ends.", true, 750, 10, 1f) { example ->
+            if (example) return@HUD draw(this, listOf("§eCore", "§7Teammate §3-2.40s", "§fYou §a0.05s", "§7Another §8~0.50s", "§7Last §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
+            draw(this, core.lines(serverTicks, mc.player?.name?.string, aliveNames()))
+        }
+    )
+    private val pasteCore = registerSetting(
+        BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died.")
+    )
+
+    /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
+    private var coreGoldor: Triple<Int, net.minecraft.world.phys.Vec3, Int>? = null
+
     // What the world shows, watched only while it can matter.
     private val barriers = mutableListOf<Pair<Int, Int>>()
     private val cleared = mutableListOf<Pair<Int, Int>>()
@@ -109,6 +129,7 @@ object DungeonSplits : Module(
         bestsChecked.clear(); realRun = true
         synchronized(lagSamples) { lagShown = false; lagSamples.clear() }
         tracker.reset(); subs.reset(); blood.reset(); moments.reset()
+        core.reset(); coreGoldor = null
         goldorAt = null; goldorMoved = false; necronId = null; watcherAt = null
         barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
     }
@@ -181,6 +202,8 @@ object DungeonSplits : Module(
                     moments.onChat(text, at)
                     subs.onChat(text, at)
                     blood.onChat(text, at)
+                    if (text == CORE_OPEN) core.onCoreOpen(at.tick)
+                    else if (text.startsWith(NECRON_LINE)) core.onNecron()
                 }
             }
         }
@@ -247,6 +270,10 @@ object DungeonSplits : Module(
             // starting to move, which he does once everyone is in.
             if (open(SplitTracker.GOLDOR) && moments.waitingForCore) watchGoldor(level, trusted = inCore == null) else goldorAt = null
 
+            // The Goldor sub split: watched from S4's start (or the core opening).
+            subs.s4Start?.let { core.onS4(it.tick) }
+            if (core.active) watchCore(level)
+
             // The Watcher moving off his starting spot, once his first spawns are out.
             if (open(SplitTracker.BLOOD) && moments.waitingForWatcher) watchWatcher(level)
         }
@@ -284,7 +311,8 @@ object DungeonSplits : Module(
      * floor, since players stand as low as y 64 during the fight.
      */
     private fun everyoneInCore(level: net.minecraft.client.multiplayer.ClientLevel): Boolean? {
-        val alive = DungeonUtils.dungeonTeammates.filter { !it.isDead }
+        // The dead count as in: a ghost can be anywhere (DeadPlayers has them before the tab list does).
+        val alive = DungeonUtils.dungeonTeammates.filter { !com.engineerclient.DeadPlayers.isDead(it) }
         if (alive.isEmpty()) return false
         var unseen = false
         for (mate in alive) {
@@ -295,6 +323,73 @@ object DungeonSplits : Module(
         // Everyone you can see is in, but not everyone can be seen: the box can't say.
         return if (unseen) null else true
     }
+
+    /**
+     * The Goldor sub split each tick while it is open: every teammate inside the core box, and
+     * Goldor setting off for the core. Both where the server last put them (not where they are
+     * drawn, a few ticks behind); you where you are. He creeps along his track at ~0.05 blocks a
+     * tick until everyone is in, then goes at ~0.65: setting off is the first step faster than
+     * [GOLDOR_GO] a tick, timed from the step's start. A jump of blocks at once is him coming into
+     * view, not moving.
+     */
+    private fun watchCore(level: net.minecraft.client.multiplayer.ClientLevel) {
+        if (core.look(serverTicks)) {
+            val me = mc.player
+            val alive = aliveNames()
+            if (me != null && me.name.string in alive) core.observe(me.name.string, inCoreBox(me.x, me.y, me.z), serverTicks)
+            for (mate in DungeonUtils.dungeonTeammates) {
+                if (mate.name !in alive || mate.name == me?.name?.string) continue
+                val p = mate.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == mate.name }
+                val at = p?.positionCodec?.base
+                core.observe(mate.name, at?.let { inCoreBox(it.x, it.y, it.z) }, serverTicks)
+            }
+            pasteLastIn()
+        }
+        if (core.openTick == null || core.goldorMoved != null) return
+        val g = coreGoldor
+        if (g == null) { bossWither(level, "Goldor")?.let { coreGoldor = Triple(it.id, it.positionCodec.base, serverTicks) }; return }
+        val e = level.getEntity(g.first) ?: run { coreGoldor = null; return }
+        val at = e.positionCodec.base
+        if (at == g.second) return
+        val dx = at.x - g.second.x; val dz = at.z - g.second.z
+        val d = Math.sqrt(dx * dx + dz * dz)
+        val ticks = (serverTicks - g.third).coerceAtLeast(1)
+        if (d < 8 && d / ticks > GOLDOR_GO) core.onGoldorMoved(g.third)
+        else coreGoldor = Triple(e.id, at, serverTicks)
+    }
+
+    /**
+     * Paste Last In Core: once all five are in, the last one and their time in party chat, once -
+     * only with four teammates all alive and every time exact ([GoldorCore.pasteLine]). Not in
+     * singleplayer (the P3 Sim).
+     */
+    private fun pasteLastIn() {
+        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer()) return
+        val me = mc.player?.name?.string ?: return
+        val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
+        if (mates.size != 4 || mates.any { it.isDead }) return
+        val alive = aliveNames()
+        if (core.lastIn(alive) == null) return
+        core.pasted = true
+        core.pasteLine(alive)?.let { sendCommand("pc $it") }
+    }
+
+    /** You and your teammates still alive: a dead one is no longer waited for. */
+    private fun aliveNames(): List<String> {
+        val me = mc.player?.name?.string
+        val mates = DungeonUtils.dungeonTeammates
+        val out = mates.filter { !it.isDead }.mapTo(ArrayList()) { it.name }
+        if (me != null && mates.none { it.name == me }) out += me
+        return out.distinct()
+    }
+
+    /**
+     * The inner chamber: the core and the space at its door (z >= 54). From S4's start nobody
+     * leaves it (Hypixel snaps you back): in 79 recorded F7 runs no one was seen out of it again
+     * before the core opened. Its floor is y 115 (nobody below 110 before Goldor set off); under it
+     * is the drop to Necron, which a wipe can put people in.
+     */
+    private fun inCoreBox(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y >= 110 && y < 155.5 && z >= 54 && z < 118
 
     /** The TNT seen in the last 2 server ticks of Necron's fight, for his death's burst. */
     private val necronTnt = ArrayDeque<Stamp>()
@@ -407,6 +502,10 @@ object DungeonSplits : Module(
     private const val SECTION_DOOR_BLOCKS = 100
     private val sectionDoor = IntArray(3)
     private val NECRON_MID = net.minecraft.world.phys.Vec3(54.0, 66.0, 76.0)
+    /** Blocks a tick: faster is Goldor setting off for the core (he creeps at ~0.05, goes at ~0.65). */
+    private const val GOLDOR_GO = 0.25
+    private const val CORE_OPEN = "The Core entrance is opening!"
+    private const val NECRON_LINE = "[BOSS] Necron: "
     private val KEY = Regex("""(?:Wither|Blood) Key""")
 
     /** The Watcher: his id and where he was last tick. */
@@ -486,6 +585,7 @@ object DungeonSplits : Module(
             val id = SplitPace.SPLIT_IDS[split.label] ?: return@forEachIndexed
             if (!whole) return@forEachIndexed
             recordBest(floor, id, SubSplitGrades.value(id, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()), true)
+            recordRecent(floor, id, SplitPace.Clocks(stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()))
         }
     }
 
@@ -524,6 +624,36 @@ object DungeonSplits : Module(
 
     /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
     private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
+
+    private fun recent(floor: String?): MutableMap<String, MutableList<SplitPace.Clocks>> =
+        (when (floor) { "F7" -> recentF7; "M7" -> recentM7; else -> "" }).split(',').mapNotNull { e ->
+            val (k, v) = e.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+            k.trim() to v.split('|').mapNotNull { c ->
+                val (ms, ticks) = c.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+                SplitPace.Clocks(ms.toLongOrNull() ?: return@mapNotNull null, ticks.toLongOrNull() ?: return@mapNotNull null)
+            }.toMutableList()
+        }.toMap(HashMap())
+
+    private fun recordRecent(floor: String, id: String, c: SplitPace.Clocks) {
+        val all = recent(floor)
+        val list = all.getOrPut(id) { mutableListOf() }
+        list += c
+        while (list.size > RECENT) list.removeAt(0)
+        val text = all.entries.sortedBy { it.key }.joinToString(",") { (k, v) -> k + "=" + v.joinToString("|") { "${it.ms}:${it.ticks}" } }
+        when (floor) { "F7" -> recentF7 = text; "M7" -> recentM7 = text; else -> return }
+        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+    }
+
+    /**
+     * [label]'s (SplitTracker's) typical time on [floor]: the median of its last [RECENT] whole times,
+     * each clock on its own; null with fewer than [RECENT_MIN] kept.
+     */
+    fun typical(floor: String, label: String): SplitPace.Clocks? {
+        val id = SplitPace.SPLIT_IDS[label] ?: return null
+        val list = recent(floor)[id]?.takeIf { it.size >= RECENT_MIN } ?: return null
+        fun median(v: List<Long>) = v.sorted().let { if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2 }
+        return SplitPace.Clocks(median(list.map { it.ms }), median(list.map { it.ticks }))
+    }
 
     private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
         when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })

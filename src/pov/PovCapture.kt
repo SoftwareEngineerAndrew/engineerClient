@@ -137,6 +137,7 @@ object PovCapture {
         freeRequested = true
         standIn = null
         groundCache.clear()
+        seenAs.clear()
     }
 
     /** Called from the client tick, outside any frame, when the previews are not wanted. */
@@ -232,21 +233,19 @@ object PovCapture {
      *
      * Odin draws its HUDs from a `HudElementRegistry` element in the HUD phase, which is *before*
      * the screen phase we are in, so a preview covers them. Rather than move the previews down
-     * (they have to be above the vanilla hotbar and scoreboard), the few that matter mid-fight are
-     * simply submitted a second time here, under the same 1/guiScale pose `ModuleManager.render`
+     * (they have to be above the vanilla hotbar and scoreboard), every HUD that is on (Keep All HUDs) or
+     * the few ticked are simply submitted a second time here, under the same 1/guiScale pose `ModuleManager.render`
      * uses. Drawing a HUD element twice in one frame is safe: `HudElement.draw` only renders and
      * records its own width/height.
      */
     private fun redrawKeptHuds(gfx: GuiGraphicsExtractor) {
-        val keep = PovPreviews.keptHudNames()
-        if (keep.isEmpty()) return
         val scale = EngineerClient.mc.window.guiScale.toFloat()
         if (scale <= 0f) return
         gfx.pose().pushMatrix()
         gfx.pose().scale(1f / scale, 1f / scale)
         try {
             for (hud in ModuleManager.hudSettingsCache) {
-                if (!hud.isEnabled || hud.name !in keep) continue
+                if (!hud.isEnabled || !PovPreviews.keepsHud(hud.name)) continue
                 EngineerClient.safely("pov keep hud ${hud.name}") { hud.value.draw(gfx, false) }
             }
         } finally {
@@ -343,12 +342,14 @@ object PovCapture {
         val feed = feeds[index] ?: return
         val slot = DungeonUtils.leapTeammates.getOrNull(index) ?: return
 
-        // Loaded: their own eyes. Out of entity range: where the dungeon map puts them, the way the
-        // Better PF viewer does ([mapStandIn]). Dead, or nowhere at all: a flat dark quadrant, which
-        // reads as "no feed" where a stale image — or a view of your own surroundings — lies.
-        val loaded: Player? = (slot.entity ?: findByName(slot.name))?.takeIf { !it.isRemoved }
+        // Loaded: their own eyes. Just gone out of entity range: their last pose, held ([recentStandIn]).
+        // Out of range for longer: where the dungeon map puts them, the way the Better PF viewer
+        // does ([mapStandIn]). Dead, or nowhere at all: a flat dark quadrant, which reads as
+        // "no feed" where a stale image — or a view of your own surroundings — lies.
+        val loaded: Player? = (slot.entity?.takeIf { !it.isRemoved } ?: findByName(slot.name))?.takeIf { !it.isRemoved }
+        if (loaded != null) seenAs[slot.name] = loaded.uuid
         val target: Entity? = when {
-            loaded == null -> mapStandIn(slot)
+            loaded == null -> recentStandIn(slot) ?: mapStandIn(slot)
             loaded === mc.player || !loaded.isAlive -> null
             else -> loaded
         }
@@ -488,6 +489,36 @@ object PovCapture {
      */
     private var standIn: Marker? = null
 
+    /** Each teammate's entity uuid, from when it was last loaded: the key to their last sampled pose. */
+    private val seenAs = HashMap<String, java.util.UUID>()
+
+    /**
+     * How long a teammate who has just gone out of entity range keeps their last real pose. At the
+     * edge of tracking range the server adds and removes their entity over and over; switching to
+     * the map stand-in each time snapped the view between their real look and the map arrow's
+     * (22.5 degree steps, looking level).
+     */
+    private const val RANGE_GRACE_NANOS = 2_000_000_000L
+
+    /** A teammate out of entity range for under [RANGE_GRACE_NANOS]: where they last were, looking where they last looked. */
+    private fun recentStandIn(p: DungeonPlayer): Entity? {
+        if (p.isDead) return null
+        val s = PovPose.lastSeen(seenAs[p.name] ?: return null) ?: return null
+        if (System.nanoTime() - s.nanos > RANGE_GRACE_NANOS) return null
+        return standIn(s.x, s.y, s.z, s.headYaw, s.pitch)
+    }
+
+    /** Puts the stand-in at a position and look, with nothing left for the partial tick to lerp. */
+    private fun standIn(x: Double, y: Double, z: Double, yaw: Float, pitch: Float): Entity? {
+        val level = EngineerClient.mc.level ?: return null
+        val e = standIn?.takeIf { it.level() === level } ?: Marker(EntityType.MARKER, level).also { standIn = it }
+        e.setPos(x, y, z)
+        e.xo = x; e.yo = y; e.zo = z
+        e.setYRot(yaw); e.yRotO = yaw
+        e.setXRot(pitch); e.xRotO = pitch
+        return e
+    }
+
     /** Each quadrant's last map column and the ground found there, so it is looked up once per move. */
     private val groundCache = HashMap<String, Triple<Int, Int, Int>>()
 
@@ -510,12 +541,7 @@ object PovCapture {
         val y = if (cached != null && cached.first == bx && cached.second == bz) cached.third
             else groundY(level, bx, bz).also { groundCache[p.name] = Triple(bx, bz, it) }
 
-        val e = standIn?.takeIf { it.level() === level } ?: Marker(EntityType.MARKER, level).also { standIn = it }
-        e.setPos(x, y.toDouble(), z)
-        e.xo = x; e.yo = y.toDouble(); e.zo = z
-        e.setYRot(p.yaw); e.yRotO = p.yaw
-        e.setXRot(0f); e.xRotO = 0f
-        return e
+        return standIn(x, y.toDouble(), z, p.yaw, 0f)
     }
 
     /**
