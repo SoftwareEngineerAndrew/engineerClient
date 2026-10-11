@@ -60,17 +60,13 @@ import java.util.zip.GZIPInputStream
 object BetterPF : Module(
     name = "Better PF",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
+    description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {
-    private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Records each run's doorways (two blocks per door spot) - the rooms themselves come from the viewer's room library, which has them all.")
-    private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed. Turn on Private Runs to keep them off the public list.")
     private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /betterpf gives you a link to all your runs, private ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way), and party chat too.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
-    val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
-    private val tidyRuns by BooleanSetting("Tidy Runs Folder", true, desc = "Once a game, runs here older than 30 days that the viewer has are deleted from this computer - the site keeps every run for good. Recordings a crash left unfinished are always saved as runs.")
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
     /**
      * A secret this install sends with every upload, so the site can list this player's runs -
@@ -91,7 +87,7 @@ object BetterPF : Module(
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
-    private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
+    private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed. One at a time, with progress in chat.") { uploadMissing() }
 
     const val SITE = "undonecoffee.com"
     private const val RUNS_URL = "https://$SITE/betterpf/api/runs"
@@ -107,7 +103,7 @@ object BetterPF : Module(
             EngineerClient.safely("betterpf start") {
                 session?.finish()
                 RoomKeys.reset()
-                session = RunRecorder(runsDir, captureGeometry, ::upload)
+                session = RunRecorder(runsDir, true, ::upload)
             }
         }
 
@@ -263,7 +259,6 @@ object BetterPF : Module(
      * compete with the game loading the next world.
      */
     private fun upload(file: Path) {
-        if (!uploadRuns) return
         Thread.ofPlatform().name("engineerclient-betterpf-upload").daemon(true).priority(Thread.MIN_PRIORITY).start {
             try {
                 // Party members recording the same run take turns, so the first one's recording is on
@@ -383,7 +378,7 @@ object BetterPF : Module(
 
     /**
      * Once a game, in the background: recordings a crash left as .part files are saved as runs (as
-     * far as they got), and with Tidy Runs Folder, runs older than [KEEP_DAYS] days that the site
+     * far as they got), and runs older than [KEEP_DAYS] days that the site
      * has (asked by recorder and start time, as Upload Missing Runs does) are deleted here.
      */
     private fun tidyRunsFolder() {
@@ -394,7 +389,6 @@ object BetterPF : Module(
                 // (one still being written is touched every few seconds)
                 val parts = Files.list(runsDir).use { s -> s.filter { PART_NAME.matches(it.fileName.toString()) }.toList() }
                 for (part in parts) if (now - Files.getLastModifiedTime(part).toMillis() > 30 * 60_000L) salvage(part)
-                if (!tidyRuns) return@start
                 val old = Files.list(runsDir).use { s ->
                     s.filter { it.fileName.toString().endsWith(".jsonl.gz") && now - Files.getLastModifiedTime(it).toMillis() > KEEP_DAYS * 86_400_000L }.toList()
                 }

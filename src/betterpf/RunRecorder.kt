@@ -371,7 +371,6 @@ class RunRecorder(
         backlog.forEach(::writeNow)
         backlog.clear()
         flushPending()
-        if (BetterPF.recordingMessage) EngineerClient.msg("§7Better PF: recording this run")
     }
 
     private fun abandon() {
