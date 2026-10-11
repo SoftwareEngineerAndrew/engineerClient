@@ -87,6 +87,9 @@ object BetterPF : Module(
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
+    private val webSignIn by ActionSetting("Copy Web Sign-in Code", desc = "Signs you in to the web party finder (undonecoffee.com/betterpf/menu): copies a code to paste at the top of that page - it's never shown. Each new code signs the last one out everywhere. Signed in, the page can show who's looking to play, invite and join from anywhere, and your game takes the party commands you press there (only yours).") { WebParty.newCode() }
+    /** The web party finder's sign-in code (WebParty), kept between games. */
+    internal var webCode by StringSetting("Web Code", "", 64, desc = "Your web party finder sign-in.", placeholder = "").hide()
     private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed. One at a time, with progress in chat.") { uploadMissing() }
 
     const val SITE = "undonecoffee.com"
@@ -106,6 +109,8 @@ object BetterPF : Module(
                 session = RunRecorder(runsDir, true, ::upload)
             }
         }
+
+        on<TickEvent.End> { EngineerClient.safely("betterpf web") { WebParty.tick() } }
 
         on<LevelEvent.Unload> {
             EngineerClient.safely("betterpf end") { session?.finish(); session = null }
@@ -174,6 +179,7 @@ object BetterPF : Module(
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
+            WebParty.onChat(text)
             val colored = legacyText(content)
             if (hidePrivateChats && (UploadPacker.privateChat(text) || UploadPacker.partyChat(text))) return@onReceive
             val n = session?.serverTickCount
@@ -514,6 +520,7 @@ object BetterPF : Module(
     override fun onDisable() {
         session?.finish()
         session = null
+        WebParty.close()
         super.onDisable()
     }
 }

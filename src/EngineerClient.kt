@@ -213,7 +213,12 @@ object EngineerClient : ClientModInitializer {
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /betterpf: the link to all your uploaded runs, private ones included.
-            for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 })
+            // /betterpf lfg [f7|m7|off]: looking to play, on the web party finder (BetterPF's WebParty).
+            for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 }
+                .then(literal("lfg").executes { com.engineerclient.betterpf.WebParty.look(null); 1 }
+                    .then(literal("f7").executes { com.engineerclient.betterpf.WebParty.look("F7"); 1 })
+                    .then(literal("m7").executes { com.engineerclient.betterpf.WebParty.look("M7"); 1 })
+                    .then(literal("off").executes { com.engineerclient.betterpf.WebParty.unlook(); 1 })))
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // Same tree registered under the formal name (both casings, since Brigadier
