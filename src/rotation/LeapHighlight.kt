@@ -145,7 +145,7 @@ object LeapHighlight {
         runCatching { LeapMenu::class.java.getDeclaredMethod("getScale").apply { isAccessible = true } }.getOrNull()
     }
 
-    private fun odinScale(): Float =
+    fun odinScale(): Float =
         runCatching { scaleGetter?.invoke(LeapMenu) as? Float }.getOrNull() ?: 1f
 
     private fun outline(gfx: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int, color: Color, radius: Int) {
