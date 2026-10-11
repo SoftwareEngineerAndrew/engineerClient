@@ -563,6 +563,9 @@ object Party {
             // Holding (or on its way) unless it already moved on in the section before.
             if (b === onto) { b.hold = eeArrived[s] && !released[s]; continue }
             if (b.inSection >= s) { walkOn(b, n); continue }
+            // The EE4 bot with nothing left in S3 goes straight to its spot from where it is (Theoretical's archer: S2's
+            // 3rd term to the core), no leap into S3.
+            if (s == 3 && eeOf(4)?.let { !it.byYou && it.owner == b.clazz } == true && jobs.none { it.bot === b && sectionOf(it.job) <= 3 }) { b.inSection = s; continue }
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.pos }
             else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { Sim.player?.position() }

@@ -49,6 +49,10 @@ object Bows {
     const val MOSQUITO = "MOSQUITO_BOW"
     /** A vanilla bow (drawn and released) with Duplex, legendary. */
     const val LAST_BREATH = "LAST_BREATH"
+    /** A vanilla bow whose arrow explodes where it lands (Explosive Shot): a blast within 2 blocks of a gate blows it. */
+    const val EXPLOSIVE = "EXPLOSIVE_BOW"
+    /** The drawn (vanilla) bows. */
+    val DRAWN = setOf(LAST_BREATH, EXPLOSIVE)
     val SHORTBOWS = setOf(TERMINATOR, SPIRIT, MOSQUITO)
 
     private const val NASTY_BITE_COOLDOWN = 10
@@ -145,7 +149,8 @@ object Bows {
         val dupShift = if (Random.nextDouble() < 42.0 / 64.0) 0 else if (Random.nextBoolean()) 1 else -1
         val plan = ShotPlan.plan(bow, a.pos, a.yaw, a.pitch, a.crouch, Hydra.stacks, noise, duplex, 3.0 * power)
         for (arrow in plan) {
-            if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null)?.let { if (arrow.owned && bow == LAST_BREATH && power >= 1f) it.isCritArrow = true }
+            if (arrow.delay == 0) launch(arrow.from, arrow.at, arrow.v, owner = if (arrow.owned) p else null,
+                onHit = if (bow == EXPLOSIVE && arrow.owned) ({ h -> explode(h.location) }) else null)?.let { if (arrow.owned && bow in DRAWN && power >= 1f) it.isCritArrow = true }
             else {
                 // Hypixel's Duplex entities each make a quieter shoot sound on the tick they spawn, at the centre of the
                 // block holding that entity's spawn position (master, vol 0.5, pitch 0.698).
@@ -218,6 +223,13 @@ object Bows {
             }
         }
         onHit?.invoke(h)
+    }
+
+    /** Explosive Shot: the blast where the arrow landed; within 2 blocks of a gate it blows it. */
+    private fun explode(at: Vec3) {
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 0.8f + Random.nextFloat() * 0.18f, at, SoundSource.MASTER)
+        Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
+        (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
     }
 
     /** A sound at you (or at [at]), its pitch on Hypixel's 1/63 steps. */

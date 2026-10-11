@@ -889,6 +889,11 @@ object SimItems {
     val LAST_BREATH get() = item(Items.BOW, Bows.LAST_BREATH, "§6Last Breath", listOf("§9Duplex I", "§7Shoot an extra arrow dealing §a4%§7 of the",
         "§7first arrow's damage.", "", "§7Draw and release, like a vanilla bow.", "", "§6§lLEGENDARY BOW"), glint = true)
 
+    /** Hypixel's Explosive Bow (EXPLOSIVE_BOW: epic, 100 damage, 20 strength): drawn like a vanilla bow, its arrow explodes ([Bows.explode]). */
+    val EXPLOSIVE_BOW get() = item(Items.BOW, Bows.EXPLOSIVE, "§5Explosive Bow", listOf("§7Damage: §c+100", "§7Strength: §c+20", "",
+        "§6Ability: Explosive Shot", "§7Your arrows explode on impact, dealing", "§7damage to nearby enemies.", "",
+        "§7Draw and release, like a vanilla bow.", "", "§5§lEPIC BOW"))
+
     /** Common F7 armour sets: Maxor + Mithril at P3 start, Terror, and Wise Wither (the usual mid-P3 swap). */
     enum class ArmorSet { MAXOR, TERROR, WISE }
 
@@ -977,7 +982,7 @@ object SimItems {
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         // 9: the spare mask (Masks.equip, Real Masks).
-        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH)
+        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH, 16 to EXPLOSIVE_BOW)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Loadouts.applySaved(p)  // your saved gear and pet, else the defaults: Maxor + mask (+ Black Cat)
@@ -1096,7 +1101,7 @@ object SimItems {
      */
     @JvmStatic
     fun quiverArrow(p: Player, weapon: ItemStack): ItemStack? {
-        if (idOf(weapon) != Bows.LAST_BREATH) return null
+        if (idOf(weapon) !in Bows.DRAWN) return null
         val level = p.level()
         val sim = if (level.isClientSide) P3Sim.inSim else SimServer.isSimLevel(level)
         return if (sim) ItemStack(Items.ARROW) else null
@@ -1108,10 +1113,11 @@ object SimItems {
      */
     @JvmStatic
     fun releaseBow(stack: ItemStack, level: Level, entity: net.minecraft.world.entity.LivingEntity, remainingTime: Int): Boolean? {
-        if (idOf(stack) != Bows.LAST_BREATH || !simServer(level) || entity !is ServerPlayer) return null
+        val bow = idOf(stack)?.takeIf { it in Bows.DRAWN } ?: return null
+        if (!simServer(level) || entity !is ServerPlayer) return null
         val power = net.minecraft.world.item.BowItem.getPowerForTime(stack.getUseDuration(entity) - remainingTime)
         if (power < 0.1f) return false
-        Bows.release(entity, Bows.LAST_BREATH, power)
+        Bows.release(entity, bow, power)
         return true
     }
 
