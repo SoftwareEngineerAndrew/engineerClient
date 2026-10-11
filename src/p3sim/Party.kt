@@ -400,6 +400,13 @@ object Party {
         GhostCapture.event("ee", b.clazz.name, into)
         val ee = eeOf(into) ?: return
         if (P3Sim.debugBots) dbg("§a${b.name} is on its ${ee.label} spot§7, holding") else Sim.note("§e${b.name}§7 is on ${ee.label}.")
+        // The preset's blocks this early enterer mines there (Theoretical: the bers, S3's 3rd term ledge).
+        P3Plan.preset().mines[if (into == 5) "core" else "ee$into"]?.let { blocks ->
+            for (pos in blocks) if (!Sim.level.getBlockState(pos).isAir) {
+                Sim.level.levelEvent(2001, pos, net.minecraft.world.level.block.Block.getId(Sim.level.getBlockState(pos)))
+                Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
+            }
+        }
     }
 
     /**

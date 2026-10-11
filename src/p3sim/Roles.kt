@@ -41,9 +41,10 @@ import net.minecraft.world.phys.Vec3
  * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `core`).
  * **Defaults**: spots (facing too) that replace the Normal PF defaults for this preset: `ee2`... and
  * `spawn/MAGE`... (a class's P3 spawn); one set in the Roles menu still comes first.
+ * **Mines**: blocks an early enterer's bot mines once it's on its spot (`ee3` -> the blocks); yours you mine yourself.
  */
 object Roles {
-    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap(), val defaults: Map<String, Spots.Spot> = emptyMap())
+    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap(), val defaults: Map<String, Spots.Spot> = emptyMap(), val mines: Map<String, List<net.minecraft.core.BlockPos>> = emptyMap())
 
     /**
      * Help on a stack (the menu's Helper): when you're on [yours] (that terminal and the stack's
@@ -186,6 +187,9 @@ object Roles {
             "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
             "spawn/ARCHER" to Spots.Spot("Spawn", 107.53, 123.06, 112.45, 47.59f, 19.81f),
         ),
+        // The bers mines the top layer of S3's 3rd term ledge (its upper slabs, x 18, z 91-99) once on the high EE3: the tank
+        // bonzos down through it to S3's device.
+        mines = mapOf("ee3" to (91..99).map { net.minecraft.core.BlockPos(18, 121, it) }),
     )
 
     /** In the skill menu as listed, with Random after the first three ([P3Plan.SKILLS]). */
