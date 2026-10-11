@@ -66,19 +66,19 @@ object SplitPace {
 
     /**
      * Dark green per sub split, as a length (SubSplitTracker's ids). The band's dark green limit,
-     * except where a band is not a length: Maxor's Lure (graded on the tick of his first hit, 128,
+     * except where a band is not a length: Maxor's Lure (graded on the tick of his first hit, 127,
      * after Crystals' 110) and Necron's lock (ARGH! on time, 270 into his fight, after the intro's
-     * 82 and the trip's 12). Fillers are their fixed length (see SubSplitGrades).
+     * 82 and the trip's 11). Fillers are their fixed length (see SubSplitGrades).
      */
     private val SUB_REFS: Map<String, Clocks> = mapOf(
-        "watcher.dialogue" to ticks(255), "watcher.wait" to ticks(63), "watcher.camp" to ticks(520), "watcher.clear" to ticks(2),
-        "maxor.crystals" to ticks(110), "maxor.lure" to ticks(18), "maxor.cooldown" to ticks(85), "maxor.kill" to ticks(1),
+        "watcher.dialogue" to ticks(261), "watcher.fight" to ticks(616),
+        "maxor.crystals" to ticks(110), "maxor.lure" to ticks(17), "maxor.cooldown" to ticks(86), "maxor.kill" to ticks(1),
         "maxor.animation" to ticks(62),
         "storm.opening" to ticks(647), "storm.crush1" to ticks(13), "storm.pin" to ticks(1), "storm.flight" to ticks(86),
         "storm.crush2" to ticks(20), "storm.kill" to ticks(2), "storm.animation" to ticks(62),
-        "terms.s1" to real(8_700), "terms.s2" to real(7_700), "terms.s3" to real(7_800), "terms.s4" to real(5_000),
-        "goldor.leaps" to ticks(9), "goldor.kill" to ticks(85),
-        "necron.intro" to ticks(82), "necron.trip1" to ticks(12), "necron.lock1" to ticks(176), "necron.kill" to ticks(155),
+        "terms.s1" to real(7_450), "terms.s2" to real(7_100), "terms.s3" to real(6_600), "terms.s4" to real(4_350),
+        "goldor.leaps" to ticks(9), "goldor.kill" to ticks(80),
+        "necron.intro" to ticks(82), "necron.trip1" to ticks(11), "necron.lock1" to ticks(176), "necron.kill" to ticks(155),
     )
 
     /** A split's dark green (what Pace counts it as before it runs), or a sub split's. */

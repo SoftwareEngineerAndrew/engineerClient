@@ -50,10 +50,10 @@ object SubSplitGrades {
         Bands(clock, longArrayOf(onTime, onTime, onTime + step, onTime + 2 * step, onTime + 3 * step), floor, fromStart)
 
     /**
-     * Per step id (SubSplitTracker's). Fixed numbers, hard-coded and the same for everyone; not
+     * Per step id (SubSplitTracker's), F7. Fixed numbers, hard-coded and the same for everyone; not
      * recomputed from anything the client sees. Change them here.
      *
-     * Cut from a sample of F7 runs since Hypixel's boss update (Oct 2026), each step timed the way
+     * Cut from 500 F7 runs since Hypixel's boss update (Oct 2026), each step timed the way
      * SubSplitTracker / SplitTracker time it; a run recorded by several of its party counts once,
      * and an uncleared run counts for the steps it got through.
      *
@@ -64,67 +64,61 @@ object SubSplitGrades {
      * [stepped].
      */
     val BANDS: Map<String, Bands> = mapOf(
-        // First line to "handle this": 229-516.
-        "watcher.dialogue" to ticks(229, 255, 294, 307, 324, 355),
-        // "handle this" to the Watcher seen moving: 45-692 (only runs where he was in view; the
-        // long tail is him coming into view already moving, not slow play, so dark red stops at 200
-        // rather than its p90 of ~455).
-        "watcher.wait" to ticks(45, 63, 78, 114, 155, 200),
-        // Not measurable as the tracker times them, so these are older bands: the camp has 12-14
-        // named mobs since the update, not 19, so the 19th player entity that ends Camp is another
-        // room's mob, often before "handle this". The last named mob to "proven yourself" is
-        // 0-337 ticks (median ~10).
-        "watcher.camp" to ticks(485, 520, 560, 600, 640, 670),
-        "watcher.clear" to ticks(0, 2, 6, 10, 16, 25),
+        // First line to "handle this": 230-689.
+        "watcher.dialogue" to ticks(230, 261, 290, 303, 322, 344),
+        // "handle this" to "proven yourself": the camp, his mobs coming out and dying, 559-2530.
+        "watcher.fight" to ticks(559, 616, 674, 712, 752, 804),
 
         // 10-tick checks: both crystals placed on the s0+81 check make "charging up" at 107-110
-        // (about half of runs), then 118-120, 129-130, 138...
+        // (about half of runs), then 115-120, 127-131, 138...
         "maxor.crystals" to stepped(Clock.TICKS, 107, 110, 10),
-        // The first hit's tick (from his first line): 124-128 on time.
-        "maxor.lure" to stepped(Clock.TICKS, 124, 128, 10, fromStart = true),
-        // Crystals back, placed and charged again: 83-85 on time, then a 10-tick check later
-        // (91-105 the next cluster).
-        "maxor.cooldown" to stepped(Clock.TICKS, 83, 85, 10),
+        // The first hit's tick (from his first line): 124-127 on time, 129-131 the next chance, then
+        // every 10 ticks (139-141, 149-151, 159-161).
+        "maxor.lure" to Bands(Clock.TICKS, longArrayOf(127, 131, 141, 151, 161), 124, fromStart = true),
+        // Crystals back, placed and charged again: 74-86 on time, then a 10-tick check later
+        // (89-91, 99-101, 110...).
+        "maxor.cooldown" to stepped(Clock.TICKS, 74, 86, 10),
         // Second hit to the beacon: 0-655.
-        "maxor.kill" to ticks(0, 1, 3, 5, 7, 17),
-        // 61-63 almost always.
+        "maxor.kill" to ticks(0, 1, 3, 4, 7, 12),
+        // 60-63 almost always.
         "maxor.animation" to filler(),
 
-        // 646-648 almost always.
+        // 646-649 almost always.
         "storm.opening" to filler(),
         // 20-tick crush checks: 10-13 is the first one.
         "storm.crush1" to stepped(Clock.TICKS, 10, 13, 20),
-        // Crush to enraged: 0-32.
-        "storm.pin" to ticks(0, 1, 2, 3, 6, 14),
-        // Enraged to reaching Yellow: 78-478 when he flies the whole way; a run where he is crushed
+        // Crush to enraged: 0-319.
+        "storm.pin" to ticks(0, 1, 2, 5, 16, 27),
+        // Enraged to reaching Yellow: 78-2123 when he flies the whole way; a run where he is crushed
         // near Yellow (0-24) is under the floor, so never a best.
-        "storm.flight" to ticks(78, 86, 90, 93, 99, 168),
+        "storm.flight" to ticks(78, 86, 90, 94, 102, 161),
         // The first check after he reaches Yellow is up to 20 ticks away.
         "storm.crush2" to stepped(Clock.TICKS, 0, 20, 20),
-        // Second crush to his death line: 1-41.
-        "storm.kill" to ticks(1, 2, 3, 5, 18, 24),
-        // 60-63 almost always.
+        // Second crush to his death line: 0-763.
+        "storm.kill" to ticks(0, 2, 3, 6, 12, 23),
+        // 59-63 almost always.
         "storm.animation" to filler(),
 
-        // Real time. S1 8.10-37.95 s, S2 6.75-38.75 s, S3 6.70-26.30 s, S4 4.45-27.20 s.
-        "terms.s1" to real(8100, 8700, 9500, 11000, 13200, 17200),
-        "terms.s2" to real(6700, 7700, 9400, 12600, 16100, 21800),
-        "terms.s3" to real(6650, 7800, 11400, 13000, 16700, 18800),
-        "terms.s4" to real(4450, 5000, 7600, 8800, 12600, 25100),
+        // Real time. S1 6.95 s up, S2 5.10, S3 5.30, S4 3.65. S1's dark red is hand-picked: its p90
+        // (36 s) is the runs that waited on someone.
+        "terms.s1" to real(6950, 7450, 8600, 9800, 13550, 17200),
+        "terms.s2" to real(5100, 7100, 9100, 11700, 14600, 19000),
+        "terms.s3" to real(5300, 6600, 8750, 10750, 13350, 16900),
+        "terms.s4" to real(3650, 4350, 6650, 8000, 10100, 14450),
 
         // The core opening to everyone in it: 0-80 (a 0 is under the floor).
         "goldor.leaps" to ticks(7, 9, 15, 21, 29, 43),
-        // Everyone in to Necron's first line (his death's fixed ticks included): 77-258.
-        "goldor.kill" to ticks(77, 85, 96, 108, 124, 134),
+        // Everyone in to Necron's first line (his death's fixed ticks included): 73-258.
+        "goldor.kill" to ticks(73, 80, 94, 109, 130, 148),
 
-        // Necron's fight: intro to the sidestep 81-84 ticks; the trip back 11-37.
+        // Necron's fight: intro to the sidestep 81-84 ticks; the trip back 9-216.
         "necron.intro" to filler(),
-        "necron.trip1" to ticks(11, 12, 14, 16, 18, 26),
+        "necron.trip1" to ticks(9, 11, 13, 16, 19, 26),
         // ARGH! is said 269-273 ticks into the fight.
         "necron.lock1" to Bands(Clock.TICKS, null, 0, lateAfter = 275),
-        // ARGH! to the run's end (EXTRA STATS; F7 has no end animation): 140-155 on time - he dies
-        // on a 20-tick check, so 161-169 is one check late, 271-384 a second trip.
-        "necron.kill" to stepped(Clock.TICKS, 140, 155, 20),
+        // ARGH! to the run's end (EXTRA STATS; F7 has no end animation): 139-155 on time - he dies
+        // on a 20-tick check, so 161-174 is one check late, 182-193 a second.
+        "necron.kill" to stepped(Clock.TICKS, 139, 155, 20),
 
         // The run's own splits (Odin's), F7, all but the terminals in ticks.
         // Open: Mort's line to the blood door. Hand-picked limits: 8 / 14 / 19 / 25 / 32 s;
@@ -151,6 +145,41 @@ object SubSplitGrades {
         "split.necron" to ticks(409, 425, 436, 447, 490, 540),
     )
 
+    /**
+     * M7's own, where its fight differs (cut from 55 M7 runs the same way); every other step is
+     * graded on F7's bands.
+     */
+    val BANDS_M7: Map<String, Bands> = mapOf(
+        // Crush to enraged: 4-54.
+        "storm.pin" to ticks(4, 5, 8, 9, 13, 16),
+        // Enraged to reaching Yellow: 83-126 when he flies the whole way.
+        "storm.flight" to ticks(78, 83, 87, 90, 92, 102),
+        // Second crush to his death line: 4-62.
+        "storm.kill" to ticks(4, 5, 7, 10, 17, 26),
+        // Real time. S1 7.60 s up, S2 5.70, S3 6.50, S4 4.20.
+        "terms.s1" to real(7600, 8150, 8450, 8950, 9900, 12150),
+        "terms.s2" to real(5700, 6500, 8400, 9950, 11800, 14900),
+        "terms.s3" to real(6500, 6950, 8450, 10200, 12350, 14350),
+        "terms.s4" to real(4200, 5050, 6600, 8000, 9400, 10750),
+        // Everyone in to Necron's first line: 118-187.
+        "goldor.kill" to ticks(118, 123, 134, 139, 147, 157),
+        // The trip back to mid: 18-213.
+        "necron.trip1" to ticks(18, 19, 24, 26, 32, 41),
+        // ARGH! to the TNT burst he dies in: 99-106 on time, then every 20 ticks (119-128, 139-148).
+        "necron.kill" to stepped(Clock.TICKS, 99, 106, 20),
+        // Storm 822-969, the core opening to Necron's line 134-210, Necron's fight 1007-1188.
+        "split.storm" to ticks(822, 826, 829, 832, 857, 887),
+        "split.goldor" to ticks(134, 144, 153, 157, 166, 180),
+        "split.necron" to ticks(1007, 1012, 1026, 1047, 1078, 1111),
+    )
+
+    /** [id]'s bands on [floor] (F7's where M7 has none of its own); null off F7 and M7. */
+    fun bands(id: String, floor: String?): Bands? = when (floor) {
+        "M7" -> BANDS_M7[id] ?: BANDS[id]
+        "F7" -> BANDS[id]
+        else -> null
+    }
+
     /** Odin's split names (colour codes stripped) to their ids here. */
     val MAIN_SPLITS = mapOf(
         "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Portal Entry" to "split.portal", "Boss Entry" to "split.enter", "Maxor" to "split.maxor", "Storm" to "split.storm",
@@ -173,13 +202,14 @@ object SubSplitGrades {
     fun clock(id: String): Clock = BANDS[id]?.clock ?: Clock.TICKS
 
     /**
-     * The colour for [value] of step [id]. A finished step at or under [best] is gold (a best ties
-     * count: it is the run that set it). [banded] is false off F7, where the bands weren't measured:
-     * then only the gold and the filler gray apply, and [fallback] (the step's own colour) the rest.
+     * The colour for [value] of step [id] on [floor]. A finished step at or under [best] is gold (a
+     * best ties count: it is the run that set it). Off F7 and M7, where no bands were measured, only
+     * the gold and the filler gray apply, and [fallback] (the step's own colour) the rest.
      */
-    fun colour(id: String, value: Long, finished: Boolean, best: Long?, banded: Boolean, fallback: String): String {
+    fun colour(id: String, value: Long, finished: Boolean, best: Long?, floor: String?, fallback: String): String {
         if (!byTime()) return fallback
-        val b = BANDS[id] ?: return fallback
+        val banded = floor == "F7" || floor == "M7"
+        val b = bands(id, floor) ?: BANDS[id] ?: return fallback
         b.lateAfter?.let { return if (finished && value > it) COLOURS[4] else FILLER }
         val limits = b.limits ?: return FILLER
         if (showBest() && finished && best != null && value <= best && value >= b.floor) return BEST
@@ -188,9 +218,9 @@ object SubSplitGrades {
         return COLOURS[if (i < 0) COLOURS.lastIndex else i]
     }
 
-    /** Whether a finished [value] can stand as a best: banded (not filler) and not under the floor. */
-    fun canBeBest(id: String, value: Long): Boolean {
-        val b = BANDS[id] ?: return false
+    /** Whether a finished [value] can stand as a best on [floor]: banded (not filler) and not under the floor. */
+    fun canBeBest(id: String, value: Long, floor: String? = "F7"): Boolean {
+        val b = bands(id, floor) ?: BANDS[id] ?: return false
         return b.limits != null && value >= b.floor
     }
 

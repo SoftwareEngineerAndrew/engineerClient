@@ -60,6 +60,9 @@ object Loadouts {
         return s
     }
 
+    /** [this] with its lore's helmet line as [line] (the Terror loadout shows Bonzo's Mask). */
+    private fun Entry.withHelmet(line: String) = Entry(slot, item, name, lore.map { if (it.startsWith("§r§7Helmet: ")) line else it }, tex, dye, glint, style, id)
+
     /** Terror Helmet as recorded; worn with the set it is Hydra Strike 4/4. */
     private fun terrorHelmet(): ItemStack {
         val e = entries[54] ?: return ItemStack.EMPTY
@@ -67,15 +70,21 @@ object Loadouts {
     }
 
     private enum class Helm { RACING, MASK, TERROR, WISE }
-    private class Def(val slot: Int, val name: String, val set: SimItems.ArmorSet, val helm: Helm, val phoenix: Boolean)
+    /** [mask]: which mask a [Helm.MASK] loadout wears (its id without STARRED_); null: the one you have on. */
+    private class Def(val slot: Int, val name: String, val set: SimItems.ArmorSet, val helm: Helm, val phoenix: Boolean, val mask: String? = null)
 
     // Gear, pet and speed as the recorded loadouts' lore and walking speeds (Cat 0.65, Phoenix 0.55 with the Racing Helmet; Terror and Mask 0.55 with Black Cat).
     private val defs = listOf(
         Def(24, "Cat terms", SimItems.ArmorSet.WISE, Helm.RACING, false),
         Def(23, "Phoenix terms", SimItems.ArmorSet.WISE, Helm.RACING, true),
-        Def(34, "Terror", SimItems.ArmorSet.TERROR, Helm.TERROR, false),
-        Def(41, "Mask terms", SimItems.ArmorSet.MAXOR, Helm.MASK, false),
+        // Terror with Bonzo's Mask on, not the recorded Terror Helmet (Hydra Strike 3/4).
+        Def(34, "Terror", SimItems.ArmorSet.TERROR, Helm.MASK, false, "BONZO_MASK"),
+        // The recorded one wears the Necrotic Spirit Mask.
+        Def(41, "Mask terms", SimItems.ArmorSet.MAXOR, Helm.MASK, false, "SPIRIT_MASK"),
     )
+
+    private fun maskId(s: ItemStack) = SimItems.idOf(s)?.removePrefix("STARRED_")
+    private fun wantedMask() = if (P3Sim.wornMaskS.index == 0) "SPIRIT_MASK" else "BONZO_MASK"
 
     // ------------------------------------------------------------------ worn gear: saved with the hotbar and in custom loadouts
 
@@ -200,17 +209,23 @@ object Loadouts {
         SimItems.ArmorSet.MAXOR -> "MITHRIL_COAT"; SimItems.ArmorSet.TERROR -> "TERROR_CHESTPLATE"; SimItems.ArmorSet.WISE -> "WISE_WITHER_CHESTPLATE"
     }
 
-    private fun matches(p: ServerPlayer, d: Def) =
-        SimItems.idOf(p.getItemBySlot(EquipmentSlot.CHEST)) == chestId(d.set) && wearsHelm(d.helm, p.getItemBySlot(EquipmentSlot.HEAD)) && P3Sim.phoenix == d.phoenix
+    private fun matches(p: ServerPlayer, d: Def): Boolean {
+        val head = p.getItemBySlot(EquipmentSlot.HEAD)
+        return SimItems.idOf(p.getItemBySlot(EquipmentSlot.CHEST)) == chestId(d.set) && wearsHelm(d.helm, head) && P3Sim.phoenix == d.phoenix &&
+            (d.mask == null || maskId(head) == d.mask)
+    }
 
-    /** The helmet [h] on your head; the one you had goes to the spare slot (or the first free one), a copy already in your inventory is swapped in. */
+    /**
+     * The helmet [h] on your head (a mask: the [wantedMask], swapping one mask for the other); the one you had goes
+     * to the spare slot (or the first free one), a copy already in your inventory is swapped in.
+     */
     private fun wearHelmet(p: ServerPlayer, h: Helm) {
         val inv = p.inventory
         val old = p.getItemBySlot(EquipmentSlot.HEAD).copy()
-        if (wearsHelm(h, old)) return
-        val wantMask = if (P3Sim.wornMaskS.index == 0) "SPIRIT_MASK" else "BONZO_MASK"
-        val candidates = (0 until 36).filter { wearsHelm(h, inv.getItem(it)) }
-        val from = (if (h == Helm.MASK) candidates.firstOrNull { SimItems.idOf(inv.getItem(it))?.removePrefix("STARRED_") == wantMask } else null) ?: candidates.firstOrNull()
+        val wantMask = wantedMask()
+        if (wearsHelm(h, old) && (h != Helm.MASK || maskId(old) == wantMask)) return
+        val candidates = (0 until 36).filter { wearsHelm(h, inv.getItem(it)) && (h != Helm.MASK || maskId(inv.getItem(it)) == wantMask) }
+        val from = candidates.firstOrNull()
         if (from != null) {
             SimItems.wear(p, EquipmentSlot.HEAD, inv.getItem(from).copy())
             inv.setItem(from, old)
@@ -233,14 +248,23 @@ object Loadouts {
         BuiltInRegistries.SOUND_EVENT.getValue(Identifier.parse(id))?.let { Sim.sound(it, vol, pitch, null, src) }
     }
 
+    /** [d]'s gear, helmet, pet and speed on at once, quietly. */
+    private fun wear(p: ServerPlayer, d: Def) {
+        SimItems.equipArmor(p, d.set, d.helm == Helm.TERROR)
+        d.mask?.let { P3Sim.wornMaskS.index = if (it == "SPIRIT_MASK") 0 else 1 }
+        wearHelmet(p, d.helm)
+        P3Sim.phoenixS.value = d.phoenix
+        Fight.applySpeed(p)
+    }
+
+    /** Terror At Terms: a P3 start's gear is the Terror loadout (over your saved gear). */
+    fun wearTerror(p: ServerPlayer) { defs.firstOrNull { it.name == "Terror" }?.let { wear(p, it) } }
+
     /** Equips [d] as Hypixel does: a tick after the click the lever clicks, the green chat line prints and the saddle creaks. */
     private fun equip(p: ServerPlayer, d: Def) {
         if (matches(p, d)) { Sim.chatStyled("§c${d.name} is already equipped!"); return }
         Fight.later(1, "loadout ${d.name}") {
-            SimItems.equipArmor(p, d.set, d.helm == Helm.TERROR)
-            wearHelmet(p, d.helm)
-            P3Sim.phoenixS.value = d.phoenix
-            Fight.applySpeed(p)
+            wear(p, d)
             sound("minecraft:block.lever.click", 0.5f, 1f, SoundSource.BLOCKS)
             Sim.chatStyled("§aYou equipped ${d.name}!")
             sound("minecraft:entity.horse.saddle", 1f, 1f, SoundSource.NEUTRAL)
@@ -262,7 +286,7 @@ object Loadouts {
         private fun draw() {
             val c = container
             for (i in 0 until 54) c.setItem(i, Terminals.FILLER)
-            for ((slot, e) in entries) if (slot < 54) c.setItem(slot, e.stack())
+            for ((slot, e) in entries) if (slot < 54) c.setItem(slot, (if (slot == 34) e.withHelmet("§r§7Helmet: §r§9Bonzo's Mask") else e).stack())
             val head = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
             c.setItem(11, if (head.isEmpty) Terminals.named(Items.STAINED_GLASS_PANE.gray(), "§7Empty Helmet Slot") else head)
             for ((slot, eq) in listOf(20 to EquipmentSlot.CHEST, 29 to EquipmentSlot.LEGS, 38 to EquipmentSlot.FEET)) {

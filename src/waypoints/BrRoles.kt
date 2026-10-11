@@ -4,8 +4,8 @@ import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.utils.sendCommand
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
@@ -16,7 +16,9 @@ import kotlin.math.abs
  * (undonecoffee.com/brroles) for each room, each door the rush can come in through, and each number
  * of players killing (2-4), with a separate set for M7. Each role has its boxes, in the order
  * they are killed, and its stack: boxes it helps with once its own are done. There is always a door runner besides, who only rushes
- * the doors and kills nothing.
+ * the doors and kills nothing - or, with Doorer Kills, kills too: the site keeps those plans apart
+ * (a set for M7 and one for the other floors), each for an entry door and the room's wither door,
+ * with the door runner the last role.
  *
  * Each player sets how many kill (duo 2, trio 3, quad 4) and their own role in BR Roles's
  * settings, for a team that runs together. Party chat overrides that for a run, for pickup groups:
@@ -44,6 +46,9 @@ object BrRoles {
     /** room -> entry door (room x, z) -> players killing -> plan; and the same for M7. */
     @Volatile private var plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
     @Volatile private var m7Plans: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> = emptyMap()
+    /** With Doorer Kills: room -> (entry door, wither door) -> everyone killing, door runner included -> plan; and M7's. */
+    @Volatile private var doorerPlans: Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>> = emptyMap()
+    @Volatile private var doorerM7Plans: Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>> = emptyMap()
     /** Miniboss rooms (one mob): every role kills every box there, from any door. */
     @Volatile private var mini: Set<String> = emptySet()
 
@@ -52,6 +57,37 @@ object BrRoles {
     /** From the settings: how many kill, and your role — null for All Boxes (roles off), 0 the door. */
     @Volatile var settingKilling = 2
     @Volatile var settingRole: Int? = null
+    /** From the settings: the door runner kills too, with the doorer plans. */
+    @Volatile var doorerKills = false
+
+    /** How many the plans are for: those killing, and the door runner too with [doorerKills]. */
+    val planCount: Int get() = if (count == 0) 0 else count + if (doorerKills) 1 else 0
+
+    /** The role whose boxes are yours: [mine], or on the door with [doorerKills] the last one. */
+    val playing: Int? get() = mine ?: planCount.takeIf { doorerKills && youOnDoor && it > 0 }
+
+    /** In master mode: the site's M7 roles, where each is a class. */
+    val master: Boolean get() = DungeonUtils.floor?.isMM == true
+
+    /**
+     * Your role before party chat: in master mode your class's (the site's M7 roles: 1 Archer,
+     * 2 Mage, 3 Berserk, 4 Tank, the Healer on the door) once the tab list has it, else the
+     * setting. All Boxes keeps roles off either way.
+     */
+    private val baseRole: Int?
+        get() {
+            val s = settingRole ?: return null
+            if (!master) return s
+            val cls = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(me, ignoreCase = true) }?.clazz
+            return when (cls) {
+                DungeonClass.ARCHER -> 1
+                DungeonClass.MAGE -> 2
+                DungeonClass.BERSERK -> 3
+                DungeonClass.TANK -> 4
+                DungeonClass.HEALER -> 0
+                else -> s
+            }
+        }
 
     /** What party chat said this run, over the settings. */
     private var chatCount: Int? = null
@@ -62,11 +98,11 @@ object BrRoles {
      * setting is All Boxes, or a role the team size doesn't have.
      */
     val count: Int
-        get() = chatCount ?: settingRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
+        get() = chatCount ?: baseRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
 
     /** Whether you are on the door: you said so in chat, or it is your setting and chat hasn't given you a role. */
     val youOnDoor: Boolean
-        get() = doorClaim?.equals(me, ignoreCase = true) ?: (settingRole == 0 && chatMine == null)
+        get() = doorClaim?.equals(me, ignoreCase = true) ?: (baseRole == 0 && chatMine == null)
 
     /** Whether roles decide what you see: there is a team size and you have a role or the door. */
     val active: Boolean
@@ -77,7 +113,7 @@ object BrRoles {
         get() {
             if (youOnDoor) return null
             chatMine?.let { return it }
-            return settingRole?.takeIf { it in 1..count }
+            return baseRole?.takeIf { it in 1..count }
         }
     /** Who has which role, in the order they said so. */
     private val taken = LinkedHashMap<String, Int>()
@@ -163,10 +199,10 @@ object BrRoles {
 
     /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". */
     fun describe(): String {
-        val from = if (chatCount != null || doorClaim != null) "party chat" else "settings"
+        val from = (if (chatCount != null || doorClaim != null) "party chat" else if (master) "class" else "settings") + if (master) ", M7 roles" else ""
         return when {
             count == 0 -> "roles off"
-            youOnDoor -> "door, $count killing ($from)"
+            youOnDoor -> (if (doorerKills) "door (kills, role $planCount)" else "door") + ", $count killing ($from)"
             mine != null -> "role $mine of $count ($from)"
             else -> "no role, $count killing ($from)"
         }
@@ -204,19 +240,36 @@ object BrRoles {
             val rooms = read(doc["rooms"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return)
             val m7 = doc["m7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { read(it) } ?: emptyMap()
             val mn = doc["mini"]?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet()?.filter { it.value.isJsonPrimitive && it.value.asBoolean }?.map { it.key }?.toSet() ?: emptySet()
-            Triple(rooms, m7, mn)
+            val doorer = doc["doorer"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { readDoorer(it) } ?: emptyMap()
+            val doorerM7 = doc["doorerM7"]?.takeIf { it.isJsonObject }?.asJsonObject?.let { readDoorer(it) } ?: emptyMap()
+            listOf(rooms, m7, mn, doorer, doorerM7)
         }.onFailure { EngineerClient.logger.warn("[ec] brroles: the site's roles couldn't be read: ${it.message}") }.getOrNull() ?: return
-        plans = got.first; m7Plans = got.second; mini = got.third
+        @Suppress("UNCHECKED_CAST")
+        run {
+            plans = got[0] as Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>>
+            m7Plans = got[1] as Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>>
+            mini = got[2] as Set<String>
+            doorerPlans = got[3] as Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>>
+            doorerM7Plans = got[4] as Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>>
+        }
         fetched = true
     }
 
-    private fun read(rooms: com.google.gson.JsonObject): Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> {
-        val out = HashMap<String, Map<Pair<Int, Int>, Map<Int, Plan>>>()
+    private fun read(rooms: com.google.gson.JsonObject): Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>> =
+        readBy(rooms) { door -> xz(door) }
+
+    /** The doorer sets: each plan keyed "entry x,z>wither x,z". */
+    private fun readDoorer(rooms: com.google.gson.JsonObject): Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>> =
+        readBy(rooms) { key -> key.split('>').takeIf { it.size == 2 }?.let { (e, w) -> xz(e)?.let { a -> xz(w)?.let { b -> a to b } } } }
+
+    private fun xz(s: String): Pair<Int, Int>? = s.split(',').mapNotNull { it.toIntOrNull() }.takeIf { it.size == 2 }?.let { it[0] to it[1] }
+
+    private fun <K> readBy(rooms: com.google.gson.JsonObject, key: (String) -> K?): Map<String, Map<K, Map<Int, Plan>>> {
+        val out = HashMap<String, Map<K, Map<Int, Plan>>>()
         for ((room, doors) in rooms.entrySet()) {
-            val byDoor = HashMap<Pair<Int, Int>, Map<Int, Plan>>()
+            val byDoor = HashMap<K, Map<Int, Plan>>()
             for ((door, counts) in doors.asJsonObject.entrySet()) {
-                val xz = door.split(',').mapNotNull { it.toIntOrNull() }
-                if (xz.size != 2) continue
+                val k = key(door) ?: continue
                 val byCount = HashMap<Int, Plan>()
                 for ((n, p) in counts.asJsonObject.entrySet()) runCatching {
                     val o = p.asJsonObject
@@ -224,7 +277,7 @@ object BrRoles {
                     val stacks = o["stacks"]?.asJsonArray?.map { r -> r.asJsonArray.map { it.asInt } } ?: roles.map { emptyList() }
                     byCount[n.toInt()] = Plan(roles, stacks)
                 }
-                byDoor[xz[0] to xz[1]] = byCount
+                byDoor[k] = byCount
             }
             out[room] = byDoor
         }
@@ -233,13 +286,19 @@ object BrRoles {
 
     /**
      * The plan for a room entered through a door (in the room's own coordinates), for the number
-     * killing now — the door the site has nearest, if it is within a few blocks. Null without one,
-     * or before the party has synced.
+     * killing now — the door the site has nearest, if it is within a few blocks. With Doorer Kills,
+     * the doorer plan for that door and the room's wither door ([wither], null if not known: no
+     * plan). Null without one, or before the party has synced.
      */
-    fun planFor(room: String, door: Pair<Int, Int>): Plan? {
+    fun planFor(room: String, door: Pair<Int, Int>, wither: Pair<Int, Int>?): Plan? {
         if (count == 0) return null
-        // In M7 its own roles, else (none set for this room yet) the other floors'.
-        if (DungeonUtils.floor == Floor.M7) planIn(m7Plans, room, door)?.let { return it }
+        if (doorerKills) {
+            if (wither == null) return null
+            if (master) doorerIn(doorerM7Plans, room, door, wither)?.let { return it }
+            return doorerIn(doorerPlans, room, door, wither)
+        }
+        // In master mode the M7 roles, else (none set for this room yet) the other floors'.
+        if (master) planIn(m7Plans, room, door)?.let { return it }
         return planIn(plans, room, door)
     }
 
@@ -247,12 +306,20 @@ object BrRoles {
         val doors = table[room] ?: return null
         val near = doors.keys.minByOrNull { abs(it.first - door.first) + abs(it.second - door.second) } ?: return null
         if (abs(near.first - door.first) + abs(near.second - door.second) > 3) return null
-        return doors[near]?.get(count)
+        return doors[near]?.get(planCount)
+    }
+
+    private fun doorerIn(table: Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>>, room: String, door: Pair<Int, Int>, wither: Pair<Int, Int>): Plan? {
+        val doors = table[room] ?: return null
+        fun d(a: Pair<Int, Int>, b: Pair<Int, Int>) = abs(a.first - b.first) + abs(a.second - b.second)
+        val near = doors.keys.minByOrNull { d(it.first, door) + d(it.second, wither) } ?: return null
+        if (d(near.first, door) > 3 || d(near.second, wither) > 3) return null
+        return doors[near]?.get(planCount)
     }
 
     /** What box [number] is to you in [plan]; null if the plan leaves it out. */
     fun look(plan: Plan, number: Int): Look? {
-        val role = mine
+        val role = playing
         if (role != null) {
             plan.roles.getOrNull(role - 1)?.indexOf(number)?.takeIf { it >= 0 }?.let { return Look.Mine(it + 1) }
             if (plan.stacks.getOrNull(role - 1)?.contains(number) == true) return Look.Stack

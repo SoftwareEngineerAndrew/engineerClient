@@ -15,16 +15,15 @@ import net.minecraft.world.phys.Vec3
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * A P3 start's lead-in: 3 s from Storm's death line to Goldor's "Who dares
- * trespass" (the game has 102 ticks, 5.1 s; cut short to get going). You're on your P3 spot with the P3 hotbar; the party
- * has already leapt down to the SS (they leave Yellow 5-20 ticks after the line and land on
- * (108, 120, 94)). Storm's body spins at Yellow, where he nearly always
- * dies, under its lightning storm ([StormCorpse]), and his last lines play.
+ * A P3 start's lead-in: Storm's death line to Goldor's "Who dares trespass", [LEAD] ticks as in the
+ * game since Hypixel's boss update (it was 102), his "At least my son died by your hands." at
+ * [SON]. You're on your P3 spot with the P3 hotbar; the party has already leapt down to the SS
+ * (they leave Yellow 5-20 ticks after the line and land on (108, 120, 94)). Storm's body spins at
+ * Yellow, where he nearly always dies, under its lightning storm ([StormCorpse]).
  */
 class StormEnd : Fight.Phase("Storm end") {
     override val restart get() = Fight.Start.P3
@@ -42,21 +41,25 @@ class StormEnd : Fight.Phase("Storm end") {
         StormFx.line(b, "I should have known that I stood no chance.")
         // Hypixel: the bar usually still shows 0.45 at the line and drops to 0 about 4 ticks later.
         BossBar.show("§c§lStorm", 0.45f)
-        // The lead-in is 2.1 s shorter than the game's, so his body dies 2 s later to keep it near P3's start as in the game.
-        StormCorpse(b, later = 40).start()
+        StormCorpse(b).start()
     }
 
     override fun tick() {
         when (t) {
             4 -> BossBar.progress(0f)
-            36 -> StormFx.line(body, "At least my son died by your hands.")
-            // 3 ticks early: the first lever credit can land 1-2 ticks before "Who dares"; the line itself still lands at LEAD.
-            LEAD - 3 -> Fight.begin(GoldorPhase(1, arrived = true))
+            SON -> StormFx.line(body, "At least my son died by your hands.")
+            // LEAD_IN early: the first lever credit can land 1-2 ticks before "Who dares"; the line itself still lands at LEAD.
+            LEAD - GoldorPhase.LEAD_IN -> Fight.begin(GoldorPhase(1, arrived = true))
         }
     }
 
     companion object {
-        const val LEAD = 60
+        /**
+         * Storm's death line to Goldor's first line, and to his "At least my son..." (62 and 42 in
+         * every post-update recording, 234 runs; 102 and 62 before it).
+         */
+        const val LEAD = 62
+        const val SON = 42
         /** Where he dies: pinned under Yellow (the median of recorded bodies). */
         val DEATH_AT = Vec3(44.6, 172.9, 65.2)
         /** The party after its leap onto the SS player. */
@@ -66,16 +69,16 @@ class StormEnd : Fight.Phase("Storm end") {
 
 /**
  * What Storm does after his death line, into P3. His body never falls over at the line: it stays where
- * the crush pinned it, spinning 40° a tick, with a wither.hurt (hostile, 15, 1.0) every 10-13 ticks;
- * explode (2, ~0.6) at +0 and +4, a wooden-door break (3, ~0.9) at ~+12. Health 0 (the vanilla
- * death fall) at +226 (215-236), removed 20-28 later (+249). Meanwhile 480 lightning bolts: 24
+ * the crush pinned it, spinning 40° a tick, with a wither.hurt (hostile, 15, 1.0) every 9-11 ticks;
+ * explode (2, ~0.6) at +0 and +4, a wooden-door break (3, ~0.9) at ~+12. Since Hypixel's boss update
+ * his health goes to 0 (the vanilla death fall) at +60, 2 ticks before Goldor's line, and he is
+ * removed at +80 (it was +200 and +220). Meanwhile, as before the update, 480 lightning bolts: 24
  * spirals from his body on a fixed schedule ([SPIRALS], the same in every fight to a tick or two),
- * each 20 bolts 2 blocks apart walking out to 38 blocks, one every ~4.5 ticks, turning 90° a bolt;
- * the last strikes ~+410 (Goldor's n ~ 310). Runs on [Fight.later], so it outlives the phase. [later]: ticks to put
- * the death fall and removal back by (a P3 start's shorter lead-in).
+ * each 20 bolts 2 blocks apart walking out to 38 blocks, one every [STEP] ticks, turning 90° a bolt;
+ * the last strikes at +366 (Goldor's n ~ 304). Ticks are the server's own (its gameTime, from Boss
+ * Recorder files of both eras). Runs on [Fight.later], so it outlives the phase.
  */
-internal class StormCorpse(private val body: BossWither, private val later: Int) {
-    constructor(body: BossWither) : this(body, 0)
+internal class StormCorpse(private val body: BossWither) {
 
     private val at = body.pos
     private var n = 0
@@ -88,7 +91,7 @@ internal class StormCorpse(private val body: BossWither, private val later: Int)
             val a0 = Random.nextDouble(360.0)
             for (j in 0 until 20) {
                 val a = Math.toRadians(a0 + 90.0 * j)
-                bolts.getOrPut(s + (j * 4.53).roundToInt()) { ArrayList() } += Vec3(at.x + 2.0 * j * cos(a), at.y, at.z + 2.0 * j * sin(a))
+                bolts.getOrPut(s + j * STEP) { ArrayList() } += Vec3(at.x + 2.0 * j * cos(a), at.y, at.z + 2.0 * j * sin(a))
             }
         }
     }
@@ -102,27 +105,33 @@ internal class StormCorpse(private val body: BossWither, private val later: Int)
     }
 
     private fun tick() {
-        if (n < DEAD + later) {
+        if (n < DEAD) {
             yaw += 40.0
             val r = Math.toRadians(yaw)
             body.moveTo(at, at.add(-sin(r), 0.0, cos(r)))
-            if (n == nextHurt) { Sim.sound(SoundEvents.WITHER_HURT, 15f, 1f, at, net.minecraft.sounds.SoundSource.HOSTILE); nextHurt += Random.nextInt(10, 14) }
+            if (n == nextHurt) { Sim.sound(SoundEvents.WITHER_HURT, 15f, 1f, at, net.minecraft.sounds.SoundSource.HOSTILE); nextHurt += Random.nextInt(9, 12) }
         }
         when (n) {
             0, 4 -> Sim.sound(SoundEvents.GENERIC_EXPLODE, 2f, 0.6f, at, net.minecraft.sounds.SoundSource.BLOCKS)
             12 -> Sim.sound(SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR, 3f, 0.9f, at)
-            DEAD + later -> body.dieAnim()
-            GONE + later -> body.remove()
+            DEAD -> body.dieAnim()
+            GONE -> body.remove()
         }
         bolts[n]?.forEach { StormFx.bolt(it.x, it.z, it.y, thunder = true) }
     }
 
     companion object {
-        const val DEAD = 226
-        const val GONE = 249
-        /** Spiral starts after the death line (measured from recorded fights' bolts on his body). */
-        val SPIRALS = listOf(0, 22, 46, 70, 85, 100, 116, 132, 147, 162, 173, 186, 200, 210, 220, 231, 242, 257, 270, 282, 292, 302, 312, 323)
-        val LAST = SPIRALS.last() + 87
+        const val DEAD = 60
+        const val GONE = 80
+        /**
+         * Spiral starts after the death line: 20 apart, then 15, then 10 (the bolts on his body in 22
+         * Boss Recorder fights, on the server's gameTime; the old list here was the same schedule
+         * read off a ping count that ran ~12% fast).
+         */
+        val SPIRALS = listOf(0, 20, 40, 60, 75, 90, 105, 120, 135, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290)
+        /** Ticks between a spiral's bolts (19 steps: its last 76 after its first). */
+        const val STEP = 4
+        val LAST = SPIRALS.last() + 19 * STEP
     }
 }
 

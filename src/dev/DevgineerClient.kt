@@ -6,6 +6,8 @@ import com.devgineerclient.recorder.DungeonRecorder
 import com.devgineerclient.splits.DungeonSplits
 import com.devgineerclient.splits.PaceTargets
 import com.devgineerclient.splits.Witherborn
+import com.devgineerclient.waypoints.PosMsgSetup
+import com.devgineerclient.waypoints.PositionalMessages
 import com.odtheking.odin.config.ModuleConfig
 import com.odtheking.odin.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
@@ -20,8 +22,10 @@ object DevgineerClient : ClientModInitializer {
     val mc: Minecraft get() = Minecraft.getInstance()
 
     override fun onInitializeClient() {
+        safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits)
+        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages)
+        safely("posmsg") { PosMsgSetup.install() }
         safely("pace targets") { PaceTargets.install() }
         safely("witherborn") { Witherborn.register() }
 

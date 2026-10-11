@@ -13,9 +13,10 @@ import net.minecraft.world.phys.Vec3
  *
  * **Roles**: one line per class, its four sections split by `/`, in the usual shorthand:
  * - digits: terminals, in the order done (`43` = T4 then T3)
- * - `ss`: Simon Says (S1's device); `i4`: the S4 device (done in S1); `dev`: the section's device
+ * - `ss`: Simon Says (S1's device); `i2` `i3` `i4`: that section's device (done in an earlier one); `dev`: the section's device
  * - `ll` `rl` `bl`: left, right, both levers (which is which: [LEFT])
- * - `ee2` `ee3`: early enter into S2 / S3; `core`: into the core (after their other jobs)
+ * - `ee2` `ee3` `ee4`: early enter into S2 / S3 / S4; `core`: into the core (after their other jobs)
+ * - `gate`: the section's gate is theirs (else it goes with the levers, below)
  * - anything else (`recore`, `(leap to 2nd term)`) is a note, ignored.
  *
  * A job in two roles is a stack: if one of them is yours it's always yours; otherwise the first bot
@@ -37,10 +38,12 @@ import net.minecraft.world.phys.Vec3
  *   everyone free has
  * Bots that pre-leapt walk on to their next terminals; at the core, everyone leaps in at once.
  *
- * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `ee4`, `core`).
+ * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `core`).
+ * **Defaults**: spots (facing too) that replace the Normal PF defaults for this preset: `ee2`... and
+ * `spawn/MAGE`... (a class's P3 spawn); one set in the Roles menu still comes first.
  */
 object Roles {
-    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap())
+    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap(), val defaults: Map<String, Spots.Spot> = emptyMap())
 
     /**
      * Help on a stack (the menu's Helper): when you're on [yours] (that terminal and the stack's
@@ -49,24 +52,29 @@ object Roles {
      */
     class Help(val section: Int, val yours: String, val by: String, val jobs: List<String>, val at: Double)
 
+    // Normal PF and Quality PF as the user plays them (2026-10-09). Roles listed mage, archer, healer, tank, bers: in a
+    // stack the first listed bot does it (S3's levers and gate: the archer, before the tank). The S2 device (Lights) is
+    // the ee2 mage's, done in S1; S2's ll is the ee3 player's (the gate follows it).
     val PF = Preset(
         "PF",
         roles = linkedMapOf(
+            MAGE to "bl ee2 / dev 2 / core / recore",
+            ARCHER to "43 / 4 rl / 4 bl / 2",
             HEALER to "ss / ll ee3 / 2 dev / 4 bl",
-            MAGE to "43 / 2 core / core / recore",
-            BERSERK to "i4 / 53 / 3 dev / 3 bl",
             TANK to "21 / 13 / 1 bl / 1",
-            ARCHER to "bl ee2 / dev 4 rl / 4 bl / 2",
+            BERSERK to "i4 / 53 / 3 / 3 bl",
         ),
         times = listOf(
-            "levers 2.2 | gate 2.4 | i4 7.3 | terms 9.0 | lights 10.0 | ss 13.5",
-            "1 2 4 5 ll 4.4 | gate 4.6 | 3 rl 6.5",
-            "1 2.4 | 2 3 4 3.5 | dev 4.2 | gate 5.0 | levers 5.2",
-            "terms 4.5 | levers 5.2",
+            // ll 0.35, rl 2.15, gate 2.85 (into S2 at 3.15), i4 5.1, Lights 7.1, the four terms by 9, SS 9.6.
+            "ll 0.35 | rl 2.15 | gate 2.85 | i4 5.1 | lights 7.1 | terms 9.0 | ss 9.6",
+            "ll 2.8 | 1 4 5 3.0 | gate 3.4 | 2 3 rl 7.0",
+            "1 4 3.0 | 2 3 5.0 | levers gate 8.0 | dev 9.0",
+            "1 2 4.0 | 3 4 6.0 | levers 8.0",
         ),
         moves = listOf(
-            "i4 leaps 8.1 | ee2 spot 11.2 | leap ee2 12.1 | hold 2",
-            "ee3 waits 1 2 3 4",
+            // The i4 bot leaps out to the tank at 5.8; the mage on the ee2 spot by 7.8; everyone but SS leapt there by 9.5.
+            "i4 leaps 5.8 | ee2 spot 7.8 | leap ee2 9.4",
+            "ee3 spot 5.0 | ee3 waits 1 2 3 4",
             "", "",
         ),
     )
@@ -74,22 +82,24 @@ object Roles {
     val QUALITY_PF = Preset(
         "Quality PF",
         roles = linkedMapOf(
-            HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
-            // S2's dev: the mage does it (dev at 8.3, on the ee2 spot at 8.6).
-            MAGE to "bl ee2 / dev 2 3 core / core / recore",
-            BERSERK to "i4 / 53 / 3 dev / 3 bl",
-            TANK to "21 / ll ee3 / 1 bl / 1",
+            MAGE to "bl ee2 / dev 2 3 / core / recore",
             ARCHER to "43 / 4 rl / 4 bl / 2",
+            HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
+            TANK to "21 / ll ee3 / 1 bl / 1",
+            BERSERK to "i4 / 53 / 3 / 3 bl",
         ),
         times = listOf(
-            "levers 1.1 | gate 1.3 | i4 6.8 | terms 8.1 | lights 8.3 | ss 12.3",
-            "1 2 4 5 ll 1.9 | gate 2.1 | 3 rl 4.2",
-            "2 3 4 2.1 | 1 2.8 | dev 3.7 | gate 3.9 | levers 4.1",
-            "terms 3.1 | levers 4.2",
+            // ll 0.15, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
+            "ll 0.15 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
+            "ll 0.8 | gate 1.0 | 1 4 5 2.1 | 2 3 rl 5.0",
+            "1 3 4 2.1 | 2 4.0 | levers gate 6.0 | dev 6.5",
+            "1 3 4 2.1 | 2 4.0 | levers 5.2",
         ),
         moves = listOf(
-            "i4 leaps 7.2 | ee2 spot 8.6 | leap ee2 9.1 | ee2 waits ee3 4 5",
-            "ee3 waits 1 2 3 4",
+            // The i4 bot leaps out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone but SS leapt there by 6.4,
+            // and the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
+            "i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
+            "ee3 spot 3.2 | ee3 waits 1 2 3 4",
             "", "",
         ),
         // Stack help: S3 4 bl -> 1st term gets rl, 1 bl -> 4th term gets ll and the
@@ -107,14 +117,14 @@ object Roles {
 
     /**
      * A route planner's prototype roles (a 399-tick P3), times from its simulation. The tank pre-does Lights and waits on S2's high path for the archer, mage and bers;
-     * the bers waits on S3 T3 for the healer, tank and archer; the mage waits by the core (EE4) for the S4
-     * leaps. (The planner's bers also leaps onto the archer at T4 for S3's levers: the bots walk it.)
+     * the bers waits on S3 T3 for the healer, tank and archer; nobody early-enters S4 (no EE4: never needed).
+     * (The planner's bers also leaps onto the archer at T4 for S3's levers: the bots walk it.)
      */
     val PROTOTYPE_1 = Preset(
         "Prototype 1",
         roles = linkedMapOf(
             HEALER to "ss (leap archer) / 1 (leap bers) / 1 (leap mage) / 1 recore",
-            MAGE to "bl 43 / 53 / ee4 / 4 recore",
+            MAGE to "bl 43 / 53 / / 4 recore",
             BERSERK to "i4 / ee3 / 3 bl / bl",
             ARCHER to "21 / 2 / dev 4 (leap healer) / 2 recore",
             TANK to "ee2 / dev bl 4 / 2 / 3 recore",
@@ -128,18 +138,58 @@ object Roles {
         moves = listOf(
             "ee2 waits 2 5 ee3",
             "ee3 waits 1 2 4",
-            "ee4 waits 1 2 3",
+            "",
             "",
         ),
         spots = mapOf(
             "ee2" to Vec3(34.05, 131.0, 139.05),
             "ee3" to Vec3(16.5, 123.0, 93.7),
-            "ee4" to Vec3(54.55, 115.06, 51.05),
+        ),
+    )
+
+    /**
+     * The fastest terms, in theory (2026-10-10). The mage pre-does Lights and holds a far EE2 spot for the bers, tank and archer
+     * (the healer leaps to the tank on S2's 2nd term instead); the bers holds a high EE3 for the tank, healer and mage, the tank
+     * doing S3's device from there in S2; the archer early-enters S4 by the core (lava bounce, mined in) for the healer, mage and bers.
+     * S1's gate: the healer, with an explosive bow during SS's 4th cycle. S2's: the mage, right after its first lever.
+     * (The bots don't bonzo, lava bounce or go through walls: they get there on these times.)
+     */
+    val THEORETICAL = Preset(
+        "Theoretical",
+        roles = linkedMapOf(
+            HEALER to "ss gate / 1 / 1 / 1",
+            BERSERK to "i4 / ee3 / 3 bl / bl",
+            TANK to "21 / 2 / i3 4 / 2",
+            MAGE to "i2 ee2 / bl 4 / 2 / 3",
+            ARCHER to "bl 43 / 53 / ee4 / 4",
+        ),
+        times = listOf(
+            // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one.
+            "rl lights 0.05 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | gate 5.6 | 3 6.8 | ss 7.8",
+            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 4.0 | 3 4.5",
+            "3 1.6 | 4 2.5 | 2 3.0 | 1 4.0 | levers gate 4.5",
+            "2 2.0 | 4 2.5 | 3 3.0 | levers 3.0 | 1 3.25",
+        ),
+        moves = listOf(
+            // The mage on its EE2 spot right after Lights; the bers leaps on after i4, the tank after its terms, the archer last.
+            "ee2 spot 1.0 | leap ee2 3.4 | ee2 waits ee3 2 5",
+            // The bers on the high EE3 by 1 s; the tank (2 s), healer and mage leap on.
+            "ee3 spot 1.0 | ee3 waits 1 2 4",
+            // The archer by the core; the healer, mage and bers leap on, then it walks to its 4th term.
+            "ee4 waits 1 3 ee3",
+            "",
+        ),
+        defaults = mapOf(
+            "ee2" to Spots.Spot("EE2", 35.99, 131.0, 138.96, 92.20f, 3.86f),
+            "ee3" to Spots.Spot("EE3", 18.70, 121.50, 91.30, 0.82f, -8.64f),
+            // The mage starts on Lights, the archer by S1's east lever (looking at it).
+            "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
+            "spawn/ARCHER" to Spots.Spot("Spawn", 107.53, 123.06, 112.45, 47.59f, 19.81f),
         ),
     )
 
     /** In the skill menu as listed, with Random after the first three ([P3Plan.SKILLS]). */
-    val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC, PROTOTYPE_1)
+    val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC, PROTOTYPE_1, THEORETICAL)
 
     /** `ll` and `rl` per section coming in along the track (S2: the high lever on the left, the low one by T4 on the right; S4, heading east: the low lever by T3 on the left, the high one by T4 on the right). */
     val LEFT = mapOf(1 to "S1 west lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
@@ -173,6 +223,8 @@ object Roles {
         token.all { it.isDigit() } -> token.map { "S$s T$it" }.filter { it in terms(s) }
         token == "ss" -> listOf("S1 SS")
         token == "i4" -> listOf("S4 Target")
+        token == "i2" -> listOf("S2 Lights")
+        token == "i3" -> listOf("S3 Arrows")
         token == "lights" -> listOf("S2 Lights")
         token == "arrows" -> listOf("S3 Arrows")
         token == "dev" -> listOf(device(s))
@@ -213,7 +265,8 @@ object Roles {
                 }
             }
         }
-        for (s in 1..3) (leverFirst[s] ?: leverRight[s])?.distinct()?.forEach { c ->
+        // A gate nobody has by name goes with the levers.
+        for (s in 1..3) if ("gate $s" !in owners) (leverFirst[s] ?: leverRight[s])?.distinct()?.forEach { c ->
             jobsOf.getValue(c) += "gate $s"
             owners.getOrPut("gate $s") { ArrayList() } += c
         }
