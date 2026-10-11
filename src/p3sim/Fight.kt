@@ -162,6 +162,14 @@ object Fight {
     }
 
     fun join(player: ServerPlayer) {
+        // A party's joiner (P3Party): set up as you are and put next to you; the fight goes on as it is.
+        val host = SimServer.player
+        if (host != null && host !== player) {
+            setup(player)
+            Sim.tp(player, host.x, host.y, host.z, host.yRot, host.xRot)
+            player.level().server.playerList.broadcastSystemMessage(net.minecraft.network.chat.Component.literal("§8[§6P3 Sim§8] §e${player.gameProfile.name}§7 joined the party."), false)
+            return
+        }
         setup(player)
         if (phase == null) {
             Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)

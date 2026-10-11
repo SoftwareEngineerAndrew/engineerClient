@@ -7,6 +7,7 @@ import com.odtheking.odin.features.ModuleManager
 import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.StringWidget
+import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.layouts.FrameLayout
 import net.minecraft.client.gui.layouts.LayoutElement
@@ -55,6 +56,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             mc.gui.setScreen(null)
             SimServer.run("stop") { Fight.end() }
         }.tooltip(tip("Ends the run: the fight stops and the splits clear.")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
+
+        party()
 
         // Left: the tabs, Practice level with Restart, Teleport and Settings above it.
         tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 2 * ROW)
@@ -482,6 +485,30 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     // ------------------------------------------------------------------ pieces
 
+    /** Top right: a party - host yours (a code for friends), or join one by its code. */
+    private fun party() {
+        val x = width - PARTY_W - 6
+        var y = 6
+        fun line(t: String) { addRenderableWidget(StringWidget(Component.literal(t), font).also { it.setPosition(x, y + 6) }); y += 20 }
+        if (P3Party.hosting) {
+            val names = P3Party.players()
+            line("Party code: ${P3Party.code?.let { "§b§l$it" } ?: "§7..."}")
+            line("§7${names.joinToString(", ").ifEmpty { "Just you" }} §8${names.size.coerceAtLeast(1)}/5")
+            addRenderableWidget(Button.builder(Component.literal("Close Party")) { P3Party.stopHosting(); rebuildWidgets() }
+                .tooltip(tip("Drops everyone who joined; your sim goes on.")).bounds(x, y, PARTY_W, 20).build())
+            return
+        }
+        addRenderableWidget(Button.builder(Component.literal("Host Party")) { P3Party.host(); rebuildWidgets() }
+            .tooltip(tip("Friends join your sim: you get a 4-letter code to send them.")).bounds(x, y, PARTY_W, 20).build())
+        y += ROW
+        val box = EditBox(font, x, y, PARTY_W - 42, 20, Component.literal("Code"))
+        box.setMaxLength(4)
+        box.setHint(Component.literal("§8Code"))
+        addRenderableWidget(box)
+        addRenderableWidget(Button.builder(Component.literal("Join")) { if (box.value.isNotBlank()) { mc.gui.setScreen(null); P3Party.join(box.value) } }
+            .tooltip(tip("Joins a friend's sim by its party code.")).bounds(x + PARTY_W - 40, y, 40, 20).build())
+    }
+
     private fun text(t: String) { panel.addChild(StringWidget(Component.literal(t), font)) }
 
     private fun row(widgets: List<LayoutElement>) {
@@ -550,6 +577,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     private companion object {
         const val RESTART_W = 100
+        const val PARTY_W = 130
         val QUADRANTS = listOf("top left", "top right", "bottom left", "bottom right")
         /** The plan's and Advanced's height (5 rows) plus a gap: where the Advanced button goes. */
         const val PANEL_H = 6 * 20 + 5 * 2 + 4
