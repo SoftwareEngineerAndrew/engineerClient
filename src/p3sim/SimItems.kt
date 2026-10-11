@@ -889,6 +889,11 @@ object SimItems {
     val LAST_BREATH get() = item(Items.BOW, Bows.LAST_BREATH, "§6Last Breath", listOf("§9Duplex I", "§7Shoot an extra arrow dealing §a4%§7 of the",
         "§7first arrow's damage.", "", "§7Draw and release, like a vanilla bow.", "", "§6§lLEGENDARY BOW"), glint = true)
 
+    /** Hypixel's Explosive Bow (EXPLOSIVE_BOW: epic, 100 damage, 20 strength): drawn like a vanilla bow, its arrow explodes ([Bows.explode]). */
+    val EXPLOSIVE_BOW get() = item(Items.BOW, Bows.EXPLOSIVE, "§5Explosive Bow", listOf("§7Damage: §c+100", "§7Strength: §c+20", "",
+        "§6Ability: Explosive Shot", "§7Your arrows explode on impact, dealing", "§7damage to nearby enemies.", "",
+        "§7Draw and release, like a vanilla bow.", "", "§5§lEPIC BOW"))
+
     /** Common F7 armour sets: Maxor + Mithril at P3 start, Terror, and Wise Wither (the usual mid-P3 swap). */
     enum class ArmorSet { MAXOR, TERROR, WISE }
 
@@ -977,10 +982,11 @@ object SimItems {
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         // 9: the spare mask (Masks.equip, Real Masks).
-        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH)
+        val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH, 16 to EXPLOSIVE_BOW)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
         Loadouts.applySaved(p)  // your saved gear and pet, else the defaults: Maxor + mask (+ Black Cat)
+        if (p3 && P3Sim.terrorAtTerms) Loadouts.wearTerror(p)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
@@ -1044,9 +1050,18 @@ object SimItems {
     /** The block the held left click last hit (null once the button is up): [clientHitBlock] handles it once a press. */
     private var hitHeld: BlockPos? = null
 
-    /** Client tick: a released attack key ends the press. */
+    /**
+     * Client tick: a released attack key ends the press. Held on a block with the Dungeonbreaker, it keeps swinging as
+     * mining does (our cancelled break gives vanilla nothing to swing for).
+     */
     @JvmStatic
-    fun clientTick() { if (!mc.options.keyAttack.isDown) hitHeld = null }
+    fun clientTick() {
+        if (!mc.options.keyAttack.isDown) { hitHeld = null; return }
+        val player = mc.player ?: return
+        val level = mc.level ?: return
+        if (mc.screen != null || player.isUsingItem || !simClient(level) || idOf(player.mainHandItem) != "DUNGEONBREAKER") return
+        if (mc.hitResult?.type == net.minecraft.world.phys.HitResult.Type.BLOCK) player.swing(net.minecraft.world.InteractionHand.MAIN_HAND, false)
+    }
 
     /**
      * A block hit on the client (DungeonbreakerSimMixin: adventure mode drops it before Fabric's
@@ -1086,7 +1101,7 @@ object SimItems {
      */
     @JvmStatic
     fun quiverArrow(p: Player, weapon: ItemStack): ItemStack? {
-        if (idOf(weapon) != Bows.LAST_BREATH) return null
+        if (idOf(weapon) !in Bows.DRAWN) return null
         val level = p.level()
         val sim = if (level.isClientSide) P3Sim.inSim else SimServer.isSimLevel(level)
         return if (sim) ItemStack(Items.ARROW) else null
@@ -1098,10 +1113,11 @@ object SimItems {
      */
     @JvmStatic
     fun releaseBow(stack: ItemStack, level: Level, entity: net.minecraft.world.entity.LivingEntity, remainingTime: Int): Boolean? {
-        if (idOf(stack) != Bows.LAST_BREATH || !simServer(level) || entity !is ServerPlayer) return null
+        val bow = idOf(stack)?.takeIf { it in Bows.DRAWN } ?: return null
+        if (!simServer(level) || entity !is ServerPlayer) return null
         val power = net.minecraft.world.item.BowItem.getPowerForTime(stack.getUseDuration(entity) - remainingTime)
         if (power < 0.1f) return false
-        Bows.release(entity, Bows.LAST_BREATH, power)
+        Bows.release(entity, bow, power)
         return true
     }
 
@@ -1111,13 +1127,17 @@ object SimItems {
         val player = mc.player ?: return
         val level = mc.level ?: return
         if (!simClient(level)) return
+        // Practice: a left click with the Infinileap starts it again; once it's done (0.25 s on), a left click with anything.
+        if (Practice.clickRestarts() || Practice.active && idOf(player.mainHandItem) == "INFINITE_SPIRIT_LEAP") { SimServer.run("practice restart") { Practice.restart() }; return }
+        // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
+        if (Mage.isMage() && Mage.beamItem(idOf(player.mainHandItem))) { SimServer.run("mage beam") { Sim.player?.let { p -> Fight.afterPing("mage beam") { Mage.click(p) } } }; return }
         val id = idOf(player.mainHandItem)?.takeIf { it in Bows.SHORTBOWS } ?: return
         SimServer.run("left click") { Sim.player?.let { p -> Bows.click(p, id, left = true) } }
     }
 
     /**
      * The drop key in the sim (ArcherDropSimMixin): never drops an item; as Archer, Ctrl+Q (the whole stack) is
-     * Explosive Shot ([volley]). Plain Q is the ultimate (Rapid Fire), not in the sim: nothing.
+     * Explosive Shot ([volley]); as Mage, Guided Sheep ([Mage]). Plain Q is the ultimate (Rapid Fire), not in the sim: nothing.
      * True: the drop is cancelled.
      */
     @JvmStatic
@@ -1127,6 +1147,8 @@ object SimItems {
         if (!simClient(level)) return false
         if (fullStack && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
             SimServer.run("archer ability") { Sim.player?.let { p -> asClicked(p, "archer ability") { volley(p) } } }
+        // The Mage's: Guided Sheep.
+        if (fullStack && Mage.isMage()) SimServer.run("mage ability") { Sim.player?.let { p -> Fight.afterPing("guided sheep") { Mage.ability(p) } } }
         return true
     }
 
@@ -1154,7 +1176,7 @@ object SimItems {
     private var clickPos: Vec3? = null
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset()
+    fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset()
         if (liveRockets.isNotEmpty()) { Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(it.unimi.dsi.fastutil.ints.IntArrayList(liveRockets))); liveRockets.clear() }
     }
 
@@ -1915,7 +1937,20 @@ object SimItems {
     private val window = ArrayDeque<Broken>()
     private var refusedSaidAt = -100 // one 20-tick throttle shared by the refusal and no-charges lines
 
-    private fun resetBreaker() { charges = MAX_CHARGES; refillStep = 0; broken.clear(); window.clear(); refusedSaidAt = -100 }
+    private fun resetBreaker() {
+        charges = MAX_CHARGES; refillStep = 0; window.clear(); refusedSaidAt = -100
+        // Perma Break: the blocks stay broken through a restart ([rebreak] after the world is rebuilt).
+        if (!P3Sim.breakerPerma) broken.clear()
+    }
+
+    /** Perma Break, after a start rebuilt the world: the blocks broken before are broken again. */
+    fun rebreak() {
+        if (!P3Sim.breakerPerma) return
+        broken.forEach { Blocks.set(it.pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) }
+    }
+
+    /** Perma Break turned off: every block it kept broken comes back now. */
+    fun unPerma() { broken.forEach { restore(it) }; broken.clear(); window.clear() }
 
     /**
      * A hit with the Dungeonbreaker reaching the server (after the ping): breaks that one block for
@@ -1933,13 +1968,13 @@ object SimItems {
             else if (why.isNotEmpty() && now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(why) }
             return
         }
-        charges--
+        if (!P3Sim.breakerInfinite) charges--
         Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
         broken.addLast(Broken(pos, s, now))
         // The 21st block broken brings the oldest back 41 ticks later, never past the regen timer.
         val b = broken.last()
         window.addLast(b)
-        if (window.size > MAX_CHARGES) { val o = window.removeFirst(); o.restoreAt = minOf(o.restoreAt, now + 41) }
+        if (window.size > MAX_CHARGES) { val o = window.removeFirst(); if (!P3Sim.breakerPerma) o.restoreAt = minOf(o.restoreAt, now + 41) }
     }
 
     private fun restore(b: Broken) {
@@ -1959,6 +1994,8 @@ object SimItems {
         }
         // The regen setting (221 ticks on main, as the client sees it); ping is added on top by the delayed block update.
         val regen = Math.round(P3Sim.breakerRegen * 20).toInt()
+        // Perma Break: nothing comes back (until it's turned off: [unPerma]).
+        if (P3Sim.breakerPerma) return
         broken.removeAll { if (now - it.at >= regen || now >= it.restoreAt) { restore(it); true } else false }
     }
 
@@ -1997,6 +2034,7 @@ object SimItems {
         val level = SimServer.level ?: return
         tickBreaker()
         tickVeil()
+        EngineerClient.safely("p3sim mage") { Mage.tick() }
         EngineerClient.safely("p3sim slot 9") { tickSlot9() }
         Sim.player?.let { p -> EngineerClient.safely("p3sim mining effects") { miningEffects(p) } }
         // Vanilla bow arrows (anything shot that isn't one of Bows'). Each one's path since last tick (and a
@@ -2037,7 +2075,8 @@ object SimItems {
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             Sim.chat("§cThis ability is on cooldown for ${(leapReady - now + 19) / 20}s."); return
         }
-        val bots = Party.bots().filter { it.entity != null }
+        // Practice: no bots, but every class is there to leap to (Practice.leapSpot).
+        val bots = if (Practice.active) Party.bots() else Party.bots().filter { it.entity != null }
         // The menu opens one RTT after the use.
         Fight.afterPing("leapOpen") { p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap"))) }
     }
@@ -2125,8 +2164,11 @@ object SimItems {
             sp.closeContainer()
             val e = bot.pos
             leapReady = Fight.serverTick + 40
-            // You land on them exactly, facing as they face.
-            Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
+            // You land on them exactly, facing as they face. Practice: where that class normally is in this section; a custom
+            // practice's leap waypoint for that class's quadrant (top left, top right, bottom left, bottom right) first.
+            val ps = if (Practice.active) Practice.leapWaypoint(P3Plan.botOrder().indexOf(bot.clazz)) ?: Practice.leapSpot(bot.clazz) else null
+            if (ps != null) Sim.tp(sp, ps.x, ps.y, ps.z, ps.yaw, ps.pitch)
+            else Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             Sim.chatStyled("§aYou have teleported to §r${rankColour(bot.name)}${bot.name}§r§a!")
             sp.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))

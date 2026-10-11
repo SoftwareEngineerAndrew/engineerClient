@@ -5,7 +5,10 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "CameraOffsetMixin",
+    "CursorResetMixin",
+    "OldBlockingMixin",
     "GuiSidebarInvoker",
+    "LeverClickMixin",
     "ScoreboardSidebarMixin",
     "SoundChannelMixin",
     "SoundVolumeMixin"

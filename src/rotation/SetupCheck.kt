@@ -16,6 +16,9 @@ object SetupCheck {
 
     data class Item(val ok: Boolean, val what: String, val fix: String = "")
 
+    /** Every /posmsg box's message, from Positional Messages where it is installed; null: it isn't. (Odin 0.3.4 has it.) */
+    @Volatile var posMessages: (() -> List<String?>)? = { PositionalMessages.posMessageStrings.map { it.message } }
+
     private fun module(name: String) = ModuleManager.modules[name.lowercase()]
 
     private fun bool(module: String, setting: String): Boolean? =
@@ -24,12 +27,12 @@ object SetupCheck {
     fun run(): List<Item> {
         val items = mutableListOf<Item>()
 
-        fun moduleOn(name: String, why: String) {
+        fun moduleOn(name: String, why: String, owner: String = "Odin") {
             val m = module(name)
             items += when {
-                m == null -> Item(false, "Odin $name: not found", "is Odin loaded?")
-                m.enabled -> Item(true, "Odin $name on")
-                else -> Item(false, "Odin $name is OFF", why)
+                m == null -> Item(false, "$owner $name: not found".trim(), "is Odin loaded?")
+                m.enabled -> Item(true, "$owner $name on".trim())
+                else -> Item(false, "$owner $name is OFF".trim(), why)
             }
         }
         fun settingOn(module: String, setting: String, why: String) {
@@ -45,11 +48,11 @@ object SetupCheck {
         moduleOn("Invincibility Timer", "it is what announces your procs")
         settingOn("Invincibility Timer", "Announce Invincibility", "the mask gate needs everyone's procs in party chat")
         moduleOn("Dungeon Waypoints", "EC's waypoints do not render without it")
-        moduleOn("Positional Messages", "the arrival texts come from its boxes")
-
-        // The exact texts the rotation waits on must exist as boxes.
-        val have = PositionalMessages.posMessageStrings
-            .mapNotNull { it.message?.trim()?.lowercase() }.toSet()
+        // The exact texts the rotation waits on must exist as /posmsg boxes ([posMessages]).
+        val texts = posMessages
+        if (texts == null) items += Item(false, "Positional Messages not installed", "the arrival texts come from /posmsg boxes")
+        else moduleOn("Positional Messages", "the arrival texts come from its boxes")
+        val have = texts?.invoke().orEmpty().mapNotNull { it?.trim()?.lowercase() }.toSet()
         (RotationSpec.graph.roles.map { it.arrived } + RotationSpec.graph.recoreArrived)
             .filter { it.isNotBlank() && it != RotationSpec.ARRIVED_ON_LEAP }.distinct()
             .forEach { text ->

@@ -60,17 +60,13 @@ import java.util.zip.GZIPInputStream
 object BetterPF : Module(
     name = "Better PF",
     category = Category.custom("Engineer Client"),
-    description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) for replaying it in the browser.",
+    description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {
-    private val captureGeometry by BooleanSetting("Capture Geometry", true, desc = "Records each run's doorways (two blocks per door spot) - the rooms themselves come from the viewer's room library, which has them all.")
-    private val uploadRuns by BooleanSetting("Upload Runs", true, desc = "Uploads each finished run to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed. Turn on Private Runs to keep them off the public list.")
-    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them. /betterpf gives you a link to all your runs, private ones included.")
-    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved. They are never uploaded either way. Party chat stays in.")
+    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /betterpf gives you a link to all your runs, private ones included.")
+    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way), and party chat too.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
-    val recordingMessage by BooleanSetting("Recording Message", true, desc = "Says \"recording this run\" in chat when a run starts being recorded.")
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
-    private val tidyRuns by BooleanSetting("Tidy Runs Folder", true, desc = "Once a game, runs here older than 30 days that the viewer has are deleted from this computer - the site keeps every run for good. Recordings a crash left unfinished are always saved as runs.")
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
     /**
      * A secret this install sends with every upload, so the site can list this player's runs -
@@ -91,7 +87,7 @@ object BetterPF : Module(
     /** For the recorder: Camera FPS. */
     val cameraFps: Int get() = cameraFpsSetting.toInt()
 
-    private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed, or that were recorded with uploading off. One at a time, with progress in chat.") { uploadMissing() }
+    private val uploadMissing by ActionSetting("Upload Missing Runs", desc = "Uploads every run saved on this computer that the viewer doesn't have yet - ones whose upload failed. One at a time, with progress in chat.") { uploadMissing() }
 
     const val SITE = "undonecoffee.com"
     private const val RUNS_URL = "https://$SITE/betterpf/api/runs"
@@ -107,7 +103,7 @@ object BetterPF : Module(
             EngineerClient.safely("betterpf start") {
                 session?.finish()
                 RoomKeys.reset()
-                session = RunRecorder(runsDir, captureGeometry, ::upload)
+                session = RunRecorder(runsDir, true, ::upload)
             }
         }
 
@@ -179,7 +175,7 @@ object BetterPF : Module(
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
             val colored = legacyText(content)
-            if (hidePrivateChats && UploadPacker.privateChat(text)) return@onReceive
+            if (hidePrivateChats && (UploadPacker.privateChat(text) || UploadPacker.partyChat(text))) return@onReceive
             val n = session?.serverTickCount
             EngineerClient.mc.execute { EngineerClient.safely("betterpf chat") { session?.onChat(text, colored, n) } }
         }
@@ -263,14 +259,12 @@ object BetterPF : Module(
      * compete with the game loading the next world.
      */
     private fun upload(file: Path) {
-        if (!uploadRuns) return
         Thread.ofPlatform().name("engineerclient-betterpf-upload").daemon(true).priority(Thread.MIN_PRIORITY).start {
             try {
-                // Party members recording the same run take turns, a little apart, so the first one's
-                // recording is on the site when the next ones look for it (see [send]).
+                // Party members recording the same run take turns, so the first one's recording is on
+                // the site when the next ones look for it ([waitForSibling]).
                 val scan = UploadPacker.scan(file, privateRuns)
-                staggerForParty(scan.summary)
-                val id = send(file, scan)
+                val id = send(file, scan, waitForSibling(scan.summary))
                 uploadFailSaid = false
                 if (uploadedMessage) EngineerClient.msg("§7Better PF: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/betterpf/$id")
             } catch (t: Throwable) {
@@ -289,30 +283,48 @@ object BetterPF : Module(
     private class Refused(message: String) : Exception(message)
 
     /**
-     * Waits 20 s for each party member whose name sorts before yours: whoever sorts first uploads
-     * straight away, and the others find their recording there to leave out what it already has.
+     * Another party member's recording of this run on the site to leave out what it has (its id), or
+     * null. Whoever sorts first of the party members who upload (the site says who has lately) goes
+     * straight away; the others wait up to [STAGGER_MS] for each one before them, asking every
+     * [POLL_MS], and go as soon as one is there.
      */
-    private fun staggerForParty(summary: JsonObject) {
-        val self = summary["self"]?.asString ?: return
-        val names = summary["party"]?.asJsonArray?.mapNotNull { runCatching { it.asJsonArray[0].asString }.getOrNull() }?.sortedBy { it.lowercase() } ?: return
-        val rank = names.indexOfFirst { it.equals(self, ignoreCase = true) }
-        if (rank > 0) Thread.sleep(rank * 20_000L)
+    private fun waitForSibling(summary: JsonObject): String? {
+        val self = summary["self"]?.asString?.lowercase() ?: return null
+        var until = 0L
+        while (true) {
+            val (id, uploaders) = askSibling(summary) ?: return null
+            if (id != null) return id
+            if (until == 0L) {
+                // (A site that doesn't say who uploads: everyone in the party, as before.)
+                val names = uploaders ?: summary["party"]?.asJsonArray?.mapNotNull { runCatching { it.asJsonArray[0].asString }.getOrNull() } ?: return null
+                val ahead = names.map { it.lowercase() }.distinct().count { it < self }
+                if (ahead == 0) return null
+                until = System.currentTimeMillis() + ahead * STAGGER_MS
+            }
+            if (System.currentTimeMillis() >= until) return null
+            Thread.sleep(POLL_MS)
+        }
     }
 
-    /**
-     * Another party member's recording of this run already on the site (the earliest), to leave out
-     * what it has: its bytes, or null.
-     */
-    private fun siblingOf(summary: JsonObject): ByteArray? {
-        // (The site only offers public runs - anyone's upload, so it is only read up to a size, and
-        // UploadPacker trusts nothing in it.)
+    private const val STAGGER_MS = 20_000L
+    private const val POLL_MS = 2_500L
+
+    /** The site's answer for this run: an earlier party member's recording (id or null), and who in the party uploads (null: not said). Null if it can't be asked. */
+    private fun askSibling(summary: JsonObject): Pair<String?, List<String>?>? = runCatching {
+        val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).header("Content-Type", "application/json")
+            .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofInputStream())
+        val body = res.body().use { s -> s.readNBytes(64 * 1024).toString(Charsets.UTF_8) }
+        if (res.statusCode() != 200) return null
+        val o = JsonParser.parseString(body).asJsonObject
+        val id = o["id"]?.takeIf { !it.isJsonNull }?.asString?.takeIf { RUN_ID.matches(it) }
+        val uploaders = o["uploaders"]?.takeIf { it.isJsonArray }?.asJsonArray?.take(16)?.mapNotNull { runCatching { it.asString }.getOrNull() }
+        id to uploaders
+    }.onFailure { EngineerClient.logger.warn("[ec] betterpf: sibling lookup failed", it) }.getOrNull()
+
+    /** A party member's recording on the site ([id]): its bytes, or null. */
+    private fun siblingBytes(id: String): ByteArray? {
+        // (Anyone's upload, so it is only read up to a size, and UploadPacker trusts nothing in it.)
         return runCatching {
-            val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/sibling")).header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(summary.toString())).build(), HttpResponse.BodyHandlers.ofInputStream())
-            val body = res.body().use { s -> s.readNBytes(64 * 1024).toString(Charsets.UTF_8) }
-            if (res.statusCode() != 200) return null
-            val id = JsonParser.parseString(body).asJsonObject["id"]?.takeIf { !it.isJsonNull }?.asString ?: return null
-            if (!RUN_ID.matches(id)) return null
             val got = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/$id")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofInputStream())
             got.body().use { s ->
                 if (got.statusCode() != 200) return null
@@ -322,7 +334,7 @@ object BetterPF : Module(
                 if (bytes.size > SIBLING_MAX) { EngineerClient.logger.warn("[ec] betterpf: a party member's upload is over ${SIBLING_MAX shr 20} MB, nothing left out"); return null }
                 bytes
             }
-        }.onFailure { EngineerClient.logger.warn("[ec] betterpf: sibling lookup failed", it) }.getOrNull()
+        }.onFailure { EngineerClient.logger.warn("[ec] betterpf: sibling download failed", it) }.getOrNull()
     }
 
     /** A party member's upload bigger than this (a real one is a few MB) is left alone. */
@@ -330,10 +342,10 @@ object BetterPF : Module(
     private val RUN_ID = Regex("""[A-Za-z0-9_-]{1,64}""")
 
     /** Sends one run, on the calling thread. Its id on the site. */
-    private fun send(file: Path, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns)): String {
+    private fun send(file: Path, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns), siblingId: String? = askSibling(scan.summary)?.first): String {
         val summary = scan.summary
         // Without the mobs a party member's recording already on the site has (UploadPacker), as xz.
-        val (packed, left) = UploadPacker.pack(file, scan, siblingOf(summary))
+        val (packed, left) = UploadPacker.pack(file, scan, siblingId?.let(::siblingBytes), hideParty = hidePrivateChats)
         if (left > 0) EngineerClient.logger.info("[ec] betterpf: $left mobs left out, already uploaded by a party member")
         try {
             return sendPacked(packed, summary)
@@ -366,7 +378,7 @@ object BetterPF : Module(
 
     /**
      * Once a game, in the background: recordings a crash left as .part files are saved as runs (as
-     * far as they got), and with Tidy Runs Folder, runs older than [KEEP_DAYS] days that the site
+     * far as they got), and runs older than [KEEP_DAYS] days that the site
      * has (asked by recorder and start time, as Upload Missing Runs does) are deleted here.
      */
     private fun tidyRunsFolder() {
@@ -377,7 +389,6 @@ object BetterPF : Module(
                 // (one still being written is touched every few seconds)
                 val parts = Files.list(runsDir).use { s -> s.filter { PART_NAME.matches(it.fileName.toString()) }.toList() }
                 for (part in parts) if (now - Files.getLastModifiedTime(part).toMillis() > 30 * 60_000L) salvage(part)
-                if (!tidyRuns) return@start
                 val old = Files.list(runsDir).use { s ->
                     s.filter { it.fileName.toString().endsWith(".jsonl.gz") && now - Files.getLastModifiedTime(it).toMillis() > KEEP_DAYS * 86_400_000L }.toList()
                 }

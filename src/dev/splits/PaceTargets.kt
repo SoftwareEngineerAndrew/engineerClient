@@ -29,6 +29,9 @@ object PaceTargets {
     /** [label]'s (SplitTracker's) Pace target for SplitPace: its box, else the PB, else null (its dark green). */
     fun paceTarget(label: String, master: Boolean): SplitPace.Clocks? {
         val i = SplitPace.ORDER.indexOf(label).takeIf { it >= 0 } ?: return null
+        // Engineer Client's Pace From Recent Runs: its typical time for the split, when it has one.
+        if ((Splits.settings["Pace From"] as? com.odtheking.odin.clickgui.settings.impl.SelectorSetting)?.value == com.engineerclient.splits.OdinSplitsLook.PaceFrom.RECENT.ordinal)
+            com.engineerclient.splits.DungeonSplits.typical(if (master) "M7" else "F7", label)?.let { return SplitPace.Clocks(it.ms, it.ticks) }
         val box = LABELS.getOrNull(i)?.let { Splits.settings["${if (master) "M7" else "F7"} $it"] as? StringSetting }
         box?.value?.let { parseSeconds(it) }?.let { return secs(it) }
         return pb(i, master)
@@ -41,7 +44,7 @@ object PaceTargets {
         val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.let { SplitPace.clocks(sid, it) } }
         val odin = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
             ?.let { secs(it.toDouble()) }
-            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks)) else c.ms >= 1000 }
+            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks), floor) else c.ms >= 1000 }
         return listOfNotNull(ours, odin).minByOrNull { it.ms }
     }
 
