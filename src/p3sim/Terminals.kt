@@ -32,7 +32,8 @@ object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
 
     /** A random draw: the six are equally likely (as measured on first opens). */
-    fun randomType(): Type = Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random()
+    /** A random type, as on Hypixel; Terminal Luck makes a Melody (the slow one) rarer, bad luck more common. */
+    fun randomType(): Type = lucky(10, { t: Type -> if (t == Type.MELODY) 1 else 0 }) { Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random() }
 
     fun <T> weighted(w: List<Pair<T, Int>>): T {
         var r = kotlin.random.Random.nextInt(w.sumOf { it.second })
@@ -130,7 +131,8 @@ object Terminals {
             // that lengthen it, up to every next one across the window at -100%.
             val order = slots.shuffled().toMutableList()
             val luck = P3Sim.termLuck
-            val steps = (luck * luck * 1500).toInt()
+            // 1500^|luck| - 1 tries (none at 0, ~38 at 50%): the path shortens (or lengthens) evenly all the way across.
+            val steps = chance(Math.pow(1500.0, Math.abs(luck)) - 1)
             var cost = walk(order)
             repeat(steps) {
                 val i = Random.nextInt(10); val j = Random.nextInt(10)
@@ -289,10 +291,10 @@ object Terminals {
     class Melody : Term(Type.MELODY) {
         override val title = "Click the button on time!"
         private var row = 0
-        /** Always First Click Melody: the first row's purple where the green starts. */
-        private var target = if (P3Sim.firstClickMelody) 1 else Random.nextInt(1, 6)
         private var lime = 1
         private var dir = 1
+        /** Always First Click Melody: the first row's purple where the green starts. Terminal Luck: where the green gets soonest. */
+        private var target = if (P3Sim.firstClickMelody) 1 else lucky(8, { c: Int -> stepsTo(c) }) { Random.nextInt(1, 6) }
         private var locked = false
         private var lastStep = -1
         /** Steps the lime still sits out after a wrong click. */
@@ -332,7 +334,7 @@ object Terminals {
                 if (lime + dir !in 1..5) dir = -dir
                 lime += dir
             }
-            if (locked) { locked = false; row++; target = ((1..5) - target).random() }
+            if (locked) { val last = target; locked = false; row++; target = lucky(8, { c: Int -> stepsTo(c) }) { ((1..5) - last).random() } }
             draw()
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
@@ -348,6 +350,13 @@ object Terminals {
             return true
         }
         override fun solved() = row >= LANES
+
+        /** Steps until the green is on column [c], bouncing from where it is now. */
+        private fun stepsTo(c: Int): Int {
+            var l = lime; var d = dir; var k = 0
+            while (l != c && k < 10) { if (l + d !in 1..5) d = -d; l += d; k++ }
+            return k
+        }
 
         companion object {
             /** The rows to lock: 3 since the update (it was 4). */

@@ -68,7 +68,8 @@ object P3Sim : Module(
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0..10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer.")
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
-    val termLuckS = +NumberSetting("Terminal Luck", 0, -100..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick); lower (bad luck): the other way. Toward 40% either way it picks Hypixel's easiest (or hardest) deals; past it, beyond anything Hypixel deals, down to 1 click at 100% and up to the worst at -100% (no pane on, a 10-click Rubix, 16 items to pick, 12 to select, the numbers all over). Melody is untouched.")
+    val termLuckS = +NumberSetting("Terminal Luck", 0, -100..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick); lower (bad luck): the other way. Toward 40% either way it picks Hypixel's easiest (or hardest) deals; past it, beyond anything Hypixel deals, down to 1 click at 100% and up to the worst at -100% (no pane on, a 10-click Rubix, 16 items to pick, 12 to select, the numbers all over). Melody: each row's purple where the green gets soonest (latest with bad luck). The terminal type: Melodies rarer (more common with bad luck), when they're on.")
+    val ssLuckS = +NumberSetting("SS Luck", 0, -100..100, 5, unit = "%", desc = "0: Simon Says as Hypixel runs it. Higher: the 4 lamps closer together, steadily all the way up (4 neighbours in a line at 100%), and after a wrong press the quick restart (no stray lamp) more often, always at 100%. Lower (bad luck): the lamps spread across the board (corner to corner at -100%) and the slow restart, with a stray lamp.")
     val mageAllS = +BooleanSetting("Mage Beam On All Classes", false, desc = "Mage Beam (a left click with a sword or the Bonzo Staff) and Guided Sheep whatever your class. Ctrl+Q fires the sheep (as Archer it stays Explosive Shot: 3 quick beam clicks fire the sheep).")
     val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
     val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
@@ -142,6 +143,8 @@ object P3Sim : Module(
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
     /** Terminal Luck, -1 to 1 (null-safe: a hotswapped field starts null). */
+    /** SS Luck, -1 to 1. */
+    val ssLuck: Double get() = ((ssLuckS as NumberSetting<*>?)?.value?.toDouble() ?: 0.0) / 100.0
     val termLuck: Double get() = ((termLuckS as NumberSetting<*>?)?.value?.toDouble() ?: 0.0) / 100.0
     val mageAll: Boolean get() = (mageAllS as BooleanSetting?)?.value == true
     val firstClickMelody: Boolean get() = (firstClickMelodyS as BooleanSetting?)?.value == true
