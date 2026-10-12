@@ -68,7 +68,7 @@ object P3Sim : Module(
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0..10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer.")
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
-    val termLuckS = +NumberSetting("Terminal Luck", 0, 0..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick). Up to 50% it picks Hypixel's easiest deals; past it, easier than Hypixel ever deals, down to 1 or 2 clicks at 100%. Melody is untouched.")
+    val termLuckS = +NumberSetting("Terminal Luck", 0, -100..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick); lower (bad luck): the other way. Toward 40% either way it picks Hypixel's easiest (or hardest) deals; past it, beyond anything Hypixel deals, down to 1 click at 100% and up to the worst at -100% (no pane on, a 10-click Rubix, 16 items to pick, 12 to select, the numbers all over). Melody is untouched.")
     val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
     val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
@@ -140,7 +140,7 @@ object P3Sim : Module(
     val hydraStart: Int get() = hydraStartS.value.toInt()
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
-    /** Terminal Luck, 0 to 1 (null-safe: a hotswapped field starts null). */
+    /** Terminal Luck, -1 to 1 (null-safe: a hotswapped field starts null). */
     val termLuck: Double get() = ((termLuckS as NumberSetting<*>?)?.value?.toDouble() ?: 0.0) / 100.0
     val firstClickMelody: Boolean get() = (firstClickMelodyS as BooleanSetting?)?.value == true
     val clickLimit: Boolean get() = clickLimitS.value
