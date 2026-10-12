@@ -7,7 +7,7 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import java.util.concurrent.ConcurrentHashMap
 
@@ -33,7 +33,7 @@ object Witherborn {
     fun register() {
         // Network thread: decided as the spawn arrives, before anything else hears of the wither.
         onReceive<ClientboundAddEntityPacket>(priority = Int.MAX_VALUE) {
-            if (type == EntityTypes.WITHER) onSpawn(id, x, y, z)
+            if (type == EntityType.WITHER) onSpawn(id, x, y, z)
         }
         on<LevelEvent.Load> { minions.clear(); seen.clear() }
         EventBus.subscribe(this)

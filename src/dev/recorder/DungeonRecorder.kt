@@ -5,6 +5,7 @@ import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.enumSelector
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
@@ -54,7 +55,7 @@ import com.mojang.blaze3d.platform.InputConstants
 object DungeonRecorder : Module(
     name = "Dungeon Recorder",
     key = null,
-    category = Category.custom("Devgineer Client", 860, 10),
+    category = Category.custom("Devgineer Client"),
     description = "Records everything in a dungeon, losslessly - every packet both ways, the world, every entity, your input and state, screens and HUD, Odin's state - as context for building mods. Saved to devgineerclient-recordings/ in the game folder.",
 ) {
     /** Where to record; the label is what the selector shows. */
@@ -63,7 +64,8 @@ object DungeonRecorder : Module(
         override fun toString() = label
     }
 
-    private val where by SelectorSetting("Where", Where.DUNGEONS, desc = "When to record: in dungeons only, also in the Dungeon Hub (party finder, queueing), or always.")
+    private val whereIndex by enumSelector("Where", Where.DUNGEONS, desc = "When to record: in dungeons only, also in the Dungeon Hub (party finder, queueing), or always.")
+    private val where: Where get() = Where.entries[whereIndex]
     private val inbound by BooleanSetting("Server Packets", true, desc = "Every packet the server sends.")
     private val outbound by BooleanSetting("Your Packets", true, desc = "Every packet you send (movement, clicks, container clicks, item use).")
     private val movement by BooleanSetting("Entity Movement", true, desc = "Other entities' movement and head turns (the bulk of the packets).")
@@ -79,8 +81,8 @@ object DungeonRecorder : Module(
     internal val inputOn by BooleanSetting("Input", true, desc = "Every key, mouse button, scroll and look turn, the actions they start, what Odin cancelled, what the crosshair is on and what each interaction returned.")
     internal val cursorMovesOn by BooleanSetting("Cursor Moves", true, desc = "Every cursor move, with its time in the tick (the largest part of the input lines).")
     private val cookiePayloads by BooleanSetting("Cookie Payloads", false, desc = "Include server cookie bytes (may hold session tokens); off writes length and hash only")
-    private val minFreeGb by NumberSetting("Min Free Disk GB", 10.0, 0.0..500.0, 1.0, desc = "Stops the recording (saying so in the file) when the disk has less free space than this.")
-    private val maxFolderGb by NumberSetting("Max Recordings Folder GB", 0.0, 0.0..2000.0, 10.0, desc = "0 = no limit. Stops the recording when the recordings folder grows past this.")
+    private val minFreeGb by NumberSetting("Min Free Disk GB", 10.0, 0.0, 500.0, 1.0, desc = "Stops the recording (saying so in the file) when the disk has less free space than this.")
+    private val maxFolderGb by NumberSetting("Max Recordings Folder GB", 0.0, 0.0, 2000.0, 10.0, desc = "0 = no limit. Stops the recording when the recordings folder grows past this.")
     private val deleteOldest by BooleanSetting("Delete Oldest When Full", false, desc = "At the folder limit, deletes the oldest finished recordings instead of stopping. Never the one being written.")
     internal val entityTicks by BooleanSetting("Entity Ticks", true, desc = "Every entity's position, rotation, motion and health each tick it changes, and each move the client applies.")
     internal val renderedEntities by BooleanSetting("Rendered Entities", true, desc = "Which entities were drawn each tick, with their name tags and outlines.")
@@ -88,10 +90,10 @@ object DungeonRecorder : Module(
     private val rawPackets by BooleanSetting("Raw Packets", true, desc = "Also keeps every packet's exact bytes as they crossed the wire, both ways, in a sidecar file (the ground truth behind each line).")
     internal val odinInternals by BooleanSetting("Odin Internals", true, desc = "Odin's private solver/tracker state via reflection (version-fragile, read-only).")
     private val thumbs by BooleanSetting("Frame Thumbnails", false, desc = "Small JPEGs of the screen as you saw it (what other mods draw: HUDs, waypoints, custom GUIs). They show private chat too and cannot be redacted; none are taken while you type (unless Typed Chat is on). Adds 100-400 MB an hour and a little frame time.")
-    private val thumbFps by NumberSetting("Thumbnail FPS", 1.0, 0.5..4.0, 0.5, desc = "Frame thumbnails a second (plus one on each screen open and title).")
+    private val thumbFps by NumberSetting("Thumbnail FPS", 1.0, 0.5, 4.0, 0.5, desc = "Frame thumbnails a second (plus one on each screen open and title).")
     private val bookmark by KeybindSetting("Bookmark", InputConstants.UNKNOWN, "Marks this moment in the recording (also /dcrec mark [note]).").onPress { DevgineerClient.safely("recorder bookmark") { Rec.mark(null) } }
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
-        DevgineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
+        DevgineerClient.safely("recorder folder") { java.nio.file.Files.createDirectories(dir); net.minecraft.util.Util.getPlatform().openPath(dir) }
     }
 
     /** The recordings folder's name, under the game directory. */

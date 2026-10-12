@@ -1,11 +1,8 @@
 package com.engineerclient.mixin;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Mutable;
-import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 /**
@@ -14,13 +11,14 @@ import org.spongepowered.asm.mixin.gen.Invoker;
  * <p>EC deliberately does NOT call the public {@code extract(delta, true)}: that also runs
  * {@code extractGui}, which resets the frame's {@code GuiRenderState} and replays every screen and
  * HUD handler (Odin's leap menu included) a second time, with the POV window size and camera. The
- * three pieces below are the ones a second world pass actually needs, so the GUI state built before
+ * four pieces below are the ones a second world pass actually needs, so the GUI state built before
  * {@code renderLevel} survives untouched.
  *
  * <ul>
  *   <li>{@code extractWindow} — window size drives the HUD projection and, via
  *       {@code Camera.update}, the aspect ratio.</li>
- *   <li>{@code extractOptions} — carries {@code cameraType} into the render state.</li>
+ *   <li>{@code extractOptions} — carries {@code cameraType} and {@code hideGui} into the render
+ *       state; {@code hideGui} is what keeps the local player's hand out of the preview.</li>
  *   <li>{@code extractCamera} — camera render state + fog for the preview eye.</li>
  * </ul>
  *
@@ -37,18 +35,5 @@ public interface GameRendererInvoker {
     void ec$extractOptions();
 
     @Invoker("extractCamera")
-    void ec$extractCamera(DeltaTracker deltaTracker, float worldPartialTicks);
-
-    /** Swapped around a POV pass: {@code renderLevel} and {@code LevelRenderer.render} read it on every call. */
-    @Mutable
-    @Accessor("mainRenderTarget")
-    void ec$setMainRenderTarget(RenderTarget target);
-
-    /** Swapped for a feed-sized depth around a POV pass: 26.3's {@code render3dHud} draws against it. */
-    @Accessor("hud3DTarget")
-    RenderTarget ec$getHud3DTarget();
-
-    @Mutable
-    @Accessor("hud3DTarget")
-    void ec$setHud3DTarget(RenderTarget target);
+    void ec$extractCamera(DeltaTracker deltaTracker, float worldPartialTicks, float cameraEntityPartialTicks);
 }

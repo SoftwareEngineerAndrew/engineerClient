@@ -1,10 +1,11 @@
 package com.devgineerclient.splits
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
+import com.engineerclient.enumSelector
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.EntityEvent
@@ -47,7 +48,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  */
 object DungeonSplits : Module(
     name = "All Sub Splits",
-    category = Category.custom("Devgineer Client", 860, 10),
+    category = Category.custom("Devgineer Client"),
     description = "A sub-split HUD per section of the run (Engineer Client keeps only the blood rush one), and the Scorecard, on the real and server-tick clocks. The splits themselves are Odin's Splits (Look: Engineer Splits).",
     key = null,
 ) {
@@ -101,8 +102,8 @@ object DungeonSplits : Module(
     }
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
-    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "", placeholder = "").hide()
-    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "", placeholder = "").hide()
+    private var bestsF7 by StringSetting("Sub Split Bests F7", "", 2048, desc = "").hide()
+    private var bestsM7 by StringSetting("Sub Split Bests M7", "", 2048, desc = "").hide()
 
     private val cardDebug by BooleanSetting("Scorecard Debug", false, desc = "Says in chat each moment the scorecard picks up, and what it read it from (portal, leaps, Goldor's first hit, Storm breaking free).")
     private val card = Scorecard().also { c -> c.onEvent = { what -> if (cardDebug) DevgineerClient.msg("§8[scorecard] §7$what") } }
@@ -112,7 +113,7 @@ object DungeonSplits : Module(
      * on/off toggle, then under it its detail level and (blood rush only) the Total row toggle. The
      * HUDs are made up front because a HUD has to exist before the run that fills it.
      */
-    private val levels = HashMap<Section, SelectorSetting<BloodRunDetail.Level>>()
+    private val levels = HashMap<Section, SelectorSetting>()
     private val huds = HashMap<Section, HUDSetting>()
     private lateinit var totalRow: BooleanSetting
     private lateinit var bloodHideInBoss: BooleanSetting
@@ -138,7 +139,7 @@ object DungeonSplits : Module(
                     draw(this, subLines(s) + cueLines(s))
                 }
             )
-            levels[s] = registerSetting(SelectorSetting("${s.name} Detail", s.level, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
+            levels[s] = registerSetting(enumSelector("${s.name} Detail", s.level, desc = "How much the ${s.name} sub-split HUD shows. Debug adds every extra moment known about it."))
                 .withDependency { hudOn(s) }
             if (s.window == SplitTracker.OPEN) totalRow = registerSetting(
                 BooleanSetting("Blood Rush Total Row", true, desc = "The averages row at the bottom of the compact blood rush splits.")
@@ -152,7 +153,7 @@ object DungeonSplits : Module(
         }
     }
 
-    private fun level(s: Section) = levels[s]?.value ?: BloodRunDetail.Level.COMPACT
+    private fun level(s: Section) = levels[s]?.value?.let { BloodRunDetail.Level.entries[it] } ?: BloodRunDetail.Level.COMPACT
 
     // What the world shows, watched only while it can matter.
     private val barriers = mutableListOf<Pair<Int, Int>>()

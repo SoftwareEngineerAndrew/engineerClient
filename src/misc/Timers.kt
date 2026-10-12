@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
@@ -56,7 +56,7 @@ import com.engineerclient.storm.StormCrush
  */
 object Timers : Module(
     name = "Timers",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Storm and his pads, Necron and relics (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {

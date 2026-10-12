@@ -210,7 +210,7 @@ object Players {
     private fun setHostClass(c: DungeonClass) {
         hostClassSeen = c
         // At once (this thread reads it next), saved on the client's.
-        P3Sim.classS.index = Party.CLASSES.indexOf(c).coerceAtLeast(0)
+        P3Sim.classS.value = Party.CLASSES.indexOf(c).coerceAtLeast(0)
         mc.execute { com.odtheking.odin.features.ModuleManager.saveConfigurations() }
     }
 
@@ -248,8 +248,8 @@ object PartySettings {
 
     val SHARED: List<Opt> by lazy { listOf(
         bool("bots") { P3Sim.botsS },
-        Opt("deathTicks", { JsonPrimitive(P3Sim.deathTicksS.index) }, { P3Sim.deathTicksS.index = it.asInt }),
-        Opt("terminal", { JsonPrimitive(P3Sim.terminalS.index) }, { P3Sim.terminalS.index = it.asInt }),
+        Opt("deathTicks", { JsonPrimitive(P3Sim.deathTicksS.value) }, { P3Sim.deathTicksS.value = it.asInt }),
+        Opt("terminal", { JsonPrimitive(P3Sim.terminalS.value) }, { P3Sim.terminalS.value = it.asInt }),
         num("goldorKill") { P3Sim.goldorKillS },
         bool("clickLimit") { P3Sim.clickLimitS },
         bool("noMelodies") { P3Sim.noMelodiesS },
@@ -266,11 +266,11 @@ object PartySettings {
     ) }
 
     val PERSONAL: List<Opt> by lazy { listOf(
-        Opt("class", { JsonPrimitive(P3Sim.ownClass.name) }, { v -> Players.classByName(v.asString)?.let { P3Sim.classS.index = Party.CLASSES.indexOf(it) } }),
+        Opt("class", { JsonPrimitive(P3Sim.ownClass.name) }, { v -> Players.classByName(v.asString)?.let { P3Sim.classS.value = Party.CLASSES.indexOf(it) } }),
         num("speed") { P3Sim.speedS },
         bool("phoenix") { P3Sim.phoenixS },
         bool("realMasks") { P3Sim.realMasksS },
-        Opt("wornMask", { JsonPrimitive(P3Sim.wornMaskS.index) }, { P3Sim.wornMaskS.index = it.asInt }),
+        Opt("wornMask", { JsonPrimitive(P3Sim.wornMaskS.value) }, { P3Sim.wornMaskS.value = it.asInt }),
         num("ping") { P3Sim.pingS },
         bool("jitter") { P3Sim.jitterS },
         num("shortbow") { P3Sim.shortbowCooldownS },
@@ -411,7 +411,7 @@ object PartyServer {
         lastPerma = perma
         // Each player's speed, pet and masks as their settings say, the moment they change.
         for (p in Sim.players()) Sim.asPlayer(p) {
-            val now = "${P3Sim.speed}/${P3Sim.phoenix}/${P3Sim.realMasks}/${P3Sim.wornMaskS.index.takeIf { Sim.isHost(p) } ?: Players.profile(p).vals["wornMask"]}"
+            val now = "${P3Sim.speed}/${P3Sim.phoenix}/${P3Sim.realMasks}/${P3Sim.wornMaskS.value.takeIf { Sim.isHost(p) } ?: Players.profile(p).vals["wornMask"]}"
             val was = lastPersonal.put(p.uuid, now)
             if (was != null && was != now) {
                 val (s0, ph0, rm0, wm0) = was.split('/')

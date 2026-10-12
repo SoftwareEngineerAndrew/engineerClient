@@ -85,7 +85,7 @@ object P3Party {
         if (!SimServer.isSim(server)) return
         loopbackOnly = true
         val port = if (server.isPublished) server.port else HttpUtil.getAvailablePort()
-        if (!server.isPublished && !server.publishServer(MinecraftServer.MultiplayerScope.LAN, false, port)) {
+        if (!server.isPublished && !server.publishServer(server.defaultGameType, false, port)) {
             loopbackOnly = false
             EngineerClient.msg("§cCouldn't open your sim to a party.")
             return
@@ -132,7 +132,8 @@ object P3Party {
         h.sockets.clear()
         runCatching { h.ws?.sendClose(WebSocket.NORMAL_CLOSURE, "closed") }
         runCatching { h.ws?.abort() }
-        if (unpublish) mc.singleplayerServer?.let { s -> if (SimServer.isSim(s) && s.isPublished) runCatching { s.unpublishServer() } }
+        // Minecraft 26.1.2 can't close an opened world again: it stays open to this computer only
+        // (unannounced) until the world is left, and hosting again reuses its port.
         loopbackOnly = false
     }
 

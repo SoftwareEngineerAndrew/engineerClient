@@ -49,11 +49,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         val roleX = right + SIDE_W + GAP
 
         addRenderableWidget(Button.builder(Component.literal("§aRestart P3")) {
-            mc.gui.setScreen(null)
+            mc.setScreen(null)
             SimActions.send("start", "what" to Fight.Start.P3.name)
         }.tooltip(tip("Starts P3 over from its beginning, everything reset (Stop: ends it)." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY, RESTART_W, 20).build())
         addRenderableWidget(Button.builder(Component.literal("§cStop")) {
-            mc.gui.setScreen(null)
+            mc.setScreen(null)
             SimActions.send("stop")
         }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
 
@@ -92,7 +92,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 else -> Roles.label(c)
             }
             addRenderableWidget(Button.builder(Component.literal(text)) {
-                P3Sim.classS.index = i
+                P3Sim.classS.value = i
                 ModuleManager.saveConfigurations()
                 rebuildWidgets()
             }.tooltip(tip(if (other != null) "${other.name} plays the ${Roles.label(c)}. Click: you take it and they get yours (${Roles.label(P3Sim.myClass)})."
@@ -276,18 +276,18 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         val saved = HotbarLayout.has(p3Part)
         row(listOf(
             stack("§eDeath Ticks", 84, P3Sim.deathTicksS.description, DEATH_TICKS.mapIndexed { i, (name, about) ->
-                change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.index = i }
+                change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.value = i }
             } + listOf(
                 // Your own (the server puts them on you the moment they change: PartyServer.tick).
                 toggle("Real Masks", P3Sim.realMasksS.value, 84, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasksS.value },
-                change("Mask: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index },
+                change("Mask: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value },
                 change("Pet: ${if (P3Sim.phoenixS.value) "Phoenix" else "Black Cat"}", 84, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenixS.value },
             )),
             // Terminals: random or one type for all.
             stack("§eTerminals", 66, P3Sim.terminalS.description, listOf(
-                change(pick("Random", forced == null), 66, "Each terminal a random type, as on Hypixel.") { P3Sim.terminalS.index = 0 },
+                change(pick("Random", forced == null), 66, "Each terminal a random type, as on Hypixel.") { P3Sim.terminalS.value = 0 },
             ) + Terminals.Type.entries.map { t ->
-                change(pick(TYPE_NAMES.getValue(t).first, forced == t), 66, TYPE_NAMES.getValue(t).second) { lastType = t; P3Sim.terminalS.index = t.ordinal + 1 }
+                change(pick(TYPE_NAMES.getValue(t).first, forced == t), 66, TYPE_NAMES.getValue(t).second) { lastType = t; P3Sim.terminalS.value = t.ordinal + 1 }
             }),
             stack("§eSpeed", 110, P3Sim.speedS.description, listOf(
                 SpeedSlider(110),
@@ -527,7 +527,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         box.setMaxLength(4)
         box.setHint(Component.literal("§8Code"))
         addRenderableWidget(box)
-        addRenderableWidget(Button.builder(Component.literal("Join")) { if (box.value.isNotBlank()) { mc.gui.setScreen(null); P3Party.join(box.value) } }
+        addRenderableWidget(Button.builder(Component.literal("Join")) { if (box.value.isNotBlank()) { mc.setScreen(null); P3Party.join(box.value) } }
             .tooltip(tip("Joins a friend's sim by its party code.")).bounds(x + PARTY_W - 40, y, 40, 20).build())
     }
 
@@ -568,7 +568,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     /** Closes the menu, back in the game, and does it. */
     private fun act(label: String, w: Int, about: String, run: () -> Unit): Button =
-        Button.builder(Component.literal(label)) { mc.gui.setScreen(null); run() }.tooltip(tip(about)).width(w).build()
+        Button.builder(Component.literal(label)) { mc.setScreen(null); run() }.tooltip(tip(about)).width(w).build()
 
     /** One of a few choices: the chosen one green and underlined. */
     private fun pick(name: String, on: Boolean) = if (on) "§a§n$name" else name
@@ -585,10 +585,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         override fun isValidClickButton(info: MouseButtonInfo) = info.button() == 0 || info.button() == 1
         override fun onClick(event: MouseButtonEvent, doubleClick: Boolean) {
             EngineerClient.logger.info("[ec] p3sim menu click: button ${event.button()} on ${message.string}")
-            // Right only when SDL has the right button down and not the left (a left click once came through as button 1 here).
+            // Right only when GLFW has the right button down and not the left (a left click once came through as button 1 here).
             val isRight = runCatching {
-                val s = org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?)
-                (s and 4) != 0 && (s and 1) == 0
+                val h = com.engineerclient.EngineerClient.mc.window.handle()
+                org.lwjgl.glfw.GLFW.glfwGetMouseButton(h, 1) == org.lwjgl.glfw.GLFW.GLFW_PRESS && org.lwjgl.glfw.GLFW.glfwGetMouseButton(h, 0) != org.lwjgl.glfw.GLFW.GLFW_PRESS
             }.getOrElse { event.button() == 1 }
             if (isRight) right() else left()
         }

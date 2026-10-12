@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.index
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
@@ -126,7 +125,7 @@ object Masks {
 
         /** What you wear in [eq], or main's grey "Empty ... Slot" pane. */
         private fun worn(eq: EquipmentSlot, empty: String): ItemStack =
-            sp.getItemBySlot(eq).copy().takeUnless { it.isEmpty } ?: Terminals.named(net.minecraft.world.item.Items.STAINED_GLASS_PANE.gray(), "§7Empty $empty Slot")
+            sp.getItemBySlot(eq).copy().takeUnless { it.isEmpty } ?: Terminals.named(net.minecraft.world.item.Items.GRAY_STAINED_GLASS_PANE, "§7Empty $empty Slot")
 
         init { draw() }
 

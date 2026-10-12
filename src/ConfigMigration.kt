@@ -27,8 +27,8 @@ object ConfigMigration {
      *  - Sub Splits' Blood Rush Sub Splits HUD is the BR Sub Split;
      *  - Agro Leaderboard is Agro Sphere (on only if its Sphere Mode was);
      *  - BR Roles' Posmsg Re-trigger and Posmsg Here Keybind are Positional Messages' Re-trigger and
-     *    Box Here Keybind (Positional Messages itself is
-     *    looked after where it is installed).
+     *    Box Here Keybind (on the Minecraft 26.1.2 build Devgineer Client's Posmsg Extras takes them
+     *    from there).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */

@@ -38,7 +38,7 @@ import java.util.concurrent.Executors
 object BetterPFMenu : Module(
     name = "Better PF Menu",
     key = null,
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "Shows your Party Finder menu live on undonecoffee.com/betterpf/menu while you have it open. People there can make it auto refresh.",
 ) {
     private val allowAuto by BooleanSetting("Allow Auto Refresh", true, desc = "Lets someone watching your menu on the site make it click Refresh every 7.5-9.5 seconds (random) while it's open.")
@@ -91,7 +91,7 @@ object BetterPFMenu : Module(
             return
         }
         inWorldAt = now
-        val screen = CoffeeClient.mc.gui.screen() as? AbstractContainerScreen<*>
+        val screen = CoffeeClient.mc.screen as? AbstractContainerScreen<*>
         val open = screen != null && clean(screen.title.string).startsWith("Party Finder")
         if (open) lastOpen = now
         if (now - lastRead >= 1_000L) {

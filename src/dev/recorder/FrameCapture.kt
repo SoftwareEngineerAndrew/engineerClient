@@ -2,7 +2,7 @@ package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
 import net.minecraft.client.Minecraft
 import java.lang.management.ManagementFactory
 
@@ -28,7 +28,7 @@ object FrameCapture {
     private var loggedFailure = false
 
     fun install() {
-        LevelExtractionEvents.END_EXTRACTION.register { ctx -> if (Rec.active) guard("frame") { frame(ctx.camera(), ctx.deltaTracker()) } }
+        LevelRenderEvents.END_EXTRACTION.register { ctx -> if (Rec.active) guard("frame") { frame(ctx.camera(), ctx.deltaTracker()) } }
         ClientTickEvents.START_CLIENT_TICK.register { _ -> if (Rec.active) tickStartNs = System.nanoTime() }
         ClientTickEvents.END_CLIENT_TICK.register { mc -> if (Rec.active) guard("tick") { endTick(mc) } else { rows.setLength(0); frames = 0 } }
     }

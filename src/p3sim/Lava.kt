@@ -86,7 +86,7 @@ object Lava {
 
     private fun bounce(p: ServerPlayer, vy: Double, sinceLast: Int) {
         p.deltaMovement = Vec3(0.0, vy, 0.0)
-        p.syncVelocity = true
+        p.hurtMarked = true
         p.fallDistance = 0.0
         p.clearFire()
         val now = Fight.serverTick

@@ -10,7 +10,7 @@ object LeapNumbersSim {
     @JvmStatic
     fun open(): Boolean {
         val player = EngineerClient.mc.player ?: return false
-        if (EngineerClient.mc.gui.screen() != null || player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
+        if (EngineerClient.mc.screen != null || player.mainHandItem.itemId != "INFINITE_SPIRIT_LEAP") return false
         InfNumbersSim.open(0L)
         return true
     }

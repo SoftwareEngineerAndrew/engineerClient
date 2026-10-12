@@ -1,9 +1,10 @@
 package com.engineerclient.pf
 
+import com.engineerclient.enumSelector
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
@@ -32,7 +33,7 @@ import net.minecraft.world.phys.Vec3
  */
 object HubNametags : Module(
     name = "Hub Nametag Stats",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "Catacombs level, secrets and S+ floor PB over players' nametags in the Dungeon Hub.",
     toggled = true,
 ) {
@@ -45,9 +46,9 @@ object HubNametags : Module(
         M1("m", "1"), M2("m", "2"), M3("m", "3"), M4("m", "4"), M5("m", "5"), M6("m", "6"), M7("m", "7"),
     }
 
-    private val pbFloor by SelectorSetting("PB Floor", PbFloor.F7, desc = "Which floor the PB column shows.")
-    private val scale by NumberSetting("Text Scale", 1f, 0.5..2.0, 0.1f, desc = "The scale of the stat line.")
-    private val gap by NumberSetting("Gap", 0f, 0.0..1.0, 0.05f, desc = "Extra space between the player's nametag and the stat line, in blocks.")
+    private val pbFloor by enumSelector("PB Floor", PbFloor.F7, desc = "Which floor the PB column shows.")
+    private val scale by NumberSetting("Text Scale", 1f, 0.5, 2.0, 0.1f, desc = "The scale of the stat line.")
+    private val gap by NumberSetting("Gap", 0f, 0.0, 1.0, 0.05f, desc = "Extra space between the player's nametag and the stat line, in blocks.")
 
     /** Vanilla draws name tags within 64 blocks of the camera and the below-name score within 10. */
     private const val RANGE_SQ = 64.0 * 64.0
@@ -57,19 +58,19 @@ object HubNametags : Module(
     private const val LINE = 9 * 1.15 * 0.025
 
     init {
-        on<RenderExtractEvent> {
+        on<RenderEvent.Extract> {
             if (!inDungeonHub()) return@on
             val level = mc.level ?: return@on
             val me = mc.player ?: return@on
             val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false)
-            val cam = mc.gameRenderer.mainCamera().position()
+            val cam = mc.gameRenderer.mainCamera.position()
             for (p in level.players()) {
                 if (p === me || !p.isAlive || p.isInvisible) continue
                 if (p.uuid.version() != 4) continue // hub NPCs pose as players; real ones are v4
                 val pos = p.getPosition(pt)
                 if (pos.distanceToSqr(cam) > RANGE_SQ) continue
                 val nameTop = nameTop(p, pos, cam, pt) ?: continue
-                val line = lineFor(p.name.string, pbFloor.mode, pbFloor.floor)
+                val line = PbFloor.entries[pbFloor].let { f -> lineFor(p.name.string, f.mode, f.floor) }
                 if (line.isEmpty()) continue
                 // drawText puts the top of the text at pos, as name tags do: one line (at our scale) above
                 // the name's top leaves the same space vanilla leaves between the name and the score.

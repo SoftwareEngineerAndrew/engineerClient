@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.Blocks
 object Termsim : Module(
     name = "Termsim",
     key = null,
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "Where new things go: Lever Clicks.",
 ) {
     private val leverClicks by BooleanSetting("Lever Clicks", true, desc = "Left clicking a lever in a dungeon plays Odin's Secret Clicked chime and draws its box, the same as right clicking it. Uses Secret Clicked's settings (and needs it on).")

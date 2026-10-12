@@ -23,7 +23,7 @@ import org.joml.Matrix4f
 object OldBlocking : Module(
     name = "Old Blocking",
     key = null,
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "Visual only: holding right click with a sword shows 1.8.9's sword blocking in first person. Changes nothing in game.",
 ) {
     /** Whether [stack] in [hand] is drawn blocking right now. Render thread. */
@@ -31,7 +31,7 @@ object OldBlocking : Module(
     fun blocking(stack: ItemStack, hand: InteractionHand): Boolean {
         if (!enabled || hand != InteractionHand.MAIN_HAND || stack.isEmpty) return false
         val player = mc.player ?: return false
-        if (mc.gui.screen() != null || !mc.options.keyUse.isDown || player.isUsingItem) return false
+        if (mc.screen != null || !mc.options.keyUse.isDown || player.isUsingItem) return false
         return stack.`is`(ItemTags.SWORDS)
     }
 

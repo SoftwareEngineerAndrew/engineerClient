@@ -1,13 +1,13 @@
 package com.engineerclient.storm
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -47,7 +47,7 @@ import java.util.Locale
  */
 object StormPhase : Module(
     name = "Storm Phase",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "F7 P2: a server-tick counter from the start of Storm's phase, and Storm's crush hitbox at each 20-tick crush check near a pillar.",
     key = null,
 ) {
@@ -66,9 +66,9 @@ object StormPhase : Module(
     private const val RANGE = 5.0
 
     private val modulo by BooleanSetting("Modulo 20", false, desc = "Show the count modulo 20 (0-19). The crush checks are every 20 server ticks from the start of the phase, so they land on the rollover to 0.")
-    private val offset by NumberSetting("Tick Offset", 0, -10..10, 1, desc = "Shifts the count, and which ticks count as crush checks, by this many ticks - in case your own testing puts the checks on a different tick than the recorded runs did.", unit = "t")
+    private val offset by NumberSetting("Tick Offset", 0, -10, 10, 1, desc = "Shifts the count, and which ticks count as crush checks, by this many ticks - in case your own testing puts the checks on a different tick than the recorded runs did.", unit = "t")
     private val hitbox by BooleanSetting("Crush Hitbox", true, desc = "After the lightning, at every crush check with Storm within 5 blocks of a pillar: where the check had him. Green if he was inside that pillar's crush zone, red if not.")
-    private val seconds by NumberSetting("Hitbox Seconds", 5, 1..10, 1, desc = "How long each check's hitbox stays up.", unit = "s").withDependency { hitbox }
+    private val seconds by NumberSetting("Hitbox Seconds", 5, 1, 10, 1, desc = "How long each check's hitbox stays up.", unit = "s").withDependency { hitbox }
     private val margins by BooleanSetting("Hitbox Margins", true, desc = "Over each hitbox, how far in or out of the zone sideways, and how far his head was above or below the pillar's bottom.").withDependency { hitbox }
     private val outline by BooleanSetting("Pillar Outline", true, desc = "The square the hitbox has to fit inside, at the height of the pillar's bottom, with each hitbox.").withDependency { hitbox }
     private val insideColor by ColorSetting("Inside Color", Color(85, 255, 85, 0.25f), true, desc = "Hitbox colour when the check had him inside the zone.").withDependency { hitbox }
@@ -128,7 +128,7 @@ object StormPhase : Module(
             lastStep[p] = serverTicks
         }
 
-        on<RenderExtractEvent> {
+        on<RenderEvent.Extract> {
             if (snapshots.isEmpty()) return@on
             val now = System.currentTimeMillis()
             val life = seconds * 1000L

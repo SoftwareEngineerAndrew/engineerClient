@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import net.minecraft.core.component.DataComponents
@@ -289,13 +288,13 @@ object Loadouts {
             for (i in 0 until 54) c.setItem(i, Terminals.FILLER)
             for ((slot, e) in entries) if (slot < 54) c.setItem(slot, (if (slot == 34) e.withHelmet("§r§7Helmet: §r§9Bonzo's Mask") else e).stack())
             val head = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
-            c.setItem(11, if (head.isEmpty) Terminals.named(Items.STAINED_GLASS_PANE.gray(), "§7Empty Helmet Slot") else head)
+            c.setItem(11, if (head.isEmpty) Terminals.named(Items.GRAY_STAINED_GLASS_PANE, "§7Empty Helmet Slot") else head)
             for ((slot, eq) in listOf(20 to EquipmentSlot.CHEST, 29 to EquipmentSlot.LEGS, 38 to EquipmentSlot.FEET)) {
                 val s = sp.getItemBySlot(eq).copy()
                 if (!s.isEmpty) c.setItem(slot, s)
             }
             for ((i, cu) in customs().withIndex()) if (i < CUSTOM_SLOTS.size) c.setItem(CUSTOM_SLOTS[i], cu.stack())
-            c.setItem(SAVE_SLOT, Terminals.named(Items.DYE.lime(), "§aSave current as loadout").also {
+            c.setItem(SAVE_SLOT, Terminals.named(Items.LIME_DYE, "§aSave current as loadout").also {
                 it.set(DataComponents.LORE, ItemLore(listOf("§7Saves what you wear and your pet", "§7as a new loadout.", "", "§eClick to save!").map { l -> Component.literal(l).withStyle { s -> s.withItalic(false) } }))
             })
             if (P3Sim.phoenix) c.setItem(21, SimItems.head(Masks.PHOENIX_TEX, "§7[Lvl 100] §5Phoenix"))

@@ -32,16 +32,13 @@ import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket
 import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
-import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket
-import net.minecraft.network.protocol.game.VecDelta
 import net.minecraft.sounds.SoundEvent
 import net.minecraft.world.BossEvent
 import net.minecraft.world.InteractionHand
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.PositionMoveRotation
 import net.minecraft.world.level.block.state.BlockState
-import net.minecraft.world.phys.Vec3
 import java.util.Locale
 import java.util.Optional
 import java.util.UUID
@@ -101,14 +98,14 @@ object BossLog {
                 val id = (p as MoveEntityPacketAccessor).ec_getEntityId()
                 if (!watched(id)) return
                 val pos = p.hasPosition()
-                val (dx, dy, dz) = delta(p.positionDelta)
+                val dx = p.getXa().toLong(); val dy = p.getYa().toLong(); val dz = p.getZa().toLong()
                 val rot = if (p.hasRotation()) "${a(p.getYRot())},${a(p.getXRot())}" else "null,null"
                 val g = if (p.isOnGround()) 1 else 0
                 out += { r ->
                     val e = DevgineerClient.mc.level?.getEntity(id)
                     when {
                         !pos -> r.net(n, "\"m\",$id,null,null,null,$rot,$g")
-                        e != null -> { val v = p.positionDelta.decode(e.positionCodec).endPosition(); r.net(n, "\"m\",$id,${b(v.x)},${b(v.y)},${b(v.z)},$rot,$g") }
+                        e != null -> { val v = e.positionCodec.decode(dx, dy, dz); r.net(n, "\"m\",$id,${b(v.x)},${b(v.y)},${b(v.z)},$rot,$g") }
                         // Not in the world yet (added by a packet still queued): the raw delta, in 1/4096 blocks.
                         else -> r.net(n, "\"md\",$id,$dx,$dy,$dz,$rot,$g")
                     }
@@ -125,8 +122,7 @@ object BossLog {
                     r.net(n, "\"tp\",$id,${pmr(abs)},$g$flag")
                 }
             }
-            // 26.3 sync packets carry no motion (pmr never wrote it anyway).
-            is ClientboundEntityPositionSyncPacket -> if (watched(p.id())) add("\"sy\",${p.id()},${pmr(PositionMoveRotation(p.position().endPosition(), Vec3.ZERO, p.yRot(), p.xRot()))},${if (p.onGround()) 1 else 0}")
+            is ClientboundEntityPositionSyncPacket -> if (watched(p.id())) add("\"sy\",${p.id()},${pmr(p.values())},${if (p.onGround()) 1 else 0}")
             is ClientboundRotateHeadPacket -> {
                 val id = (p as RotateHeadPacketAccessor).ec_getEntityId()
                 if (watched(id)) add("\"h\",$id,${a(p.getYHeadRot())}")
@@ -134,12 +130,12 @@ object BossLog {
             is ClientboundSetEntityMotionPacket -> if (watched(p.id())) add("\"v\",${p.id()},${v(p.movement().x)},${v(p.movement().y)},${v(p.movement().z)}")
 
             is ClientboundAddEntityPacket -> {
-                if (p.type == EntityTypes.WITHER) s.bossIds += p.id
-                if (!(focus || p.type == EntityTypes.WITHER)) return
+                if (p.type == EntityType.WITHER) s.bossIds += p.id
+                if (!(focus || p.type == EntityType.WITHER)) return
                 val m = p.movement
                 val entry = "\"a\",${p.id},${js(BuiltInRegistries.ENTITY_TYPE.getKey(p.type).toString())},${b(p.x)},${b(p.y)},${b(p.z)}," +
                     "${v(m.x)},${v(m.y)},${v(m.z)},${a(p.yRot)},${a(p.xRot)},${a(p.yHeadRot)},${p.data}"
-                if (p.type != EntityTypes.PLAYER) { add(entry); return }
+                if (p.type != EntityType.PLAYER) { add(entry); return }
                 // Players (and Hypixel's player-shaped NPCs): their name, from the tab list the server
                 // fills before it adds them.
                 val uuid = p.uuid
@@ -159,10 +155,7 @@ object BossLog {
                 add("\"dmg\",${p.entityId()},${js(p.sourceType().registeredName)},${p.sourceCauseId()},${p.sourceDirectId()}$at")
             }
             is ClientboundHurtAnimationPacket -> if (watched(p.id())) add("\"hurt\",${p.id()},${a(p.yaw())}")
-            // 26.3 moved swings to their own packet and renumbered the rest; logged with 26.2's
-            // action numbers (0/3 swing main/off hand, 2 wake up, 4/5 crit/magic crit).
-            is ClientboundAnimatePacket -> if (watched(p.id)) add("\"an\",${p.id},${p.action + if (p.action == ClientboundAnimatePacket.WAKE_UP) 2 else 3}")
-            is ClientboundSwingAnimationPacket -> if (watched(p.entityId())) add("\"an\",${p.entityId()},${if (p.hand() == InteractionHand.MAIN_HAND) 0 else 3}")
+            is ClientboundAnimatePacket -> if (watched(p.id)) add("\"an\",${p.id},${p.action}")
             is ClientboundSetEntityDataPacket -> if (watched(p.id())) {
                 val vals = p.packedItems().mapNotNull { d -> dataValue(d.value())?.let { "[${d.id()},$it]" } }
                 if (vals.isNotEmpty()) add("\"d\",${p.id()},[${vals.joinToString(",")}]")
@@ -215,12 +208,6 @@ object BossLog {
     private fun sound(h: Holder<SoundEvent>): String = h.unwrapKey().map { it.identifier().toString() }.orElseGet { h.value().location().toString() }
 
     private fun pmr(p: PositionMoveRotation) = "${b(p.position().x)},${b(p.position().y)},${b(p.position().z)},${a(p.yRot())},${a(p.xRot())}"
-
-    /** A move's whole delta in 1/4096 blocks (26.3 can send it as steps, each from the one before). */
-    private fun delta(d: VecDelta): Triple<Long, Long, Long> = when (d) {
-        is VecDelta.Linear -> Triple(d.xa.toLong(), d.ya.toLong(), d.za.toLong())
-        is VecDelta.Stepped -> Triple(d.steps.sumOf { it.xa.toLong() }, d.steps.sumOf { it.ya.toLong() }, d.steps.sumOf { it.za.toLong() })
-    }
 
     private fun js(s: String) = JsonPrimitive(s).toString()
     private fun b(v: Double) = String.format(Locale.ROOT, "%.5f", v)
