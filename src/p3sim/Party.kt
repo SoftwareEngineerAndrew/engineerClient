@@ -113,17 +113,40 @@ object Party {
 
     /** A player joined or left, or took a class: the bots follow at once (one a player took leaves the fight). */
     fun rosterChanged() {
-        val now = Players.playerClasses()
-        val freed = lastPlayed - now
-        lastPlayed = now
         bots()
-        // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its role's jobs.
         val ph = Fight.phase as? GoldorPhase ?: return
-        for (c in freed) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
+        if (botsFor !== ph) return
+        // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its
+        // role's jobs; then whatever a removed bot had and no player does goes to the bots.
+        for (c in P3Plan.botOrder()) if (!Players.isPlayerClass(c) && botOf(c)?.entity == null) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
+        adoptOrphans(ph)
     }
 
-    /** The classes players had at the last roster change. */
-    private var lastPlayed: Set<DungeonClass> = emptySet()
+    /** The P3 the bots were made for (null: none, or bots were off then). */
+    private var botsFor: GoldorPhase? = null
+
+    /** Every job left undone that no player has and no bot holds: its picked or role's bot, else the least busy. */
+    private fun adoptOrphans(phase: GoldorPhase) {
+        val ghostJobs = bots.flatMap { it.ghost?.jobs.orEmpty() }.toSet()
+        val crew = bots.filter { it.ghost == null && it.entity != null }
+        if (crew.isEmpty()) return
+        val plan = P3Plan.plan()
+        for (job in P3Plan.allJobs()) {
+            if (Players.isPlayerJob(job) || job in ghostJobs || jobs.any { it.job == job }) continue
+            val st = phase.stations.firstOrNull { it.id == job }
+            if (st?.done == true) continue
+            if (st == null && job.startsWith("gate") && phase.gateIsDown(job.removePrefix("gate ").toIntOrNull() ?: 0)) continue
+            val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
+            if (s < phase.section) continue
+            val bot = P3Plan.doer(job)?.let { c -> crew.firstOrNull { it.clazz == c } }
+                ?: plan.owners[job]?.firstNotNullOfOrNull { c -> crew.firstOrNull { it.clazz == c } }
+                ?: crew.minByOrNull { b -> jobs.count { it.bot === b } } ?: continue
+            val (ts, sec) = plan.times[job] ?: (s to 5.0)
+            if (ts <= phase.section) jobs += Job(job, bot, phase.section, 0.0).also { it.at = phase.n + 20 } else jobs += Job(job, bot, ts, sec)
+            dbg("§e${bot.name}§7 picks up $job (nobody had it)")
+            walkOn(bot, phase.n)
+        }
+    }
 
     /** The players' classes' positions: who stands where. */
     private fun posOf(c: DungeonClass?): Vec3? = Players.playerOf(c)?.position()
@@ -231,7 +254,7 @@ object Party {
      * what they left undone (this section's now, later ones on the plan's times).
      */
     fun takeOver(phase: GoldorPhase, c: DungeonClass, at: Vec3?, theirs: Set<String>) {
-        if (!botsOn || Players.isPlayerClass(c)) return
+        if (botsFor !== phase || Players.isPlayerClass(c)) return
         // Its bot may be there already without a body (a full party's roster change makes one).
         val had = botOf(c)
         if (had?.entity != null) return
@@ -255,6 +278,8 @@ object Party {
             else jobs += Job(job, b, ts, sec)
         }
         dbg("§e${b.name}§7 takes over the ${c.name}'s jobs: ${jobs.filter { it.bot === b }.joinToString { it.job }}")
+        // Into the core with the rest if they're in; else off to its first job.
+        if (coreIn) { b.inSection = 5; go(b, CORE_SPOT.add(0.0, 0.0, 2.0), phase.n, -1, "the core") } else walkOn(b, phase.n)
     }
 
     fun bot(slot: Int) = bots().getOrNull(slot - 1)
@@ -328,6 +353,7 @@ object Party {
         planned = 0
         lastLeap = 0
         if (botsOn) { bots(); if (phase.from == 1) startGhosts(phase) }
+        botsFor = if (botsOn) phase else null
         resolveEes()
         if (!botsOn) return
         if (P3Sim.realMoves) Routes.preload()

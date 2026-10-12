@@ -200,9 +200,11 @@ object P3Sim : Module(
 
     private fun setMine(key: String, v: com.google.gson.JsonElement, own: () -> Unit) {
         val p = Sim.acting?.takeIf { !Sim.isHost(it) }
-        if (p == null) { own(); return }
+        // The server changed it itself (a loadout, /stats, the Pet Rod): not a menu change to act on again.
+        if (p == null) { own(); Sim.player?.let { PartyServer.notePersonal(it) }; return }
         Players.profile(p).vals[key] = v
         SimNet.send(p, "set", com.google.gson.JsonObject().also { it.add(key, v) }.toString())
+        PartyServer.notePersonal(p)
     }
     // Null-safe: a hotswapped game has the setting null until it is relaunched (off till then).
     val realMoves: Boolean get() = (realMovesS as BooleanSetting?)?.value != false

@@ -301,7 +301,17 @@ object PartyServer {
     private var lastPlan: String? = null
     private val sentRoster = HashMap<UUID, String>()
     private var lastPerma = false
-    private val lastPersonal = HashMap<UUID, String>()
+    private val lastPersonal = ConcurrentHashMap<UUID, String>()
+
+    /** [p]'s speed, pet and masks as their settings have them now. */
+    private fun personalOf(p: ServerPlayer): String = Sim.asPlayer(p) {
+        "${P3Sim.speed}/${P3Sim.phoenix}/${P3Sim.realMasks}/${P3Sim.wornMaskS.index.takeIf { Sim.isHost(p) } ?: Players.profile(p).vals["wornMask"]}"
+    }
+
+    /** The server set one of [p]'s personal settings itself: taken as it stands, so the watcher below doesn't act on it again. */
+    fun notePersonal(p: ServerPlayer) { if (SimServer.server?.isSameThread == true) lastPersonal[p.uuid] = personalOf(p) }
+
+    private var lastOrder = ""
 
     fun register() {
         SimNet.onServer("hello") { p, data -> hello(p, data) }
@@ -418,7 +428,7 @@ object PartyServer {
         lastPerma = perma
         // Each player's speed, pet and masks as their settings say, the moment they change.
         for (p in Sim.players()) Sim.asPlayer(p) {
-            val now = "${P3Sim.speed}/${P3Sim.phoenix}/${P3Sim.realMasks}/${P3Sim.wornMaskS.index.takeIf { Sim.isHost(p) } ?: Players.profile(p).vals["wornMask"]}"
+            val now = personalOf(p)
             val was = lastPersonal.put(p.uuid, now)
             if (was != null && was != now) {
                 val (s0, ph0, rm0, wm0) = was.split('/')
@@ -427,6 +437,9 @@ object PartyServer {
                 if ((rm0 != rm1 || wm0 != wm1) && !Masks.ghost) Masks.equip(p)
             }
         }
+        // A leap order changed (anyone's): Odin's leap menus follow at once.
+        val order = Sim.players().joinToString { p -> Party.mates(p).joinToString { it.name } }
+        if (order != lastOrder) { lastOrder = order; rosterDirty = true }
         if (rosterDirty || Fight.serverTick % 20 == 0) { rosterDirty = false; Sim.players().forEach { roster(it) } }
     }
 
