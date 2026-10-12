@@ -134,8 +134,12 @@ object P3Party {
 
     // ------------------------------------------------------------------ joining
 
-    /** Joins the party with [code] (the menu's Join): leaves where you are and connects to the host. */
-    fun join(code: String) {
+    /**
+     * Joins the party with [code] (the menu's Join): leaves where you are and connects to the host. [asVersion]: the
+     * version given to the relay; when the host's is ours under a channel's name (an older host sends the whole
+     * 2026.10.12-beta), it's the same code, so we ask again as that.
+     */
+    fun join(code: String, asVersion: String = version) {
         val c = code.trim().uppercase()
         if (!Regex("[A-HJ-NP-Z2-9]{4}").matches(c)) { EngineerClient.msg("§cA party code is 4 letters and numbers."); return }
         if (host != null) { EngineerClient.msg("§cClose your own party first."); return }
@@ -143,11 +147,17 @@ object P3Party {
         val sock = CompletableFuture<Socket>()
         val lock = Any()
         var wsRef: WebSocket? = null
-        connect("$RELAY/join/$c?v=${enc(version)}",
+        connect("$RELAY/join/$c?v=${enc(asVersion)}",
             onText = { t ->
                 val m = runCatching { JsonParser.parseString(t).asJsonObject }.getOrNull()
                 when (m?.get("t")?.asString) {
-                    "error" -> { runCatching { local.close() }; EngineerClient.msg("§c${m.get("msg").asString}") }
+                    "error" -> {
+                        runCatching { local.close() }
+                        val msg = m.get("msg").asString
+                        val theirs = Regex("host has EngineerClient (\\S+?),").find(msg)?.groupValues?.get(1)
+                        if (theirs != null && theirs != asVersion && theirs.substringBefore('+').substringBefore('-') == version) mc.execute { join(c, theirs) }
+                        else EngineerClient.msg("§c$msg")
+                    }
                     "ok" -> {
                         // The game connects here; what it sends goes to the relay, and the relay's bytes come back to it.
                         Thread({
