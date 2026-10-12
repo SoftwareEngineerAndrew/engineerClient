@@ -7,15 +7,16 @@ package com.engineerclient.p3sim
 object Stats {
     private var from = 1
     private val sections = IntArray(5) { -1 }
-    private var mine = 0
-    private var deaths = 0
+    /** Each player's own completions and death ticks taken, by name. */
+    private val mine = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val deaths = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
-    fun reset(from: Int) { this.from = from; sections.fill(-1); mine = 0; deaths = 0 }
+    fun reset(from: Int) { this.from = from; sections.fill(-1); mine.clear(); deaths.clear() }
 
     private fun s(ticks: Int) = "%.2fs".format(java.util.Locale.ROOT, ticks / 20.0)
 
     /** One of your own completions. */
-    fun done() { mine++ }
+    fun done(by: String) { mine.merge(by, 1, Int::plus) }
 
     fun section(s: Int, ticks: Int) {
         if (s !in 1..4 || sections[s] >= 0) return
@@ -41,7 +42,7 @@ object Stats {
         return if (old == null) " §6PB" else " §6§lNEW PB §8(was ${s(old)})"
     }
 
-    fun deathTick() { deaths++ }
+    fun deathTick(by: String) { deaths.merge(by, 1, Int::plus) }
 
     fun p3(n: Int) {
         val parts = (1..4).filter { sections[it] >= 0 }.joinToString(" §8|§7 ") { "S$it ${s(sections[it])}" }
@@ -50,7 +51,8 @@ object Stats {
         for (p in Sim.players()) Sim.asPlayer(p) {
             if (!P3Sim.showTimes) return@asPlayer
             Sim.note("$parts$total" + if (Sim.isHost(p)) best else "")
-            if (Sim.isHost(p)) Sim.note("You did §f$mine§7 of the jobs; death ticks taken: §f$deaths")
+            val n = p.gameProfile.name
+            Sim.note("You did §f${mine[n] ?: 0}§7 of the jobs; death ticks taken: §f${deaths[n] ?: 0}")
         }
     }
 

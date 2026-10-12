@@ -35,6 +35,8 @@ object HotbarLayout {
 
     /** This game's file changed (the sim's server saved a joiner's): read it again. */
     fun forgetLocal() { cache.remove("") }
+    /** A joiner's files arrived (or they left): read theirs again. */
+    fun forget(id: java.util.UUID) { cache.remove(id.toString()) }
 
     private fun saved(): Saved = cache[owner()] ?: run {
         val s = runCatching { PlayerFiles.read(PlayerFiles.HOTBAR)?.let { gson.fromJson(it, Saved::class.java) } }

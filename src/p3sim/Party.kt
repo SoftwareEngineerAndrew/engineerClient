@@ -130,7 +130,7 @@ object Party {
         for (into in 2..6) {
             val k = if (into == 6) 5 else into
             val base = P3Plan.earlyEnters.firstOrNull { it.into == into }
-            val owner = GhostPlayer.eeOwner(plan.ee[k]?.name, P3Sim.ownClass.name,
+            val owner = GhostPlayer.eeOwner(plan.ee[k]?.name, Players.playerClasses().map { it.name }.toSet(),
                 bots.filter { it.ghost?.earlyEnters(k) == true }.map { it.clazz.name }, bots.filter { it.ghost != null }.map { it.clazz.name }.toSet())
             val c = CLASSES.firstOrNull { it.name == owner }
             // The one set in Roles for this skill and class, else the preset's own, else the Early Enters tab's.
@@ -213,6 +213,33 @@ object Party {
         }
         clear(); bots.clear(); want.forEach { c -> bots += Bot(c, order.indexOf(c) + 1) }
         return bots
+    }
+
+    /**
+     * A player left mid-P3 ([theirs]: the jobs they had): their class's bot is back where they stood, at once, and does
+     * what they left undone (this section's now, later ones on the plan's times).
+     */
+    fun takeOver(phase: GoldorPhase, c: DungeonClass, at: Vec3, theirs: Set<String>) {
+        if (!botsOn || Players.isPlayerClass(c) || botOf(c) != null || bots.none { it.entity != null }) return
+        val order = P3Plan.botOrder()
+        val b = Bot(c, order.indexOf(c) + 1)
+        bots += b
+        bots.sortBy { order.indexOf(it.clazz) }
+        b.inSection = phase.section
+        spawn(b, at)
+        val plan = P3Plan.plan()
+        for (job in theirs) {
+            val st = phase.stations.firstOrNull { it.id == job }
+            if (st?.done == true) continue
+            if (st == null && job.startsWith("gate") && phase.gateIsDown(job.removePrefix("gate ").toIntOrNull() ?: 0)) continue
+            val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
+            if (s < phase.section) continue
+            val (ts, sec) = plan.times[job] ?: (s to 5.0)
+            // Its time already begun: now (a second to react).
+            if (ts <= phase.section) jobs += Job(job, b, phase.section, 0.0).also { it.at = phase.n + 20 }
+            else jobs += Job(job, b, ts, sec)
+        }
+        dbg("§e${b.name}§7 takes over the ${c.name}'s jobs: ${jobs.filter { it.bot === b }.joinToString { it.job }}")
     }
 
     fun bot(slot: Int) = bots().getOrNull(slot - 1)
@@ -327,9 +354,27 @@ object Party {
             jobs += Job(job, bot, ts, sec)
             dbg("helper: §e${bot.name}§7 does your stacked $job too, by ${sec}s into S$ts")
         }
+        // The same for a joiner's stacks, as their game sent them.
+        if (P3Plan.helper) for (pl in Sim.players()) {
+            if (Sim.isHost(pl)) continue
+            val theirs = Players.jobsOf(pl)
+            for ((job, c) in Players.profile(pl).stacks) {
+                if (job !in theirs) continue
+                val st = phase.stations.firstOrNull { it.id == job }
+                if (st?.done == true) continue
+                val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
+                if (s < from) continue
+                val bot = botOf(c)?.takeIf { it.ghost == null } ?: continue
+                var (ts, sec) = plan.times[job] ?: (s to 5.0)
+                if (ts < from) { ts = from; sec = 0.5 }
+                jobs += Job(job, bot, ts, sec)
+                dbg("helper: §e${bot.name}§7 does ${pl.gameProfile.name}'s stacked $job too, by ${sec}s into S$ts")
+            }
+        }
         // Helper: bots help on your stacks (both try; whoever's first).
         if (P3Plan.helper) for (h in P3Plan.preset().helps) {
-            if (h.section < from || !P3Plan.isMine(h.yours) || !h.jobs.all { P3Plan.isMine(it) }) continue
+            // Whoever has these jobs (the host or a joiner).
+            if (h.section < from || Sim.players().none { pl -> Players.jobsOf(pl).let { js -> h.yours in js && h.jobs.all { it in js } } }) continue
             val c = P3Plan.doer(h.by)?.takeIf { !Players.isPlayerClass(it) } ?: continue
             val bot = botOf(c)?.takeIf { it.ghost == null } ?: continue
             for (j in h.jobs) if (phase.stations.firstOrNull { it.id == j }?.done != true) {
@@ -764,7 +809,9 @@ object Party {
 
     /** "3" -> who does S[into] T3; "ee3" / "core" -> who early-enters there. */
     private fun whoFor(token: String, into: Int): DungeonClass? =
-        if (token.all { it.isDigit() }) P3Plan.doer("S$into T$token") else eeOf(into(token) ?: return null)?.owner
+        // A terminal: the player doing it (anyone's own jobs), else its bot.
+        if (token.all { it.isDigit() }) "S$into T$token".let { j -> Players.playerDoing(j)?.let(Players::classOf) ?: P3Plan.doer(j)?.takeIf { !Players.isPlayerClass(it) } ?: P3Plan.roleDoerBot(j) }
+        else eeOf(into(token) ?: return null)?.owner
 
     /**
      * [c] has leapt onto [onto] (you: been within 3 blocks of it). A ghost: it's on it, or leapt onto

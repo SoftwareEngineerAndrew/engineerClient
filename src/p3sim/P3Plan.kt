@@ -146,6 +146,9 @@ object P3Plan {
     /** [job]'s bot by the roles (a stack: the first listed that isn't you). */
     fun roleDoer(job: String): DungeonClass? = plan().owners[job]?.firstOrNull { it != P3Sim.ownClass }
 
+    /** [job]'s bot by the roles: the first listed no player plays (server side). */
+    fun roleDoerBot(job: String): DungeonClass? = plan().owners[job]?.firstOrNull { !Players.isPlayerClass(it) }
+
     /** Bots picked for jobs (skill/your class/job -> class), and your jobs a bot does too with the Helper on: for this skill and class. */
     private var picks: HashMap<String, String>? = HashMap()
     private var stacked: HashSet<String>? = HashSet()
@@ -303,9 +306,13 @@ object P3Plan {
     /** The shared parts as the host last sent them: only a change from these goes back. */
     private var partyShared: String? = null
 
+    /** A joiner's own jobs from before the party (the host's skill, or a class the party gave them, makes others). */
+    private var ownMine: List<String>? = null
+    private var ownMineFor: String? = null
+
     /** A joiner's game: the host's shared parts arrived. */
     fun receiveShared(o: com.google.gson.JsonObject) {
-        if (ownShared == null) ownShared = sharedJson()
+        if (ownShared == null) { ownShared = sharedJson(); ownMine = mine().toList(); ownMineFor = mineFor }
         applyShared(o, save = false)
         partyShared = sharedJson().toString()
     }
@@ -313,7 +320,10 @@ object P3Plan {
     /** A joiner's game left the party: their own shared parts back. */
     fun leaveParty() {
         ownShared?.let { applyShared(it, save = false) }
-        ownShared = null; partyShared = null
+        // Their own jobs back, unless the party's were for the same skill and class (then their edits there stand).
+        val om = ownMine; val omf = ownMineFor
+        if (om != null && omf != null && omf != mineFor) { mine.clear(); mine += om; mineFor = omf }
+        ownShared = null; partyShared = null; ownMine = null; ownMineFor = null
     }
 
     /** A joiner's plan for the server: their jobs and spots (and the shared parts, if their menu changed them). */
@@ -322,6 +332,7 @@ object P3Plan {
         o.add("mine", com.google.gson.JsonArray().also { a -> m.forEach { a.add(it) } })
         o.addProperty("mineFor", mineFor)
         o.add("order", com.google.gson.JsonArray().also { a -> botOrder().forEach { a.add(it.name) } })
+        o.add("stacks", com.google.gson.JsonObject().also { st -> m.filter { isStacked(it) }.forEach { j -> helperOf(j)?.let { st.addProperty(j, it.name) } } })
         o.add("spots", com.google.gson.JsonObject().also { s ->
             spots().forEach { (k, p) -> s.add(k, com.google.gson.JsonArray().also { a -> a.add(p.x); a.add(p.y); a.add(p.z); a.add(p.yaw); a.add(p.pitch) }) }
         })
@@ -339,7 +350,9 @@ object P3Plan {
             val waitForYou = own?.get("waitForYou")?.asBoolean ?: waitForYou
             val helper = own?.get("helper")?.asBoolean ?: helper
             val leapGap = own?.get("leapGap")?.asDouble ?: leapGap
-            val s = Saved(skill, mine.toList(), mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
+            // In a party with other jobs than their own: their own are what's kept.
+            val keepOwn = own != null && ownMineFor != null && ownMineFor != mineFor
+            val s = Saved(skill, if (keepOwn) ownMine.orEmpty() else mine.toList(), if (keepOwn) ownMineFor else mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
                 earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList(),
                 spots().mapValues { (_, p) -> listOf(p.x, p.y, p.z, p.yaw.toDouble(), p.pitch.toDouble()) }, HashMap(pickMap()), stackSet().toList())
             file.parentFile.mkdirs()

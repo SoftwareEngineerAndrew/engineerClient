@@ -366,7 +366,7 @@ object DungeonSplits : Module(
      * singleplayer (the P3 Sim).
      */
     private fun pasteLastIn() {
-        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer()) return
+        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer() || com.engineerclient.p3sim.P3Sim.inSim) return
         val me = mc.player?.name?.string ?: return
         val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
         if (mates.size != 4 || mates.any { it.isDead }) return

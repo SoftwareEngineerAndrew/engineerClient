@@ -207,9 +207,18 @@ object Fight {
     fun leave(player: ServerPlayer) {
         // A crystal they carried goes back on its stand (else Maxor's side waits for it forever).
         (phase as? P1Maxor)?.playerLeft(player)
+        // Their ghost state goes (a pending revive with it), so a rejoin starts clean.
+        Masks.leftOne(player)
+        Players.forgetFiles(player)
+        val joiner = !Sim.isHost(player)
+        val c = Players.classOf(player)
+        val theirs = Players.jobsOf(player)
+        val at = player.position()
         Players.left(player)
         PartyServer.left(player)
         Party.rosterChanged()
+        // Their bot back mid-P3, doing what they left.
+        if (joiner) (phase as? GoldorPhase)?.let { Party.takeOver(it, c, at, theirs) }
         if (!Sim.isHost(player)) Sim.everyone { Sim.note("§e${player.gameProfile.name}§7 left the party.") }
     }
 
@@ -233,7 +242,13 @@ object Fight {
         // As sent on main: night vision amplifier 1 with flags 7 (ambient, particles, icon); haste and mining fatigue flags 3 (no icon).
         player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
-        SimItems.giveHotbar(player)
+        // P1/P2's hotbar mid-run there (a joiner arriving), else P3's.
+        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm)
+        // Nothing left of a ghost (a rejoin keeps the saved effects and flight).
+        if (player.gameMode() != GameType.CREATIVE) {
+            player.removeEffect(MobEffects.INVISIBILITY)
+            player.abilities.flying = false; player.abilities.mayfly = false; player.onUpdateAbilities()
+        }
         // Haste 0 + Mining Fatigue 255 unless the Dungeonbreaker is in hand (main toggles them with the held slot).
         SimItems.miningEffects(player, force = true)
     }
