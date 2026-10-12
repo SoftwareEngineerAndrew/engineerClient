@@ -451,6 +451,15 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                     Practice.removeLeapWaypoint(); rebuildWidgets()
                 }),
             change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
+            change("Export", 100, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
+                val code = Practice.exportCode()
+                mc.keyboardHandler.clipboard = code
+                EngineerClient.msg("§7Custom practice code copied: §f$code")
+            },
+            change("Import", 100, "Replaces your custom practice with the code on your clipboard.") {
+                if (Practice.importCode(mc.keyboardHandler.clipboard)) EngineerClient.msg("§7Custom practice imported (S${Practice.customSection}, ${Practice.customJobs.size} job(s), ${Practice.checkpoints.size} checkpoint(s), ${Practice.leapWaypoints.size} leap waypoint(s)).")
+                else EngineerClient.msg("§cYour clipboard doesn't hold a custom practice code.")
+            },
             DelaySlider(100),
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
                 if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
