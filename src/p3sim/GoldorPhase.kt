@@ -338,7 +338,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Someone else finishing the terminal you're in closes your window first, in the same tick.
         if (st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st, except = Sim.players().firstOrNull { it.gameProfile.name == by })
         // Your stats and recording are the host's.
-        if (by == Sim.hostName) { Stats.done(); GhostCapture.event("done", st.id) }
+        if (Sim.isPlayerName(by)) Stats.done(by!!)
+        if (by == Sim.hostName) GhostCapture.event("done", st.id)
         // [twice]: Hypixel processes a Lights left click twice, so the announcement goes out again in the same tick
         // (counted once). Everyone sees it.
         Sim.everyone {
@@ -477,7 +478,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death Ticks: Off: nothing at all.
         if (P3Sim.deathTicks == 0) return
         deaths++
-        if (Sim.isHost(p)) Stats.deathTick()
+        Stats.deathTick(p.gameProfile.name)
         // No line stand for death ticks. Quiet wither.ambient 1/1 HOSTILE at you, not the loud boss sound;
         // after the death/proc chat and sounds.
         val line = {

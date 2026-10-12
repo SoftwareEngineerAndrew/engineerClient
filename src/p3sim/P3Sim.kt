@@ -237,11 +237,11 @@ object P3Sim : Module(
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             dispatcher.register(net.minecraft.commands.Commands.literal("stats")
                 .requires { it.server === SimServer.server }
-                .executes { ctx -> ctx.source.player?.let { p -> Masks.openStats(p) }; 1 })
+                .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Masks.openStats(p) } }; 1 })
             // /loadouts: Hypixel's Loadouts window, same sim-server-only rule.
             dispatcher.register(net.minecraft.commands.Commands.literal("loadouts")
                 .requires { it.server === SimServer.server }
-                .executes { ctx -> ctx.source.player?.let { p -> Loadouts.open(p) }; 1 })
+                .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Loadouts.open(p) } }; 1 })
         }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             val cmd = ClientCommands.literal("p3sim").executes { openMenuOrSim(); 1 }
@@ -340,20 +340,21 @@ object P3Sim : Module(
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7
         DungeonListener.inBoss = true
-        // The party as the sim's server has it (players and bots, in your leap order), else (before it says) your own sim's bots.
-        val sent = PartyClient.team.takeIf { PartyClient.me != null && it.isNotEmpty() }
-        val names = sent?.joinToString { "${it.name}/${it.clazz}" } ?: Party.bots().joinToString { it.name }
-        val mine = PartyClient.me?.takeIf { sent != null } ?: ownClass
-        if (DungeonListener.dungeonTeammates.size != 1 + (sent?.size ?: Party.bots().size) || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != mine.ordinal || roster != names) {
+        // The party as the sim's server has it (players and bots, in your leap order); none until it says (the server's
+        // own lists aren't this thread's to read).
+        val sent = PartyClient.team.takeIf { PartyClient.me != null && it.isNotEmpty() } ?: return
+        val names = sent.joinToString { "${it.name}/${it.clazz}" }
+        val mine = PartyClient.me ?: return
+        if (DungeonListener.dungeonTeammates.size != 1 + sent.size || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != mine.ordinal || roster != names) {
             teamClass = mine.ordinal
             roster = names
             val team = arrayListOf(DungeonPlayer(me, mine, 50, mc.player?.skin))
-            if (sent != null) sent.forEach { m ->
+            sent.forEach { m ->
                 // A player's skin from their entity here, when it's loaded.
                 val skin = if (m.player) mc.level?.players()?.firstOrNull { it.gameProfile.name == m.name }?.let { (it as? net.minecraft.client.player.AbstractClientPlayer)?.skin } else null
                 team += DungeonPlayer(m.name, m.clazz, 50, skin)
             }
-            else Party.bots().forEach { team += DungeonPlayer(it.name, it.clazz, 50, null) }
+
             val others = team.filter { it.name != me }
             DungeonListener.dungeonTeammates = team
             DungeonListener.dungeonTeammatesNoSelf = others

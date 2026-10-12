@@ -469,6 +469,8 @@ object TermInfo : Module(
         for (i in 0 until section - 1) with(sections[i]) { termsDone = terms; leversDone = 2; deviceDone = true; gateDestroyed = true }
         active = section - 1
         sectionsOver = section - 1
+        // S1-S3 done: the core's watched from S4's start (as simSection() has it on the host's game).
+        coreWatch = section == 4
         sectionStart = serverTicks
     }
 
