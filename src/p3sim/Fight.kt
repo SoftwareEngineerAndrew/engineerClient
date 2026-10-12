@@ -87,8 +87,10 @@ object Fight {
     )
 
     /** Runs [run] after the simulated ping, in real time: at the first server tick on or after the delay (at once with none). */
-    fun afterPing(what: String, run: () -> Unit) {
-        val ms = pingMs()
+    fun afterPing(what: String, run: () -> Unit) = afterMs(pingMs(), what, run)
+
+    /** Runs [run] [ms] real ms from now, at the first server tick on or after it (at once for 0). */
+    fun afterMs(ms: Double, what: String, run: () -> Unit) {
         val p = phase
         if (ms <= 0.0) run()
         else timed += Timed(System.nanoTime() + (ms * 1e6).toLong(), what, epoch) { if (phase === p) run() }
