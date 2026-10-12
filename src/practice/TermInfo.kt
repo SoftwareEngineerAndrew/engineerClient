@@ -49,7 +49,8 @@ import java.util.Locale
  *    from Goldor's first line, each next one from the last one's end.
  *  - Highlight Levers: a blue box around each P3 lever's hitbox (and the lights device's), in F7/M7 boss.
  *  - Core Leap: once S3 is done, the side of the screen where the first teammate inside the core will be in
- *    Odin's Leap Menu, in gold, so you're already flicking there when you open the menu. Over terminals too.
+ *    Odin's Leap Menu, in gold, so you're already flicking there when you open the menu. Behind terminals too:
+ *    only ever drawn as part of the HUD, which every screen draws over, so it never covers or recolours a slot.
  *
  * Terminals run from Goldor's first line (or the first task message) to "The Core entrance is
  * opening!". Chat and titles are read straight off the network.
@@ -63,7 +64,7 @@ object TermInfo : Module(
     private val simple by BooleanSetting("Simple Mode", false, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
     private val sectionSeconds by NumberSetting("Section Time Seconds", 1.5, 0.5, 10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
-    private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown over terminals too.")
+    private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.")
     private val coreDropdown by DropdownSetting("Core Leap Look", desc = "").withDependency { coreLeap }
     private val corePreview by BooleanSetting("Core Preview", false, desc = "Shows the highlight now, top right, as if someone were in the core (also over this menu), to try the looks below. Turn it off after.").withDependency { coreLeap && coreDropdown }
     private val coreStyleIndex by enumSelector("Core Style", CoreStyle.QUADRANT, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.").withDependency { coreLeap && coreDropdown }
@@ -88,8 +89,8 @@ object TermInfo : Module(
     private val corePulseSpeed by NumberSetting("Core Pulse Speed", 1.5, 0.25, 6.0, 0.25, desc = "Pulses a second.", unit = "/s").withDependency { coreLeap && coreDropdown && corePulse }
     private val corePulseLow by NumberSetting("Core Pulse Low", 30, 0, 100, 5, desc = "The faintest point of the pulse, in % of the colour's opacity.", unit = "%").withDependency { coreLeap && coreDropdown && corePulse }
     private val coreFadeIn by NumberSetting("Core Fade In", 0, 0, 1000, 50, desc = "Fades in over this long once someone is in the core.", unit = "ms").withDependency { coreLeap && coreDropdown }
-    private val coreOverScreens by BooleanSetting("Core Over Screens", true, desc = "Also drawn on top of open screens: terminals, chat, your inventory. Off: only with no screen open.").withDependency { coreLeap && coreDropdown }
-    private val coreOverLeap by BooleanSetting("Core Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, on top of it.").withDependency { coreLeap && coreDropdown && coreOverScreens }
+    private val coreOverScreens by BooleanSetting("Core Over Screens", true, desc = "Also shown while a screen is open (terminals, chat, your inventory), in the background behind it: the screen always draws over it, so it never hides or recolours a terminal. Off: only with no screen open.").withDependency { coreLeap && coreDropdown }
+    private val coreOverLeap by BooleanSetting("Core Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, behind it.").withDependency { coreLeap && coreDropdown && coreOverScreens }
     private val coreHideInCore by BooleanSetting("Core Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.").withDependency { coreLeap && coreDropdown }
 
     private enum class CoreStyle(private val label: String, val area: Boolean) {
@@ -275,17 +276,18 @@ object TermInfo : Module(
     /**
      * Core Leap: the part of the screen where the first teammate seen in the core sits in Odin's Leap Menu
      * (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right), so the flick is already on its way when the
-     * menu opens. Drawn by the HUD with no screen open, and after the screen ([overScreen]) with one.
+     * menu opens. Only ever drawn by the HUD, which renders before any open screen, so a terminal (vanilla or
+     * Odin's) always draws over it: it can flash behind one but never covers or recolours a slot.
      */
-    private fun drawCoreLeap(gfx: GuiGraphicsExtractor, overScreen: Boolean) {
+    private fun drawCoreLeap(gfx: GuiGraphicsExtractor) {
         if (!enabled || !coreLeap || mc.options.hideGui) return
         val self = mc.player ?: return
         val screen = mc.screen
         val preview = corePreview
-        if (overScreen) {
-            if (screen == null || !(coreOverScreens || preview)) return
+        if (screen != null) {
+            if (!(coreOverScreens || preview)) return
             if (!coreOverLeap && isLeapScreen(screen)) return
-        } else if (screen != null) return
+        }
         val i: Int
         val name: String
         val clazz: String
@@ -542,13 +544,8 @@ object TermInfo : Module(
         on<TickEvent.Server> { serverTicks++ }
         on<RenderEvent.Extract> { com.engineerclient.EngineerClient.safely("highlight levers") { drawLevers() } }
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "core_leap")) { gfx, _ ->
-            com.engineerclient.EngineerClient.safely("core leap") { trackCore(); drawCoreLeap(gfx, overScreen = false) }
-        }
-        // Over terminals and other screens too: after the screen is drawn, so on top of it.
-        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
-            net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.afterExtract(screen).register { _, gfx, _, _, _ ->
-                com.engineerclient.EngineerClient.safely("core leap screen") { trackCore(); drawCoreLeap(gfx, overScreen = true) }
-            }
+            // The HUD is drawn under any open screen too, so this is also the behind-the-terminal draw.
+            com.engineerclient.EngineerClient.safely("core leap") { trackCore(); drawCoreLeap(gfx) }
         }
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
