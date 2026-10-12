@@ -98,7 +98,7 @@ object P3Party {
     private fun onHostText(h: Host, text: String) {
         val m = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return
         when (m.get("t")?.asString) {
-            "code" -> { h.code = m.get("code").asString; EngineerClient.msg("§7Party code: §b§l${h.code}§7 - friends type it in their P3 Sim menu.") }
+            "code" -> { h.code = m.get("code").asString; EngineerClient.msg("§7Party code: §b§l${h.code}§7") }
             "open" -> {
                 val id = m.get("id").asInt
                 // A connection into your own server for this joiner; what it sends back goes to the relay as [id][bytes].
