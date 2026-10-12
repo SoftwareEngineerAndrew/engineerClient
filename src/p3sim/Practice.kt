@@ -301,6 +301,22 @@ object Practice {
     /** No custom practice: start, jobs and checkpoints gone. */
     fun clearCustom() { customStart = null; customSection = 0; customJobs.clear(); checkpoints.clear(); leapWaypoints.clear(); save() }
 
+    /** The custom practice as a code to share ([PracticeCode]). */
+    fun exportCode(): String = PracticeCode.encode(PracticeCode.Custom(customStart, customJobs.toSet(), checkpoints.toList(), leapWaypoints.toList(), startDelay))
+
+    /** Replaces the custom practice with the one in [code]; false: not a code. */
+    fun importCode(code: String): Boolean {
+        val c = PracticeCode.decode(code) ?: return false
+        customStart = c.start
+        customSection = c.start?.let { sectionAt(it.x, it.y, it.z) } ?: 0
+        customJobs.clear(); customJobs += c.jobs
+        checkpoints.clear(); checkpoints += c.checkpoints
+        leapWaypoints.clear(); leapWaypoints += c.leaps
+        startDelay = c.delay
+        save()
+        return true
+    }
+
     /** Leap waypoints: the leap menu's slots 1-4 (top left, top right, bottom left, bottom right) land here in a custom practice. */
     val leapWaypoints = ArrayList<Spots.Spot>()
 
