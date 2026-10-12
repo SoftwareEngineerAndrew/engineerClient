@@ -104,11 +104,16 @@ object Players {
         val spots = ConcurrentHashMap<String, Spots.Spot>()
         /** Their leap order (the other four classes, slots 1-4), as their menu has it; null: Odin's. */
         @Volatile var order: List<DungeonClass>? = null
+        /** Their stacked jobs (right click) and the bot that helps on each, as their game picked it. */
+        @Volatile var stacks: Map<String, DungeonClass> = emptyMap()
     }
 
     private val profiles = ConcurrentHashMap<UUID, Profile>()
 
     fun profile(p: ServerPlayer): Profile = profiles.getOrPut(p.uuid) { Profile() }
+
+    /** [p]'s hotbar and loadouts are read again (their game sent them, or they left). */
+    fun forgetFiles(p: ServerPlayer) { HotbarLayout.forget(p.uuid); Loadouts.forget(p.uuid) }
 
     /** The acting player's profile when they're a joiner (their settings over the host's), else null. */
     fun joiner(): Profile? = Sim.acting?.takeIf { !Sim.isHost(it) }?.let { profiles[it.uuid] }
@@ -320,6 +325,7 @@ object PartyServer {
             val o = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: JsonObject()
             val prof = Players.profile(p)
             o.getAsJsonObject("files")?.entrySet()?.forEach { (k, v) -> prof.files[k] = v.asString }
+            Players.forgetFiles(p)
             o.getAsJsonObject("settings")?.entrySet()?.forEach { (k, v) -> prof.vals[k] = v }
             val want = prof.vals["class"]?.asString?.let { Players.classByName(it) }
             prof.asked = want?.name
@@ -340,7 +346,7 @@ object PartyServer {
         val o = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: return
         if (Sim.isHost(p)) return  // the host's are their own settings, read directly
         val prof = Players.profile(p)
-        o.getAsJsonObject("files")?.entrySet()?.forEach { (k, v) -> prof.files[k] = v.asString }
+        o.getAsJsonObject("files")?.let { f -> f.entrySet().forEach { (k, v) -> prof.files[k] = v.asString }; Players.forgetFiles(p) }
         o.getAsJsonObject("settings")?.entrySet()?.forEach { (k, v) -> prof.vals[k] = v }
         // A class picked in their menu: theirs, swapped with whoever had it. (Not the one they came asking for and were
         // refused, still in their menu until the server's answer reaches it.)
@@ -369,6 +375,7 @@ object PartyServer {
         val prof = Players.profile(p)
         o.getAsJsonArray("mine")?.let { a -> prof.mine = a.map { it.asString }.toSet(); prof.mineFor = o.get("mineFor")?.asString }
         o.getAsJsonArray("order")?.let { a -> prof.order = a.mapNotNull { Players.classByName(it.asString) } }
+        o.getAsJsonObject("stacks")?.let { st -> prof.stacks = st.entrySet().mapNotNull { (k, v) -> Players.classByName(v.asString)?.let { k to it } }.toMap() }
         o.getAsJsonObject("spots")?.let { sp ->
             prof.spots.clear()
             sp.entrySet().forEach { (k, v) ->
@@ -474,7 +481,7 @@ object PartyClient {
         SimNet.onClient("shared") { data ->
             if (!joiner) return@onClient
             val o = JsonParser.parseString(data).asJsonObject
-            if (!gotShared) { gotShared = true; ownShared = PartySettings.snapshot(PartySettings.SHARED) }
+            if (!gotShared) { gotShared = true; ownShared = PartySettings.snapshot(PartySettings.SHARED).also { keepOwn(it) } }
             PartySettings.apply(PartySettings.SHARED, o)
             lastShared = PartySettings.snapshot(PartySettings.SHARED)
         }
@@ -500,6 +507,23 @@ object PartyClient {
         SimNet.onClient("say") { EngineerClient.msg(it) }
         ClientPlayConnectionEvents.DISCONNECT.register { _, _ -> mc.execute { left() } }
     }
+
+    private var restoredOwn = false
+
+    /** A game that quit or crashed in a party: its own shared settings back from the copy kept then (once, configs loaded). */
+    private fun restoreOwn() {
+        restoredOwn = true
+        EngineerClient.safely("p3sim own settings restore") {
+            if (!ownFile.exists()) return@safely
+            runCatching { PartySettings.apply(PartySettings.SHARED, JsonParser.parseString(ownFile.readText()).asJsonObject) }
+            com.odtheking.odin.features.ModuleManager.saveConfigurations()
+            ownFile.delete()
+        }
+    }
+
+    /** A joiner's own shared settings while they're in a party (the party's are in their config meanwhile). */
+    private val ownFile get() = java.io.File(mc.gameDirectory, "config/engineerclient/p3sim-own-settings.json")
+    private fun keepOwn(o: JsonObject) = EngineerClient.safely("p3sim own settings keep") { ownFile.parentFile.mkdirs(); ownFile.writeText(o.toString()) }
 
     /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. */
     private fun fx(what: String) {
@@ -527,6 +551,7 @@ object PartyClient {
 
     /** Client tick: say hello once in a sim; send our settings and plan as they change. */
     fun tick() {
+        if (!restoredOwn && !P3Sim.inSim) restoreOwn()
         if (!P3Sim.inSim || mc.player == null) { if (helloSent) left(); return }
         if (!helloSent) {
             helloSent = true
@@ -566,7 +591,12 @@ object PartyClient {
 
     /** Out of the sim: a joiner's own settings and plan back. */
     private fun left() {
-        if (gotShared) ownShared?.let { PartySettings.apply(PartySettings.SHARED, it) }
+        if (gotShared) ownShared?.let {
+            PartySettings.apply(PartySettings.SHARED, it)
+            // Saved as theirs again (the party's were saved while in it), and the crash copy is no longer needed.
+            EngineerClient.safely("p3sim own settings back") { com.odtheking.odin.features.ModuleManager.saveConfigurations() }
+            ownFile.delete()
+        }
         if (helloSent && !P3Sim.localSim) P3Plan.leaveParty()
         helloSent = false; gotShared = false; ownShared = null; lastShared = null; lastProfile = null; lastPlan = null
         team = emptyList(); me = null; party = false; phase = ""
@@ -651,8 +681,9 @@ object SimActions {
             "hotbarSave" -> Sim.chat("§8[§6P3 Sim Beta§8] " + HotbarLayout.save(p, b("p3")))
             "hotbarReset" -> Sim.chat("§8[§6P3 Sim Beta§8] " + HotbarLayout.reset(b("p3")))
             "resetItems" -> SimItems.giveHotbar(p, b("p3"))
-            "practiceCustom" -> Practice.startCustom()
-            "practicePreset" -> Practice.startPreset(s("name") ?: return)
+            // Practice runs on the host's own setup (their start, jobs, checkpoints, timer).
+            "practiceCustom", "practicePreset" -> if (!Sim.isHost(p)) Sim.note("Practice is the host's: their start, jobs and checkpoints.")
+                else if (s("a") == "practiceCustom") Practice.startCustom() else Practice.startPreset(s("name") ?: return)
         }
     }
 }
