@@ -42,11 +42,12 @@ object Mage {
     private val SHEEP_SURGE = 4..6
     private const val SHEEP_LIFE = 60
 
-    private var beamReady = 0
+    // Each player's own ([perPlayer]): their beam, sheep and cooldowns.
+    private var beamReady by perPlayer { 0 }
     /** The server ticks of the last beam clicks (for the sheep's burst). */
-    private val clicks = ArrayDeque<Int>()
-    private var sheepReady = 0
-    private var readyNoted = true
+    private val clicks: ArrayDeque<Int> by perPlayer { ArrayDeque() }
+    private var sheepReady by perPlayer { 0 }
+    private var readyNoted by perPlayer { true }
 
     /** A sheep that can't push you, be pushed or be aimed at. */
     class GhostSheep(level: net.minecraft.world.level.Level) : Sheep(EntityTypes.SHEEP, level) {
@@ -57,7 +58,7 @@ object Mage {
     }
 
     private class Flying(val e: Sheep, val at: Int) { var boomAt = -1 }
-    private val sheep = ArrayList<Flying>()
+    private val sheep: ArrayList<Flying> by perPlayer { ArrayList() }
 
     /** Mage, or any class with Mage Beam On All Classes: the beam and Guided Sheep are yours. */
     fun isMage() = P3Sim.myClass == DungeonClass.MAGE || P3Sim.mageAll

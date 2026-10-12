@@ -398,8 +398,8 @@ object Terminals {
         }
 
         /** Called every server tick while open. */
-        fun tick() {
-            if (player.containerMenu !== this) { open -= this; return }
+        fun tick() = Sim.asPlayer(player) {
+            if (player.containerMenu !== this) { open -= this; return@asPlayer }
             val age = Fight.serverTick - opened
             term.tick(age)
             if (Fight.serverTick > answeredAt) { copyIn(); broadcastChanges() }
@@ -465,14 +465,13 @@ object Terminals {
     fun tick() { open.toList().forEach { it.tick() } }
 
     fun closeAll() {
-        Sim.player?.let { if (it.containerMenu is TerminalMenu) it.closeContainer() }
+        Sim.players().forEach { if (it.containerMenu is TerminalMenu) it.closeContainer() }
         open.clear()
     }
 
-    /** Someone else finished [station]: your window on it closes (Hypixel has no terminal lock). */
-    fun closeFor(station: Station) {
-        val p = Sim.player ?: return
-        if ((p.containerMenu as? TerminalMenu)?.station === station) p.closeContainer()
+    /** Someone finished [station]: everyone else's window on it closes (Hypixel has no terminal lock). */
+    fun closeFor(station: Station, except: ServerPlayer? = null) {
+        for (p in Sim.players()) if (p !== except && (p.containerMenu as? TerminalMenu)?.station === station) p.closeContainer()
     }
 
     /** Is the player in [station]'s terminal right now. */

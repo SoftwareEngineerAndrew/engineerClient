@@ -68,6 +68,10 @@ object P3Party {
     @Volatile private var host: Host? = null
 
     val hosting get() = host != null
+
+    /** In someone's party right now: connected to a host through the relay (the server entry [join] makes). */
+    val joined: Boolean get() = !mc.hasSingleplayerServer() && mc.currentServer?.name?.startsWith(PARTY_NAME) == true
+    private const val PARTY_NAME = "P3 Sim party"
     /** The party's code, null until the relay gives it. */
     val code: String? get() = host?.code
 
@@ -172,7 +176,7 @@ object P3Party {
                         mc.execute {
                             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Joining party $c"))
                             ConnectScreen.startConnecting(TitleScreen(), mc, ServerAddress("127.0.0.1", local.localPort),
-                                ServerData("P3 Sim party $c", "127.0.0.1:${local.localPort}", ServerData.Type.OTHER), false, null)
+                                ServerData("$PARTY_NAME $c", "127.0.0.1:${local.localPort}", ServerData.Type.OTHER), false, null)
                         }
                     }
                 }

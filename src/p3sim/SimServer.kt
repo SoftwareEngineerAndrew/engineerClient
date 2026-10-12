@@ -76,6 +76,9 @@ object SimServer {
         ServerPlayConnectionEvents.JOIN.register { handler, _, s ->
             if (s === server) EngineerClient.safely("p3sim join") { Fight.join(handler.player) }
         }
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, s ->
+            if (s === server) EngineerClient.safely("p3sim leave") { Fight.leave(handler.player) }
+        }
         SimItems.register()
     }
 
@@ -88,7 +91,8 @@ object SimServer {
             Commands.literal("pc").then(Commands.argument("message", StringArgumentType.greedyString()).executes { c ->
                 val msg = StringArgumentType.getString(c, "message")
                 val name = c.source.player?.gameProfile?.name ?: "You"
-                Sim.chat("§9Party §8> §b[MVP§4+§b] $name§f: $msg")
+                // The whole party sees it (sent by whoever typed it).
+                Sim.everyone { Sim.chat("§9Party §8> §b[MVP§4+§b] $name§f: $msg") }
                 1
             })
         )

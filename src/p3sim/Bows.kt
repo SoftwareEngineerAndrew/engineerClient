@@ -64,19 +64,20 @@ object Bows {
 
     /** A click (or a drawn bow's release, at [power] 0.1-1 of a full draw). */
     private class Click(val bow: String, val left: Boolean, val aim: Aim, val power: Float = 1f)
-    private val clicks = ArrayList<Click>()
+    // Each player's own ([perPlayer]): their clicks, cooldowns and arrows.
+    private val clicks: ArrayList<Click> by perPlayer { ArrayList() }
     private class Later(val at: Int, val run: () -> Unit)
-    private val later = ArrayList<Later>()
+    private val later: ArrayList<Later> by perPlayer { ArrayList() }
     /** Your aim at the end of each recent tick, newest last (a buffered click fires with the server's view then). */
-    private val history = ArrayDeque<Aim>()
+    private val history: ArrayDeque<Aim> by perPlayer { ArrayDeque() }
 
-    private var shotReady = 0
-    private var biteReady = 0
+    private var shotReady by perPlayer { 0 }
+    private var biteReady by perPlayer { 0 }
     /** A click made during the cooldown: the bow it was made with, fired the tick the cooldown ends. */
-    private var pendingShot: String? = null
-    private var pendingBite = false
+    private var pendingShot: String? by perPlayer { null }
+    private var pendingBite by perPlayer { false }
 
-    private val live = ArrayList<SimArrow>()
+    private val live: ArrayList<SimArrow> by perPlayer { ArrayList() }
 
     fun reset() {
         clicks.clear(); later.clear(); history.clear()
@@ -94,7 +95,7 @@ object Bows {
     /** A click with shortbow [bow] ([left]: a swing). It lands after the simulated ping, aimed as you were when you clicked. */
     fun click(p: ServerPlayer, bow: String, left: Boolean) {
         val a = aim(p)
-        Fight.afterPing("shortbow") { if (Sim.player === p && !p.isRemoved) clicks += Click(bow, left, a) }
+        Fight.afterPing("shortbow") { if (!p.isRemoved) clicks += Click(bow, left, a) }
     }
 
     /**
@@ -103,7 +104,7 @@ object Bows {
      */
     fun release(p: ServerPlayer, bow: String, power: Float) {
         val a = aim(p)
-        Fight.afterPing("bow") { if (Sim.player === p && !p.isRemoved) clicks += Click(bow, false, a, power) }
+        Fight.afterPing("bow") { if (!p.isRemoved) clicks += Click(bow, false, a, power) }
     }
 
     /** End of every server tick (after entities moved): clicks, buffered clicks, Duplex releases, Hydra Strike. */
@@ -192,7 +193,10 @@ object Bows {
                 return null
             }
         }
-        val a = SimArrow(level, at.x, at.y, at.z) { _, h -> hit(h, onHit) }
+        // Its hits are the shooter's (their Hydra stacks, their gate), whenever they land.
+        val shooter = Sim.acting ?: owner
+        val all = Sim.toAll
+        val a = SimArrow(level, at.x, at.y, at.z) { _, h -> Sim.asPlayer(shooter, all) { hit(h, onHit) } }
         a.immune = ::immune
         if (owner != null) a.setOwner(owner)
         a.pickup = AbstractArrow.Pickup.DISALLOWED
@@ -245,13 +249,13 @@ object Bows {
      * once-a-second grid.
      */
     object Hydra {
-        var stacks = 0
+        var stacks by perPlayer { 0 }
             private set
-        private var lastGain = -100
-        private var nextLoss = Int.MAX_VALUE
-        private var period = 0
-        private var grid = 0
-        private var shown = 0
+        private var lastGain by perPlayer { -100 }
+        private var nextLoss by perPlayer { Int.MAX_VALUE }
+        private var period by perPlayer { 0 }
+        private var grid by perPlayer { Random.nextInt(20) }
+        private var shown by perPlayer { 0 }
         private val pieces: Int get() = P3Sim.terrorPieces
         /** Ticks per lost stack: (T+1)*20, T = 4 s (1-2 pieces), 7 s (3), 10 s (4); sampled at the last gain. */
         private fun periodNow(): Int = ((if (pieces >= 4) 10 else if (pieces == 3) 7 else 4) + 1) * 20

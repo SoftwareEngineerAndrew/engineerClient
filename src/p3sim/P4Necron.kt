@@ -92,11 +92,10 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private var tnts = emptyList<Entity>()
 
     override fun start() {
-        val p = Sim.player
-        if (!fromP3 && p != null) {
+        if (!fromP3 && Sim.players().isNotEmpty()) {
             Blocks.finish("p3end")
             val s = Spots.P4
-            Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
+            Sim.forEachPlayer { p -> Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch) }
         }
         Party.startP4(fromP3)
         necron = BossWither("Necron", MID)
@@ -216,9 +215,9 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     private fun frenzy() {
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 30f, 31 / 63f, necron.pos)
         Sim.sound(SoundEvents.WITHER_AMBIENT, 30f, 44 / 63f, necron.pos)
-        val p = Sim.player ?: return
-        if (p.position().distanceTo(MID) > FRENZY_RANGE || SimItems.cloaked) return
-        Sim.chat("§cNecron's§r§7 Nuclear Frenzy hit you for §r§c57,600§r§7 damage.")
+        Sim.forEachPlayer { p ->
+            if (p.position().distanceTo(MID) <= FRENZY_RANGE && !SimItems.cloaked) Sim.chat("§cNecron's§r§7 Nuclear Frenzy hit you for §r§c57,600§r§7 damage.")
+        }
     }
 
     /**

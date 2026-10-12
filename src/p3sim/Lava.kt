@@ -31,9 +31,10 @@ object Lava {
     private const val COOLDOWN = 4
 
     private class Seen(val ns: Long, val inLava: Boolean, val pitch: Float)
-    private val seen = java.util.ArrayDeque<Seen>()
-    private var bouncedAt = -1000
-    private var hurtAt = -1000
+    // Each player's own ([perPlayer]).
+    private val seen: java.util.ArrayDeque<Seen> by perPlayer { java.util.ArrayDeque() }
+    private var bouncedAt by perPlayer { -1000 }
+    private var hurtAt by perPlayer { -1000 }
     fun reset() { seen.clear(); bouncedAt = -1000; hurtAt = -1000 }
 
     fun tick(p: ServerPlayer) {

@@ -21,8 +21,9 @@ object Stats {
         if (s !in 1..4 || sections[s] >= 0) return
         sections[s] = ticks
         val best = best("S$s", ticks)
-        if (P3Sim.showTimes) Sim.note("§fS$s§7 ${s(ticks)}$best")
-        com.engineerclient.practice.TermInfo.simSectionTime(ticks)
+        // The host's with their personal best, everyone else's plain; Term Info's on every game.
+        if (P3Sim.showTimes) for (p in Sim.players()) Sim.asPlayer(p) { Sim.note("§fS$s§7 ${s(ticks)}" + if (Sim.isHost(p)) best else "") }
+        PartyClient.send("sectionTime", ticks)
     }
 
     // ------------------------------------------------------------------ personal bests
@@ -45,9 +46,12 @@ object Stats {
     fun p3(n: Int) {
         if (!P3Sim.showTimes) return
         val parts = (1..4).filter { sections[it] >= 0 }.joinToString(" §8|§7 ") { "S$it ${s(sections[it])}" }
-        val total = if (from == 1) " §8|§f P3 ${s(n)}${best("P3", n)}" else ""
-        Sim.note("$parts$total")
-        Sim.note("You did §f$mine§7 of the jobs; death ticks taken: §f$deaths")
+        val best = if (from == 1) best("P3", n) else ""
+        val total = if (from == 1) " §8|§f P3 ${s(n)}" else ""
+        for (p in Sim.players()) Sim.asPlayer(p) {
+            Sim.note("$parts$total" + if (Sim.isHost(p)) best else "")
+            if (Sim.isHost(p)) Sim.note("You did §f$mine§7 of the jobs; death ticks taken: §f$deaths")
+        }
     }
 
     /** The server tick a full run (from P1) started, or -1. */
