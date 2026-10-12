@@ -12,6 +12,7 @@
     "InvincibilityPhoenixMixin",
     "LeapMenuRenderMixin",
     "NumbersPreviewMixin",
+    "OdinTermTimesMixin",
     "PanelOrderMixin",
     "PersonalBestSimMixin",
     "SimonSaysBlocksMixin",

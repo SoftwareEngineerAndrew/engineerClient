@@ -107,6 +107,7 @@ object EngineerClient : ClientModInitializer {
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
+        safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
