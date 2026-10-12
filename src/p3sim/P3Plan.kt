@@ -198,6 +198,9 @@ object P3Plan {
     fun orderFor(c: DungeonClass): List<DungeonClass> {
         if (c == P3Sim.ownClass) return botOrder()
         val o = Party.CLASSES.filter { it != c }
+        // A joiner's: their menu's order, as their game sent it.
+        Players.playerOf(c)?.takeIf { !Sim.isHost(it) }?.let { Players.profile(it).order }
+            ?.takeIf { it.size == o.size && it.toSet() == o.toSet() }?.let { return it }
         return odinOrder(o) ?: o
     }
 
@@ -318,6 +321,7 @@ object P3Plan {
         val m = mine()
         o.add("mine", com.google.gson.JsonArray().also { a -> m.forEach { a.add(it) } })
         o.addProperty("mineFor", mineFor)
+        o.add("order", com.google.gson.JsonArray().also { a -> botOrder().forEach { a.add(it.name) } })
         o.add("spots", com.google.gson.JsonObject().also { s ->
             spots().forEach { (k, p) -> s.add(k, com.google.gson.JsonArray().also { a -> a.add(p.x); a.add(p.y); a.add(p.z); a.add(p.yaw); a.add(p.pitch) }) }
         })

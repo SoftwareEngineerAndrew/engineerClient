@@ -38,7 +38,12 @@ object SimServer {
     val level: ServerLevel? get() = server?.overworld()
 
     /** The sim's player: the one whose game it is (a party's joiners come after). */
-    val player: ServerPlayer? get() = server?.playerList?.players?.firstOrNull()
+    val player: ServerPlayer? get() {
+        val l = server?.playerList?.players ?: return null
+        // By this game's own account: a respawn puts the host's new player at the end of the list.
+        val me = net.minecraft.client.Minecraft.getInstance().user.profileId
+        return l.firstOrNull { it.uuid == me } ?: l.firstOrNull()
+    }
 
     /** Runs [block] on the sim server's thread (from the client's menu, say), if it is running. */
     fun run(what: String, block: (MinecraftServer) -> Unit) {

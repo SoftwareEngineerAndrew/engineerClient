@@ -123,7 +123,7 @@ object P3Sim : Module(
     }
 
     val autoStart: Boolean get() = autoStartS.value
-    val showTimes: Boolean get() = showTimesS.value
+    val showTimes: Boolean get() = mine("showTimes", { showTimesS.value }) { it.asBoolean }
 
     /**
      * A personal setting ([PartySettings.PERSONAL]) for the player it's about: on the sim's server, while a party's

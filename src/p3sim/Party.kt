@@ -596,7 +596,8 @@ object Party {
                 "leaps" -> botOf(Roles.whoIs(plan, m.who))?.takeIf { it.ghost == null }?.let { b ->
                     if (at != null) leaps += Leap(b, at) {
                         // Back into the section: onto someone still working in it (else you).
-                        bots.firstOrNull { it !== b && it.inSection == s && busy(it) }?.pos ?: Sim.player?.position()
+                        bots.firstOrNull { it !== b && it.inSection == s && busy(it) }?.pos
+                            ?: Sim.players().firstOrNull { GoldorPhase.dtZone(it.position()) == s }?.position() ?: Sim.host?.position()
                     }
                 }
             }
