@@ -132,6 +132,7 @@ object TermInfo : Module(
     private const val GATE = "The gate has been destroyed!"
     private val TASK = Regex("^(\\w+) (?:activated|completed) a (terminal|lever|device)! \\((\\d)/\\d\\)$")
     private val GATE_CORE_TITLE = Regex("gate (?:has been )?destroyed|core entrance is opening", RegexOption.IGNORE_CASE)
+    private val TASK_COUNT = Regex("^\\w+ (?:activated|completed) a (?:terminal|lever|device)! \\((\\d+)/(\\d+)\\)$")
     private val TITLE = Regex("^(\\w{1,16}) (?:activated a (?:terminal|lever)|completed a device)! \\(\\d+/\\d+\\)$")
 
     private class Section(val terms: Int, val number: Int) {
@@ -181,6 +182,28 @@ object TermInfo : Module(
 
     /** S3 done: watching for the first teammate in the core, until Necron or a new world. */
     @Volatile private var coreWatch = false
+    /**
+     * Sections over, counted for Core Leap as Sub Splits does: a section is over once its last completion
+     * (n/n) and its gate are both in, in either order. Doesn't lean on every single term/lever/device
+     * message being read the way [active] does, so a missed one doesn't keep Core Leap from showing in S4.
+     */
+    private var sectionsOver = 0
+    private var lastIn = false
+    private var gateIn = false
+
+    private fun countSectionEnd(msg: String) {
+        if (sectionsOver >= 3) return
+        if (msg == GATE) gateIn = true
+        else {
+            val m = TASK_COUNT.matchEntire(msg) ?: return
+            if (m.groupValues[1] != m.groupValues[2]) return
+            lastIn = true
+        }
+        if (!lastIn || !gateIn) return
+        sectionsOver++; lastIn = false; gateIn = false
+        if (sectionsOver == 3) coreWatch = true
+    }
+
     /** Teammates inside the core box, by name, with when they were first seen there (ms). */
     private val inCoreSince = LinkedHashMap<String, Long>()
     private val CORE_GOLD = Color(255, 170, 0, 0.25f)
@@ -376,6 +399,7 @@ object TermInfo : Module(
     private fun reset() {
         coreWatch = false
         inCoreSince.clear()
+        sectionsOver = 0; lastIn = false; gateIn = false
         for (s in sections) with(s) {
             termsDone = 0; deviceDone = false; leversDone = 0; gateDestroyed = number == 4
             lastIgn = ""; lastIndex = 0; lastType = ""
@@ -400,6 +424,7 @@ object TermInfo : Module(
         if (section !in 1..4) return
         for (i in 0 until section - 1) with(sections[i]) { termsDone = terms; leversDone = 2; deviceDone = true; gateDestroyed = true }
         active = section - 1
+        sectionsOver = section - 1
         sectionStart = serverTicks
     }
 
@@ -490,6 +515,7 @@ object TermInfo : Module(
                     // The first task message starts terminals too (Goldor's line missed).
                     if (active == -1 && TASK.matches(msg)) start()
                     onTaskChat(msg)
+                    if (active != -1) countSectionEnd(msg)
                 }
             }
         }
