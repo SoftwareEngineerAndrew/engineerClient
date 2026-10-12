@@ -3,7 +3,7 @@ package com.engineerclient.practice
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.mixin.MinecraftAccessor
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
@@ -15,12 +15,11 @@ import com.odtheking.odin.features.impl.boss.SimonSays
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.createSoundSettings
 import com.odtheking.odin.utils.playSoundSettings
-import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
@@ -74,13 +73,13 @@ import java.util.Locale
  */
 object SimonSaysPractice : Module(
     name = "SS Practice",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
     key = null,
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", InputConstants.UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
     private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
-    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
+    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
     private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")
     private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one. Here and on the real device in P3 (turns Odin's own Custom Click Sounds off).")
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown", desc = "").withDependency { clickSounds }
@@ -90,7 +89,7 @@ object SimonSaysPractice : Module(
     private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
     private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
-    private val size by NumberSetting("Size", 1.0, 1.0..3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
+    private val size by NumberSetting("Size", 1.0, 1.0, 3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
     private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
 
     // ------------------------------------------------------------------ the real device
@@ -164,7 +163,7 @@ object SimonSaysPractice : Module(
             // The wall: the grid (x 111, y 120-123, z 92-95) in a ring of black wool, start button on its left.
             for (y in 119..124) for (z in 91..96) {
                 val grid = y in 120..123 && z in 92..95
-                p.set(BlockPos(111, y, z), if (grid) Blocks.OBSIDIAN.defaultBlockState() else Blocks.WOOL.black().defaultBlockState())
+                p.set(BlockPos(111, y, z), if (grid) Blocks.OBSIDIAN.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
             }
             p.set(START, BUTTON)
             p.set(EXTRA, BUTTON)
@@ -322,7 +321,7 @@ object SimonSaysPractice : Module(
     /** Light grey wool behind the selected RNG button, black behind the others. */
     private fun markRng() {
         val p = placed ?: return
-        for (level in -1..2) p.set(rngButton(level).east(), if (level == rngLevel) Blocks.WOOL.lightGray().defaultBlockState() else Blocks.WOOL.black().defaultBlockState())
+        for (level in -1..2) p.set(rngButton(level).east(), if (level == rngLevel) Blocks.LIGHT_GRAY_WOOL.defaultBlockState() else Blocks.BLACK_WOOL.defaultBlockState())
     }
 
     /** Picks a pattern tightness; it counts from the next sequence on. */
@@ -464,7 +463,7 @@ object SimonSaysPractice : Module(
     /** Light grey wool behind the button of the mode you're in (0 start, 1 Inf, 3-4 start on rN), black behind the others. */
     private fun markMode(mode: Int) {
         val p = placed ?: return
-        val grey = Blocks.WOOL.lightGray().defaultBlockState(); val black = Blocks.WOOL.black().defaultBlockState()
+        val grey = Blocks.LIGHT_GRAY_WOOL.defaultBlockState(); val black = Blocks.BLACK_WOOL.defaultBlockState()
         p.set(START.east(), if (mode == 0) grey else black)
         p.set(EXTRA.east(), if (mode == 1) grey else black)
         for (n in 3..4) p.set(fromButton(n).east(), if (mode == n) grey else black)
@@ -479,9 +478,9 @@ object SimonSaysPractice : Module(
         // Its level is only read for drawing (the renderer skips one without); it isn't added to it.
         be.setLevel(p.level)
         p.signs[pos] = be
-        be.setText(net.minecraft.world.level.block.entity.SignText.EMPTY.asMutable()
-            .setLine(1, net.minecraft.network.chat.Component.literal(line1))
-            .setLine(2, net.minecraft.network.chat.Component.literal(line2)).asImmutable(), net.minecraft.world.level.block.entity.SignTextSlot.FRONT)
+        be.setText(net.minecraft.world.level.block.entity.SignText()
+            .setMessage(1, net.minecraft.network.chat.Component.literal(line1))
+            .setMessage(2, net.minecraft.network.chat.Component.literal(line2)), true)
     }
 
     // ------------------------------------------------------------------ Start on r3 / r4
@@ -571,14 +570,14 @@ object SimonSaysPractice : Module(
     /** Trigger Bot: the button under the crosshair, pressed as soon as it's the next one. Only the practice device. */
     private fun trigger() {
         val p = placed ?: return
-        if (mc.gui.screen() != null) return
+        if (mc.screen != null) return
         val pos = target() ?: return
         val cell = (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos } ?: return
         if (!buttonUp[cell] || downUntil[cell] > tick) return
         val due = if (Inf.on) Inf.queue.firstOrNull() else if (accepting) expected.getOrNull(next) else null
         if (cell != due) return
         press(cell)
-        mc.player?.let { it.swing(InteractionHand.MAIN_HAND, it.mainHandItem.interactAnimation, false) }
+        mc.player?.let { it.swing(InteractionHand.MAIN_HAND, false) }
     }
 
     private fun press(cell: Int) {
@@ -707,6 +706,10 @@ object SimonSaysPractice : Module(
         return View(p, eye ?: player.getEyePosition(partialTicks), turned, size)
     }
 
+    /** This frame's view, from the camera in first person. */
+    private fun frameView(p: Placement): View = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
+        mc.gameRenderer.mainCamera.position().takeIf { mc.options.cameraType.isFirstPerson })
+
     /** Follow You: quarter turns the device has made from how it was summoned (0, or 2 once turned around). */
     private var turned = 0
     private const val TURN_AROUND = 100.0
@@ -727,10 +730,10 @@ object SimonSaysPractice : Module(
     private fun draw(p: Placement, v: View, context: net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext) {
         val pose = context.poseStack()
         val out = context.submitNodeCollector()
-        val cam = mc.gameRenderer.mainCamera().position()
+        val cam = mc.gameRenderer.mainCamera.position()
         val level = p.level
         val lightPos = if (follow) v.lightPos else p.lightPos
-        val light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, lightPos)
+        val light = net.minecraft.client.renderer.LevelRenderer.getLightCoords(level, lightPos)
         fun at(pos: BlockPos, draw: () -> Unit) {
             val w = v.toWorld(Vec3(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble()))
             pose.pushPose()
@@ -745,19 +748,29 @@ object SimonSaysPractice : Module(
             val s = DeviceBlock(lightPos)
             s.randomSeedPos = pos; s.blockPos = pos; s.blockState = state
             s.biome = level.getBiome(pos); s.cardinalLighting = level.cardinalLighting(); s.lightEngine = level.lightEngine
-            at(pos) { out.submitMovingBlock(pose, s, 0) }
+            at(pos) { out.submitMovingBlock(pose, s) }
         }
         val signs = mc.blockEntityRenderDispatcher
         val camera = context.levelState().cameraRenderState
         for ((pos, be) in p.signs) {
-            val s = signs.tryExtractRenderState<net.minecraft.world.level.block.entity.SignBlockEntity, net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState>(be, 0f, null, false) ?: continue
+            val s = signs.tryExtractRenderState<net.minecraft.world.level.block.entity.SignBlockEntity, net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState>(be, 0f, null) ?: continue
             s.lightCoords = light
             at(pos) { signs.submit(s, pose, out, camera) }
         }
         val target = target() ?: return
         val state = p.blocks[target] ?: return
-        val width = mc.gameRenderer.gameRenderState().windowRenderState.appropriateLineWidth
-        at(target) { out.submitShapeOutline(pose, shapeOf(target, state), net.minecraft.client.renderer.rendertype.RenderTypes.linesTranslucent(), net.minecraft.util.ARGB.black(102), width, false) }
+        val width = mc.window.appropriateLineWidth
+        val colour = net.minecraft.util.ARGB.black(102)
+        // As ShapeRenderer.renderShape draws it (26.1.2 has no outline submit).
+        at(target) {
+            out.submitCustomGeometry(pose, net.minecraft.client.renderer.rendertype.RenderTypes.linesTranslucent()) { last, buffer ->
+                shapeOf(target, state).forAllEdges { x0, y0, z0, x1, y1, z1 ->
+                    val n = org.joml.Vector3f((x1 - x0).toFloat(), (y1 - y0).toFloat(), (z1 - z0).toFloat()).normalize()
+                    buffer.addVertex(last, x0.toFloat(), y0.toFloat(), z0.toFloat()).setColor(colour).setNormal(last, n).setLineWidth(width)
+                    buffer.addVertex(last, x1.toFloat(), y1.toFloat(), z1.toFloat()).setColor(colour).setNormal(last, n).setLineWidth(width)
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------------ input (from the mixin)
@@ -914,7 +927,7 @@ object SimonSaysPractice : Module(
             else (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos }?.let { press(it) }
         }
         // Your arm moves for a button, as in the game; not for the obsidian or wool. Nothing is sent.
-        if (button) mc.player?.let { it.swing(InteractionHand.MAIN_HAND, it.mainHandItem.interactAnimation, false) }
+        if (button) mc.player?.let { it.swing(InteractionHand.MAIN_HAND, false) }
         (mc as MinecraftAccessor).`ec$setRightClickDelay`(4) // holding right click repeats like the game's own
         return true
     }
@@ -926,7 +939,7 @@ object SimonSaysPractice : Module(
         val p = placed ?: return false
         // A left click on the grid (obsidian, lantern or button) restarts: a new run, started as the last one was.
         if ((0 until 16).any { p.at(lampAt(it)) == pos || p.at(buttonAt(it)) == pos }) EngineerClient.safely("ss practice restart") { restart() }
-        mc.player?.let { it.swing(InteractionHand.MAIN_HAND, it.mainHandItem.attackAnimation, false) }
+        mc.player?.let { it.swing(InteractionHand.MAIN_HAND, false) }
         return true
     }
 
@@ -943,17 +956,22 @@ object SimonSaysPractice : Module(
             jobs.removeAll(due.toSet())
             for (j in due) if (j.gen == gen) EngineerClient.safely("ss practice") { j.run() }
         }
-        on<RenderExtractEvent> {
+        // Minecraft 26.1.2: what is submitted is only drawn this frame from Fabric's collect-submits
+        // stage; Odin's render events come later in the frame (after the translucent terrain).
+        net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.COLLECT_SUBMITS.register { context ->
+            val p = placed ?: return@register
+            if (!enabled || p.level !== mc.level) return@register
+            EngineerClient.safely("ss practice draw") { draw(p, frameView(p), context) }
+        }
+        on<RenderEvent.Extract> {
             val p = placed ?: return@on
             if (p.level !== mc.level) return@on
-            val v = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
-                mc.gameRenderer.mainCamera().position().takeIf { mc.options.cameraType.isFirstPerson })
-            EngineerClient.safely("ss practice draw") { draw(p, v, context) }
+            val v = frameView(p)
             if (!solver) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
-                    drawStyledBox(v.box(solverBox(p, lamp)), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, BoxStyle.FILLED_OUTLINE, true)
+                    drawStyledBox(v.box(solverBox(p, lamp)), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, 2, true)
                 }
                 return@on
             }
@@ -961,7 +979,7 @@ object SimonSaysPractice : Module(
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
                 val lamp = lampAt(revealed[i])
-                drawStyledBox(v.box(solverBox(p, lamp)), colour, BoxStyle.FILLED_OUTLINE, true)
+                drawStyledBox(v.box(solverBox(p, lamp)), colour, 2, true)
             }
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution. After

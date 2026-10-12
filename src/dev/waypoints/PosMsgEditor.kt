@@ -6,7 +6,7 @@ import com.engineerclient.waypoints.Face
 
 import com.devgineerclient.DevgineerClient
 import com.devgineerclient.DevgineerClient.mc
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.ModuleManager
 import com.devgineerclient.waypoints.PositionalMessages.PosMessage
@@ -76,10 +76,10 @@ object PosMsgEditor : BrWaypoints2.WandUser {
         }
     }
 
-    private fun editing() = editMode && mc.gui.screen() == null && BrWaypoints2.wandInHand()
+    private fun editing() = editMode && mc.screen == null && BrWaypoints2.wandInHand()
 
     init {
-        on<RenderExtractEvent> {
+        on<RenderEvent.Extract> {
             if (!editMode) return@on
             // The module draws the shapes itself while Show Positions is on; if it is off, show them here.
             val odinDraws = PositionalMessages.settings["Show Positions"]?.value == true

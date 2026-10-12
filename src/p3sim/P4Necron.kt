@@ -1,7 +1,5 @@
 package com.engineerclient.p3sim
 
-import net.minecraft.world.entity.EntityTypes
-import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import net.minecraft.core.BlockPos
@@ -306,7 +304,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     // ------------------------------------------------------------------ entities
 
     /** A fireball that only flies: no explosion, no entity hits, can't be hit back. Gone after 5 s. */
-    private class Fireball(level: ServerLevel) : LargeFireball(EntityTypes.FIREBALL, level) {
+    private class Fireball(level: ServerLevel) : LargeFireball(EntityType.FIREBALL, level) {
         private var life = 100
         override fun tick() { super.tick(); if (--life <= 0) discard() }
         override fun onHit(result: HitResult) {
@@ -322,7 +320,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
     }
 
     /** A wither skull that only flies (puff on a block, no explosion). */
-    private class Skull(level: ServerLevel) : WitherSkull(EntityTypes.WITHER_SKULL, level) {
+    private class Skull(level: ServerLevel) : WitherSkull(EntityType.WITHER_SKULL, level) {
         private var life = 100
         override fun tick() { super.tick(); if (--life <= 0) discard() }
         override fun onHit(result: HitResult) {
@@ -394,7 +392,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
             while (nextBolt < bolts.size && bolts[nextBolt] <= t) {
                 nextBolt++
                 val a = Random.nextDouble(Math.PI * 2); val r = 12 * kotlin.math.sqrt(Random.nextDouble())
-                val bolt = LightningBolt(EntityTypes.LIGHTNING_BOLT, Sim.level)
+                val bolt = LightningBolt(EntityType.LIGHTNING_BOLT, Sim.level)
                 bolt.setVisualOnly(true)
                 bolt.snapTo(centre.x + r * cos(a), 63.0, centre.z + r * sin(a), 0f, 0f)
                 Sim.spawn(bolt)

@@ -10,7 +10,7 @@ import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.protocol.common.ClientboundUpdateTagsPacket
 import net.minecraft.network.protocol.game.*
 import net.minecraft.resources.Identifier
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.level.block.Block
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -93,8 +93,8 @@ object PacketDecode {
             sb.append('['); PacketJson.num(sb, p.xRot); sb.append(','); PacketJson.num(sb, p.yRot); sb.append(','); PacketJson.num(sb, p.yHeadRot); sb.append(']')
         }
         when {
-            type === EntityTypes.FALLING_BLOCK -> members += "dataState" to { sb -> PacketJson.str(sb, BlockStateParser.serialize(Block.stateById(p.data))) }
-            type === EntityTypes.ITEM_FRAME || type === EntityTypes.GLOW_ITEM_FRAME || type === EntityTypes.PAINTING ->
+            type === EntityType.FALLING_BLOCK -> members += "dataState" to { sb -> PacketJson.str(sb, BlockStateParser.serialize(Block.stateById(p.data))) }
+            type === EntityType.ITEM_FRAME || type === EntityType.GLOW_ITEM_FRAME || type === EntityType.PAINTING ->
                 members += "facing" to { sb -> PacketJson.str(sb, Direction.from3DDataValue(p.data).serializedName) }
         }
         return Decoded(emptySet(), members)
@@ -154,7 +154,7 @@ object PacketDecode {
     // ------------------------------------------------------------------ entity ids
 
     /**
-     * The entity-id fields of each packet class, checked by name against Minecraft 26.3. A subclass
+     * The entity-id fields of each packet class, checked by name against Minecraft 26.2. A subclass
      * (the move_entity variants) uses its parent's entry.
      */
     private val ENTITY_FIELDS: Map<Class<*>, List<String>> = mapOf(
@@ -191,7 +191,7 @@ object PacketDecode {
         ServerboundAttackPacket::class.java to listOf("entityId"),
         ServerboundPickItemFromEntityPacket::class.java to listOf("id"),
         ServerboundPlayerCommandPacket::class.java to listOf("id"),
-        ServerboundSpectatorActionPacket::class.java to listOf("spectateEntityId"),
+        ServerboundSpectateEntityPacket::class.java to listOf("entityId"),
         ServerboundEntityTagQueryPacket::class.java to listOf("entityId"),
     )
 

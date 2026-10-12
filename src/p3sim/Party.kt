@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import net.minecraft.world.entity.EntityTypes
 import com.mojang.authlib.GameProfile
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.component.DataComponents
@@ -1113,7 +1112,7 @@ object Party {
     /** A bot's party chat line, as Hypixel shows one (the bots are MVP+, as the leap lines colour them). */
     fun partyLine(b: Bot, text: String) = "§9Party §8> §b[MVP§c+§b] ${b.name}§f: $text"
 
-    private fun swing(b: Bot) { b.entity?.let { it.swing(net.minecraft.world.InteractionHand.MAIN_HAND, it.mainHandItem.interactAnimation, false) } }
+    private fun swing(b: Bot) { b.entity?.swing(net.minecraft.world.InteractionHand.MAIN_HAND) }
 
     /**
      * What a bot holds, as teammates do: in P3 the Dungeonbreaker (teammates' rest
@@ -1202,11 +1201,11 @@ object Party {
     )
 
     private fun spawn(b: Bot, at: Vec3) {
-        val m = Mannequin(EntityTypes.MANNEQUIN, Sim.level)
+        val m = Mannequin(EntityType.MANNEQUIN, Sim.level)
         m.setComponent(DataComponents.PROFILE, ResolvableProfile.createResolved(profile(b)))
         m.setCustomName(Component.literal("§a${b.name}"))
         m.isCustomNameVisible = true
-        m.isPermanentlyInvulnerable = true
+        m.isInvulnerable = true
         m.setNoGravity(true)
         dress(m, b.clazz)
         hideDescription(m)

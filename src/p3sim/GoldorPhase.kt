@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import net.minecraft.world.entity.EntityTypes
 import com.engineerclient.rotation.P3Sections
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
@@ -658,7 +657,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         private fun spawnGiants() {
             for (i in 0 until 4) {
                 val e = SimGiant(Sim.level)
-                e.setNoAi(true); e.isSilent = true; e.isPermanentlyInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
+                e.setNoAi(true); e.isSilent = true; e.isInvulnerable = true; e.setNoGravity(true); e.isInvisible = true
                 // Vanilla clears a mob's invisible flag without the effect: the effect keeps it (no particles).
                 e.addEffect(net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY, -1, 0, false, false))
                 e.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.GOLDEN_SWORD))
@@ -836,7 +835,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     }
 
     /** A greatsword giant that stays in the peaceful sim world (vanilla deletes monsters there, as it does [SimWither]s). */
-    class SimGiant(level: net.minecraft.world.level.Level) : Giant(EntityTypes.GIANT, level) {
+    class SimGiant(level: net.minecraft.world.level.Level) : Giant(EntityType.GIANT, level) {
         override fun checkDespawn() {}
     }
 

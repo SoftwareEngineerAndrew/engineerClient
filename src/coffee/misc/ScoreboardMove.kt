@@ -46,7 +46,7 @@ object ScoreboardMove {
         gfx.pose().translate(-left.toFloat(), -top.toFloat())
         drawing = true
         seen = null
-        try { (mc.gui.hud as GuiSidebarInvoker).`cc$displayScoreboardSidebar`(gfx, objective) }
+        try { (mc.gui as GuiSidebarInvoker).`cc$displayScoreboardSidebar`(gfx, objective) }
         finally { drawing = false; gfx.pose().popMatrix(); drawn = seen }
         return w to h
     }

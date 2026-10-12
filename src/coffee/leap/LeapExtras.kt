@@ -4,7 +4,7 @@ import com.coffeeclient.CoffeeClient
 import com.engineerclient.pov.PovPreviews
 import com.engineerclient.pov.ShowIn
 import com.google.gson.JsonParser
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
@@ -14,6 +14,7 @@ import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.enumSelector
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.core.onReceive
@@ -26,7 +27,7 @@ import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.equalsOneOf
-import com.odtheking.odin.utils.render.roundedRect
+import com.engineerclient.roundedRect
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
@@ -47,18 +48,18 @@ import net.minecraft.resources.Identifier
  */
 object LeapExtras : Module(
     name = "Leap Extras",
-    category = Category.custom("Coffee Client", 860, 10),
+    category = Category.custom("Coffee Client"),
     description = "Adds to Odin's Leap Menu: a click delay when it opens, an outline of where each person will be, and Map Leap (the dungeon map as the leap menu, in the clear).",
     toggled = true,
 ) {
-    private val clickDelay by NumberSetting("Click Delay", 1, 0..10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
+    private val clickDelay by NumberSetting("Click Delay", 1, 0, 10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
 
-    private val showIn by SelectorSetting("Show In", ShowIn.Option.EVERYWHERE, desc = "Where Click Delay and Leap Outline work. Blood rush is from the dungeon starting until the blood door opens.")
+    private val showInIndex by enumSelector("Show In", ShowIn.Option.EVERYWHERE, desc = "Where Click Delay and Leap Outline work. Blood rush is from the dungeon starting until the blood door opens.")
 
     private val leapOutline by BooleanSetting("Leap Outline", false, desc = "Draws a very faint rectangle where each person in the leap menu would be, so your mouse can already be on the right one when it opens.")
 
     private val mapLeap by BooleanSetting("Map Leap", false, desc = "In the clear, the leap menu shows the dungeon map with everyone's head where they are. Click a head to leap to them; the one nearest the cursor is enlarged.")
-    private val mapLeapSize by NumberSetting("Map Leap Size", 0.8f, 0.3..1.0, 0.05f, desc = "How much of the screen the map takes up.").withDependency { mapLeap }
+    private val mapLeapSize by NumberSetting("Map Leap Size", 0.8f, 0.3, 1.0, 0.05f, desc = "How much of the screen the map takes up.").withDependency { mapLeap }
     private val mapColors by BooleanSetting("Map Leap Colors", false, desc = "Shows the map's colours, and buttons that copy them from Odin's map, DTMap or Devonian.").withDependency { mapLeap }
 
     /** One map colour: its setting, and where each map mod it can be imported from keeps the same colour. */
@@ -99,7 +100,7 @@ object LeapExtras : Module(
 
     /** Within Click Delay of the leap menu opening. Read by the click mixins. */
     @JvmStatic
-    fun inClickDelay(): Boolean = enabled && ShowIn.allows(showIn.ordinal) && System.currentTimeMillis() - openedAt < clickDelay * 50L
+    fun inClickDelay(): Boolean = enabled && ShowIn.allows(showInIndex) && System.currentTimeMillis() - openedAt < clickDelay * 50L
 
     init {
         on<ScreenEvent.Open> {
@@ -129,7 +130,7 @@ object LeapExtras : Module(
      * way). Grey where nobody is, or outside a dungeon.
      */
     private fun drawOutline(g: GuiGraphicsExtractor) {
-        if (!enabled || !leapOutline || !LeapMenu.enabled || CoffeeClient.mc.gui.screen() != null || !ShowIn.allows(showIn.ordinal)) return
+        if (!enabled || !leapOutline || !LeapMenu.enabled || CoffeeClient.mc.screen != null || !ShowIn.allows(showInIndex)) return
         val window = CoffeeClient.mc.window
         val halfW = window.guiScaledWidth / 2
         val halfH = window.guiScaledHeight / 2

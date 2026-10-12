@@ -5,7 +5,7 @@ import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.sounds.SoundSource
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.animal.sheep.Sheep
 import net.minecraft.world.entity.decoration.ArmorStand
@@ -50,7 +50,7 @@ object Mage {
     private var readyNoted by perPlayer { true }
 
     /** A sheep that can't push you, be pushed or be aimed at. */
-    class GhostSheep(level: net.minecraft.world.level.Level) : Sheep(EntityTypes.SHEEP, level) {
+    class GhostSheep(level: net.minecraft.world.level.Level) : Sheep(EntityType.SHEEP, level) {
         override fun isPickable() = false
         override fun isPushable() = false
         override fun canBeCollidedWith(other: net.minecraft.world.entity.Entity?) = false
@@ -141,7 +141,7 @@ object Mage {
         sheepReady = now + SHEEP_COOLDOWN
         readyNoted = false
         val e = GhostSheep(Sim.level)
-        e.setNoAi(true); e.setNoGravity(true); e.isPermanentlyInvulnerable = true; e.isSilent = true
+        e.setNoAi(true); e.setNoGravity(true); e.isInvulnerable = true; e.isSilent = true
         e.snapTo(p.x, p.y + 0.781, p.z, p.yRot, 0f)
         e.yHeadRot = p.yRot - 10f
         sheep += Flying(Sim.spawn(e), now)

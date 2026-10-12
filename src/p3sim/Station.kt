@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import net.minecraft.world.entity.EntityTypes
 import com.engineerclient.EngineerClient
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
@@ -50,7 +49,7 @@ class Station(
             s.snapTo(at.x, y, at.z, 0f, 0f)
             s.isInvisible = true
             // Gravity is on in Hypixel's packets (noGravity false); SimStand never moves by itself.
-            s.isPermanentlyInvulnerable = true
+            s.isInvulnerable = true
             s.isSilent = true
             // Styled from the start, as Hypixel's names are.
             s.setCustomName(if (name.isEmpty()) null else Sim.legacy(name))
@@ -146,7 +145,7 @@ class Station(
  * A status stand as Hypixel's: gravity on (noGravity false in Hypixel's stand data) yet
  * it stays where it is put, as there. Vanilla would let it fall, so its own movement is dropped.
  */
-class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.ARMOR_STAND, level) {
+class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityType.ARMOR_STAND, level) {
     override fun travel(travelVector: Vec3) {}
 }
 
@@ -159,9 +158,9 @@ object Corpse {
     fun spawn(p: net.minecraft.server.level.ServerPlayer, ticks: Int) {
         val made = ArrayList<net.minecraft.world.entity.Entity>()
         EngineerClient.safely("p3sim corpse") {
-            val m = net.minecraft.world.entity.decoration.Mannequin(EntityTypes.MANNEQUIN, Sim.level)
+            val m = net.minecraft.world.entity.decoration.Mannequin(EntityType.MANNEQUIN, Sim.level)
             m.setComponent(net.minecraft.core.component.DataComponents.PROFILE, net.minecraft.world.item.component.ResolvableProfile.createResolved(p.gameProfile))
-            m.isPermanentlyInvulnerable = true
+            m.isInvulnerable = true
             m.setNoGravity(true)
             m.isSilent = true
             for (slot in listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET))
@@ -173,7 +172,7 @@ object Corpse {
                 val s = SimStand(Sim.level)
                 s.snapTo(x, y, p.z, 0f, 0f)
                 s.isInvisible = invisible
-                s.isPermanentlyInvulnerable = true
+                s.isInvulnerable = true
                 s.isSilent = true
                 Station.setMarker(s)
                 if (name != null) { s.setCustomName(Sim.legacy(name)); s.isCustomNameVisible = true }

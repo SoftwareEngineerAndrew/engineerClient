@@ -3,7 +3,7 @@ package com.devgineerclient.maxor
 import com.devgineerclient.DevgineerClient
 import com.devgineerclient.maxor.CrystalCycles.From
 import com.devgineerclient.maxor.CrystalCycles.Side
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -21,7 +21,7 @@ import net.minecraft.network.protocol.game.ClientboundRespawnPacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EntityType
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.BlockState
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -43,7 +43,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 object MaxorCrystals : Module(
     name = "Maxor Crystals",
     key = null,
-    category = Category.custom("Devgineer Client", 860, 10),
+    category = Category.custom("Devgineer Client"),
     description = "F7 P1: how many server ticks each energy crystal took to place, cycle by cycle, and which laser check that made.",
 ) {
     private val chatReport by BooleanSetting("Chat Report", true, desc = "A line in your chat for each crystal cycle, when the laser fires (or the phase ends without it).")
@@ -114,9 +114,9 @@ object MaxorCrystals : Module(
             is ClientboundSystemChatPacket -> if (!p.overlay) chat(p.content.string.replace(CONTROL_CODES, ""))
             is ClientboundAddEntityPacket -> {
                 // Not a Witherborn wither (full Storm armor): it is never Maxor.
-                if (p.type == EntityTypes.WITHER && !com.devgineerclient.splits.Witherborn.onSpawn(p.id, p.x, p.y, p.z)) withers += p.id
+                if (p.type == EntityType.WITHER && !com.devgineerclient.splits.Witherborn.onSpawn(p.id, p.x, p.y, p.z)) withers += p.id
                 val m = model ?: return
-                if (p.type != EntityTypes.END_CRYSTAL) return
+                if (p.type != EntityType.END_CRYSTAL) return
                 if (p.y > 231) { m.crystalsBack(ticks); return }
                 val side = PYLONS.entries.firstOrNull { (_, c) -> kotlin.math.abs(p.x - c[0]) < 1.5 && kotlin.math.abs(p.z - c[2]) < 1.5 }?.key ?: return
                 m.placed(side, ticks)

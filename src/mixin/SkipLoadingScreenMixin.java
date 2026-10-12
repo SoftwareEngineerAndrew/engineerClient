@@ -22,6 +22,6 @@ public abstract class SkipLoadingScreenMixin {
     @Inject(method = "startWaitingForNewLevel", at = @At("TAIL"))
     private void ec$skipLoadingScreen(LocalPlayer player, ClientLevel level, LevelLoadingScreen.Reason reason, CallbackInfo ci) {
         if (!RandomStuff.INSTANCE.skipsLoadingScreen()) return;
-        if (Minecraft.getInstance().gui.screen() instanceof LevelLoadingScreen screen) screen.onClose();
+        if (Minecraft.getInstance().screen instanceof LevelLoadingScreen screen) screen.onClose();
     }
 }

@@ -1,7 +1,8 @@
 package com.engineerclient.splits
 
+import com.engineerclient.enumSelector
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
@@ -38,11 +39,11 @@ object OdinSplitsLook {
     private enum class PaceFloor { F7, M7 }
     enum class PaceFrom(private val label: String) { RECENT("Recent Runs"), TARGETS("Targets"); override fun toString() = label }
 
-    private val look = SelectorSetting("Look", Look.ENGINEER_SPLITS,
+    private val look = enumSelector("Look", Look.ENGINEER_SPLITS,
         desc = "Odin Splits, or Engineer Splits: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
 
     /** The Engineer look is picked. */
-    val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS
+    val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS.ordinal
 
     private val colourByTime = BooleanSetting("Color Based Off Time", true,
         desc = "Floor 7 split times coloured by how fast they were (dark green to black), here and in Sub Splits. Off: each time in its split's own colour. Added by engineerClient.")
@@ -61,17 +62,17 @@ object OdinSplitsLook {
 
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }
 
-    private val paceFrom = SelectorSetting("Pace From", PaceFrom.RECENT,
+    private val paceFrom = SelectorSetting("Pace From", PaceFrom.RECENT.toString(), PaceFrom.entries.map { it.toString() },
         desc = "What Pace counts each split still to come as. Recent Runs: your typical time for it, the median of your last 20 (until 5 are kept, its target), so Pace is where this run will likely finish. Targets: the boxes below (or PBs), which add up to faster than you usually run.")
         .withDependency { engineer && pace.value }
 
-    private val paceFloor = SelectorSetting("Pace Targets", PaceFloor.F7,
+    private val paceFloor = enumSelector("Pace Targets", PaceFloor.F7,
         desc = "Which floor's targets the boxes below are for. Pace uses the ones for the floor you are on; other floors and Kuudra have no targets, so there Pace is the time so far.")
         .withDependency { engineer && pace.value }
 
     private fun boxes(floor: String, master: Boolean, index: Int) = EngineerLook.targetLabels(master).map { name ->
-        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your PB for it, shown grayed in the box (on F7 without a PB, its dark green time).", placeholder = "")
-            .withDependency { engineer && pace.value && paceFloor.value.ordinal == index }
+        StringSetting("$floor $name", "", 12, desc = "How long $name should take on $floor, in seconds (61.5) or minutes (1:01.5). Blank uses your PB for it, shown grayed in the box (on F7 without a PB, its dark green time).")
+            .withDependency { engineer && pace.value && paceFloor.value == index }
     }
 
     private val f7 = boxes("F7", false, 0)
@@ -133,7 +134,7 @@ object OdinSplitsLook {
     private const val NECRON_END = "[BOSS] Necron: All this, for nothing..."
 
     private fun fillFromPbs() {
-        val master = paceFloor.value == PaceFloor.M7
+        val master = paceFloor.value == PaceFloor.M7.ordinal
         val boxes = if (master) m7 else f7
         var filled = 0
         boxes.forEachIndexed { i, box ->
@@ -214,7 +215,7 @@ object OdinSplitsLook {
 
     /** With Pace From Recent Runs, split [i]'s typical time (the median of your recent ones), else null. */
     private fun typical(i: Int, master: Boolean): SplitPace.Clocks? {
-        if (paceFrom.value != PaceFrom.RECENT) return null
+        if (paceFrom.value != PaceFrom.RECENT.ordinal) return null
         val label = SplitPace.ORDER.getOrNull(i) ?: return null
         return DungeonSplits.typical(if (master) "M7" else "F7", label)
     }
@@ -292,7 +293,7 @@ object OdinSplitsLook {
     private const val LINE = 9
 
     private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
-        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.value == PaceFloor.M7) else place()
+        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.value == 1) else place()
         val rows = if (example) exampleRows() else rows()
         val opts = options()
         val lines = EngineerLook.lines(rows, opts, place, master, targets(if (example) EngineerLook.Place.FLOOR7 else place, master),

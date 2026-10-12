@@ -9,14 +9,14 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.ArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.SuggestionProvider
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.impl.ListSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
@@ -47,14 +47,14 @@ import kotlin.math.floor
  */
 object PositionalMessages : Module(
     name = "Positional Messages",
-    category = Category.custom("Devgineer Client", 860, 10),
+    category = Category.custom("Devgineer Client"),
     description = "Sends a message when you're near a certain position. /posmsg",
 ) {
     private val onlyDungeons by BooleanSetting("Only in Dungeons", true, desc = "Only sends messages when you're in a dungeon.")
     private val showPositions by BooleanSetting("Show Positions", false, desc = "Draws boxes/lines around the positions.")
-    private val cylinderHeight by NumberSetting("Height", 0.2f, 0.1..5.0, 0.1, desc = "Height of the cylinder for in messages.").withDependency { showPositions }
+    private val cylinderHeight by NumberSetting("Height", 0.2f, 0.1, 5.0, 0.1, desc = "Height of the cylinder for in messages.").withDependency { showPositions }
     private val displayMessage by BooleanSetting("Show Message", true, desc = "Whether or not to display the message in the box.").withDependency { showPositions }
-    private val messageSize by NumberSetting("Message Size", 1f, 0.1..4.0, 0.1f, desc = "The size at which to display the message in the box.").withDependency { showPositions && displayMessage }
+    private val messageSize by NumberSetting("Message Size", 1f, 0.1, 4.0, 0.1f, desc = "The size at which to display the message in the box.").withDependency { showPositions && displayMessage }
 
     /** Read by PosMsgEditor every tick. */
     val retrigger by BooleanSetting("Re-trigger", false, desc = "Each /posmsg is sent once per world. On: leaving a box (or its radius) re-arms it, so walking back in sends it again. Only your own client.")
@@ -99,7 +99,7 @@ object PositionalMessages : Module(
             }
         }
 
-        on<RenderExtractEvent> {
+        on<RenderEvent.Extract> {
             if (!showPositions || (onlyDungeons && !DungeonUtils.inBoss)) return@on
             posMessageStrings.forEach { posMessage ->
                 if (posMessage.distance != null) {

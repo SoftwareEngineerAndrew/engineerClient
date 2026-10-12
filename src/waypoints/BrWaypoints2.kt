@@ -1,12 +1,13 @@
 package com.engineerclient.waypoints
 
+import com.engineerclient.enumSelector
 import com.engineerclient.EngineerClient
 import com.engineerclient.splits.DoorBlocks
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.JsonElement
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
@@ -16,7 +17,7 @@ import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -33,7 +34,6 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.itemUUID
 import com.odtheking.odin.utils.render.drawFilledBox
-import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.render.drawWireFrameBox
@@ -48,7 +48,7 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand
-import net.minecraft.world.entity.monster.Enderman
+import net.minecraft.world.entity.monster.EnderMan
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.AABB
@@ -73,7 +73,7 @@ import java.io.File
  */
 object BrWaypoints2 : Module(
     name = "BR Roles",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Engineer Client"),
     description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made on undonecoffee.com/brroles.",
     key = null,
 ) {
@@ -106,23 +106,23 @@ object BrWaypoints2 : Module(
     private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing. Wins over Fade Done Boxes.")
     private val doneColor by ColorSetting("Done Color", Color(121, 255, 121, 166 / 255f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
 
-    private val opacity by NumberSetting("Fill Opacity", 0.03f, 0.0..1.0, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
+    private val opacity by NumberSetting("Fill Opacity", 0.03f, 0.0, 1.0, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
 
     private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
 
     private enum class Killers { DUO, TRIO, QUAD }
     private enum class MyRole { ALL_BOXES, DOOR, ROLE_1, ROLE_2, ROLE_3, ROLE_4 }
 
-    private val killers by SelectorSetting("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
+    private val killers by enumSelector("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
 
-    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. In master mode the site's M7 roles are used and your class picks the role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door). Party chat (!br 2, !br d) overrides it for a run.")
+    private val myRole by enumSelector("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. In master mode the site's M7 roles are used and your class picks the role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door). Party chat (!br 2, !br d) overrides it for a run.")
 
     private val doorerKills by BooleanSetting("Doorer Kills", false, desc = "The door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by.")
 
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
 
     /** Which item is the wand, saved with the config so it survives a restart. */
-    private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.", placeholder = "").hide()
+    private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.").hide()
 
     // --- boxes -----------------------------------------------------------------------------------
 
@@ -211,8 +211,8 @@ object BrWaypoints2 : Module(
         }
 
         on<TickEvent.End> {
-            BrRoles.settingKilling = killers.ordinal + 2
-            BrRoles.settingRole = when (myRole.ordinal) { 0 -> null; 1 -> 0; else -> myRole.ordinal - 1 }
+            BrRoles.settingKilling = killers + 2
+            BrRoles.settingRole = when (myRole) { 0 -> null; 1 -> 0; else -> myRole - 1 }
             BrRoles.doorerKills = doorerKills
             wandUser?.tick()
             if (!DungeonUtils.inDungeons) return@on
@@ -229,7 +229,7 @@ object BrWaypoints2 : Module(
             watchDeaths()
         }
 
-        on<RenderExtractEvent> {
+        on<RenderEvent.Extract> {
             if (!DungeonUtils.inDungeons) return@on
 
             for ((box, colour, label, next, done) in drawn()) {
@@ -255,7 +255,7 @@ object BrWaypoints2 : Module(
 
             if (spawnMarkers) {
                 val colour = (Highlight.settings["Highlight color"] as? ColorSetting)?.value ?: Colors.WHITE
-                val style = (Highlight.settings["Render Style"] as? SelectorSetting<*>)?.value as? BoxStyle ?: BoxStyle.OUTLINE
+                val style = (Highlight.settings["Render Style"] as? SelectorSetting)?.value ?: 1
                 for (mob in mobs) {
                     // Flat on the floor, lifted a hair so it does not flicker into the block.
                     val y = mob.y + 0.02
@@ -484,8 +484,8 @@ object BrWaypoints2 : Module(
             val cells = listOf(-2, -1, 1, 2).flatMap { d -> listOf(70, 71).map { y -> BlockPos(gx + d * dx, y, gz + d * dz) } }
             if (!cells.all { level.isLoaded(it) }) continue
             val states = cells.map { level.getBlockState(it) }
-            if (!states.all { it.isAir || it.block == Blocks.BARRIER || it.block == Blocks.COAL_BLOCK || it.block == Blocks.DYED_TERRACOTTA.red() }) continue
-            val wither = states.any { it.block == Blocks.COAL_BLOCK || it.block == Blocks.DYED_TERRACOTTA.red() }
+            if (!states.all { it.isAir || it.block == Blocks.BARRIER || it.block == Blocks.COAL_BLOCK || it.block == Blocks.RED_TERRACOTTA }) continue
+            val wither = states.any { it.block == Blocks.COAL_BLOCK || it.block == Blocks.RED_TERRACOTTA }
             if (wither) { witherSides += a; witherSides += b }
             links.getOrPut(a) { mutableListOf() } += b to (gx to gz)
             links.getOrPut(b) { mutableListOf() } += a to (gx to gz)
@@ -697,7 +697,7 @@ object BrWaypoints2 : Module(
     private fun isMob(e: Entity): Boolean = when (e) {
         is ArmorStand -> false
         is WitherBoss -> false
-        is Enderman -> true
+        is EnderMan -> true
         is Player -> e.uuid.version() == 2 && e != mc.player
         else -> !e.isInvisible
     }
@@ -819,7 +819,7 @@ object BrWaypoints2 : Module(
 
     /**
      * Rooms of int arrays, by hand: Gson's reflective path can't make an int[] inside a generic
-     * List (26.3's Gson calls it an abstract class), so nothing loaded.
+     * List (Gson 2.14 calls it an abstract class), so nothing loaded.
      */
     private fun rooms(json: JsonElement?): Map<String, List<IntArray?>?> {
         val obj = json?.takeIf { it.isJsonObject }?.asJsonObject ?: return emptyMap()

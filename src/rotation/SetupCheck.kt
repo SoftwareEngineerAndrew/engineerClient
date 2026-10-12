@@ -3,6 +3,7 @@ package com.engineerclient.rotation
 import com.engineerclient.EngineerClient
 import com.engineerclient.EcConfig
 import com.odtheking.odin.features.ModuleManager
+import com.odtheking.odin.features.impl.dungeon.PositionalMessages
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.GraphicsPreset
 
@@ -15,8 +16,8 @@ object SetupCheck {
 
     data class Item(val ok: Boolean, val what: String, val fix: String = "")
 
-    /** Every /posmsg box's message, from Positional Messages where it is installed; null: it isn't. */
-    @Volatile var posMessages: (() -> List<String?>)? = null
+    /** Every /posmsg box's message, from Positional Messages where it is installed; null: it isn't. (Odin 0.3.4 has it.) */
+    @Volatile var posMessages: (() -> List<String?>)? = { PositionalMessages.posMessageStrings.map { it.message } }
 
     private fun module(name: String) = ModuleManager.modules[name.lowercase()]
 
@@ -50,7 +51,7 @@ object SetupCheck {
         // The exact texts the rotation waits on must exist as /posmsg boxes ([posMessages]).
         val texts = posMessages
         if (texts == null) items += Item(false, "Positional Messages not installed", "the arrival texts come from /posmsg boxes")
-        else moduleOn("Positional Messages", "the arrival texts come from its boxes", "")
+        else moduleOn("Positional Messages", "the arrival texts come from its boxes")
         val have = texts?.invoke().orEmpty().mapNotNull { it?.trim()?.lowercase() }.toSet()
         (RotationSpec.graph.roles.map { it.arrived } + RotationSpec.graph.recoreArrived)
             .filter { it.isNotBlank() && it != RotationSpec.ARRIVED_ON_LEAP }.distinct()

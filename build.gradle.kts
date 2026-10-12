@@ -7,7 +7,7 @@ buildscript {
 }
 
 plugins {
-    kotlin("jvm") version "2.4.20"
+    kotlin("jvm") version "2.4.0"
 }
 
 apply(plugin = "net.fabricmc.fabric-loom")
@@ -33,28 +33,27 @@ repositories {
 }
 
 dependencies {
-    "minecraft"("com.mojang:minecraft:26.3")
-    implementation("net.fabricmc:fabric-loader:0.19.5")
-    implementation("net.fabricmc:fabric-language-kotlin:1.14.1+kotlin.2.4.20")
-    implementation("net.fabricmc.fabric-api:fabric-api:0.162.0+26.3")
+    "minecraft"("com.mojang:minecraft:26.1.2")
+    implementation("net.fabricmc:fabric-loader:0.19.3")
+    implementation("net.fabricmc:fabric-language-kotlin:1.13.12+kotlin.2.4.0")
+    implementation("net.fabricmc.fabric-api:fabric-api:0.151.0+26.1.2")
 
     // xz (LZMA2) for Better PF recordings: about half the size of gzip. Pure Java, shipped inside
     // the mod jar.
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json). 0.3.7 for 26.3 is not released
-    // yet: compiled against the 26.3 port build (OdinFabric PR #164, CI run 37808382947), which the
-    // release workflow downloads into libs/odin; kept out of git.
-    compileOnly(files("libs/odin"))
+    // Odin is a required runtime mod (declared in fabric.mod.json); compiled against its Modrinth
+    // release (0.3.4 for 26.1).
+    compileOnly("maven.modrinth:odin:7FcnBdo7")
 
-    // Sodium replaces the terrain renderer on every team client. Since 26.2 it culls from inside the
-    // level extract, so the POV previews no longer call it; optional at runtime.
-    compileOnly("maven.modrinth:sodium:bAZQdGpg")
+    // Sodium replaces the terrain renderer on every team client; the POV previews drive its
+    // terrain pass directly. Optional at runtime (guarded by FabricLoader.isModLoaded).
+    compileOnly("maven.modrinth:sodium:5FMvNu0I")
 
     // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
-    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
-    compileOnly("maven.modrinth:devonian:k8Mog4wx")
+    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9-26.1 for 26.1.2.
+    compileOnly("maven.modrinth:devonian:EQT06WHl")
 }
 
 tasks {
