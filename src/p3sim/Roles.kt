@@ -187,9 +187,9 @@ object Roles {
             "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
             "spawn/ARCHER" to Spots.Spot("Spawn", 107.53, 123.06, 112.45, 47.59f, 19.81f),
         ),
-        // The bers mines the top layer of S3's 3rd term ledge (its upper slabs, x 18, z 91-99) once on the high EE3: the tank
-        // bonzos down through it to S3's device.
-        mines = mapOf("ee3" to (91..99).map { net.minecraft.core.BlockPos(18, 121, it) }),
+        // The bers mines the top layer of S3's 3rd term ledge (its upper slabs, x 18, z 91-99) once on the high EE3 (the tank
+        // bonzos down through it to S3's device), and the 2x2 quartz platform beside it (x 15-16, y 122, z 93-94).
+        mines = mapOf("ee3" to (91..99).map { net.minecraft.core.BlockPos(18, 121, it) } + listOf(15, 16).flatMap { x -> listOf(93, 94).map { net.minecraft.core.BlockPos(x, 122, it) } }),
     )
 
     /** In the skill menu as listed, with Random after the first three ([P3Plan.SKILLS]). */
