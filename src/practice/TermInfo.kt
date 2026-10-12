@@ -83,7 +83,7 @@ object TermInfo : Module(
     private val coreFadeIn by NumberSetting("Core Fade In", 0, 0..1000, 50, desc = "Fades in over this long once someone is in the core.", unit = "ms").withDependency { coreLeap && coreDropdown }
     private val coreOverScreens by BooleanSetting("Core Over Screens", true, desc = "Also drawn on top of open screens: terminals, chat, your inventory. Off: only with no screen open.").withDependency { coreLeap && coreDropdown }
     private val coreOverLeap by BooleanSetting("Core Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, on top of it.").withDependency { coreLeap && coreDropdown && coreOverScreens }
-    private val coreHideInCore by BooleanSetting("Core Hide When In Core", true, desc = "Hidden once you're in the core yourself.").withDependency { coreLeap && coreDropdown }
+    private val coreHideInCore by BooleanSetting("Core Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.").withDependency { coreLeap && coreDropdown }
 
     private enum class CoreStyle(private val label: String, val area: Boolean) {
         QUADRANT("Quadrant", true), SIDE("Side", true), VERTICAL("Top / Bottom", true), EDGE_GLOW("Edge Glow", false),
@@ -188,6 +188,8 @@ object TermInfo : Module(
      * message being read the way [active] does, so a missed one doesn't keep Core Leap from showing in S4.
      */
     private var sectionsOver = 0
+    /** You've been in the core since Core Leap started watching: it stays off until the next run. */
+    private var selfBeenInCore = false
     private var lastIn = false
     private var gateIn = false
 
@@ -217,6 +219,7 @@ object TermInfo : Module(
     private fun trackCore() {
         if (!enabled || !coreLeap || !watchingCore()) { inCoreSince.clear(); return }
         val level = mc.level ?: return
+        if (mc.player?.let { inCore(it) } == true) selfBeenInCore = true
         val now = System.currentTimeMillis()
         for (m in DungeonUtils.leapTeammates) {
             if (m.name == "Empty") continue
@@ -255,7 +258,7 @@ object TermInfo : Module(
             since = System.currentTimeMillis() / 3000 * 3000
         } else {
             if (!watchingCore()) return
-            if (coreHideInCore && inCore(self)) return
+            if (coreHideInCore && selfBeenInCore) return
             val first = inCoreSince.minByOrNull { it.value } ?: return
             val mates = DungeonUtils.leapTeammates
             i = mates.indexOfFirst { it.name == first.key }.takeIf { it in 0..3 } ?: return
@@ -400,6 +403,7 @@ object TermInfo : Module(
         coreWatch = false
         inCoreSince.clear()
         sectionsOver = 0; lastIn = false; gateIn = false
+        selfBeenInCore = false
         for (s in sections) with(s) {
             termsDone = 0; deviceDone = false; leversDone = 0; gateDestroyed = number == 4
             lastIgn = ""; lastIndex = 0; lastType = ""
