@@ -105,6 +105,8 @@ object Practice {
     private fun launch(m: String, s: Int) {
         mode = m; section = s
         tasks = emptyList(); ticks = 0; endTicks = -1
+        // The last try's times come down at once (the Section Time too, not only once the start timer ends).
+        com.engineerclient.practice.TermInfo.simClearTime()
         Fight.start(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4)[s - 1], practice = true)
     }
 

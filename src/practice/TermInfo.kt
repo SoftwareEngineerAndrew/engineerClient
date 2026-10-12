@@ -432,6 +432,10 @@ object TermInfo : Module(
         sectionStart = serverTicks
     }
 
+    /** P3 Sim: takes down the section time on screen (a practice restarting). */
+    @JvmStatic
+    fun simClearTime() { shownTime = null }
+
     /**
      * P3 Sim: a section's time as the sim measured it ([ticks], server ticks), shown as Section Time. Term Info
      * can't follow the sim by its chat: restarts, later starts and practices do part of P3 without it.
