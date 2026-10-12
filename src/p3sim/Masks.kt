@@ -211,6 +211,9 @@ object Masks {
         PartyClient.send("masksReset")
     }
 
+    /** [p] left: their masks and ghost state go. */
+    fun leftOne(p: ServerPlayer) = Sim.asPlayer(p) { resetOne() }
+
     private fun resetOne() {
         items.forEach { it.readyAt = 0 }; safeUntil = 0
         reviveGen++

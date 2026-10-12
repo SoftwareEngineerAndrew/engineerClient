@@ -139,6 +139,8 @@ object Loadouts {
 
     /** This game's file changed (the sim's server saved a joiner's): read it again. */
     fun forgetLocal() { customLists.remove("") }
+    /** A joiner's files arrived (or they left): read theirs again. */
+    fun forget(id: java.util.UUID) { customLists.remove(id.toString()) }
 
     private fun customs(): MutableList<Custom> = customLists[owner()] ?: run {
         val l = runCatching {
