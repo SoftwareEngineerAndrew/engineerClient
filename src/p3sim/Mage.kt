@@ -55,7 +55,8 @@ object Mage {
     private class Flying(val e: Sheep, val at: Int) { var boomAt = -1 }
     private val sheep = ArrayList<Flying>()
 
-    fun isMage() = P3Sim.myClass == DungeonClass.MAGE
+    /** Mage, or any class with Mage Beam On All Classes: the beam and Guided Sheep are yours. */
+    fun isMage() = P3Sim.myClass == DungeonClass.MAGE || P3Sim.mageAll
 
     fun beamItem(id: String?) = id in BEAM_ITEMS
 

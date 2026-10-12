@@ -1148,7 +1148,7 @@ object SimItems {
         if (fullStack && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
             SimServer.run("archer ability") { Sim.player?.let { p -> asClicked(p, "archer ability") { volley(p) } } }
         // The Mage's: Guided Sheep.
-        if (fullStack && Mage.isMage()) SimServer.run("mage ability") { Sim.player?.let { p -> Fight.afterPing("guided sheep") { Mage.ability(p) } } }
+        if (fullStack && Mage.isMage() && P3Sim.myClass != com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER) SimServer.run("mage ability") { Sim.player?.let { p -> Fight.afterPing("guided sheep") { Mage.ability(p) } } }
         return true
     }
 
