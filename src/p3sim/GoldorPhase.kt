@@ -98,6 +98,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 val spot = Practice.startSpot()
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
+                Practice.holdStartItem(player)
             }
             Practice.hold(holdFor)
             return
@@ -146,6 +147,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                     val spot = if (practice) Practice.startSpot() else Spots.p3Start(from)
                     Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                     SimItems.giveHotbar(player, p3 = true)
+                    if (practice) Practice.holdStartItem(player)
                 }
             } else {
                 // From Storm: the Superboom onto the bar where the Hyperion was (a swap: with a saved

@@ -427,7 +427,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             change(if (start != null) "§aStart Position" else "Start Position", 100,
                 "Click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
                     (start?.let { "Now: S${Practice.customSection}, ${at(it)}." } ?: "Not set.")) {
-                here()?.let { h -> val n = Practice.setStart(h); EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}.") }
+                here()?.let { h ->
+                    val held = mc.player?.mainHandItem
+                    val n = Practice.setStart(h, held?.let { Practice.itemKey(it) })
+                    EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}${held?.takeIf { !it.isEmpty }?.let { "§7, holding §f${it.hoverName.string}" } ?: ""}§7.")
+                }
             },
             ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
                 tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: removes the last one. Now: $cps."),
