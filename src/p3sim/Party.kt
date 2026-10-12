@@ -115,7 +115,7 @@ object Party {
     fun rosterChanged() {
         bots()
         val ph = Fight.phase as? GoldorPhase ?: return
-        if (botsFor !== ph) return
+        if (!botsOn || botsFor !== ph) return
         // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its
         // role's jobs; then whatever a removed bot had and no player does goes to the bots.
         for (c in P3Plan.botOrder()) if (!Players.isPlayerClass(c) && botOf(c)?.entity == null) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
@@ -128,7 +128,8 @@ object Party {
     /** Every job left undone that no player has and no bot holds: its picked or role's bot, else the least busy. */
     private fun adoptOrphans(phase: GoldorPhase) {
         val ghostJobs = bots.flatMap { it.ghost?.jobs.orEmpty() }.toSet()
-        val crew = bots.filter { it.ghost == null && it.entity != null }
+        // Not one holding on an early-enter spot (its jobs wait for the release, and might never come).
+        val crew = bots.filter { it.ghost == null && it.entity != null && !it.hold }
         if (crew.isEmpty()) return
         val plan = P3Plan.plan()
         for (job in P3Plan.allJobs()) {
@@ -254,13 +255,22 @@ object Party {
      * what they left undone (this section's now, later ones on the plan's times).
      */
     fun takeOver(phase: GoldorPhase, c: DungeonClass, at: Vec3?, theirs: Set<String>) {
-        if (botsFor !== phase || Players.isPlayerClass(c)) return
+        if (!botsOn || botsFor !== phase || Players.isPlayerClass(c)) return
         // Its bot may be there already without a body (a full party's roster change makes one).
         val had = botOf(c)
         if (had?.entity != null) return
         val order = P3Plan.botOrder()
         val b = had ?: Bot(c, order.indexOf(c) + 1).also { bots += it; bots.sortBy { b -> order.indexOf(b.clazz) } }
         b.inSection = phase.section
+        // A player's early enter it now owns: done if its section has begun (the player was on it), or there already if
+        // the player stood on it, so the bot doesn't go back and hold for leaps that came long ago.
+        for (into in 2..5) if (eeOf(into)?.owner == c) {
+            if (into <= phase.section || youArrived[into]) {
+                eeArrived[into] = true
+                if (eeArrivedN[into] < 0) eeArrivedN[into] = phase.n
+            }
+            if (into <= phase.section) released[into] = true
+        }
         val plan = P3Plan.plan()
         // Not a player's, nor a job some bot already has.
         // (The one leaving is still listed while they go: theirs count as nobody's.)

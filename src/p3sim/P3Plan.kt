@@ -195,7 +195,8 @@ object P3Plan {
     fun botOrder(): List<DungeonClass> {
         val mineClass = P3Sim.ownClass
         val order = (leapOrder + Party.CLASSES).distinct().filter { it != mineClass }
-        leapOrder.clear(); leapOrder += order
+        // Only when it changed: the server reads it every tick while the menu may write it.
+        if (order != leapOrder) { leapOrder.clear(); leapOrder += order }
         return if (odinSort) odinOrder(order) ?: order else order
     }
 
