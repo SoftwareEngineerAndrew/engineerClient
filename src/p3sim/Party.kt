@@ -834,7 +834,7 @@ object Party {
         val j = next(b) ?: return
         // A gate it can throw at from here: it stays.
         if (j.job.startsWith("gate") && inReach(b, j.job)) return
-        if (j.at >= 0 || sectionOf(j.job) <= b.inSection) go(b, spotOf(j.job), n, j.at, "${j.job}${if (j.at < 0) " (its section not started)" else ""}", lead = leadOf(j.job))
+        if (j.at >= 0 || sectionOf(j.job) <= b.inSection) go(b, spotOf(j.job), n, j.at, "${j.job}${if (j.at < 0) " (its section not started)" else ""}", presetStand(j.job)?.let { it.yaw to it.pitch }, lead = leadOf(j.job))
     }
 
     /**
@@ -855,7 +855,10 @@ object Party {
 
     private fun sectionOf(job: String) = job.removePrefix("gate ").toIntOrNull() ?: job.substring(1, 2).toInt()
 
-    private fun spotOf(job: String): Vec3 = STANDS[job] ?: job.removePrefix("gate ").toIntOrNull()?.let { GATES.getOrNull(it) } ?: CORE_SPOT
+    private fun spotOf(job: String): Vec3 = presetStand(job)?.let { Vec3(it.x, it.y, it.z) } ?: STANDS[job] ?: job.removePrefix("gate ").toIntOrNull()?.let { GATES.getOrNull(it) } ?: CORE_SPOT
+
+    /** The skill's own stand for [job] (Roles' "stand/<job>"), with how the bot faces there. */
+    private fun presetStand(job: String): Spots.Spot? = P3Plan.preset().defaults["stand/$job"]
 
     /**
      * A tick of getting there, as teammates do: walking on the
