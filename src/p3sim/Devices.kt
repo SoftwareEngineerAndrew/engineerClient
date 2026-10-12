@@ -134,8 +134,21 @@ class Devices(val phase: GoldorPhase) {
             }
         }
 
-        /** 4 cells, no repeats, new each time. */
-        private fun newSequence() = (0 until 16).shuffled().take(4)
+        /**
+         * 4 cells, no repeats, new each time. SS Luck: of 3000^|luck| draws (1 at 0, about 55 at 50%), the one with the
+         * shortest path lamp to lamp (4 neighbours in a line at 100%); bad luck the longest (corner to corner at -100%).
+         * Even all the way across: the path's 6.4 blocks on average at 0, 4.7 at 20%, 3.5 at 50%.
+         */
+        private fun newSequence(): List<Int> {
+            val luck = P3Sim.ssLuck
+            val x = Math.pow(3000.0, Math.abs(luck))
+            val n = (x.toInt() + if (Random.nextDouble() < x - x.toInt()) 1 else 0).coerceAtLeast(1)
+            val draws = List(n) { (0 until 16).shuffled().take(4) }
+            return if (luck > 0) draws.minBy { path(it) } else draws.maxBy { path(it) }
+        }
+
+        /** Lamp to lamp, in blocks. */
+        private fun path(s: List<Int>) = s.zipWithNext().sumOf { (a, b) -> Math.hypot((a % 4 - b % 4).toDouble(), (a / 4 - b / 4).toDouble()) }
 
         /** The stray light: not part of the sequence, so a cell outside it. */
         private fun stray(): Int = ((0 until 16) - sequence.toSet()).random()
@@ -195,7 +208,8 @@ class Devices(val phase: GoldorPhase) {
                 after(3) { for (c in 0 until 16) button(c, false) }
                 // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26)
                 // or stray + [a, b] (34); the buttons stay stale-clickable through it.
-                val plain = Random.nextBoolean()
+                // SS Luck: the quick one (26, no stray) more often, always at 100%; bad luck the slow one.
+                val plain = Random.nextDouble() < 0.5 + 0.5 * P3Sim.ssLuck
                 after(3 + if (plain) 26 else 34) {
                     sequence = newSequence()
                     val ex = listOf(sequence[0], sequence[1])

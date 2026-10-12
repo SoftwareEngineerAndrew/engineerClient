@@ -288,6 +288,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 toggle("No Melodies", P3Sim.noMelodies, 110, P3Sim.noMelodiesS.description) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
                 toggle("Click Limit", P3Sim.clickLimitS.value, 110, P3Sim.clickLimitS.description) { P3Sim.clickLimitS.value = !P3Sim.clickLimitS.value },
                 LuckSlider(110),
+                LuckSlider(110, "SS Luck", P3Sim.ssLuckS),
                 toggle("1st Click Melody", P3Sim.firstClickMelody, 110, "Always First Click Melody: " + P3Sim.firstClickMelodyS.description) { P3Sim.firstClickMelodyS.value = !P3Sim.firstClickMelody },
             )),
             stack("§eTimings", 106, "The fight's numbers.", listOf(
@@ -362,15 +363,16 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         override fun applyValue() = setSpeed(speed())
     }
 
-    /** Terminal Luck, -100 to 100% in fives. */
-    private inner class LuckSlider(w: Int) : AbstractSliderButton(0, 0, w, 20, Component.empty(), (P3Sim.termLuck + 1) / 2) {
+    /** A luck setting ([s]: Terminal Luck, SS Luck), -100 to 100% in fives. */
+    private inner class LuckSlider(w: Int, private val name: String = "Luck", private val s: com.odtheking.odin.clickgui.settings.impl.NumberSetting<*> = P3Sim.termLuckS) :
+        AbstractSliderButton(0, 0, w, 20, Component.empty(), (s.value.toDouble() / 100 + 1) / 2) {
         init {
             updateMessage()
-            setTooltip(tip(P3Sim.termLuckS.description))
+            setTooltip(tip(s.description))
         }
         private fun luck() = Math.round(value * 40).toInt() * 5 - 100
-        override fun updateMessage() { message = Component.literal("Luck: ${if (luck() < 0) "§c" else ""}${luck()}%") }
-        override fun applyValue() { P3Sim.termLuckS.value = luck(); ModuleManager.saveConfigurations() }
+        override fun updateMessage() { message = Component.literal("$name: ${if (luck() < 0) "§c" else ""}${luck()}%") }
+        override fun applyValue() { @Suppress("UNCHECKED_CAST") (s as com.odtheking.odin.clickgui.settings.impl.NumberSetting<Int>).value = luck(); ModuleManager.saveConfigurations() }
     }
 
     /** Practice's start timer, 0 to 5 s in tenths. */
