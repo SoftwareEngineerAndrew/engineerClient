@@ -430,11 +430,17 @@ class Devices(val phase: GoldorPhase) {
             return held
         }
 
+        /** Who last stood on the plate: the device is theirs when it's done. */
+        private var plateBy: String? = null
+
         private fun rawOnPlate(): Boolean {
-            val p = Sim.player ?: return false
-            // A pressure plate: pressed while your box overlaps its block (feet within its lower quarter).
-            val b = p.boundingBox
-            return b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
+            // A pressure plate: pressed while someone's box overlaps its block (feet within its lower quarter).
+            val p = Sim.players().firstOrNull { pl ->
+                val b = pl.boundingBox
+                b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
+            } ?: return false
+            plateBy = p.gameProfile.name
+            return true
         }
 
         /** End of each tick (after the arrows moved, so a hit on a grid tick shows the next target in that tick). */
@@ -466,7 +472,7 @@ class Devices(val phase: GoldorPhase) {
             if (lit < 0 && hits == 0 && !onPlate()) return
             if (lit == current) { Blocks.set(pos, B.DYED_TERRACOTTA.blue().defaultBlockState()); lit = -1 }
             hits++
-            if (hits >= 9) { clear(); st.complete(Sim.me) }
+            if (hits >= 9) { clear(); st.complete(plateBy ?: Sim.me) }
         }
 
         val targets get() = blocks
@@ -506,4 +512,9 @@ class Devices(val phase: GoldorPhase) {
 }
 
 /** A delayed step of a device (dropped when [gen] is stale). */
-private class Job(val at: Int, val gen: Int, val run: () -> Unit)
+/** A device's queued step, run as whoever caused it ([Sim.asPlayer]: the presser's credit stays theirs). */
+private class Job(val at: Int, val gen: Int, private val body: () -> Unit) {
+    private val actor = Sim.acting
+    private val all = Sim.toAll
+    fun run() = Sim.asPlayer(actor, all, body)
+}

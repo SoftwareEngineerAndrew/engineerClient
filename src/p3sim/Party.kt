@@ -84,8 +84,38 @@ object Party {
 
     /** An early enter as this run has it: whose (a ghost's: as in its run, on its spot), where. [into] 6: the recore. */
     class Ee(val into: Int, val label: String, val spot: Vec3, val yaw: Float, val pitch: Float, val owner: DungeonClass?) {
-        val byYou get() = owner != null && owner == P3Sim.myClass
+        /** A player's (yours, or a party player's: no bot does it). */
+        val byYou get() = owner != null && Players.isPlayerClass(owner)
+        /** The player doing it, if a player is. */
+        val player get() = Players.playerOf(owner)
     }
+
+    /** One of the party as a player sees it: another player, or a bot. */
+    class Mate(val name: String, val clazz: DungeonClass, val player: net.minecraft.server.level.ServerPlayer?, val bot: Bot?) {
+        val pos: Vec3 get() = player?.position() ?: bot!!.pos
+        val yaw: Float get() = player?.yRot ?: bot!!.yaw
+        val pitch: Float get() = player?.xRot ?: bot!!.entity?.xRot ?: bot!!.pitch
+        /** There to leap to: a player, or a bot standing in the fight. */
+        val here: Boolean get() = player != null || bot?.entity != null
+        val profile: GameProfile get() = player?.gameProfile ?: profile(bot!!)
+    }
+
+    /** Everyone but [viewer], players and bots, in [viewer]'s leap order (slots 1-4). */
+    fun mates(viewer: net.minecraft.server.level.ServerPlayer?): List<Mate> {
+        val mine = viewer?.let { Players.classOf(it) } ?: P3Sim.ownClass
+        val all = bots()
+        return P3Plan.orderFor(mine).mapNotNull { c ->
+            val pl = Players.playerOf(c)?.takeIf { it !== viewer }
+            if (pl != null) Mate(pl.gameProfile.name, c, pl, null)
+            else all.firstOrNull { it.clazz == c }?.let { Mate(it.name, c, null, it) }
+        }
+    }
+
+    /** A player joined or left, or took a class: the bots follow at once (one a player took leaves the fight). */
+    fun rosterChanged() { bots() }
+
+    /** The players' classes' positions: who stands where. */
+    private fun posOf(c: DungeonClass?): Vec3? = Players.playerOf(c)?.position()
     private val ees = arrayOfNulls<Ee>(7)
 
     /** Who early-enters into [into] this run, and where (null: nobody). */
@@ -100,7 +130,7 @@ object Party {
         for (into in 2..6) {
             val k = if (into == 6) 5 else into
             val base = P3Plan.earlyEnters.firstOrNull { it.into == into }
-            val owner = GhostPlayer.eeOwner(plan.ee[k]?.name, P3Sim.myClass?.name,
+            val owner = GhostPlayer.eeOwner(plan.ee[k]?.name, P3Sim.ownClass.name,
                 bots.filter { it.ghost?.earlyEnters(k) == true }.map { it.clazz.name }, bots.filter { it.ghost != null }.map { it.clazz.name }.toSet())
             val c = CLASSES.firstOrNull { it.name == owner }
             // The one set in Roles for this skill and class, else the preset's own, else the Early Enters tab's.
@@ -108,9 +138,12 @@ object Party {
             val g = bots.firstOrNull { it.clazz == c }?.ghost
             // A ghost's spot is where it stood in its run (the recore: the plan's).
             val f = if (into == 6) null else g?.eeSpot(k)
+            // A party player's: their own spot (their plan's).
+            val js = base?.let { e -> Players.playerOf(c)?.takeIf { !Sim.isHost(it) }?.let { Players.spotOf(it, e.key) } }
             ees[into] = when {
                 c == null -> null
                 f != null -> Ee(into, base?.label ?: "EE$into", Vec3(f.p.x, f.p.y, f.p.z), f.yaw, f.pitch, c)
+                base != null && js != null -> Ee(into, base.label, Vec3(js.x, js.y, js.z), js.yaw, js.pitch, c)
                 base != null && spot != null -> Ee(into, base.label, Vec3(spot.x, spot.y, spot.z), spot.yaw, spot.pitch, c)
                 else -> null
             }
@@ -159,10 +192,26 @@ object Party {
         b.to = to; b.goAt = at; b.due = due
     }
 
-    /** The bots, in leap slot order (rebuilt when your class or the order changes). */
+    /**
+     * The bots, in leap slot order (rebuilt when your class or the order changes): one per class no player plays. A
+     * player taking a class mid-fight takes its bot's place at once (the bot and its jobs go); a class a player left gets
+     * its bot back at the next start.
+     */
     fun bots(): List<Bot> {
         val order = P3Plan.botOrder()
-        if (bots.map { it.clazz } != order) { clear(); bots.clear(); order.forEachIndexed { i, c -> bots += Bot(c, i + 1) } }
+        val want = order.filter { !Players.isPlayerClass(it) }
+        if (bots.map { it.clazz } == want) return bots
+        val live = bots.any { it.entity != null }
+        if (live) {
+            val gone = bots.filter { it.clazz !in want }
+            for (b in gone) {
+                b.entity?.discard(); b.entity = null
+                jobs.removeAll { it.bot === b }; leaps.removeAll { it.bot === b }
+            }
+            bots.removeAll(gone.toSet())
+            if (bots.map { it.clazz }.toSet() == want.toSet() || bots.any { it.entity != null }) return bots
+        }
+        clear(); bots.clear(); want.forEach { c -> bots += Bot(c, order.indexOf(c) + 1) }
         return bots
     }
 
@@ -206,7 +255,7 @@ object Party {
     /** Whose leaps each early enterer waits for before moving on ("1" = that section's T1's doer, "ee3"...); null: everyone free. */
     private val waitsFor = arrayOfNulls<List<String>>(6)
     /** You've been on the early enterer (leapt onto it). */
-    private val youOn = BooleanArray(6)
+    private val youOn = Array(6) { HashSet<DungeonClass>() }
     private val holdNoted = BooleanArray(6)
     /** The early enterer into each section has moved on (everyone it waited for leapt). */
     private val released = BooleanArray(6)
@@ -232,7 +281,7 @@ object Party {
 
     fun startP3(phase: GoldorPhase) {
         clear()
-        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.fill(false); holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
+        youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.forEach { it.clear() }; holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
         eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false
         planned = 0
         lastLeap = 0
@@ -249,7 +298,7 @@ object Party {
         val crew = bots.filter { it.ghost == null }
         // Every job that isn't yours: its role's bot (a stack: the first listed), or the least busy one.
         for (job in P3Plan.allJobs()) {
-            if (P3Plan.isMine(job) || job in ghostJobs) continue
+            if (Players.isPlayerJob(job) || job in ghostJobs) continue
             val st = phase.stations.firstOrNull { it.id == job }
             if (st?.done == true) continue
             if (st == null && job.startsWith("gate") && phase.gateIsDown(job.removePrefix("gate ").toIntOrNull() ?: 0)) continue
@@ -281,7 +330,7 @@ object Party {
         // Helper: bots help on your stacks (both try; whoever's first).
         if (P3Plan.helper) for (h in P3Plan.preset().helps) {
             if (h.section < from || !P3Plan.isMine(h.yours) || !h.jobs.all { P3Plan.isMine(it) }) continue
-            val c = P3Plan.doer(h.by)?.takeIf { it != P3Sim.myClass } ?: continue
+            val c = P3Plan.doer(h.by)?.takeIf { !Players.isPlayerClass(it) } ?: continue
             val bot = botOf(c)?.takeIf { it.ghost == null } ?: continue
             for (j in h.jobs) if (phase.stations.firstOrNull { it.id == j }?.done != true) {
                 jobs += Job(j, bot, h.section, h.at)
@@ -341,16 +390,16 @@ object Party {
         override fun eeArrivedAt(into: Int, who: String): Int? {
             val owner = eeOf(into)?.owner ?: return 0
             if (owner.name != who) return 0
-            return (if (owner == P3Sim.myClass) youArrivedN[into] else eeArrivedN[into]).takeIf { it >= 0 }
+            return (if (Players.isPlayerClass(owner)) youArrivedN[into] else eeArrivedN[into]).takeIf { it >= 0 }
         }
         override fun eeReadyAt(into: Int) = if (eeOf(into)?.owner == b.clazz) readyAt[into].takeIf { it >= 0 } else 0
         override fun recoredAt(who: String): Int? {
             val owner = eeOf(5)?.owner ?: return 0
             if (owner.name != who) return 0
-            return (if (owner == P3Sim.myClass) youInCoreN else recoredN).takeIf { it >= 0 }
+            return (if (Players.isPlayerClass(owner)) youInCoreN else recoredN).takeIf { it >= 0 }
         }
         override fun positionOf(who: String): P? =
-            if (who == P3Sim.myClass?.name) Sim.player?.position()?.p() else bots.firstOrNull { it.clazz.name == who }?.pos?.p()
+            posOf(Players.classByName(who))?.p() ?: bots.firstOrNull { it.clazz.name == who }?.pos?.p()
     }
 
     /** What a ghost does, done as the bots do it ([GhostPlayer.Body]). */
@@ -414,10 +463,10 @@ object Party {
      * again), in the core once it's open.
      */
     private fun trackYou(phase: GoldorPhase) {
-        val p = Sim.player?.position() ?: return
         val n = phase.n
         for (into in 2..5) {
             val ee = eeOf(into)?.takeIf { it.byYou } ?: continue
+            val p = ee.player?.position() ?: continue
             val d = p.distanceTo(ee.spot)
             if (youArrivedN[into] < 0) {
                 if (phase.section < into && d <= 3.0) { youArrivedN[into] = n; GhostCapture.event("ee", ee.owner!!.name, into) }
@@ -425,10 +474,11 @@ object Party {
             // Off and straight back on (a step, a blink the wrong way): still on it.
             else if (youLeftN[into] >= 0 && d <= 3.0 && n - youLeftN[into] <= GhostPlayer.BACK) { youLeftN[into] = -1; GhostCapture.event("back", ee.owner!!.name, into) }
         }
-        if (phase.section >= 5 && youInCoreN < 0 && GoldorPhase.CORE_BOX.contains(p)) {
+        val inCore = Sim.players().firstOrNull { GoldorPhase.CORE_BOX.contains(it.position()) }
+        if (phase.section >= 5 && youInCoreN < 0 && inCore != null) {
             youInCoreN = n
             GhostCapture.event("core")
-            P3Sim.myClass?.takeIf { eeOf(5)?.owner == it }?.let { GhostCapture.event("recore", it.name) }
+            Players.classOf(inCore).takeIf { eeOf(5)?.owner == it }?.let { GhostCapture.event("recore", it.name) }
         }
     }
 
@@ -464,7 +514,7 @@ object Party {
         // Leaps that are due.
         leaps.filter { n >= it.at }.forEach { l ->
             // Onto you at your early enter: only while you're in position.
-            if (l.youAt != null && Sim.player?.position()?.let { it.distanceTo(l.youAt) <= 3.0 } != true) return@forEach
+            if (l.youAt != null && Sim.players().none { it.position().distanceTo(l.youAt) <= 3.0 }) return@forEach
             leaps.remove(l)
             l.onto()?.let { dbg("§e${l.bot.name}§7 leaps (${it.short()})"); leapTo(l.bot, it, n); walkOn(l.bot, n) }
         }
@@ -557,7 +607,7 @@ object Party {
         if (eeBot != null && !eeArrived[s]) dbg("§e${eeBot.name}§7 isn't on its ${ee.label} spot yet: going on there, the others leap to it")
         // Nobody early-enters S4 (there's no EE4): everyone leaps onto the core early enterer holding by the core, and walks on from there.
         val coreHold = if (s == 4 && ee == null) coreBot()?.takeIf { it.ghost == null && eeArrived[5] && it.hold } else null
-        val coreYou = s == 4 && ee == null && eeOf(5)?.let { it.byYou && Sim.player?.position()?.let { p -> p.distanceTo(it.spot) <= 3.0 } == true } == true
+        val coreYou = s == 4 && ee == null && eeOf(5)?.let { it.byYou && it.player?.position()?.let { p -> p.distanceTo(it.spot) <= 3.0 } == true } == true
         val onto = eeBot ?: coreHold
         var i = 0
         for (b in bots) {
@@ -575,7 +625,7 @@ object Party {
             if (s == 3 && eeOf(4)?.let { !it.byYou && it.owner == b.clazz } == true && jobs.none { it.bot === b && sectionOf(it.job) <= 3 }) { b.inSection = s; continue }
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.pos }
-            else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { Sim.player?.position() }
+            else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { eeOf(5)?.player?.position() }
             else walkOn(b, n)
         }
     }
@@ -627,7 +677,7 @@ object Party {
         val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] &&
             n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
         if (!open) return
-        val target: () -> Vec3? = if (eeBot != null) ({ eeBot.pos }) else ({ Sim.player?.position() })
+        val target: () -> Vec3? = if (eeBot != null) ({ eeBot.pos }) else ({ ee.player?.position() })
         for (b in bots) {
             if (b === eeBot || b.ghost != null || b.inSection >= into || busy(b)) continue
             b.inSection = into
@@ -648,8 +698,11 @@ object Party {
         // you on it) while it holds on its spot; on it before it got there doesn't count.
         for (into in s..(s + 1).coerceAtMost(5)) {
             val b = eeOf(into)?.takeIf { !it.byYou }?.let { botOf(it.owner) } ?: continue
-            if (youOn[into] || !b.hold || !eeArrived[into] || released[into]) continue
-            if (Sim.player?.position()?.let { it.distanceTo(b.pos) < 3.0 } == true) { youOn[into] = true; dbg("§ayou're on ${b.name}§7 (EE$into)") }
+            if (!b.hold || !eeArrived[into] || released[into]) continue
+            for (pl in Sim.players()) {
+                val c = Players.classOf(pl)
+                if (c !in youOn[into] && pl.position().distanceTo(b.pos) < 3.0) { youOn[into] += c; dbg("§a${pl.gameProfile.name} is on ${b.name}§7 (EE$into)") }
+            }
         }
         for (into in s..(s + 1).coerceAtMost(5)) {
             val ee = eeOf(into)?.takeIf { !it.byYou } ?: continue
@@ -657,16 +710,17 @@ object Party {
             if (released[into] || !b.hold || !eeArrived[into] || b.inSection < into) continue
             val waits = waitsFor[into]
             // You're waited for if you're one who leaps onto it (on SS you leap to the 2nd term instead).
-            val needYou = waits == null || waits.any { whoFor(it, into) == P3Sim.myClass }
+            val players = Players.playerClasses().filter { it != b.clazz }
+            val needed = if (waits == null) players else waits.mapNotNull { whoFor(it, into) }.filter { it in players }
             val ok = when {
                 // Never without you (a safety net at 30 s); the bots get 10 s.
                 into == s && n - sectionN[s] >= 600 -> true
-                needYou && !leapt(P3Sim.myClass, b, into) -> false
+                needed.any { !leapt(it, b, into) } -> false
                 into == s && n - sectionN[s] >= 200 -> true
                 waits != null -> waits.all { t -> leapt(whoFor(t, into), b, into) }
                 // No list: everyone - every bot (busy ones too, once they're done and leapt) and you.
                 else -> (into == s || preleapOpen(into, n)) &&
-                    bots.all { it === b || leapt(it.clazz, b, into) } && leapt(P3Sim.myClass, b, into)
+                    bots.all { it === b || leapt(it.clazz, b, into) } && players.all { leapt(it, b, into) }
             }
             // Everyone's on: it moves 0.3 s later (as a player reacts).
             if (!ok) { readyAt[into] = -1; continue }
@@ -686,9 +740,9 @@ object Party {
     /** Debug: who an early enterer has (+) and hasn't (-) had leap onto it. */
     private fun waitStatus(b: Bot, into: Int): String {
         val waits = waitsFor[into]
-        val who = (waits?.mapNotNull { whoFor(it, into) } ?: bots.filter { it !== b }.map { it.clazz }) + listOfNotNull(P3Sim.myClass)
+        val who = (waits?.mapNotNull { whoFor(it, into) } ?: bots.filter { it !== b }.map { it.clazz }) + Players.playerClasses()
         return who.distinct().filter { it != b.clazz }.joinToString(" ") { c ->
-            val name = if (c == P3Sim.myClass) "you" else Roles.label(c)
+            val name = Players.playerOf(c)?.gameProfile?.name ?: Roles.label(c)
             if (leapt(c, b, into)) "§a+$name§7" else "§c-$name§7"
         } + if (waits != null) " (list: ${waits.joinToString(" ")})" else " (everyone)"
     }
@@ -717,7 +771,7 @@ object Party {
      */
     private fun leapt(c: DungeonClass?, onto: Bot, into: Int): Boolean = when {
         c == null || c == onto.clazz -> true
-        c == P3Sim.myClass -> youOn[into]
+        Players.isPlayerClass(c) -> c in youOn[into]
         else -> botOf(c)?.let { o ->
             val g = o.ghost
             if (g != null) o.pos.distanceTo(onto.pos) < 3.0 || g.leaptOnto(onto.clazz.name, eeArrivedN[into].coerceAtLeast(0)) || !g.expectsLeap(onto.clazz.name, into)
@@ -733,10 +787,10 @@ object Party {
         if (into > 4) return
         val ee = eeOf(into)?.takeIf { it.byYou } ?: return
         if (youArrived[into]) return
-        val p = Sim.player ?: return
+        val p = ee.player ?: return
         if (p.position().distanceTo(ee.spot) > 3.0) return
         youArrived[into] = true
-        Sim.note("§aAt your ${ee.label}§7: the party leaps to you.")
+        Sim.asPlayer(p) { Sim.note("§aAt your ${ee.label}§7: the party leaps to you.") }
     }
 
     /** Is a section's last job held for you (you early-enter the next one and aren't there yet). */
@@ -746,7 +800,7 @@ object Party {
         if (youArrived[ee.into]) return false
         if (!holdNoted[ee.into] && phase.stations.count { it.section == phase.section && !it.done } == 1) {
             holdNoted[ee.into] = true
-            Sim.note("§7The party holds S${phase.section}'s last job until you're at your §e${ee.label}§7 spot (Wait for you, in the menu's Early Enters).")
+            Sim.asPlayer(ee.player) { Sim.note("§7The party holds S${phase.section}'s last job until you're at your §e${ee.label}§7 spot (Wait for you, in the menu's Early Enters).") }
         }
         return true
     }
@@ -807,7 +861,7 @@ object Party {
         val ee = eeOf(5)
         val onto: (() -> Vec3?)? = when {
             ee == null -> null
-            ee.byYou -> Sim.player?.takeIf { GoldorPhase.CORE_BOX.inflate(4.0).contains(it.position()) }?.let { p -> { p.position() } }
+            ee.byYou -> ee.player?.takeIf { GoldorPhase.CORE_BOX.inflate(4.0).contains(it.position()) }?.let { p -> { p.position() } }
             else -> botOf(ee.owner)?.let { b -> { b.pos } }
         }
         bots.forEachIndexed { i, b ->
@@ -1039,9 +1093,9 @@ object Party {
 
     /** [b] leaps onto [at]: lands there facing as whoever it leapt to; their mod says so in party chat a tick later. */
     private fun leapTo(b: Bot, at: Vec3, n: Int) {
-        val p = Sim.player
+        val p = Sim.players().firstOrNull { it.position().distanceTo(at) < 1.0 }
         val onto: Pair<String, Float>? = when {
-            p != null && p.position().distanceTo(at) < 1.0 -> Sim.me to p.yRot
+            p != null -> p.gameProfile.name to p.yRot
             else -> bots.firstOrNull { it !== b && it.pos.distanceTo(at) < 1.0 }?.let { it.name to it.yaw }
         }
         b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null
@@ -1050,7 +1104,7 @@ object Party {
         // Most teammates' leaps are announced, usually 1 tick after the tp.
         val name = onto?.first ?: return
         // On you: what an early enterer (you, recording) waits for.
-        if (name == Sim.me) GhostCapture.event("landed", b.clazz.name)
+        if (name == Sim.hostName) GhostCapture.event("landed", b.clazz.name)
         val gen = generation
         Fight.later(1, "leap announce") { if (gen == generation) Sim.chat(partyLine(b, "Leaped to $name!")) }
     }

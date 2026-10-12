@@ -50,12 +50,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
         addRenderableWidget(Button.builder(Component.literal("§aRestart P3")) {
             mc.gui.setScreen(null)
-            SimServer.run("restart") { Fight.start(Fight.Start.P3) }
-        }.tooltip(tip("Starts P3 over from its beginning, everything reset (Stop: ends it).")).bounds(cx - RESTART_W / 2, restartY, RESTART_W, 20).build())
+            SimActions.send("start", "what" to Fight.Start.P3.name)
+        }.tooltip(tip("Starts P3 over from its beginning, everything reset (Stop: ends it)." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY, RESTART_W, 20).build())
         addRenderableWidget(Button.builder(Component.literal("§cStop")) {
             mc.gui.setScreen(null)
-            SimServer.run("stop") { Fight.end() }
-        }.tooltip(tip("Ends the run: the fight stops and the splits clear.")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
+            SimActions.send("stop")
+        }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
 
         party()
 
@@ -80,15 +80,23 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             }.tooltip(tip("$about Your jobs become your class's role in it.")).bounds(right, skillY + k * ROW, SIDE_W, 20).build())
         }
 
-        // Right of it: your role (class), one above the other; a bot plays each of the others.
+        // Right of it: your role (class), one above the other; a bot plays each of the others (in a party: the
+        // classes nobody plays). A class another player has is shown with their name: taking it swaps you.
         title("§eRole", roleX, CLASS_W, roleY)
         val roles = P3Plan.preset().roles
         Party.CLASSES.forEachIndexed { i, c ->
-            addRenderableWidget(Button.builder(Component.literal(if (c == P3Sim.myClass) "§a§n${Roles.label(c)}" else Roles.label(c))) {
+            val other = PartyClient.team.firstOrNull { it.player && it.clazz == c }
+            val text = when {
+                c == P3Sim.myClass -> "§a§n${Roles.label(c)}"
+                other != null -> "§b${Roles.label(c).take(4)} §7${other.name.take(6)}"
+                else -> Roles.label(c)
+            }
+            addRenderableWidget(Button.builder(Component.literal(text)) {
                 P3Sim.classS.index = i
                 ModuleManager.saveConfigurations()
                 rebuildWidgets()
-            }.tooltip(tip("Play as ${Roles.label(c)}: your jobs become its ${P3Plan.skillName()} role (${roles[c] ?: "none"}); a bot plays each of the other classes."))
+            }.tooltip(tip(if (other != null) "${other.name} plays the ${Roles.label(c)}. Click: you take it and they get yours (${Roles.label(P3Sim.myClass)})."
+                else "Play as ${Roles.label(c)}: your jobs become its ${P3Plan.skillName()} role (${roles[c] ?: "none"}); a bot plays each class no player plays."))
                 .bounds(roleX, roleY + i * ROW, CLASS_W, 20).build())
         }
 
@@ -263,16 +271,17 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         speedRow.addChild(change("-", 54, "10 less speed.") { setSpeed(P3Sim.speed - 10) })
         speedRow.addChild(change("+", 54, "10 more speed.") { setSpeed(P3Sim.speed + 10) })
         // Your hotbar: P1/P2's or P3's, whichever part of the fight you are in (HotbarLayout).
-        val p3Part = Fight.phase !is P1Maxor && Fight.phase !is P2Storm
+        val p3Part = PartyClient.phase != "P1" && PartyClient.phase != "P2"
         val part = if (p3Part) "P3" else "P1/P2"
         val saved = HotbarLayout.has(p3Part)
         row(listOf(
             stack("§eDeath Ticks", 84, P3Sim.deathTicksS.description, DEATH_TICKS.mapIndexed { i, (name, about) ->
                 change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.index = i }
             } + listOf(
-                toggle("Real Masks", P3Sim.realMasks, 84, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
-                change("Mask: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index; server { Sim.player?.let { Masks.equip(it) } } },
-                change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 84, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
+                // Your own (the server puts them on you the moment they change: PartyServer.tick).
+                toggle("Real Masks", P3Sim.realMasksS.value, 84, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasksS.value },
+                change("Mask: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index },
+                change("Pet: ${if (P3Sim.phoenixS.value) "Phoenix" else "Black Cat"}", 84, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenixS.value },
             )),
             // Terminals: random or one type for all.
             stack("§eTerminals", 66, P3Sim.terminalS.description, listOf(
@@ -298,8 +307,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 toggle("Mage On All", P3Sim.mageAll, 106, "Mage Beam On All Classes: " + P3Sim.mageAllS.description) { P3Sim.mageAllS.value = !P3Sim.mageAll },
                 toggle("Infinite Charges", P3Sim.breakerInfinite, 106, "On (green): the Dungeonbreaker never runs out of charges.") { P3Sim.toggleBreakerInfinite() },
                 toggle("Perma Break", P3Sim.breakerPerma, 106, "On (green): blocks the Dungeonbreaker breaks stay broken (through restarts too) until you turn it off; then they all come back.") {
+                    // Off: the server brings the blocks back (PartyServer.tick).
                     P3Sim.toggleBreakerPerma()
-                    if (!P3Sim.breakerPerma) server { SimItems.unPerma() }
                 },
             )),
             stack("§eFight", 92, "How the fight goes on.", listOf(
@@ -313,12 +322,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             )),
             stack("§eOther", 100, "Your hotbar, recording, leaving.", listOf(
                 act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet: every $part hotbar reset (a start, Reset Items) lays them out so. Arrange them first.") {
-                    server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } }
+                    SimActions.send("hotbarSave", "p3" to p3Part)
                 },
                 act("Default Hotbar", 100, "Forgets your saved $part layout: its resets go back to the sim's default.") {
-                    server { EngineerClient.msg(HotbarLayout.reset(p3Part)) }
+                    SimActions.send("hotbarReset", "p3" to p3Part)
                 }.also { it.active = saved },
-                act("Reset Items", 100, "Your hotbar back as it is at a start.") { server { Sim.player?.let { SimItems.giveHotbar(it, p3Part) } } },
+                act("Reset Items", 100, "Your hotbar back as it is at a start.") { SimActions.send("resetItems", "p3" to p3Part) },
                 toggle("Record", P3Sim.record, 100, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
                 act("§7Leave", 100, "Leaves the sim world.") { SimWorld.leave() },
             )),
@@ -345,9 +354,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
     private fun setSpeed(v: Int) {
         val s = v.coerceIn(MIN_SPEED, MAX_SPEED)
         if (s == P3Sim.speed) return
+        // Now, not at the next start: the server applies it the moment it changes (PartyServer.tick: Fight.applySpeed).
         P3Sim.speedS.value = s
-        // Now, not at the next start: Black Cat's +100 and the speed cap come with it (Fight.applySpeed).
-        server { Sim.player?.let { Fight.applySpeed(it) } }
     }
 
     /** Your speed, 100 to 750 in steps of 10. */
@@ -358,7 +366,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         }
         private fun speed() = MIN_SPEED + Math.round(value * (MAX_SPEED - MIN_SPEED) / 10).toInt() * 10
         override fun updateMessage() {
-            message = Component.literal("Speed: ${speed()}" + if (P3Sim.phoenix) " §8(Phoenix out)" else " §8(${speed() + 100} with Black Cat)")
+            message = Component.literal("Speed: ${speed()}" + if (P3Sim.phoenixS.value) " §8(Phoenix out)" else " §8(${speed() + 100} with Black Cat)")
         }
         override fun applyValue() = setSpeed(speed())
     }
@@ -406,10 +414,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         row(cols)
     }
 
-    private fun tp(x: Double, y: Double, z: Double, yaw: Float?, pitch: Float?) = server {
-        GhostCapture.invalidate("a menu teleport")
-        Sim.player?.let { Sim.tp(it, x, y, z, yaw, pitch) }
-    }
+    private fun tp(x: Double, y: Double, z: Double, yaw: Float?, pitch: Float?) =
+        SimActions.send("tp", "x" to x, "y" to y, "z" to z, "yaw" to yaw, "pitch" to pitch)
 
     private fun xyz(x: Double, y: Double, z: Double) = "%.1f, %.1f, %.1f".format(Locale.ROOT, x, y, z)
 
@@ -469,7 +475,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
             },
             DelaySlider(100),
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
-                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
+                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { SimActions.send("practiceCustom") }
                 .also { it.active = start != null },
         ))
         val others = (1..4).filter { it != sec }.mapNotNull { s -> Practice.customJobsIn(s).takeIf { it.isNotEmpty() }?.let { j -> "S$s ${j.joinToString(" ") { COLUMNS[column(it)].first }}" } }.joinToString(", ")
@@ -489,7 +495,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
                 cols += stack(if (i == 0) "§eS$ps Presets" else "", 64, "Section $ps's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
                     act(p.name, 64, "Practice ${p.name} (S$ps): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                         (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
-                        (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { server { Practice.startPreset(p.name) } }
+                        (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
                 })
             }
         }
@@ -569,7 +575,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
 
     private fun onOff(b: Boolean) = if (b) "§aON" else "§cOFF"
 
-    private fun server(run: () -> Unit) = SimServer.run("menu") { run() }
+    /** In a party: more than one player in the sim (starts and stops are everyone's). */
+    private val inParty get() = PartyClient.party
 
     /** A button that takes right clicks too ([left] / [right]). */
     private class ClickButton(w: Int, text: String, tooltip: Tooltip, private val left: () -> Unit, private val right: () -> Unit) :

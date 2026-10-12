@@ -23,13 +23,14 @@ import net.minecraft.world.item.component.ItemLore
 object Masks {
     private class Item(val id: String, val name: String, val cooldown: Int, val safe: Int, val line: String) { var readyAt = 0 }
 
-    private val items = listOf(
+    /** Each player's own three, with their own cooldowns ([perPlayer]). */
+    private val items: List<Item> by perPlayer { listOf(
         // The exact lines (Bonzo's with Hypixel's glyph).
         Item("SPIRIT_MASK", "Spirit Mask", 600, 60, "§6Second Wind Activated§r§a! Your Spirit Mask saved your life!"),
         Item("BONZO_MASK", "Bonzo's Mask", 3600, 60, "§aYour §r§9 Bonzo's Mask §r§asaved your life!"),
         // Item.safe is no longer read: every proc covers SAFE ticks (Phoenix too, not its lore's 4 s).
         Item("PHOENIX", "Phoenix", 1200, 60, "§eYour §r§cPhoenix Pet §r§esaved you from certain death!"),
-    )
+    ) }
 
     /**
      * How long a proc keeps you alive: just under 3 s, so the next death tick always hits. They land on tick 58
@@ -65,7 +66,7 @@ object Masks {
             if (SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.endsWith("_MASK") == true) SimItems.wear(p, EquipmentSlot.HEAD, ItemStack.EMPTY)
             if (SimItems.idOf(inv.getItem(SPARE_SLOT))?.endsWith("_MASK") == true) inv.setItem(SPARE_SLOT, ItemStack.EMPTY)
         } else {
-            val spirit = P3Sim.wornMaskS.index == 0
+            val spirit = P3Sim.wornMask == 0
             SimItems.wear(p, EquipmentSlot.HEAD, if (spirit) SPIRIT_MASK else BONZO_MASK)
             inv.setItem(SPARE_SLOT, if (spirit) BONZO_MASK else SPIRIT_MASK)
         }
@@ -150,7 +151,7 @@ object Masks {
             c.setItem(25, rec(25, Terminals.named(net.minecraft.world.item.Items.CLOCK, "§dMiscellaneous Stats")))
             c.setItem(32, rec(32, Terminals.named(net.minecraft.world.item.Items.LEAD, "§eHunting Stats")))
             c.setItem(34, rec(34, Terminals.named(net.minecraft.world.item.Items.BOOK, "§3Wisdom Stats")))
-            c.setItem(47, if (P3Sim.phoenix) SimItems.head(PHOENIX_TEX, "§7[Lvl 76] §6Phoenix") else rec(47, SimItems.head(BLACK_CAT_TEX, REC_NAME.getValue(47))))
+            c.setItem(47, if (Sim.asPlayer(sp) { P3Sim.phoenix }) SimItems.head(PHOENIX_TEX, "§7[Lvl 76] §6Phoenix") else rec(47, SimItems.head(BLACK_CAT_TEX, REC_NAME.getValue(47))))
             c.setItem(49, Terminals.named(net.minecraft.world.item.Items.BARRIER, "§cClose"))
             c.setItem(50, rec(50, Terminals.named(net.minecraft.world.item.Items.POTION, "§aActive Effects")))
             c.setItem(51, rec(51, Terminals.named(net.minecraft.world.item.Items.DIAMOND, "§aSkyBlock Achievements")))
@@ -166,7 +167,7 @@ object Masks {
                 val worn = sp.getItemBySlot(EquipmentSlot.HEAD).copy()
                 sp.setItemSlot(EquipmentSlot.HEAD, clickedItem.copy())
                 sp.inventory.setItem(index, worn)
-                if (id.endsWith("_MASK")) P3Sim.wornMaskS.index = if (id.endsWith("SPIRIT_MASK")) 0 else 1
+                if (id.endsWith("_MASK")) Sim.asPlayer(sp) { P3Sim.setWornMask(if (id.endsWith("SPIRIT_MASK")) 0 else 1) }
                 Fight.applySpeed(sp)  // the Racing Helmet adds 100 speed
                 Sim.sound(SoundEvents.ARMOR_EQUIP_GENERIC.value(), 1f, 1f)
                 if (!P3Sim.realMasks && id.endsWith("_MASK")) Sim.chat("§7Turn on §eReal Masks§7 (menu, Settings) for the one you wear to be the one that saves you.")
@@ -184,7 +185,7 @@ object Masks {
 
     /** The Pet Rod: Phoenix (saves you once, no Black Cat bonus) <-> Black Cat (+100 speed); applySpeed does the rest. */
     fun swapPet(p: ServerPlayer) {
-        P3Sim.phoenixS.value = !P3Sim.phoenix
+        P3Sim.setPhoenix(!P3Sim.phoenix)
         // The speed update lands 2-3 ticks after the Autopet chat (about evenly); the swap itself is silent
         // bar one vol-0 splash at (200,300,400).
         Fight.later(2 + kotlin.random.Random.nextInt(2), "pet speed") { Fight.applySpeed(p) }
@@ -199,15 +200,20 @@ object Masks {
     }
 
     /** Invincible until (after a proc). */
-    private var safeUntil = 0
+    private var safeUntil by perPlayer { 0 }
 
     /** Phoenix's scream as main names it: an unregistered (direct) sound event. */
     private val PHOENIX_SCREAM = net.minecraft.sounds.SoundEvent.createVariableRangeEvent(net.minecraft.resources.Identifier.parse("minecraft:mob.ghast.affectionate_scream"))
 
+    /** Everyone's masks ready again, nobody a ghost (every start). */
     fun reset() {
+        Sim.forEachPlayer { resetOne() }
+        // Odin's Invincibility Timer restarts with ours on every game (it only ever hears procs, not a sim restart).
+        PartyClient.send("masksReset")
+    }
+
+    private fun resetOne() {
         items.forEach { it.readyAt = 0 }; safeUntil = 0
-        // Odin's Invincibility Timer restarts with ours (it only ever hears procs, not a sim restart).
-        com.engineerclient.EngineerClient.mc.execute { com.engineerclient.misc.OdinMasksUsed.resetTimers() }
         reviveGen++
         if (ghost) { ghost = false; saved = null; Sim.player?.let { p -> restoreArmor(p); p.removeEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY); p.abilities.flying = false; p.abilities.mayfly = false; p.onUpdateAbilities() } }
     }
@@ -238,7 +244,7 @@ object Masks {
         if (item != null) {
             item.readyAt = now + item.cooldown
             // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
-            if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.phoenixS.value = true; Fight.applySpeed(p) }
+            if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.setPhoenix(true); Fight.applySpeed(p) }
             safeUntil = now + SAFE
             // Proc particles as recorded: explosion x3 at your feet, Phoenix adds lava x18.
             Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
@@ -262,6 +268,9 @@ object Masks {
             return
         }
         Sim.chat(if (by == null) "§c ☠ §r§7You died and became a ghost." else "§c ☠ §r§7You were killed by $by and became a ghost.")
+        // The rest of the party sees it with your name.
+        val name = p.gameProfile.name
+        Sim.asPlayer(p) { Sim.chatOthers(if (by == null) "§c ☠ §r§7$name died and became a ghost." else "§c ☠ §r§7$name was killed by $by and became a ghost.") }
         // The Revive Stone line shows in about 71% of deaths on Hypixel; it changes nothing.
         if (kotlin.random.Random.nextInt(100) < 71) Sim.chat("§aYour Revive Stone revived you and broke!")
         becomeGhost(p)
@@ -273,12 +282,12 @@ object Masks {
     // ------------------------------------------------------------------ the ghost
 
     /** Dead and waiting for a revive: invisible, flying where you died, with the ghost kit. */
-    var ghost = false
+    var ghost by perPlayer { false }
         private set
-    private var saved: List<ItemStack>? = null
-    private var savedSlot = 0
-    private var savedArmor: Map<net.minecraft.world.entity.EquipmentSlot, ItemStack>? = null
-    private var reviveGen = 0
+    private var saved: List<ItemStack>? by perPlayer { null }
+    private var savedSlot by perPlayer { 0 }
+    private var savedArmor: Map<net.minecraft.world.entity.EquipmentSlot, ItemStack>? by perPlayer { null }
+    private var reviveGen by perPlayer { 0 }
 
     private val ARMOR_SLOTS = listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET)
 
@@ -332,10 +341,12 @@ object Masks {
     }
 
     private fun revive(p: ServerPlayer) {
-        // The reviver: the nearest bot (reviver choice isn't known; bots never die). No bots: a self-revive in place.
-        val bot = Party.bots().filter { it.entity != null }.minByOrNull { it.pos.distanceToSqr(p.position()) }
+        // The reviver: the nearest teammate alive, a player or a bot (reviver choice isn't known; bots never die). Nobody:
+        // a self-revive in place.
+        val bot = Party.mates(p).filter { it.here && (it.player == null || !Sim.asPlayer(it.player) { ghost }) }.minByOrNull { it.pos.distanceToSqr(p.position()) }
         endGhost(p)
-        Sim.chat("§a ❣ §r§b${Sim.me}§r§a was revived by §r§b${bot?.name ?: Sim.me}§r§a!")
+        // Everyone sees who was revived.
+        Sim.everyone { Sim.chat("§a ❣ §r§b${p.gameProfile.name}§r§a was revived by §r§b${bot?.name ?: p.gameProfile.name}§r§a!") }
         Sim.chat("§cAutopet rule triggered but couldn't find your pet!")
         if (bot != null) Sim.tp(p, bot.pos.x, bot.pos.y, bot.pos.z, p.yRot, p.xRot)
     }

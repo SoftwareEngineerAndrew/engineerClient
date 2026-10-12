@@ -44,6 +44,7 @@
     "P3SimWorldMixin",
     "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
+    "SimActorMixin",
     "NumbersHandlerMixin",
     "ScoreboardSidebarMixin",
     "ScreenBlurMixin",

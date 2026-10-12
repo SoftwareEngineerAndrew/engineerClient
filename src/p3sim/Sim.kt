@@ -15,13 +15,80 @@ import net.minecraft.world.entity.Relative
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
-/** Small server-side helpers for the sim (server thread only). */
+/**
+ * Small server-side helpers for the sim (server thread only).
+ *
+ * In a party ([P3Party]) everyone plays the same fight: whatever one player does (a click, an item, a terminal, a
+ * menu choice) runs as theirs ([asPlayer]): [player] and [me] are them, and what it says goes to them alone, as
+ * Hypixel's own lines do. The fight's own ticks and [everyone] speak to the whole party.
+ */
 object Sim {
     /** Every entity the sim spawns carries this tag, so a reset (or the next start) can clear them. */
     const val TAG = "p3sim"
 
     val level: ServerLevel get() = SimServer.level ?: error("sim not running")
-    val player: ServerPlayer? get() = SimServer.player
+
+    /**
+     * The player this is about: whoever's click, item, packet or menu choice is being handled ([asPlayer]), else
+     * (the fight's own ticks, the client thread) the host, whose game it is.
+     */
+    val player: ServerPlayer? get() = acting ?: SimServer.player
+
+    /** The player set by [asPlayer], on the sim server's thread only (null: none, the fight's own). */
+    val acting: ServerPlayer? get() = actor?.takeIf { SimServer.server?.isSameThread == true }
+    private var actor: ServerPlayer? = null
+
+    /** Inside [everyone]: what's said goes to the whole party, even from one player's action. */
+    private var all = false
+    /** Whether [everyone] is in force (what's queued from it keeps it). */
+    val toAll: Boolean get() = all && SimServer.server?.isSameThread == true
+
+    /** Everyone in the sim, the host first. */
+    fun players(): List<ServerPlayer> = SimServer.server?.playerList?.players?.toList().orEmpty()
+
+    /** The host: the player whose game it is (the first in), whoever [player] is now. */
+    val host: ServerPlayer? get() = SimServer.player
+
+    fun isHost(p: ServerPlayer?) = p != null && p === SimServer.player
+
+    /** Runs [run] as [p]'s: [player], [me], chat, titles and sounds are theirs, and so is what [run] queues ([Fight.later]). */
+    fun <T> asPlayer(p: ServerPlayer?, toAll: Boolean = false, run: () -> T): T {
+        val was = actor; val wasAll = all
+        actor = p; all = toAll
+        try { return run() } finally { actor = was; all = wasAll }
+    }
+
+    /**
+     * SimActorMixin: a packet from [p] is being handled on the sim's server (a click in a window, a block hit, a use):
+     * it acts as theirs until [leavePacket]. [Fight.tick] clears whatever a failed handler left.
+     */
+    @JvmStatic fun enterPacket(p: ServerPlayer) {
+        val s = SimServer.server ?: return
+        if (!s.isSameThread || p.level().server !== s) return
+        actor = p; all = false
+    }
+
+    @JvmStatic fun leavePacket(p: ServerPlayer) { if (actor === p && SimServer.server?.isSameThread == true) actor = null }
+
+    /** Back to the fight's own (the head of each tick). */
+    fun clearActor() { actor = null; all = false }
+
+    /** Runs [run] once for each player in the sim, as theirs ([asPlayer]). */
+    fun forEachPlayer(run: (ServerPlayer) -> Unit) { for (p in players()) asPlayer(p) { run(p) } }
+
+    /** Runs [run] with what it says going to everyone (a progress line, a boss line, a gate), whoever caused it. */
+    fun <T> everyone(run: () -> T): T {
+        val wasAll = all
+        all = true
+        try { return run() } finally { all = wasAll }
+    }
+
+    /** Who hears a line: the acting player alone, or (the fight's own, or [everyone]) the whole party. */
+    private fun audience(): List<ServerPlayer> {
+        val a = acting
+        return if (a != null && !toAll) listOf(a) else players()
+    }
+
     private var guarded = false
 
     /**
@@ -42,16 +109,33 @@ object Sim {
 
     val me: String get() = player?.gameProfile?.name ?: "You"
 
+    /** The host's name: the stats, ghost runs and run recordings are the host's. */
+    val hostName: String get() = host?.gameProfile?.name ?: "You"
+
+    /** Whether [name] (a station's doer, say) is a player in the sim, not a bot. */
+    fun isPlayerName(name: String?) = name != null && players().any { it.gameProfile.name == name }
+
     /** A chat line as Hypixel sends it: plain system chat, `§` codes and all (Odin reads these). */
     fun chat(text: String) {
-        Recorder.event(text)
-        player?.sendSystemMessage(Component.literal(text))
+        val to = audience()
+        if (to.any { isHost(it) }) Recorder.event(text)
+        to.forEach { it.sendSystemMessage(Component.literal(text)) }
     }
 
     /** A chat line as a styled component (no `§` left in its text), the way Hypixel sends most of its lines. */
     fun chatStyled(text: String) {
-        Recorder.event(text)
-        player?.sendSystemMessage(legacy(text))
+        val to = audience()
+        if (to.any { isHost(it) }) Recorder.event(text)
+        to.forEach { it.sendSystemMessage(legacy(text)) }
+    }
+
+    /** A line to everyone but the acting player (what the others see of someone's death, say). */
+    fun chatOthers(text: String) {
+        val a = acting ?: return
+        for (p in players()) if (p !== a) {
+            if (isHost(p)) Recorder.event(text)
+            p.sendSystemMessage(Component.literal(text))
+        }
     }
 
     /** A line from the sim itself (not something Hypixel says): marked so it can't be mistaken. */
@@ -81,8 +165,8 @@ object Sim {
         return out
     }
 
-    /** A `[BOSS]` line, with the wither.ambient (5, 1.19) Hypixel plays on every one (at the boss when [at] is given). */
-    fun boss(name: String, line: String, at: Vec3? = null, stand: Boolean = true) {
+    /** A `[BOSS]` line, to everyone, with the wither.ambient (5, 1.19) Hypixel plays on every one (at the boss when [at] is given). */
+    fun boss(name: String, line: String, at: Vec3? = null, stand: Boolean = true) = everyone {
         chat("§4[BOSS] $name§r§c: $line")
         if (stand) BossWither.speak(name, line)
         // At the boss: Hypixel plays it within a block of him, not at the player.
@@ -90,18 +174,25 @@ object Sim {
     }
 
     fun title(title: String, sub: String = "", fadeIn: Int = 0, stay: Int = 30, fadeOut: Int = 5) {
-        Recorder.event("title: $title | $sub")
-        val p = player ?: return
-        // Hypixel's order: times, title, subtitle.
-        p.connection.send(ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut))
-        p.connection.send(ClientboundSetTitleTextPacket(legacy(title)))
-        p.connection.send(ClientboundSetSubtitleTextPacket(legacy(sub)))
+        val to = audience()
+        if (to.any { isHost(it) }) Recorder.event("title: $title | $sub")
+        for (p in to) {
+            // Hypixel's order: times, title, subtitle.
+            p.connection.send(ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut))
+            p.connection.send(ClientboundSetTitleTextPacket(legacy(title)))
+            p.connection.send(ClientboundSetSubtitleTextPacket(legacy(sub)))
+        }
     }
 
+    /**
+     * A sound: at [at] in the world (heard there by whoever is near), or with no [at] at the player it's for: the
+     * acting player alone, or (the fight's own, [everyone]) each player at their own position.
+     */
     fun sound(sound: SoundEvent, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null, source: SoundSource = SoundSource.MASTER) {
-        val p = player ?: return
-        val pos = at ?: p.position()
-        level.playSound(null, pos.x, pos.y, pos.z, sound, source, volume, pitch)
+        if (at != null) { level.playSound(null, at.x, at.y, at.z, sound, source, volume, pitch); return }
+        val holder = net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound)
+        val seed = level.random.nextLong()
+        for (p in audience()) p.connection.send(net.minecraft.network.protocol.game.ClientboundSoundPacket(holder, source, p.x, p.y, p.z, volume, pitch, seed))
     }
 
     fun sound(sound: Holder<SoundEvent>, volume: Float = 1f, pitch: Float = 1f, at: Vec3? = null, source: SoundSource = SoundSource.MASTER) = sound(sound.value(), volume, pitch, at, source)
@@ -136,3 +227,20 @@ object Sim {
         s.commands.performPrefixedCommand(s.createCommandSourceStack().withSuppressedOutput(), cmd)
     }
 }
+
+/**
+ * One value per player (keyed by [Sim.player]'s UUID): an item's cooldown, a mask's timer, a terminal's click
+ * window, so each player in a party has their own. Alone it is one value, as before.
+ */
+class PerPlayer<T>(private val init: () -> T) : kotlin.properties.ReadWriteProperty<Any?, T> {
+    private class Box<T>(var v: T)
+    private val map = java.util.concurrent.ConcurrentHashMap<java.util.UUID, Box<T>>()
+    private fun box(): Box<T> = map.getOrPut(Sim.player?.uuid ?: NOBODY) { Box(init()) }
+    override fun getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = box().v
+    override fun setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, value: T) { box().v = value }
+    /** Every player's value, as it stands. */
+    fun values(): List<T> = map.values.map { it.v }
+    companion object { private val NOBODY = java.util.UUID(0, 0) }
+}
+
+fun <T> perPlayer(init: () -> T) = PerPlayer(init)

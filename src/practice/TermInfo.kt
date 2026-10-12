@@ -165,14 +165,15 @@ object TermInfo : Module(
     @Volatile private var sectionStart = 0
     @Volatile private var shownTime: Pair<String, Long>? = null
 
-    private fun current() = simSection() ?: if (com.engineerclient.p3sim.P3Sim.inSim) null else sections.getOrNull(active)
+    private fun current() = simSection() ?: if (com.engineerclient.p3sim.P3Sim.localSim) null else sections.getOrNull(active)
 
     /**
      * P3 Sim: the section in progress straight off the sim, not its chat: a restart, a later section's or a timed start
-     * and a practice do part of P3 without chat, and a restart starts again in the same world.
+     * and a practice do part of P3 without chat, and a restart starts again in the same world. Your own sim's only:
+     * in someone else's (a party) it goes by the chat, as on Hypixel, from the start the sim sends ([simStart]).
      */
     private fun simSection(): Section? {
-        if (!com.engineerclient.p3sim.P3Sim.inSim) return null
+        if (!com.engineerclient.p3sim.P3Sim.localSim) return null
         val g = com.engineerclient.p3sim.Fight.phase as? com.engineerclient.p3sim.GoldorPhase ?: return null
         val n = g.section.takeIf { it in 1..4 } ?: return null
         val st = g.stations.filter { it.section == n }
