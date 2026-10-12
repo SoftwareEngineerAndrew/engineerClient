@@ -167,7 +167,7 @@ object Roles {
         times = listOf(
             // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one.
             "rl lights 0.05 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | gate 5.6 | 3 6.8 | ss 7.8",
-            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 4.0 | 3 4.5",
+            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 3.7 | 3 3.95",
             "3 1.6 | 4 2.5 | 2 3.0 | 1 4.0 | levers gate 4.5",
             "2 2.0 | 4 2.5 | 3 3.0 | levers 3.0 | 1 3.25",
         ),
