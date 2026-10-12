@@ -632,10 +632,14 @@ class P1Maxor : Fight.Phase("P1") {
 
     /** [p] left the party: a crystal they carried is back on its stand, as if never taken. */
     fun playerLeft(p: net.minecraft.server.level.ServerPlayer) = Sim.asPlayer(p) {
-        if (carrying <= 0) return@asPlayer
+        val had = carrying
+        if (had <= 0) return@asPlayer
         carrying = 0
         if (killAt >= 0) return@asPlayer
-        for (i in 0..1) if (tops[i] == null && !pylons[i].placed && i !in pending && i !in clicked) tops[i] = Top(i, stands = true)
+        // Only theirs: a side a bot carries isn't missing, and the other players' crystals are theirs.
+        val botHeld = carriers.filter { it.holding }.map { it.fetch }
+        val missing = (0..1).filter { tops[it] == null && !pylons[it].placed && it !in pending && it !in clicked && it !in botHeld }
+        missing.drop(carryingBy.values().sum()).take(had).forEach { tops[it] = Top(it, stands = true) }
     }
 
     private fun hit() {
