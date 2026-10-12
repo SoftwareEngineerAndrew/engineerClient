@@ -238,7 +238,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         goldor.tick(this)
         // Main re-sends Goldor's bar (name, style, progress) once a second all P3 long.
         if (n > 0 && n % 20 == 0) BossBar.resend()
-        if (section in 1..4 && goldorSeg() == section) goldorReached[section] = true
+        // His start stretch (the S4 line, first lap) isn't reaching S4: a fast run starts S4 while he's still on it, and
+        // he'd walk off it straight away, making S4 lethal all through.
+        if (section in 1..4 && goldorSeg() == section && !(section == 4 && goldor.firstLap)) goldorReached[section] = true
         // He breaks no blocks (no carving; the replay takes no built block). The TNT cubes (one 27-block cube per 200-tick slot in about
         // half the runs), the granite blobs, the lantern burst and the S4 plate follow one recorded run.
         arenaReplay?.tick(n)
