@@ -215,10 +215,10 @@ object Fight {
         val theirs = Players.jobsOf(player)
         val at = player.position()
         Players.left(player)
+        // Their bot back mid-P3 where they stood, doing what they left (before the roster's own, which would give it the role's).
+        if (joiner) (phase as? GoldorPhase)?.let { Party.takeOver(it, c, at, theirs) }
         PartyServer.left(player)
         Party.rosterChanged()
-        // Their bot back mid-P3, doing what they left.
-        if (joiner) (phase as? GoldorPhase)?.let { Party.takeOver(it, c, at, theirs) }
         if (!Sim.isHost(player)) Sim.everyone { Sim.note("§e${player.gameProfile.name}§7 left the party.") }
     }
 

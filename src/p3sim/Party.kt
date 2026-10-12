@@ -111,7 +111,18 @@ object Party {
     }
 
     /** A player joined or left, or took a class: the bots follow at once (one a player took leaves the fight). */
-    fun rosterChanged() { bots() }
+    fun rosterChanged() {
+        val now = Players.playerClasses()
+        val freed = lastPlayed - now
+        lastPlayed = now
+        bots()
+        // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its role's jobs.
+        val ph = Fight.phase as? GoldorPhase ?: return
+        for (c in freed) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
+    }
+
+    /** The classes players had at the last roster change. */
+    private var lastPlayed: Set<DungeonClass> = emptySet()
 
     /** The players' classes' positions: who stands where. */
     private fun posOf(c: DungeonClass?): Vec3? = Players.playerOf(c)?.position()
@@ -218,18 +229,22 @@ object Party {
      * A player left mid-P3 ([theirs]: the jobs they had): their class's bot is back where they stood, at once, and does
      * what they left undone (this section's now, later ones on the plan's times).
      */
-    fun takeOver(phase: GoldorPhase, c: DungeonClass, at: Vec3, theirs: Set<String>) {
-        if (!botsOn || Players.isPlayerClass(c) || botOf(c) != null || bots.none { it.entity != null }) return
+    fun takeOver(phase: GoldorPhase, c: DungeonClass, at: Vec3?, theirs: Set<String>) {
+        if (!botsOn || Players.isPlayerClass(c)) return
+        // Its bot may be there already without a body (a full party's roster change makes one).
+        val had = botOf(c)
+        if (had?.entity != null) return
         val order = P3Plan.botOrder()
-        val b = Bot(c, order.indexOf(c) + 1)
-        bots += b
-        bots.sortBy { order.indexOf(it.clazz) }
+        val b = had ?: Bot(c, order.indexOf(c) + 1).also { bots += it; bots.sortBy { b -> order.indexOf(b.clazz) } }
         b.inSection = phase.section
-        spawn(b, at)
         val plan = P3Plan.plan()
-        for (job in theirs) {
+        // Not a player's, nor a job some bot already has.
+        // (The one leaving is still listed while they go: theirs count as nobody's.)
+        val others = Sim.players().filter { Players.classOf(it) != c }
+        val todo = theirs.filter { j -> others.none { j in Players.jobsOf(it) } && jobs.none { it.job == j } && phase.stations.firstOrNull { it.id == j }?.done != true }
+        spawn(b, at ?: todo.firstOrNull { (phase.stations.firstOrNull { s -> s.id == it }?.section ?: 0) == phase.section }?.let { spotOf(it) } ?: Sim.host?.position() ?: CORE_SPOT)
+        for (job in todo) {
             val st = phase.stations.firstOrNull { it.id == job }
-            if (st?.done == true) continue
             if (st == null && job.startsWith("gate") && phase.gateIsDown(job.removePrefix("gate ").toIntOrNull() ?: 0)) continue
             val s = st?.section ?: job.removePrefix("gate ").toIntOrNull() ?: continue
             if (s < phase.section) continue
