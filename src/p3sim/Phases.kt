@@ -631,6 +631,14 @@ class P1Maxor : Fight.Phase("P1") {
 
     // ------------------------------------------------------------------ hits
 
+    /** [p] left the party: a crystal they carried is back on its stand, as if never taken. */
+    fun playerLeft(p: net.minecraft.server.level.ServerPlayer) = Sim.asPlayer(p) {
+        if (carrying <= 0) return@asPlayer
+        carrying = 0
+        if (killAt >= 0) return@asPlayer
+        for (i in 0..1) if (tops[i] == null && !pylons[i].placed && i !in pending && i !in clicked) tops[i] = Top(i, stands = true)
+    }
+
     private fun hit() {
         hits++
         lastHit = t

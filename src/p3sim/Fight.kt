@@ -205,6 +205,8 @@ object Fight {
 
     /** A party's player left: their window, their class's place (its bot comes back at the next start). */
     fun leave(player: ServerPlayer) {
+        // A crystal they carried goes back on its stand (else Maxor's side waits for it forever).
+        (phase as? P1Maxor)?.playerLeft(player)
         Players.left(player)
         PartyServer.left(player)
         Party.rosterChanged()
@@ -278,6 +280,8 @@ object Fight {
         if (!practice) Practice.exit()
         lastStart = what
         stop()
+        // Every game's Term Info from nothing (a joiner's only reads chat): the phase's own start says where from.
+        PartyClient.send("termStart", 0)
         later.clear()
         Sim.clearEntities()
         // The bots too: a start that spawns none (P2, P4 with Party Bots off) must not see the last run's.
@@ -348,6 +352,7 @@ object Fight {
         // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
         // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
         PartyClient.send("splitsStop")
+        PartyClient.send("termStart", 0)
     }
 
     fun tick(server: MinecraftServer) {

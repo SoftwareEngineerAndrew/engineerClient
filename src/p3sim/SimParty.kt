@@ -102,6 +102,8 @@ object Players {
         @Volatile var mineFor: String? = null
         /** Their own spawn and early-enter spots (skill/class/key), as their plan has them. */
         val spots = ConcurrentHashMap<String, Spots.Spot>()
+        /** Their leap order (the other four classes, slots 1-4), as their menu has it; null: Odin's. */
+        @Volatile var order: List<DungeonClass>? = null
     }
 
     private val profiles = ConcurrentHashMap<UUID, Profile>()
@@ -276,6 +278,7 @@ object PartySettings {
         bool("mageAll") { P3Sim.mageAllS },
         bool("infinite") { P3Sim.breakerInfiniteS },
         bool("terror") { P3Sim.terrorAtTermsS },
+        bool("showTimes") { P3Sim.showTimesS },
     ) }
 
     fun snapshot(opts: List<Opt>): JsonObject = JsonObject().also { o -> opts.forEach { runCatching { o.add(it.key, it.get()) } } }
@@ -365,6 +368,7 @@ object PartyServer {
         if (Sim.isHost(p)) return
         val prof = Players.profile(p)
         o.getAsJsonArray("mine")?.let { a -> prof.mine = a.map { it.asString }.toSet(); prof.mineFor = o.get("mineFor")?.asString }
+        o.getAsJsonArray("order")?.let { a -> prof.order = a.mapNotNull { Players.classByName(it.asString) } }
         o.getAsJsonObject("spots")?.let { sp ->
             prof.spots.clear()
             sp.entrySet().forEach { (k, v) ->
