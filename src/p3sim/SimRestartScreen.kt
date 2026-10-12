@@ -361,14 +361,14 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         override fun applyValue() = setSpeed(speed())
     }
 
-    /** Terminal Luck, 0 to 100% in fives. */
-    private inner class LuckSlider(w: Int) : AbstractSliderButton(0, 0, w, 20, Component.empty(), P3Sim.termLuck) {
+    /** Terminal Luck, -100 to 100% in fives. */
+    private inner class LuckSlider(w: Int) : AbstractSliderButton(0, 0, w, 20, Component.empty(), (P3Sim.termLuck + 1) / 2) {
         init {
             updateMessage()
             setTooltip(tip(P3Sim.termLuckS.description))
         }
-        private fun luck() = Math.round(value * 20).toInt() * 5
-        override fun updateMessage() { message = Component.literal("Luck: ${luck()}%") }
+        private fun luck() = Math.round(value * 40).toInt() * 5 - 100
+        override fun updateMessage() { message = Component.literal("Luck: ${if (luck() < 0) "§c" else ""}${luck()}%") }
         override fun applyValue() { P3Sim.termLuckS.value = luck(); ModuleManager.saveConfigurations() }
     }
 
