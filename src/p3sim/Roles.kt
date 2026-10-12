@@ -186,6 +186,8 @@ object Roles {
             // The mage starts on Lights, the archer by S1's east lever (looking at it).
             "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
             "spawn/ARCHER" to Spots.Spot("Spawn", 107.53, 123.06, 112.45, 47.59f, 19.81f),
+            // S2's 2nd terminal from the top of the stairs (looking at 59, 120, 122).
+            "stand/S2 T2" to Spots.Spot("S2 T2", 59.50, 120.00, 125.20, -179.66f, 23.96f),
         ),
         // Once on the high EE3, the bers mines the 2x2 quartz platform beside it (x 15-16, y 122, z 93-94); the ledge it
         // stands on stays.
