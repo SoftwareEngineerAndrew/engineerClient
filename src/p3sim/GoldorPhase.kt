@@ -114,21 +114,25 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // n = startN now, whenever that is (a start timer's ticks don't count).
         nOffset = startN - t
         arenaReplay?.begin(startN)
-        // Earlier sections: done, their gates and doors open, as if a party had just done them.
+        // Earlier sections: done, their gates and doors open, as if a party had just done them (practice: no gate's
+        // blocks ever go; it counts as blown).
         for (s in 1 until from.coerceAtMost(5)) {
             stations.filter { it.section == s }.forEach { doneAlready(it) }
             gateDown[s] = true; doorOpen[s] = true
-            if (s <= 3) { Blocks.finish("gate${s}${s + 1}"); Blocks.finish("door$s") }
+            if (s <= 3) {
+                if (!practice) Blocks.finish("gate${s}${s + 1}")
+                Blocks.finish("door$s", exclude = if (practice) gateBlocks(s) else emptySet())
+            }
             sectionEnd[s] = startN
         }
         if (from >= 2) Blocks.finish("p3start")
         // Practice: the rest of the party's part done, in this section and on to the practice's last (a custom one can
-        // run across several), the gates too unless they're yours.
+        // run across several), the gates too unless they're yours (blown, their blocks still up).
         if (practice) {
             val jobs = Practice.practiceJobs()
             for (s in from..Practice.lastSection().coerceIn(from, 4)) {
                 stations.filter { it.section == s && it.id !in jobs }.forEach { doneAlready(it) }
-                if (s <= 3 && "gate $s" !in jobs) { gateDown[s] = true; Blocks.finish("gate$s${s + 1}") }
+                if (s <= 3 && "gate $s" !in jobs) gateDown[s] = true
             }
         }
         section = from.coerceAtMost(5)
@@ -395,10 +399,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Blocks change 1 tick after the chat line (gates, doors and the core alike). Practice: only a door on the
         // way (before its last section) opens, and never takes the gate's blocks with it (they stay in practice).
         if (!practice || s < Practice.lastSection()) {
-            val gate = if (!practice || s > 3) emptySet() else
-                (Blocks.anim("gate$s${s + 1}")?.frames?.map { it.pos }.orEmpty() +
-                    BlockPos.betweenClosedStream(GATE_BOXES[s].inflate(0.5)).map { it.immutable() }.toList()).toSet()
-            Blocks.play("door$s", exclude = gate, delay = 1)
+            Blocks.play("door$s", exclude = if (!practice || s > 3) emptySet() else gateBlocks(s), delay = 1)
             if (s == 1) Blocks.play("ss_s1done", delay = 1)
         }
         // His section line is queued with the door (the later of the last completion and the gate).
@@ -414,6 +415,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Stations of the new section that were done early already count.
         if (count(section) >= Station.total(section)) sectionDone(section)
     }
+
+    /** Gate [s]'s blocks (its animation's and its box's), which stay in practice. */
+    private fun gateBlocks(s: Int): Set<BlockPos> =
+        (Blocks.anim("gate$s${s + 1}")?.frames?.map { it.pos }.orEmpty() +
+            BlockPos.betweenClosedStream(GATE_BOXES[s].inflate(0.5)).map { it.immutable() }.toList()).toSet()
 
     /** Blows gate [s] (between S[s] and S[s+1]) if it can go now. [by]: who, null when it goes by itself. */
     fun blowGate(s: Int, by: String?): Boolean {
