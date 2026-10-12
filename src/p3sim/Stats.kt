@@ -46,7 +46,8 @@ object Stats {
 
     fun p3(n: Int) {
         val parts = (1..4).filter { sections[it] >= 0 }.joinToString(" §8|§7 ") { "S$it ${s(sections[it])}" }
-        val best = if (from == 1) best("P3", n) else ""
+        // The host's PB only with their Section Times on (as before parties).
+        val best = if (from == 1 && P3Sim.showTimesS.value) best("P3", n) else ""
         val total = if (from == 1) " §8|§f P3 ${s(n)}" else ""
         for (p in Sim.players()) Sim.asPlayer(p) {
             if (!P3Sim.showTimes) return@asPlayer

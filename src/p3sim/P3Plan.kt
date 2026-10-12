@@ -119,7 +119,9 @@ object P3Plan {
         if (mineFor != key) {
             mineFor = key
             mine.clear()
-            mine += plan().jobsOf[P3Sim.ownClass].orEmpty()
+            // Back on their own skill and class in a party: their own jobs, not the role's.
+            val own = ownMine
+            if (own != null && key == ownMineFor) mine += own else mine += plan().jobsOf[P3Sim.ownClass].orEmpty()
         }
         return mine
     }
