@@ -17,7 +17,6 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.render.drawFilledBox
 import com.odtheking.odin.utils.render.drawWireFrameBox
@@ -58,9 +57,9 @@ object I4Aims : Module(
     private val guesses by NumberSetting("Guess Aims", 1, 0, 2, 1, desc = "Aims shown for the next, not yet lit target (each covering the most unhit cells the ones before don't).")
     private val inFlight by BooleanSetting("Count Arrows In Flight", true, desc = "Once a volley in the air will hit the lit target, show the guess aims: your next shot goes to the next target.")
     private val preview by BooleanSetting("Landing Preview", true, desc = "Where each arrow of a volley fired now would cross the board: white on an unhit cell, grey elsewhere.")
-    private val litColor by ColorSetting("Target Aim", Color(85, 255, 85, 0.55f), true, desc = "The lit target's spots.")
-    private val guessColor by ColorSetting("Guess Aim", Color(255, 170, 0, 0.5f), true, desc = "The first guess aim's spots.")
-    private val guess2Color by ColorSetting("Second Guess Aim", Color(255, 85, 85, 0.45f), true, desc = "The second guess aim's spots.")
+    private val litColor by ColorSetting("Target Color", Color(57, 255, 20, 1f), true, desc = "The lit target's spots.")
+    private val guessColor by ColorSetting("Guess Color", Color(255, 230, 0, 1f), true, desc = "The first guess aim's spots.")
+    private val guess2Color by ColorSetting("Second Guess Color", Color(255, 0, 230, 1f), true, desc = "The second guess aim's spots.")
 
     private val BOWS = setOf("TERMINATOR", "MOSQUITO_BOW", "ITEM_SPIRIT_BOW", "JUJU_SHORTBOW", "ARTISANAL_SHORTBOW", "LAST_BREATH")
     private val PLATE = Vec3(63.5, 127.0, 35.5)
@@ -258,12 +257,12 @@ object I4Aims : Module(
 
     private fun colorOf(role: Role) = when (role) { Role.TARGET -> litColor; Role.GUESS -> guessColor; Role.GUESS2 -> guess2Color }
 
-    /** Each pitch row of the aim's spots as runs of neighbouring counts, a box each, shaded by chance (100%, 95%+, the rest). */
+    /** Each pitch row of the aim's spots as runs of neighbouring counts, a box each; spots under 95% are drawn darker but still opaque. */
     private fun RenderEvent.Extract.drawAim(r: Result, s: Shown) {
         val base = colorOf(s.role)
         val l = r.lattice
         fun corner(i: Double, j: Double) = I4Geometry.onPlane(r.eye, l.yaw0 + i * l.step, l.pitch0 + j * l.step, I4Geometry.FACE - 0.03)
-        fun shade(c: Double) = when { c >= 0.999 -> 1f; c >= 0.95 -> 0.7f; else -> 0.4f }
+        fun shade(c: Double) = if (c >= 0.95) 1f else 0.6f
         for ((j, row) in s.aim.pixels.groupBy { it.j }) {
             val sorted = row.sortedBy { it.i }
             var start = 0
@@ -271,15 +270,17 @@ object I4Aims : Module(
                 if (k < sorted.size && sorted[k].i == sorted[k - 1].i + 1 && shade(sorted[k].chance) == shade(sorted[start].chance)) continue
                 val a = corner(sorted[start].i - 0.5, j - 0.5) ?: continue
                 val b = corner(sorted[k - 1].i + 0.5, j + 0.5) ?: continue
-                drawFilledBox(AABB(minOf(a.x, b.x), minOf(a.y, b.y), a.z - 0.005, maxOf(a.x, b.x), maxOf(a.y, b.y), a.z), base.withAlpha(base.alphaFloat * shade(sorted[start].chance)), depth = true)
+                drawFilledBox(AABB(minOf(a.x, b.x), minOf(a.y, b.y), a.z - 0.005, maxOf(a.x, b.x), maxOf(a.y, b.y), a.z), tint(base, shade(sorted[start].chance)), depth = true)
                 start = k
             }
         }
         val best = s.aim.best
         val c = I4Geometry.onPlane(r.eye, l.yaw(best.i), l.pitch(best.j), I4Geometry.FACE - 0.04) ?: return
         val w = maxOf(0.03, l.step * 0.0175 * 15)
-        drawWireFrameBox(AABB(c.x - w, c.y - w, c.z - 0.005, c.x + w, c.y + w, c.z), Color(255, 255, 255, 0.9f), depth = true)
+        drawWireFrameBox(AABB(c.x - w, c.y - w, c.z - 0.005, c.x + w, c.y + w, c.z), Color(255, 255, 255, 1f), depth = true)
     }
+
+    private fun tint(c: Color, f: Float) = if (f >= 1f) c else Color((c.red * f).toInt(), (c.green * f).toInt(), (c.blue * f).toInt(), c.alphaFloat)
 
     /** Where each arrow of a volley fired now would cross the board's face. */
     private fun RenderEvent.Extract.drawPreview() {
