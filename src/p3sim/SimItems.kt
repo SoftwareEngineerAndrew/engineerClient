@@ -1152,7 +1152,8 @@ object SimItems {
     /** A left click from a player's game ([clientLeftClick]), as theirs. */
     fun serverLeftClick(p: ServerPlayer) {
         val id = idOf(p.mainHandItem)
-        if (Practice.clickRestarts() || Practice.active && id == "INFINITE_SPIRIT_LEAP") { Practice.restart(); return }
+        // The host's practice: their clicks only.
+        if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && id == "INFINITE_SPIRIT_LEAP")) { Practice.restart(); return }
         // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
         if (Mage.isMage() && Mage.beamItem(id)) { Fight.afterPing("mage beam") { Mage.click(p) }; return }
         if (id in Bows.SHORTBOWS) Bows.click(p, id!!, left = true)

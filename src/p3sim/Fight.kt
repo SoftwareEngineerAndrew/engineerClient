@@ -147,6 +147,8 @@ object Fight {
     }
 
     fun reset(server: MinecraftServer) {
+        // A new sim: nobody's timers from the last one (they'd sit far ahead of this one's ticks).
+        PerPlayer.clearAll()
         serverTick = 0
         epoch++
         later.clear()
@@ -184,9 +186,8 @@ object Fight {
         val host = SimServer.player
         if (host != null && host !== player) {
             // Their game says hello next, with their class and settings (PartyServer.hello): set up again then.
+            // No class until their game says which it wants (hello): a stand-in one would take a bot, or someone's pick.
             Sim.asPlayer(player) {
-                Players.joined(player)
-                Party.rosterChanged()
                 PartyServer.rosterDirty = true
                 setup(player)
                 Sim.tp(player, host.x, host.y, host.z, host.yRot, host.xRot)
