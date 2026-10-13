@@ -5,6 +5,7 @@ import com.engineerclient.EngineerClient.mc
 import com.engineerclient.practice.I4Geometry.Board
 import com.engineerclient.practice.I4Geometry.Lattice
 import com.engineerclient.practice.I4Geometry.Shooter
+import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
@@ -20,6 +21,10 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.render.drawFilledBox
 import com.odtheking.odin.utils.render.drawWireFrameBox
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.resources.Identifier
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow
@@ -28,6 +33,11 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.atan
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.tan
 
 /**
  * i4 (the Arrows Device): on the board, every crosshair spot your mouse can reach from where you stand that lands
@@ -57,6 +67,9 @@ object I4Aims : Module(
     private val guesses by NumberSetting("Guess Aims", 1, 0, 2, 1, desc = "Aims shown for the next, not yet lit target (each covering the most unhit cells the ones before don't).")
     private val inFlight by BooleanSetting("Count Arrows In Flight", true, desc = "Once a volley in the air will hit the lit target, show the guess aims: your next shot goes to the next target.")
     private val preview by BooleanSetting("Landing Preview", true, desc = "Where each arrow of a volley fired now would cross the board: white on an unhit cell, grey elsewhere.")
+    private val screenOverlay by BooleanSetting("Screen Overlay", true, desc = "Draw the spots flat on your screen around the crosshair, above the world but under open screens: nothing in the world tints or hides them. Off draws them on the board.")
+    private val autoZoom by BooleanSetting("Auto Zoom", true, desc = "Narrow your FOV while you look at the board from the plate, so each mouse count is a bigger step on screen. Mouse speed in degrees doesn't change.")
+    private val zoom by NumberSetting("Zoom", 2.0, 1.25, 4.0, 0.25, unit = "x", desc = "How far Auto Zoom magnifies.").withDependency { autoZoom }
     private val litColor by ColorSetting("Target Color", Color(57, 255, 20, 1f), true, desc = "The lit target's spots.")
     private val guessColor by ColorSetting("Guess Color", Color(255, 230, 0, 1f), true, desc = "The first guess aim's spots.")
     private val guess2Color by ColorSetting("Second Guess Color", Color(255, 0, 230, 1f), true, desc = "The second guess aim's spots.")
@@ -247,9 +260,14 @@ object I4Aims : Module(
             val r = result ?: return@on
             if (!atBoardCached()) return@on
             EngineerClient.safely("i4 aims draw") {
-                for (s in r.aims) drawAim(r, s)
+                if (!screenOverlay) for (s in r.aims) drawAim(r, s)
                 if (preview) drawPreview()
             }
+        }
+
+        // Under the crosshair, so it stays on top; the HUD is drawn under any open screen.
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CROSSHAIR, Identifier.fromNamespaceAndPath("engineerclient", "i4_aims")) { g, _ ->
+            EngineerClient.safely("i4 aims screen") { drawScreen(g) }
         }
     }
 
@@ -281,6 +299,93 @@ object I4Aims : Module(
     }
 
     private fun tint(c: Color, f: Float) = if (f >= 1f) c else Color((c.red * f).toInt(), (c.green * f).toInt(), (c.blue * f).toInt(), c.alphaFloat)
+
+    private const val ZOOM_SECONDS = 0.12f
+    private var zoomT = 0f
+    private var zoomAt = 0L
+    private var zoomed = false
+
+    /**
+     * Camera.calculateFov's result, narrowed by up to [zoom] while you're on the plate holding a bow and looking at
+     * the board (with a margin, wider once zoomed so the edge doesn't flicker). Eased in and out over [ZOOM_SECONDS].
+     */
+    @JvmStatic fun zoomFov(fov: Float): Float {
+        if (com.engineerclient.pov.PovCapture.capturing) return fov
+        val now = System.nanoTime()
+        val dt = if (zoomAt == 0L) 0f else ((now - zoomAt) / 1e9f).coerceAtMost(0.1f)
+        zoomAt = now
+        zoomed = enabled && autoZoom && bow() != null && atBoardCached() && lookingAtBoard(if (zoomed) 1.5 else 0.75)
+        zoomT = (zoomT + (if (zoomed) dt else -dt) / ZOOM_SECONDS).coerceIn(0f, 1f)
+        if (zoomT <= 0f) return fov
+        val k = 1.0 + (zoom - 1.0) * zoomT * zoomT * (3 - 2 * zoomT)
+        return Math.toDegrees(2 * atan(tan(Math.toRadians(fov / 2.0)) / k)).toFloat()
+    }
+
+    /** Your crosshair's ray meets the board's face within [margin] blocks of the cells (x 64-69, y 126-131). */
+    private fun lookingAtBoard(margin: Double): Boolean {
+        val p = mc.player ?: return false
+        val eye = p.eyePosition
+        val look = p.lookAngle
+        if (look.z <= 1e-3) return false
+        val t = (I4Geometry.FACE - eye.z) / look.z
+        val x = eye.x + look.x * t; val y = eye.y + look.y * t
+        return x in 64.0 - margin..69.0 + margin && y in 126.0 - margin..131.0 + margin
+    }
+
+    /**
+     * The spots in screen pixels around the crosshair: each is a look direction, so it goes on the screen where that
+     * direction projects for your current look and the camera's (zoomed) FOV. View bobbing moves the world, not this.
+     */
+    private fun drawScreen(g: GuiGraphicsExtractor) {
+        if (!enabled || !screenOverlay) return
+        val r = result ?: return
+        if (!atBoardCached()) return
+        val p = mc.player ?: return
+        val window = mc.window
+        val w = window.width; val h = window.height
+        val focal = h / 2.0 / tan(Math.toRadians(mc.gameRenderer.mainCamera.fov / 2.0))
+        val cy = Math.toRadians(p.yRot.toDouble()); val cp = Math.toRadians(p.xRot.toDouble())
+        val fx = -sin(cy) * cos(cp); val fy = -sin(cp); val fz = cos(cy) * cos(cp)
+        val rx = -cos(cy); val rz = -sin(cy)
+        val ux = -rz * fy; val uy = rz * fx - rx * fz; val uz = rx * fy
+        val l = r.lattice
+        // Screen pixel of the look at lattice counts (i, j), or null behind you.
+        fun at(i: Double, j: Double): Pair<Int, Int>? {
+            val yaw = Math.toRadians(l.yaw0 + i * l.step); val pitch = Math.toRadians(l.pitch0 + j * l.step)
+            val dx = -sin(yaw) * cos(pitch); val dy = -sin(pitch); val dz = cos(yaw) * cos(pitch)
+            val depth = dx * fx + dy * fy + dz * fz
+            if (depth <= 0.1) return null
+            return (w / 2.0 + focal * (dx * rx + dz * rz) / depth).roundToInt() to (h / 2.0 - focal * (dx * ux + dy * uy + dz * uz) / depth).roundToInt()
+        }
+        fun shade(c: Double) = if (c >= 0.95) 1f else 0.6f
+        val gs = window.guiScale.toFloat()
+        g.pose().pushMatrix()
+        g.pose().scale(1f / gs, 1f / gs)
+        for (s in r.aims.asReversed()) {
+            val base = colorOf(s.role)
+            for ((j, row) in s.aim.pixels.groupBy { it.j }) {
+                val sorted = row.sortedBy { it.i }
+                var start = 0
+                for (k in 1..sorted.size) {
+                    if (k < sorted.size && sorted[k].i == sorted[k - 1].i + 1 && shade(sorted[k].chance) == shade(sorted[start].chance)) continue
+                    val a = at(sorted[start].i - 0.5, j - 0.5); val b = at(sorted[k - 1].i + 0.5, j + 0.5)
+                    if (a != null && b != null) {
+                        val x0 = minOf(a.first, b.first); val y0 = minOf(a.second, b.second)
+                        g.fill(x0, y0, maxOf(a.first, b.first, x0 + 1), maxOf(a.second, b.second, y0 + 1), tint(base, shade(sorted[start].chance)).rgba)
+                    }
+                    start = k
+                }
+            }
+        }
+        for (s in r.aims) {
+            val c = at(s.aim.best.i.toDouble(), s.aim.best.j.toDouble()) ?: continue
+            g.outline(c.first - 6, c.second - 6, 13, 13, WHITE)
+            g.outline(c.first - 5, c.second - 5, 11, 11, WHITE)
+        }
+        g.pose().popMatrix()
+    }
+
+    private const val WHITE = -1
 
     /** Where each arrow of a volley fired now would cross the board's face. */
     private fun RenderEvent.Extract.drawPreview() {

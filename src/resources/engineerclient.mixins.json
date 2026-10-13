@@ -19,6 +19,7 @@
     "ArcherDropSimMixin",
     "BlurRadiusMixin",
     "CameraAccessor",
+    "CameraFovMixin",
     "ChatComponentMixin",
     "ClickGuiTextMixin",
     "ConnectionTapMixin",
