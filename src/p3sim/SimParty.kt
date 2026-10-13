@@ -350,11 +350,11 @@ object PartyServer {
             val got = Players.request(p, want)
             if (want != got) SimNet.send(p, "set", JsonObject().also { it.addProperty("class", got.name) }.toString())
             Party.rosterChanged()
-            Fight.setup(p)
-            BossBar.showTo(p)
+            // A hello again changes nothing they have (a mid-run setup would reset their hotbar and health).
+            if (!again) { Fight.setup(p); BossBar.showTo(p) }
             val name = p.gameProfile.name
             if (!again) Sim.everyone { Sim.note("§e$name§7 joined the party as the §f${Roles.label(got)}§7.") }
-            if (want != null && want != got) Sim.note("${Players.playerOf(want)?.gameProfile?.name ?: "Someone"} plays the ${Roles.label(want)}, so you're the §f${Roles.label(got)}§7. Pick a class in the menu: taking someone's swaps you.")
+            if (want != null && want != got && !again) Sim.note("${Players.playerOf(want)?.gameProfile?.name ?: "Someone"} plays the ${Roles.label(want)}, so you're the §f${Roles.label(got)}§7. Pick a class in the menu: taking someone's swaps you.")
             if (Fight.phase != null && !again) Sim.note("The run is under way: §fRestart§7 (menu or keybind) to play it from the start together.")
         }
         sendState(p)
@@ -369,8 +369,9 @@ object PartyServer {
         // A class picked in their menu: theirs, swapped with whoever had it. (Not the one they came asking for and were
         // refused, still in their menu until the server's answer reaches it.)
         val want = o.getAsJsonObject("settings")?.get("class")?.asString?.let { Players.classByName(it) }
-        if (prof.clazz == null) Players.joined(p)
-        else if (want != null && want != prof.clazz && want.name != prof.asked) Players.changeClass(p, want)
+        // Not in yet: their hello gives them their class.
+        if (prof.clazz == null) return
+        if (want != null && want != prof.clazz && want.name != prof.asked) Players.changeClass(p, want)
         prof.asked = want?.name
     }
 
@@ -459,7 +460,8 @@ object PartyServer {
         val me = Players.classOf(p)
         val a = JsonArray()
         for (m in Party.mates(p)) a.add(JsonObject().also { it.addProperty("n", m.name); it.addProperty("c", m.clazz.name); it.addProperty("p", m.player != null) })
-        val o = JsonObject().also { it.addProperty("me", me.name); it.add("team", a); it.addProperty("party", Sim.players().size > 1) }
+        // "in": their hello is in (they have a class); before that "me" is only the host's, a stand-in.
+        val o = JsonObject().also { it.addProperty("me", me.name); it.addProperty("in", Players.hasClass(p)); it.add("team", a); it.addProperty("party", Sim.players().size > 1) }
         val s = o.toString()
         if (!force && sentRoster[p.uuid] == s) return
         sentRoster[p.uuid] = s
@@ -515,7 +517,8 @@ object PartyClient {
         }
         SimNet.onClient("roster") { data ->
             val o = JsonParser.parseString(data).asJsonObject
-            me = Players.classByName(o.get("me")?.asString)
+            // Only once the server has us in (until then our hello may be lost: it's sent again while this is null).
+            me = if (o.get("in")?.asBoolean != false) Players.classByName(o.get("me")?.asString) else null
             team = o.getAsJsonArray("team").mapNotNull { e -> val m = e.asJsonObject; Players.classByName(m.get("c").asString)?.let { Mate(m.get("n").asString, it, m.get("p").asBoolean) } }
             party = o.get("party")?.asBoolean == true
         }
