@@ -42,6 +42,12 @@ import kotlin.random.Random
  *
  * Clicks: right click shoots (left click too, but the Mosquito's left click is Nasty Bite), one shot per
  * Shortbow Cooldown; Nasty Bite has its own 10 ticks. A click inside a cooldown fires the tick it ends.
+ *
+ * Aim: a shot is aimed with the newest look the server has of you on the tick it fires (your last move packet it
+ * has), never the use_item packet's own rotation or your look at the click: a flick right after a click still turns
+ * the shot, up to a round trip later. The noise is 1.8's: one gaussian (sd 0.0075) on each axis of the unit look,
+ * so speed varies with it too (not modern's triangle); only the main arrow has it, and Hydra Strike and Duplex
+ * inherit it from the main arrow's move. The Terminator's side arrows have none: exactly your look +-5.5 deg.
  */
 object Bows {
     const val TERMINATOR = "TERMINATOR"
@@ -92,7 +98,7 @@ object Bows {
         Hydra.start()
     }
 
-    /** A click with shortbow [bow] ([left]: a swing). It lands after the simulated ping, aimed as you were when you clicked. */
+    /** A click with shortbow [bow] ([left]: a swing). It lands after the simulated ping and is aimed when it fires ([past]). */
     fun click(p: ServerPlayer, bow: String, left: Boolean) {
         val a = aim(p)
         Fight.afterPing("shortbow") { if (!p.isRemoved) clicks += Click(bow, left, a) }
@@ -116,9 +122,10 @@ object Bows {
         pendingShot?.let { bow -> if (now >= shotReady) { pendingShot = null; if (held == bow) fire(p, bow, false, past(p)) } }
         if (pendingBite && now >= biteReady) { pendingBite = false; if (held == MOSQUITO) fire(p, MOSQUITO, true, past(p)) }
         for (c in clicks) {
+            // A drawn bow fires on its release packet, as vanilla's does; a shortbow on the tick, with the server's view then.
             if (c.bow !in SHORTBOWS) { fire(p, c.bow, false, c.aim, c.power); continue }
-            if (c.bow == MOSQUITO && c.left) { if (now >= biteReady) fire(p, MOSQUITO, true, c.aim) else pendingBite = true }
-            else if (now >= shotReady) fire(p, c.bow, false, c.aim) else pendingShot = c.bow
+            if (c.bow == MOSQUITO && c.left) { if (now >= biteReady) fire(p, MOSQUITO, true, past(p)) else pendingBite = true }
+            else if (now >= shotReady) fire(p, c.bow, false, past(p)) else pendingShot = c.bow
         }
         clicks.clear()
         if (later.isNotEmpty()) {
@@ -132,7 +139,10 @@ object Bows {
         while (history.size > 40) history.removeFirst()
     }
 
-    /** The server's view of you now: you, [Fight.pingTicks] ticks ago. */
+    /**
+     * The server's view of you now: you, [Fight.pingTicks] ticks ago (at no ping, you now: this tick's move is in, so a
+     * swing, sent before it, still gets it).
+     */
     private fun past(p: ServerPlayer): Aim {
         val d = Fight.pingTicks
         return if (d <= 0 || history.isEmpty()) aim(p) else history[(history.size - d).coerceAtLeast(0)]
