@@ -529,6 +529,19 @@ class P2Storm : Fight.Phase("P2") {
 
     private fun send(key: String, to: Vec3) { role[key]?.let { botTo[it] = to } }
 
+    /** A bot left the fight (a player took its class): a free bot takes its pad role, going where it was going. */
+    fun botsChanged() {
+        if (!P3Sim.bots) return
+        for (key in role.keys.toList()) {
+            val old = role[key] ?: continue
+            if (old.entity != null) continue
+            val free = Party.bots().firstOrNull { b -> b.entity != null && role.values.none { it === b } }
+            if (free == null) { role.remove(key); continue }
+            role[key] = free
+            botTo.remove(old)?.let { botTo[free] = it }
+        }
+    }
+
     private fun tickBots() {
         if (!P3Sim.bots || role.isEmpty()) return
         when (t) {

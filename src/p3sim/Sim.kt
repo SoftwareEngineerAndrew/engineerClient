@@ -235,12 +235,18 @@ object Sim {
 class PerPlayer<T>(private val init: () -> T) : kotlin.properties.ReadWriteProperty<Any?, T> {
     private class Box<T>(var v: T)
     private val map = java.util.concurrent.ConcurrentHashMap<java.util.UUID, Box<T>>()
+    init { all += this }
     private fun box(): Box<T> = map.getOrPut(Sim.player?.uuid ?: NOBODY) { Box(init()) }
     override fun getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = box().v
     override fun setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, value: T) { box().v = value }
     /** Every player's value, as it stands. */
     fun values(): List<T> = map.values.map { it.v }
-    companion object { private val NOBODY = java.util.UUID(0, 0) }
+    companion object {
+        private val NOBODY = java.util.UUID(0, 0)
+        private val all = java.util.concurrent.CopyOnWriteArrayList<PerPlayer<*>>()
+        /** Everyone's values back to new (a new sim). */
+        fun clearAll() = all.forEach { it.map.clear() }
+    }
 }
 
 fun <T> perPlayer(init: () -> T) = PerPlayer(init)

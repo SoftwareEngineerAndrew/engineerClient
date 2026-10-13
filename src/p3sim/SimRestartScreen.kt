@@ -164,24 +164,31 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
         val doer = P3Plan.doer(job)
         val picked = !mine && doer != P3Plan.roleDoer(job)
         val star = if (P3Plan.isStack(job)) "§e*" else ""
+        // Another player plays that class: theirs (their own plan decides), not a bot's.
+        val mate = if (mine) null else PartyClient.team.firstOrNull { it.player && it.clazz == doer }
+        // Which bot does a job is the host's pick in a party.
+        val joiner = PartyClient.joiner
         val text = when {
             mine && P3Plan.isStacked(job) -> "§aYou§e+"
             mine -> "§aYou$star"
+            mate != null -> "§d${mate.name.take(4)}$star"
             else -> (if (picked) "§b" else "§7") + (doer?.let { Roles.label(it).take(4) } ?: "§8any") + star
         }
         val owners = P3Plan.plan().owners[job].orEmpty()
         val who = when {
             mine && P3Plan.isStacked(job) -> "Yours, stacked: the ${P3Plan.helperOf(job)?.let { Roles.label(it) } ?: "?"} bot does it too with Helpers ${onOff(P3Plan.helper)}§r."
             mine -> "Yours."
+            mate != null -> "${mate.name} plays the ${Roles.label(mate.clazz)}: theirs, unless their own plan says otherwise."
             doer != null -> "The ${Roles.label(doer)} bot does it${if (picked) " (you picked it; its role's: ${P3Plan.roleDoer(job)?.let { Roles.label(it) } ?: "any"})" else ""}."
             else -> "Whichever bot is least busy does it."
         }
         val shared = if (owners.size > 1) " In the ${owners.joinToString(" and ") { Roles.label(it) }} roles (a stack)." else ""
         val click = if (mine) "Left click: the bot's. Right click: ${if (P3Plan.isStacked(job)) "not a stack" else "a stack (its bot does it too)"}."
+        else if (joiner) "Left click: yours. (Which bot does a job is the host's pick.)"
         else "Left click: yours. Right click: the next bot."
         return ClickButton(JOB_W, text, tip("${jobName(job)}. $who$shared $click"),
             left = { P3Plan.toggle(job); rebuildWidgets() },
-            right = { if (P3Plan.isMine(job)) P3Plan.toggleStacked(job) else P3Plan.cycleDoer(job); rebuildWidgets() })
+            right = { if (P3Plan.isMine(job)) P3Plan.toggleStacked(job) else if (!joiner) P3Plan.cycleDoer(job); rebuildWidgets() })
     }
 
     // ------------------------------------------------------------------ advanced

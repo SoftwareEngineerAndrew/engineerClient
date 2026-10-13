@@ -122,7 +122,7 @@ object Players {
     fun classOf(p: ServerPlayer): DungeonClass = if (Sim.isHost(p)) P3Sim.ownClass else profiles[p.uuid]?.clazz ?: P3Sim.ownClass
 
     /** The player playing [c], or null (a bot's, or nobody's). */
-    fun playerOf(c: DungeonClass?): ServerPlayer? = if (c == null) null else Sim.players().firstOrNull { classOf(it) == c }
+    fun playerOf(c: DungeonClass?): ServerPlayer? = if (c == null) null else Sim.players().firstOrNull { hasClass(it) && classOf(it) == c }
 
     /** The classes the joiners play (any thread: a copy kept by the server's tick). */
     @Volatile var joinerClasses: Set<DungeonClass> = emptySet()
@@ -176,7 +176,10 @@ object Players {
 
     fun left(p: ServerPlayer) { refresh(p) }
 
-    private fun takenBy(p: ServerPlayer): Set<DungeonClass> = Sim.players().filter { it !== p }.map { classOf(it) }.toSet()
+    /** Whether [p] has a class yet (the host always; a joiner from their hello). */
+    private fun hasClass(p: ServerPlayer) = Sim.isHost(p) || profiles[p.uuid]?.clazz != null
+
+    private fun takenBy(p: ServerPlayer): Set<DungeonClass> = Sim.players().filter { it !== p && hasClass(it) }.map { classOf(it) }.toSet()
 
     private fun free(p: ServerPlayer, want: DungeonClass?): DungeonClass {
         val taken = takenBy(p)
@@ -680,9 +683,10 @@ object SimActions {
             }
             "restart" -> {
                 if (!Sim.isHost(p)) Sim.everyone { Sim.note("§f$who§7 restarted.") }
-                if (Practice.active) Practice.restart() else Fight.start(Fight.lastStart)
+                if (Practice.active) { if (Sim.isHost(p)) Practice.restart() else Sim.note("Practice is the host's: their start, jobs and checkpoints.") }
+                else Fight.start(Fight.lastStart)
             }
-            "practiceRestart" -> Practice.restart()
+            "practiceRestart" -> if (Sim.isHost(p)) Practice.restart() else Sim.note("Practice is the host's: their start, jobs and checkpoints.")
             "stop" -> {
                 if (!Sim.isHost(p)) Sim.everyone { Sim.note("§f$who§7 stopped the run.") }
                 Fight.end()

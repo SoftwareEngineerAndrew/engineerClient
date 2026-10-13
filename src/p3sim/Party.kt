@@ -114,6 +114,9 @@ object Party {
     /** A player joined or left, or took a class: the bots follow at once (one a player took leaves the fight). */
     fun rosterChanged() {
         bots()
+        // P1's carriers and P2's pad roles: whoever's left takes over a removed bot's part.
+        (Fight.phase as? P1Maxor)?.botsChanged()
+        (Fight.phase as? P2Storm)?.botsChanged()
         val ph = Fight.phase as? GoldorPhase ?: return
         if (!botsOn || botsFor !== ph) return
         // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its

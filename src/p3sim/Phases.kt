@@ -631,6 +631,15 @@ class P1Maxor : Fight.Phase("P1") {
 
     // ------------------------------------------------------------------ hits
 
+    /** A bot left the fight (a player took its class): its crystal back on its stand, the other carrier covers its side. */
+    fun botsChanged() {
+        val gone = carriers.filter { it.bot.entity == null }
+        if (gone.isEmpty()) return
+        for (c in gone) if (c.holding && killAt < 0 && tops[c.fetch] == null && !pylons[c.fetch].placed) tops[c.fetch] = Top(c.fetch, stands = true)
+        carriers.removeAll(gone.toSet())
+        if (lure?.entity == null) lure = null
+    }
+
     /** [p] left the party: a crystal they carried is back on its stand, as if never taken. */
     fun playerLeft(p: net.minecraft.server.level.ServerPlayer) = Sim.asPlayer(p) {
         val had = carrying
