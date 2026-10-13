@@ -243,9 +243,10 @@ class PerPlayer<T>(private val init: () -> T) : kotlin.properties.ReadWritePrope
     fun values(): List<T> = map.values.map { it.v }
     companion object {
         private val NOBODY = java.util.UUID(0, 0)
-        private val all = java.util.concurrent.CopyOnWriteArrayList<PerPlayer<*>>()
+        /** Weakly: a phase's own go with it. */
+        private val all = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(java.util.WeakHashMap<PerPlayer<*>, Boolean>()))
         /** Everyone's values back to new (a new sim). */
-        fun clearAll() = all.forEach { it.map.clear() }
+        fun clearAll() = synchronized(all) { all.toList() }.forEach { it.map.clear() }
     }
 }
 
