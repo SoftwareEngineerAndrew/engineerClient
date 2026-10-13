@@ -635,8 +635,14 @@ class P1Maxor : Fight.Phase("P1") {
     fun botsChanged() {
         val gone = carriers.filter { it.bot.entity == null }
         if (gone.isEmpty()) return
-        for (c in gone) if (c.holding && killAt < 0 && tops[c.fetch] == null && !pylons[c.fetch].placed) tops[c.fetch] = Top(c.fetch, stands = true)
+        val had = gone.count { it.holding }
         carriers.removeAll(gone.toSet())
+        // Crystals aren't a side's: whichever stands are empty with nobody carrying for them get one back each.
+        if (had > 0 && killAt < 0) {
+            val botHeld = carriers.filter { it.holding }.map { it.fetch }
+            val missing = (0..1).filter { tops[it] == null && !pylons[it].placed && it !in pending && it !in clicked && it !in botHeld }
+            missing.drop(carryingBy.values().sum()).take(had).forEach { tops[it] = Top(it, stands = true) }
+        }
         if (lure?.entity == null) lure = null
     }
 

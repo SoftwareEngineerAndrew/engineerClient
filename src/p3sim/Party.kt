@@ -102,9 +102,11 @@ object Party {
 
     /** Everyone but [viewer], players and bots, in [viewer]'s leap order (slots 1-4). */
     fun mates(viewer: net.minecraft.server.level.ServerPlayer?): List<Mate> {
+        // Not yet in (no class until their hello): everyone, in class order.
+        val classless = viewer != null && !Players.hasClass(viewer)
         val mine = viewer?.let { Players.classOf(it) } ?: P3Sim.ownClass
         val all = bots()
-        return P3Plan.orderFor(mine).mapNotNull { c ->
+        return (if (classless) CLASSES else P3Plan.orderFor(mine)).mapNotNull { c ->
             val pl = Players.playerOf(c)?.takeIf { it !== viewer }
             if (pl != null) Mate(pl.gameProfile.name, c, pl, null)
             else all.firstOrNull { it.clazz == c }?.let { Mate(it.name, c, null, it) }

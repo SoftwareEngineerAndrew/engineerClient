@@ -144,6 +144,8 @@ object Players {
 
     fun jobsOf(p: ServerPlayer): Set<String> {
         if (Sim.isHost(p)) return P3Plan.mine()
+        // Not yet in (no class until their hello): nothing of theirs.
+        if (!hasClass(p)) return emptySet()
         val c = classOf(p)
         val prof = profiles[p.uuid]
         val key = "${P3Plan.skill}/$c"
@@ -174,10 +176,11 @@ object Players {
         return got
     }
 
-    fun left(p: ServerPlayer) { refresh(p) }
+    /** [p] left: no class until they say again (a rejoin asks anew, and holds nothing meanwhile). */
+    fun left(p: ServerPlayer) { profiles[p.uuid]?.clazz = null; refresh(p) }
 
     /** Whether [p] has a class yet (the host always; a joiner from their hello). */
-    private fun hasClass(p: ServerPlayer) = Sim.isHost(p) || profiles[p.uuid]?.clazz != null
+    fun hasClass(p: ServerPlayer) = Sim.isHost(p) || profiles[p.uuid]?.clazz != null
 
     private fun takenBy(p: ServerPlayer): Set<DungeonClass> = Sim.players().filter { it !== p && hasClass(it) }.map { classOf(it) }.toSet()
 
@@ -337,6 +340,8 @@ object PartyServer {
         if (!Sim.isHost(p)) {
             val o = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: JsonObject()
             val prof = Players.profile(p)
+            // A hello again (the first was lost, or late): set up as before, but not announced twice.
+            val again = prof.clazz != null
             o.getAsJsonObject("files")?.entrySet()?.forEach { (k, v) -> prof.files[k] = v.asString }
             Players.forgetFiles(p)
             o.getAsJsonObject("settings")?.entrySet()?.forEach { (k, v) -> prof.vals[k] = v }
@@ -348,9 +353,9 @@ object PartyServer {
             Fight.setup(p)
             BossBar.showTo(p)
             val name = p.gameProfile.name
-            Sim.everyone { Sim.note("§e$name§7 joined the party as the §f${Roles.label(got)}§7.") }
+            if (!again) Sim.everyone { Sim.note("§e$name§7 joined the party as the §f${Roles.label(got)}§7.") }
             if (want != null && want != got) Sim.note("${Players.playerOf(want)?.gameProfile?.name ?: "Someone"} plays the ${Roles.label(want)}, so you're the §f${Roles.label(got)}§7. Pick a class in the menu: taking someone's swaps you.")
-            if (Fight.phase != null) Sim.note("The run is under way: §fRestart§7 (menu or keybind) to play it from the start together.")
+            if (Fight.phase != null && !again) Sim.note("The run is under way: §fRestart§7 (menu or keybind) to play it from the start together.")
         }
         sendState(p)
     }
@@ -489,6 +494,7 @@ object PartyClient {
     /** A joiner's own shared settings and plan from before the party, put back when it leaves. */
     private var ownShared: JsonObject? = null
     private var gotShared = false
+    private var helloTicks = 0
 
     /** Whether this game is a joiner's: in someone else's sim. */
     val joiner: Boolean get() = P3Sim.inSim && !P3Sim.localSim
@@ -574,8 +580,11 @@ object PartyClient {
             lastProfile = profileJson(withFiles = true)
             SimNet.send("hello", lastProfile!!)
             if (joiner) sendPlan(force = true)
+            helloTicks = 0
             return
         }
+        // No roster back yet: the hello may have been lost (sent before the channel was ready); again every 5 s.
+        if (me == null && ++helloTicks % 100 == 0) { SimNet.send("hello", profileJson(withFiles = true)); if (joiner) sendPlan(force = true) }
         val prof = profileJson(withFiles = false)
         if (prof != lastProfile?.let { stripFiles(it) }) { lastProfile = prof; SimNet.send("profile", prof) }
         if (joiner && gotShared) {
@@ -682,9 +691,11 @@ object SimActions {
                 Fight.start(what)
             }
             "restart" -> {
-                if (!Sim.isHost(p)) Sim.everyone { Sim.note("§f$who§7 restarted.") }
                 if (Practice.active) { if (Sim.isHost(p)) Practice.restart() else Sim.note("Practice is the host's: their start, jobs and checkpoints.") }
-                else Fight.start(Fight.lastStart)
+                else {
+                    if (!Sim.isHost(p)) Sim.everyone { Sim.note("§f$who§7 restarted.") }
+                    Fight.start(Fight.lastStart)
+                }
             }
             "practiceRestart" -> if (Sim.isHost(p)) Practice.restart() else Sim.note("Practice is the host's: their start, jobs and checkpoints.")
             "stop" -> {
