@@ -52,7 +52,6 @@ object RandomStuff : Module(
      * render type still shows on the slots Odin hands back to vanilla.
      */
     private val hideTermNumbers by BooleanSetting("Hide Numbers in Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-10 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
-    private val i4BowAims by BooleanSetting("i4 Bow Aims", true, desc = "Odin's Arrows Device aim positions for the bow you hold (Terminator, Mosquito, Terror's Hydra arrows), not only the Terminator. Needs Odin's Show Aim Positions.")
     private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
@@ -189,9 +188,6 @@ object RandomStuff : Module(
         widgets.removeAll(icons)
         widgets.filter { it.y > row && it !is PlainTextButton }.forEach { it.y -= 24 }
     }
-
-    /** Read by I4Aims and ArrowsDeviceAimMixin. */
-    fun showsI4BowAims(): Boolean = enabled && i4BowAims
 
     /** Read by PartyFinderStats for every Party Finder tooltip. */
     fun showsPartyFinderStats(): Boolean = enabled && partyFinderStats

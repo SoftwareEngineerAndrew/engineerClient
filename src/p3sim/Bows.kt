@@ -32,8 +32,10 @@ import kotlin.random.Random
  * the Terminator, the Spirit Shortbow and the Mosquito Shortbow, with Terror armor's Hydra Strike ([Hydra]).
  *
  * A shot handled on server tick N: the main arrow leaves your eye - 0.1 (1.27 sneaking), 0.01745 to your right, at
- * 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and moves that tick: pos1, v0 = 0.99u - g. On N+1 its
- * velocity is k*v0 (k = 1 + 0.01 x Hydra stacks). At 10 stacks two more launch on N+1 at +-8 deg of that move.
+ * 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and moves that tick: pos1, v0 = 0.99u - g (what its spawn
+ * packet says). On N+1 its velocity is k*v0 (k = 1 + 0.01 x Hydra stacks), but it flies from pos1 as if that tick's
+ * gravity had not been taken: k*v0 + g, which is where the i4 board registers it (2,423 of 2,453 recorded hits; flown
+ * from the packets alone they land 0.2 low). At 10 stacks two more launch on N+1 at +-8 deg of that move.
  * The Terminator's side arrows launch on N+1 from 0.5 under pos1 at your clean look +-5.5 deg; the Mosquito's
  * Duplex replays the main arrow's N+1 move 3 or 4 ticks later. A Terminator volley is 5 entities (the side arrows
  * twice each, identical), a Duplex is 2 identical entities, Hydra Strike's two are distinct. Arrows are spawned at the end of a tick in the
@@ -374,14 +376,15 @@ object ShotPlan {
         val y = Math.toRadians(yaw.toDouble())
         val dir = look(yaw, pitch)
         // The main arrow: from your eye - 0.1, a hair to your right, at 3 x (look + noise); it moves that tick (pos1,
-        // v0 = 0.99u - g), and on the next its velocity is k*v0.
+        // v0 = 0.99u - g), and on the next its velocity is k*v0 - flown with g given back ([fly]), as the side arrows are.
         val u = dir.add(noise).scale(speed)
         val from = pos.add(-cos(y) * RIGHT, (if (crouch) 1.27 else 1.62) - 0.1, -sin(y) * RIGHT)
         val pos1 = from.add(u)
         val move = Vec3(0.99 * u.x, 0.99 * u.y - G, 0.99 * u.z).scale(k)
-        val out = arrayListOf(Planned(from, pos1, move, owned = true, delay = 0))
+        val fly = move.add(0.0, G, 0.0)
+        val out = arrayListOf(Planned(from, pos1, fly, owned = true, delay = 0))
         // Hydra Strike at 10 stacks: that move turned +-8 deg.
-        if (stacks >= 10) for (s in listOf(8.0, -8.0)) out += Planned(pos1, pos1, roty(move, s), owned = false, delay = 0)
+        if (stacks >= 10) for (s in listOf(8.0, -8.0)) out += Planned(pos1, pos1, roty(fly, s), owned = false, delay = 0)
         when (bow) {
             // The Terminator's side arrows: Hypixel spawns each twice, identical (1 main + 2 pairs = 5 entities, with or
             // without Terror): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
@@ -392,7 +395,7 @@ object ShotPlan {
             }
         }
         // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities.
-        if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay) }
+        if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, fly, owned = false, delay = duplexDelay) }
         return out
     }
 }
