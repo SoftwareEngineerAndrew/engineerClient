@@ -85,7 +85,7 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers,
+            P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers, com.engineerclient.practice.I4Aims,
         )
     }
 
@@ -113,7 +113,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice, com.engineerclient.practice.I4Aims)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -132,7 +132,6 @@ object EngineerClient : ClientModInitializer {
         DeadPlayers.register()
         com.engineerclient.misc.Witherborn.register()
         com.engineerclient.misc.I4Complete.register()
-        com.engineerclient.practice.I4Aims.register()
         RoleVignette.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
             "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +
