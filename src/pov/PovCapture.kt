@@ -100,7 +100,8 @@ object PovCapture {
     private var feedHeight = 0
 
     /** The nested `renderLevel` fires our own injectors again. */
-    private var capturing = false
+    var capturing = false
+        private set
 
     private var nextFeed = 0
     private var freeRequested = false
