@@ -149,7 +149,7 @@ class RunRecorder(
         recordSwings(level)
         if (tick % 5 == 0) recordMapPlayers()
         recordEntities(level)
-        if (confirmed && tick % 20 == 0) recordSkulls(level)
+        if (confirmed) recordSkulls(level)
         if (confirmed && captureGeometry) geometry.tick(level, tick)
         flushPending()
     }
@@ -483,6 +483,10 @@ class RunRecorder(
         if (prev != tex && !(prev == null && tex.isEmpty())) emit("""{"k":"held","t":$tick,"name":${str(name)},"tex":${str(tex)}}""")
     }
 
+    private class PlayerRaw(var x: Double = Double.NaN, var y: Double = 0.0, var z: Double = 0.0, var yRot: Float = 0f, var xRot: Float = 0f,
+                            var crouching: Boolean = false, var stack: ItemStack? = null, var held: String = "", var vanilla: String = "")
+    private val playerRaw = HashMap<String, PlayerRaw>()
+
     private fun recordPlayers(level: ClientLevel) {
         val sb = StringBuilder()
         var changed = 0
@@ -494,12 +498,23 @@ class RunRecorder(
             // would draw them as one mob jumping about. Real players keep their names.
             val name = if (p.uuid.version() == 2) "${p.name.string}#${p.id}" else p.name.string
             seen += name
-            val held = p.mainHandItem.let { if (it.isEmpty) "" else it.itemId.ifEmpty { vanillaId(it) } }
             if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
             recordEquipment(p, "\"name\":${str(name)}", name)
-            // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one; [9] 1 while crouching.
-            val entry = "[${str(name)},${m(p.x)},${m(p.y)},${m(p.z)},${w(p.yRot)},${a(p.xRot)},${str(held)},${p.uuid.version()},${str(vanillaId(p.mainHandItem))},${if (p.isCrouching) 1 else 0}]"
             recordHeldHead(p, name)
+            // Exactly where it was, facing the same way, holding the same stack: the same line, not built again.
+            val raw = playerRaw.getOrPut(name) { PlayerRaw() }
+            val stack = p.mainHandItem
+            if (lastPlayer.containsKey(name) && raw.x == p.x && raw.y == p.y && raw.z == p.z && raw.yRot == p.yRot &&
+                raw.xRot == p.xRot && raw.stack === stack && raw.crouching == p.isCrouching) continue
+            raw.x = p.x; raw.y = p.y; raw.z = p.z; raw.yRot = p.yRot; raw.xRot = p.xRot; raw.crouching = p.isCrouching
+            if (raw.stack !== stack) {
+                raw.stack = stack
+                // (Odin's itemId copies the item's whole custom data: once per stack, not every tick)
+                raw.vanilla = vanillaId(stack)
+                raw.held = if (stack.isEmpty) "" else stack.itemId.ifEmpty { raw.vanilla }
+            }
+            // [8] is the vanilla item (for drawing it); [6] the Skyblock id when there is one; [9] 1 while crouching.
+            val entry = "[${str(name)},${m(p.x)},${m(p.y)},${m(p.z)},${w(p.yRot)},${a(p.xRot)},${str(raw.held)},${p.uuid.version()},${str(raw.vanilla)},${if (raw.crouching) 1 else 0}]"
             if (lastPlayer.put(name, entry) == entry) continue
             if (changed++ > 0) sb.append(',')
             sb.append(entry)
@@ -507,6 +522,7 @@ class RunRecorder(
         if (changed > 0) emit("""{"k":"p","t":$tick,"d":[$sb]}""")
         for (name in lastPlayer.keys.filter { it !in seen }) {
             lastPlayer.remove(name)
+            playerRaw.remove(name)
             emit("""{"k":"pgone","t":$tick,"name":${str(name)}}""")
         }
     }
@@ -590,8 +606,21 @@ class RunRecorder(
         return null
     }
 
+    // Each entity's name as text, plain and with its colours, kept while it has the same name (the
+    // game keeps the same Component until the name changes): working both out for every entity every
+    // tick was most of the time this took.
+    private class Named(val of: net.minecraft.network.chat.Component?, val name: String, val colored: String)
+    private val names = HashMap<Int, Named>()
+    private fun namesOf(e: Entity): Named {
+        val c = e.customName
+        names[e.id]?.let { if (it.of === c) return it }
+        return Named(c, c?.string ?: "", c?.let { ADR.legacyText(it) } ?: "").also { names[e.id] = it }
+    }
+
+    private val seenIds = HashSet<Int>()
+
     private fun recordEntities(level: ClientLevel) {
-        val seen = HashSet<Int>(tracked.size + 16)
+        seenIds.clear()
         val moved = StringBuilder()
         var movedCount = 0
         val me = EngineerClient.mc.player
@@ -603,10 +632,11 @@ class RunRecorder(
             // An entity the game hasn't placed yet (NaN position) would make an unreadable line.
             if (!e.x.isFinite() || !e.y.isFinite() || !e.z.isFinite()) continue
             val id = e.id
-            seen += id
-            val name = e.customName?.string ?: ""
+            seenIds += id
+            val named0 = namesOf(e)
+            val name = named0.name
             // The name with its colours (§ codes), when it has any: "c" next to the plain "name".
-            val colored = e.customName?.let { ADR.legacyText(it) } ?: ""
+            val colored = named0.colored
             val c = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
             val t = tracked[id]
             // Mobs turn their heads apart from their bodies (the way they look at you).
@@ -695,13 +725,15 @@ class RunRecorder(
             }
         }
         if (movedCount > 0) emit("""{"k":"e","t":$tick,"d":[$moved]}""")
-        val gone = tracked.keys.filter { it !in seen }
+        val gone = tracked.keys.filter { it !in seenIds }
         for (id in gone) {
             tracked.remove(id)
+            names.remove(id)
             tags.remove(id)
             lastEquipment.remove("#$id")
             lastStacks.remove("#$id")
             lastStand.remove(id)
+            lastStandRaw.remove(id)
             lastFrame.remove(id)
             emit("""{"k":"gone","t":$tick,"id":$id}""")
         }
@@ -728,10 +760,17 @@ class RunRecorder(
     // Armor stands: size, visibility, arms/base plate and their pose (Hypixel poses them for heads,
     // held items and nametags), written when any of it changes.
     private val lastStand = HashMap<Int, String>()
+    // The flags and six pose objects each stand had when its line was last built: the game makes new
+    // pose objects when a pose changes, so the same ones are no change (most stands never move).
+    private val lastStandRaw = HashMap<Int, Array<Any>>()
 
     private fun recordStand(e: ArmorStand) {
         val f = (if (e.isSmall) 1 else 0) or (if (e.isInvisible) 2 else 0) or (if (e.showArms()) 4 else 0) or
             (if (!e.showBasePlate()) 8 else 0) or (if (e.isMarker) 16 else 0)
+        val raw = lastStandRaw[e.id]
+        if (raw != null && raw[0] == f && raw[1] === e.headPose && raw[2] === e.bodyPose && raw[3] === e.leftArmPose &&
+            raw[4] === e.rightArmPose && raw[5] === e.leftLegPose && raw[6] === e.rightLegPose) return
+        lastStandRaw[e.id] = arrayOf(f, e.headPose, e.bodyPose, e.leftArmPose, e.rightArmPose, e.leftLegPose, e.rightLegPose)
         val pose = listOf(e.headPose, e.bodyPose, e.leftArmPose, e.rightArmPose, e.leftLegPose, e.rightLegPose)
             .joinToString(",") { "${a(it.x())},${a(it.y())},${a(it.z())}" }
         val body = """"f":$f,"pose":[$pose]"""
@@ -743,11 +782,15 @@ class RunRecorder(
     // position and again if it changes. The viewer would otherwise draw a default head.
     private val lastSkull = HashMap<BlockPos, String>()
 
+    // Each chunk around you is looked at once a second, a twentieth of them each tick: all 625 in
+    // one tick made that tick a spike.
     private fun recordSkulls(level: ClientLevel) {
         val player = EngineerClient.mc.player ?: return
         val cx = player.blockPosition().x shr 4
         val cz = player.blockPosition().z shr 4
+        val slice = tick % 20
         for (x in cx - SKULL_CHUNKS..cx + SKULL_CHUNKS) for (z in cz - SKULL_CHUNKS..cz + SKULL_CHUNKS) {
+            if (Math.floorMod(x * 7 + z, 20) != slice) continue
             val chunk = level.chunkSource.getChunk(x, z, ChunkStatus.FULL, false) ?: continue
             for (be in chunk.blockEntities.values) {
                 if (be !is SkullBlockEntity) continue
@@ -762,10 +805,10 @@ class RunRecorder(
     private fun recordEquipment(e: LivingEntity, who: String, key: String) {
         // (the game swaps in new stacks when equipment changes: the same objects as last tick are no change -
         // building the line for every entity every tick would be most of the recorder's time)
-        val stacks = arrayOf(e.mainHandItem, e.getItemBySlot(EquipmentSlot.HEAD), e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val was = lastStacks[key]
-        if (was != null && (0 until 5).all { was[it] === stacks[it] }) return
-        lastStacks[key] = stacks
+        if (was != null && was[0] === e.mainHandItem && was[1] === e.getItemBySlot(EquipmentSlot.HEAD) && was[2] === e.getItemBySlot(EquipmentSlot.CHEST) &&
+            was[3] === e.getItemBySlot(EquipmentSlot.LEGS) && was[4] === e.getItemBySlot(EquipmentSlot.FEET)) return
+        lastStacks[key] = arrayOf(e.mainHandItem, e.getItemBySlot(EquipmentSlot.HEAD), e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val head = e.getItemBySlot(EquipmentSlot.HEAD)
         val items = listOf(e.mainHandItem, head, e.getItemBySlot(EquipmentSlot.CHEST), e.getItemBySlot(EquipmentSlot.LEGS), e.getItemBySlot(EquipmentSlot.FEET))
         val headTex = head.get(DataComponents.PROFILE)?.let { texturesOf(it.partialProfile().properties()) }
