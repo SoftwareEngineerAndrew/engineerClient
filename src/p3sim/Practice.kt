@@ -20,7 +20,7 @@ import java.util.Locale
  *
  * Custom practice (leap waypoints: where the leap menu's slots 1-4 land in it): your own start position, the jobs you pick (any sections', so it can run across
  * several; it starts in the earliest of them and the start's) and checkpoints to reach in order
- * (within 1 block across, the same height), all timed the same way. Saved in config/adm/p3sim-practice.json.
+ * (within 1 block across, the same height), all timed the same way. Saved in config/engineerclient/p3sim-practice.json.
  *
  * Server thread, except what the HUDs and the menu read ([mode], [tasks], [ticks], [endTicks], the custom setup).
  */
@@ -320,7 +320,7 @@ object Practice {
     private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null, val leaps: List<List<Double>>? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/adm/p3sim-practice.json")
+    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-practice.json")
     private fun list(p: Spots.Spot) = listOf(p.x, p.y, p.z, p.yaw.toDouble(), p.pitch.toDouble())
     private fun spot(name: String, v: List<Double>) = Spots.Spot(name, v[0], v[1], v[2], v[3].toFloat(), v[4].toFloat())
 

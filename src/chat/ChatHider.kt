@@ -20,23 +20,23 @@ import java.nio.file.Files
  * event or the packet would have silenced the other mods too.
  *
  * Rules come from `chat/hidden.json` in the jar; drop a file of the same shape at
- * `config/adm/chat-hider.json` to override without a rebuild (Reload Rules picks it up).
+ * `config/engineerclient/chat-hider.json` to override without a rebuild (Reload Rules picks it up).
  */
 object ChatHider : Module(
     name = "Chat Hider",
-    category = Category.custom("ADM", 860, 10),
-    description = "Hides the chat lines its rules mark Block (built in, or config/adm/chat-hider.json). Other mods still see every line.",
+    category = Category.custom("Engineer Client", 860, 10),
+    description = "Hides the chat lines its rules mark Block (built in, or config/engineerclient/chat-hider.json). Other mods still see every line.",
     key = null,
     toggled = true,
 ) {
     private val logHidden by BooleanSetting("Log Hidden Lines", false, desc = "Writes every hidden line and the rule that hid it to the EC session log, for checking a rule.")
-    private val reload by ActionSetting("Reload Rules", desc = "Re-reads config/adm/chat-hider.json (or the built-in rules if that file is absent).") { load(announce = true) }
+    private val reload by ActionSetting("Reload Rules", desc = "Re-reads config/engineerclient/chat-hider.json (or the built-in rules if that file is absent).") { load(announce = true) }
 
     @Volatile
     private var rules: ChatRules = ChatRules(emptyList(), emptyList())
     private var loaded = false
 
-    private val overrideFile = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("adm").resolve("chat-hider.json")
+    private val overrideFile = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("chat-hider.json")
 
     private fun load(announce: Boolean) {
         loaded = true
