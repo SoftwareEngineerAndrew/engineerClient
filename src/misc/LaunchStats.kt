@@ -41,10 +41,10 @@ object LaunchStats {
 
     fun install() {
         playtimeMs = runCatching { Files.readString(file).trim().toLong() }.getOrDefault(0L)
-        ClientTickEvents.END_CLIENT_TICK.register { count() }
+        ClientTickEvents.END_CLIENT_TICK.register { runCatching { count() } }
         ClientLifecycleEvents.CLIENT_STOPPING.register { save() }
         // Started: Odin has read every module's settings by now.
-        ClientLifecycleEvents.CLIENT_STARTED.register { EngineerClient.safely("launch stats") { send() } }
+        ClientLifecycleEvents.CLIENT_STARTED.register { runCatching { send() } }
     }
 
     private fun count() {
@@ -96,7 +96,7 @@ object LaunchStats {
                         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(),
                     HttpResponse.BodyHandlers.discarding(),
                 )
-            }.onFailure { EngineerClient.logger.info("[ec] launch stats not sent: ${it.message}") }
+            } // a failed send is dropped: nothing is shown or logged
         }
     }
 }
