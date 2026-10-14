@@ -94,13 +94,14 @@ object EngineerClient : ClientModInitializer {
     }
 
     override fun onInitializeClient() {
+        try { ConfigMigration.rename(mc.gameDirectory.toPath()) } catch (t: Throwable) { logger.warn("[ec] moving Engineer Client's settings to ADM failed", t) }
         try { ConfigMigration.run(mc.gameDirectory.toPath().resolve("config").resolve("odin")) } catch (t: Throwable) { logger.warn("[ec] module settings migration failed", t) }
         val firstRun = EcConfig.load()
 
         // Register our own module into Odin's module system: own ClickGUI panel
-        // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
+        // ("Engineer Client"), own config file (config/odin/addons/adm.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), *MODULES.toTypedArray())
+        ModuleManager.registerModules(ModuleConfig("adm.json"), *MODULES.toTypedArray())
 
         // Additions to Odin's own modules (e.g. the Engineer Splits look on Odin's Splits) go in
         // before anything saves the configs, which would drop saved values for settings that don't
@@ -138,7 +139,7 @@ object EngineerClient : ClientModInitializer {
         com.engineerclient.practice.I4Aims.register()
         RoleVignette.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
-            "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +
+            "adm ${FabricLoader.getInstance().getModContainer("adm").map { it.metadata.version.friendlyString }.orElse("?")}" +
                 "  spec v${RotationSpec.graph.version}" +
                 "  odin ${FabricLoader.getInstance().getModContainer("odin").map { it.metadata.version.friendlyString }.orElse("?")}",
             "starting role: ${RotationSpec.graph.name(EcConfig.data.myStartingRole)}",
@@ -175,7 +176,7 @@ object EngineerClient : ClientModInitializer {
     }
 
     /** What every line the mod says in chat starts with. */
-    const val PREFIX = "§8[§6EC§8] "
+    const val PREFIX = "§8[§6ADM§8] "
 
     /** A line from the mod, with its [PREFIX]. Anything the mod says goes through here. */
     fun msg(text: String) = chat(PREFIX + text)
@@ -185,15 +186,15 @@ object EngineerClient : ClientModInitializer {
     /** /ec on its own: what the rest of it does. */
     private val HELP = listOf(
         "${PREFIX}§7commands:",
-        "§f /ec role <role>|clear§7 — your P3 starting role; §f/ec roles§7 — everyone's",
-        "§f /ec setup§7 — checks the Odin setup Dynamic Term Roles relies on",
-        "§f /ec log§7 [mark <note>] — the session log; §f/ec debug§7, §f/ec memreport",
+        "§f /adm role <role>|clear§7 — your P3 starting role; §f/adm roles§7 — everyone's",
+        "§f /adm setup§7 — checks the Odin setup Dynamic Term Roles relies on",
+        "§f /adm log§7 [mark <note>] — the session log; §f/adm debug§7, §f/adm memreport",
     )
 
     private fun roleLines(): List<String> {
         val me = mc.player?.name?.string
         val mineId = EcConfig.data.myStartingRole
-        val lines = mutableListOf("${EngineerClient.PREFIX}§7phase-3 starting roles §8(/ec role <role> sets yours; the rest are heard from party chat)")
+        val lines = mutableListOf("${EngineerClient.PREFIX}§7phase-3 starting roles §8(/adm role <role> sets yours; the rest are heard from party chat)")
         RotationSpec.graph.startingRoles.forEach { role ->
             val ign = P3Rotation.teamRoles[role.id] ?: if (role.id == mineId) me else null
             val mine = if (role.id == mineId) " §8(you)" else ""
@@ -223,7 +224,7 @@ object EngineerClient : ClientModInitializer {
             // Same tree registered under the formal name (both casings, since Brigadier
             // literals are case-sensitive) and the short alias. Built fresh per name —
             // a bare redirect would not run the root executes on the alias itself.
-            for (name in listOf("engineerclient", "EngineerClient", "ec")) dispatcher.register(
+            for (name in listOf("adm", "ADM", "ec")) dispatcher.register(
                 literal(name)
                     .executes { ctx ->
                         HELP.forEach { ctx.source.sendFeedback(Component.literal(it)) }
@@ -232,7 +233,7 @@ object EngineerClient : ClientModInitializer {
                     .then(literal("log")
                         .executes { ctx ->
                             ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7log: §f${EcLog.path ?: "not open"}"))
-                            ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/ec log mark <note>§7 stamps a note into it"))
+                            ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/adm log mark <note>§7 stamps a note into it"))
                             1
                         }
                         .then(literal("mark")

@@ -31,7 +31,7 @@ import net.minecraft.world.entity.player.Player
  */
 object AgroSphere : Module(
     name = "Agro Sphere",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("ADM"),
     description = "In F7 P1/P2, a see-through sphere around Maxor/Storm through the closest player: the aggro boundary. If you're closest, it shows your margin to the 2nd closest.",
     key = null,
 ) {

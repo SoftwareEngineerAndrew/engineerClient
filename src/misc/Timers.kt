@@ -56,7 +56,7 @@ import com.engineerclient.storm.StormCrush
  */
 object Timers : Module(
     name = "Timers",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("ADM"),
     description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Storm and his pads, Necron and relics (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {

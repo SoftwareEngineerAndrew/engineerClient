@@ -73,7 +73,7 @@ import java.util.Locale
  */
 object SimonSaysPractice : Module(
     name = "SS Practice",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("ADM"),
     description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
     key = null,
 ) {
