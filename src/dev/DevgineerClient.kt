@@ -27,7 +27,7 @@ object DevgineerClient : ClientModInitializer {
         safely("adopt settings") { adoptSettings("Dynamic Term Roles", "i4 Aim") }
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch)
+        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch, com.devgineerclient.misc.RenderTweaks)
         // Fast Launch pieces: after registration, so they can read its (loaded) settings.
         safely("fast launch default") { com.devgineerclient.misc.FastLaunch.enableByDefault() }
         safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
