@@ -26,26 +26,26 @@ import java.util.concurrent.CompletionStage
 import java.util.concurrent.Executors
 
 /**
- * Better PF Menu: while it's on and you're in a world, undonecoffee.com/betterpf/menu lists you
+ * ADR Menu: while it's on and you're in a world, undonecoffee.com/adr/menu lists you
  * ("not in the menu"), and while the Party Finder menu is open, what it lists. Someone on that page
  * can turn on auto refresh: this clicks the menu's Refresh button every 7.5-9.5 s (random each time), for as long as they
  * watch and the menu is open.
  *
- * One WebSocket (/betterpf/api/pfmenu/share) for as long as you're in a world. The menu is read on
+ * One WebSocket (/adr/api/pfmenu/share) for as long as you're in a world. The menu is read on
  * the client thread once a second and sent only when it changed; a closed menu counts as still open
  * for a few seconds (so the menus a party opens on click don't flicker you off it).
  */
-object BetterPFMenu : Module(
-    name = "Better PF Menu",
+object ADRMenu : Module(
+    name = "ADR Menu",
     key = null,
     category = Category.custom("Coffee Client"),
-    description = "Shows your Party Finder menu live on undonecoffee.com/betterpf/menu while you have it open. People there can make it auto refresh.",
+    description = "Shows your Party Finder menu live on undonecoffee.com/adr/menu while you have it open. People there can make it auto refresh.",
 ) {
     private val allowAuto by BooleanSetting("Allow Auto Refresh", true, desc = "Lets someone watching your menu on the site make it click Refresh every 7.5-9.5 seconds (random) while it's open.")
     private val autoMessage by BooleanSetting("Auto Refresh Message", true, desc = "Says in chat when auto refresh is turned on or off from the site.")
 
     private const val SITE = "undonecoffee.com"
-    private const val URL = "wss://$SITE/betterpf/api/pfmenu/share"
+    private const val URL = "wss://$SITE/adr/api/pfmenu/share"
     /** Auto refresh's gap, picked anew after each click: 7.5 to 9.5 s. */
     private fun refreshGap() = 7_500L + (Math.random() * 2_000).toLong()
     private const val LINGER_MS = 5_000L
@@ -198,7 +198,7 @@ object BetterPFMenu : Module(
                     connecting = false
                     if (gen != generation) { webSocket.abort(); return@execute }
                     ws = webSocket; backoffMs = 1_000L
-                    if (failSaid) CoffeeClient.msg("§7Better PF Menu: connected again.")
+                    if (failSaid) CoffeeClient.msg("§7ADR Menu: connected again.")
                     failSaid = false
                     CoffeeClient.logger.info("[cc] pf menu: connected")
                     flush()
@@ -235,9 +235,9 @@ object BetterPFMenu : Module(
             if (on == auto) return@execute
             auto = on
             if (autoMessage) CoffeeClient.msg(
-                if (!on) "§7Better PF Menu: auto refresh off."
-                else if (allowAuto) "§7Better PF Menu: auto refresh on from the site (Refresh every 7.5-9.5s while the menu is open)."
-                else "§7Better PF Menu: the site asked for auto refresh; §fAllow Auto Refresh§7 is off."
+                if (!on) "§7ADR Menu: auto refresh off."
+                else if (allowAuto) "§7ADR Menu: auto refresh on from the site (Refresh every 7.5-9.5s while the menu is open)."
+                else "§7ADR Menu: the site asked for auto refresh; §fAllow Auto Refresh§7 is off."
             )
         }
     }
@@ -245,7 +245,7 @@ object BetterPFMenu : Module(
     /** Lost the connection: try again, a little later each time. The next menu read resends. */
     private fun fail(why: String) {
         CoffeeClient.logger.warn("[cc] pf menu: connection failed: $why")
-        if (!failSaid) { failSaid = true; CoffeeClient.msg("§cBetter PF Menu: can't reach $SITE ($why). Retrying.") }
+        if (!failSaid) { failSaid = true; CoffeeClient.msg("§cADR Menu: can't reach $SITE ($why). Retrying.") }
         disconnect("failed")
         nextTry = System.currentTimeMillis() + backoffMs
         backoffMs = (backoffMs * 2).coerceAtMost(30_000L)

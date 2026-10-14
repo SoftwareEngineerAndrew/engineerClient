@@ -229,7 +229,7 @@ fun lookingAt(at: Vec3, degrees: Double, range: Double): Boolean {
  * (2 ticks after the first who does, if later). The bar is his health, resent once a second: 0.95 at
  * a hit, falling while stunned, 0.25 once he breaks free, ~0.2 at the second hit, 0 at the kill.
  *
- * Measured on 240 post-update Better PF recordings (ticks after his first line, as Better PF counts
+ * Measured on 240 post-update ADR recordings (ticks after his first line, as ADR counts
  * them) against the ones before, with the alpha server's Boss Recorder study for the crystal rules.
  * With bots, two carry (pick up, wait at their pylon, go back up for the respawn, as real
  * parties do) and one lures him from (73.6, 225, 77.2); everyone stays on his level until the kill

@@ -73,7 +73,7 @@ object Masks {
 
     // ------------------------------------------------------------------ /stats: Stats & Equipment
 
-    /** Hypixel's /stats window (as recorded in Better PF runs); click a mask in your inventory below to wear it. */
+    /** Hypixel's /stats window (as recorded in ADR runs); click a mask in your inventory below to wear it. */
     fun openStats(p: ServerPlayer) {
         p.openMenu(net.minecraft.world.SimpleMenuProvider({ id, inv, _ -> StatsMenu(id, inv, p) }, Component.literal("Stats & Equipment")))
     }

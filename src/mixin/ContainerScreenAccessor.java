@@ -5,21 +5,21 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
 /**
- * Where a container screen's window sits and how big it is (GUI pixels), for Better PF: slot
+ * Where a container screen's window sits and how big it is (GUI pixels), for ADR: slot
  * positions and the mouse are recorded relative to its top-left so the viewer can redraw it.
  */
 @Mixin(AbstractContainerScreen.class)
 public interface ContainerScreenAccessor {
 
     @Accessor("leftPos")
-    int betterpfLeftPos();
+    int adrLeftPos();
 
     @Accessor("topPos")
-    int betterpfTopPos();
+    int adrTopPos();
 
     @Accessor("imageWidth")
-    int betterpfImageWidth();
+    int adrImageWidth();
 
     @Accessor("imageHeight")
-    int betterpfImageHeight();
+    int adrImageHeight();
 }

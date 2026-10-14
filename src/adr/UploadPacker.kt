@@ -1,4 +1,4 @@
-package com.engineerclient.betterpf
+package com.engineerclient.adr
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
@@ -360,13 +360,13 @@ object UploadPacker {
     fun pack(file: Path, scan: Scan, sibling: ByteArray?, hideParty: Boolean = false): Pair<Path, Int> {
         // Whatever is wrong with a party member's upload, this one goes up - whole, if need be.
         val sib = sibling?.let { b ->
-            runCatching { readSibling(b.inputStream()) }.onFailure { log.warn("[ec] betterpf: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
+            runCatching { readSibling(b.inputStream()) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
         }
         if (sib != null) {
             try {
                 return write(file, scan, sib, hideParty)
             } catch (e: Exception) {
-                log.warn("[ec] betterpf: packing with a party member's upload failed, packing it whole", e)
+                log.warn("[ec] adr: packing with a party member's upload failed, packing it whole", e)
             }
         }
         return write(file, scan, null, hideParty)
@@ -377,10 +377,10 @@ object UploadPacker {
         // time alone (or a recording that only claims to be of this run) is too unsure to trust.
         val aligned = sibling?.let { lineUp(scan, it) }
         val sib = sibling?.takeIf { aligned?.second == ALIGNED_MARGIN }
-        if (sibling != null && sib == null) log.info("[ec] betterpf: a party member's upload doesn't line up with this one, nothing left out")
+        if (sibling != null && sib == null) log.info("[ec] adr: a party member's upload doesn't line up with this one, nothing left out")
         val drop = sib?.let { s -> scan.counts.filter { (id, n) -> (s.counts[id] ?: 0) >= n }.keys } ?: emptySet()
         val players = sib?.let { Players(scan, it, aligned!!) }
-        val out = Files.createTempFile("betterpf-upload-", ".jsonl.xz")
+        val out = Files.createTempFile("adr-upload-", ".jsonl.xz")
         try {
             writeTo(file, scan, out, drop, players, hideParty)
         } catch (t: Throwable) {

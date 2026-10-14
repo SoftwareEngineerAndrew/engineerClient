@@ -41,7 +41,7 @@ object TermsimExtras {
             if (term.type == TerminalTypes.MELODY) return@on
             // The slot under the mouse (the screen's own hoveredSlot is protected).
             val acc = screen as ContainerScreenAccessor
-            val mx = mouseX - acc.betterpfLeftPos(); val my = mouseY - acc.betterpfTopPos()
+            val mx = mouseX - acc.adrLeftPos(); val my = mouseY - acc.adrTopPos()
             val slot = screen.menu.slots.firstOrNull { mx >= it.x - 1 && mx < it.x + 17 && my >= it.y - 1 && my < it.y + 17 }?.index ?: return@on
             if (slot in term.solution && term.canClick(slot, 0)) term.click(slot, 0, TerminalSolver.clickPrediction)
         }
