@@ -34,7 +34,7 @@ import org.lwjgl.glfw.GLFW
 
 /**
  * Dungeon Recorder: everything that happens in a dungeon, losslessly, for building mods with an LLM.
- * Where Better PF records a replay and Boss Recorder the boss fights, this keeps the lot:
+ * Where ADR records a replay and Boss Recorder the boss fights, this keeps the lot:
  *
  *  - every packet both ways, field by field ([PacketJson]), with every frame's exact bytes and the
  *    connection's lifecycle ([WireTap], [RecorderLifecycle]) and what became of each packet ([PacketFate]);

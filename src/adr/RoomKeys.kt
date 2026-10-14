@@ -1,4 +1,4 @@
-package com.engineerclient.betterpf
+package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.features.impl.dungeon.map.WorldScan

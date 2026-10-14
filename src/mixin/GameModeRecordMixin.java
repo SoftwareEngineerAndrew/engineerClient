@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.betterpf.BetterPF;
+import com.engineerclient.adr.ADR;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Better PF: every container slot click the client sends (whatever sends it: the vanilla screen,
+ * ADR: every container slot click the client sends (whatever sends it: the vanilla screen,
  * Odin's custom terminal window, hotbar/drop keys - they all end up here), and every block the
  * player right-clicks, for the replay. Recording only; nothing is changed or cancelled.
  */
@@ -23,11 +23,11 @@ public class GameModeRecordMixin {
 
     @Inject(method = "handleContainerInput", at = @At("HEAD"))
     private void ec$recordSlotClick(int containerId, int slot, int button, ContainerInput input, Player player, CallbackInfo ci) {
-        BetterPF.INSTANCE.onSlotClick(slot, button, input.name());
+        ADR.INSTANCE.onSlotClick(slot, button, input.name());
     }
 
     @Inject(method = "useItemOn", at = @At("HEAD"))
     private void ec$recordBlockUse(LocalPlayer player, InteractionHand hand, BlockHitResult hit, CallbackInfoReturnable<?> cir) {
-        BetterPF.INSTANCE.onBlockUse(hit.getBlockPos());
+        ADR.INSTANCE.onBlockUse(hit.getBlockPos());
     }
 }

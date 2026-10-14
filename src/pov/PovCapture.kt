@@ -375,7 +375,7 @@ object PovCapture {
         val slot = DungeonUtils.leapTeammates.getOrNull(index) ?: return
 
         // Loaded: their own eyes. Just gone out of entity range: their last pose, held ([recentStandIn]).
-        // Out of range for longer: where the dungeon map puts them, the way the Better PF viewer
+        // Out of range for longer: where the dungeon map puts them, the way the ADR viewer
         // does ([mapStandIn]). Dead, or nowhere at all: a flat dark quadrant, which reads as
         // "no feed" where a stale image — or a view of your own surroundings — lies.
         val loaded: Player? = (slot.entity?.takeIf { !it.isRemoved } ?: findByName(slot.name))?.takeIf { !it.isRemoved }
@@ -559,7 +559,7 @@ object PovCapture {
     private val groundCache = HashMap<String, Triple<Int, Int, Int>>()
 
     /**
-     * A teammate out of entity range, placed where the dungeon map shows them - as the Better PF
+     * A teammate out of entity range, placed where the dungeon map shows them - as the ADR
      * viewer places them: Odin's decoded map marker turned into world x/z the way the recorder does
      * it, standing on the ground nearest y=69 in that column, facing the way the marker's arrow
      * points (the map has 16 steps of it), looking level. Only in the clear, where the map is the

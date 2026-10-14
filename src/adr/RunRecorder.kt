@@ -1,4 +1,4 @@
-package com.engineerclient.betterpf
+package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
@@ -67,7 +67,7 @@ class RunRecorder(
         private set
     private val backlog = ArrayList<String>()
 
-    private val io = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-betterpf-writer").apply { isDaemon = true } }
+    private val io = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-adr-writer").apply { isDaemon = true } }
     private var writer: BufferedWriter? = null
     private var tempFile: Path? = null
     private var linesWritten = 0L
@@ -121,7 +121,7 @@ class RunRecorder(
         flushFrames()
         flushMouse()
         tick++
-        // Never the P3 Sim world: Odin is told it is in F7 there, and Better PF would take it for a run.
+        // Never the P3 Sim world: Odin is told it is in F7 there, and ADR would take it for a run.
         if (!confirmed && com.engineerclient.p3sim.P3Sim.inSim) { abandon(); return }
         if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
@@ -165,10 +165,10 @@ class RunRecorder(
     private var lastFrameNs = 0L
 
     fun onFrame(partialTick: Float, yaw: Float, pitch: Float) {
-        // At most Camera FPS a second (Better PF's setting, 20-160), whatever the game's frame rate;
+        // At most Camera FPS a second (ADR's setting, 20-160), whatever the game's frame rate;
         // a little under the interval, so uneven frame times at that rate still keep every frame.
         val now = System.nanoTime()
-        if (now - lastFrameNs < 960_000_000L / BetterPF.cameraFps.coerceIn(20, 160)) return
+        if (now - lastFrameNs < 960_000_000L / ADR.cameraFps.coerceIn(20, 160)) return
         lastFrameNs = now
         val entry = "[${f2(partialTick)},${f2(Mth.wrapDegrees(yaw))},${f2(pitch)}]"
         if (yaw == lastFrameYaw && pitch == lastFramePitch) { heldFrame = entry; return }
@@ -347,10 +347,10 @@ class RunRecorder(
                 val target = temp.resolveSibling(finalName)
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
                 val mb = Files.size(target) / 1_000_000.0
-                if (BetterPF.savedMessage) EngineerClient.msg("§7Better PF: saved run §f$finalName §7(${String.format(Locale.ROOT, "%.1f", mb)} MB, $lines lines, ${tick / 20}s)")
+                if (ADR.savedMessage) EngineerClient.msg("§7ADR: saved run §f$finalName §7(${String.format(Locale.ROOT, "%.1f", mb)} MB, $lines lines, ${tick / 20}s)")
                 onSaved(target)
             } catch (t: Throwable) {
-                EngineerClient.logger.error("[ec] betterpf: failed to finish run file", t)
+                EngineerClient.logger.error("[ec] adr: failed to finish run file", t)
             }
         }
         io.shutdown()
@@ -400,7 +400,7 @@ class RunRecorder(
         val chunk = pending.toString()
         pending.setLength(0)
         io.execute {
-            try { w.write(chunk) } catch (t: Throwable) { EngineerClient.logger.error("[ec] betterpf write failed", t) }
+            try { w.write(chunk) } catch (t: Throwable) { EngineerClient.logger.error("[ec] adr write failed", t) }
         }
     }
 
@@ -605,7 +605,7 @@ class RunRecorder(
             seen += id
             val name = e.customName?.string ?: ""
             // The name with its colours (§ codes), when it has any: "c" next to the plain "name".
-            val colored = e.customName?.let { BetterPF.legacyText(it) } ?: ""
+            val colored = e.customName?.let { ADR.legacyText(it) } ?: ""
             val c = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
             val t = tracked[id]
             // Mobs turn their heads apart from their bodies (the way they look at you).

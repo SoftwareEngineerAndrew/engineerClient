@@ -7,7 +7,7 @@ import java.util.PriorityQueue
 import java.util.zip.GZIPInputStream
 
 /**
- * How real players get about in P3, for the bots: a graph of every trail recorded in Better PF runs
+ * How real players get about in P3, for the bots: a graph of every trail recorded in ADR runs
  * (all five players) and p3wr's leg tracks (routes.bin, built offline). Its nodes are trail points
  * (merged on a 0.2-block grid), its edges the recorded tick-to-tick moves (sprints, jumps, lava
  * bounces, Bonzo and Jerry boosts, stonks through walls with the Dungeonbreaker) plus short walk joins
