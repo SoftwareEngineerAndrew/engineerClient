@@ -14,10 +14,10 @@ object ConfigMigration {
     private const val OLD = "engineerclient"
 
     /**
-     * The public build is ADM, which was Engineer Client: there, the Odin settings file (config/odin/addons/
-     * engineerclient.json) is copied to adm.json and the config/engineerclient folder (Better PF runs, P3 Sim
-     * saves, stats...) moved to config/adm, the first time it starts, before anything reads either. Nothing to do
-     * where the names are the same. [gameDir] is the game's folder.
+     * The public build is ADM, which was Engineer Client: there, Engineer Client's Odin settings file is copied to
+     * ADM's and its own folder under config (Better PF runs, P3 Sim saves, stats...) moved to ADM's, the first time
+     * it starts, before anything reads either. Nothing to do where the names are the same. [gameDir] is the game's
+     * folder.
      */
     fun rename(gameDir: Path) {
         if (NAME == OLD) return
