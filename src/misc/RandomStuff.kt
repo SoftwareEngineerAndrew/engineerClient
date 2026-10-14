@@ -140,6 +140,8 @@ object RandomStuff : Module(
 
     // Auto join state, per connection.
     private var pendingSkyblockJoin = false
+    /** The connection Auto Join Skyblock last started on: a JOIN on it again is a server switch. */
+    private var skyblockConnection: net.minecraft.network.Connection? = null
     private var ticksUntilSkyblock = -1
     private var attempts = 0
 
@@ -319,11 +321,18 @@ object RandomStuff : Module(
             if (screen is TitleScreen && cleansMenus()) cleanTitleScreen(screen)
         }
 
-        // Auto Join Skyblock: a new connection to Hypixel (not a server switch inside it, which is no new
-        // connection) starts the countdown to the first /skyblock.
-        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, client ->
+        // Auto Join Skyblock: a new connection to Hypixel starts the countdown to the first /skyblock. Hypixel
+        // moves you to Skyblock through the configuration phase (its resource pack comes then), which fires JOIN
+        // again on the same connection: that is the transfer, not a new connection, so it only waits for it.
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { handler, _, client ->
             val ip = client.currentServer?.ip?.lowercase().orEmpty()
             if (!enabled || !autoJoinSkyblock || !ip.contains("hypixel")) return@register
+            val connection = handler.connection
+            if (connection === skyblockConnection) {
+                if (pendingSkyblockJoin && attempts > 0) ticksUntilSkyblock = TRANSFER_TICKS
+                return@register
+            }
+            skyblockConnection = connection
             pendingSkyblockJoin = true
             attempts = 0
             ticksUntilSkyblock = (skyblockDelay * 20).toInt()
