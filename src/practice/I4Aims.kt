@@ -460,7 +460,7 @@ object I4Aims : Module(
      * drawn while a screen (menu, chat) is open.
      */
     private fun drawScreen(g: GuiGraphicsExtractor) {
-        if (!enabled || mc.screen != null) return
+        if (!enabled || mc.gui.screen() != null) return
         val r = result ?: return
         if (r.aims.isEmpty() || !atBoardCached()) return
         val camera = mc.gameRenderer.mainCamera()
