@@ -64,8 +64,9 @@ object ADR : Module(
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the ADR viewer (undonecoffee.com/adr), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {
-    private val privateRuns by BooleanSetting("Private Runs", false, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, private ones included.")
-    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way), and party chat too.")
+    private val privateRuns by BooleanSetting("Private Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, private ones included.")
+    private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way).")
+    private val hidePartyChat by BooleanSetting("Hide Party Chat", false, desc = "Leaves party chat out of recordings and uploads. Off, the viewer shows what your party said during the run.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
@@ -186,7 +187,8 @@ object ADR : Module(
             var hide = false
             EngineerClient.safely("adr party") { hide = PartyTracker.onChat(text, colored) }
             if (hide) it.cancel()
-            if (hidePrivateChats && (UploadPacker.privateChat(text) || UploadPacker.partyChat(text))) return@onReceive
+            if (hidePrivateChats && UploadPacker.privateChat(text)) return@onReceive
+            if (hidePartyChat && UploadPacker.partyChat(text)) return@onReceive
             val n = session?.serverTickCount
             EngineerClient.mc.execute { EngineerClient.safely("adr chat") { session?.onChat(text, colored, n) } }
         }
@@ -356,7 +358,7 @@ object ADR : Module(
     private fun send(file: Path, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns), siblingId: String? = askSibling(scan.summary)?.first): String {
         val summary = scan.summary
         // Without the mobs a party member's recording already on the site has (UploadPacker), as xz.
-        val (packed, left) = UploadPacker.pack(file, scan, siblingId?.let(::siblingBytes), hideParty = hidePrivateChats)
+        val (packed, left) = UploadPacker.pack(file, scan, siblingId?.let(::siblingBytes), hideParty = hidePartyChat)
         if (left > 0) EngineerClient.logger.info("[ec] adr: $left mobs left out, already uploaded by a party member")
         try {
             return sendPacked(packed, summary)
