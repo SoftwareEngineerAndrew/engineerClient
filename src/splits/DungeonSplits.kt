@@ -5,16 +5,23 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.misc.Witherborn
 import com.odtheking.odin.clickgui.settings.Setting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.Color
+import com.engineerclient.storm.StormCrush
+import com.engineerclient.storm.StormCrushView
+import com.engineerclient.storm.StormPhase
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Colors
@@ -45,7 +52,7 @@ import net.minecraft.world.level.block.Blocks
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("Engineer Client"),
-    description = "The blood rush sub splits, room by room, and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
+    description = "The blood rush sub splits, room by room; Storm's: his steps with the lightning, every pad read and how late each crush came (and his crush hitbox with Show Crush Info); and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
 
@@ -101,6 +108,40 @@ object DungeonSplits : Module(
         BooleanSetting("Blood Rush Hide In Boss", false, desc = "Hides the blood rush sub splits once you are in the boss.")
     ).withDependency { hudOn() }
 
+    /** The Storm sub split: his steps, graded, with everything else seen in his phase under each ([StormDetail]). */
+    private val storm = StormDetail()
+    private val crushView = StormCrushView()
+    enum class StormLevel { COMPACT, DETAILED }
+    private val stormHud = registerSetting(
+        HUD("Storm Sub Split", "Storm's phase: each step (Opening, Crush, Pin, Flight, Crush, Kill, Animation) graded, and under each what happened in it - Giga Lightning, his lightning line, leaving his spot, every pad read, each crush with the pillar and whether it came on the first check it could, breaking free, reaching Yellow. Shown until the run ends.", true, 330, 10, 0.9f) { example ->
+            if (example) return@HUD draw(this, listOf(
+                "§bStorm §f41.30s",
+                "§aOpening §732.40s",
+                " §8· §eGiga Lightning §726.00s", " §8· §eLightning line §727.45s", " §8· §5Purple pad §7read 1 §729.95s", " §8· §bLeft his spot §8(4.95s after the line) §732.40s",
+                "§6Crush §a0.55s", " §8· §6Crushed by §5Purple §8t660 §a(first check) §733.00s",
+                "§cPin §a0.10s", "§bFlight §e4.50s", " §8· §eReached Yellow §737.60s",
+                "§6Crush §a0.95s", "§cKill §a0.15s", "§aAnimation §73.10s",
+            ))
+            draw(this, stormLines())
+        }
+    )
+    private fun stormOn() = stormHud.value.enabled
+    private val stormLevel = registerSetting(enumSelector("Storm Detail", StormLevel.DETAILED, desc = "Compact: the steps on one line. Detailed: a line per step, with what happened in it under each."))
+        .withDependency { stormOn() }
+    private val showCrushInfo = registerSetting(
+        BooleanSetting("Show Crush Info", false, desc = "Storm's crush hitbox: from his lightning on, at every 20-tick crush check with him within 5 blocks of a pillar, where the check had him - green if he was inside that pillar's crush zone, red if not, and by how much - and each check in the Storm sub split.")
+    )
+    private val hitboxSeconds = registerSetting(NumberSetting("Hitbox Seconds", 5, 1, 10, 1, desc = "How long each check's hitbox stays up.", unit = "s"))
+        .withDependency { showCrushInfo.enabled }
+    private val hitboxMargins = registerSetting(BooleanSetting("Hitbox Margins", true, desc = "Over each hitbox, how far in or out of the zone sideways, and how far his head was above or below the pillar's bottom."))
+        .withDependency { showCrushInfo.enabled }
+    private val pillarOutline = registerSetting(BooleanSetting("Pillar Outline", true, desc = "The square the hitbox has to fit inside, at the height of the pillar's bottom, with each hitbox."))
+        .withDependency { showCrushInfo.enabled }
+    private val insideColor = registerSetting(ColorSetting("Inside Color", Color(85, 255, 85, 0.25f), true, desc = "Hitbox colour when the check had him inside the zone."))
+        .withDependency { showCrushInfo.enabled }
+    private val outsideColor = registerSetting(ColorSetting("Outside Color", Color(255, 85, 85, 0.25f), true, desc = "Hitbox colour when the check had him outside it."))
+        .withDependency { showCrushInfo.enabled }
+
     /** The Goldor sub split: each leap into the core after S4 and Goldor starting to move ([GoldorCore]). */
     private val core = GoldorCore()
     private val goldorHud = registerSetting(
@@ -130,6 +171,7 @@ object DungeonSplits : Module(
         synchronized(lagSamples) { lagShown = false; lagSamples.clear() }
         tracker.reset(); subs.reset(); blood.reset(); moments.reset()
         core.reset(); coreGoldor = null
+        storm.reset(); crushView.reset()
         goldorAt = null; goldorMoved = false; necronId = null; watcherAt = null
         barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
     }
@@ -187,7 +229,19 @@ object DungeonSplits : Module(
         }
 
         // Odin's server tick: the server's own clock, which falls behind when it lags.
-        on<TickEvent.Server> { serverTicks++; subs.onServerTick(); sampleLag() }
+        on<TickEvent.Server> {
+            serverTicks++; subs.onServerTick(); sampleLag()
+            val now = serverTicks
+            EngineerClient.mc.execute {
+                EngineerClient.safely("storm detail") {
+                    storm.onServerTick(now)
+                    // Show Crush Info: each 20-tick crush check from his lightning until he dies.
+                    val t = storm.phase(now)
+                    if (showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t + StormPhase.checkOffset))
+                        crushView.check(now)?.let { (v, armed) -> storm.onCheck(now, v, armed) }
+                }
+            }
+        }
 
         // Chat straight off the network, before any mod can hide it — chat cleaners drop exactly
         // the terminal and gate lines the splits are timed from.
@@ -202,6 +256,7 @@ object DungeonSplits : Module(
                     moments.onChat(text, at)
                     subs.onChat(text, at)
                     blood.onChat(text, at)
+                    storm.onChat(text, at.tick, DungeonUtils.floor?.name == "M7")
                     if (text == CORE_OPEN) core.onCoreOpen(at.tick)
                     else if (text.startsWith(NECRON_LINE)) core.onNecron()
                 }
@@ -220,6 +275,12 @@ object DungeonSplits : Module(
             if (open(SplitTracker.TERMS) && old.block == Blocks.BARRIER && updated.isAir) {
                 val section = SECTION_DOORS.indexOfFirst { (x, z) -> pos.x in x && pos.z in z }
                 if (section >= 0) sectionDoor[section]++
+            }
+            // A Storm pillar stepping down (a pad read): its layers go through moving pistons (going back up, they don't).
+            if (storm.active && updated.block == Blocks.MOVING_PISTON && pos.y in StormCrush.FLOOR..StormCrush.TOP) {
+                StormCrush.PILLARS.firstOrNull { pos.x == it.columnX && pos.z == it.columnZ }?.let {
+                    storm.onPillarStep(it, serverTicks); crushView.onStep(it, serverTicks)
+                }
             }
             // Maxor's beacon turning to bedrock is his kill.
             if (open(SplitTracker.MAXOR) && pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK) {
@@ -244,6 +305,7 @@ object DungeonSplits : Module(
             // Storm and Necron where the server last put them (not where they are drawn, 3 ticks behind).
             if (open(SplitTracker.STORM)) bossWither(level, "Storm")?.positionCodec?.base?.let {
                 subs.onStormPosition(now(), it.x, it.y, it.z)
+                storm.onPosition(serverTicks, it.x, it.y, it.z)
             }
             if (open(SplitTracker.NECRON)) bossWither(level, "Necron")?.let { necron ->
                 necronId = necron.id
@@ -292,6 +354,10 @@ object DungeonSplits : Module(
                 }
             }
         }
+        on<RenderEvent.Extract> {
+            if (showCrushInfo.enabled) with(crushView) { render(hitboxSeconds.value, hitboxMargins.enabled, pillarOutline.enabled, insideColor.value, outsideColor.value) }
+        }
+
         on<EntityEvent.Remove> {
             // Necron's wither going, close by: the backup for his death when the TNT wasn't seen.
             if (entity is WitherBoss && open(SplitTracker.NECRON) && entity.id == necronId && distanceTo(entity) <= 48) {
@@ -550,6 +616,49 @@ object DungeonSplits : Module(
         if (bloodHideInBoss.enabled && DungeonUtils.inBoss) return emptyList()
         return blood.lines(BloodRunDetail.Level.entries[bloodLevel.value], now(), totalRow.enabled)
     }
+
+    /**
+     * The Storm sub split's lines: each step graded on its own clock ([SubSplitGrades]: bands on
+     * F7, gold for a best, gray for a step that never varies), its other clock in brackets, and in
+     * Detailed what happened during it, timed from his phase's start.
+     */
+    private fun stormLines(): List<String> {
+        val split = tracker.split(SplitTracker.STORM) ?: return emptyList()
+        val now = now()
+        val floor = DungeonUtils.floor?.name
+        val bests = bests(floor)
+        val steps = subs.forSplit(SplitTracker.STORM)
+        val ids = subs.idsForSplit(SplitTracker.STORM)
+        val graded = steps.mapIndexed { i, st ->
+            val stop = st.stop ?: now
+            val ms = stop.realMs - st.start.realMs
+            val ticks = (stop.tick - st.start.tick).toLong()
+            val id = ids.getOrElse(i) { "" }
+            val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
+            val own = st.label.take(2).replace('&', '§')
+            val grade = SubSplitGrades.colour(id, value, st.stop != null, validBest(id, bests[id]), floor == "F7", own)
+            val real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL
+            Triple(st, grade + SplitFormat.seconds(if (real) ms else ticks * 50), SplitFormat.seconds(if (real) ticks * 50 else ms))
+        }
+        if (graded.isEmpty()) return emptyList()
+        if (StormLevel.entries[stormLevel.value] == StormLevel.COMPACT) return listOf("§bStorm: " + graded.joinToString(" §8| ") { it.second })
+
+        val stop = split.stop ?: now
+        val out = mutableListOf("§bStorm §f" + SplitFormat.seconds((stop.tick - split.start.tick) * 50L))
+        val start = storm.start
+        val moments = storm.moments()
+        // Moments are in phase ticks: the phase starts a tick before his first line, the split on it.
+        fun at(m: StormDetail.Moment) = (start ?: (split.start.tick - 1)) + m.tick
+        moments.filter { at(it) < graded.first().first.start.tick }.forEach { out += moment(it) }
+        graded.forEachIndexed { i, (st, time, other) ->
+            out += st.label.take(2).replace('&', '§') + st.label.drop(2) + " " + time + " §8(§7" + other + "§8)"
+            val end = graded.getOrNull(i + 1)?.first?.start?.tick ?: Int.MAX_VALUE
+            moments.filter { at(it) >= st.start.tick && at(it) < end }.forEach { out += moment(it) }
+        }
+        return out
+    }
+
+    private fun moment(m: StormDetail.Moment) = " §8· " + m.text + " §7" + StormDetail.secs(m.tick)
 
     /**
      * The run's pace ([SplitPace]) against the Pace targets - each split's setting, else the PB, else
