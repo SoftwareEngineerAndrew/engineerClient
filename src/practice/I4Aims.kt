@@ -110,19 +110,26 @@ object I4Aims : Module(
     @Volatile private var result: Result? = null
 
     /**
-     * Everything that depends only on where you stand and what you hold: the coarse scan, and each aim's spots (worked
-     * out once, as asked or in the background). A new target or a hit only picks among them, so it paints at once.
+     * Everything that depends only on where you stand and what you hold: the coarse scan. Each aim's spots depend on
+     * the mouse lattice too ([Grid]): worked out once per lattice, so a new target or a hit only picks among them.
      */
-    private class Scan(val key: String, val board: Board, val shooter: Shooter, val lattice: Lattice, val min: Double, val coarse: List<I4Geometry.Coarse>) {
+    private class Scan(val key: String, val board: Board, val shooter: Shooter, val min: Double, val coarse: List<I4Geometry.Coarse>) {
+        @Volatile var grid: Grid? = null
+    }
+
+    /** One mouse lattice's aims, by their cells. */
+    private class Grid(val sc: Scan, val lattice: Lattice) {
         val fine = java.util.concurrent.ConcurrentHashMap<Set<Int>, java.util.Optional<I4Geometry.Aim>>()
         fun aim(c: I4Geometry.Coarse): I4Geometry.Aim? =
-            fine.computeIfAbsent(c.cells) { java.util.Optional.ofNullable(I4Geometry.fine(board, shooter, lattice, min, c)) }.orElse(null)
+            fine.computeIfAbsent(c.cells) { java.util.Optional.ofNullable(I4Geometry.fine(sc.board, sc.shooter, lattice, sc.min, c)) }.orElse(null)
         fun cached(c: I4Geometry.Coarse) = fine.containsKey(c.cells)
     }
     @Volatile private var scan: Scan? = null
     private val busy = AtomicBoolean(false)
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "ec-i4-aims").apply { isDaemon = true } }
-    private val warmer = Executors.newSingleThreadExecutor { Thread(it, "ec-i4-warm").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
+    /** The solver's own few threads (its parallel streams run here, not on every core), so the game keeps its frames. */
+    private val pool = java.util.concurrent.ForkJoinPool(3)
+    private fun <T> inPool(f: () -> T): T = pool.submit(java.util.concurrent.Callable { f() }).get()
 
     /** Read by ArrowsDeviceAimMixin: Odin's aim cubes are hidden while this draws its own. */
     @JvmStatic fun replacesOdinAims(): Boolean = enabled
@@ -139,7 +146,7 @@ object I4Aims : Module(
     }
 
     private fun reset() {
-        lit = -1; marked.clear(); flying.clear(); result = null; scan = null; complete = false
+        lit = -1; marked.clear(); flying.clear(); result = null; scan = null; complete = false; drawn = null
         started = false; u.fill(1.0); pi.fill(0.0); confirmCell = -1
     }
 
@@ -198,6 +205,18 @@ object I4Aims : Module(
         return ((y - 125.0) / 2).toInt().coerceIn(0, 2)
     }
 
+    /**
+     * The aims to choose from. With Hydra Strike (a whole row in one volley) only the three row aims (the vertical
+     * strips on the middle column), unless every row has at most one cell that can still be uncounted: then any aim,
+     * to hit those cells directly.
+     */
+    private fun candidates(all: List<I4Geometry.Coarse>, u: DoubleArray): List<I4Geometry.Coarse> {
+        val rows = all.filter { it.cells.size == 3 && rowOf(it.cells) >= 0 }
+        if (rows.size < 3) return all
+        val onePerRow = (0 until 3).all { r -> (0 until 3).count { c -> u[r * 3 + c] > 0.05 } <= 1 }
+        return if (onePerRow) all else rows
+    }
+
     /** The aim covering the most chance of being the target, +0.03 on row [row] and +0.03 on the middle row. */
     private fun guess(all: List<I4Geometry.Coarse>, pi: DoubleArray, row: Int): I4Geometry.Coarse? =
         all.maxWithOrNull(compareBy({ c ->
@@ -210,8 +229,9 @@ object I4Aims : Module(
      * aim worth the most (its chance, plus each uncounted cell a LATER arrow covers, the new target with chance
      * 1/(cells left)). Otherwise [guess]. NEXT is [guess] after NOW's volley strikes at a row volley's rates.
      */
-    private fun plan(all: List<I4Geometry.Coarse>): Pair<I4Geometry.Coarse?, I4Geometry.Coarse?> {
+    private fun plan(scanned: List<I4Geometry.Coarse>): Pair<I4Geometry.Coarse?, I4Geometry.Coarse?> {
         if (complete) return null to null
+        val all = candidates(scanned, u)
         if (!started) return all.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * it.cells.count { c -> c / 3 == 1 }) }, { it.good })) to null
         val row = crosshairRow()
         val now = if (lit >= 0 && pi[lit] > 0.5) {
@@ -222,71 +242,82 @@ object I4Aims : Module(
         if (now == null || !showNext) return now to null
         val u2 = u.copyOf(); val pi2 = pi.copyOf()
         for (c in now.order) strike(u2, pi2, c, ROW_Q[c % 3])
-        val next = guess(all, pi2, rowOf(now.cells))
+        val next = guess(candidates(scanned, u2), pi2, rowOf(now.cells))
         return now to next?.takeIf { it.cells != now.cells }
     }
 
     private fun step(): Double = I4Geometry.mouseStep(mc.options.sensitivity().get())
 
-    /** Starts a pass for what you hold, where you stand and how the board is, unless the last one was for the same. */
+    /** How far (in counts, 0-0.5) your look sits off [l]: whole mouse counts keep it on. */
+    private fun offLattice(l: Lattice, yaw: Float, pitch: Float): Double {
+        fun off(d: Double) = Math.abs(d - Math.rint(d))
+        return maxOf(off(Mth.wrapDegrees(yaw - l.yaw0) / l.step), off((pitch - l.pitch0) / l.step))
+    }
+
+    /** Picks NOW and NEXT for how the board is; scans first when where you stand or what you hold changed. */
     private fun update() {
         val p = mc.player ?: return
         val b = board ?: return
         val bow = bow()
         val step = step()
-        // Where your look sits on the lattice (whole counts move it, so only a teleport or a new sensitivity changes it).
-        val phaseY = Math.floorMod((p.yRot / step * 40).toLong(), 40L)
-        val phaseP = Math.floorMod((p.xRot / step * 40).toLong(), 40L)
         val pos = p.position()
         val legacy = !com.engineerclient.p3sim.P3Sim.inSim
-        val geo = "$bow|$stacks|${p.isShiftKeyDown}|${"%.3f %.3f %.3f".format(pos.x, pos.y, pos.z)}|$step|$phaseY,$phaseP|$minChance|$legacy"
+        val geo = "$bow|$stacks|${p.isShiftKeyDown}|${"%.3f %.3f %.3f".format(pos.x, pos.y, pos.z)}|$step|$minChance|$legacy"
         val sc = scan
-        if (sc != null && sc.key == geo) {
-            val (now, next) = plan(sc.coarse)
-            val key = "$geo|${now?.cells?.sorted()}|${next?.cells?.sorted()}"
-            if (key == result?.key) return
-            val picked = if (now == null) emptyList() else listOfNotNull(now, next)
-            // Already worked out: paint it now.
-            if (picked.all { sc.cached(it) }) { show(sc, key, picked, 0); return }
+        if (sc == null || sc.key != geo) {
+            // One scan at a time; the tick after it ends starts the next if anything changed meanwhile.
             if (!busy.compareAndSet(false, true)) return
+            val shooter = Shooter(bow, pos, p.isShiftKeyDown, stacks, legacy)
+            val min = minChance / 100.0
             worker.execute {
-                try { val t0 = System.nanoTime(); show(sc, key, picked, (System.nanoTime() - t0) / 1_000_000) }
-                catch (t: Throwable) { EngineerClient.logger.error("[ec] i4 aims failed", t); result = Result(key, sc.shooter.eye, sc.lattice, null, null) }
-                finally { busy.set(false) }
+                try {
+                    val t0 = System.nanoTime()
+                    scan = Scan(geo, b, shooter, min, inPool { I4Geometry.scan(b, shooter, min) })
+                    EngineerClient.logger.info("[ec] i4 scan ${(System.nanoTime() - t0) / 1_000_000}ms for $geo")
+                } catch (t: Throwable) {
+                    EngineerClient.logger.error("[ec] i4 aims failed", t)
+                    scan = Scan(geo, b, shooter, min, emptyList())   // not retried every tick
+                } finally {
+                    busy.set(false)
+                }
             }
             return
         }
-        // One scan at a time; the tick after it ends starts the next if anything changed meanwhile.
+        // The mouse lattice: kept while your look stays on it (whole counts), moved when it drifts off.
+        var grid = sc.grid
+        if (grid == null || offLattice(grid.lattice, p.yRot, p.xRot) > 0.3) {
+            grid = Grid(sc, Lattice(Mth.wrapDegrees(p.yRot.toDouble()), p.xRot.toDouble(), step))
+            sc.grid = grid
+        }
+        val (now, next) = plan(sc.coarse)
+        val key = "$geo|${System.identityHashCode(grid)}|${now?.cells?.sorted()}|${next?.cells?.sorted()}"
+        if (key == result?.key) return
+        val picked = if (now == null) emptyList() else listOfNotNull(now, next)
+        // Already worked out: paint it now.
+        if (picked.all { grid.cached(it) }) { show(grid, key, picked, 0); return }
         if (!busy.compareAndSet(false, true)) return
-        val shooter = Shooter(bow, pos, p.isShiftKeyDown, stacks, legacy)
-        val yaw0 = (p.yRot.toDouble() % 360.0 + 360.0) % 360.0 - (if ((p.yRot.toDouble() % 360.0 + 360.0) % 360.0 >= 180.0) 360.0 else 0.0)
-        val lattice = Lattice(yaw0, p.xRot.toDouble(), step)
-        val min = minChance / 100.0
+        val g = grid
         worker.execute {
             try {
                 val t0 = System.nanoTime()
-                val fresh = Scan(geo, b, shooter, lattice, min, I4Geometry.scan(b, shooter, min))
-                scan = fresh
-                EngineerClient.logger.info("[ec] i4 scan ${(System.nanoTime() - t0) / 1_000_000}ms: ${fresh.coarse.size} aims for $geo")
-                // Every aim in the background, so each new target paints at once; the next tick picks.
-                warmer.execute { for (c in fresh.coarse) { if (scan !== fresh) break; runCatching { fresh.aim(c) } } }
+                inPool { picked.parallelStream().forEach { g.aim(it) } }
+                show(g, key, picked, (System.nanoTime() - t0) / 1_000_000)
+                // The rest of this lattice's candidates, so the next pick paints at once.
+                inPool { candidates(sc.coarse, DoubleArray(9) { 1.0 }).filter { !g.cached(it) }.parallelStream().forEach { g.aim(it) } }
             } catch (t: Throwable) {
-                EngineerClient.logger.error("[ec] i4 aims failed", t)
-                scan = Scan(geo, b, shooter, lattice, min, emptyList())   // not retried every tick
-            } finally {
-                busy.set(false)
-            }
+                EngineerClient.logger.error("[ec] i4 aims failed", t); result = Result(key, sc.shooter.eye, g.lattice, null, null)
+            } finally { busy.set(false) }
         }
     }
 
-    private fun show(sc: Scan, key: String, picked: List<I4Geometry.Coarse>, ms: Long) {
+    private fun show(grid: Grid, key: String, picked: List<I4Geometry.Coarse>, ms: Long) {
         val was = result?.key
-        val r = Result(key, sc.shooter.eye, sc.lattice, picked.getOrNull(0)?.let { sc.aim(it) }, picked.getOrNull(1)?.let { sc.aim(it) })
+        val r = Result(key, grid.sc.shooter.eye, grid.lattice, picked.getOrNull(0)?.let { grid.aim(it) }, picked.getOrNull(1)?.let { grid.aim(it) })
         result = r
         logPass(was, key, r, ms)
     }
 
-    private val KEY_PARTS = listOf("bow", "stacks", "sneak", "pos", "step", "phase", "min", "legacy", "now", "next")
+    private val KEY_PARTS = listOf("bow", "stacks", "sneak", "pos", "step", "min", "legacy", "lattice", "now", "next")
 
     /** One log line per pass: what changed since the last one and what it paints, to trace jumps in what's drawn. */
     private fun logPass(was: String?, key: String, r: Result, ms: Long) {
@@ -418,34 +449,58 @@ object I4Aims : Module(
     private const val GREEN = 0xFF00FF00.toInt()
     private const val CYAN = 0xFF00FFFF.toInt()
 
+    /** The last frame's painted runs (x0, x1, y, colour), reused while the camera and the aims haven't changed. */
+    private class Drawn(val result: Result, val yaw: Float, val pitch: Float, val fov: Float, val w: Int, val h: Int, val runs: IntArray)
+    private var drawn: Drawn? = null
+
     /**
-     * Each screen pixel in the spots' box, green when the look through its centre rounds to a spot of NOW (the nearest
-     * whole mouse count), cyan for one of NEXT, for the camera's look and (zoomed) FOV this frame; painted as runs along
-     * each pixel row.
+     * Green on each screen pixel whose look (through its centre) rounds to a spot of NOW (the nearest whole mouse
+     * count), cyan for NEXT, for the camera's look and (zoomed) FOV this frame. Each aim is worked out over its own
+     * screen box only, as runs along each pixel row, and the runs are kept until the camera or the aims change. Not
+     * drawn while a screen (menu, chat) is open.
      */
     private fun drawScreen(g: GuiGraphicsExtractor) {
-        if (!enabled) return
+        if (!enabled || mc.screen != null) return
         val r = result ?: return
-        val spots = r.aims.flatMap { it.pixels }
-        if (spots.isEmpty() || !atBoardCached()) return
-        val l = r.lattice
-        val i0 = spots.minOf { it.i }; val i1 = spots.maxOf { it.i }
-        val j0 = spots.minOf { it.j }; val j1 = spots.maxOf { it.j }
-        val cols = i1 - i0 + 1
-        // 1: NOW (green), 2: NEXT (cyan); NOW wins where they overlap.
-        val mark = ByteArray(cols * (j1 - j0 + 1))
-        r.next?.pixels?.forEach { mark[(it.j - j0) * cols + (it.i - i0)] = 2 }
-        r.now?.pixels?.forEach { mark[(it.j - j0) * cols + (it.i - i0)] = 1 }
-
+        if (r.aims.isEmpty() || !atBoardCached()) return
         val camera = mc.gameRenderer.mainCamera()
         val window = mc.window
         val w = window.width; val h = window.height
-        val focal = h / 2.0 / tan(Math.toRadians(camera.fov / 2.0))
-        val cy = Math.toRadians(camera.yRot().toDouble()); val cp = Math.toRadians(camera.xRot().toDouble())
+        val d = drawn
+        val runs = if (d != null && d.result === r && d.yaw == camera.yRot() && d.pitch == camera.xRot() && d.fov == camera.fov && d.w == w && d.h == h) d.runs
+        else IntArrayList().also { out ->
+            // NEXT first, so NOW's runs are painted over it where they meet.
+            r.next?.let { trace(it, r.lattice, camera.yRot(), camera.xRot(), camera.fov, w, h, CYAN, out) }
+            r.now?.let { trace(it, r.lattice, camera.yRot(), camera.xRot(), camera.fov, w, h, GREEN, out) }
+        }.toArray().also { drawn = Drawn(r, camera.yRot(), camera.xRot(), camera.fov, w, h, it) }
+        val gs = window.guiScale.toFloat()
+        g.pose().pushMatrix()
+        g.pose().scale(1f / gs, 1f / gs)
+        for (k in runs.indices step 4) g.fill(runs[k], runs[k + 2], runs[k + 1], runs[k + 2] + 1, runs[k + 3])
+        g.pose().popMatrix()
+    }
+
+    private class IntArrayList {
+        private var a = IntArray(256); private var n = 0
+        fun add(x: Int) { if (n == a.size) a = a.copyOf(n * 2); a[n++] = x }
+        fun toArray(): IntArray = a.copyOf(n)
+    }
+
+    /** [aim]'s pixels as runs (x0, x1, y, [color]) into [out], over the screen box of its counts. */
+    private fun trace(aim: I4Geometry.Aim, l: Lattice, yawDeg: Float, pitchDeg: Float, fov: Float, w: Int, h: Int, color: Int, out: IntArrayList) {
+        val spots = aim.pixels
+        if (spots.isEmpty()) return
+        val i0 = spots.minOf { it.i }; val i1 = spots.maxOf { it.i }
+        val j0 = spots.minOf { it.j }; val j1 = spots.maxOf { it.j }
+        val cols = i1 - i0 + 1
+        val mark = BooleanArray(cols * (j1 - j0 + 1))
+        for (s in spots) mark[(s.j - j0) * cols + (s.i - i0)] = true
+        val focal = h / 2.0 / tan(Math.toRadians(fov / 2.0))
+        val cy = Math.toRadians(yawDeg.toDouble()); val cp = Math.toRadians(pitchDeg.toDouble())
         val fx = -sin(cy) * cos(cp); val fy = -sin(cp); val fz = cos(cy) * cos(cp)
         val rx = -cos(cy); val rz = -sin(cy)
         val ux = -rz * fy; val uy = rz * fx - rx * fz; val uz = rx * fy
-        // The screen box of the spots' counts, a count wider each way.
+        // The screen box of the counts, a count wider each way.
         var xMin = Double.MAX_VALUE; var xMax = -Double.MAX_VALUE; var yMin = Double.MAX_VALUE; var yMax = -Double.MAX_VALUE
         for (ci in listOf(i0 - 1.0, i1 + 1.0)) for (cj in listOf(j0 - 1.0, j1 + 1.0)) {
             val yaw = Math.toRadians(l.yaw0 + ci * l.step); val pitch = Math.toRadians(l.pitch0 + cj * l.step)
@@ -457,30 +512,22 @@ object I4Aims : Module(
         }
         val px0 = maxOf(0, xMin.toInt()); val px1 = minOf(w - 1, xMax.toInt() + 1)
         val py0 = maxOf(0, yMin.toInt()); val py1 = minOf(h - 1, yMax.toInt() + 1)
-        if (px1 < px0 || py1 < py0 || (px1 - px0).toLong() * (py1 - py0) > 2_000_000L) return
-
-        val gs = window.guiScale.toFloat()
-        g.pose().pushMatrix()
-        g.pose().scale(1f / gs, 1f / gs)
+        if (px1 < px0 || py1 < py0 || (px1 - px0).toLong() * (py1 - py0) > 1_000_000L) return
         for (py in py0..py1) {
             val sv = -(py + 0.5 - h / 2.0) / focal
             var run = -1
-            var runMark = 0
             for (px in px0..px1 + 1) {
-                var on = 0
+                var on = false
                 if (px <= px1) {
                     val su = (px + 0.5 - w / 2.0) / focal
                     val dx = fx + su * rx + sv * ux; val dy = fy + sv * uy; val dz = fz + su * rz + sv * uz
                     val i = l.i(l.yaw0 + Mth.wrapDegrees(Math.toDegrees(atan2(-dx, dz)) - l.yaw0))
                     val j = l.j(Math.toDegrees(atan2(-dy, hypot(dx, dz))))
-                    on = if (i in i0..i1 && j in j0..j1) mark[(j - j0) * cols + (i - i0)].toInt() else 0
+                    on = i in i0..i1 && j in j0..j1 && mark[(j - j0) * cols + (i - i0)]
                 }
-                if (on != runMark) {
-                    if (runMark != 0) g.fill(run, py, px, py + 1, if (runMark == 1) GREEN else CYAN)
-                    run = px; runMark = on
-                }
+                if (on && run < 0) run = px
+                else if (!on && run >= 0) { out.add(run); out.add(px); out.add(py); out.add(color); run = -1 }
             }
         }
-        g.pose().popMatrix()
     }
 }
