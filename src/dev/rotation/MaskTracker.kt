@@ -35,13 +35,17 @@ object MaskTracker {
         }
     }
 
-    /** Remaining cooldown in ticks, per player, per type. Absent means ready. */
+    /**
+     * Remaining cooldown in ticks, per player, per type. Absent means ready. Odin posts the server
+     * tick on the network thread while procs, resets and reads run on the game thread, so every
+     * access below holds this object's lock.
+     */
     private val cooldowns = HashMap<String, MutableMap<Kind, Int>>()
 
-    fun reset() = cooldowns.clear()
+    @Synchronized fun reset() = cooldowns.clear()
 
     /** Advance every tracked cooldown by one server tick. */
-    fun tick() {
+    @Synchronized fun tick() {
         val empty = mutableListOf<String>()
         cooldowns.forEach { (ign, byKind) ->
             byKind.entries.removeIf { (_, left) -> left <= 1 }
@@ -51,17 +55,17 @@ object MaskTracker {
         empty.forEach { cooldowns.remove(it) }
     }
 
-    fun proc(ign: String, kind: Kind) {
+    @Synchronized fun proc(ign: String, kind: Kind) {
         cooldowns.getOrPut(ign) { mutableMapOf() }[kind] = kind.cooldownTicks
         EcLog.log("MASK", "$ign ${kind.name} procced; ${available(ign)}/3 left")
     }
 
     /** How many of the three are off cooldown for this player. For a teammate this is an upper bound. */
-    fun available(ign: String): Int = Kind.entries.count { cooldowns[ign]?.containsKey(it) != true }
+    @Synchronized fun available(ign: String): Int = Kind.entries.count { cooldowns[ign]?.containsKey(it) != true }
 
-    fun onCooldown(ign: String): List<Kind> = Kind.entries.filter { cooldowns[ign]?.containsKey(it) == true }
+    @Synchronized fun onCooldown(ign: String): List<Kind> = Kind.entries.filter { cooldowns[ign]?.containsKey(it) == true }
 
-    fun cooldownTicks(ign: String, kind: Kind): Int = cooldowns[ign]?.get(kind) ?: 0
+    @Synchronized fun cooldownTicks(ign: String, kind: Kind): Int = cooldowns[ign]?.get(kind) ?: 0
 
     /** Your own proc line. Returns the type when it matched. */
     fun onSelfLine(self: String, line: String): Kind? =

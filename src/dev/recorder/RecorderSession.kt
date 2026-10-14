@@ -122,6 +122,8 @@ class RecorderSession(
     private val gapHistory = GapHistory()
     private var lastGapFlushMs = 0L
     @Volatile private var gapWarned = false
+    /** Lines were dropped for want of room: resync once the queue has drained (writer thread). */
+    @Volatile private var resyncDue = false
 
     private fun recordGap(job: Job, why: String) = recordGap(why, job.seq, job.seq, job.ms, job.ms, 1, mapOf(job.typeTag to 1L))
 
@@ -327,6 +329,12 @@ class RecorderSession(
                 }
                 val now = System.currentTimeMillis()
                 writeGaps(now, !running)
+                if (resyncDue && running && pendingBytes.get() < queueCap / 4 && synchronized(gapLock) { gaps.values.none { it.why == "queue_full" } }) {
+                    // The overload is over: resync as a new part does, with a keyframe and every
+                    // "only when it changed" line starting over.
+                    resyncDue = false
+                    if (Rec.session === this) { Rec.requestKeyframe("gap"); Rec.clearChanged() }
+                }
                 guardStop?.let { stopFromGuard(it) }
                 if (!ioAccepting()) {
                     // A disk error, or an IO thread that died: nothing more reaches the disk.
@@ -542,7 +550,11 @@ class RecorderSession(
             gapHistory.add(g.why, g.seqA, g.seqB, g.msA, g.msB, g.lines, g.types)
             if (part > 0) selfLine("gap", gapBody(g))
         }
-        if (!gapWarned && pending.any { it.why == "queue_full" }) {
+        val overloaded = pending.any { it.why == "queue_full" }
+        // Dropped lines may have been "only when it changed" ones, already marked seen: a resync is
+        // due, run by the writer loop once the overload is over (one now would only add to it).
+        if (overloaded) resyncDue = true
+        if (!gapWarned && overloaded) {
             gapWarned = true
             notify("§cDungeon Recorder: the recorder fell behind and skipped some lines (written as a gap in the file).")
         }

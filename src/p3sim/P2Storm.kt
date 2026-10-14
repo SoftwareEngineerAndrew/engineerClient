@@ -149,17 +149,11 @@ class P2Storm : Fight.Phase("P2") {
         bar()
         tickBots()
         StormFx.follow()
-        if (deadAt >= 0 && t >= deadAt) {
-            when (t - deadAt) {
-                0 -> { line("I should have known that I stood no chance."); handed = true; StormCorpse(storm).start() }
-                StormEnd.SON -> line("At least my son died by your hands.")
-                // As from StormEnd: the phase starts LEAD_IN early, so "Who dares" lands at LEAD.
-                StormEnd.LEAD - GoldorPhase.LEAD_IN -> Fight.begin(GoldorPhase(1, arrived = true))
-            }
-            return
-        }
+        if (deadAt >= 0 && t >= deadAt) { dead(); return }
         move()
         if (t % 20 == 19) check()
+        // A death delay of 0: the line comes in crush 2's own tick, after the check that set it.
+        if (deadAt == t) { dead(); return }
         attacks()
         // The pin ends 0-1 after a Mage beam (yours, even on the crush tick, or the bot's).
         if (pinnedUntilBeam && crushes < 2) {
@@ -168,6 +162,16 @@ class P2Storm : Fight.Phase("P2") {
             if (takeoffAt >= 0 && t >= takeoffAt) takeoff()
         }
         beamed = false
+    }
+
+    /** After the death line is due: the line, Storm's corpse, then the hand-off to Goldor. */
+    private fun dead() {
+        when (t - deadAt) {
+            0 -> { line("I should have known that I stood no chance."); handed = true; StormCorpse(storm).start() }
+            StormEnd.SON -> line("At least my son died by your hands.")
+            // As from StormEnd: the phase starts LEAD_IN early, so "Who dares" lands at LEAD.
+            StormEnd.LEAD - GoldorPhase.LEAD_IN -> Fight.begin(GoldorPhase(1, arrived = true))
+        }
     }
 
     private var beamed = false

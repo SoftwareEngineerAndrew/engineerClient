@@ -100,7 +100,8 @@ object SimWorld {
     /** The mod is opening (or making) the sim world right now. */
     @Volatile var opening = false
 
-    fun isBuilt(worldDir: java.nio.file.Path) = Files.exists(worldDir.resolve(MARKER))
+    /** Built by the mod from the arena this jar carries: one from another build (opened from the world list) isn't the sim's. */
+    fun isBuilt(worldDir: java.nio.file.Path) = runCatching { Files.readString(worldDir.resolve(MARKER)).trim() == arenaVersion }.getOrDefault(false)
 
     /** Called on the server once it runs: stamps which arena the world was built from. */
     fun markBuilt(worldDir: java.nio.file.Path) {

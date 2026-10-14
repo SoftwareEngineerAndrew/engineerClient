@@ -31,13 +31,7 @@ object EcConfig {
         try {
             if (Files.exists(file)) {
                 data = gson.fromJson(Files.readString(file), Data::class.java) ?: Data()
-                // Old shape stored the whole team; keep only the entry that was ours.
-                data.roleBindings?.let { old ->
-                    val me = Minecraft.getInstance().player?.name?.string
-                    if (data.myStartingRole == null && me != null) data.myStartingRole = old.entries.firstOrNull { it.value.equals(me, true) }?.key
-                    data.roleBindings = null
-                    save()
-                }
+                migrateRoleBindings()
                 return false
             }
         } catch (t: Throwable) {
@@ -46,6 +40,18 @@ object EcConfig {
         }
         save()
         return true
+    }
+
+    /**
+     * Old shape stored the whole team; keep only the entry that was ours. Fabric can start the mod before
+     * Minecraft knows the account, so with no name yet the old map is kept and this runs again on join.
+     */
+    fun migrateRoleBindings() {
+        val old = data.roleBindings ?: return
+        val me = Minecraft.getInstance().user?.name ?: return
+        if (data.myStartingRole == null) data.myStartingRole = old.entries.firstOrNull { it.value.equals(me, true) }?.key
+        data.roleBindings = null
+        save()
     }
 
     fun save() {

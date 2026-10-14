@@ -62,9 +62,9 @@ object PracticeCode {
         val start = if (r.get(1) == 1) r.spot("Start", true) else null
         val delay = r.get(6) / 10.0
         val all = P3Plan.allJobs()
-        val jobs = if (r.get(1) == 1) List(r.gamma() - 1) { all[r.get(bitsFor(all.size))] }.toSet()
+        val jobs = if (r.get(1) == 1) List(r.count()) { all[r.get(bitsFor(all.size))] }.toSet()
             else all.filter { r.get(1) == 1 }.toSet()
-        val cps = List(r.gamma() - 1) { r.spot("Checkpoint ${it + 1}", false) }
+        val cps = List(r.count()) { r.spot("Checkpoint ${it + 1}", false) }
         val leaps = List(r.get(3).coerceAtMost(4)) { r.spot("Leap ${it + 1}", true) }
         Custom(start, jobs, cps, leaps, delay.coerceIn(0.0, 5.0))
     }.getOrNull()
@@ -90,7 +90,9 @@ object PracticeCode {
     private class Reader(val bits: List<Boolean>) {
         var i = 0
         fun get(n: Int): Int { var v = 0; repeat(n) { v = (v shl 1) or (if (bits[i++]) 1 else 0) }; return v }
-        fun gamma(): Int { var z = 0; while (!bits[i]) { z++; i++ }; return get(z + 1) }
+        fun gamma(): Int { var z = 0; while (!bits[i]) { z++; i++ }; require(z < 31); return get(z + 1) }
+        /** A list's length ([gamma] - 1): each entry takes a bit or more, so a bad code can't ask for a huge list. */
+        fun count(): Int = (gamma() - 1).also { require(it <= bits.size - i) }
         fun pos(o: Double) = get(POS_BITS) / 32.0 + o
         fun spot(name: String, facing: Boolean): Spots.Spot {
             val x = pos(X0); val y = pos(Y0); val z = pos(Z0)

@@ -13,6 +13,7 @@ import java.net.http.WebSocket
 import java.security.SecureRandom
 import java.time.Duration
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 
 /**
@@ -39,6 +40,8 @@ object OnlineLink {
     private var sentWhere = ""
     private var sentStats = ""
     private var lastPing = 0L
+    /** The last frame handed to the socket; the next one waits for it (see [sendText]). */
+    private var sending: CompletableFuture<WebSocket> = CompletableFuture.completedFuture(null)
 
     /** Every client tick while ADR is on. */
     fun tick() {
@@ -63,7 +66,7 @@ object OnlineLink {
         }
         if (now - lastPing > 30_000) {
             lastPing = now
-            runCatching { ws.sendText("ping", true) }
+            sendText("ping")
             stats()?.let { if (it.toString() != sentStats) { sentStats = it.toString(); send(it) } }
         }
     }
@@ -107,10 +110,12 @@ object OnlineLink {
             .whenComplete { ws, err ->
                 connecting = false
                 if (err != null) { retryLater(); return@whenComplete }
-                socket = ws
                 backoff = 5_000L
+                // Everything set up and hello on its way before tick() can see the socket, so hello is
+                // always the first frame and the resets don't land after tick() has sent.
                 sentParty = -1; sentWhere = ""; sentStats = ""; lastPing = 0L
-                runCatching { ws.sendText(hello().toString(), true) }
+                sending = ws.sendText(hello().toString(), true)
+                socket = ws
             }
     }
 
@@ -120,7 +125,17 @@ object OnlineLink {
         backoff = (backoff * 2).coerceAtMost(5 * 60_000L)
     }
 
-    private fun send(o: JsonObject) { socket?.let { runCatching { it.sendText(o.toString(), true) } } }
+    private fun send(o: JsonObject) = sendText(o.toString())
+
+    /**
+     * The JDK socket takes one text frame at a time: a second sendText while the first is still out
+     * fails ("Send pending") without throwing, and the frame is lost. One tick can send party, where,
+     * ping and stats together, so each frame waits for the one before it, whether that one went or not.
+     */
+    private fun sendText(text: String) {
+        val ws = socket ?: return
+        sending = sending.handle { _, _ -> Unit }.thenCompose { ws.sendText(text, true) }
+    }
 
     /** ADR turned off: offline. */
     fun close() {

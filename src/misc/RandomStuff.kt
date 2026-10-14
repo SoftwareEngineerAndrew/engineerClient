@@ -327,6 +327,10 @@ object RandomStuff : Module(
         // again on the same connection: that is the transfer, not a new connection, so it only waits for it.
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { handler, _, client ->
             val ip = client.currentServer?.ip?.lowercase().orEmpty()
+            // Any new connection drops what the last one left pending: a countdown cut short by a
+            // disconnect must not carry on into the next world, Hypixel or not.
+            pendingSkyblockJoin = false
+            ticksUntilSkyblock = -1
             if (!enabled || !autoJoinSkyblock || !ip.contains("hypixel")) return@register
             val connection = handler.connection
             if (connection === skyblockConnection) {
@@ -350,14 +354,22 @@ object RandomStuff : Module(
 
         // The lobby can ignore a command sent before it is ready, so /skyblock goes out [skyblockDelay]
         // after landing and then every 3 seconds until Odin sees the Skyblock scoreboard. On raw client
-        // ticks: Odin's TickEvent.End only fires with a world loaded.
+        // ticks: Odin's TickEvent.End only fires with a world loaded. Raw ticks also run with the module
+        // off, so turning it (or the setting) off mid-countdown ends the countdown here.
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!pendingSkyblockJoin || ticksUntilSkyblock < 0) return@register
-            if (LocationUtils.isInSkyblock || attempts >= MAX_ATTEMPTS) { pendingSkyblockJoin = false; ticksUntilSkyblock = -1; return@register }
+            if (!enabled || !autoJoinSkyblock || LocationUtils.isInSkyblock || attempts >= MAX_ATTEMPTS) { pendingSkyblockJoin = false; ticksUntilSkyblock = -1; return@register }
             if (client.player == null || ticksUntilSkyblock-- > 0) return@register
             attempts++
             sendCommand("skyblock")
             ticksUntilSkyblock = RETRY_TICKS
         }
+    }
+
+    // Switched off, the tick that writes the hider's flag stops running, so the sidebar is handed
+    // back whole here: left on, the mixin would keep hiding lines for a module that is off.
+    override fun onDisable() {
+        super.onDisable()
+        ScoreboardLines.hideLines = false
     }
 }
