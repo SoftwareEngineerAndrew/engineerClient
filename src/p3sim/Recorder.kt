@@ -9,7 +9,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Records every sim run (the menu's Record runs) to `config/engineerclient/p3sim-runs/`, one JSON
+ * Records every sim run (the menu's Record runs) to `config/adm/p3sim-runs/`, one JSON
  * line a server tick: you (position, look, open window), the section, what's left in it, every bot
  * (where, heading where, holding, its jobs) and the party's early-enter state; plus every chat line
  * the sim sent and the bots' debug lines as events. The last 20 runs are kept. Server thread only.
@@ -20,7 +20,7 @@ object Recorder {
     private var file: File? = null
     private val events = ArrayList<String>()
 
-    val dir: File get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-runs")
+    val dir: File get() = File(Minecraft.getInstance().gameDirectory, "config/adm/p3sim-runs")
 
     fun begin(what: String) {
         finish()

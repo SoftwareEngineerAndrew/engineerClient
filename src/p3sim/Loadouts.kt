@@ -132,7 +132,7 @@ object Loadouts {
 
     private class Custom(val name: String = "", val worn: Worn = Worn())
 
-    private val customFile get() = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-loadouts.json")
+    private val customFile get() = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/adm/p3sim-loadouts.json")
     private val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
     private var customList: MutableList<Custom>? = null
 

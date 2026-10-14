@@ -36,7 +36,7 @@ import net.minecraft.world.item.ItemDisplayContext
  */
 object RandomStuff : Module(
     name = "Random Stuff",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("ADM"),
     description = "A collection of small unrelated QoL toggles.",
     key = null,
 ) {

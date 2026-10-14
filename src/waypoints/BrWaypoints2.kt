@@ -73,7 +73,7 @@ import java.io.File
  */
 object BrWaypoints2 : Module(
     name = "BR Roles",
-    category = Category.custom("Engineer Client"),
+    category = Category.custom("ADM"),
     description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made on undonecoffee.com/brroles.",
     key = null,
 ) {
@@ -803,7 +803,7 @@ object BrWaypoints2 : Module(
         return true
     }
 
-    private val file get() = File(mc.gameDirectory, "config/engineerclient/brwaypoints2.json")
+    private val file get() = File(mc.gameDirectory, "config/adm/brwaypoints2.json")
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
     /**

@@ -11,7 +11,22 @@ import java.nio.file.Path
 object ConfigMigration {
 
     /**
-     * One-time moves inside config/odin/addons/engineerclient.json, before Odin reads it, so a
+     * Engineer Client is ADM now: its Odin settings file (config/odin/addons/engineerclient.json) is copied to
+     * adm.json, and its own folder (config/engineerclient: Better PF runs, P3 Sim saves, stats...) moved to
+     * config/adm, the first time ADM starts. Before anything reads either. [gameDir] is the game's folder.
+     */
+    fun rename(gameDir: Path) {
+        val addons = gameDir.resolve("config").resolve("odin").resolve("addons")
+        val oldJson = addons.resolve("engineerclient.json")
+        val newJson = addons.resolve("adm.json")
+        if (Files.exists(oldJson) && !Files.exists(newJson)) Files.copy(oldJson, newJson)
+        val oldDir = gameDir.resolve("config").resolve("engineerclient")
+        val newDir = gameDir.resolve("config").resolve("adm")
+        if (Files.isDirectory(oldDir) && !Files.exists(newDir)) Files.move(oldDir, newDir)
+    }
+
+    /**
+     * One-time moves inside config/odin/addons/adm.json, before Odin reads it, so a
      * module that was renamed or folded into another keeps what was set in it:
      *  - BR Waypoints 2 is BR Roles;
      *  - the health and mana settings moved from Random Stuff to Health & Mana (on if Random Stuff
@@ -33,7 +48,7 @@ object ConfigMigration {
      * config/odin. True if the file was rewritten.
      */
     fun run(odinDir: Path): Boolean {
-        val file = odinDir.resolve("addons").resolve("engineerclient.json")
+        val file = odinDir.resolve("addons").resolve("adm.json")
         val odinFile = odinDir.resolve("odin-config.json")
         if (!Files.exists(file)) return false
         val modules = JsonParser.parseString(Files.readString(file)).asJsonArray
