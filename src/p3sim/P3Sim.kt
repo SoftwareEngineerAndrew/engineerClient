@@ -39,7 +39,7 @@ import com.mojang.blaze3d.platform.InputConstants
  */
 object P3Sim : Module(
     name = "P3 Sim",
-    category = Category.custom("ADM"),
+    category = Category.custom("Engineer Client"),
     description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
     key = null,
 ) {
@@ -70,7 +70,7 @@ object P3Sim : Module(
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
     val termLuckS = +NumberSetting("Terminal Luck", 0, 0, 100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick). Up to 50% it picks Hypixel's easiest deals; past it, easier than Hypixel ever deals, down to 1 or 2 clicks at 100%. Melody is untouched.")
     val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
-    val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/adm/p3sim-runs (last 20 kept), to look at what went wrong.")
+    val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1, 10, 1, unit = "/s", desc = "Charges back each second (20 max), in irregular +2 steps. Main server: ~6 a second; alpha ~2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0, 30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")

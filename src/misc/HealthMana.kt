@@ -24,7 +24,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  */
 object HealthMana : Module(
     name = "Health & Mana",
-    category = Category.custom("ADM"),
+    category = Category.custom("Engineer Client"),
     description = "Health and mana bars in Odin's Player Display colours, and hiding Odin's Health/Mana HUDs until the stat runs low.",
     key = null,
 ) {

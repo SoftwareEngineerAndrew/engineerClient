@@ -55,11 +55,11 @@ import java.util.zip.GZIPInputStream
  * replayed in the browser viewer (undonecoffee.com/betterpf).
  *
  * A session starts on every world load while this is on; [RunRecorder] keeps it only if the world
- * turns out to be a dungeon. Runs land in config/adm/betterpf/runs/.
+ * turns out to be a dungeon. Runs land in config/engineerclient/betterpf/runs/.
  */
 object BetterPF : Module(
     name = "Better PF",
-    category = Category.custom("ADM"),
+    category = Category.custom("Engineer Client"),
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the Better PF viewer (undonecoffee.com/betterpf), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {
@@ -95,7 +95,7 @@ object BetterPF : Module(
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
     private var session: RunRecorder? = null
-    private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("adm").resolve("betterpf").resolve("runs")
+    private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("betterpf").resolve("runs")
 
     init {
         on<LevelEvent.Load> {

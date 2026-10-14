@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # promote.sh [-n] "<commit message>": copies this repo's committed HEAD to the public
-# undonecoffee/adm, without the extras that only ship in this dev build:
+# undonecoffee/adm as ADM (Advanced Dungeons Mod), without the extras that only ship in this dev build:
 #   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient{,.odin}.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
-#   promote.sh    this script
+#   promote.sh    this script (and promote-adm.cjs, which renames the public tree to ADM)
 # fabric.mod.json loses their entrypoints, mixin configs and the "breaks" line. The result must
 # compile on its own before it is committed. One squashed commit lands on the public branch of the
 # same name (main, or mc/<version> for an older Minecraft; run it from that branch's worktree) and
@@ -33,7 +33,7 @@ fi
 # Replace the public tree with the dev HEAD, then drop the extras.
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
-rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
+rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" "$PUB/promote-adm.cjs" \
   "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json"
 
 FMJ="$PUB/src/resources/fabric.mod.json"
@@ -44,6 +44,11 @@ sed -i -E \
   -e 's/("value": "com\.engineerclient\.EngineerClient" \}),$/\1/' \
   "$FMJ"
 jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON after stripping" >&2; exit 1; }
+
+# This repo builds Engineer Client; the public release is ADM. Mod id, name, panel, prefix, commands, folders,
+# jar and README are renamed in the public tree only.
+node "$TEAM/promote-adm.cjs" "$PUB" || { echo "promote: renaming to ADM failed" >&2; exit 1; }
+jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON after renaming" >&2; exit 1; }
 
 if grep -rniE 'coffeeclient|devgineerclient' "$PUB/src" "$PUB/build.gradle.kts"; then
   echo "promote: the lines above still reference the extras" >&2; exit 1

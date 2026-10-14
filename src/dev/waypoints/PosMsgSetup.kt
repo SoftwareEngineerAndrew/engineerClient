@@ -25,7 +25,7 @@ object PosMsgSetup {
         val dev = odinDir.resolve("addons").resolve("devgineerclient.json")
         val modules = if (Files.exists(dev)) JsonParser.parseString(Files.readString(dev)).asJsonArray else JsonArray()
         if (module(modules, NAME) != null) return
-        val ec = odinDir.resolve("addons").resolve("adm.json")
+        val ec = odinDir.resolve("addons").resolve("engineerclient.json")
         if (!Files.exists(ec)) return
         val from = module(JsonParser.parseString(Files.readString(ec)).asJsonArray, "Positional Messages")?.getAsJsonObject("settings") ?: return
         val settings = JsonObject()

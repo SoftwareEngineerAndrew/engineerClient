@@ -44,8 +44,8 @@ import net.minecraft.world.level.block.Blocks
  */
 object DungeonSplits : Module(
     name = "Sub Splits",
-    category = Category.custom("ADM"),
-    description = "The blood rush sub splits, room by room, and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: ADM Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
+    category = Category.custom("Engineer Client"),
+    description = "The blood rush sub splits, room by room, and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
 

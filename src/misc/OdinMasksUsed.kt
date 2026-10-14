@@ -19,7 +19,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
  */
 object OdinMasksUsed {
 
-    private val onlyUsed = BooleanSetting("Only Used", false, desc = "Only show the masks and Phoenix that have saved you this run. Added by ADM.")
+    private val onlyUsed = BooleanSetting("Only Used", false, desc = "Only show the masks and Phoenix that have saved you this run. Added by engineerClient.")
         .withDependency { (InvincibilityTimer.settings["Invincibility Hud"] as? DropdownSetting)?.value ?: true }
 
     /** Same messages Odin procs on: Spirit, Bonzo, Phoenix. */

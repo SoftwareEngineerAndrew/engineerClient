@@ -50,7 +50,7 @@ object OdinHighlightLook {
     private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, MIMIC }
 
     private val look = enumSelector("Look", Look.ODIN,
-        desc = "Odin's Highlight, or Blade: each kind of mob in its own colour (starred, tanks, minibosses, Fels, Shadow Assassins, Mimics), each mob found from its name tag exactly. Added by ADM.")
+        desc = "Odin's Highlight, or Blade: each kind of mob in its own colour (starred, tanks, minibosses, Fels, Shadow Assassins, Mimics), each mob found from its name tag exactly. Added by engineerClient.")
 
     private val blade: Boolean get() = look.value == Look.BLADE.ordinal
 
