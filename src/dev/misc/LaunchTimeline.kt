@@ -101,13 +101,13 @@ object LaunchTimeline {
         if (unpark != null) line += "  | from unpark: ${prev - unpark}ms"
         DevgineerClient.logger.info("[dc] launch timeline: {}", line)
         // In chat: the build this launch runs (so a restart onto a new jar is visible) and the time it took.
-        runCatching {
+        if (FastLaunch.buildChat) runCatching {
             val build = FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")
             val total = marks["sb-world"]?.let { end -> end - (marks["unpark"] ?: 0L) }
             val took = total?.let { " §8· §7%.1f s to Skyblock%s".format(it / 1000.0, if ("unpark" in marks) " (parked)" else "") } ?: ""
             DevgineerClient.chat("§8[dc] §7build §f$build$took")
         }
-        runCatching {
+        if (FastLaunch.timeline) runCatching {
             val file = mc.gameDirectory.toPath().resolve("logs").resolve("launch-timeline.log")
             Files.writeString(file, "${LocalDateTime.now().withNano(0)}  $line\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND)
         }

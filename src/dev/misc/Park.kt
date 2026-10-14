@@ -63,7 +63,12 @@ object Park {
     /** RenderSystem.initBackendSystem HEAD (ParkMixin). */
     @JvmStatic
     fun atParkPoint() {
-        if (listening && System.getProperty("dc.park") == "1" && go.count > 0 && !quit) {
+        // Launched to be parked, but parking was switched off since: leave quietly rather than open a game.
+        if (System.getProperty("dc.park") == "1" && !FastLaunch.park) {
+            DevgineerClient.logger.info("[dc] parked start is off (Fast Launch), exiting")
+            Runtime.getRuntime().halt(0)
+        }
+        if (listening && FastLaunch.park && System.getProperty("dc.park") == "1" && go.count > 0 && !quit) {
             state = "parked"
             DevgineerClient.logger.info("[dc] parked before the window, waiting for f7")
             go.await()
@@ -82,7 +87,7 @@ object Park {
 object FastExit {
     fun install() {
         ClientLifecycleEvents.CLIENT_STOPPING.register {
-            Thread.getAllStackTraces().keys.filter { it.name == "DTM-ImageLoader" }.forEach { it.interrupt() }
+            if (FastLaunch.fastExit) Thread.getAllStackTraces().keys.filter { it.name == "DTM-ImageLoader" }.forEach { it.interrupt() }
         }
     }
 }
