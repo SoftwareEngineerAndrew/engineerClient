@@ -102,8 +102,7 @@ object BrWaypoints2 : Module(
 
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through.")
 
-    private val fadeDone by BooleanSetting("Fade Done Boxes", false, desc = "A box whose mobs are all dead, or in a room the map shows cleared, stays up very faint instead of disappearing.")
-    private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing. Wins over Fade Done Boxes.")
+    private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing.")
     private val doneColor by ColorSetting("Done Color", Color(121, 255, 121, 166 / 255f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
 
     private val opacity by NumberSetting("Fill Opacity", 0.03f, 0.0, 1.0, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
@@ -239,11 +238,6 @@ object BrWaypoints2 : Module(
                     drawFilledBox(bb, doneColor.withAlpha(opacity), depth = false)
                     drawWireFrameBox(bb, doneColor, depth = false)
                     drawText("§7" + label.replace(CONTROL_CODES, ""), Vec3((bb.minX + bb.maxX) / 2, bb.maxY + 0.6, (bb.minZ + bb.maxZ) / 2), 1.5f, false)
-                    continue
-                }
-                // Done (Fade Done Boxes): just a ghost of the outline, and no label.
-                if (done) {
-                    drawWireFrameBox(bb, colour.withAlpha(0.15f), depth = false)
                     continue
                 }
                 // Seen through walls; the faces faint enough to walk through without noticing, the
@@ -575,7 +569,7 @@ object BrWaypoints2 : Module(
 
     /**
      * A box as drawn: its colour, the label over it, whether it is the next of yours to kill, and
-     * whether it is done (its mobs dead or its room cleared), drawn faint with Fade Done Boxes.
+     * whether it is done (its mobs dead or its room cleared), drawn in Done Color with Recolor Done Boxes.
      */
     private data class Drawn(val box: Box, val colour: Color, val label: String, val next: Boolean, val done: Boolean = false)
 
@@ -593,8 +587,8 @@ object BrWaypoints2 : Module(
     private fun drawn(): List<Drawn> {
         val out = ArrayList<Drawn>()
         val live = shown()
-        // With Fade or Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
-        val all = if (fadeDone || recolorDone) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
+        // With Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
+        val all = if (recolorDone) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
         val liveSet = live.toHashSet()
         for ((room, list) in all.groupBy { it.room }) {
             val plan = if (!BrRoles.active) null else planOf(room)

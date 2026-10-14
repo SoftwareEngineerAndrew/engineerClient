@@ -1,4 +1,7 @@
-package com.engineerclient.rotation
+package com.devgineerclient.rotation
+
+import com.engineerclient.rotation.EcLog
+import com.engineerclient.rotation.P3Sections
 
 /**
  * Turns phase-3 chat into events. Kept free of Minecraft so the patterns can be tested against

@@ -1,4 +1,7 @@
-package com.engineerclient.rotation
+package com.devgineerclient.rotation
+
+import com.engineerclient.rotation.EcLog
+import com.engineerclient.rotation.P3Sections
 
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.events.ScreenEvent
@@ -140,12 +143,7 @@ object LeapHighlight {
         return intArrayOf(x0, y0, x0 + w, y0 + h)
     }
 
-    private val scaleGetter by lazy {
-        runCatching { LeapMenu::class.java.getDeclaredMethod("getScale").apply { isAccessible = true } }.getOrNull()
-    }
-
-    fun odinScale(): Float =
-        runCatching { scaleGetter?.invoke(LeapMenu) as? Float }.getOrNull() ?: 1f
+    fun odinScale(): Float = com.engineerclient.misc.OdinLeapScale.get()
 
     private fun outline(gfx: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int, color: Color, radius: Int) {
         // A translucent wash plus a hard ring: the wash reads at a glance, the ring survives

@@ -42,7 +42,7 @@ object SimWorld {
     fun open() {
         mc.execute {
             if (P3Sim.inSim) return@execute
-            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening P3 Sim"))
+            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening P3 Sim Beta"))
             opening = true
             EngineerClient.safely("p3sim open") { openOrCreate() }
         }
@@ -62,7 +62,7 @@ object SimWorld {
     fun leave() {
         mc.execute {
             if (!P3Sim.inSim) return@execute
-            mc.disconnectFromWorld(Component.literal("Leaving P3 Sim"))
+            mc.disconnectFromWorld(Component.literal("Leaving P3 Sim Beta"))
             mc.setScreen(TitleScreen())
         }
     }
@@ -70,7 +70,7 @@ object SimWorld {
     /** Deletes the world and makes it again (`/p3sim rebuild`). */
     fun rebuild() {
         mc.execute {
-            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim"))
+            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim Beta"))
             opening = true
             EngineerClient.safely("p3sim rebuild") {
                 mc.levelSource.createAccess(NAME).use { it.deleteLevel() }

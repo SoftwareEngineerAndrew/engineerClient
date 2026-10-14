@@ -29,6 +29,7 @@ object CoffeeClient : ClientModInitializer {
 
         safely("leap extras settings") { adoptLeapExtrasSettings() }
         safely("adr menu settings") { renameModule("Better PF Menu", "ADR Menu") }
+        safely("completion titles setting") { adoptSetting("Term Info", "Random Stuff", "Hide Completion Titles") }
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
@@ -67,6 +68,23 @@ object CoffeeClient : ClientModInitializer {
         target.add(entry)
         java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
         logger.info("[cc] Leap Extras settings copied from engineerclient.json")
+    }
+
+    /** A setting that moved here from an Engineer Client module keeps its value: copied once, while this file has none. */
+    private fun adoptSetting(fromModule: String, toModule: String, key: String) {
+        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
+        val ours = dir.resolve("coffeeclient.json")
+        val theirs = dir.resolve("engineerclient.json")
+        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
+        fun module(list: com.google.gson.JsonArray, name: String) = list.firstOrNull { it.asJsonObject.get("name")?.asString == name }?.asJsonObject
+        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
+        val to = module(target, toModule) ?: return
+        val toSettings = to.getAsJsonObject("settings") ?: com.google.gson.JsonObject().also { to.add("settings", it) }
+        if (toSettings.has(key)) return
+        val source = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
+        val value = module(source, fromModule)?.getAsJsonObject("settings")?.get(key) ?: return
+        toSettings.add(key, value)
+        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
     }
 
     /** A module that was renamed keeps its settings: its entry in coffeeclient.json takes the new name, once. */

@@ -22,9 +22,14 @@ object DevgineerClient : ClientModInitializer {
     val mc: Minecraft get() = Minecraft.getInstance()
 
     override fun onInitializeClient() {
+        // Modules that moved here from Engineer Client keep their settings (copied once, before Odin reads this file).
+        safely("adopt settings") { adoptSettings("Dynamic Term Roles", "i4 Aim") }
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PosMsgExtras, com.devgineerclient.practice.I4Aims)
+        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PosMsgExtras, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation)
+        safely("leap highlight") { com.devgineerclient.rotation.LeapHighlight.register() }
+        safely("role vignette") { com.devgineerclient.rotation.RoleVignette.register() }
+        safely("rotation commands") { com.devgineerclient.rotation.RotationCommands.install() }
         safely("posmsg") { PosMsgSetup.install() }
         safely("pace targets") { PaceTargets.install() }
         safely("witherborn") { Witherborn.register() }
@@ -32,6 +37,24 @@ object DevgineerClient : ClientModInitializer {
         // On by default, existing installs included (once: turning it off sticks).
         safely("boss recorder default") { BossRecorder.enableByDefault() }
         safely("maxor crystals default") { MaxorCrystals.enableByDefault() }
+    }
+
+    /** Copies these modules' entries from engineerclient.json into devgineerclient.json where this file has none yet. */
+    private fun adoptSettings(vararg names: String) {
+        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
+        val theirs = dir.resolve("engineerclient.json")
+        if (!java.nio.file.Files.exists(theirs)) return
+        val ours = dir.resolve("devgineerclient.json")
+        val target = if (java.nio.file.Files.exists(ours)) com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray else com.google.gson.JsonArray()
+        val source = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
+        var changed = false
+        for (name in names) {
+            if (target.any { it.asJsonObject.get("name")?.asString == name }) continue
+            val entry = source.firstOrNull { it.asJsonObject.get("name")?.asString == name } ?: continue
+            target.add(entry)
+            changed = true
+        }
+        if (changed) java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */
