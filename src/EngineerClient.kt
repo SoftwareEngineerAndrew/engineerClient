@@ -136,7 +136,6 @@ object EngineerClient : ClientModInitializer {
         DeadPlayers.register()
         com.engineerclient.misc.Witherborn.register()
         com.engineerclient.misc.I4Complete.register()
-        com.engineerclient.practice.I4Aims.register()
         RoleVignette.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
             "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +
