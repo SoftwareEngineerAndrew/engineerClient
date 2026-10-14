@@ -21,7 +21,6 @@
     "CameraAccessor",
     "ChatComponentMixin",
     "ClickGuiTextMixin",
-    "ConnectionTapMixin",
     "ContainerScreenAccessor",
     "ContainerTooltipMixin",
     "FogColorMixin",

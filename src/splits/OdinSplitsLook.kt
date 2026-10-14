@@ -245,7 +245,7 @@ object OdinSplitsLook {
 
     /**
      * Grays each blank target box's stand-in into it: the PB, or (F7 without one) the dark green
-     * time. Run as Odin's menu opens (ClickGuiSizeMixin), so it is current whenever the boxes show.
+     * time. Run as Odin's menu opens (ClickGuiOpenMixin), so it is current whenever the boxes show.
      */
     @JvmStatic
     fun refreshPlaceholders() {

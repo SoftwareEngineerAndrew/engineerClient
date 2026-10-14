@@ -1,7 +1,10 @@
-package com.engineerclient.rotation
+package com.devgineerclient.rotation
 
-import com.engineerclient.rotation.RotationSpec.Pot
-import com.engineerclient.rotation.RotationSpec.Role
+import com.engineerclient.rotation.EcLog
+import com.engineerclient.rotation.P3Sections
+
+import com.devgineerclient.rotation.RotationSpec.Pot
+import com.devgineerclient.rotation.RotationSpec.Role
 import org.slf4j.LoggerFactory
 
 /**

@@ -28,7 +28,7 @@ import java.util.Locale
  * is green while it's open; a second click goes back to the plan. Toggles are green when on. Every
  * button says what it does when hovered; changes save at once, starts and teleports close the menu.
  */
-class SimRestartScreen : Screen(Component.literal("P3 Sim")) {
+class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     private enum class Tab { PLAN, ADVANCED, SETTINGS, TELEPORT, PRACTICE }
 
     private lateinit var panel: LinearLayout

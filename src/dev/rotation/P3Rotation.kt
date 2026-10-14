@@ -1,4 +1,7 @@
-package com.engineerclient.rotation
+package com.devgineerclient.rotation
+
+import com.engineerclient.rotation.EcLog
+import com.engineerclient.rotation.P3Sections
 
 import com.engineerclient.EcConfig
 import com.engineerclient.EngineerClient
@@ -43,7 +46,7 @@ import net.minecraft.sounds.SoundEvents
  */
 object P3Rotation : Module(
     name = "Dynamic Term Roles",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Devgineer Client", 860, 10),
     description = "Tracks the phase-3 terminal rotation and shows the role you are on.",
     key = null,
 ) {
@@ -152,7 +155,7 @@ object P3Rotation : Module(
         //
         // blade-addons and devonian inject into the same network method Odin does, ahead of it,
         // and consume completion packets before Odin's hook fires. So EC has its own mixin there
-        // at priority 1 (ConnectionTapMixin -> [tap]) — first in line, read-only. Odin's event
+        // at priority 1 (RotationTapMixin -> [tap]) — first in line, read-only. Odin's event
         // stays as a second path; [take] dedupes by identity.
         on<PacketEvent.Receive>(EventPriority.HIGHEST) { handlePacket(packet, "odin") }
 
@@ -206,7 +209,7 @@ object P3Rotation : Module(
         }
     }
 
-    /** Called from [com.engineerclient.mixin.ConnectionTapMixin] on the network thread, for every inbound packet. */
+    /** Called from [com.devgineerclient.mixin.RotationTapMixin] on the network thread, for every inbound packet. */
     fun tap(packet: Packet<*>) {
         EngineerClient.safely("packet tap") { handlePacket(packet, "tap") }
     }

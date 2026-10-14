@@ -108,7 +108,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
 
     override fun isPauseScreen() = false
 
-    private val scale get() = com.engineerclient.rotation.LeapHighlight.odinScale()
+    private val scale get() = com.engineerclient.misc.OdinLeapScale.get()
 
     /** Spot [i]'s box on screen: x0, y0, x1, y1. */
     private fun box(i: Int): IntArray {
