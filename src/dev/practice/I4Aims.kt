@@ -1,10 +1,10 @@
-package com.engineerclient.practice
+package com.devgineerclient.practice
 
-import com.engineerclient.EngineerClient
-import com.engineerclient.EngineerClient.mc
-import com.engineerclient.practice.I4Geometry.Board
-import com.engineerclient.practice.I4Geometry.Lattice
-import com.engineerclient.practice.I4Geometry.Shooter
+import com.devgineerclient.DevgineerClient
+import com.devgineerclient.DevgineerClient.mc
+import com.devgineerclient.practice.I4Geometry.Board
+import com.devgineerclient.practice.I4Geometry.Lattice
+import com.devgineerclient.practice.I4Geometry.Shooter
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
@@ -63,7 +63,7 @@ import kotlin.math.tan
  */
 object I4Aims : Module(
     name = "i4 Aim",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Devgineer Client", 860, 10),
     description = "i4: paints where to aim now (green) and next (cyan), from a simulated best strategy.",
     key = null,
 ) {
@@ -187,7 +187,7 @@ object I4Aims : Module(
             for (b in level.getBlockState(pos).getCollisionShape(level, pos).toAabbs()) { boxes += b.move(pos); cellOf += cell }
         }
         if (I4Geometry.CELLS.indices.any { it !in cellOf }) return I4Geometry.DEFAULT
-        EngineerClient.logger.info("[ec] i4 board: ${boxes.size} boxes: " + boxes.indices.joinToString(" ") { i ->
+        DevgineerClient.logger.info("[dc] i4 board: ${boxes.size} boxes: " + boxes.indices.joinToString(" ") { i ->
             val b = boxes[i]; "${cellOf[i]}:[%.4f %.4f %.4f %.4f %.4f %.4f]".format(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ) })
         return Board(boxes, cellOf.toIntArray())
     }
@@ -273,9 +273,9 @@ object I4Aims : Module(
                 try {
                     val t0 = System.nanoTime()
                     scan = Scan(geo, b, shooter, min, inPool { I4Geometry.scan(b, shooter, min) })
-                    EngineerClient.logger.info("[ec] i4 scan ${(System.nanoTime() - t0) / 1_000_000}ms for $geo")
+                    DevgineerClient.logger.info("[dc] i4 scan ${(System.nanoTime() - t0) / 1_000_000}ms for $geo")
                 } catch (t: Throwable) {
-                    EngineerClient.logger.error("[ec] i4 aims failed", t)
+                    DevgineerClient.logger.error("[dc] i4 aims failed", t)
                     scan = Scan(geo, b, shooter, min, emptyList())   // not retried every tick
                 } finally {
                     busy.set(false)
@@ -305,7 +305,7 @@ object I4Aims : Module(
                 // The rest of this lattice's candidates, so the next pick paints at once.
                 inPool { candidates(sc.coarse, DoubleArray(9) { 1.0 }).filter { !g.cached(it) }.parallelStream().forEach { g.aim(it) } }
             } catch (t: Throwable) {
-                EngineerClient.logger.error("[ec] i4 aims failed", t); result = Result(key, sc.shooter.eye, g.lattice, null, null)
+                DevgineerClient.logger.error("[dc] i4 aims failed", t); result = Result(key, sc.shooter.eye, g.lattice, null, null)
             } finally { busy.set(false) }
         }
     }
@@ -323,7 +323,7 @@ object I4Aims : Module(
     private fun logPass(was: String?, key: String, r: Result, ms: Long) {
         val old = was?.split('|'); val now = key.split('|')
         val changed = now.indices.filter { old == null || old.getOrNull(it) != now[it] }.joinToString(",") { KEY_PARTS.getOrElse(it) { "?" } + "=" + now[it] }
-        EngineerClient.logger.info("[ec] i4 paint ${ms}ms t=$ticks lit=$lit changed[$changed] spots=${r.aims.map { it.pixels.size }} " +
+        DevgineerClient.logger.info("[dc] i4 paint ${ms}ms t=$ticks lit=$lit changed[$changed] spots=${r.aims.map { it.pixels.size }} " +
             "pi=${pi.joinToString(",") { "%.2f".format(it) }} u=${u.joinToString(",") { "%.2f".format(it) }}")
     }
 
@@ -349,7 +349,7 @@ object I4Aims : Module(
                 if (cell == lit && pi[lit] > 0.5) { confirmCell = cell; confirmBy = ticks + eta + 3 }
                 strike(u, pi, cell, 1.0)
             }
-            EngineerClient.logger.info("[ec] i4 arrow t=$ticks id=${a.id} age=${a.tickCount} -> cell $cell by t=${ticks + eta} (lit=$lit)")
+            DevgineerClient.logger.info("[dc] i4 arrow t=$ticks id=${a.id} age=${a.tickCount} -> cell $cell by t=${ticks + eta} (lit=$lit)")
         }
     }
 
@@ -371,7 +371,7 @@ object I4Aims : Module(
         on<BlockUpdateEvent> {
             val i = I4Geometry.CELLS.indexOf(pos)
             if (i < 0) return@on
-            EngineerClient.logger.info("[ec] i4 block t=$ticks cell $i ${if (updated.`is`(Blocks.EMERALD_BLOCK)) "lit" else "blue"}")
+            DevgineerClient.logger.info("[dc] i4 block t=$ticks cell $i ${if (updated.`is`(Blocks.EMERALD_BLOCK)) "lit" else "blue"}")
             if (updated.`is`(Blocks.EMERALD_BLOCK)) {
                 // The first emerald, or a cell you'd hit lighting again (the board started over).
                 if (!started || i in marked) { marked.clear(); u.fill(1.0); started = true }
@@ -394,7 +394,7 @@ object I4Aims : Module(
                 return@on
             }
             awayTicks = 0
-            EngineerClient.safely("i4 aims") {
+            DevgineerClient.safely("i4 aims") {
                 if (board == null) board = readBoard()
                 // Your arrow on the shown cell missed after all: it's still the target.
                 if (confirmCell >= 0 && ticks > confirmBy) {
@@ -407,8 +407,8 @@ object I4Aims : Module(
         }
 
         // Under the crosshair, so it stays on top; the HUD is drawn under any open screen.
-        HudElementRegistry.attachElementBefore(VanillaHudElements.CROSSHAIR, Identifier.fromNamespaceAndPath("engineerclient", "i4_aims")) { g, _ ->
-            EngineerClient.safely("i4 aims screen") { drawScreen(g) }
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CROSSHAIR, Identifier.fromNamespaceAndPath("devgineerclient", "i4_aims")) { g, _ ->
+            DevgineerClient.safely("i4 aims screen") { drawScreen(g) }
         }
     }
 

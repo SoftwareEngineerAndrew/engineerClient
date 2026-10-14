@@ -1,6 +1,6 @@
-package com.engineerclient.mixin;
+package com.devgineerclient.mixin;
 
-import com.engineerclient.practice.I4Aims;
+import com.devgineerclient.practice.I4Aims;
 import net.minecraft.client.Camera;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class CameraFovMixin {
 
     @Inject(method = "calculateFov(F)F", at = @At("RETURN"), cancellable = true)
-    private void ec$i4Zoom(float partialTick, CallbackInfoReturnable<Float> cir) {
+    private void dc$i4Zoom(float partialTick, CallbackInfoReturnable<Float> cir) {
         cir.setReturnValue(I4Aims.zoomFov(cir.getReturnValueF()));
     }
 }
