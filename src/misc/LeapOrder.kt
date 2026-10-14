@@ -15,12 +15,14 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+import net.fabricmc.fabric.api.event.Event
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
+import net.minecraft.resources.Identifier
 import java.nio.file.Files
 import java.util.Locale
 
@@ -51,9 +53,16 @@ object LeapOrder {
             if (now != saved) EngineerClient.safely("leap order save") { save(now) }
         }
 
-        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            // Brigadier merges this into Odin's /od leaporder: the bare literal opens the screen, its 4 names still set it.
-            for (root in listOf("od", "odin")) dispatcher.register(literal(root).then(literal("leaporder").executes { open(); 1 }))
+        // After Odin's commands: Odin's /od is a redirect to /odin, and an "od" literal registered before it would
+        // take its place without the redirect, breaking every other /od subcommand (/od ep, /od sb, ...).
+        val afterOdin = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")
+        ClientCommandRegistrationCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterOdin)
+        ClientCommandRegistrationCallback.EVENT.register(afterOdin) { dispatcher, _ ->
+            // Brigadier merges this into Odin's /odin leaporder: the bare literal opens the screen, its 4 names still
+            // set it. /od gets it on the node it redirects to; "od" itself is never registered here.
+            val leaporder = literal("leaporder").executes { open(); 1 }
+            dispatcher.register(literal("odin").then(leaporder))
+            dispatcher.root.getChild("od")?.redirect?.addChild(leaporder.build())
             dispatcher.register(literal("lo").executes { open(); 1 }
                 .then(argument("member1", StringArgumentType.word())
                     .then(argument("member2", StringArgumentType.word())
