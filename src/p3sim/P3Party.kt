@@ -51,7 +51,7 @@ object P3Party {
      * 2026.10.12-beta+44b18f5, 2026.10.12+44b18f5.local and 2026.10.12 all join each other.
      */
     private val version: String by lazy {
-        FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?").substringBefore('+').substringBefore('-')
+        FabricLoader.getInstance().getModContainer("adm").map { it.metadata.version.friendlyString }.orElse("?").substringBefore('+').substringBefore('-')
     }
 
     private val http: HttpClient by lazy { HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build() }
@@ -158,7 +158,7 @@ object P3Party {
                     "error" -> {
                         runCatching { local.close() }
                         val msg = m.get("msg").asString
-                        val theirs = Regex("host has EngineerClient (\\S+?),").find(msg)?.groupValues?.get(1)
+                        val theirs = Regex("host has (?:EngineerClient|ADM) (\\S+?),").find(msg)?.groupValues?.get(1)
                         if (theirs != null && theirs != asVersion && theirs.substringBefore('+').substringBefore('-') == version) mc.execute { join(c, theirs) }
                         else EngineerClient.msg("§c$msg")
                     }

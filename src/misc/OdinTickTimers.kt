@@ -23,7 +23,7 @@ object OdinTickTimers {
     private const val TICK_PREFIX = "§7Tick:"
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
 
-    private val countUp = BooleanSetting("Goldor Count Up", false, desc = "The Goldor Hud's Tick timer counts up from Goldor's first line like a split, past 3 s; the colour still goes green / yellow / red with each tick. Added by engineerClient.")
+    private val countUp = BooleanSetting("Goldor Count Up", false, desc = "The Goldor Hud's Tick timer counts up from Goldor's first line like a split, past 3 s; the colour still goes green / yellow / red with each tick. Added by ADM.")
         .withDependency { (TickTimers.settings["Goldor Hud"] as? HUDSetting)?.value?.enabled ?: true }
 
     private var serverTicks = 0

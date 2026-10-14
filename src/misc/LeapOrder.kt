@@ -26,14 +26,14 @@ import java.util.Locale
 
 /**
  * Odin's custom leap order (`/od leaporder a b c d`, Leap Menu sorting Custom), kept across restarts: Odin holds
- * it in memory only, so it is saved to config/engineerclient/leaporder.txt whenever it changes (however it was
+ * it in memory only, so it is saved to config/adm/leaporder.txt whenever it changes (however it was
  * set) and put back at startup.
  *
  * `/od leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: Odin's leap menu as it would look, the
  * order's players in their spots, to drag between them. `/lo a b c d` sets it as Odin's command does.
  */
 object LeapOrder {
-    private val file by lazy { FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("leaporder.txt") }
+    private val file by lazy { FabricLoader.getInstance().configDir.resolve("adm").resolve("leaporder.txt") }
     private var saved: List<String> = emptyList()
 
     fun install() {

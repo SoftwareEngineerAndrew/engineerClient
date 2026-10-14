@@ -35,7 +35,7 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
  */
 object PovPreviews : Module(
     name = "POV Previews",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("ADM", 860, 10),
     description = "Renders each teammate's first-person view into their quarter of Odin's Spirit Leap menu.",
     key = null,
 ) {

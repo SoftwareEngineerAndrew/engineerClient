@@ -8,7 +8,7 @@ import net.minecraft.world.item.ItemStack
 import java.io.File
 
 /**
- * Your own layout for the sim's items, kept on this computer in `config/engineerclient/p3sim-hotbar.json`.
+ * Your own layout for the sim's items, kept on this computer in `config/adm/p3sim-hotbar.json`.
  *
  * "Save Hotbar" (sim menu) records where each sim item is in your inventory right now - hotbar and
  * the rest, by item id - and which hotbar slot you hold. From then on every hotbar reset (a fight
