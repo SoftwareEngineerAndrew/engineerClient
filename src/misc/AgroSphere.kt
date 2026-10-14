@@ -25,7 +25,8 @@ import net.minecraft.world.entity.player.Player
  * height), and the sphere only shows while you are in that phase's arena: fall below Maxor's
  * platform during P1, or below Storm's during P2, and it is gone for the rest of that phase instead of
  * switching to the next boss. Before any boss line has been seen (joined mid-fight) it goes by height
- * alone. F7 only.
+ * alone. F7 only. Storm's shows from his lightning line ("ENERGY HEED MY CALL!") on: before it he
+ * flies his set route and then hovers, and about 5 s after it he leaves the hover for the pads.
  *
  * The boss is the nearest live WitherBoss to you, preferring one whose name mentions the boss -
  * the other withers sit in their own arenas further down, so nearest is the one you're fighting.
@@ -51,6 +52,9 @@ object AgroSphere : Module(
     private var sawBossLine = false
     /** You went below the running phase's arena: no sphere until the next phase starts. */
     private var leftPhase = false
+    /** Storm's lightning line has come: from then on his aggro matters. */
+    private var stormLightning = false
+    private val stormLightningRegex = Regex("^\\[BOSS] Storm: (?:ENERGY HEED MY CALL!|THUNDER LET ME BE YOUR CATALYST!)$")
     private val maxorRegex = Regex("^\\[BOSS] Maxor: ")
     private val stormStartRegex = Regex("^\\[BOSS] Storm: Pathetic Maxor, just like expected\\.$")
     private val stormEndRegex = Regex("^\\[BOSS] Storm: I should have known that I stood no chance\\.$")
@@ -72,11 +76,12 @@ object AgroSphere : Module(
     }
 
     init {
-        on<LevelEvent.Load> { activePhase = null; sawBossLine = false; leftPhase = false }
+        on<LevelEvent.Load> { activePhase = null; sawBossLine = false; leftPhase = false; stormLightning = false }
 
         on<MessageEvent.Chat> {
             when {
-                stormStartRegex.matches(message) -> { activePhase = M7Phases.P2; sawBossLine = true; leftPhase = false }
+                stormStartRegex.matches(message) -> { activePhase = M7Phases.P2; sawBossLine = true; leftPhase = false; stormLightning = false }
+                stormLightningRegex.matches(message) -> stormLightning = true
                 stormEndRegex.matches(message) || goldorStartRegex.matches(message) -> { activePhase = null; sawBossLine = true }
                 maxorRegex.containsMatchIn(message) && !sawBossLine -> { activePhase = M7Phases.P1; sawBossLine = true; leftPhase = false }
             }
@@ -87,7 +92,8 @@ object AgroSphere : Module(
             val here = DungeonUtils.getF7Phase()
             // Below the running phase's arena (you fell): off for the rest of the phase.
             if (sawBossLine && activePhase != null && here != activePhase) leftPhase = true
-            val phase = if (leftPhase) null else if (sawBossLine) activePhase else here
+            val phase = (if (leftPhase) null else if (sawBossLine) activePhase else here)
+                ?.takeUnless { it == M7Phases.P2 && sawBossLine && !stormLightning }
             val name = when (phase) {
                 M7Phases.P1 -> "Maxor"
                 M7Phases.P2 -> "Storm"
