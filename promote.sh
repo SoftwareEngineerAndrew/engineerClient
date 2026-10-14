@@ -34,7 +34,8 @@ fi
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
 rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" "$PUB/promote-adm.cjs" \
-  "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json"
+  "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
+  "$PUB/src/resources/devgineerclient.odin.mixins.json"
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \
