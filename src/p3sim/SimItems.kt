@@ -799,7 +799,7 @@ object SimItems {
     // ------------------------------------------------------------------ Haste / Mining Fatigue by held slot
 
     /** Whether the Dungeonbreaker was held at the last [miningEffects] (null: not applied yet). */
-    private var breakerHeld: Boolean? = null
+    private var breakerHeld: Boolean? by perPlayer { null }
 
     /**
      * Main: Haste 0 and Mining Fatigue 255 (flags 3, no icon) while the held slot is not the Dungeonbreaker,
@@ -824,7 +824,7 @@ object SimItems {
     // ------------------------------------------------------------------ hotbar slot 9 (index 8)
 
     /** Arrows left in the quiver: starts at a typical recorded count (2,769), one less per shot ([quiverShot]). */
-    private var quiverArrows = QUIVER_START
+    private var quiverArrows by perPlayer { QUIVER_START }
     private const val QUIVER_START = 2769
 
     /** A bow shot from the quiver: one arrow less, the preview follows on the next tick. */
@@ -864,8 +864,7 @@ object SimItems {
      * Slot 9 as main shows it: the quiver preview while a bow is held, the Magical Map while the Infinileap is, the SkyBlock
      * Menu otherwise. Only when slot 9 holds one of them (a saved layout may have moved the menu), and never in the ghost kit.
      */
-    private fun tickSlot9() {
-        val p = Sim.player ?: return
+    private fun tickSlot9(p: ServerPlayer) {
         if (Masks.ghost) return
         val inv = p.inventory
         val cur = inv.getItem(8)
@@ -1011,10 +1010,12 @@ object SimItems {
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             // Hypixel's click model: a block-aimed click fired from use_item_on; the client's own MAIN-hand use_item
             // for the same item, in the same or the next server tick, is that click's follow-up and does nothing.
-            blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick == t) { blockFired = null; return@register InteractionResult.SUCCESS } }
-            var result: InteractionResult = InteractionResult.PASS
-            EngineerClient.safely("p3sim use $id") { result = use(player, id) }
-            result
+            Sim.asPlayer(player) {
+                blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick == t) { blockFired = null; return@asPlayer InteractionResult.SUCCESS } }
+                var result: InteractionResult = InteractionResult.PASS
+                EngineerClient.safely("p3sim use $id") { result = use(player, id) }
+                result
+            }
         }
         UseBlockCallback.EVENT.register { player, level, hand, hit ->
             if (hand != InteractionHand.MAIN_HAND) return@register InteractionResult.PASS
@@ -1025,7 +1026,7 @@ object SimItems {
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             var result: InteractionResult = InteractionResult.PASS
-            EngineerClient.safely("p3sim use block") { result = useBlock(player, hit.blockPos, id, hit.direction) }
+            EngineerClient.safely("p3sim use block") { result = Sim.asPlayer(player) { useBlock(player, hit.blockPos, id, hit.direction) } }
             // The client already placed what it held (an Infinileap is a head) and took it off its hotbar: as on
             // Hypixel, the server sends the held stack back (vanilla re-sends the blocks itself). Only a block item can have
             // been placed: the staffs' resend is their own (Bonzo ~77%).
@@ -1035,14 +1036,14 @@ object SimItems {
         UseEntityCallback.EVENT.register { player, level, hand, entity, _ ->
             if (hand != InteractionHand.MAIN_HAND || !simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             var result: InteractionResult = InteractionResult.PASS
-            EngineerClient.safely("p3sim use entity") { result = useEntity(player, entity) }
+            EngineerClient.safely("p3sim use entity") { result = Sim.asPlayer(player) { useEntity(player, entity) } }
             result
         }
         AttackEntityCallback.EVENT.register { player, level, _, entity, _ ->
             if (simClient(level)) return@register if (entity is ItemFrame) InteractionResult.FAIL else InteractionResult.PASS
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
             var result: InteractionResult = InteractionResult.PASS
-            EngineerClient.safely("p3sim hit entity") { result = useEntity(player, entity, left = true) }
+            EngineerClient.safely("p3sim hit entity") { result = Sim.asPlayer(player) { useEntity(player, entity, left = true) } }
             result
         }
     }
@@ -1079,20 +1080,36 @@ object SimItems {
         hitHeld = at
         // A left click on a lever credits it, toggling nothing.
         // With the Dungeonbreaker the click also reaches the mining refusal ("digging there" in S4's device).
-        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) SimServer.run("lever left") { ph.devices.leftClick(at) }; if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return true } }
-        // Superboom: a left click on a gate blows it too.
-        if (idOf(player.mainHandItem) == "SUPERBOOM_TNT") {
-            if (again) return true
-            SimServer.run("superboom") { Sim.player?.let { p -> Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } } } }
-            return true
-        }
-        if (idOf(player.mainHandItem) != "DUNGEONBREAKER") return false
+        // The server decides ([serverHit]: the hit goes to it, a joiner's as theirs); the client only predicts.
+        val held = idOf(player.mainHandItem)
         val state = level.getBlockState(at)
+        val lever = state.block is LeverBlock
+        if (!again || held == "DUNGEONBREAKER") SimNet.send("hit", "${at.x},${at.y},${at.z},${face.ordinal},${if (again) 1 else 0}")
+        // Superboom: a left click on a gate blows it too.
+        if (held == "SUPERBOOM_TNT") return true
+        // A left click on a lever credits it, toggling nothing.
+        if (lever && held != "DUNGEONBREAKER") return true
+        if (held != "DUNGEONBREAKER") return false
         if (state.isAir) return true
         // The client breaks it at once (as Hypixel's do); the server keeps it or sends it back.
         if (state.getDestroySpeed(level, at) >= 0) level.destroyBlock(at, false)
-        SimServer.run("dungeonbreaker") { Sim.player?.let { p -> Fight.afterPing("dungeonbreaker") { mine(p, at) } } }
         return true
+    }
+
+    /** A block hit from a player's game ([clientHitBlock]): a lever's credit, a Superboom, a Dungeonbreaker hit; as theirs. */
+    fun serverHit(p: ServerPlayer, data: String) {
+        val v = data.split(',')
+        if (v.size < 5) return
+        val at = BlockPos(v[0].toIntOrNull() ?: return, v[1].toIntOrNull() ?: return, v[2].toIntOrNull() ?: return)
+        val face = net.minecraft.core.Direction.entries.getOrNull(v[3].toIntOrNull() ?: return) ?: return
+        val again = v[4] == "1"
+        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) return
+        val held = idOf(p.mainHandItem)
+        // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
+        // refusal ("digging there" in S4's device).
+        (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) ph.devices.leftClick(at); if (held != "DUNGEONBREAKER") return } }
+        if (held == "SUPERBOOM_TNT") { if (!again) Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } }; return }
+        if (held == "DUNGEONBREAKER") Fight.afterPing("dungeonbreaker") { mine(p, at) }
     }
 
     /**
@@ -1128,11 +1145,18 @@ object SimItems {
         val level = mc.level ?: return
         if (!simClient(level)) return
         // Practice: a left click with the Infinileap starts it again; once it's done (0.25 s on), a left click with anything.
-        if (Practice.clickRestarts() || Practice.active && idOf(player.mainHandItem) == "INFINITE_SPIRIT_LEAP") { SimServer.run("practice restart") { Practice.restart() }; return }
+        val id = idOf(player.mainHandItem)
+        if (id != null || Practice.active || Practice.clickRestarts()) SimNet.send("left")
+    }
+
+    /** A left click from a player's game ([clientLeftClick]), as theirs. */
+    fun serverLeftClick(p: ServerPlayer) {
+        val id = idOf(p.mainHandItem)
+        // The host's practice: their clicks only.
+        if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && id == "INFINITE_SPIRIT_LEAP")) { Practice.restart(); return }
         // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
-        if (Mage.isMage() && Mage.beamItem(idOf(player.mainHandItem))) { SimServer.run("mage beam") { Sim.player?.let { p -> Fight.afterPing("mage beam") { Mage.click(p) } } }; return }
-        val id = idOf(player.mainHandItem)?.takeIf { it in Bows.SHORTBOWS } ?: return
-        SimServer.run("left click") { Sim.player?.let { p -> Bows.click(p, id, left = true) } }
+        if (Mage.isMage() && Mage.beamItem(id)) { Fight.afterPing("mage beam") { Mage.click(p) }; return }
+        if (id in Bows.SHORTBOWS) Bows.click(p, id!!, left = true)
     }
 
     /**
@@ -1145,11 +1169,16 @@ object SimItems {
         val player = mc.player ?: return false
         val level = mc.level ?: return false
         if (!simClient(level)) return false
-        if (fullStack && P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER)
-            SimServer.run("archer ability") { Sim.player?.let { p -> asClicked(p, "archer ability") { volley(p) } } }
-        // The Mage's: Guided Sheep.
-        if (fullStack && Mage.isMage()) SimServer.run("mage ability") { Sim.player?.let { p -> Fight.afterPing("guided sheep") { Mage.ability(p) } } }
+        if (fullStack) SimNet.send("drop", "1")
         return true
+    }
+
+    /** The drop key from a player's game ([clientDrop]), as theirs: Ctrl+Q is the class ability. */
+    fun serverDrop(p: ServerPlayer, fullStack: Boolean) {
+        if (!fullStack) return
+        if (P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER) asClicked(p, "archer ability") { volley(p) }
+        // The Mage's: Guided Sheep.
+        else if (Mage.isMage()) Fight.afterPing("guided sheep") { Mage.ability(p) }
     }
 
     /**
@@ -1164,7 +1193,7 @@ object SimItems {
         val yRot = if (prior) Fight.lastRot.second else p.yRot
         val pos = p.position()
         Fight.afterPing(what) {
-            if (p.isRemoved || Sim.player !== p) return@afterPing
+            if (p.isRemoved) return@afterPing
             val nowX = p.xRot; val nowY = p.yRot
             p.xRot = xRot; p.yRot = yRot
             clickPos = pos
@@ -1176,8 +1205,16 @@ object SimItems {
     private var clickPos: Vec3? = null
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear(); blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset()
-        if (liveRockets.isNotEmpty()) { Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(it.unimi.dsi.fastutil.ints.IntArrayList(liveRockets))); liveRockets.clear() }
+    fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset() }
+
+    /** What isn't any one player's: the arrows being traced, the pushes, the rockets (gone from every game). */
+    fun resetShared() {
+        arrows.clear(); lastMotion.clear(); lastPos.clear(); pendingMotion.clear()
+        if (liveRockets.isNotEmpty()) {
+            val ids = it.unimi.dsi.fastutil.ints.IntArrayList(liveRockets)
+            Sim.players().forEach { it.connection.send(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(ids)) }
+            liveRockets.clear()
+        }
     }
 
     /** A right click with [id] in the air, or on a block that isn't the sim's ([fromBlock]: from use_item_on). */
@@ -1198,7 +1235,7 @@ object SimItems {
             "SUPERBOOM_TNT" -> {}
             in Bows.SHORTBOWS -> Bows.click(p, id, left = false)
             // Main: the cast lands one tick after the use_item, stand, splash, abilities, Autopet line and bobber together.
-            "PET_ROD" -> Fight.afterPing("pet rod") { Fight.later(1, "pet rod cast") { if (!p.isRemoved && Sim.player === p) castRod(p) } }
+            "PET_ROD" -> Fight.afterPing("pet rod") { Fight.later(1, "pet rod cast") { if (!p.isRemoved) castRod(p) } }
             else -> return InteractionResult.PASS
         }
         // Keep the client's copy of the stack (the Infinileap is a head, a block item it may think it placed).
@@ -1245,10 +1282,10 @@ object SimItems {
     }
 
     /** The item a block click just fired and its server tick: the client's use_item for it in that tick or the next is skipped. */
-    private var blockFired: Pair<String, Int>? = null
+    private var blockFired: Pair<String, Int>? by perPlayer { null }
 
     /** The server tick of each terminal's last accepted click (same-tick dedupe). */
-    private val termClickTick = java.util.WeakHashMap<Station, Int>()
+    private val termClickTick: java.util.WeakHashMap<Station, Int> by perPlayer { java.util.WeakHashMap() }
 
     private fun useEntity(p: ServerPlayer, e: net.minecraft.world.entity.Entity, left: Boolean = false): InteractionResult {
         if (e is net.minecraft.world.entity.boss.enderdragon.EndCrystal) { (Fight.phase as? P1Maxor)?.useCrystal(e); return InteractionResult.SUCCESS }
@@ -1404,7 +1441,7 @@ object SimItems {
     }
 
     /** Wither Impact's server cooldown: a second cast within 2 server ticks is discarded, blink and Implosion both. */
-    private var lastHype = -100
+    private var lastHype by perPlayer { -100 }
 
     private fun hypeReady(): Boolean {
         val now = Fight.serverTick
@@ -1419,7 +1456,7 @@ object SimItems {
      */
     private const val IMPLOSION_DAMAGE = 34_000_000.0
 
-    private var lastCure = -1000
+    private var lastCure by perPlayer { -1000 }
 
     /** Wither Shield: absorption back to 16 two ticks on; every ~5 s the cure sound and a ring of 16 witch particles. */
     private fun witherShield(p: ServerPlayer) {
@@ -1617,7 +1654,7 @@ object SimItems {
         return s
     }
 
-    private var bonzoLast = -100
+    private var bonzoLast by perPlayer { -100 }
     /** Packet-only rockets not yet removed (a stop drops their cleanup: [reset] removes them). */
     private val liveRockets = it.unimi.dsi.fastutil.ints.IntArrayList()
     private const val BONZO_SPEED = 0.75
@@ -1658,7 +1695,7 @@ object SimItems {
         rapidFire(p)
         fun fly(k: Int) {
             Fight.later(1, "jerry bullet") {
-                if (p.isRemoved || Sim.player !== p) { stand.discard(); return@later }
+                if (p.isRemoved) { stand.discard(); return@later }
                 val b = bullet(k)
                 // Check-then-move (max life 30).
                 if (k < JERRY_LIFE && !jerrySolid(b)) {
@@ -1703,12 +1740,12 @@ object SimItems {
         return s
     }
 
-    private var jerryTick = -1
-    private var jerryShots = 0
+    private var jerryTick by perPlayer { -1 }
+    private var jerryShots by perPlayer { 0 }
     private const val JERRY_LIFE = 30
 
-    private var rapidShots = 0
-    private var rapidLast = -1000
+    private var rapidShots by perPlayer { 0 }
+    private var rapidLast by perPlayer { -1000 }
 
     /** The Rapid-fire action bar: 14 x the shot in the burst, reset after 4 s idle. */
     private fun rapidFire(p: ServerPlayer) {
@@ -1730,18 +1767,18 @@ object SimItems {
      * (no 10 s expiry, despite the lore). It does NOT stop death ticks (GoldorPhase.deathTick).
      * Vitality: 122, 30 a hit; a hit with under 30 left ends it ("Not enough vitality!"). Cooldown ~5 s from the end.
      */
-    var cloakUntil = 0
+    var cloakUntil by perPlayer { 0 }
         private set
-    private var cloakReady = 0
+    private var cloakReady by perPlayer { 0 }
     val cloaked get() = Fight.serverTick < cloakUntil
-    private var vitality = 0
+    private var vitality by perPlayer { 0 }
     private const val VEIL_VITALITY = 122
     private const val VEIL_HIT = 30
     private const val VEIL_COOLDOWN = 100
 
     /** The 6 invisible powered creepers: a hexagon, radius 1.5, ~3 degrees a tick, at your feet. */
-    private val veil = ArrayList<net.minecraft.world.entity.monster.Creeper>()
-    private var veilAngle = 0.0
+    private val veil: ArrayList<net.minecraft.world.entity.monster.Creeper> by perPlayer { ArrayList() }
+    private var veilAngle by perPlayer { 0.0 }
 
     /** A creeper that stays in the peaceful sim world and can't be hit, pushed or aimed at. */
     class VeilCreeper(level: Level) : net.minecraft.world.entity.monster.Creeper(net.minecraft.world.entity.EntityTypes.CREEPER, level) {
@@ -1795,9 +1832,8 @@ object SimItems {
         return true
     }
 
-    private fun tickVeil() {
+    private fun tickVeil(p: ServerPlayer) {
         if (!cloaked) { if (veil.isNotEmpty() && veil.none { !it.isRemoved }) veil.clear(); return }
-        val p = Sim.player ?: return
         // Dead (a death tick goes through the veil): it ends a tick later with the sound only.
         if (Masks.ghost) { endVeil(p, null, soundNow = true); return }
         veilAngle += 3.0
@@ -1928,14 +1964,17 @@ object SimItems {
     }
 
     /** Charges (max 20), refilled in small irregular steps; blocks broken, oldest first, and when. */
-    var charges = MAX_CHARGES; private set(v) { if (field != v) { field = v; refreshBreakerLore() } }
-    private var refillStep = 0 // main: irregular +2 steps, not a batch per second
+    private var chargesNow by perPlayer { MAX_CHARGES }
+    var charges: Int get() = chargesNow; private set(v) { if (chargesNow != v) { chargesNow = v; refreshBreakerLore() } }
+    private var refillStep by perPlayer { 0 } // main: irregular +2 steps, not a batch per second
     private val refillRng = java.util.Random()
     private class Broken(val pos: BlockPos, val state: BlockState, val at: Int) { var restoreAt = Int.MAX_VALUE }
-    private val broken = ArrayDeque<Broken>()
+    /** Each player's broken blocks (their own regen and window). */
+    private val brokenBy = perPlayer { ArrayDeque<Broken>() }
+    private val broken: ArrayDeque<Broken> by brokenBy
     /** The last 20 breaks: the 21st one schedules the oldest of them back. */
-    private val window = ArrayDeque<Broken>()
-    private var refusedSaidAt = -100 // one 20-tick throttle shared by the refusal and no-charges lines
+    private val window: ArrayDeque<Broken> by perPlayer { ArrayDeque() }
+    private var refusedSaidAt by perPlayer { -100 } // one 20-tick throttle shared by the refusal and no-charges lines
 
     private fun resetBreaker() {
         charges = MAX_CHARGES; refillStep = 0; window.clear(); refusedSaidAt = -100
@@ -1946,7 +1985,7 @@ object SimItems {
     /** Perma Break, after a start rebuilt the world: the blocks broken before are broken again. */
     fun rebreak() {
         if (!P3Sim.breakerPerma) return
-        broken.forEach { Blocks.set(it.pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) }
+        brokenBy.values().forEach { l -> l.forEach { Blocks.set(it.pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) } }
     }
 
     /** Perma Break turned off: every block it kept broken comes back now. */
@@ -1981,6 +2020,14 @@ object SimItems {
         Blocks.set(b.pos, b.state) // over whatever is there, the core-door barrier too
     }
 
+    /** Every player's broken blocks back as their time comes (a player who left too). */
+    private fun restoreBroken() {
+        if (P3Sim.breakerPerma) return
+        val now = Fight.serverTick
+        val regen = Math.round(P3Sim.breakerRegen * 20).toInt()
+        brokenBy.values().forEach { l -> l.removeAll { if (now - it.at >= regen || now >= it.restoreAt) { restore(it); true } else false } }
+    }
+
     private fun tickBreaker() {
         val now = Fight.serverTick
         // Main refills ~6/s as +2 steps (sometimes +1) at irregular 1-20 tick gaps; the rate setting scales the gap.
@@ -1992,18 +2039,15 @@ object SimItems {
                 refillStep = 0
             }
         }
-        // The regen setting (221 ticks on main, as the client sees it); ping is added on top by the delayed block update.
-        val regen = Math.round(P3Sim.breakerRegen * 20).toInt()
-        // Perma Break: nothing comes back (until it's turned off: [unPerma]).
-        if (P3Sim.breakerPerma) return
-        broken.removeAll { if (now - it.at >= regen || now >= it.restoreAt) { restore(it); true } else false }
+        // The regen setting (221 ticks on main, as the client sees it; [restoreBroken]); ping is added on top by the
+        // delayed block update. Perma Break: nothing comes back (until it's turned off: [unPerma]).
     }
 
     /**
      * The Archer's ability (Ctrl+Q): three arrows from your middle at the Terminator's +-5.5 deg, every 22 s
      * (Bows' arrows, so they count for i4 too); they blow up a gate they hit.
      */
-    private var volleyReady = 0
+    private var volleyReady by perPlayer { 0 }
 
     private fun volley(p: ServerPlayer) {
         val now = Fight.serverTick
@@ -2032,11 +2076,15 @@ object SimItems {
 
     fun tick() {
         val level = SimServer.level ?: return
-        tickBreaker()
-        tickVeil()
-        EngineerClient.safely("p3sim mage") { Mage.tick() }
-        EngineerClient.safely("p3sim slot 9") { tickSlot9() }
-        Sim.player?.let { p -> EngineerClient.safely("p3sim mining effects") { miningEffects(p) } }
+        // Each player's own: charges, veil, Mage's sheep, slot 9, the held slot's effects.
+        Sim.forEachPlayer { p ->
+            tickBreaker()
+            EngineerClient.safely("p3sim veil") { tickVeil(p) }
+            EngineerClient.safely("p3sim mage") { Mage.tick() }
+            EngineerClient.safely("p3sim slot 9") { tickSlot9(p) }
+            EngineerClient.safely("p3sim mining effects") { miningEffects(p) }
+        }
+        restoreBroken()
         // Vanilla bow arrows (anything shot that isn't one of Bows'). Each one's path since last tick (and a
         // little on), traced against the blocks: the first block on it is what it hit.
         level.getEntitiesOfClass(AbstractArrow::class.java, AABB(-20.0, 0.0, -20.0, 160.0, 256.0, 160.0)) { it.owner is Player && it !is SimArrow && it !in arrows }.forEach { arrows += it }
@@ -2066,7 +2114,7 @@ object SimItems {
     // ------------------------------------------------------------------ Spirit Leap
 
     /** Spirit Leap's 2 s cooldown. */
-    private var leapReady = 0
+    private var leapReady by perPlayer { 0 }
 
     private fun openLeap(p: ServerPlayer) {
         val now = Fight.serverTick
@@ -2075,25 +2123,25 @@ object SimItems {
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             Sim.chat("§cThis ability is on cooldown for ${(leapReady - now + 19) / 20}s."); return
         }
-        // Practice: no bots, but every class is there to leap to (Practice.leapSpot).
-        val bots = if (Practice.active) Party.bots() else Party.bots().filter { it.entity != null }
+        // Practice: no bots, but every class is there to leap to (Practice.leapSpot). In a party: the players and bots.
+        val mates = Party.mates(p).filter { Practice.active || it.here }
         // The menu opens one RTT after the use.
-        Fight.afterPing("leapOpen") { p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, bots) }, Component.literal("Spirit Leap"))) }
+        Fight.afterPing("leapOpen") { p.openMenu(SimpleMenuProvider({ id, inv, _ -> LeapMenu(id, inv, mates) }, Component.literal("Spirit Leap"))) }
     }
 
     /** The ghost's Haunt: the "Teleport to Player" menu, opened one RTT after the click. */
     private fun openHaunt(p: ServerPlayer) {
-        val bots = Party.bots().filter { it.entity != null }
-        Fight.afterPing("hauntOpen") { if (Masks.ghost) p.openMenu(SimpleMenuProvider({ id, inv, _ -> HauntMenu(id, inv, bots) }, Component.literal("Teleport to Player"))) }
+        val mates = Party.mates(p).filter { it.here }
+        Fight.afterPing("hauntOpen") { if (Masks.ghost) p.openMenu(SimpleMenuProvider({ id, inv, _ -> HauntMenu(id, inv, mates) }, Component.literal("Teleport to Player"))) }
     }
 
     /** Hypixel's ghost teleport window: teammates' heads in slots 11-15, a click teleports you to them (no cooldown). */
-    class HauntMenu(id: Int, inv: Inventory, val bots: List<Party.Bot>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
+    class HauntMenu(id: Int, inv: Inventory, val bots: List<Party.Mate>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
         init {
             for (i in 0 until 36) container.setItem(i, ItemStack.EMPTY)
-            bots.sortedBy { it.slot }.forEachIndexed { i, b ->
+            bots.forEachIndexed { i, b ->
                 val h = ItemStack(Items.PLAYER_HEAD)
-                h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(Party.profile(b)))
+                h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(b.profile))
                 h.set(DataComponents.CUSTOM_NAME, Component.literal("${rankColour(b.name)}${b.name}").withStyle { it.withItalic(false) })
                 h.set(DataComponents.LORE, ItemLore(listOf("§7Click to teleport to this player!", "", "§7Health: §a100%", "", "§eClick to teleport!").map { Component.literal(it).withStyle { st -> st.withItalic(false) } }))
                 container.setItem(listOf(11, 12, 14, 15).getOrElse(i) { 16 }, h)
@@ -2108,7 +2156,7 @@ object SimItems {
             Fight.afterPing("haunt") {
                 sp.closeContainer()
                 val e = bot.pos
-                Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
+                Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.pitch)
                 Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1.095f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
                 Sim.chatStyled("§aTeleported you to ${bot.name}!")
             }
@@ -2119,15 +2167,15 @@ object SimItems {
     }
 
     /** Hypixel's Spirit Leap window: teammates' heads in slots 11-15, a click leaps (8 ticks, as measured). */
-    class LeapMenu(id: Int, inv: Inventory, val bots: List<Party.Bot>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
+    class LeapMenu(id: Int, inv: Inventory, val bots: List<Party.Mate>) : ChestMenu(MenuType.GENERIC_9x4, id, inv, SimpleContainer(36), 4) {
         private val owner = inv.player
         init {
             for (i in 0 until 36) container.setItem(i, Terminals.FILLER)
             // In the plan's leap slot order: slots 1-4 = chest slots 11, 12, 14, 15.
-            bots.sortedBy { it.slot }.forEachIndexed { i, b ->
+            bots.forEachIndexed { i, b ->
                 val h = ItemStack(Items.PLAYER_HEAD)
-                // The teammate's own head (the menu shows each one's skin): the bot's profile.
-                h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(Party.profile(b)))
+                // The teammate's own head (the menu shows each one's skin): the bot's profile, a player's own.
+                h.set(DataComponents.PROFILE, ResolvableProfile.createResolved(b.profile))
                 // The name in its rank colour, one yellow "Click to teleport!" line.
                 val colour = net.minecraft.ChatFormatting.getByCode(rankColour(b.name)[1]) ?: net.minecraft.ChatFormatting.GREEN
                 h.set(DataComponents.CUSTOM_NAME, Component.literal(b.name).withStyle { it.withItalic(false).withColor(colour) })
@@ -2159,7 +2207,7 @@ object SimItems {
         }
 
         /** Main's tail: container_close(N), player_position, the sound, the chat line, then container_close(0). */
-        private fun leap(sp: ServerPlayer, bot: Party.Bot) {
+        private fun leap(sp: ServerPlayer, bot: Party.Mate) {
             if (sp.isRemoved) return
             sp.closeContainer()
             val e = bot.pos
@@ -2168,11 +2216,11 @@ object SimItems {
             // practice's leap waypoint for that class's quadrant (top left, top right, bottom left, bottom right) first.
             val ps = if (Practice.active) Practice.leapWaypoint(P3Plan.botOrder().indexOf(bot.clazz)) ?: Practice.leapSpot(bot.clazz) else null
             if (ps != null) Sim.tp(sp, ps.x, ps.y, ps.z, ps.yaw, ps.pitch)
-            else Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.entity?.xRot ?: sp.xRot)
+            else Sim.tp(sp, e.x, e.y, e.z, bot.yaw, bot.pitch)
             Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, sp.position(), net.minecraft.sounds.SoundSource.HOSTILE)
             Sim.chatStyled("§aYou have teleported to §r${rankColour(bot.name)}${bot.name}§r§a!")
             sp.connection.send(net.minecraft.network.protocol.game.ClientboundContainerClosePacket(0))
-            GhostCapture.event("leap", bot.clazz.name)
+            if (Sim.isHost(sp)) GhostCapture.event("leap", bot.clazz.name)
         }
 
         override fun quickMoveStack(p: Player, slot: Int): ItemStack = ItemStack.EMPTY

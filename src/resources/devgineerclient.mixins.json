@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "BlockChangeSourceMixin",
+    "CameraFovMixin",
     "ChatDisplayTapMixin",
     "CommandsAppliedMixin",
     "ConnectionEndTapMixin",

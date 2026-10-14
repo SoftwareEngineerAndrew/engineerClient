@@ -105,7 +105,9 @@ object EngineerClient : ClientModInitializer {
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
+        safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
+        safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
@@ -189,7 +191,9 @@ object EngineerClient : ClientModInitializer {
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /adr: the link to all your uploaded runs, private ones included.
-            for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 })
+            // /adr online: ADR Online in your browser, signed in.
+            for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
+                .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
             // Odin's settings menu, as its /od opens it.
             for (name in listOf("adm", "ADM", "advanceddungeonsmod", "eclient", "ea", "eec", "em"))
                 dispatcher.register(literal(name).executes { mc.schedule { mc.gui.setScreen(com.odtheking.odin.clickgui.ClickGUI) }; 1 })

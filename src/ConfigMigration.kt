@@ -30,7 +30,6 @@ object ConfigMigration {
         if (Files.isDirectory(oldDir) && !Files.exists(newDir)) Files.move(oldDir, newDir)
     }
 
-
     /**
      * One-time moves inside config/odin/addons/engineerclient.json, before Odin reads it, so a
      * module that was renamed or folded into another keeps what was set in it:

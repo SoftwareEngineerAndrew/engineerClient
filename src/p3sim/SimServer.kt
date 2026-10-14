@@ -37,13 +37,19 @@ object SimServer {
 
     val level: ServerLevel? get() = server?.overworld()
 
-    /** The (only) player in the sim. */
-    val player: ServerPlayer? get() = server?.playerList?.players?.firstOrNull()
+    /** The sim's player: the one whose game it is (a party's joiners come after). */
+    val player: ServerPlayer? get() {
+        val l = server?.playerList?.players ?: return null
+        // By this game's own account: a respawn puts the host's new player at the end of the list.
+        val me = net.minecraft.client.Minecraft.getInstance().user.profileId
+        return l.firstOrNull { it.uuid == me } ?: l.firstOrNull()
+    }
 
     /** Runs [block] on the sim server's thread (from the client's menu, say), if it is running. */
     fun run(what: String, block: (MinecraftServer) -> Unit) {
         val s = server ?: return
-        s.execute { if (server === s) EngineerClient.safely("p3sim $what") { block(s) } }
+        // The host's (a packet handler that threw may have left someone else's actor set).
+        s.execute { if (server === s) EngineerClient.safely("p3sim $what") { Sim.asPlayer(null) { block(s) } } }
     }
 
     fun register() {
@@ -63,7 +69,7 @@ object SimServer {
         ServerLifecycleEvents.SERVER_STOPPING.register { s ->
             if (s !== server) return@register
             // Saved as built: no fight entities, every changed block back.
-            EngineerClient.safely("p3sim stopping") { Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
+            EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
         }
         ServerLifecycleEvents.SERVER_STOPPED.register { s ->
             if (s !== server) return@register
@@ -76,6 +82,9 @@ object SimServer {
         ServerPlayConnectionEvents.JOIN.register { handler, _, s ->
             if (s === server) EngineerClient.safely("p3sim join") { Fight.join(handler.player) }
         }
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, s ->
+            if (s === server) EngineerClient.safely("p3sim leave") { Fight.leave(handler.player) }
+        }
         SimItems.register()
     }
 
@@ -87,8 +96,10 @@ object SimServer {
         s.commands.dispatcher.register(
             Commands.literal("pc").then(Commands.argument("message", StringArgumentType.greedyString()).executes { c ->
                 val msg = StringArgumentType.getString(c, "message")
+                // A chat command runs later, outside the packet: as whoever typed it.
                 val name = c.source.player?.gameProfile?.name ?: "You"
-                Sim.chat("§9Party §8> §b[MVP§4+§b] $name§f: $msg")
+                // The whole party sees it (sent by whoever typed it).
+                Sim.everyone { Sim.chat("§9Party §8> §b[MVP§4+§b] $name§f: $msg") }
                 1
             })
         )

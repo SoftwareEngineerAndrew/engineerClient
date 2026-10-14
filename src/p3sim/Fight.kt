@@ -49,12 +49,17 @@ object Fight {
     var serverTick = 0
         private set
 
-    private class Later(val at: Int, val what: String, val epoch: Int, val run: () -> Unit)
+    /** A queued action, and whose it is ([Sim.asPlayer]: a party player's click stays theirs when it lands). */
+    private class Later(val at: Int, val what: String, val epoch: Int, val run: () -> Unit) {
+        val actor = Sim.acting
+        val all = Sim.toAll
+        fun go() = Sim.asPlayer(actor, all, run)
+    }
     /** Bumped by every stop: actions queued before it never run after. */
     private var epoch = 0
     private val later = ArrayList<Later>()
 
-    /** Runs [run] [ticks] server ticks from now (0 = later this tick). Cleared when a phase starts. */
+    /** Runs [run] [ticks] server ticks from now (0 = later this tick), as whoever queued it. Cleared when a phase starts. */
     fun later(ticks: Int, what: String = "later", run: () -> Unit) {
         later += Later(serverTick + ticks.coerceAtLeast(0), what, epoch, run)
     }
@@ -62,7 +67,11 @@ object Fight {
     /** The player's ping, in server ticks: what their clicks and items wait before the server acts. */
     val pingTicks: Int get() = (P3Sim.ping.toInt() + 25) / 50
 
-    private class Timed(val dueNs: Long, val what: String, val epoch: Int, val run: () -> Unit)
+    private class Timed(val dueNs: Long, val what: String, val epoch: Int, val run: () -> Unit) {
+        val actor = Sim.acting
+        val all = Sim.toAll
+        fun go() = Sim.asPlayer(actor, all, run)
+    }
     private val timed = ArrayList<Timed>()
 
     /**
@@ -87,8 +96,10 @@ object Fight {
     )
 
     /** Runs [run] after the simulated ping, in real time: at the first server tick on or after the delay (at once with none). */
-    fun afterPing(what: String, run: () -> Unit) {
-        val ms = pingMs()
+    fun afterPing(what: String, run: () -> Unit) = afterMs(pingMs(), what, run)
+
+    /** Runs [run] [ms] real ms from now, at the first server tick on or after it (at once for 0). */
+    fun afterMs(ms: Double, what: String, run: () -> Unit) {
         val p = phase
         if (ms <= 0.0) run()
         else timed += Timed(System.nanoTime() + (ms * 1e6).toLong(), what, epoch) { if (phase === p) run() }
@@ -98,7 +109,7 @@ object Fight {
      * (xRot, yRot) at the head of the last handleUseItem, before it snaps the player to the packet's rotation: the
      * last movement packet's rotation, which Hypixel aims a use_item's Jerry-chine with. Set by UseItemRotSimMixin.
      */
-    var lastRot: Pair<Float, Float> = 0f to 0f
+    var lastRot: Pair<Float, Float> by perPlayer { 0f to 0f }
         private set
 
     /** UseItemRotSimMixin: a use_item reached [p]'s handler (server thread of the sim's server only). */
@@ -106,40 +117,47 @@ object Fight {
     fun noteUseItem(p: ServerPlayer) {
         val s = p.level().server
         if (s !== SimServer.server || !s.isSameThread) return
-        lastRot = p.xRot to p.yRot
+        Sim.asPlayer(p) { lastRot = p.xRot to p.yRot }
     }
-    private val posHistory = java.util.ArrayDeque<Pair<Long, net.minecraft.world.phys.Vec3>>()
+    /** Each player's recent positions (ns, where), for [seenPos]. */
+    private val posHistories = HashMap<java.util.UUID, java.util.ArrayDeque<Pair<Long, net.minecraft.world.phys.Vec3>>>()
 
     /**
      * Where the server sees [p]: where they were one one-way latency ago (its checks run on the
      * position packets that arrived, so about ping/2 late). Live position with no ping.
      */
-    fun seenPos(p: ServerPlayer): net.minecraft.world.phys.Vec3 {
+    fun seenPos(p: ServerPlayer): net.minecraft.world.phys.Vec3 = Sim.asPlayer(p, Sim.toAll) {
         val live = p.position()
         val ms = P3Sim.ping / 2.0
-        if (ms <= 0.0 || posHistory.isEmpty()) return live
+        val posHistory = posHistories[p.uuid]
+        if (ms <= 0.0 || posHistory == null || posHistory.isEmpty()) return@asPlayer live
         val target = System.nanoTime() - (ms * 1e6).toLong()
         var prev: Pair<Long, net.minecraft.world.phys.Vec3>? = null
         for (e in posHistory) {
             if (e.first >= target) {
-                val a = prev ?: return e.second
+                val a = prev ?: return@asPlayer e.second
                 val t = (target - a.first).toDouble() / (e.first - a.first).coerceAtLeast(1)
-                return a.second.lerp(e.second, t.coerceIn(0.0, 1.0))
+                return@asPlayer a.second.lerp(e.second, t.coerceIn(0.0, 1.0))
             }
             prev = e
         }
-        val a = prev ?: return live
+        val a = prev ?: return@asPlayer live
         val t = (target - a.first).toDouble() / (System.nanoTime() - a.first).coerceAtLeast(1)
-        return a.second.lerp(live, t.coerceIn(0.0, 1.0))
+        a.second.lerp(live, t.coerceIn(0.0, 1.0))
     }
 
     fun reset(server: MinecraftServer) {
+        // A new sim: nobody's timers from the last one (they'd sit far ahead of this one's ticks).
+        PerPlayer.clearAll()
         serverTick = 0
         epoch++
         later.clear()
-        timed.clear(); posHistory.clear()
+        timed.clear(); posHistories.clear()
         Terminals.closeAll()
-        SimItems.reset()
+        Sim.forEachPlayer { SimItems.reset() }
+        SimItems.resetShared()
+        Players.clear()
+        PartyServer.reset()
         phase = null
         BossBar.hide()
         Sim.clearEntities()
@@ -157,11 +175,25 @@ object Fight {
         Terminals.closeAll()
         // The Dungeonbreaker's broken blocks would grow back into the next start's world (a gate a
         // later start has open); cooldowns start fresh, as the masks' do.
-        SimItems.reset()
+        Sim.forEachPlayer { SimItems.reset() }
+        SimItems.resetShared()
         BossBar.hide()
     }
 
     fun join(player: ServerPlayer) {
+        // A party's joiner (P3Party): a class of their own (its bot gone), set up as the host is and put next to them;
+        // the fight goes on as it is (the next start has them in it from the start).
+        val host = SimServer.player
+        if (host != null && host !== player) {
+            // Their game says hello next, with their class and settings (PartyServer.hello): set up again then.
+            // No class until their game says which it wants (hello): a stand-in one would take a bot, or someone's pick.
+            Sim.asPlayer(player) {
+                PartyServer.rosterDirty = true
+                setup(player)
+                Sim.tp(player, host.x, host.y, host.z, host.yRot, host.xRot)
+            }
+            return
+        }
         setup(player)
         if (phase == null) {
             Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)
@@ -172,8 +204,27 @@ object Fight {
         }
     }
 
+    /** A party's player left: their window, their class's place (its bot comes back at the next start). */
+    fun leave(player: ServerPlayer) {
+        // A crystal they carried goes back on its stand (else Maxor's side waits for it forever).
+        (phase as? P1Maxor)?.playerLeft(player)
+        // Their ghost state goes (a pending revive with it), so a rejoin starts clean.
+        Masks.leftOne(player)
+        Players.forgetFiles(player)
+        val joiner = !Sim.isHost(player)
+        val c = Players.classOf(player)
+        val theirs = Players.jobsOf(player)
+        val at = player.position()
+        Players.left(player)
+        // Their bot back mid-P3 where they stood, doing what they left (before the roster's own, which would give it the role's).
+        if (joiner) (phase as? GoldorPhase)?.let { Party.takeOver(it, c, at, theirs) }
+        PartyServer.left(player)
+        Party.rosterChanged()
+        if (!Sim.isHost(player)) Sim.everyone { Sim.note("§e${player.gameProfile.name}§7 left the party.") }
+    }
+
     /** Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. */
-    fun setup(player: ServerPlayer) {
+    fun setup(player: ServerPlayer) = Sim.asPlayer(player) {
         // Hypixel: SURVIVAL. Blocks stay whole through Sim.guardBlocks + DungeonbreakerSimMixin.
         if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.SURVIVAL)
         Sim.guardBlocks()
@@ -192,7 +243,13 @@ object Fight {
         // As sent on main: night vision amplifier 1 with flags 7 (ambient, particles, icon); haste and mining fatigue flags 3 (no icon).
         player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
-        SimItems.giveHotbar(player)
+        // P1/P2's hotbar mid-run there (a joiner arriving), else P3's.
+        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm)
+        // Nothing left of a ghost (a rejoin keeps the saved effects and flight).
+        if (player.gameMode() != GameType.CREATIVE) {
+            player.removeEffect(MobEffects.INVISIBILITY)
+            player.abilities.flying = false; player.abilities.mayfly = false; player.onUpdateAbilities()
+        }
         // Haste 0 + Mining Fatigue 255 unless the Dungeonbreaker is in hand (main toggles them with the held slot).
         SimItems.miningEffects(player, force = true)
     }
@@ -201,7 +258,7 @@ object Fight {
      * Odin's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
      * a world load; a sim restart is a new P3, so it starts clean too.
      */
-    private fun resetArrowsDevice() {
+    fun resetArrowsDevice() {
         val c = com.odtheking.odin.features.impl.boss.ArrowsDevice::class.java
         fun field(name: String) = c.getDeclaredField(name).apply { isAccessible = true }
         (field("markedPositions").get(null) as? MutableSet<*>)?.clear()
@@ -214,9 +271,9 @@ object Fight {
      * Your speed stat: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out
      * adds nothing; the Racing Helmet adds 100 more.
      */
-    fun speedStat(player: ServerPlayer): Int {
+    fun speedStat(player: ServerPlayer): Int = Sim.asPlayer(player, Sim.toAll) {
         val racing = SimItems.idOf(player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)) == "RACING_HELMET"
-        return P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
+        P3Sim.speed + (if (P3Sim.phoenix) 0 else 100) + (if (racing) 100 else 0)
     }
 
     fun applySpeed(player: ServerPlayer) {
@@ -232,11 +289,15 @@ object Fight {
         private set
 
     /** Starts [what] from its beginning (stopping whatever ran). [practice]: a section practice's start ([Practice]); any other start ends practice mode. */
-    fun start(what: Start, practice: Boolean = false) {
-        val player = Sim.player ?: return
+    fun start(what: Start, practice: Boolean = false) = Sim.asPlayer(null) { startAll(what, practice) }
+
+    private fun startAll(what: Start, practice: Boolean) {
+        if (Sim.players().isEmpty()) return
         if (!practice) Practice.exit()
         lastStart = what
         stop()
+        // Every game's Term Info from nothing (a joiner's only reads chat): the phase's own start says where from.
+        PartyClient.send("termStart", 0)
         later.clear()
         Sim.clearEntities()
         // The bots too: a start that spawns none (P2, P4 with Party Bots off) must not see the last run's.
@@ -246,11 +307,13 @@ object Fight {
         Blocks.prepare(what)
         SimItems.rebreak()
         // Every start (and restart) is with Black Cat out; the Pet Rod or a Phoenix proc swaps it.
-        P3Sim.phoenixS.value = false
-        setup(player)
-        Bows.start()
+        Sim.forEachPlayer { pl ->
+            P3Sim.setPhoenix(false)
+            setup(pl)
+            Bows.start()
+            Lava.reset()
+        }
         Masks.reset()
-        Lava.reset()
         refreshPhase = if (kotlin.random.Random.nextInt(36) < 21) 18 else 17
         Stats.runStart = if (what == Start.P1) serverTick else -1
         previous = null
@@ -266,10 +329,7 @@ object Fight {
             Start.CORE -> com.engineerclient.splits.SplitTracker.GOLDOR to 0
             Start.P4 -> com.engineerclient.splits.SplitTracker.NECRON to 0
         }
-        EngineerClient.mc.execute {
-            EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, termsDone) }
-            EngineerClient.safely("p3sim arrows device") { resetArrowsDevice() }
-        }
+        PartyClient.send("splitsStart", termsDone, split)
         Recorder.begin(what.label)
         // No "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
         val p: Phase = when (what) {
@@ -307,10 +367,12 @@ object Fight {
         Party.clear()
         // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
         // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
-        EngineerClient.mc.execute { EngineerClient.safely("p3sim splits stop") { com.engineerclient.splits.DungeonSplits.simStop() } }
+        PartyClient.send("splitsStop")
+        PartyClient.send("termStart", 0)
     }
 
     fun tick(server: MinecraftServer) {
+        Sim.clearActor()
         serverTick++
         // Hypixel pings every client each server tick; Odin (and this mod) count those as server
         // ticks: Simon Says, terminal first-click protection, splits all run on them.
@@ -318,23 +380,26 @@ object Fight {
         if (later.isNotEmpty()) {
             val due = later.filter { it.at <= serverTick }
             later.removeAll(due.toSet())
-            due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.run() } }
+            due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.go() } }
         }
         if (timed.isNotEmpty()) {
             val nowNs = System.nanoTime()
             val due = timed.filter { it.dueNs <= nowNs }.sortedBy { it.dueNs }
             timed.removeAll(due.toSet())
-            due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.run() } }
+            due.forEach { if (it.epoch == epoch) EngineerClient.safely("p3sim ${it.what}") { it.go() } }
         }
-        Sim.player?.let { pl ->
-            posHistory.addLast(System.nanoTime() to pl.position())
-            while (posHistory.size > 40) posHistory.removeFirst()
+        val now = System.nanoTime()
+        for (pl in Sim.players()) {
+            val h = posHistories.getOrPut(pl.uuid) { java.util.ArrayDeque() }
+            h.addLast(now to pl.position())
+            while (h.size > 40) h.removeFirst()
         }
+        EngineerClient.safely("p3sim party") { PartyServer.tick() }
         Blocks.tick()
         Terminals.tick()
         SimItems.tick()
-        EngineerClient.safely("p3sim bows") { Bows.tick() }
-        if (P3Sim.lava) Sim.player?.let { pl -> EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
+        Sim.forEachPlayer { EngineerClient.safely("p3sim bows") { Bows.tick() } }
+        Sim.forEachPlayer { pl -> if (P3Sim.lava) EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase
         if (p == null) { Recorder.finish(); SimItems.flushMotion(); return }
         // The run recorder covers P1-P3 and stops at Necron; his phase still has to tick.
