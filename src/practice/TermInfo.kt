@@ -7,7 +7,6 @@ import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.engineerclient.enumSelector
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -15,9 +14,6 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.darker
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.render.drawFilledBox
-import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
@@ -31,7 +27,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.Identifier
-import net.minecraft.world.level.block.LeverBlock
 import net.minecraft.util.ARGB
 import net.minecraft.world.entity.player.Player
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -47,7 +42,6 @@ import java.util.Locale
  *    colours the 4th and 5th too, continuing Odin's fade (NumbersPreviewMixin).
  *  - Section Times: when a section is done, how long it took, in purple, for a few seconds (server ticks). S1 runs
  *    from Goldor's first line, each next one from the last one's end.
- *  - Highlight Levers: a blue box around each P3 lever's hitbox (and the lights device's), in F7/M7 boss.
  *  - Core Leap: once S3 is done, the side of the screen where the first teammate inside the core will be in
  *    Odin's Leap Menu, in gold, so you're already flicking there when you open the menu. Behind terminals too:
  *    only ever drawn as part of the HUD, which every screen draws over, so it never covers or recolours a slot.
@@ -100,11 +94,6 @@ object TermInfo : Module(
     }
     private enum class CoreFill(private val label: String) { SOLID("Solid"), TO_CENTRE("Fade To Crosshair"), TO_EDGE("Fade To Edge"); override fun toString() = label }
     private enum class NamePos(private val label: String) { AREA("Area Middle"), CROSSHAIR("By Crosshair"); override fun toString() = label }
-    private val highlightLevers by BooleanSetting("Highlight Levers", true, desc = "A blue box around each P3 lever's hitbox in F7/M7 boss (and the P3 Sim Beta), so you can see where to click.")
-    private val leverColor by ColorSetting("Lever Color", Color(40, 120, 255, 1f), true, desc = "").withDependency { highlightLevers }
-    private val leverFill by BooleanSetting("Lever Fill", false, desc = "Fills the box too, faintly.").withDependency { highlightLevers }
-    private val leverWalls by BooleanSetting("Levers Through Walls", true, desc = "Drawn over blocks in the way.").withDependency { highlightLevers }
-    private val deviceLevers by BooleanSetting("Lights Device Levers", true, desc = "The 20 levers of S2's lights device too.").withDependency { highlightLevers }
     private val numbersPreview by BooleanSetting("Numbers 4th/5th Preview", false, desc = "Odin's terminal solver shows the next 3 clicks in Numbers; this colours the 4th and 5th too.")
     private val order4 by ColorSetting("Order 4", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Color of the Numbers solver for the 4th item.").withDependency { numbersPreview }
     private val order5 by ColorSetting("Order 5", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Color of the Numbers solver for the 5th item.").withDependency { numbersPreview }
@@ -192,31 +181,6 @@ object TermInfo : Module(
     private fun lines(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
         lines.forEachIndexed { i, l -> gfx.text(l, 0, i * 10, Colors.WHITE, shadow = true) }
         return (lines.maxOfOrNull { mc.font.width(it) } ?: 0) to lines.size * 10
-    }
-
-    /** The 8 terminal-section levers (S1-S4), as the P3 Sim places them. */
-    private val SECTION_LEVERS = listOf(
-        BlockPos(106, 124, 113), BlockPos(94, 124, 113), BlockPos(27, 124, 127), BlockPos(23, 132, 138),
-        BlockPos(2, 122, 55), BlockPos(14, 122, 55), BlockPos(84, 121, 34), BlockPos(86, 128, 46),
-    )
-    /** The lights device's 5x4 levers (x 58-62, y 133-136, z 142). */
-    private val DEVICE_LEVERS = (58..62).flatMap { x -> (133..136).map { y -> BlockPos(x, y, 142) } }
-
-    /** Highlight Levers: each lever's own shape (it depends on how the lever faces), where it is a lever. */
-    private fun RenderEvent.Extract.drawLevers() {
-        if (!enabled || !highlightLevers) return
-        if (!com.engineerclient.p3sim.P3Sim.inSim && !(DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7)) return
-        val level = mc.level ?: return
-        val fill = leverColor.withAlpha(leverColor.alphaFloat * 0.2f)
-        for (pos in if (deviceLevers) SECTION_LEVERS + DEVICE_LEVERS else SECTION_LEVERS) {
-            val state = level.getBlockState(pos)
-            if (state.block !is LeverBlock) continue
-            val shape = state.getShape(level, pos)
-            if (shape.isEmpty) continue
-            val box = shape.bounds().move(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
-            if (leverFill) drawFilledBox(box, fill, depth = !leverWalls)
-            drawWireFrameBox(box, leverColor, depth = !leverWalls)
-        }
     }
 
     /** S3 done: watching for the first teammate in the core, until Necron or a new world. */
@@ -542,7 +506,6 @@ object TermInfo : Module(
         infoHud.enabled = true; timeHud.enabled = true
         on<LevelEvent.Load> { reset(); shownTime = null }
         on<TickEvent.Server> { serverTicks++ }
-        on<RenderEvent.Extract> { com.engineerclient.EngineerClient.safely("highlight levers") { drawLevers() } }
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "core_leap")) { gfx, _ ->
             // The HUD is drawn under any open screen too, so this is also the behind-the-terminal draw.
             com.engineerclient.EngineerClient.safely("core leap") { trackCore(); drawCoreLeap(gfx) }

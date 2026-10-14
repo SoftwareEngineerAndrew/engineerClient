@@ -4,6 +4,7 @@ import com.coffeeclient.leap.LeapExtras
 import com.coffeeclient.misc.CameraOffset
 import com.coffeeclient.misc.OldBlocking
 import com.coffeeclient.misc.EntityDistance
+import com.coffeeclient.misc.HighlightLevers
 import com.coffeeclient.misc.Termsim
 import com.coffeeclient.misc.PreRequeue
 import com.coffeeclient.misc.RandomStuff
@@ -30,16 +31,18 @@ object CoffeeClient : ClientModInitializer {
         safely("leap extras settings") { adoptLeapExtrasSettings() }
         safely("adr menu settings") { renameModule("Better PF Menu", "ADR Menu") }
         safely("completion titles setting") { adoptSetting("Term Info", "Random Stuff", "Hide Completion Titles") }
+        safely("highlight levers settings") { adoptHighlightLevers() }
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
             if (!RandomStuff.enabled) RandomStuff.toggle()
             if (!LeapExtras.enabled) LeapExtras.toggle()
+            if (!HighlightLevers.enabled) HighlightLevers.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -84,6 +87,27 @@ object CoffeeClient : ClientModInitializer {
         val source = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
         val value = module(source, fromModule)?.getAsJsonObject("settings")?.get(key) ?: return
         toSettings.add(key, value)
+        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
+    }
+
+    /**
+     * Highlight Levers used to be part of Term Info: the first time it loads here it takes Term Info's
+     * lever settings, on if Term Info and its Highlight Levers were (that setting was on by default).
+     */
+    private fun adoptHighlightLevers() {
+        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
+        val ours = dir.resolve("coffeeclient.json")
+        val theirs = dir.resolve("engineerclient.json")
+        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
+        fun module(list: com.google.gson.JsonArray, name: String) = list.firstOrNull { it.asJsonObject.get("name")?.asString == name }?.asJsonObject
+        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
+        if (module(target, "Highlight Levers") != null) return
+        val termInfo = module(com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray, "Term Info")
+        val from = termInfo?.getAsJsonObject("settings") ?: com.google.gson.JsonObject()
+        val on = (termInfo?.get("enabled")?.asBoolean ?: false) && (from.get("Highlight Levers")?.asBoolean ?: true)
+        val settings = com.google.gson.JsonObject()
+        for (key in listOf("Lever Color", "Lever Fill", "Levers Through Walls", "Lights Device Levers")) from.get(key)?.let { settings.add(key, it) }
+        target.add(com.google.gson.JsonObject().apply { addProperty("name", "Highlight Levers"); addProperty("enabled", on); add("settings", settings) })
         java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
     }
 

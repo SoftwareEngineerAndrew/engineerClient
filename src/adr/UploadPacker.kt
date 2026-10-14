@@ -129,7 +129,7 @@ object UploadPacker {
      * /f list show. Hypixel writes them "From [RANK] name: ...", "To name: ...", "Guild > ...",
      * "Officer > ...", "Co-op > ...", "Friend > ...", or as boxes of several lines - any line of a
      * message being one of these leaves the whole message out. Party chat is only left out with Hide
-     * Private Chats on ([partyChat]): the viewer uses it.
+     * Party Chat on ([partyChat]): the viewer uses it.
      * Used both while recording (Hide Private Chats) and on upload (always).
      */
     private val PRIVATE_LINE = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > |Friend request from |You are now friends with |-*\s*Friends \(Page |Guild Name: |Total Members: |Online Members: |Offline Members: |-- .+ --$)""")
@@ -139,7 +139,7 @@ object UploadPacker {
         PRIVATE_LINE.containsMatchIn(l) || (!l.startsWith("Party > ") && PRIVATE_ANYWHERE.containsMatchIn(l))
     }
 
-    /** Party chat ("Party > [RANK] name: ..."): left out too with Hide Private Chats on. */
+    /** Party chat ("Party > [RANK] name: ..."): left out with Hide Party Chat on. */
     fun partyChat(text: String): Boolean = text.lineSequence().any { it.trim().startsWith("Party > ") }
 
     /** A "chat" line whose message is private (see [privateChat]), or party chat with [party]; one that can't be read is left out too. */

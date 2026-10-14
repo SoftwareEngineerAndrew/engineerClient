@@ -196,7 +196,7 @@ object ConfigMigration {
         return changed
     }
 
-    private val RANDOM_STUFF_RENAMES = mapOf("Hide Scoreboard Lines" to "Clean Scoreboard", "Skip Loading Screen" to "Clean Loading Screen")
+    private val RANDOM_STUFF_RENAMES = mapOf("Hide Scoreboard Lines" to "Clean Scoreboard", "Skip Loading Screen" to "Clean Loading Screen", "Hide Numbers in Numbers" to "Hide Numbers' Numbers")
 
     private val POSMSG_KEYS = mapOf("Posmsg Re-trigger" to "Re-trigger", "Posmsg Here Keybind" to "Box Here Keybind")
 
