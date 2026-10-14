@@ -33,8 +33,6 @@ import net.minecraft.resources.Identifier
 import net.minecraft.world.level.block.LeverBlock
 import net.minecraft.util.ARGB
 import net.minecraft.world.entity.player.Player
-import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.util.Locale
 
@@ -44,7 +42,6 @@ import java.util.Locale
  *
  *  - Term Info HUD: the current section's progress, 3/7 (green once the gate is down), or in
  *    detail its terms, levers, device and gate.
- *  - Hide Completion Titles: the "X activated a terminal! (3/7)" titles, everyone's.
  *  - Numbers 4th/5th: Odin's terminal solver colours only the next 3 Numbers clicks (Order 1-3); this
  *    colours the 4th and 5th too, continuing Odin's fade (NumbersPreviewMixin).
  *  - Section Times: when a section is done, how long it took, in purple, for a few seconds (server ticks). S1 runs
@@ -64,7 +61,6 @@ object TermInfo : Module(
     key = null,
 ) {
     private val simple by BooleanSetting("Simple Mode", false, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
-    private val hideTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening titles.")
     private val sectionTimes by BooleanSetting("Section Times", true, desc = "When a section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.")
     private val sectionSeconds by NumberSetting("Section Time Seconds", 1.5, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionTimes }
     private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.")
@@ -100,7 +96,7 @@ object TermInfo : Module(
     }
     private enum class CoreFill(private val label: String) { SOLID("Solid"), TO_CENTRE("Fade To Crosshair"), TO_EDGE("Fade To Edge"); override fun toString() = label }
     private enum class NamePos(private val label: String) { AREA("Area Middle"), CROSSHAIR("By Crosshair"); override fun toString() = label }
-    private val highlightLevers by BooleanSetting("Highlight Levers", true, desc = "A blue box around each P3 lever's hitbox in F7/M7 boss (and the P3 Sim), so you can see where to click.")
+    private val highlightLevers by BooleanSetting("Highlight Levers", true, desc = "A blue box around each P3 lever's hitbox in F7/M7 boss (and the P3 Sim Beta), so you can see where to click.")
     private val leverColor by ColorSetting("Lever Color", Color(40, 120, 255, 1f), true, desc = "").withDependency { highlightLevers }
     private val leverFill by BooleanSetting("Lever Fill", false, desc = "Fills the box too, faintly.").withDependency { highlightLevers }
     private val leverWalls by BooleanSetting("Levers Through Walls", true, desc = "Drawn over blocks in the way.").withDependency { highlightLevers }
@@ -378,7 +374,7 @@ object TermInfo : Module(
                 val bh = LeapMenu.BOX_HEIGHT
                 val lx = if (right) 0 else -bw
                 val ly = if (bottom) 0 else -bh
-                val scale = com.engineerclient.rotation.LeapHighlight.odinScale()
+                val scale = com.engineerclient.misc.OdinLeapScale.get()
                 gfx.pose().pushMatrix()
                 gfx.pose().translate((cx + sx * 24).toFloat(), (cy + sy * 24).toFloat())
                 gfx.pose().scale(scale, scale)
@@ -566,15 +562,17 @@ object TermInfo : Module(
             }
         }
 
-        onReceive<ClientboundSetTitleTextPacket> { if (hidden(text.string)) it.cancel() }
-        onReceive<ClientboundSetSubtitleTextPacket> { if (hidden(text.string)) it.cancel() }
     }
 
 
 
 
-    private fun hidden(raw: String): Boolean {
-        if (!hideTitles) return false
+    /**
+     * Whether a title or subtitle is a terminal one: "X activated a terminal! (3/7)" and the like while
+     * terminals run (or in the P3 sim), the gate destroyed and core entrance opening ones whenever. For
+     * Coffee Client's Hide Completion Titles.
+     */
+    fun isCompletionTitle(raw: String): Boolean {
         val text = raw.replace(CONTROL_CODES, "")
         // The gate and core titles: by their text, whenever (the core one comes as terminals end).
         if (GATE_CORE_TITLE.containsMatchIn(text)) return true

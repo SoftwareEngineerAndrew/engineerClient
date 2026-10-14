@@ -1,4 +1,7 @@
-package com.engineerclient.rotation
+package com.devgineerclient.rotation
+
+import com.engineerclient.rotation.EcLog
+import com.engineerclient.rotation.P3Sections
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EcConfig
@@ -59,8 +62,8 @@ object SetupCheck {
                 else Item(false, "posmsg \"$text\" missing", "add a /posmsg box with exactly that text")
             }
 
-        items += if (P3Rotation.enabled) Item(true, "EC Dynamic Term Roles on")
-        else Item(false, "EC Dynamic Term Roles is OFF", "enable it in the Engineer Client panel")
+        items += if (P3Rotation.enabled) Item(true, "Dynamic Term Roles on")
+        else Item(false, "Dynamic Term Roles is OFF", "enable it in the Devgineer Client panel")
 
         val mine = RotationSpec.graph.role(EcConfig.data.myStartingRole)
         items += if (mine != null) Item(true, "your starting role: ${mine.name}")

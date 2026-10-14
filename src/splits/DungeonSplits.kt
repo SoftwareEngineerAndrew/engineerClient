@@ -422,7 +422,6 @@ object DungeonSplits : Module(
         if (DungeonUtils.floor?.name?.startsWith("M") == true) {
             subs.onNecronDeath(at)
             OdinSplitsLook.onNecronDead()
-            com.engineerclient.misc.Timers.onNecronDead()
         }
     }
 
