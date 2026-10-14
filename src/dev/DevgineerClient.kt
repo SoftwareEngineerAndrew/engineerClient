@@ -23,14 +23,16 @@ object DevgineerClient : ClientModInitializer {
 
     override fun onInitializeClient() {
         safely("launch timeline") { com.devgineerclient.misc.LaunchTimeline.install() }
-        safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
-        safely("park") { com.devgineerclient.misc.Park.install() }
-        safely("fast exit") { com.devgineerclient.misc.FastExit.install() }
         // Modules that moved here from Engineer Client keep their settings (copied once, before Odin reads this file).
         safely("adopt settings") { adoptSettings("Dynamic Term Roles", "i4 Aim") }
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation)
+        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch)
+        // Fast Launch pieces: after registration, so they can read its (loaded) settings.
+        safely("fast launch default") { com.devgineerclient.misc.FastLaunch.enableByDefault() }
+        safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
+        safely("park") { com.devgineerclient.misc.Park.install() }
+        safely("fast exit") { com.devgineerclient.misc.FastExit.install() }
         safely("leap highlight") { com.devgineerclient.rotation.LeapHighlight.register() }
         safely("role vignette") { com.devgineerclient.rotation.RoleVignette.register() }
         safely("rotation commands") { com.devgineerclient.rotation.RotationCommands.install() }

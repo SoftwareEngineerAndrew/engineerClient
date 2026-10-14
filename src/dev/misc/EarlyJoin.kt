@@ -22,7 +22,7 @@ import net.minecraft.network.protocol.configuration.ClientboundFinishConfigurati
  * to play is held until the load is done (EarlyJoinHoldMixin): the server's play packets wait in the socket, since
  * the connection stops reading at the end of configuration until the client switches over.
  *
- * QuickPlayMixin then skips vanilla's own connect after the load. -Ddc.earlyJoin=false turns it off.
+ * QuickPlayMixin then skips vanilla's own connect after the load. Off: Fast Launch > Early Join, or -Ddc.earlyJoin=false.
  */
 object EarlyJoin {
     /** The early connection was started; vanilla's quick play connect is skipped. */
@@ -34,7 +34,7 @@ object EarlyJoin {
         if (System.getProperty("dc.earlyJoin") == "false") return
         val args = FabricLoader.getInstance().getLaunchArguments(false)
         val address = args.indexOf("--quickPlayMultiplayer").takeIf { it >= 0 }?.let { args.getOrNull(it + 1) } ?: return
-        ClientLifecycleEvents.CLIENT_STARTED.register { mc -> if (!mc.isGameLoadFinished) connect(mc, address) }
+        ClientLifecycleEvents.CLIENT_STARTED.register { mc -> if (!mc.isGameLoadFinished && FastLaunch.earlyJoin) connect(mc, address) }
         ClientTickEvents.END_CLIENT_TICK.register { mc ->
             val (listener, packet) = held ?: return@register
             if (!mc.isGameLoadFinished) return@register
