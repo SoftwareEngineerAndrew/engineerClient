@@ -773,10 +773,16 @@ object DungeonSplits : Module(
      */
     fun typical(floor: String, label: String): SplitPace.Clocks? {
         val id = SplitPace.SPLIT_IDS[label] ?: return null
-        val list = recentView(floor)[id]?.takeIf { it.size >= RECENT_MIN } ?: return null
-        fun median(v: List<Long>) = v.sorted().let { if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2 }
-        return SplitPace.Clocks(median(list.map { it.ms }), median(list.map { it.ticks }))
+        val view = recentView(floor)
+        // Per parsed view (a new one each time the saved text changes), so the medians are sorted once, not every frame.
+        val cache = typicalCache.takeIf { it.first === view } ?: (view to HashMap<String, SplitPace.Clocks?>()).also { typicalCache = it }
+        return cache.second.getOrPut(id) {
+            val list = view[id]?.takeIf { it.size >= RECENT_MIN } ?: return@getOrPut null
+            fun median(v: List<Long>) = v.sorted().let { if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2 }
+            SplitPace.Clocks(median(list.map { it.ms }), median(list.map { it.ticks }))
+        }
     }
+    private var typicalCache: Pair<Map<String, List<SplitPace.Clocks>>, HashMap<String, SplitPace.Clocks?>> = emptyMap<String, List<SplitPace.Clocks>>() to HashMap()
 
     private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
         when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })
