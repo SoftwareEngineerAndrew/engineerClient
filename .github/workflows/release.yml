@@ -1,8 +1,8 @@
 name: Release
 
-# One rolling release per Minecraft version: main is the newest (26.3, release "main"); each older
-# version lives on an mc/<version> branch with its own release ("26.2", "26.1.2"). Every push
-# replaces that branch's release.
+# One rolling release per Minecraft version, named after it ("26.3", "26.2", "26.1.2"): main builds the
+# newest one, marked Latest; each older version lives on an mc/<version> branch. Every push replaces
+# that branch's release.
 on:
   push:
     branches: [main, "mc/**"]
@@ -33,15 +33,16 @@ jobs:
       - name: Version
         run: |
           echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "CHANNEL=${GITHUB_REF_NAME#mc/}" >> "$GITHUB_ENV"
-          echo "MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)" >> "$GITHUB_ENV"
+          MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)
+          echo "MC=$MC" >> "$GITHUB_ENV"
+          echo "CHANNEL=$MC" >> "$GITHUB_ENV"
       - run: gradle build --console=plain -Dorg.gradle.jvmargs=-Xmx2G
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete "release-$CHANNEL" --yes --cleanup-tag || true
-          if [ "$CHANNEL" = main ]; then latest=--latest; else latest=--latest=false; fi
+          if [ "$GITHUB_REF_NAME" = main ]; then latest=--latest; else latest=--latest=false; fi
           # One jar with a fixed name per Minecraft version, so its download link never changes:
           # releases/download/release-<channel>/EngineerClient-<mc>.jar
           jar="EngineerClient-$MC.jar"
