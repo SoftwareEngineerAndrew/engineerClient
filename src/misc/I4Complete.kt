@@ -20,8 +20,9 @@ import net.minecraft.world.phys.AABB
  *  - Device tag: the device's stand turning "Active" (Hypixel renames its stands on a 20-tick grid, so up to a
  *    second later).
  *
- * No guess from the board going dark: it lights on a 500 ms wall-clock grid that drifts from server ticks under lag,
- * so a next target can arrive after any tick-based deadline and the title fired early.
+ * No guess from the board going dark: the next emerald takes 1-10 server ticks after a count, with one tick of slack
+ * against when the client sees each tick, so that deadline fired the title before the device was done; the chat
+ * comes in the tick of the last hit anyway.
  */
 object I4Complete {
     private const val TITLE = "§a§li4 Complete!"
