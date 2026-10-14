@@ -7,6 +7,7 @@ import com.odtheking.odin.features.ModuleManager
 import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.StringWidget
+import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.layouts.FrameLayout
 import net.minecraft.client.gui.layouts.LayoutElement
@@ -49,12 +50,14 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
         addRenderableWidget(Button.builder(Component.literal("§aRestart P3")) {
             mc.setScreen(null)
-            SimServer.run("restart") { Fight.start(Fight.Start.P3) }
-        }.tooltip(tip("Starts P3 over from its beginning, everything reset (Stop: ends it).")).bounds(cx - RESTART_W / 2, restartY, RESTART_W, 20).build())
+            SimActions.send("start", "what" to Fight.Start.P3.name)
+        }.tooltip(tip("Starts P3 over from its beginning, everything reset (Stop: ends it)." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY, RESTART_W, 20).build())
         addRenderableWidget(Button.builder(Component.literal("§cStop")) {
             mc.setScreen(null)
-            SimServer.run("stop") { Fight.end() }
-        }.tooltip(tip("Ends the run: the fight stops and the splits clear.")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
+            SimActions.send("stop")
+        }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
+
+        party()
 
         // Left: the tabs, Practice level with Restart, Teleport and Settings above it.
         tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 2 * ROW)
@@ -77,15 +80,23 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             }.tooltip(tip("$about Your jobs become your class's role in it.")).bounds(right, skillY + k * ROW, SIDE_W, 20).build())
         }
 
-        // Right of it: your role (class), one above the other; a bot plays each of the others.
+        // Right of it: your role (class), one above the other; a bot plays each of the others (in a party: the
+        // classes nobody plays). A class another player has is shown with their name: taking it swaps you.
         title("§eRole", roleX, CLASS_W, roleY)
         val roles = P3Plan.preset().roles
         Party.CLASSES.forEachIndexed { i, c ->
-            addRenderableWidget(Button.builder(Component.literal(if (c == P3Sim.myClass) "§a§n${Roles.label(c)}" else Roles.label(c))) {
-                P3Sim.classS.index = i
+            val other = PartyClient.team.firstOrNull { it.player && it.clazz == c }
+            val text = when {
+                c == P3Sim.myClass -> "§a§n${Roles.label(c)}"
+                other != null -> "§b${Roles.label(c).take(4)} §7${other.name.take(6)}"
+                else -> Roles.label(c)
+            }
+            addRenderableWidget(Button.builder(Component.literal(text)) {
+                P3Sim.classS.value = i
                 ModuleManager.saveConfigurations()
                 rebuildWidgets()
-            }.tooltip(tip("Play as ${Roles.label(c)}: your jobs become its ${P3Plan.skillName()} role (${roles[c] ?: "none"}); a bot plays each of the other classes."))
+            }.tooltip(tip(if (other != null) "${other.name} plays the ${Roles.label(c)}. Click: you take it and they get yours (${Roles.label(P3Sim.myClass)})."
+                else "Play as ${Roles.label(c)}: your jobs become its ${P3Plan.skillName()} role (${roles[c] ?: "none"}); a bot plays each class no player plays."))
                 .bounds(roleX, roleY + i * ROW, CLASS_W, 20).build())
         }
 
@@ -260,22 +271,23 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         speedRow.addChild(change("-", 54, "10 less speed.") { setSpeed(P3Sim.speed - 10) })
         speedRow.addChild(change("+", 54, "10 more speed.") { setSpeed(P3Sim.speed + 10) })
         // Your hotbar: P1/P2's or P3's, whichever part of the fight you are in (HotbarLayout).
-        val p3Part = Fight.phase !is P1Maxor && Fight.phase !is P2Storm
+        val p3Part = PartyClient.phase != "P1" && PartyClient.phase != "P2"
         val part = if (p3Part) "P3" else "P1/P2"
         val saved = HotbarLayout.has(p3Part)
         row(listOf(
             stack("§eDeath Ticks", 84, P3Sim.deathTicksS.description, DEATH_TICKS.mapIndexed { i, (name, about) ->
-                change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.index = i }
+                change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.value = i }
             } + listOf(
-                toggle("Real Masks", P3Sim.realMasks, 84, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasks; server { Sim.player?.let { Masks.equip(it) } } },
-                change("Mask: ${if (P3Sim.wornMaskS.index == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.index = 1 - P3Sim.wornMaskS.index; server { Sim.player?.let { Masks.equip(it) } } },
-                change("Pet: ${if (P3Sim.phoenix) "Phoenix" else "Black Cat"}", 84, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenix; server { Sim.player?.let { Fight.applySpeed(it) } } },
+                // Your own (the server puts them on you the moment they change: PartyServer.tick).
+                toggle("Real Masks", P3Sim.realMasksS.value, 84, P3Sim.realMasksS.description) { P3Sim.realMasksS.value = !P3Sim.realMasksS.value },
+                change("Mask: ${if (P3Sim.wornMaskS.value == 0) "Spirit" else "Bonzo"}", 84, P3Sim.wornMaskS.description) { P3Sim.wornMaskS.value = 1 - P3Sim.wornMaskS.value },
+                change("Pet: ${if (P3Sim.phoenixS.value) "Phoenix" else "Black Cat"}", 84, P3Sim.phoenixS.description) { P3Sim.phoenixS.value = !P3Sim.phoenixS.value },
             )),
             // Terminals: random or one type for all.
             stack("§eTerminals", 66, P3Sim.terminalS.description, listOf(
-                change(pick("Random", forced == null), 66, "Each terminal a random type, as on Hypixel.") { P3Sim.terminalS.index = 0 },
+                change(pick("Random", forced == null), 66, "Each terminal a random type, as on Hypixel.") { P3Sim.terminalS.value = 0 },
             ) + Terminals.Type.entries.map { t ->
-                change(pick(TYPE_NAMES.getValue(t).first, forced == t), 66, TYPE_NAMES.getValue(t).second) { lastType = t; P3Sim.terminalS.index = t.ordinal + 1 }
+                change(pick(TYPE_NAMES.getValue(t).first, forced == t), 66, TYPE_NAMES.getValue(t).second) { lastType = t; P3Sim.terminalS.value = t.ordinal + 1 }
             }),
             stack("§eSpeed", 110, P3Sim.speedS.description, listOf(
                 SpeedSlider(110),
@@ -285,16 +297,18 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                 toggle("No Melodies", P3Sim.noMelodies, 110, P3Sim.noMelodiesS.description) { P3Sim.noMelodiesS.value = !P3Sim.noMelodies },
                 toggle("Click Limit", P3Sim.clickLimitS.value, 110, P3Sim.clickLimitS.description) { P3Sim.clickLimitS.value = !P3Sim.clickLimitS.value },
                 LuckSlider(110),
+                LuckSlider(110, "SS Luck", P3Sim.ssLuckS),
                 toggle("1st Click Melody", P3Sim.firstClickMelody, 110, "Always First Click Melody: " + P3Sim.firstClickMelodyS.description) { P3Sim.firstClickMelodyS.value = !P3Sim.firstClickMelody },
             )),
             stack("§eTimings", 106, "The fight's numbers.", listOf(
                 stepper("Goldor kill", "${P3Sim.goldorKill}t", P3Sim.goldorKillS.description, { P3Sim.goldorKillS.value = (P3Sim.goldorKill - 1).coerceAtLeast(10) }, { P3Sim.goldorKillS.value = (P3Sim.goldorKill + 1).coerceAtMost(120) }),
                 stepper("Shortbow", "${P3Sim.shortbowCooldown}t", P3Sim.shortbowCooldownS.description, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown - 1).coerceAtLeast(1) }, { P3Sim.shortbowCooldownS.value = (P3Sim.shortbowCooldown + 1).coerceAtMost(20) }),
                 stepper("Hydra", "${P3Sim.hydraStart}", P3Sim.hydraStartS.description, { P3Sim.hydraStartS.value = (P3Sim.hydraStart - 1).coerceAtLeast(0) }, { P3Sim.hydraStartS.value = (P3Sim.hydraStart + 1).coerceAtMost(10) }),
+                toggle("Mage On All", P3Sim.mageAll, 106, "Mage Beam On All Classes: " + P3Sim.mageAllS.description) { P3Sim.mageAllS.value = !P3Sim.mageAll },
                 toggle("Infinite Charges", P3Sim.breakerInfinite, 106, "On (green): the Dungeonbreaker never runs out of charges.") { P3Sim.toggleBreakerInfinite() },
                 toggle("Perma Break", P3Sim.breakerPerma, 106, "On (green): blocks the Dungeonbreaker breaks stay broken (through restarts too) until you turn it off; then they all come back.") {
+                    // Off: the server brings the blocks back (PartyServer.tick).
                     P3Sim.toggleBreakerPerma()
-                    if (!P3Sim.breakerPerma) server { SimItems.unPerma() }
                 },
             )),
             stack("§eFight", 92, "How the fight goes on.", listOf(
@@ -308,12 +322,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             )),
             stack("§eOther", 100, "Your hotbar, recording, leaving.", listOf(
                 act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet: every $part hotbar reset (a start, Reset Items) lays them out so. Arrange them first.") {
-                    server { Sim.player?.let { EngineerClient.msg(HotbarLayout.save(it, p3Part)) } }
+                    SimActions.send("hotbarSave", "p3" to p3Part)
                 },
                 act("Default Hotbar", 100, "Forgets your saved $part layout: its resets go back to the sim's default.") {
-                    server { EngineerClient.msg(HotbarLayout.reset(p3Part)) }
+                    SimActions.send("hotbarReset", "p3" to p3Part)
                 }.also { it.active = saved },
-                act("Reset Items", 100, "Your hotbar back as it is at a start.") { server { Sim.player?.let { SimItems.giveHotbar(it, p3Part) } } },
+                act("Reset Items", 100, "Your hotbar back as it is at a start.") { SimActions.send("resetItems", "p3" to p3Part) },
                 toggle("Record", P3Sim.record, 100, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
                 act("§7Leave", 100, "Leaves the sim world.") { SimWorld.leave() },
             )),
@@ -340,9 +354,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     private fun setSpeed(v: Int) {
         val s = v.coerceIn(MIN_SPEED, MAX_SPEED)
         if (s == P3Sim.speed) return
+        // Now, not at the next start: the server applies it the moment it changes (PartyServer.tick: Fight.applySpeed).
         P3Sim.speedS.value = s
-        // Now, not at the next start: Black Cat's +100 and the speed cap come with it (Fight.applySpeed).
-        server { Sim.player?.let { Fight.applySpeed(it) } }
     }
 
     /** Your speed, 100 to 750 in steps of 10. */
@@ -353,20 +366,21 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         }
         private fun speed() = MIN_SPEED + Math.round(value * (MAX_SPEED - MIN_SPEED) / 10).toInt() * 10
         override fun updateMessage() {
-            message = Component.literal("Speed: ${speed()}" + if (P3Sim.phoenix) " §8(Phoenix out)" else " §8(${speed() + 100} with Black Cat)")
+            message = Component.literal("Speed: ${speed()}" + if (P3Sim.phoenixS.value) " §8(Phoenix out)" else " §8(${speed() + 100} with Black Cat)")
         }
         override fun applyValue() = setSpeed(speed())
     }
 
-    /** Terminal Luck, 0 to 100% in fives. */
-    private inner class LuckSlider(w: Int) : AbstractSliderButton(0, 0, w, 20, Component.empty(), P3Sim.termLuck) {
+    /** A luck setting ([s]: Terminal Luck, SS Luck), -100 to 100% in fives. */
+    private inner class LuckSlider(w: Int, private val name: String = "Luck", private val s: com.odtheking.odin.clickgui.settings.impl.NumberSetting<*> = P3Sim.termLuckS) :
+        AbstractSliderButton(0, 0, w, 20, Component.empty(), (s.value.toDouble() / 100 + 1) / 2) {
         init {
             updateMessage()
-            setTooltip(tip(P3Sim.termLuckS.description))
+            setTooltip(tip(s.description))
         }
-        private fun luck() = Math.round(value * 20).toInt() * 5
-        override fun updateMessage() { message = Component.literal("Luck: ${luck()}%") }
-        override fun applyValue() { P3Sim.termLuckS.value = luck(); ModuleManager.saveConfigurations() }
+        private fun luck() = Math.round(value * 40).toInt() * 5 - 100
+        override fun updateMessage() { message = Component.literal("$name: ${if (luck() < 0) "§c" else ""}${luck()}%") }
+        override fun applyValue() { @Suppress("UNCHECKED_CAST") (s as com.odtheking.odin.clickgui.settings.impl.NumberSetting<Int>).value = luck(); ModuleManager.saveConfigurations() }
     }
 
     /** Practice's start timer, 0 to 5 s in tenths. */
@@ -400,10 +414,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         row(cols)
     }
 
-    private fun tp(x: Double, y: Double, z: Double, yaw: Float?, pitch: Float?) = server {
-        GhostCapture.invalidate("a menu teleport")
-        Sim.player?.let { Sim.tp(it, x, y, z, yaw, pitch) }
-    }
+    private fun tp(x: Double, y: Double, z: Double, yaw: Float?, pitch: Float?) =
+        SimActions.send("tp", "x" to x, "y" to y, "z" to z, "yaw" to yaw, "pitch" to pitch)
 
     private fun xyz(x: Double, y: Double, z: Double) = "%.1f, %.1f, %.1f".format(Locale.ROOT, x, y, z)
 
@@ -424,7 +436,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             change(if (start != null) "§aStart Position" else "Start Position", 100,
                 "Click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
                     (start?.let { "Now: S${Practice.customSection}, ${at(it)}." } ?: "Not set.")) {
-                here()?.let { h -> val n = Practice.setStart(h); EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}.") }
+                here()?.let { h ->
+                    val held = mc.player?.mainHandItem
+                    val n = Practice.setStart(h, held?.let { Practice.itemKey(it) })
+                    EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}${held?.takeIf { !it.isEmpty }?.let { "§7, holding §f${it.hoverName.string}" } ?: ""}§7.")
+                }
             },
             ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
                 tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: removes the last one. Now: $cps."),
@@ -448,9 +464,18 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                     Practice.removeLeapWaypoint(); rebuildWidgets()
                 }),
             change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
+            change("Export", 100, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
+                val code = Practice.exportCode()
+                mc.keyboardHandler.clipboard = code
+                EngineerClient.msg("§7Custom practice code copied: §f$code")
+            },
+            change("Import", 100, "Replaces your custom practice with the code on your clipboard.") {
+                if (Practice.importCode(mc.keyboardHandler.clipboard)) EngineerClient.msg("§7Custom practice imported (S${Practice.customSection}, ${Practice.customJobs.size} job(s), ${Practice.checkpoints.size} checkpoint(s), ${Practice.leapWaypoints.size} leap waypoint(s)).")
+                else EngineerClient.msg("§cYour clipboard doesn't hold a custom practice code.")
+            },
             DelaySlider(100),
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
-                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { server { Practice.startCustom() } }
+                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { SimActions.send("practiceCustom") }
                 .also { it.active = start != null },
         ))
         val others = (1..4).filter { it != sec }.mapNotNull { s -> Practice.customJobsIn(s).takeIf { it.isNotEmpty() }?.let { j -> "S$s ${j.joinToString(" ") { COLUMNS[column(it)].first }}" } }.joinToString(", ")
@@ -470,7 +495,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                 cols += stack(if (i == 0) "§eS$ps Presets" else "", 64, "Section $ps's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
                     act(p.name, 64, "Practice ${p.name} (S$ps): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                         (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
-                        (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { server { Practice.startPreset(p.name) } }
+                        (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
                 })
             }
         }
@@ -481,6 +506,30 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     }
 
     // ------------------------------------------------------------------ pieces
+
+    /** Top right: a party - host yours (a code for friends), or join one by its code. */
+    private fun party() {
+        val x = width - PARTY_W - 6
+        var y = 6
+        fun line(t: String) { addRenderableWidget(StringWidget(Component.literal(t), font).also { it.setPosition(x, y + 6) }); y += 20 }
+        if (P3Party.hosting) {
+            val names = P3Party.players()
+            line("Party code: ${P3Party.code?.let { "§b§l$it" } ?: "§7..."}")
+            line("§7${names.joinToString(", ").ifEmpty { "Just you" }} §8${names.size.coerceAtLeast(1)}/5")
+            addRenderableWidget(Button.builder(Component.literal("Close Party")) { P3Party.stopHosting(); rebuildWidgets() }
+                .tooltip(tip("Drops everyone who joined; your sim goes on.")).bounds(x, y, PARTY_W, 20).build())
+            return
+        }
+        addRenderableWidget(Button.builder(Component.literal("Host Party")) { P3Party.host(); rebuildWidgets() }
+            .tooltip(tip("Friends join your sim: you get a 4-letter code to send them.")).bounds(x, y, PARTY_W, 20).build())
+        y += ROW
+        val box = EditBox(font, x, y, PARTY_W - 42, 20, Component.literal("Code"))
+        box.setMaxLength(4)
+        box.setHint(Component.literal("§8Code"))
+        addRenderableWidget(box)
+        addRenderableWidget(Button.builder(Component.literal("Join")) { if (box.value.isNotBlank()) { mc.setScreen(null); P3Party.join(box.value) } }
+            .tooltip(tip("Joins a friend's sim by its party code.")).bounds(x + PARTY_W - 40, y, 40, 20).build())
+    }
 
     private fun text(t: String) { panel.addChild(StringWidget(Component.literal(t), font)) }
 
@@ -526,7 +575,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     private fun onOff(b: Boolean) = if (b) "§aON" else "§cOFF"
 
-    private fun server(run: () -> Unit) = SimServer.run("menu") { run() }
+    /** In a party: more than one player in the sim (starts and stops are everyone's). */
+    private val inParty get() = PartyClient.party
 
     /** A button that takes right clicks too ([left] / [right]). */
     private class ClickButton(w: Int, text: String, tooltip: Tooltip, private val left: () -> Unit, private val right: () -> Unit) :
@@ -550,6 +600,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     private companion object {
         const val RESTART_W = 100
+        const val PARTY_W = 130
         val QUADRANTS = listOf("top left", "top right", "bottom left", "bottom right")
         /** The plan's and Advanced's height (5 rows) plus a gap: where the Advanced button goes. */
         const val PANEL_H = 6 * 20 + 5 * 2 + 4

@@ -132,12 +132,12 @@ object Blocks {
         }
     }
 
-    /** Jumps [name] to its end state at once (starting a phase past it); once per fight. */
-    fun finish(name: String) {
+    /** Jumps [name] to its end state at once (starting a phase past it); once per fight. [exclude]: positions left as they are. */
+    fun finish(name: String, exclude: Set<BlockPos> = emptySet()) {
         val a = library[name] ?: return
         if (!done.add(name)) return
         val p = Playing(a, 0)
-        a.frames.forEachIndexed { i, f -> if (!p.skip[i]) set(f.pos, f.state) }
+        a.frames.forEachIndexed { i, f -> if (!p.skip[i] && f.pos !in exclude) set(f.pos, f.state) }
     }
 
     /** Stops [name] where it is (the strip when Maxor dies). */

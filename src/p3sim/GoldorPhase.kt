@@ -56,7 +56,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private var everyoneInAt = -1
     private var deadAt = -1
     /** Frenzy hits in a row (the third one kills you on main, the second on alpha). */
-    private var frenzyHits = 0
+    private var frenzyHits by perPlayer { 0 }
     private var arrivedAt = -1
     private var necronAt = -1
     private var p3endAt = -1
@@ -97,6 +97,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 val spot = Practice.startSpot()
                 Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                 SimItems.giveHotbar(player, p3 = true)
+                Practice.holdStartItem(player)
             }
             Practice.hold(holdFor)
             return
@@ -113,21 +114,25 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // n = startN now, whenever that is (a start timer's ticks don't count).
         nOffset = startN - t
         arenaReplay?.begin(startN)
-        // Earlier sections: done, their gates and doors open, as if a party had just done them.
+        // Earlier sections: done, their gates and doors open, as if a party had just done them (practice: no gate's
+        // blocks ever go; it counts as blown).
         for (s in 1 until from.coerceAtMost(5)) {
             stations.filter { it.section == s }.forEach { doneAlready(it) }
             gateDown[s] = true; doorOpen[s] = true
-            if (s <= 3) { Blocks.finish("gate${s}${s + 1}"); Blocks.finish("door$s") }
+            if (s <= 3) {
+                if (!practice) Blocks.finish("gate${s}${s + 1}")
+                Blocks.finish("door$s", exclude = if (practice) gateBlocks(s) else emptySet())
+            }
             sectionEnd[s] = startN
         }
         if (from >= 2) Blocks.finish("p3start")
         // Practice: the rest of the party's part done, in this section and on to the practice's last (a custom one can
-        // run across several), the gates too unless they're yours.
+        // run across several), the gates too unless they're yours (blown, their blocks still up).
         if (practice) {
             val jobs = Practice.practiceJobs()
             for (s in from..Practice.lastSection().coerceIn(from, 4)) {
                 stations.filter { it.section == s && it.id !in jobs }.forEach { doneAlready(it) }
-                if (s <= 3 && "gate $s" !in jobs) { gateDown[s] = true; Blocks.finish("gate$s${s + 1}") }
+                if (s <= 3 && "gate $s" !in jobs) gateDown[s] = true
             }
         }
         section = from.coerceAtMost(5)
@@ -135,12 +140,14 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         goldor.spawn(startN, bar = !(from == 1 && arrived))
         Party.startP3(this)
         GhostCapture.start(this)
-        Sim.player?.let { player ->
+        // Everyone on their own spawn (a joiner's: their plan's), with the P3 bar.
+        Sim.forEachPlayer { player ->
             if (!arrived) {
-                if (!held) {
-                    val spot = if (practice) Practice.startSpot() else Spots.p3Start(from)
+                if (!held || !Sim.isHost(player)) {
+                    val spot = if (practice && Sim.isHost(player)) Practice.startSpot() else Spots.p3Start(from)
                     Sim.tp(player, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
                     SimItems.giveHotbar(player, p3 = true)
+                    if (practice && Sim.isHost(player)) Practice.holdStartItem(player)
                 }
             } else {
                 // From Storm: the Superboom onto the bar where the Hyperion was (a swap: with a saved
@@ -173,10 +180,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
           }
           if (arrived) Fight.later(LEAD_IN, "who dares") { if (Fight.phase === this) opening() } else opening()
         } else if (from == 5) {
-            com.engineerclient.practice.TermInfo.simStart(5)
+            PartyClient.send("termStart", 5)
             openCore()
         } else {
-            com.engineerclient.practice.TermInfo.simStart(from)
+            PartyClient.send("termStart", from)
             maybeTaunt()
             if (!practice) Sim.note("Starting at §fS$from§7 (n = $startN, the median fast run's).")
         }
@@ -213,7 +220,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (n == -1) goldor.tick(this)   // he moves from n=-1
         if (n < 0) return
         devices.tick()
-        innerChamber()
+        Sim.forEachPlayer { innerChamber(it) }
         tauntAt.remove(n)?.let { if (section <= 4) say(it) }
         dialogue()
         // Stand names refresh on a 20-tick grid.
@@ -231,7 +238,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         goldor.tick(this)
         // Main re-sends Goldor's bar (name, style, progress) once a second all P3 long.
         if (n > 0 && n % 20 == 0) BossBar.resend()
-        if (section in 1..4 && goldorSeg() == section) goldorReached[section] = true
+        // His start stretch (the S4 line, first lap) isn't reaching S4: a fast run starts S4 while he's still on it, and
+        // he'd walk off it straight away, making S4 lethal all through.
+        if (section in 1..4 && goldorSeg() == section && !(section == 4 && goldor.firstLap)) goldorReached[section] = true
         // He breaks no blocks (no carving; the replay takes no built block). The TNT cubes (one 27-block cube per 200-tick slot in about
         // half the runs), the granite blobs, the lantern burst and the S4 plate follow one recorded run.
         arenaReplay?.tick(n)
@@ -247,10 +256,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
      * Walking north out of the core through its (mined) door hole puts you back at about (54.5, 115, 58.3)
      * with the enderman.teleport (far off, vol 8, pitch 0) and the chat line, every 20 ticks while you keep going.
      */
-    private var lastIn: Vec3? = null
-    private var innerAt = -100
-    private fun innerChamber() {
-        val p = Sim.player ?: return
+    private var lastIn: Vec3? by perPlayer { null }
+    private var innerAt by perPlayer { -100 }
+    private fun innerChamber(p: net.minecraft.server.level.ServerPlayer) {
         val was = lastIn; val now = p.position(); lastIn = now
         // From S4's start until Goldor takes off for the core (not at the opening), nothing gets you out of the inner chamber: any move from inside
         // CORE_BOX to outside it (a step, a leap, a teleport) snaps you back. Coming in from outside is free
@@ -327,12 +335,15 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         val k = count(shown)
         val line = progressLine(by, what, k, Station.total(shown))
         // Someone else finishing the terminal you're in closes your window first, in the same tick.
-        if (by != Sim.me && st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st)
-        if (by == Sim.me) { Stats.done(); GhostCapture.event("done", st.id) }
+        if (st.kind == Station.Kind.TERMINAL) Terminals.closeFor(st, except = Sim.players().firstOrNull { it.gameProfile.name == by })
+        // Your stats and recording are the host's.
+        if (by == Sim.hostName) { Stats.done(); GhostCapture.event("done", st.id) }
         // [twice]: Hypixel processes a Lights left click twice, so the announcement goes out again in the same tick
-        // (counted once).
-        repeat(if (twice) 2 else 1) { announce(line) }
-        if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
+        // (counted once). Everyone sees it.
+        Sim.everyone {
+            repeat(if (twice) 2 else 1) { announce(line) }
+            if (inProgress && count(section) >= Station.total(section)) sectionDone(section)
+        }
     }
 
     /** A progress line as Hypixel sends it, in its order: chat, title/subtitle, pling. */
@@ -365,9 +376,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** One per door (S1-S3), any of the three whatever the section. */
     private val SECTION_LINES = listOf("The little ants have a brain it seems.", "I will replace that gate with a stronger one!", "YOUR END IS NEAR!!")
 
-    private fun sectionDone(s: Int) {
+    private fun sectionDone(s: Int): Unit = Sim.everyone {
         sectionEnd[s] = n
-        if (s == 4) { openCore(); return }
+        if (s == 4) { openCore(); return@everyone }
         if (gateDown[s]) openDoor(s)
         else {
             Sim.chat("§aThe gate will open in 5 seconds!")
@@ -388,16 +399,13 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
     }
 
-    private fun openDoor(s: Int) {
-        if (doorOpen[s]) return
+    private fun openDoor(s: Int): Unit = Sim.everyone {
+        if (doorOpen[s]) return@everyone
         doorOpen[s] = true
         // Blocks change 1 tick after the chat line (gates, doors and the core alike). Practice: only a door on the
         // way (before its last section) opens, and never takes the gate's blocks with it (they stay in practice).
         if (!practice || s < Practice.lastSection()) {
-            val gate = if (!practice || s > 3) emptySet() else
-                (Blocks.anim("gate$s${s + 1}")?.frames?.map { it.pos }.orEmpty() +
-                    BlockPos.betweenClosedStream(GATE_BOXES[s].inflate(0.5)).map { it.immutable() }.toList()).toSet()
-            Blocks.play("door$s", exclude = gate, delay = 1)
+            Blocks.play("door$s", exclude = if (!practice || s > 3) emptySet() else gateBlocks(s), delay = 1)
             if (s == 1) Blocks.play("ss_s1done", delay = 1)
         }
         // His section line is queued with the door (the later of the last completion and the gate).
@@ -414,13 +422,18 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (count(section) >= Station.total(section)) sectionDone(section)
     }
 
+    /** Gate [s]'s blocks (its animation's and its box's), which stay in practice. */
+    private fun gateBlocks(s: Int): Set<BlockPos> =
+        (Blocks.anim("gate$s${s + 1}")?.frames?.map { it.pos }.orEmpty() +
+            BlockPos.betweenClosedStream(GATE_BOXES[s].inflate(0.5)).map { it.immutable() }.toList()).toSet()
+
     /** Blows gate [s] (between S[s] and S[s+1]) if it can go now. [by]: who, null when it goes by itself. */
-    fun blowGate(s: Int, by: String?): Boolean {
-        if (s !in 1..3 || gateDown[s] || holding) return false
-        if (by != null && section < s) return false
+    fun blowGate(s: Int, by: String?): Boolean = Sim.everyone {
+        if (s !in 1..3 || gateDown[s] || holding) return@everyone false
+        if (by != null && section < s) return@everyone false
         gateDown[s] = true
         gateAt[s] = n
-        if (by == Sim.me) GhostCapture.event("gate", k = s)
+        if (by == Sim.hostName) GhostCapture.event("gate", k = s)
         Sim.chat("§aThe gate has been destroyed!")
         // Hypixel: an empty title and the subtitle on the same tick.
         Sim.title("", "§aThe gate has been destroyed!", 0, 40, 0)
@@ -430,7 +443,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Practice: the gate's blocks stay, even when you blow it (it still counts as blown).
         if (!practice) Blocks.play("gate$s${s + 1}", delay = 1)
         if (sectionEnd[s] >= 0) openDoor(s)
-        return true
+        true
     }
 
     /** The gate whose blocks are within [r] of [p], or 0. */
@@ -441,8 +454,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     // ------------------------------------------------------------------ death ticks
 
-    private fun deathTick() {
-        val p = Sim.player ?: return
+    /** Each player's own death tick (where they stand). */
+    private fun deathTick() = Sim.forEachPlayer { deathTick(it) }
+
+    private fun deathTick(p: net.minecraft.server.level.ServerPlayer) {
         if (p.isSpectator || p.isCreative || Masks.ghost) return   // the Creeper Veil does not stop death ticks
         // The server's view of you, about one one-way latency late.
         val seen = Fight.seenPos(p)
@@ -461,7 +476,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // Death Ticks: Off: nothing at all.
         if (P3Sim.deathTicks == 0) return
         deaths++
-        Stats.deathTick()
+        if (Sim.isHost(p)) Stats.deathTick()
         // No line stand for death ticks. Quiet wither.ambient 1/1 HOSTILE at you, not the loud boss sound;
         // after the death/proc chat and sounds.
         val line = {
@@ -478,7 +493,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     // ------------------------------------------------------------------ the core
 
-    private fun openCore() {
+    private fun openCore(): Unit = Sim.everyone {
         section = 5
         coreAt = n
         Sim.chat("§aThe Core entrance is opening!")
@@ -489,10 +504,10 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Stats.p3(n)
     }
 
-    /** True when everyone (you and the bots) is in the core. */
+    /** True when everyone (the players and the bots) is in the core. */
     private fun everyoneIn(): Boolean {
-        val p = Sim.player ?: return false
-        if (!CORE_BOX.contains(Fight.seenPos(p))) return false
+        val ps = Sim.players()
+        if (ps.isEmpty() || ps.any { !CORE_BOX.contains(Fight.seenPos(it)) }) return false
         return Party.allIn(CORE_BOX)
     }
 
@@ -515,7 +530,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         }
         goldor.barTick(n)
         // Frenzy: every 10 ticks (on n % 10 == 7, main) while you're 2-14 blocks from him.
-        if (deadAt < 0 && n % 10 == 7) Sim.player?.let { p ->
+        if (deadAt < 0 && n % 10 == 7) Sim.forEachPlayer { p ->
             val d = p.position().distanceTo(goldor.position)
             if (Masks.ghost || p.isSpectator || p.isCreative || d !in 2.0..14.0) frenzyHits = 0
             else {
@@ -729,7 +744,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                 // The party hitting him from the moment he leaves: the red hurt flash every few ticks.
                 if (n >= nextHurt) {
                     nextHurt = n + 2 + kotlin.random.Random.nextInt(11)
-                    Sim.player?.connection?.send(net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket(boss.e))
+                    Sim.players().forEach { it.connection.send(net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket(boss.e)) }
                 }
                 if (!arrived) {
                     val to = CORE_POINT.subtract(pos)

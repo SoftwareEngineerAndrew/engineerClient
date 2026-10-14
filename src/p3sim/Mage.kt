@@ -24,8 +24,10 @@ import kotlin.math.sin
  * by blocks). It lands at most once every 4 ticks; a hit plays the victim's hurt sound at your feet a tick later.
  *
  * Guided Sheep (the regular ability): Ctrl+Q ("Used Guided Sheep!"), or a burst of 3 beam clicks 2-5 ticks apart
- * (a tick after the third, no line). A white sheep from your feet (+0.78, ghast.shoot 0.3 at you) flies ~0.9 a
- * tick, steered by your look, a little below it; it explodes on a block or a boss (generic.explode, the hit line)
+ * (a tick after the third, no line). A white sheep from your feet (+0.78, ghast.shoot 0.3 at you) flies exactly
+ * 1 block a tick along your look (its positions; the motion Hypixel sends with it, ~0.9 a little below the look,
+ * isn't what it does), with a 3-block surge at ticks 4-6 (13 blocks out at 10 ticks, 28 at 25); it explodes on
+ * a block or a boss (generic.explode, the hit line)
  * or after 60 ticks, and is gone a tick later. Ready again 139 ticks on ("Guided Sheep is now available!").
  */
 object Mage {
@@ -35,14 +37,17 @@ object Mage {
     const val BEAM_RANGE = 40.0
     private const val BEAM_GAP = 4
     private const val SHEEP_COOLDOWN = 139
-    private const val SHEEP_SPEED = 0.9
+    private const val SHEEP_SPEED = 1.0
+    /** The ticks of the sheep's life it covers 2 blocks instead of 1. */
+    private val SHEEP_SURGE = 4..6
     private const val SHEEP_LIFE = 60
 
-    private var beamReady = 0
+    // Each player's own ([perPlayer]): their beam, sheep and cooldowns.
+    private var beamReady by perPlayer { 0 }
     /** The server ticks of the last beam clicks (for the sheep's burst). */
-    private val clicks = ArrayDeque<Int>()
-    private var sheepReady = 0
-    private var readyNoted = true
+    private val clicks: ArrayDeque<Int> by perPlayer { ArrayDeque() }
+    private var sheepReady by perPlayer { 0 }
+    private var readyNoted by perPlayer { true }
 
     /** A sheep that can't push you, be pushed or be aimed at. */
     class GhostSheep(level: net.minecraft.world.level.Level) : Sheep(EntityType.SHEEP, level) {
@@ -53,9 +58,10 @@ object Mage {
     }
 
     private class Flying(val e: Sheep, val at: Int) { var boomAt = -1 }
-    private val sheep = ArrayList<Flying>()
+    private val sheep: ArrayList<Flying> by perPlayer { ArrayList() }
 
-    fun isMage() = P3Sim.myClass == DungeonClass.MAGE
+    /** Mage, or any class with Mage Beam On All Classes: the beam and Guided Sheep are yours. */
+    fun isMage() = P3Sim.myClass == DungeonClass.MAGE || P3Sim.mageAll
 
     fun beamItem(id: String?) = id in BEAM_ITEMS
 
@@ -153,8 +159,8 @@ object Mage {
             val e = f.e
             if (e.isRemoved) { it.remove(); continue }
             if (f.boomAt >= 0) { if (now > f.boomAt) { e.discard(); it.remove() }; continue }
-            // Steered by your look, a little below it (~4.6 degrees), ~0.9 a tick.
-            val v = (p?.let { look(it, 4.6) } ?: e.deltaMovement.normalize()).scale(SHEEP_SPEED)
+            // Steered along your look, 1 a tick (2 in the surge).
+            val v = (p?.let { look(it) } ?: e.deltaMovement.normalize()).scale(SHEEP_SPEED * (if (now - f.at in SHEEP_SURGE) 2 else 1))
             val from = e.position()
             val to = from.add(v)
             val block = Sim.level.clip(ClipContext(from.add(0.0, 0.4, 0.0), to.add(0.0, 0.4, 0.0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, e))

@@ -32,7 +32,8 @@ object Terminals {
     enum class Type(val rows: Int) { ORDER(4), PANES(5), RUBIX(5), STARTS(5), SELECT(6), MELODY(6) }
 
     /** A random draw: the six are equally likely (as measured on first opens). */
-    fun randomType(): Type = Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random()
+    /** A random type, as on Hypixel; Terminal Luck makes a Melody (the slow one) rarer, bad luck more common. */
+    fun randomType(): Type = lucky(10, { t: Type -> if (t == Type.MELODY) 1 else 0 }) { Type.entries.filter { it != Type.MELODY || !P3Sim.noMelodies }.random() }
 
     fun <T> weighted(w: List<Pair<T, Int>>): T {
         var r = kotlin.random.Random.nextInt(w.sumOf { it.second })
@@ -40,26 +41,31 @@ object Terminals {
         return w.last().first
     }
 
+    /** A fractional count, rounded up by chance (2.3: 3 three times in ten), so the luck steps along smoothly. */
+    private fun chance(x: Double): Int = x.toInt() + if (Random.nextDouble() < x - x.toInt()) 1 else 0
+
     /**
-     * Terminal Luck: of 1 draw at 0 up to [most] at full luck (a fractional count by chance), the one [cost]
-     * likes best (fewest clicks, closest numbers).
+     * Terminal Luck, both ways: of 1 draw at 0 up to [most] by 60% (more between), the one [cost] likes best (fewest
+     * clicks, closest numbers); bad luck the one it likes least.
      */
     fun <T> lucky(most: Int, cost: (T) -> Int, draw: () -> T): T {
         val luck = P3Sim.termLuck
-        if (luck <= 0.0) return draw()
-        val want = 1 + luck * (most - 1)
-        val n = want.toInt() + if (Random.nextDouble() < want - want.toInt()) 1 else 0
-        return List(n.coerceAtLeast(1)) { draw() }.minBy(cost)
+        if (luck == 0.0) return draw()
+        val n = chance(1 + (most - 1) * (Math.abs(luck) / 0.6).coerceAtMost(1.0)).coerceAtLeast(1)
+        val draws = List(n) { draw() }
+        return if (luck > 0) draws.minBy(cost) else draws.maxBy(cost)
     }
 
     /**
-     * Terminal Luck past 50%: luckier than Hypixel ever deals. [clicks] shrinks, down to 15% of it (at
-     * least 1) at 100%. Below 50% it stays as drawn.
+     * Terminal Luck past Hypixel's deals: from 40% (either way) [clicks] eases toward the extreme, 1 click at
+     * 100% and [worst] at -100%. Gently at first (squared), so it carries on from [lucky] without a jump.
      */
-    fun beyond(clicks: Int): Int {
-        val f = ((P3Sim.termLuck - 0.5) / 0.5).coerceIn(0.0, 1.0)
+    fun beyond(clicks: Int, worst: Int): Int {
+        val luck = P3Sim.termLuck
+        val f = ((Math.abs(luck) - 0.4) / 0.6).coerceIn(0.0, 1.0).let { it * it }
         if (f <= 0.0) return clicks
-        return Math.round(clicks * (1 - 0.85 * f)).toInt().coerceIn(1, clicks)
+        val to = if (luck > 0) 1 else worst
+        return chance(clicks + (to - clicks) * f).coerceIn(minOf(1, clicks), maxOf(worst, clicks))
     }
 
     /** Item with a non-italic name (in [color] if given, as Hypixel colours most terminal items) and [count]. */
@@ -121,15 +127,18 @@ object Terminals {
         private var next = 1
         init {
             // Luck: the numbers closer together. Swaps that shorten the walk 1 to 10 (or keep it) are kept;
-            // more of them the luckier, up to a neat path (each next one beside the last) at 100%.
+            // more of them the luckier, up to a neat path (each next one beside the last) at 100%. Bad luck: swaps
+            // that lengthen it, up to every next one across the window at -100%.
             val order = slots.shuffled().toMutableList()
-            val steps = (Math.pow(P3Sim.termLuck, 3.0) * 1500).toInt()
+            val luck = P3Sim.termLuck
+            // 1500^|luck| - 1 tries (none at 0, ~38 at 50%): the path shortens (or lengthens) evenly all the way across.
+            val steps = chance(Math.pow(1500.0, Math.abs(luck)) - 1)
             var cost = walk(order)
             repeat(steps) {
                 val i = Random.nextInt(10); val j = Random.nextInt(10)
                 java.util.Collections.swap(order, i, j)
                 val c = walk(order)
-                if (c <= cost) cost = c else java.util.Collections.swap(order, i, j)
+                if (if (luck > 0) c <= cost else c >= cost) cost = c else java.util.Collections.swap(order, i, j)
             }
             order.forEachIndexed { i, s -> items[s] = named(Items.RED_STAINED_GLASS_PANE, "${i + 1}", i + 1, color = net.minecraft.ChatFormatting.GREEN) }
         }
@@ -152,7 +161,7 @@ object Terminals {
         init {
             // 0-9 start On, median 3 (measured).
             val on = lucky(10, { n: Int -> -n }) { weighted(listOf(0 to 8, 1 to 24, 2 to 36, 3 to 44, 4 to 40, 5 to 16, 6 to 5, 7 to 4, 8 to 3, 9 to 1)) }
-                .let { 15 - beyond(15 - it) }
+                .let { 15 - beyond(15 - it, 15) }
             val lit = slots.shuffled().take(on).toSet()
             slots.forEach { items[it] = pane(it in lit) }
         }
@@ -175,7 +184,8 @@ object Terminals {
         init {
             // Boards follow Hypixel's measured fewest-clicks spread (mean ~7.2, easier than 9 free draws'
             // 8.1): free draws until one needs the drawn count.
-            val want = beyond(lucky(10, { n: Int -> n }) { weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2)) })
+            // 10: the most any board needs.
+            val want = beyond(lucky(10, { n: Int -> n }) { weighted(listOf(4 to 3, 5 to 4, 6 to 4, 7 to 6, 8 to 7, 9 to 7, 10 to 2)) }, 10)
             if (want >= 4) do { slots.forEach { colour[it] = Random.nextInt(5) } } while (solved() || minClicks() != want)
             else do {
                 // Luckier than Hypixel deals (1-3): one colour, a few panes a step or two off it.
@@ -217,7 +227,7 @@ object Terminals {
             val wrong = STARTS_POOL.filter { it.second[0] != letter }
             // Items with the letter per window, as measured; each slot's item is uniform.
             val n = lucky(10, { n: Int -> n }) { weighted(listOf(2 to 1, 3 to 5, 4 to 14, 5 to 21, 6 to 32, 7 to 43, 8 to 27, 9 to 20, 10 to 16, 11 to 3, 12 to 4)) }
-                .let { beyond(it) }
+                .let { beyond(it, 16) }
             val picks = (List(n) { right.random() } + List(slots.size - n) { wrong.random() }).shuffled()
             slots.forEachIndexed { i, s -> val (id, name) = picks[i]; items[s] = named(item(id), name, color = net.minecraft.ChatFormatting.GREEN) }
         }
@@ -247,8 +257,8 @@ object Terminals {
             val families = listOf(target) + (COLOURS - target).shuffled().take(4)
             // Luck: the target more likely one of the two colours with 5.
             val sixes = lucky(10, { s: Set<Colour> -> if (target in s) 1 else 0 }) { families.shuffled().take(3).toSet() }
-            // Past 50% luck: fewer of the target, the others sharing the rest of the 28.
-            val mine = beyond(if (target in sixes) 6 else 5)
+            // Past Hypixel's deals: fewer of the target (more with bad luck), the others sharing the rest of the 28.
+            val mine = beyond(if (target in sixes) 6 else 5, 12)
             val others = families - target
             val sizes = if (mine == (if (target in sixes) 6 else 5)) families.associateWith { if (it in sixes) 6 else 5 }
                 else (others.mapIndexed { i, c -> c to (28 - mine) / 4 + if (i < (28 - mine) % 4) 1 else 0 } + (target to mine)).toMap()
@@ -281,10 +291,10 @@ object Terminals {
     class Melody : Term(Type.MELODY) {
         override val title = "Click the button on time!"
         private var row = 0
-        /** Always First Click Melody: the first row's purple where the green starts. */
-        private var target = if (P3Sim.firstClickMelody) 1 else Random.nextInt(1, 6)
         private var lime = 1
         private var dir = 1
+        /** Always First Click Melody: the first row's purple where the green starts. Terminal Luck: where the green gets soonest. */
+        private var target = if (P3Sim.firstClickMelody) 1 else lucky(8, { c: Int -> stepsTo(c) }) { Random.nextInt(1, 6) }
         private var locked = false
         private var lastStep = -1
         /** Steps the lime still sits out after a wrong click. */
@@ -324,7 +334,7 @@ object Terminals {
                 if (lime + dir !in 1..5) dir = -dir
                 lime += dir
             }
-            if (locked) { locked = false; row++; target = ((1..5) - target).random() }
+            if (locked) { val last = target; locked = false; row++; target = lucky(8, { c: Int -> stepsTo(c) }) { ((1..5) - last).random() } }
             draw()
         }
         override fun click(slot: Int, button: Int, input: ContainerInput): Boolean {
@@ -340,6 +350,13 @@ object Terminals {
             return true
         }
         override fun solved() = row >= LANES
+
+        /** Steps until the green is on column [c], bouncing from where it is now. */
+        private fun stepsTo(c: Int): Int {
+            var l = lime; var d = dir; var k = 0
+            while (l != c && k < 10) { if (l + d !in 1..5) d = -d; l += d; k++ }
+            return k
+        }
 
         companion object {
             /** The rows to lock: 3 since the update (it was 4). */
@@ -381,8 +398,8 @@ object Terminals {
         }
 
         /** Called every server tick while open. */
-        fun tick() {
-            if (player.containerMenu !== this) { open -= this; return }
+        fun tick() = Sim.asPlayer(player) {
+            if (player.containerMenu !== this) { open -= this; return@asPlayer }
             val age = Fight.serverTick - opened
             term.tick(age)
             if (Fight.serverTick > answeredAt) { copyIn(); broadcastChanges() }
@@ -448,14 +465,13 @@ object Terminals {
     fun tick() { open.toList().forEach { it.tick() } }
 
     fun closeAll() {
-        Sim.player?.let { if (it.containerMenu is TerminalMenu) it.closeContainer() }
+        Sim.players().forEach { if (it.containerMenu is TerminalMenu) it.closeContainer() }
         open.clear()
     }
 
-    /** Someone else finished [station]: your window on it closes (Hypixel has no terminal lock). */
-    fun closeFor(station: Station) {
-        val p = Sim.player ?: return
-        if ((p.containerMenu as? TerminalMenu)?.station === station) p.closeContainer()
+    /** Someone finished [station]: everyone else's window on it closes (Hypixel has no terminal lock). */
+    fun closeFor(station: Station, except: ServerPlayer? = null) {
+        for (p in Sim.players()) if (p !== except && (p.containerMenu as? TerminalMenu)?.station === station) p.closeContainer()
     }
 
     /** Is the player in [station]'s terminal right now. */

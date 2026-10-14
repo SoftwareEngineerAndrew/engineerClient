@@ -78,7 +78,8 @@ class Station(
                 s.setCustomName(c); s.isCustomNameVisible = c != null
             }
         }
-        val far = kind != Kind.LEVER && (Sim.player?.position()?.distanceTo(at) ?: 0.0) >= 25.0
+        val ps = Sim.players()
+        val far = kind != Kind.LEVER && ps.isNotEmpty() && ps.none { it.position().distanceTo(at) < 25.0 }
         if (far) { name(top, ""); name(bottom, ""); return }
         when (kind) {
             Kind.TERMINAL -> if (done) {
@@ -178,7 +179,7 @@ object Corpse {
                 if (head != null) s.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, head)
                 made += Sim.spawn(s)
             }
-            stand(p.x, p.y - 1.28, "§a${Sim.me}")
+            stand(p.x, p.y - 1.28, "§a${p.gameProfile.name}")
             stand(p.x, p.y - 1.66, "§c§lDEAD")
             stand(p.x - 1.0, p.y, null, net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PLAYER_HEAD), invisible = false)
         }

@@ -32,8 +32,10 @@ import kotlin.random.Random
  * the Terminator, the Spirit Shortbow and the Mosquito Shortbow, with Terror armor's Hydra Strike ([Hydra]).
  *
  * A shot handled on server tick N: the main arrow leaves your eye - 0.1 (1.27 sneaking), 0.01745 to your right, at
- * 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and moves that tick: pos1, v0 = 0.99u - g. On N+1 its
- * velocity is k*v0 (k = 1 + 0.01 x Hydra stacks). At 10 stacks two more launch on N+1 at +-8 deg of that move.
+ * 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and moves that tick: pos1, v0 = 0.99u - g (what its spawn
+ * packet says). On N+1 its velocity is k*v0 (k = 1 + 0.01 x Hydra stacks), but it flies from pos1 as if that tick's
+ * gravity had not been taken: k*v0 + g, which is where the i4 board registers it (2,423 of 2,453 recorded hits; flown
+ * from the packets alone they land 0.2 low). At 10 stacks two more launch on N+1 at +-8 deg of that move.
  * The Terminator's side arrows launch on N+1 from 0.5 under pos1 at your clean look +-5.5 deg; the Mosquito's
  * Duplex replays the main arrow's N+1 move 3 or 4 ticks later. A Terminator volley is 5 entities (the side arrows
  * twice each, identical), a Duplex is 2 identical entities, Hydra Strike's two are distinct. Arrows are spawned at the end of a tick in the
@@ -42,6 +44,12 @@ import kotlin.random.Random
  *
  * Clicks: right click shoots (left click too, but the Mosquito's left click is Nasty Bite), one shot per
  * Shortbow Cooldown; Nasty Bite has its own 10 ticks. A click inside a cooldown fires the tick it ends.
+ *
+ * Aim: a shot is aimed with the newest look the server has of you on the tick it fires (your last move packet it
+ * has), never the use_item packet's own rotation or your look at the click: a flick right after a click still turns
+ * the shot, up to a round trip later. The noise is 1.8's: one gaussian (sd 0.0075) on each axis of the unit look,
+ * so speed varies with it too (not modern's triangle); only the main arrow has it, and Hydra Strike and Duplex
+ * inherit it from the main arrow's move. The Terminator's side arrows have none: exactly your look +-5.5 deg.
  */
 object Bows {
     const val TERMINATOR = "TERMINATOR"
@@ -64,19 +72,20 @@ object Bows {
 
     /** A click (or a drawn bow's release, at [power] 0.1-1 of a full draw). */
     private class Click(val bow: String, val left: Boolean, val aim: Aim, val power: Float = 1f)
-    private val clicks = ArrayList<Click>()
+    // Each player's own ([perPlayer]): their clicks, cooldowns and arrows.
+    private val clicks: ArrayList<Click> by perPlayer { ArrayList() }
     private class Later(val at: Int, val run: () -> Unit)
-    private val later = ArrayList<Later>()
+    private val later: ArrayList<Later> by perPlayer { ArrayList() }
     /** Your aim at the end of each recent tick, newest last (a buffered click fires with the server's view then). */
-    private val history = ArrayDeque<Aim>()
+    private val history: ArrayDeque<Aim> by perPlayer { ArrayDeque() }
 
-    private var shotReady = 0
-    private var biteReady = 0
+    private var shotReady by perPlayer { 0 }
+    private var biteReady by perPlayer { 0 }
     /** A click made during the cooldown: the bow it was made with, fired the tick the cooldown ends. */
-    private var pendingShot: String? = null
-    private var pendingBite = false
+    private var pendingShot: String? by perPlayer { null }
+    private var pendingBite by perPlayer { false }
 
-    private val live = ArrayList<SimArrow>()
+    private val live: ArrayList<SimArrow> by perPlayer { ArrayList() }
 
     fun reset() {
         clicks.clear(); later.clear(); history.clear()
@@ -91,10 +100,10 @@ object Bows {
         Hydra.start()
     }
 
-    /** A click with shortbow [bow] ([left]: a swing). It lands after the simulated ping, aimed as you were when you clicked. */
+    /** A click with shortbow [bow] ([left]: a swing). It lands after the simulated ping and is aimed when it fires ([past]). */
     fun click(p: ServerPlayer, bow: String, left: Boolean) {
         val a = aim(p)
-        Fight.afterPing("shortbow") { if (Sim.player === p && !p.isRemoved) clicks += Click(bow, left, a) }
+        Fight.afterPing("shortbow") { if (!p.isRemoved) clicks += Click(bow, left, a) }
     }
 
     /**
@@ -103,7 +112,7 @@ object Bows {
      */
     fun release(p: ServerPlayer, bow: String, power: Float) {
         val a = aim(p)
-        Fight.afterPing("bow") { if (Sim.player === p && !p.isRemoved) clicks += Click(bow, false, a, power) }
+        Fight.afterPing("bow") { if (!p.isRemoved) clicks += Click(bow, false, a, power) }
     }
 
     /** End of every server tick (after entities moved): clicks, buffered clicks, Duplex releases, Hydra Strike. */
@@ -115,9 +124,10 @@ object Bows {
         pendingShot?.let { bow -> if (now >= shotReady) { pendingShot = null; if (held == bow) fire(p, bow, false, past(p)) } }
         if (pendingBite && now >= biteReady) { pendingBite = false; if (held == MOSQUITO) fire(p, MOSQUITO, true, past(p)) }
         for (c in clicks) {
+            // A drawn bow fires on its release packet, as vanilla's does; a shortbow on the tick, with the server's view then.
             if (c.bow !in SHORTBOWS) { fire(p, c.bow, false, c.aim, c.power); continue }
-            if (c.bow == MOSQUITO && c.left) { if (now >= biteReady) fire(p, MOSQUITO, true, c.aim) else pendingBite = true }
-            else if (now >= shotReady) fire(p, c.bow, false, c.aim) else pendingShot = c.bow
+            if (c.bow == MOSQUITO && c.left) { if (now >= biteReady) fire(p, MOSQUITO, true, past(p)) else pendingBite = true }
+            else if (now >= shotReady) fire(p, c.bow, false, past(p)) else pendingShot = c.bow
         }
         clicks.clear()
         if (later.isNotEmpty()) {
@@ -131,7 +141,10 @@ object Bows {
         while (history.size > 40) history.removeFirst()
     }
 
-    /** The server's view of you now: you, [Fight.pingTicks] ticks ago. */
+    /**
+     * The server's view of you now: you, [Fight.pingTicks] ticks ago (at no ping, you now: this tick's move is in, so a
+     * swing, sent before it, still gets it).
+     */
     private fun past(p: ServerPlayer): Aim {
         val d = Fight.pingTicks
         return if (d <= 0 || history.isEmpty()) aim(p) else history[(history.size - d).coerceAtLeast(0)]
@@ -192,7 +205,10 @@ object Bows {
                 return null
             }
         }
-        val a = SimArrow(level, at.x, at.y, at.z) { _, h -> hit(h, onHit) }
+        // Its hits are the shooter's (their Hydra stacks, their gate), whenever they land.
+        val shooter = Sim.acting ?: owner
+        val all = Sim.toAll
+        val a = SimArrow(level, at.x, at.y, at.z) { _, h -> Sim.asPlayer(shooter, all) { hit(h, onHit) } }
         a.immune = ::immune
         if (owner != null) a.setOwner(owner)
         a.pickup = AbstractArrow.Pickup.DISALLOWED
@@ -245,13 +261,13 @@ object Bows {
      * once-a-second grid.
      */
     object Hydra {
-        var stacks = 0
+        var stacks by perPlayer { 0 }
             private set
-        private var lastGain = -100
-        private var nextLoss = Int.MAX_VALUE
-        private var period = 0
-        private var grid = 0
-        private var shown = 0
+        private var lastGain by perPlayer { -100 }
+        private var nextLoss by perPlayer { Int.MAX_VALUE }
+        private var period by perPlayer { 0 }
+        private var grid by perPlayer { Random.nextInt(20) }
+        private var shown by perPlayer { 0 }
         private val pieces: Int get() = P3Sim.terrorPieces
         /** Ticks per lost stack: (T+1)*20, T = 4 s (1-2 pieces), 7 s (3), 10 s (4); sampled at the last gain. */
         private fun periodNow(): Int = ((if (pieces >= 4) 10 else if (pieces == 3) 7 else 4) + 1) * 20
@@ -360,25 +376,29 @@ object ShotPlan {
         val y = Math.toRadians(yaw.toDouble())
         val dir = look(yaw, pitch)
         // The main arrow: from your eye - 0.1, a hair to your right, at 3 x (look + noise); it moves that tick (pos1,
-        // v0 = 0.99u - g), and on the next its velocity is k*v0.
+        // v0 = 0.99u - g), and on the next its velocity is k*v0 - flown with g given back ([fly]), as the side arrows are.
         val u = dir.add(noise).scale(speed)
         val from = pos.add(-cos(y) * RIGHT, (if (crouch) 1.27 else 1.62) - 0.1, -sin(y) * RIGHT)
         val pos1 = from.add(u)
         val move = Vec3(0.99 * u.x, 0.99 * u.y - G, 0.99 * u.z).scale(k)
-        val out = arrayListOf(Planned(from, pos1, move, owned = true, delay = 0))
+        val fly = move.add(0.0, G, 0.0)
+        // In spawn order, which is the order the server ticks them (entity id): the main arrow, then each side's at +x
+        // (left, from the i4 plate) before -x (i4 recordings, Terminator: 1,606 of 1,606 volleys; Hydra Strike's taken to
+        // match). It decides which arrow of a volley can take an i4 target drawn in the same tick.
+        val out = arrayListOf(Planned(from, pos1, fly, owned = true, delay = 0))
         // Hydra Strike at 10 stacks: that move turned +-8 deg.
-        if (stacks >= 10) for (s in listOf(8.0, -8.0)) out += Planned(pos1, pos1, roty(move, s), owned = false, delay = 0)
+        if (stacks >= 10) for (s in listOf(-8.0, 8.0)) out += Planned(pos1, pos1, roty(fly, s), owned = false, delay = 0)
         when (bow) {
             // The Terminator's side arrows: Hypixel spawns each twice, identical (1 main + 2 pairs = 5 entities, with or
             // without Terror): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
             // tick's gravity given back.
             Bows.TERMINATOR -> {
                 val side = pos1.add(0.0, -0.5, 0.0)
-                for (s in listOf(5.5, -5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
+                for (s in listOf(-5.5, 5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
             }
         }
         // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities.
-        if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, move, owned = false, delay = duplexDelay) }
+        if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, fly, owned = false, delay = duplexDelay) }
         return out
     }
 }
