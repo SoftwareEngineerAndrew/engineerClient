@@ -102,7 +102,7 @@ object EngineerClient : ClientModInitializer {
         safely("splits look") { OdinSplitsLook.install() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
-        safely("launch stats") { com.engineerclient.misc.LaunchStats.install() }
+        runCatching { com.engineerclient.misc.LaunchStats.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
 
