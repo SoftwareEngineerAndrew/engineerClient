@@ -105,7 +105,8 @@ object RandomStuff : Module(
     private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
     private val skipLoadingScreen by BooleanSetting("Skip Loading Screen", true, desc = "No \"Loading terrain\" screen when joining or changing world: the world shows as it loads in.")
     private val clickGuiScale by NumberSetting("Click GUI Size", 1.55f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
-    private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
+    private val autoJoinSkyblock by BooleanSetting("Auto Join Skyblock", false, desc = "Each time you connect to Hypixel (Prism's join on launch, the server list...), /skyblock goes out right after you land, and again until you're on Skyblock.")
+    private val skyblockDelay by NumberSetting("Skyblock Join Delay", 0.2, 0.0..3.0, 0.05, desc = "How long after landing on Hypixel the first /skyblock goes out.", unit = "s").withDependency { autoJoinSkyblock }
 
     // --- Scoreboard lines ----------------------------------------------------------------------
     //
@@ -122,14 +123,12 @@ object RandomStuff : Module(
     private const val BLESS_COOLDOWN_MS = 10_000L
     private var lastBless = 0L
 
-    // Auto join state. All in-memory, never saved - "only the first time" is just "once per game
-    // launch", no config plumbing needed to enforce it.
-    private var hasConnectedToHypixel = false
+    // Auto join state, per connection.
     private var pendingSkyblockJoin = false
     private var ticksUntilSkyblock = -1
     private var attempts = 0
 
-    /** The title screen's Join Hypixel button: connects to Hypixel, as Auto Join Hypixel does (no /skyblock after). */
+    /** The title screen's Join Hypixel button: connects to Hypixel (Auto Join Skyblock then takes it to Skyblock). */
     fun joinHypixel(screen: net.minecraft.client.gui.screens.Screen) = connect(screen)
 
     private fun connect(screen: net.minecraft.client.gui.screens.Screen) {
@@ -149,10 +148,9 @@ object RandomStuff : Module(
     }
 
     private const val HYPIXEL_ADDRESS = "hypixel.net"
-    private const val FIRST_TRY_TICKS = 10  // 0.5s after the lobby loads
-    private const val RETRY_TICKS = 40      // then every 2s until we are on Skyblock
+    private const val RETRY_TICKS = 20      // after the first, every 1s until we are on Skyblock
     private const val TRANSFER_TICKS = 60   // a world load mid-way means a transfer is happening: give it 3s
-    private const val MAX_ATTEMPTS = 6
+    private const val MAX_ATTEMPTS = 8
 
     /** Skip Loading Screen: read by SkipLoadingScreenMixin on every world change. */
     fun skipsLoadingScreen(): Boolean = enabled && skipLoadingScreen
@@ -294,33 +292,31 @@ object RandomStuff : Module(
             }
         }
 
-        // Auto join Hypixel. Hooked directly to raw Fabric events rather than Odin's own
-        // TickEvent.End: that event is wired to ClientTickEvents.END_LEVEL_TICK, which only fires
-        // once a world is loaded - it never fires at the title screen, so a countdown built on it
-        // would sit at its starting value forever and never reach zero. ScreenEvents.AFTER_INIT
-        // (fires once the title screen has actually finished initializing, unlike Odin's
-        // BEFORE_INIT-based ScreenEvent.Open) makes a connect-delay unnecessary entirely.
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
             if (screen is TitleScreen && cleansMenus()) cleanTitleScreen(screen)
         }
 
-        ScreenEvents.AFTER_INIT.register { client, screen, _, _ ->
-            if (!enabled || !autoJoinHypixel || hasConnectedToHypixel || screen !is TitleScreen) return@register
-            hasConnectedToHypixel = true
+        // Auto Join Skyblock: a new connection to Hypixel (not a server switch inside it, which is no new
+        // connection) starts the countdown to the first /skyblock.
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, client ->
+            val ip = client.currentServer?.ip?.lowercase().orEmpty()
+            if (!enabled || !autoJoinSkyblock || !ip.contains("hypixel")) return@register
             pendingSkyblockJoin = true
-            connect(screen)
+            attempts = 0
+            ticksUntilSkyblock = (skyblockDelay * 20).toInt()
         }
 
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
 
         on<LevelEvent.Load> {
-            if (!enabled || !autoJoinHypixel || !pendingSkyblockJoin) return@on
-            ticksUntilSkyblock = if (attempts == 0) FIRST_TRY_TICKS else TRANSFER_TICKS
+            // A world load after a /skyblock is the transfer under way: give it time before trying again.
+            if (!enabled || !autoJoinSkyblock || !pendingSkyblockJoin || attempts == 0) return@on
+            ticksUntilSkyblock = TRANSFER_TICKS
         }
 
-        // The lobby we land in ignores a command sent before it is ready, so /skyblock goes out
-        // shortly after the world loads and then every couple of seconds until Odin sees the
-        // Skyblock scoreboard.
+        // The lobby can ignore a command sent before it is ready, so /skyblock goes out [skyblockDelay]
+        // after landing and then every second until Odin sees the Skyblock scoreboard. On raw client
+        // ticks: Odin's TickEvent.End only fires with a world loaded.
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!pendingSkyblockJoin || ticksUntilSkyblock < 0) return@register
             if (LocationUtils.isInSkyblock || attempts >= MAX_ATTEMPTS) { pendingSkyblockJoin = false; ticksUntilSkyblock = -1; return@register }
