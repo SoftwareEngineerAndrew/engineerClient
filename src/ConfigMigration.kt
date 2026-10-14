@@ -52,7 +52,9 @@ object ConfigMigration {
      *  - Agro Leaderboard is Agro Sphere (on only if its Sphere Mode was);
      *  - BR Roles' Posmsg Re-trigger and Posmsg Here Keybind are Positional Messages' Re-trigger and
      *    Box Here Keybind (Positional Messages itself is
-     *    looked after where it is installed).
+     *    looked after where it is installed);
+     *  - Storm Phase's Crush Hitbox is Sub Splits' Show Crush Info (on only if Storm Phase was), its
+     *    hitbox settings with it.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -142,6 +144,18 @@ object ConfigMigration {
             changed = true
         }
 
+        // Storm Phase's crush hitbox moved to Sub Splits as Show Crush Info: it drew only with Storm Phase on.
+        module(modules, "Storm Phase")?.let { sp ->
+            val from = settings(sp)
+            val moved = STORM_HITBOX_KEYS.filter { from.has(it) }
+            val sub = settings(ensure("Sub Splits"))
+            if (sub.has("Show Crush Info")) return@let
+            val hitbox = from.remove("Crush Hitbox")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: true
+            sub.addProperty("Show Crush Info", (sp["enabled"]?.asBoolean ?: true) && hitbox)
+            for (k in moved) from.remove(k).let { if (!sub.has(k)) sub.add(k, it) }
+            changed = true
+        }
+
         // Sub Splits' detail levels lost "Off" and renamed "Extreme" to "Debug". Off was a way of
         // hiding the HUD, so it becomes the HUD switched off (the level itself back to Compact).
         module(modules, "Sub Splits")?.let(::settings)?.let { sub ->
@@ -196,6 +210,8 @@ object ConfigMigration {
     }
 
     private val RANDOM_STUFF_RENAMES = mapOf("Hide Scoreboard Lines" to "Clean Scoreboard", "Skip Loading Screen" to "Clean Loading Screen", "Hide Numbers in Numbers" to "Hide Numbers' Numbers")
+
+    private val STORM_HITBOX_KEYS = listOf("Hitbox Seconds", "Hitbox Margins", "Pillar Outline", "Inside Color", "Outside Color")
 
     private val POSMSG_KEYS = mapOf("Posmsg Re-trigger" to "Re-trigger", "Posmsg Here Keybind" to "Box Here Keybind")
 
