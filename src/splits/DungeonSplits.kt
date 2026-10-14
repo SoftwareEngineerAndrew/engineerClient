@@ -735,8 +735,21 @@ object DungeonSplits : Module(
     /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
     private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
 
+    private fun recentText(floor: String?) = when (floor) { "F7" -> recentF7; "M7" -> recentM7; else -> "" }
+
+    /**
+     * [recent], parsed once per saved text: [typical] asks every frame (the splits HUD and pace), and parsing the
+     * setting each time was ~11% of the render thread. Read only; [recordRecent] parses its own copy.
+     */
+    private val recentParsed = HashMap<String, Pair<String, Map<String, List<SplitPace.Clocks>>>>()
+    private fun recentView(floor: String): Map<String, List<SplitPace.Clocks>> {
+        val text = recentText(floor)
+        recentParsed[floor]?.let { (t, m) -> if (t === text) return m }
+        return recent(floor).also { recentParsed[floor] = text to it }
+    }
+
     private fun recent(floor: String?): MutableMap<String, MutableList<SplitPace.Clocks>> =
-        (when (floor) { "F7" -> recentF7; "M7" -> recentM7; else -> "" }).split(',').mapNotNull { e ->
+        recentText(floor).split(',').mapNotNull { e ->
             val (k, v) = e.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
             k.trim() to v.split('|').mapNotNull { c ->
                 val (ms, ticks) = c.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
@@ -760,7 +773,7 @@ object DungeonSplits : Module(
      */
     fun typical(floor: String, label: String): SplitPace.Clocks? {
         val id = SplitPace.SPLIT_IDS[label] ?: return null
-        val list = recent(floor)[id]?.takeIf { it.size >= RECENT_MIN } ?: return null
+        val list = recentView(floor)[id]?.takeIf { it.size >= RECENT_MIN } ?: return null
         fun median(v: List<Long>) = v.sorted().let { if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2 }
         return SplitPace.Clocks(median(list.map { it.ms }), median(list.map { it.ticks }))
     }
