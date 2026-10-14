@@ -393,8 +393,9 @@ class Devices(val phase: GoldorPhase) {
      * z50. Live from P3's start, not only in S4 (an early finish counts in S4 via
      * GoldorPhase.complete). Each run is a random order of the 9 cells. As on Hypixel's main server:
      * the next cell is the target the moment the last one is hit, and a later
-     * arrow in that same tick can hit it too; but it only shows (emerald) on a per-run 10-tick grid while someone is
-     * on the plate - in the same tick when the hit lands on a grid tick. A target hit before it showed counts and
+     * arrow in that same tick can hit it too (arrows tick in spawn order, so only a later one); but it only shows
+     * (emerald) on a per-attempt 10-tick grid while someone is on the plate, 1-10 ticks after. A hit on the shown one
+     * turns it blue at once. A target hit before it showed counts and
      * changes no block, so the board (and Odin's solver, which only sees blocks) never lights it: 7-8 lights for 9
      * hits is usual. Off the plate, on the grid: the lit one goes blue and progress resets. Done, the board stays
      * all blue terracotta (all emerald would read as 9 new targets to Odin).
@@ -406,13 +407,16 @@ class Devices(val phase: GoldorPhase) {
         private var lit = -1
         private var hits = 0
         private var order = (0 until 9).shuffled()
-        /** This run's grid phase: lights land on t ≡ grid (mod 10). */
+        /**
+         * This attempt's grid phase: lights land on t ≡ grid (mod 10) server ticks, a new phase each attempt (Hypixel
+         * recordings: 98% of lights on their attempt's phase, 5 of 8 back-to-back attempts on a different one).
+         */
         private var grid = Random.nextInt(10)
 
-        fun place() { reset(); grid = Random.nextInt(10); blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
+        fun place() { reset(); blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
         fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
 
-        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled() }
+        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled(); grid = Random.nextInt(10) }
 
         /** The cell that is the target now (shown or not), or -1 when done. */
         private val current get() = if (hits < 9) order[hits] else -1
@@ -443,11 +447,16 @@ class Devices(val phase: GoldorPhase) {
             return true
         }
 
-        /** End of each tick (after the arrows moved, so a hit on a grid tick shows the next target in that tick). */
+        /**
+         * End of each tick, for the next one: Hypixel lights before the arrows move, so a target drawn by a hit shows
+         * 1-10 ticks later, never in the hit's own tick (a hit on a grid tick waits the full 10). The device itself is
+         * never late: a hit counts on the current target whether it shows yet or not ([hit]), and a shown one goes
+         * blue at once.
+         */
         fun tick() {
             val st = station("Target")
             onPlate()
-            if (st.done || phase.section > 4 || (phase.t - grid) % 10 != 0) return
+            if (st.done || phase.section > 4 || (phase.t + 1 - grid).mod(10) != 0) return
             if (onPlate()) {
                 if (current >= 0 && lit != current) light()
             } else if (lit >= 0 || hits > 0) {
