@@ -60,11 +60,11 @@ object SetupCheck {
             }
 
         items += if (P3Rotation.enabled) Item(true, "EC Dynamic Term Roles on")
-        else Item(false, "ADM Dynamic Term Roles is OFF", "enable it in the ADM panel")
+        else Item(false, "EC Dynamic Term Roles is OFF", "enable it in the Engineer Client panel")
 
         val mine = RotationSpec.graph.role(EcConfig.data.myStartingRole)
         items += if (mine != null) Item(true, "your starting role: ${mine.name}")
-        else Item(false, "no starting role set", "/adm role <${RotationSpec.graph.startingRoles.joinToString("|") { it.name }}>")
+        else Item(false, "no starting role set", "/ec role <${RotationSpec.graph.startingRoles.joinToString("|") { it.name }}>")
 
         // Other mods that intercept system chat at the network layer. EC reads packets ahead of
         // them, but report them anyway: a run that still misses lines starts here.

@@ -21,7 +21,7 @@ object EcConfig {
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("adm").resolve("config.json")
+    private val file = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("config.json")
 
     var data: Data = Data()
         private set
