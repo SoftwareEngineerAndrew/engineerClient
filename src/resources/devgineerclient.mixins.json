@@ -38,6 +38,7 @@
     "RecTabOverlayAccessor",
     "RecThumbFrameMixin",
     "RotateHeadPacketAccessor",
+    "RotationTapMixin",
     "SoundPlayTapMixin",
     "ToastTapMixin",
     "TooltipTapMixin"

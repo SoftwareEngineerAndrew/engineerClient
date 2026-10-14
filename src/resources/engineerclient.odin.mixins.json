@@ -5,7 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "BlockUpdateServerThreadMixin",
-    "ClickGuiSizeMixin",
+    "ClickGuiOpenMixin",
     "HudElementMixin",
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",
