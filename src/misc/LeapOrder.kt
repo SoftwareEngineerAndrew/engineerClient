@@ -5,8 +5,8 @@ import com.engineerclient.EngineerClient.mc
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.render.roundedRect
-import com.odtheking.odin.utils.render.roundedRectOutlined
+import com.engineerclient.roundedRect
+import com.engineerclient.roundedRectOutlined
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.PartyUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
@@ -67,7 +67,7 @@ object LeapOrder {
         }
     }
 
-    private fun open() = mc.schedule { mc.gui.setScreen(LeapOrderScreen()) }
+    private fun open() = mc.schedule { mc.setScreen(LeapOrderScreen()) }
 
     /** Odin's order, Odin-style (lower case, ranks 0-3: top left, top right, bottom left, bottom right). */
     fun set(names: List<String>) {
@@ -141,7 +141,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         fun centred(text: String, y: Int) = gfx.text(text, (width - font.width(text)) / 2, y, WHITE, shadow = true)
         centred("§6§lLeap Order", 12)
         centred("§7Drag a player into another quarter of the screen to swap them. Saved as you drop.", 26)
-        if (LeapMenu.type != LeapMenu.Sorting.CUSTOM) centred("§cOdin's Leap Menu sorting isn't Custom, so it won't use this order.", 38)
+        if (LeapMenu.type != CUSTOM_SORTING) centred("§cOdin's Leap Menu sorting isn't Custom, so it won't use this order.", 38)
         centred("§8Top left is first, then top right, bottom left, bottom right.", height - 20)
 
         // The quarter a drop would go to.
@@ -220,21 +220,17 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         dragging = -1
     }
 
-    /**
-     * A left click. Under SDL (26.3) the event's button number isn't reliable (a left click can come through as
-     * 1), so anything but SDL saying the right button alone is down counts.
-     */
-    private fun isLeft(event: MouseButtonEvent): Boolean = runCatching {
-        val state = org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?)
-        !((state and 4) != 0 && (state and 1) == 0)
-    }.getOrElse { event.button() == 0 }
+    /** A left click (26.1.2 is on GLFW, whose button numbers are reliable). */
+    private fun isLeft(event: MouseButtonEvent): Boolean = event.button() == 0
 
-    /** The left button is still held (SDL), or null when that can't be told. */
+    /** The left button is still held, or null when that can't be told. */
     private fun leftHeld(): Boolean? = runCatching {
-        (org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?) and 1) != 0
+        org.lwjgl.glfw.GLFW.glfwGetMouseButton(mc.window.handle(), org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS
     }.getOrNull()
 
     private companion object {
+        /** Odin 0.3.4's Leap Menu "Sorting": Odin, A-Z Class, A-Z Name, Custom sorting, No Sorting. */
+        const val CUSTOM_SORTING = 3
         val WHITE = Color(255, 255, 255, 1f)
         val BOX = Color(30, 30, 30, 0.85f)
         val HOVER = Color(60, 60, 60, 0.9f)
