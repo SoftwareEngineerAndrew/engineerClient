@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import com.engineerclient.practice.SimonSaysDevice
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -48,11 +49,11 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ Simon Says
 
     /**
-     * Simon Says (S1), as measured on Hypixel (the same timings as SS
-     * Practice): the start button; lights one every 8 ticks; the buttons back 10 ticks after the
-     * last light goes out (18 after the stray lamp, the lit one's 18 after its own); a press stays
-     * down 3 ticks; the next round 6 ticks after a round's last press; four rounds (the update cut the fifth). A wrong press:
-     * buttons gone 3 ticks later and a new sequence shown 26-34 ticks after that.
+     * Simon Says (S1): [SimonSaysDevice], the device as Hypixel runs it (the start button a start/reset toggle,
+     * round tasks nothing cancels, four rounds, each player's ~50 ms limiter), drawn here in the arena's
+     * blocks. A press reaches it after the presser's simulated ping. A press stays down 3 ticks; the next round
+     * 6 ticks after a round's last press. A wrong press: buttons gone 3 ticks later and a new pattern shown
+     * 26-34 ticks after that.
      */
     inner class SimonSays {
         private val START = BlockPos(110, 121, 91)
@@ -60,78 +61,58 @@ class Devices(val phase: GoldorPhase) {
         private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
         private val BUTTON: BlockState get() = B.STONE_BUTTON.defaultBlockState().setValue(ButtonBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(ButtonBlock.FACING, Direction.WEST)
 
-        private var sequence = listOf<Int>()
-        private var expected = listOf<Int>()
-        private var next = 0
-        private var accepting = false
-        private val up = BooleanArray(16)
-        private val downUntil = IntArray(16)
-        private var gen = 0
-        private var startPresses = 0
-        private var starting = false
-        private var startedAt = -100
-        private var running = false
+        /** Each presser by name, to complete the device as them (their own section times and lines). */
+        private val pressers = HashMap<String, net.minecraft.server.level.ServerPlayer?>()
 
-
-        private val jobs = ArrayList<Job>()
-        private fun after(ticks: Int, run: () -> Unit) { jobs += Job(phase.t + ticks, gen, run) }
+        private val device = SimonSaysDevice(object : SimonSaysDevice.Io {
+            override fun newSequence() = this@SimonSays.newSequence().toIntArray()
+            override fun lamp(cell: Int, on: Boolean) = light(cell, on)
+            override fun button(cell: Int, up: Boolean, pressed: Boolean) =
+                Blocks.set(buttonAt(cell), if (up) BUTTON.setValue(ButtonBlock.POWERED, pressed) else B.AIR.defaultBlockState())
+            override fun completed(by: String) {
+                Sim.asPlayer(pressers[by]) { station("SS").complete(by) }
+            }
+        })
 
         private val done get() = station("SS").done
 
         fun place() {
             Blocks.set(START, BUTTON)
-            for (c in 0 until 16) { light(c, false); button(c, false) }
+            clear()
         }
 
         fun clear() {
-            gen++; jobs.clear(); running = false; accepting = false
-            for (c in 0 until 16) { light(c, false); button(c, false) }
+            device.clear()
+            pressers.clear()
+            for (c in 0 until 16) { light(c, false); Blocks.set(buttonAt(c), B.AIR.defaultBlockState()) }
         }
 
-        fun tick() {
-            if (jobs.isEmpty()) return
-            val due = jobs.filter { it.at <= phase.t }
-            jobs.removeAll(due.toSet())
-            due.forEach { if (it.gen == gen) it.run() }
-        }
+        fun tick() = device.tick()
 
         private fun light(cell: Int, on: Boolean) = Blocks.set(lampAt(cell), if (on) B.SEA_LANTERN.defaultBlockState() else B.OBSIDIAN.defaultBlockState())
-        private fun button(cell: Int, show: Boolean, pressed: Boolean = false) {
-            up[cell] = show
-            Blocks.set(buttonAt(cell), if (show) BUTTON.setValue(ButtonBlock.POWERED, pressed) else B.AIR.defaultBlockState())
-        }
 
         fun use(pos: BlockPos): Boolean {
-            if (pos == START) { Fight.afterPing("ss start") { pressStart() }; return true }
+            if (pos == START) {
+                // The limiter goes by when presses reach the server: sent now, there a ping later.
+                val ping = Fight.pingMs()
+                val at = System.nanoTime() / 1e6 + ping
+                Fight.afterMs(ping, "ss start") { pressStart(at) }
+                return true
+            }
             val cell = (0 until 16).firstOrNull { buttonAt(it) == pos } ?: return false
             Fight.afterPing("ss press") { press(cell) }
             return true
         }
 
-        private fun pressStart() {
+        private fun pressStart(ms: Double) {
             Blocks.set(START, BUTTON.setValue(ButtonBlock.POWERED, true))
             Fight.later(2, "ss start up") { if (phase === Fight.phase) Blocks.set(START, BUTTON) }
             if (done || phase.section != 1) return
-            if (starting) { startPresses++; return }
-            if (running && phase.t - startedAt < 20) return
-            // Hypixel sends no button click: a start plays entity.enderman.teleport (vol 8, pitch 0) at
-            // the presser, once per start (one per burst of start presses in the runs looked at).
-            Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f)
-            // A press mid-run starts it over, as from idle.
-            clear()
-            starting = true; startPresses = 1; startedAt = phase.t
-            after(6) { starting = false; begin() }
-        }
-
-        private fun begin() {
-            running = true
-            sequence = newSequence()
-            val s = sequence
-            when (startPresses.coerceAtMost(3)) {
-                1 -> show(listOf(s[0]), listOf(s[0]), stray = false)
-                2 -> show(listOf(stray(), s[0]), listOf(s[0]), stray = true)
-                else -> show(listOf(stray(), s[0], s[1]), listOf(s[0], s[1]), stray = true)
-            }
+            val who = Sim.me
+            pressers[who] = Sim.acting
+            // Hypixel sends no button click. A reset plays entity.enderman.teleport (vol 8, pitch 0) at the presser:
+            // in the runs looked at it came with exactly the presses that were resets (one per burst).
+            if (device.start(who, ms) == SimonSaysDevice.Start.RESET) Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f)
         }
 
         /**
@@ -150,71 +131,26 @@ class Devices(val phase: GoldorPhase) {
         /** Lamp to lamp, in blocks. */
         private fun path(s: List<Int>) = s.zipWithNext().sumOf { (a, b) -> Math.hypot((a % 4 - b % 4).toDouble(), (a / 4 - b / 4).toDouble()) }
 
-        /** The stray light: not part of the sequence, so a cell outside it. */
-        private fun stray(): Int = ((0 until 16) - sequence.toSet()).random()
-
-        /** The cell whose lamp is on now, or -1. */
-        private var litCell = -1
-
-        /**
-         * A show. Lamps every 8 ticks, except the stray's gap to the next, 4-8 (median 6). The first lamp
-         * is in the call's own tick, as the buttons vanish. After a stray the 15 buttons are back 18 ticks
-         * after the stray lit and the lit one's 18 after its own lamp; a plain show brings all 16 back 10
-         * after the last lamp goes out. [stale]: a restart after a wrong press, where Hypixel's old button timer
-         * fires 1-4 ticks in, so the buttons stay clickable, and a lit lamp's button vanishes.
-         */
-        private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean, stale: Boolean = false) {
-            accepting = false
-            for (c in 0 until 16) button(c, false)
-            expected = expect; next = 0
-            val n = cells.size
-            val gap = if (stray) listOf(4, 5, 5, 6, 6, 6, 6, 7, 7, 8).random() else 8
-            val at = IntArray(n) { if (it == 0) 0 else if (it == 1) gap else gap + 8 * (it - 1) }
-            for (i in 0 until n) {
-                val lamp: () -> Unit = {
-                    if (i > 0) light(cells[i - 1], false); light(cells[i], true); litCell = cells[i]
-                    if (stale) button(cells[i], false)
-                }
-                if (at[i] == 0) lamp() else after(at[i]) { lamp() }
-            }
-            after(at[n - 1] + 8) { light(cells[n - 1], false); litCell = -1 }
-            if (stale) after(1 + Random.nextInt(4)) { for (c in 0 until 16) if (c != litCell) button(c, true) }
-            if (stray) {
-                after(18) { for (c in 0 until 16) if (c != cells.last()) button(c, true); accepting = true }
-                after(at[n - 1] + 18) { button(cells.last(), true) }
-            } else {
-                after(at[n - 1] + 18) { for (c in 0 until 16) button(c, true); accepting = true }
-            }
-        }
-
         private fun press(cell: Int) {
-            if (!up[cell] || downUntil[cell] > phase.t) return
-            button(cell, true, pressed = true)
-            downUntil[cell] = phase.t + 3
+            val who = Sim.me
+            pressers[who] = Sim.acting
+            val r = device.press(cell, who)
+            if (r == SimonSaysDevice.Press.NONE) return
             // Each press: note_block.pling (vol 8, pitch 4.05 as sent) at the presser, never a button click.
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
-            val g = gen
-            Fight.later(3, "ss up") { if (g == gen && up[cell]) button(cell, true) }
-            if (!accepting) return
-            if (cell == expected[next]) {
-                next++
-                if (next < expected.size) return
-                accepting = false
-                val n = expected.size
-                if (n == 4) after(6) { clear(); station("SS").complete(Sim.me) }
-                else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
-            } else {
-                accepting = false
-                after(3) { for (c in 0 until 16) button(c, false) }
-                // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26)
-                // or stray + [a, b] (34); the buttons stay stale-clickable through it.
-                // SS Luck: the quick one (26, no stray) more often, always at 100%; bad luck the slow one.
-                val plain = Random.nextDouble() < 0.5 + 0.5 * P3Sim.ssLuck
-                after(3 + if (plain) 26 else 34) {
-                    sequence = newSequence()
-                    val ex = listOf(sequence[0], sequence[1])
-                    show(if (plain) ex else listOf(stray()) + ex, ex, stray = !plain, stale = true)
-                }
+            if (r != SimonSaysDevice.Press.WRONG) return
+            // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26), or a
+            // stray lamp then [a, b] (34, the stray 4-8 ticks before, median 6): a round 1 show, then a round 2
+            // one with a new pattern, as a skip shows it. The old buttons come back 1-4 ticks into each show
+            // (stale: they press, nothing counts), and a lamp lighting takes its own.
+            // SS Luck: the quick one (26, no stray) more often, always at 100%; bad luck the slow one.
+            val plain = Random.nextDouble() < 0.5 + 0.5 * P3Sim.ssLuck
+            val stale = { device.after(1 + Random.nextInt(4)) { device.buttonsBack() } }
+            if (plain) device.after(3 + 26) { device.showRound(2); stale() }
+            else {
+                val gap = listOf(4, 5, 5, 6, 6, 6, 6, 7, 7, 8).random()
+                device.after(3 + 34 - gap) { device.showRound(1); stale() }
+                device.after(3 + 34) { device.showRound(2); stale() }
             }
         }
     }
@@ -518,12 +454,4 @@ class Devices(val phase: GoldorPhase) {
             mapOf(20 to true, 22 to true, 24 to true, 1 to false, 3 to false),
         )
     }
-}
-
-/** A delayed step of a device (dropped when [gen] is stale). */
-/** A device's queued step, run as whoever caused it ([Sim.asPlayer]: the presser's credit stays theirs). */
-private class Job(val at: Int, val gen: Int, private val body: () -> Unit) {
-    private val actor = Sim.acting
-    private val all = Sim.toAll
-    fun run() = Sim.asPlayer(actor, all, body)
 }
