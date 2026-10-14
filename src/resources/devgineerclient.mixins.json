@@ -32,7 +32,6 @@
     "PacketDecoderTapMixin",
     "PacketEncoderTapMixin",
     "PacketProcessorDrainMixin",
-    "ParkMixin",
     "ParticleEngineTapMixin",
     "ParticleTapMixin",
     "RecBossOverlayAccessor",

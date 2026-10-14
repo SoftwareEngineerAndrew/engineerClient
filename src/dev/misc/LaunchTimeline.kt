@@ -40,7 +40,6 @@ import java.time.LocalDateTime
  *  config2/join2 Hypixel's move to Skyblock
  *  skyblock      Odin sees the Skyblock scoreboard
  *  sb-world      Skyblock drawn
- *  unpark        a parked launch (Park) told to carry on; the line then also gives the time from here
  */
 object LaunchTimeline {
     private val startMs = ProcessHandle.current().info().startInstant().map { it.toEpochMilli() }.orElse(ManagementFactory.getRuntimeMXBean().startTime)
@@ -58,8 +57,6 @@ object LaunchTimeline {
         marks[name] = now()
     }
 
-    /** A parked launch was released: from here is what you waited for. */
-    fun unparked() { marks["unpark"] = now() }
 
     fun install() {
         // How long the JVM took before any Java ran: its uptime counts from JVM init, the process from exec.
@@ -97,14 +94,12 @@ object LaunchTimeline {
         written = true
         var prev = 0L
         var line = marks.entries.joinToString("  ") { (k, v) -> "$k ${v}ms (+${v - prev})".also { prev = v } }
-        val unpark = marks["unpark"]
-        if (unpark != null) line += "  | from unpark: ${prev - unpark}ms"
         DevgineerClient.logger.info("[dc] launch timeline: {}", line)
         // In chat: the build this launch runs (so a restart onto a new jar is visible) and the time it took.
         if (FastLaunch.buildChat) runCatching {
             val build = FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")
-            val total = marks["sb-world"]?.let { end -> end - (marks["unpark"] ?: 0L) }
-            val took = total?.let { " §8· §7%.1f s to Skyblock%s".format(it / 1000.0, if ("unpark" in marks) " (parked)" else "") } ?: ""
+            val total = marks["sb-world"]?.let { end -> end }
+            val took = total?.let { " §8· §7%.1f s to Skyblock".format(it / 1000.0) } ?: ""
             DevgineerClient.chat("§8[dc] §7build §f$build$took")
         }
         if (FastLaunch.timeline) runCatching {
