@@ -23,6 +23,7 @@ object DevgineerClient : ClientModInitializer {
 
     override fun onInitializeClient() {
         safely("launch timeline") { com.devgineerclient.misc.LaunchTimeline.install() }
+        safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
         // Modules that moved here from Engineer Client keep their settings (copied once, before Odin reads this file).
         safely("adopt settings") { adoptSettings("Dynamic Term Roles", "i4 Aim") }
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
