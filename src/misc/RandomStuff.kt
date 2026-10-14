@@ -188,7 +188,6 @@ object RandomStuff : Module(
         widgets.filter { it.y > row && it !is PlainTextButton }.forEach { it.y -= 24 }
     }
 
-
     /** Read by PartyFinderStats for every Party Finder tooltip. */
     fun showsPartyFinderStats(): Boolean = enabled && partyFinderStats
 
