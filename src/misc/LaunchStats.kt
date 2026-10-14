@@ -3,7 +3,7 @@ package com.engineerclient.misc
 import com.engineerclient.EngineerClient
 import com.engineerclient.adr.ADR
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.RenderableSetting
+import com.odtheking.odin.clickgui.settings.Setting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
@@ -72,11 +72,11 @@ object LaunchStats {
                     addProperty("enabled", m.enabled)
                     if (m.enabled) add("settings", JsonObject().also { s ->
                         for ((key, setting) in m.settings) {
-                            if ((setting as? RenderableSetting<*>)?.hidden == true) continue
+                            if (isHidden(setting)) continue
                             when (setting) {
                                 is BooleanSetting -> s.addProperty(key, setting.value)
                                 is NumberSetting<*> -> s.addProperty(key, setting.value as Number)
-                                is SelectorSetting<*> -> s.addProperty(key, setting.value.toString())
+                                is SelectorSetting -> s.addProperty(key, optionName(setting))
                                 is HUDSetting -> s.addProperty(key, setting.value.enabled)
                                 else -> {}
                             }
@@ -86,6 +86,15 @@ object LaunchStats {
             })
         }
     }
+
+    // Odin 0.3.4 keeps a setting's hidden flag and a selector's option names to itself.
+    private val hiddenGetter by lazy { runCatching { Setting::class.java.getDeclaredMethod("getHidden").apply { isAccessible = true } }.getOrNull() }
+    private val optionsField by lazy { runCatching { SelectorSetting::class.java.getDeclaredField("options").apply { isAccessible = true } }.getOrNull() }
+
+    private fun isHidden(setting: Setting<*>): Boolean = runCatching { hiddenGetter?.invoke(setting) as? Boolean }.getOrNull() ?: false
+
+    private fun optionName(setting: SelectorSetting): String =
+        runCatching { (optionsField?.get(setting) as? List<*>)?.getOrNull(setting.value)?.toString() }.getOrNull() ?: setting.value.toString()
 
     private fun send() {
         val body = report().toString()
