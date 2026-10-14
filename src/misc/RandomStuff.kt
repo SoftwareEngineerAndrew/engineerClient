@@ -4,6 +4,10 @@ import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.RenderExtractEvent
+import com.engineerclient.pf.HubNametags
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
@@ -102,21 +106,32 @@ object RandomStuff : Module(
 
     // --- Startup and restart -------------------------------------------------------------------
 
-    private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
-    private val skipLoadingScreen by BooleanSetting("Skip Loading Screen", true, desc = "No \"Loading terrain\" screen when joining or changing world: the world shows as it loads in.")
-    private val clickGuiScale by NumberSetting("Click GUI Size", 1.55f, 1.0..4.0, 0.05f, desc = "Size of Odin's settings menu. Replaces Odin's own Click GUI Size, which only goes in whole steps.")
     private val autoJoinHypixel by BooleanSetting("Auto Join Hypixel", false, desc = "First title screen this launch: connects to Hypixel, then gets you onto Skyblock as fast as possible.")
 
-    // --- Scoreboard lines ----------------------------------------------------------------------
+    // --- Hub Nametag Stats ------------------------------------------------------------------------
     //
-    // Hypixel's sidebar carries a few lines nobody reads mid-run - the real-world date, the
-    // Skyblock clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines
-    // does the matching and the hiding; these settings only say what to hide.
+    // In the Dungeon Hub, a stat line over real players' nametags: Catacombs level, secrets and the
+    // S+ PB on one floor (HubNametags draws it).
 
-    private val hideSbLines by BooleanSetting("Hide Scoreboard Lines", false, desc = "Hides the noisy sidebar lines: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
+    private val hubNametags by BooleanSetting("Hub Nametag Stats", true, desc = "In the Dungeon Hub, Catacombs level, secrets and the S+ PB on the PB Floor over players' nametags.")
+    private val pbFloor by SelectorSetting("PB Floor", HubNametags.PbFloor.F7, desc = "Which floor's S+ PB the nametag stats show.").withDependency { hubNametags }
+    private val nametagGap by NumberSetting("Gap", 0f, 0.0..1.0, 0.05f, desc = "Extra space between a player's nametag and the stat line, in blocks.").withDependency { hubNametags }
+
+    // --- Clean ---------------------------------------------------------------------------------
+    //
+    // Hypixel's sidebar carries a few lines nobody reads mid-run - the real-world date, the Skyblock
+    // clock and season, and in dungeons the Keys and Cleared counters. ScoreboardLines does the
+    // matching and the hiding; these settings only say what to hide. Clean Chat's rules are ChatHider's.
+
+    private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Title screen: no Friends, Language or Accessibility buttons. Esc menu: no Advancements, Statistics, Server Links or icon row (bugs, feedback, friends, player reporting), and Options shares its row with a Mods button.")
+    private val skipLoadingScreen by BooleanSetting("Clean Loading Screen", true, desc = "No \"Loading terrain\" screen when joining or changing world: the world shows as it loads in.")
+    private val hideSbLines by BooleanSetting("Clean Scoreboard", false, desc = "Hides the noisy sidebar lines: date and server, clock, season, other locations, objective, Keys, pre-start countdown, Solo, www.hypixel.net, blank spacers and the title, plus the three below. Purse, Bits and teammates always stay. Off, the sidebar is left alone.")
     private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides the location line in dungeons: The Catacombs (F1-F7, M1-M7, E).").withDependency { hideSbLines }
     private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { hideSbLines }
     private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared: #% (#) line.").withDependency { hideSbLines }
+    private val cleanChat by BooleanSetting("Clean Chat", true, desc = "Hides the chat lines its rules mark Block (built in, or config/engineerclient/chat-hider.json). Other mods still see every line.")
+    private val logHidden by BooleanSetting("Log Hidden Lines", false, desc = "Writes every hidden line and the rule that hid it to the EC session log, for checking a rule.").withDependency { cleanChat }
+    private val reloadChatRules by ActionSetting("Reload Rules", desc = "Re-reads config/engineerclient/chat-hider.json (or the built-in rules if that file is absent).") { com.engineerclient.chat.ChatHider.reload() }.withDependency { cleanChat }
 
     private val partyLeaveRegex = Regex("^(?:\\[[^]]*?] ?)?\\w{1,16} has left the party\\.$")
     private const val BLESS_COOLDOWN_MS = 10_000L
@@ -160,8 +175,11 @@ object RandomStuff : Module(
     /** Clean Menus: read by PauseMenuMixin, and below for the title screen. */
     fun cleansMenus(): Boolean = enabled && cleanMenus
 
-    /** Click GUI Size: read by ClickGuiSizeMixin each time Odin's menu opens; 0 leaves Odin's own size. */
-    fun clickGuiSize(): Float = if (enabled) clickGuiScale else 0f
+    /** Clean Chat: read by ChatHider for every line the chat GUI is about to add. */
+    fun cleansChat(): Boolean = enabled && cleanChat
+
+    /** Clean Chat's Log Hidden Lines. */
+    fun logsHiddenChat(): Boolean = logHidden
 
     /**
      * Whether text drawn at pose scale [scale] should be sampled smoothly (ClickGuiTextMixin): only in
@@ -280,6 +298,10 @@ object RandomStuff : Module(
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
+        }
+
+        on<RenderExtractEvent> {
+            if (enabled && hubNametags) HubNametags.render(this, pbFloor, nametagGap.toDouble())
         }
 
         on<MessageEvent.Overlay> {

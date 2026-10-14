@@ -4,16 +4,9 @@ import com.engineerclient.adr.ADR
 import com.engineerclient.misc.AgroSphere
 import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
-import com.engineerclient.rotation.LeapHighlight
-import com.engineerclient.chat.ChatHider
 import com.engineerclient.practice.SimonSaysPractice
 import com.engineerclient.pov.PovPreviews
 
-import com.engineerclient.rotation.P3Rotation
-import com.engineerclient.rotation.RoleVignette
-import com.engineerclient.rotation.RotationEngine
-import com.engineerclient.rotation.RotationSpec
-import com.engineerclient.rotation.SetupCheck
 import com.engineerclient.splits.DungeonSplits
 import com.engineerclient.splits.OdinSplitsLook
 import com.engineerclient.storm.StormPhase
@@ -89,7 +82,7 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers,
+            com.engineerclient.practice.TermInfo, StormPhase, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
         )
     }
 
@@ -117,7 +110,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, ADR, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -132,16 +125,12 @@ object EngineerClient : ClientModInitializer {
             if (!exclusiveChecked) safely("exclusive fullscreen") { noExclusiveFullscreen() }
         }
 
-        LeapHighlight.register()
         DeadPlayers.register()
         com.engineerclient.misc.Witherborn.register()
         com.engineerclient.misc.I4Complete.register()
-        RoleVignette.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
             "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +
-                "  spec v${RotationSpec.graph.version}" +
                 "  odin ${FabricLoader.getInstance().getModContainer("odin").map { it.metadata.version.friendlyString }.orElse("?")}",
-            "starting role: ${RotationSpec.graph.name(EcConfig.data.myStartingRole)}",
         ))
         // The player is not known until they log in; record who this client is once they are.
         ClientTickEvents.END_CLIENT_TICK.register(object : ClientTickEvents.EndTick {
@@ -182,42 +171,27 @@ object EngineerClient : ClientModInitializer {
 
     fun msg(text: Component) = chat(Component.literal(PREFIX).append(text))
 
-    /** /ec on its own: what the rest of it does. */
-    private val HELP = listOf(
+    /** /ec on its own: what the rest of it does. Other parts of the mod add their own lines. */
+    val HELP = mutableListOf(
         "${PREFIX}§7commands:",
-        "§f /ec role <role>|clear§7 — your P3 starting role; §f/ec roles§7 — everyone's",
-        "§f /ec setup§7 — checks the Odin setup Dynamic Term Roles relies on",
-        "§f /ec log§7 [mark <note>] — the session log; §f/ec debug§7, §f/ec memreport",
+        "§f /ec log§7 [mark <note>] — the session log; §f/ec memreport",
     )
 
-    private fun roleLines(): List<String> {
-        val me = mc.player?.name?.string
-        val mineId = EcConfig.data.myStartingRole
-        val lines = mutableListOf("${EngineerClient.PREFIX}§7phase-3 starting roles §8(/ec role <role> sets yours; the rest are heard from party chat)")
-        RotationSpec.graph.startingRoles.forEach { role ->
-            val ign = P3Rotation.teamRoles[role.id] ?: if (role.id == mineId) me else null
-            val mine = if (role.id == mineId) " §8(you)" else ""
-            val tasks = role.tasks.joinToString(" ") { t ->
-                val letter = t.type.first().uppercase()
-                if (t.check) "§b$letter" else "§8$letter"
-            }
-            lines += "§7 ${role.name.padEnd(7)} §f${ign ?: "§8unbound"}$mine  $tasks§7 ${role.note}"
-        }
-        if (RotationEngine.running) {
-            lines += "§7 live: §a${RotationEngine.roleOf(me ?: "")?.name ?: "§8—"}§7, section §a${P3Rotation.section}"
-        }
-        return lines
-    }
+    /** More lines for /ec log mark to stamp under the note (other parts of the mod add theirs). */
+    val markLines = mutableListOf<() -> List<String>>()
 
     private fun mark(note: String) {
         EcLog.log("MARK", note.ifBlank { "(no note)" })
-        P3Rotation.debugLines().forEach { EcLog.log("MARK", "  " + it.replace(Regex("§."), "")) }
+        markLines.forEach { lines -> lines().forEach { EcLog.log("MARK", "  " + it.replace(Regex("§."), "")) } }
     }
 
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             // /adr: the link to all your uploaded runs, private ones included.
             for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 })
+            // Odin's settings menu, as its /od opens it.
+            for (name in listOf("adm", "ADM", "advanceddungeonsmod", "eclient", "ea", "eec", "em"))
+                dispatcher.register(literal(name).executes { mc.schedule { mc.gui.setScreen(com.odtheking.odin.clickgui.ClickGUI) }; 1 })
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // Same tree registered under the formal name (both casings, since Brigadier
@@ -243,43 +217,10 @@ object EngineerClient : ClientModInitializer {
                                 ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7marked: §f$note"))
                                 1
                             })))
-                    .then(literal("debug").executes { ctx ->
-                        P3Rotation.debugLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
-                        1
-                    })
                     .then(literal("memreport").executes {
                         com.engineerclient.debug.MemReport.write { line -> msg(line) }
                         1
                     })
-                    .then(literal("setup").executes { ctx ->
-                        SetupCheck.lines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
-                        1
-                    })
-                    .then(literal("roles").executes { ctx ->
-                        roleLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
-                        1
-                    })
-                    .then(literal("role")
-                        .then(literal("clear").executes { ctx ->
-                            EcConfig.data.myStartingRole = null
-                            EcConfig.save()
-                            ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7your starting role is cleared."))
-                            1
-                        })
-                        .then(argument("role", StringArgumentType.word()).executes { ctx ->
-                            val wanted = StringArgumentType.getString(ctx, "role")
-                            val role = RotationSpec.graph.startingRoles.find { it.name.equals(wanted, true) }
-                            if (role == null) {
-                                ctx.source.sendError(Component.literal(
-                                    "§cUnknown starting role '$wanted' — use ${RotationSpec.graph.startingRoles.joinToString("/") { it.name }}"))
-                                return@executes 0
-                            }
-                            EcConfig.data.myStartingRole = role.id
-                            EcConfig.save()
-                            ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7you run §a${role.name}§7 — announced to the party when you enter the boss room."))
-                            P3Rotation.announceMyRole()
-                            1
-                        }))
             )
         }
     }

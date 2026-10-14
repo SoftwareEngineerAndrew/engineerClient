@@ -36,6 +36,9 @@ object ConfigMigration {
      * module that was renamed or folded into another keeps what was set in it:
      *  - BR Waypoints 2 is BR Roles;
      *  - Better PF is ADR (its runs folder too);
+     *  - P3 Sim is P3 Sim Beta;
+     *  - Random Stuff's Hide Scoreboard Lines and Skip Loading Screen are Clean Scoreboard and Clean
+     *    Loading Screen; Chat Hider is its Clean Chat, and Hub Nametag Stats its Hub Nametag Stats;
      *  - the health and mana settings moved from Random Stuff to Health & Mana (on if Random Stuff
      *    was); Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied
      *    to Health & Mana, which provides those HUDs;
@@ -71,6 +74,27 @@ object ConfigMigration {
         module(modules, "Better PF")?.let {
             if (module(modules, "ADR") == null) { it.addProperty("name", "ADR"); changed = true }
         }
+        module(modules, "P3 Sim")?.let {
+            if (module(modules, "P3 Sim Beta") == null) { it.addProperty("name", "P3 Sim Beta"); changed = true }
+        }
+
+        module(modules, "Random Stuff")?.let(::settings)?.let { rs ->
+            for ((old, new) in RANDOM_STUFF_RENAMES) rs.remove(old)?.let { if (!rs.has(new)) rs.add(new, it); changed = true }
+        }
+
+        // Modules that became Random Stuff settings: on/off and the settings kept; the module entry goes.
+        fun fold(name: String, enabledKey: String, keys: Map<String, String>) {
+            val old = module(modules, name) ?: return
+            val rs = settings(ensure("Random Stuff"))
+            if (!rs.has(enabledKey)) rs.addProperty(enabledKey, old["enabled"]?.asBoolean ?: true)
+            val from = settings(old)
+            for ((k, to) in keys) from[k]?.let { if (!rs.has(to)) rs.add(to, it) }
+            modules.remove(old)
+            changed = true
+        }
+        fold("Chat Hider", "Clean Chat", mapOf("Log Hidden Lines" to "Log Hidden Lines"))
+        fold("Hub Nametag Stats", "Hub Nametag Stats", mapOf("PB Floor" to "PB Floor", "Gap" to "Gap"))
+
         val own = odinDir.parent.resolve(NAME)
         if (Files.isDirectory(own.resolve("betterpf")) && !Files.exists(own.resolve("adr"))) Files.move(own.resolve("betterpf"), own.resolve("adr"))
 
@@ -171,6 +195,8 @@ object ConfigMigration {
         }
         return changed
     }
+
+    private val RANDOM_STUFF_RENAMES = mapOf("Hide Scoreboard Lines" to "Clean Scoreboard", "Skip Loading Screen" to "Clean Loading Screen")
 
     private val POSMSG_KEYS = mapOf("Posmsg Re-trigger" to "Re-trigger", "Posmsg Here Keybind" to "Box Here Keybind")
 
