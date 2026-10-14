@@ -5,7 +5,6 @@ import com.engineerclient.EngineerClient.mc
 import com.engineerclient.mixin.MinecraftAccessor
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockInteractEvent
@@ -18,7 +17,6 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.createSoundSettings
 import com.odtheking.odin.utils.playSoundSettings
 import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
@@ -79,19 +77,16 @@ object SimonSaysPractice : Module(
     key = null,
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", InputConstants.UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
-    private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
     private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
     private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")
-    private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one. Here and on the real device in P3 (turns Odin's own Custom Click Sounds off).")
-    private val soundsDropdown by DropdownSetting("Click Sounds Dropdown", desc = "").withDependency { clickSounds }
-    private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
-    private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
-    private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from ADR runs), and each press's time from the one before, the first from when its button came up.")
-    private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
+    private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
     private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
     private val size by NumberSetting("Size", 1.0, 1.0..3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
-    private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
+
+    /** Odin's Simon Says click sounds, always on: here and on the real device in P3. */
+    private val CORRECT_SOUND = Triple("entity.experience_orb.pickup", 1f, 1f)
+    private val WRONG_SOUND = Triple("entity.blaze.hurt", 1f, 1f)
 
     // ------------------------------------------------------------------ the real device
 
@@ -331,7 +326,7 @@ object SimonSaysPractice : Module(
         rngLevel = level
         markRng()
         click(p.at(rngButton(level)))
-        if (clickSounds) playSoundSettings(correctSound())
+        playSoundSettings(CORRECT_SOUND)
         p.set(rngButton(level), BUTTON.setValue(ButtonBlock.POWERED, true))
         after(2) { placed?.set(rngButton(level), BUTTON) }
     }
@@ -398,7 +393,7 @@ object SimonSaysPractice : Module(
         reset()
         phase = Phase.STARTING
         startPresses = lastStartPresses; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); fails = 0
-        if (sound && clickSounds) playSoundSettings(correctSound())
+        if (sound) playSoundSettings(CORRECT_SOUND)
         after(6) { begin() }
     }
 
@@ -429,7 +424,7 @@ object SimonSaysPractice : Module(
         Inf.queue.clear(); Inf.bag.clear(); Inf.gaps.clear(); Inf.lastPressed = -1; Inf.lastMs = 0L
         while (Inf.queue.size < Inf.SHOWN) Inf.queue += infPick()
         for (c in 0 until 16) setButton(c, true)
-        if (clickSounds) playSoundSettings(correctSound())
+        playSoundSettings(CORRECT_SOUND)
     }
 
     /** Ends Inf mode (by any other start, a restart, removing the device), with its pace in chat. */
@@ -451,8 +446,8 @@ object SimonSaysPractice : Module(
     }
 
     private fun infPress(cell: Int) {
-        if (cell != Inf.queue.firstOrNull()) { if (clickSounds) playSoundSettings(wrongSound()); return }
-        if (clickSounds) playSoundSettings(correctSound())
+        if (cell != Inf.queue.firstOrNull()) { playSoundSettings(WRONG_SOUND); return }
+        playSoundSettings(CORRECT_SOUND)
         val now = System.currentTimeMillis()
         if (Inf.lastMs != 0L) Inf.gaps += now - Inf.lastMs
         Inf.lastMs = now
@@ -499,7 +494,7 @@ object SimonSaysPractice : Module(
         fromRound = n
         markMode(n)
         phase = Phase.RUNNING
-        if (sound && clickSounds) playSoundSettings(correctSound())
+        if (sound) playSoundSettings(CORRECT_SOUND)
         after(6) { fromRun() }
     }
 
@@ -563,7 +558,7 @@ object SimonSaysPractice : Module(
         // After the reset above, so it doesn't cancel the button coming back up.
         markMode(0)
         click(p.at(START))
-        if (clickSounds) playSoundSettings(correctSound())
+        playSoundSettings(CORRECT_SOUND)
         p.set(START, BUTTON.setValue(ButtonBlock.POWERED, true))
         after(2) { placed?.set(START, BUTTON) }
     }
@@ -591,7 +586,7 @@ object SimonSaysPractice : Module(
         if (Inf.on) { infPress(cell); return }
         if (!accepting) return
         if (cell == expected[next]) {
-            if (clickSounds) playSoundSettings(correctSound())
+            playSoundSettings(CORRECT_SOUND)
             val now = System.currentTimeMillis()
             roundClicks += (now - lastClickMs) / 1000.0; lastClickMs = now
             next++
@@ -604,7 +599,7 @@ object SimonSaysPractice : Module(
             if (n == FINAL_ROUND) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
             else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
         } else {
-            if (clickSounds) playSoundSettings(wrongSound())
+            playSoundSettings(WRONG_SOUND)
             accepting = false
             fails++
             revealed.clear()
@@ -633,8 +628,7 @@ object SimonSaysPractice : Module(
             else -> "§4"
         }
         EngineerClient.msg("§7SS took: $colour${fmt(total)}s$suffix")
-        if (!roundTimes) return
-        // One line a round: its clicking time (vs the top healers' median, with the skip start),
+                // One line a round: its clicking time (vs the top healers' median, with the skip start),
         // then each press, the first from when its button came up, the rest from the press before.
         val vsTop = rounds.size == TOP_ROUNDS.size
         for (i in rounds.indices) {
@@ -824,22 +818,22 @@ object SimonSaysPractice : Module(
      * The presses also go into the real device's round times ([Real]).
      */
     private fun realClick(pos: BlockPos, blocked: Boolean) {
-        if (placed != null || (!clickSounds && !realTimes)) return
+        if (placed != null) return
         if (DungeonUtils.getF7Phase() != M7Phases.P3) return
         val isStart = pos == START
         if (!isStart && (pos.x != 110 || pos.y !in 120..123 || pos.z !in 92..95)) return
         val state = mc.level?.getBlockState(pos) ?: return
         if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
-        if (clickSounds) (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
-        if (blocked) { if (clickSounds) playSoundSettings(wrongSound()); return }
-        if (isStart) { if (clickSounds) playSoundSettings(correctSound()); return }
+        (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
+        if (blocked) { playSoundSettings(WRONG_SOUND); return }
+        if (isStart) { playSoundSettings(CORRECT_SOUND); return }
 
         @Suppress("UNCHECKED_CAST")
         val order = odinOrder.get(null) as List<BlockPos>
         val i = odinNeeded.getInt(null)
         val right = order.getOrNull(i) == pos.east()
-        if (clickSounds) playSoundSettings(if (right) correctSound() else wrongSound())
-        if (realTimes) Real.press(right, last = right && i == order.size - 1, System.currentTimeMillis())
+        playSoundSettings(if (right) CORRECT_SOUND else WRONG_SOUND)
+        Real.press(right, last = right && i == order.size - 1, System.currentTimeMillis())
     }
 
     /**
@@ -949,7 +943,7 @@ object SimonSaysPractice : Module(
             val v = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
                 mc.gameRenderer.mainCamera().position().takeIf { mc.options.cameraType.isFirstPerson })
             EngineerClient.safely("ss practice draw") { draw(p, v, context) }
-            if (!solver) return@on
+            if (!SimonSays.enabled) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
@@ -969,7 +963,7 @@ object SimonSaysPractice : Module(
         // here means "skip cancelled ones"), so a press Block Wrong Clicks stopped still sounds wrong.
         on<BlockInteractEvent>(priority = -1) { EngineerClient.safely("ss real sounds") { realClick(pos, isCancelled) } }
         on<BlockUpdateEvent> {
-            if (!realTimes || placed != null || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (placed != null || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             EngineerClient.safely("ss real times") { Real.block(pos, old, updated) }
         }
         on<LevelEvent.Load> { Real.reset() }

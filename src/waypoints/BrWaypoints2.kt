@@ -100,25 +100,25 @@ object BrWaypoints2 : Module(
         EngineerClient.msg("§aWand set: §f${held.hoverName.string}")
     }
 
-    private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through.")
+    private enum class Killers { DUO, TRIO, QUAD }
+    private enum class MyRole { ALL_BOXES, DOOR, ROLE_1, ROLE_2, ROLE_3, ROLE_4 }
+
+    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. In master mode the site's M7 roles are used and your class picks the role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door). Party chat (!br 2, !br d) overrides it for a run.")
+
+    private val killers by SelectorSetting("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
+
+    private val doorerKills by BooleanSetting("Doorer Kills", false, desc = "The door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by.")
 
     private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing.")
     private val doneColor by ColorSetting("Done Color", Color(121, 255, 121, 166 / 255f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
 
     private val opacity by NumberSetting("Fill Opacity", 0.03f, 0.0..1.0, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
 
-    private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
-
-    private enum class Killers { DUO, TRIO, QUAD }
-    private enum class MyRole { ALL_BOXES, DOOR, ROLE_1, ROLE_2, ROLE_3, ROLE_4 }
-
-    private val killers by SelectorSetting("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
-
-    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. In master mode the site's M7 roles are used and your class picks the role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door). Party chat (!br 2, !br d) overrides it for a run.")
-
-    private val doorerKills by BooleanSetting("Doorer Kills", false, desc = "The door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by.")
-
     private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
+
+    private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through.")
+
+    private val debug by BooleanSetting("Debug", false, desc = "Says in chat, for each room the rush comes into: the door it came in by, your role, and the boxes it shows you.")
 
     /** Which item is the wand, saved with the config so it survives a restart. */
     private var wand by StringSetting("Wand", "", 256, desc = "The wand's identity.", placeholder = "").hide()
