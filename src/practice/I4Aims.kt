@@ -104,7 +104,9 @@ object I4Aims : Module(
     private val ROW_Q = doubleArrayOf(0.67, 0.73, 0.54)
 
     /** What is painted: what it was worked out for, and its aims. */
-    private class Result(val key: String, val eye: Vec3, val lattice: Lattice, val aims: List<I4Geometry.Aim>)
+    private class Result(val key: String, val eye: Vec3, val lattice: Lattice, val now: I4Geometry.Aim?, val next: I4Geometry.Aim?) {
+        val aims get() = listOfNotNull(now, next)
+    }
     @Volatile private var result: Result? = null
 
     /**
@@ -243,13 +245,13 @@ object I4Aims : Module(
             val (now, next) = plan(sc.coarse)
             val key = "$geo|${now?.cells?.sorted()}|${next?.cells?.sorted()}"
             if (key == result?.key) return
-            val picked = listOfNotNull(now, next)
+            val picked = if (now == null) emptyList() else listOfNotNull(now, next)
             // Already worked out: paint it now.
             if (picked.all { sc.cached(it) }) { show(sc, key, picked, 0); return }
             if (!busy.compareAndSet(false, true)) return
             worker.execute {
                 try { val t0 = System.nanoTime(); show(sc, key, picked, (System.nanoTime() - t0) / 1_000_000) }
-                catch (t: Throwable) { EngineerClient.logger.error("[ec] i4 aims failed", t); result = Result(key, sc.shooter.eye, sc.lattice, emptyList()) }
+                catch (t: Throwable) { EngineerClient.logger.error("[ec] i4 aims failed", t); result = Result(key, sc.shooter.eye, sc.lattice, null, null) }
                 finally { busy.set(false) }
             }
             return
@@ -279,7 +281,7 @@ object I4Aims : Module(
 
     private fun show(sc: Scan, key: String, picked: List<I4Geometry.Coarse>, ms: Long) {
         val was = result?.key
-        val r = Result(key, sc.shooter.eye, sc.lattice, picked.mapNotNull { sc.aim(it) })
+        val r = Result(key, sc.shooter.eye, sc.lattice, picked.getOrNull(0)?.let { sc.aim(it) }, picked.getOrNull(1)?.let { sc.aim(it) })
         result = r
         logPass(was, key, r, ms)
     }
@@ -414,10 +416,12 @@ object I4Aims : Module(
     }
 
     private const val GREEN = 0xFF00FF00.toInt()
+    private const val CYAN = 0xFF00FFFF.toInt()
 
     /**
-     * Each screen pixel in the spots' box, green when the look through its centre rounds to a spot (the nearest whole
-     * mouse count), for the camera's look and (zoomed) FOV this frame; painted as runs along each pixel row.
+     * Each screen pixel in the spots' box, green when the look through its centre rounds to a spot of NOW (the nearest
+     * whole mouse count), cyan for one of NEXT, for the camera's look and (zoomed) FOV this frame; painted as runs along
+     * each pixel row.
      */
     private fun drawScreen(g: GuiGraphicsExtractor) {
         if (!enabled) return
@@ -428,8 +432,10 @@ object I4Aims : Module(
         val i0 = spots.minOf { it.i }; val i1 = spots.maxOf { it.i }
         val j0 = spots.minOf { it.j }; val j1 = spots.maxOf { it.j }
         val cols = i1 - i0 + 1
-        val good = BooleanArray(cols * (j1 - j0 + 1))
-        for (s in spots) good[(s.j - j0) * cols + (s.i - i0)] = true
+        // 1: NOW (green), 2: NEXT (cyan); NOW wins where they overlap.
+        val mark = ByteArray(cols * (j1 - j0 + 1))
+        r.next?.pixels?.forEach { mark[(it.j - j0) * cols + (it.i - i0)] = 2 }
+        r.now?.pixels?.forEach { mark[(it.j - j0) * cols + (it.i - i0)] = 1 }
 
         val camera = mc.gameRenderer.mainCamera()
         val window = mc.window
@@ -459,17 +465,20 @@ object I4Aims : Module(
         for (py in py0..py1) {
             val sv = -(py + 0.5 - h / 2.0) / focal
             var run = -1
+            var runMark = 0
             for (px in px0..px1 + 1) {
-                var on = false
+                var on = 0
                 if (px <= px1) {
                     val su = (px + 0.5 - w / 2.0) / focal
                     val dx = fx + su * rx + sv * ux; val dy = fy + sv * uy; val dz = fz + su * rz + sv * uz
                     val i = l.i(l.yaw0 + Mth.wrapDegrees(Math.toDegrees(atan2(-dx, dz)) - l.yaw0))
                     val j = l.j(Math.toDegrees(atan2(-dy, hypot(dx, dz))))
-                    on = i in i0..i1 && j in j0..j1 && good[(j - j0) * cols + (i - i0)]
+                    on = if (i in i0..i1 && j in j0..j1) mark[(j - j0) * cols + (i - i0)].toInt() else 0
                 }
-                if (on && run < 0) run = px
-                else if (!on && run >= 0) { g.fill(run, py, px, py + 1, GREEN); run = -1 }
+                if (on != runMark) {
+                    if (runMark != 0) g.fill(run, py, px, py + 1, if (runMark == 1) GREEN else CYAN)
+                    run = px; runMark = on
+                }
             }
         }
         g.pose().popMatrix()
