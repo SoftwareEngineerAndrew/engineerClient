@@ -137,8 +137,12 @@ object I4Geometry {
     }
 
     /** Who shoots, and how: the inputs every spot's volley depends on besides the look. */
-    class Shooter(val bow: String, val pos: Vec3, val crouch: Boolean, val stacks: Int) {
-        val eye: Vec3 get() = Vec3(pos.x, pos.y + if (crouch) 1.27 else 1.62, pos.z)
+    /**
+     * Who shoots, from where. [legacy]: a 1.8 server (Hypixel), where sneaking lowers the eye (and the arrows) by only
+     * 0.08 to 1.54; a modern one (P3 Sim) drops it to 1.27.
+     */
+    class Shooter(val bow: String, val pos: Vec3, val crouch: Boolean, val stacks: Int, val legacy: Boolean = true) {
+        val eye: Vec3 get() = Vec3(pos.x, pos.y + if (!crouch) 1.62 else if (legacy) 1.54 else 1.27, pos.z)
     }
 
     /**
@@ -159,7 +163,8 @@ object I4Geometry {
     }
 
     private fun plan(s: Shooter, yaw: Float, pitch: Float, noise: Vec3) =
-        ShotPlan.plan(s.bow, s.pos, yaw, pitch, s.crouch, s.stacks, noise, 4).filter { it.delay == 0 }
+        if (s.crouch && s.legacy) ShotPlan.plan(s.bow, s.pos.add(0.0, -0.08, 0.0), yaw, pitch, false, s.stacks, noise, 4).filter { it.delay == 0 }
+        else ShotPlan.plan(s.bow, s.pos, yaw, pitch, s.crouch, s.stacks, noise, 4).filter { it.delay == 0 }
 
     fun volley(board: Board, s: Shooter, yaw: Float, pitch: Float): Volley {
         val arrows = plan(s, yaw, pitch, Vec3.ZERO)
@@ -184,18 +189,26 @@ object I4Geometry {
         }
     }
 
-    /** The chance (over [NOISE]) that every arrow that lands on one of [want] with no noise still lands on it. */
+    /**
+     * The chance (over [NOISE]) that every cell of [want] is still hit by some arrow: a cell a noise-free arrow (a
+     * Terminator's side arrow) lands on is certain however close the noisy ones beside it are to its edge.
+     */
     fun chance(board: Board, v: Volley, want: Set<Int>): Double {
-        val idx = v.cells.indices.filter { v.cells[it] in want && v.noisy(it) }
+        val sure = v.cells.indices.filter { v.cells[it] in want && !v.noisy(it) }.map { v.cells[it] }.toSet()
+        val idx = v.cells.indices.filter { v.cells[it] in want && v.cells[it] !in sure }
         if (idx.isEmpty()) return 1.0
+        val need = want - sure
         var ok = 0
+        val got = HashSet<Int>()
         for (n in NOISE) {
-            if (idx.all { i ->
-                    val c = v.crossings[i]!!
-                    val dx = v.jx[i][0] * n.x + v.jx[i][1] * n.y + v.jx[i][2] * n.z
-                    val dy = v.jy[i][0] * n.x + v.jy[i][1] * n.y + v.jy[i][2] * n.z
-                    hit(board, c, dx, dy) == v.cells[i]
-                }) ok++
+            got.clear()
+            for (i in idx) {
+                val c = v.crossings[i]!!
+                val dx = v.jx[i][0] * n.x + v.jx[i][1] * n.y + v.jx[i][2] * n.z
+                val dy = v.jy[i][0] * n.x + v.jy[i][1] * n.y + v.jy[i][2] * n.z
+                if (hit(board, c, dx, dy) == v.cells[i]) got += v.cells[i]
+            }
+            if (got.containsAll(need)) ok++
         }
         return ok.toDouble() / NOISE.size
     }
@@ -239,7 +252,14 @@ object I4Geometry {
      * [lattice]. [keep] picks which of the coarse aims get the fine pass (it's the costly one).
      */
     fun aims(board: Board, s: Shooter, lattice: Lattice, minChance: Double, coarse: Double = 0.2,
-             keep: (List<Coarse>) -> List<Coarse> = { it }): List<Aim> {
+             keep: (List<Coarse>) -> List<Coarse> = { it }): List<Aim> =
+        keep(scan(board, s, minChance, coarse)).parallelStream().map { c -> fine(board, s, lattice, minChance, c, coarse) }.toList().filterNotNull()
+
+    /**
+     * The coarse pass alone: the cell sets a volley covers from [s] (every [coarse] degrees), each with its best chance,
+     * those reaching [minChance]. It depends on where you stand and what you hold, not on the board's state.
+     */
+    fun scan(board: Board, s: Shooter, minChance: Double, coarse: Double = 0.2): List<Coarse> {
         val eye = s.eye
         val (y0, p0) = lookAt(eye, Vec3(62.5, 133.0, FACE))
         val (y1, p1) = lookAt(eye, Vec3(70.5, 124.5, FACE))
@@ -257,19 +277,23 @@ object I4Geometry {
             }
             mine
         }.toList().forEach { m -> m.forEach { (k, c) -> found.getOrPut(k) { Coarse(k, c.order) }.merge(c) } }
-        val picked = keep(found.values.filter { it.bestChance >= minChance })
-        return picked.parallelStream().map { c -> fine(board, s, lattice, minChance, coarse, c) }.toList().filterNotNull()
+        return found.values.filter { it.bestChance >= minChance }
     }
 
-    /** [c]'s spots on [lattice]: every reachable look in its box that covers exactly its cells at [minChance] or better. */
-    private fun fine(board: Board, s: Shooter, lattice: Lattice, minChance: Double, coarse: Double, c: Coarse): Aim? {
-        val pixels = ArrayList<Pixel>()
-        for (j in lattice.j(c.minPitch - coarse)..lattice.j(c.maxPitch + coarse)) for (i in lattice.i(c.minYaw - coarse)..lattice.i(c.maxYaw + coarse)) {
-            val v = volley(board, s, lattice.yaw(i).toFloat(), lattice.pitch(j).toFloat())
-            if (v.covers != c.cells) continue
-            val ch = chance(board, v, c.cells)
-            if (ch >= minChance) pixels += Pixel(i, j, ch)
-        }
+    fun fine(board: Board, s: Shooter, lattice: Lattice, minChance: Double, c: Coarse, coarse: Double = 0.2): Aim? {
+        val iRange = lattice.i(c.minYaw - coarse)..lattice.i(c.maxYaw + coarse)
+        // Each pitch row on its own thread.
+        val pixels = (lattice.j(c.minPitch - coarse)..lattice.j(c.maxPitch + coarse)).toList().parallelStream().flatMap { j ->
+            val row = ArrayList<Pixel>()
+            for (i in iRange) {
+                val v = volley(board, s, lattice.yaw(i).toFloat(), lattice.pitch(j).toFloat())
+                // A spot that also covers more cells is only better: keep it, or the aim gets holes where a bigger one starts.
+                if (!v.covers.containsAll(c.cells)) continue
+                val ch = chance(board, v, c.cells)
+                if (ch >= minChance) row += Pixel(i, j, ch)
+            }
+            row.stream()
+        }.toList()
         if (pixels.isEmpty()) return null
         // The best spot: the surest, then the one with the most room around it (counts to the nearest spot that isn't
         // as sure), so being a count or two off still lands it.
