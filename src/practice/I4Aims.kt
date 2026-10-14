@@ -89,11 +89,24 @@ object I4Aims : Module(
     /** Your "completed a device!" came while at the board: nothing left to aim at until a target lights again. */
     private var complete = false
 
-    /** A finished pass: what it was worked out for, and its aims. */
+    /** What is painted: what it was worked out for, and its aims. */
     private class Result(val key: String, val eye: Vec3, val lattice: Lattice, val aims: List<I4Geometry.Aim>)
     @Volatile private var result: Result? = null
+
+    /**
+     * Everything that depends only on where you stand and what you hold: the coarse scan, and each aim's spots (worked
+     * out once, as asked or in the background). A new target or a hit only picks among them, so it paints at once.
+     */
+    private class Scan(val key: String, val board: Board, val shooter: Shooter, val lattice: Lattice, val min: Double, val coarse: List<I4Geometry.Coarse>) {
+        val fine = java.util.concurrent.ConcurrentHashMap<Set<Int>, java.util.Optional<I4Geometry.Aim>>()
+        fun aim(c: I4Geometry.Coarse): I4Geometry.Aim? =
+            fine.computeIfAbsent(c.cells) { java.util.Optional.ofNullable(I4Geometry.fine(board, shooter, lattice, min, c)) }.orElse(null)
+        fun cached(c: I4Geometry.Coarse) = fine.containsKey(c.cells)
+    }
+    @Volatile private var scan: Scan? = null
     private val busy = AtomicBoolean(false)
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "ec-i4-aims").apply { isDaemon = true } }
+    private val warmer = Executors.newSingleThreadExecutor { Thread(it, "ec-i4-warm").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
 
     /** Read by ArrowsDeviceAimMixin: Odin's aim cubes are hidden while this draws its own. */
     @JvmStatic fun replacesOdinAims(): Boolean = enabled
@@ -109,7 +122,7 @@ object I4Aims : Module(
         return lastBow
     }
 
-    private fun reset() { lit = -1; marked.clear(); flying.clear(); result = null; complete = false }
+    private fun reset() { lit = -1; marked.clear(); flying.clear(); result = null; scan = null; complete = false }
 
     /** You're at the plate with the board there (all 9 cells blue terracotta or emerald). */
     private fun atBoard(): Boolean {
@@ -174,16 +187,37 @@ object I4Aims : Module(
         val phaseY = Math.floorMod((p.yRot / step * 40).toLong(), 40L)
         val phaseP = Math.floorMod((p.xRot / step * 40).toLong(), 40L)
         val pos = p.position()
-        val key = "$bow|$stacks|${p.isShiftKeyDown}|${"%.3f %.3f %.3f".format(pos.x, pos.y, pos.z)}|$step|$phaseY,$phaseP|$target|$guess|${open.sorted()}|$minChance"
-        // One pass at a time; the tick after it ends starts the next if anything changed meanwhile.
-        if (key == result?.key || !busy.compareAndSet(false, true)) return
-        val shooter = Shooter(bow, pos, p.isShiftKeyDown, stacks)
+        val legacy = !com.engineerclient.p3sim.P3Sim.inSim
+        val geo = "$bow|$stacks|${p.isShiftKeyDown}|${"%.3f %.3f %.3f".format(pos.x, pos.y, pos.z)}|$step|$phaseY,$phaseP|$minChance|$legacy"
+        val key = "$geo|$target|$guess|${open.sorted()}"
+        if (key == result?.key) return
+        val sc = scan
+        if (sc != null && sc.key == geo) {
+            val picked = pick(sc.coarse, target, open, guess)
+            // Already worked out: paint it now.
+            if (picked.all { sc.cached(it) }) { show(sc, key, picked, 0); return }
+            if (!busy.compareAndSet(false, true)) return
+            worker.execute {
+                try { val t0 = System.nanoTime(); show(sc, key, picked, (System.nanoTime() - t0) / 1_000_000) }
+                catch (t: Throwable) { EngineerClient.logger.error("[ec] i4 aims failed", t); result = Result(key, sc.shooter.eye, sc.lattice, emptyList()) }
+                finally { busy.set(false) }
+            }
+            return
+        }
+        // One scan at a time; the tick after it ends starts the next if anything changed meanwhile.
+        if (!busy.compareAndSet(false, true)) return
+        val shooter = Shooter(bow, pos, p.isShiftKeyDown, stacks, legacy)
         val yaw0 = (p.yRot.toDouble() % 360.0 + 360.0) % 360.0 - (if ((p.yRot.toDouble() % 360.0 + 360.0) % 360.0 >= 180.0) 360.0 else 0.0)
         val lattice = Lattice(yaw0, p.xRot.toDouble(), step)
         val min = minChance / 100.0
         worker.execute {
             try {
-                result = Result(key, shooter.eye, lattice, I4Geometry.aims(b, shooter, lattice, min) { pick(it, target, open, guess) })
+                val t0 = System.nanoTime()
+                val fresh = Scan(geo, b, shooter, lattice, min, I4Geometry.scan(b, shooter, min))
+                scan = fresh
+                show(fresh, key, pick(fresh.coarse, target, open, guess), (System.nanoTime() - t0) / 1_000_000)
+                // Every other aim in the background, so the next target paints at once.
+                warmer.execute { for (c in fresh.coarse) { if (scan !== fresh) break; runCatching { fresh.aim(c) } } }
             } catch (t: Throwable) {
                 EngineerClient.logger.error("[ec] i4 aims failed", t)
                 result = Result(key, shooter.eye, lattice, emptyList())   // not retried every tick
@@ -191,6 +225,23 @@ object I4Aims : Module(
                 busy.set(false)
             }
         }
+    }
+
+    private fun show(sc: Scan, key: String, picked: List<I4Geometry.Coarse>, ms: Long) {
+        val was = result?.key
+        val r = Result(key, sc.shooter.eye, sc.lattice, picked.mapNotNull { sc.aim(it) })
+        result = r
+        logPass(was, key, r, ms)
+    }
+
+    private val KEY_PARTS = listOf("bow", "stacks", "sneak", "pos", "step", "phase", "min", "legacy", "target", "guess", "open")
+
+    /** One log line per pass: what changed since the last one and what it paints, to trace jumps in what's drawn. */
+    private fun logPass(was: String?, key: String, r: Result, ms: Long) {
+        val old = was?.split('|'); val now = key.split('|')
+        val changed = now.indices.filter { old == null || old.getOrNull(it) != now[it] }.joinToString(",") { KEY_PARTS.getOrElse(it) { "?" } + "=" + now[it] }
+        val aim = r.aims.firstOrNull()
+        EngineerClient.logger.info("[ec] i4 pass ${ms}ms lit=$lit marked=${marked.sorted()} changed[$changed] paints=${aim?.cells?.sorted() ?: "-"} spots=${aim?.pixels?.size ?: 0}")
     }
 
     /** New arrows near you: where each will cross the board, so a volley in the air on the lit target counts as its hit. */
@@ -210,6 +261,7 @@ object I4Aims : Module(
             if (cell < 0) { flying[a.id] = -1 to ticks + 12; continue }
             val eta = ((I4Geometry.FACE - a.z) / v.z).toInt() + 4
             flying[a.id] = cell to ticks + eta
+            EngineerClient.logger.info("[ec] i4 arrow t=$ticks id=${a.id} age=${a.tickCount} -> cell $cell by t=${ticks + eta} (lit=$lit)")
         }
     }
 
@@ -231,6 +283,7 @@ object I4Aims : Module(
         on<BlockUpdateEvent> {
             val i = I4Geometry.CELLS.indexOf(pos)
             if (i < 0) return@on
+            EngineerClient.logger.info("[ec] i4 block t=$ticks cell $i ${if (updated.`is`(Blocks.EMERALD_BLOCK)) "lit" else "blue"}")
             if (updated.`is`(Blocks.EMERALD_BLOCK)) {
                 // A cell you'd hit lighting again: the board started over.
                 if (i in marked) marked.clear()
