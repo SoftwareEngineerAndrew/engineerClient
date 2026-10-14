@@ -35,29 +35,29 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  */
 object OdinSplitsLook {
 
-    private enum class Look(private val label: String) { ODIN_SPLITS("Odin Splits"), ENGINEER_SPLITS("ADM Splits"); override fun toString() = label }
+    private enum class Look(private val label: String) { ODIN_SPLITS("Odin Splits"), ENGINEER_SPLITS("Engineer Splits"); override fun toString() = label }
     private enum class PaceFloor { F7, M7 }
     enum class PaceFrom(private val label: String) { RECENT("Recent Runs"), TARGETS("Targets"); override fun toString() = label }
 
     private val look = enumSelector("Look", Look.ENGINEER_SPLITS,
-        desc = "Odin Splits, or ADM Splits: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by ADM.")
+        desc = "Odin Splits, or Engineer Splits: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
 
     /** The Engineer look is picked. */
     val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS.ordinal
 
     private val colourByTime = BooleanSetting("Color Based Off Time", true,
-        desc = "Floor 7 split times coloured by how fast they were (dark green to black), here and in Sub Splits. Off: each time in its split's own colour. Added by ADM.")
+        desc = "Floor 7 split times coloured by how fast they were (dark green to black), here and in Sub Splits. Off: each time in its split's own colour. Added by engineerClient.")
 
     private val showPb = BooleanSetting("Show PB", false,
-        desc = "Times that tie or beat your best for that split in gold. Off: they get their colour from the time like any other. Added by ADM.")
+        desc = "Times that tie or beat your best for that split in gold. Off: they get their colour from the time like any other. Added by engineerClient.")
         .withDependency { colourByTime.value }
 
-    private val showLag = BooleanSetting("Show Lag", true, desc = "ADM Splits: the Lag line on top, the time lost to lag so far this run (floor 7).")
+    private val showLag = BooleanSetting("Show Lag", true, desc = "Engineer Splits: the Lag line on top, the time lost to lag so far this run (floor 7).")
         .withDependency { engineer }
-    private val showPace = BooleanSetting("Show Pace", true, desc = "ADM Splits: the Pace line, the projected finish.")
+    private val showPace = BooleanSetting("Show Pace", true, desc = "Engineer Splits: the Pace line, the projected finish.")
         .withDependency { engineer }
 
-    private val enterAfterEntry = BooleanSetting("Enter After Entry", true, desc = "ADM Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
+    private val enterAfterEntry = BooleanSetting("Enter After Entry", true, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }

@@ -33,7 +33,7 @@ import net.minecraft.world.phys.Vec3
  */
 object HubNametags : Module(
     name = "Hub Nametag Stats",
-    category = Category.custom("ADM"),
+    category = Category.custom("Engineer Client"),
     description = "Catacombs level, secrets and S+ floor PB over players' nametags in the Dungeon Hub.",
     toggled = true,
 ) {

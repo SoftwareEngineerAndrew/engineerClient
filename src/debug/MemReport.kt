@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter
  * `/ec memreport`: who holds LWJGL's native memory - Minecraft's MemoryUtil, backed here by LWJGL's
  * jemalloc, which rendering, fonts, textures and LWJGL's bundled C libraries (NanoVG, stb) all use.
  * Every allocation still live, grouped by the code that made it, largest total first, written to
- * `logs/adm/memreport-<stamp>.txt`; the top few are said in chat.
+ * `logs/engineerclient/memreport-<stamp>.txt`; the top few are said in chat.
  *
  * LWJGL only records allocations when the game was started with
  * `-Dorg.lwjgl.util.DebugAllocator=true` (add `-Dorg.lwjgl.util.DebugAllocator.internal=true` to
@@ -55,7 +55,7 @@ object MemReport {
                 for ((stack, a) in ranked) {
                     out.append("${mb(a[0])} in ${a[1]} allocations\n").append(stack).append("\n\n")
                 }
-                val dir = EngineerClient.mc.gameDirectory.toPath().resolve("logs").resolve("adm")
+                val dir = EngineerClient.mc.gameDirectory.toPath().resolve("logs").resolve("engineerclient")
                 Files.createDirectories(dir)
                 val file = dir.resolve("memreport-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".txt")
                 Files.writeString(file, out)

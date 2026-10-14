@@ -52,12 +52,12 @@ object CoffeeClient : ClientModInitializer {
 
     /**
      * Leap Extras used to be an Engineer Client module: the first time it loads here, its saved
-     * settings are copied over from adm.json so they carry across.
+     * settings are copied over from engineerclient.json so they carry across.
      */
     private fun adoptLeapExtrasSettings() {
         val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
         val ours = dir.resolve("coffeeclient.json")
-        val theirs = dir.resolve("adm.json")
+        val theirs = dir.resolve("engineerclient.json")
         if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
         val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
         if (target.any { it.asJsonObject.get("name")?.asString == "Leap Extras" }) return
@@ -65,7 +65,7 @@ object CoffeeClient : ClientModInitializer {
         val entry = source.firstOrNull { it.asJsonObject.get("name")?.asString == "Leap Extras" } ?: return
         target.add(entry)
         java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
-        logger.info("[cc] Leap Extras settings copied from adm.json")
+        logger.info("[cc] Leap Extras settings copied from engineerclient.json")
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */

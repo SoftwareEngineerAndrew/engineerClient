@@ -43,7 +43,7 @@ import net.minecraft.sounds.SoundEvents
  */
 object P3Rotation : Module(
     name = "Dynamic Term Roles",
-    category = Category.custom("ADM"),
+    category = Category.custom("Engineer Client"),
     description = "Tracks the phase-3 terminal rotation and shows the role you are on.",
     key = null,
 ) {
@@ -174,7 +174,7 @@ object P3Rotation : Module(
                 check.forEach { EcLog.log("SETUP", (if (it.ok) "ok   " else "FAIL ") + it.what + (if (!it.ok) " — ${it.fix}" else "")) }
                 check.filter { !it.ok }.takeIf { it.isNotEmpty() && !setupWarned }?.let { bad ->
                     setupWarned = true
-                    EngineerClient.msg("§c${bad.size} setup problem${if (bad.size == 1) "" else "s"} — §7/adm setup")
+                    EngineerClient.msg("§c${bad.size} setup problem${if (bad.size == 1) "" else "s"} — §7/ec setup")
                 }
             }
             wasInBoss = inBoss
@@ -361,7 +361,7 @@ object P3Rotation : Module(
         EcLog.log("SECTION", "phase 3 start — team: " + teamRoles.entries.joinToString { "${it.value}=${RotationSpec.graph.name(it.key)}" })
         val me = EngineerClient.mc.player?.name?.string
         if (EcConfig.data.myStartingRole == null) {
-            EngineerClient.msg("§cYou have no starting role — §7set it with §f/adm role <role>§7.")
+            EngineerClient.msg("§cYou have no starting role — §7set it with §f/ec role <role>§7.")
         }
         RotationEngine.begin(teamRoles)
         val missing = RotationSpec.graph.startingRoles.filter { it.id !in teamRoles }.map { it.name }

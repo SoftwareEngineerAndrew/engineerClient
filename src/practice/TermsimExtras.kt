@@ -24,7 +24,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
  * The setting lives in Odin's own Terminal Simulator module ([install]), like OdinSplitsLook's.
  */
 object TermsimExtras {
-    private val hoverTerms = BooleanSetting("Hover Terms", false, desc = "Hovering the slot to click clicks it (numbers: the next number). Termsim only. Added by ADM.")
+    private val hoverTerms = BooleanSetting("Hover Terms", false, desc = "Hovering the slot to click clicks it (numbers: the next number). Termsim only. Added by engineerClient.")
 
     /** Adds Hover Terms to Odin's Terminal Simulator, re-reading the configs for its saved value. */
     fun install() {
