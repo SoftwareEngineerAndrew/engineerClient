@@ -120,7 +120,10 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         return intArrayOf(x0, y0, x0 + w, y0 + h)
     }
 
-    private fun spotAt(x: Double, y: Double): Int = (0 until 4).firstOrNull { val b = box(it); x >= b[0] && x < b[2] && y >= b[1] && y < b[3] } ?: -1
+    /** The spot for a point anywhere on screen: its quarter (the leap menu's boxes sit one per quarter). */
+    private fun spotAt(x: Double, y: Double): Int = (if (x < width / 2.0) 0 else 1) + (if (y < height / 2.0) 0 else 2)
+
+    private fun onBox(i: Int, x: Double, y: Double): Boolean { val b = box(i); return x >= b[0] && x < b[2] && y >= b[1] && y < b[3] }
 
     private fun clazz(name: String): DungeonClass? = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(name, ignoreCase = true) }?.clazz
 
@@ -137,10 +140,17 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         val font = mc.font
         fun centred(text: String, y: Int) = gfx.text(text, (width - font.width(text)) / 2, y, WHITE, shadow = true)
         centred("§6§lLeap Order", 12)
-        centred("§7Drag a player onto another spot to swap them. Saved as you drop.", 26)
+        centred("§7Drag a player into another quarter of the screen to swap them. Saved as you drop.", 26)
         if (LeapMenu.type != LeapMenu.Sorting.CUSTOM) centred("§cOdin's Leap Menu sorting isn't Custom, so it won't use this order.", 38)
         centred("§8Top left is first, then top right, bottom left, bottom right.", height - 20)
 
+        // The quarter a drop would go to.
+        if (dragging >= 0) {
+            val q = spotAt(mouseX, mouseY)
+            val qx = if (q % 2 == 0) 0 else width / 2
+            val qy = if (q / 2 == 0) 0 else height / 2
+            gfx.fill(qx, qy, qx + (width + 1) / 2, qy + (height + 1) / 2, QUARTER.rgba)
+        }
         for (i in 0 until 4) {
             val b = box(i)
             if (i == dragging) {
@@ -185,7 +195,9 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
             dragging = i
             sawHeld = false
             val b = box(i)
-            grabX = event.x() - b[0]; grabY = event.y() - b[1]
+            // Held where it was grabbed; grabbed elsewhere in its quarter, held by its middle.
+            if (onBox(i, event.x(), event.y())) { grabX = event.x() - b[0]; grabY = event.y() - b[1] }
+            else { grabX = (b[2] - b[0]) / 2.0; grabY = (b[3] - b[1]) / 2.0 }
             return true
         }
         return super.mouseClicked(event, doubleClick)
@@ -200,7 +212,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     /** Lets go of the dragged player at [x], [y]: swapped with the spot there, if any. */
     private fun drop(x: Double, y: Double) {
         val to = spotAt(x, y)
-        if (to >= 0 && to != dragging) {
+        if (to != dragging) {
             val t = names[to]; names[to] = names[dragging]; names[dragging] = t
             LeapOrder.set(names.toList())
             mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
@@ -229,5 +241,6 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         val DRAGGED = Color(45, 45, 45, 0.7f)
         val EMPTY = Color(0, 0, 0, 0.25f)
         val OUTLINE = Color(120, 120, 120, 1f)
+        val QUARTER = Color(255, 255, 255, 0.06f)
     }
 }
