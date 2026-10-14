@@ -9,7 +9,7 @@ import com.coffeeclient.misc.PreRequeue
 import com.coffeeclient.misc.RandomStuff
 import com.coffeeclient.misc.SoundEditor
 import com.coffeeclient.misc.SpeedHud
-import com.coffeeclient.pf.BetterPFMenu
+import com.coffeeclient.pf.ADRMenu
 import com.odtheking.odin.config.ModuleConfig
 import com.odtheking.odin.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
@@ -28,10 +28,11 @@ object CoffeeClient : ClientModInitializer {
         val firstRun = !java.nio.file.Files.exists(mc.gameDirectory.toPath().resolve("config/odin/addons/coffeeclient.json"))
 
         safely("leap extras settings") { adoptLeapExtrasSettings() }
+        safely("adr menu settings") { renameModule("Better PF Menu", "ADR Menu") }
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, BetterPFMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
@@ -66,6 +67,17 @@ object CoffeeClient : ClientModInitializer {
         target.add(entry)
         java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
         logger.info("[cc] Leap Extras settings copied from engineerclient.json")
+    }
+
+    /** A module that was renamed keeps its settings: its entry in coffeeclient.json takes the new name, once. */
+    private fun renameModule(old: String, new: String) {
+        val file = mc.gameDirectory.toPath().resolve("config/odin/addons/coffeeclient.json")
+        if (!java.nio.file.Files.exists(file)) return
+        val modules = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file)).asJsonArray
+        if (modules.any { it.asJsonObject.get("name")?.asString == new }) return
+        val entry = modules.firstOrNull { it.asJsonObject.get("name")?.asString == old }?.asJsonObject ?: return
+        entry.addProperty("name", new)
+        java.nio.file.Files.writeString(file, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(modules))
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */

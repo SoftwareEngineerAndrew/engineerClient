@@ -1,6 +1,6 @@
 package com.engineerclient
 
-import com.engineerclient.betterpf.BetterPF
+import com.engineerclient.adr.ADR
 import com.engineerclient.misc.AgroSphere
 import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
@@ -84,7 +84,7 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, BetterPF, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
+            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
             P3Rotation, com.engineerclient.practice.TermInfo, StormPhase, ChatHider, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.pf.HubNametags, com.engineerclient.misc.Timers,
         )
     }
@@ -115,7 +115,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, BetterPF, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ChatHider, ADR, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -214,10 +214,10 @@ object EngineerClient : ClientModInitializer {
 
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            // /betterpf: the link to all your uploaded runs, private ones included.
-            // /betterpf online: Better PF Online in your browser, signed in.
-            for (name in listOf("betterpf", "BetterPF")) dispatcher.register(literal(name).executes { BetterPF.myRunsLink(); 1 }
-                .then(literal("online").executes { com.engineerclient.betterpf.OnlineLink.openPage(); 1 }))
+            // /adr: the link to all your uploaded runs, private ones included.
+            // /adr online: ADR Online in your browser, signed in.
+            for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
+                .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // Same tree registered under the formal name (both casings, since Brigadier

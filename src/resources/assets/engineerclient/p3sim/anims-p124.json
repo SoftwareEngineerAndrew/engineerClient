@@ -1,5 +1,5 @@
 {
-  "_doc": "F7 boss scripted block animations (P1 Maxor, P2 Storm, P4 Necron) from Better PF recordings. frames: [dt, x, y, z, state], dt = server ticks (st/n) after the chat line in 'event' (negative = before), sorted by dt; within one dt apply in array order (file order). Built from recorded runs with server tick (n) chat lines.",
+  "_doc": "F7 boss scripted block animations (P1 Maxor, P2 Storm, P4 Necron) from ADR recordings. frames: [dt, x, y, z, state], dt = server ticks (st/n) after the chat line in 'event' (negative = before), sorted by dt; within one dt apply in array order (file order). Built from recorded runs with server tick (n) chat lines.",
   "p1strip": {
     "event": "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!",
     "source": "2026-10-01_19-47-15_F7.jsonl.gz",

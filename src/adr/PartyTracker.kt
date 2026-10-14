@@ -1,11 +1,11 @@
-package com.engineerclient.betterpf
+package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
 /**
- * Your party, live, for Better PF Online: [PartyState] reading Hypixel's chat, plus the dungeon's
+ * Your party, live, for ADR Online: [PartyState] reading Hypixel's chat, plus the dungeon's
  * teammates once in one. A /p list is sent only when the state has a doubt it can't settle (right
  * after joining Hypixel, after joining a Party Finder group, or chat that doesn't add up) - at most
  * one a minute, and its answer is kept out of your chat.
@@ -72,7 +72,7 @@ object PartyTracker {
         hide
     }
 
-    /** Every client tick while Better PF is on. */
+    /** Every client tick while ADR is on. */
     fun tick() = synchronized(state) {
         val now = System.currentTimeMillis()
         // In a dungeon, its teammates are the party.
@@ -88,7 +88,7 @@ object PartyTracker {
         if (now - joinedAt < JOIN_WAIT_MS || now - doubtSince < DOUBT_WAIT_MS || now - lastAsk < ASK_GAP_MS) return
         lastAsk = now
         hideUntil = now + HIDE_MS
-        EngineerClient.logger.info("[ec] betterpf: /p list ($doubt)")
+        EngineerClient.logger.info("[ec] adr: /p list ($doubt)")
         sendCommand("p list")
     }
 

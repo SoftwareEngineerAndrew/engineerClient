@@ -1,4 +1,4 @@
-package com.engineerclient.betterpf
+package com.engineerclient.adr
 
 /**
  * The party you're in, worked out from Hypixel's chat as it happens - joins, leaves, kicks,

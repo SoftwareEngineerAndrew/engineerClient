@@ -38,7 +38,7 @@ dependencies {
     implementation("net.fabricmc:fabric-language-kotlin:1.14.1+kotlin.2.4.20")
     implementation("net.fabricmc.fabric-api:fabric-api:0.162.0+26.3")
 
-    // xz (LZMA2) for Better PF recordings: about half the size of gzip. Pure Java, shipped inside
+    // xz (LZMA2) for ADR recordings: about half the size of gzip. Pure Java, shipped inside
     // the mod jar.
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")

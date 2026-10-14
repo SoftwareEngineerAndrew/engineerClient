@@ -22,7 +22,7 @@ import kotlin.random.Random
 import net.minecraft.world.level.block.Blocks as B
 
 /**
- * Static and per-run corrections to the arena that arena.bin (built from the Better PF library) does not carry,
+ * Static and per-run corrections to the arena that arena.bin (built from the ADR library) does not carry,
  * from packet captures of Hypixel P3s (`arena-fixes.json`, `arena-ext.bin`):
  * - the thicker east wall (x128-134) and the NW column ([Arena.Data] patch, `arena-ext.bin`);
  * - the y63 floor layer, rolled per cell from the recorded spread, and the sparse removals before Terms

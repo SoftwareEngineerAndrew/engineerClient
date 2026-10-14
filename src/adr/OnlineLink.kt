@@ -1,4 +1,4 @@
-package com.engineerclient.betterpf
+package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.pf.PlayerStats
@@ -16,7 +16,7 @@ import java.util.Base64
 import java.util.concurrent.CompletionStage
 
 /**
- * Better PF Online (undonecoffee.com/betterpf/online): while Better PF is on, a WebSocket to the
+ * ADR Online (undonecoffee.com/adr/online): while ADR is on, a WebSocket to the
  * site says who you are, your party ([PartyTracker]), where you are and your PBs, so the page can
  * list everyone online by party. It signs in with this install's owner token (the one uploads
  * carry); nothing comes back but pongs.
@@ -40,7 +40,7 @@ object OnlineLink {
     private var sentStats = ""
     private var lastPing = 0L
 
-    /** Every client tick while Better PF is on. */
+    /** Every client tick while ADR is on. */
     fun tick() {
         if (stopped) return
         val now = System.currentTimeMillis()
@@ -84,7 +84,7 @@ object OnlineLink {
         }
     }
 
-    /** Your own PBs and Catacombs, once looked up (Better PF's Party Finder stats). */
+    /** Your own PBs and Catacombs, once looked up (ADR's Party Finder stats). */
     private fun stats(): JsonObject? {
         val st = (PlayerStats.lookup(EngineerClient.mc.user.name) as? PlayerStats.Ready)?.stats ?: return null
         return JsonObject().apply {
@@ -102,8 +102,8 @@ object OnlineLink {
 
     private fun connect() {
         connecting = true
-        http.newWebSocketBuilder().header("Authorization", "Bearer ${BetterPF.token()}").connectTimeout(Duration.ofSeconds(15))
-            .buildAsync(URI.create("wss://$SITE/betterpf/api/online/game"), Listener())
+        http.newWebSocketBuilder().header("Authorization", "Bearer ${ADR.token()}").connectTimeout(Duration.ofSeconds(15))
+            .buildAsync(URI.create("wss://$SITE/adr/api/online/game"), Listener())
             .whenComplete { ws, err ->
                 connecting = false
                 if (err != null) { retryLater(); return@whenComplete }
@@ -122,7 +122,7 @@ object OnlineLink {
 
     private fun send(o: JsonObject) { socket?.let { runCatching { it.sendText(o.toString(), true) } } }
 
-    /** Better PF turned off: offline. */
+    /** ADR turned off: offline. */
     fun close() {
         val ws = socket
         socket = null
@@ -140,25 +140,25 @@ object OnlineLink {
 
     // ------------------------------------------------------------------ signing the page in
 
-    /** Better PF's "Open Online Page" and /betterpf online: the page, signed in, in your browser. */
+    /** ADR's "Open Online Page" and /adr online: the page, signed in, in your browser. */
     fun openPage() {
-        Thread.ofPlatform().name("engineerclient-betterpf-online").daemon(true).start {
+        Thread.ofPlatform().name("engineerclient-adr-online").daemon(true).start {
             try {
                 val u = EngineerClient.mc.user
                 val key = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also { SecureRandom().nextBytes(it) })
                 val body = JsonObject().apply { addProperty("key", key); addProperty("name", u.name); addProperty("uuid", u.profileId.toString().replace("-", "")) }
-                val res = http.send(HttpRequest.newBuilder(URI.create("https://$SITE/betterpf/api/online/key"))
-                    .header("Content-Type", "application/json").header("Authorization", "Bearer ${BetterPF.token()}")
+                val res = http.send(HttpRequest.newBuilder(URI.create("https://$SITE/adr/api/online/key"))
+                    .header("Content-Type", "application/json").header("Authorization", "Bearer ${ADR.token()}")
                     .timeout(Duration.ofSeconds(20)).POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString())
                 if (res.statusCode() != 200) {
-                    EngineerClient.msg("§cBetter PF: the site didn't sign you in (${res.body().take(80)}). Try again in a minute.")
+                    EngineerClient.msg("§cADR: the site didn't sign you in (${res.body().take(80)}). Try again in a minute.")
                     return@start
                 }
-                browse("https://$SITE/betterpf/online#k=$key")
-                EngineerClient.msg("§aBetter PF Online opened in your browser§7 - signed in there (any older sign-in is signed out).")
+                browse("https://$SITE/adr/online#k=$key")
+                EngineerClient.msg("§aADR Online opened in your browser§7 - signed in there (any older sign-in is signed out).")
             } catch (t: Throwable) {
-                EngineerClient.logger.warn("[ec] betterpf: online sign-in failed", t)
-                EngineerClient.msg("§cBetter PF: couldn't reach the site.")
+                EngineerClient.logger.warn("[ec] adr: online sign-in failed", t)
+                EngineerClient.msg("§cADR: couldn't reach the site.")
             }
         }
     }
