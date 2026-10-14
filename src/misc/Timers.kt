@@ -30,7 +30,9 @@ import com.engineerclient.storm.StormCrush
  *  - Crystal Spawn: after a laser hit (Maxor becoming damageable) the top crystals come back 40
  *    ticks later.
  *  - Storm: the next crush check (every 20 ticks from the phase starting, a tick before his first
- *    line) until he dies, and the lightning at 548.
+ *    line) until he dies, and his Giga Lightning: it strikes at 520 (519-521 in 662 F7 and 371 M7
+ *    runs since the boss update), 33 ticks after "I'd be happy to show you what that's like!", which
+ *    sets it again if his first line was missed. His "ENERGY HEED MY CALL!" comes 29 ticks after it.
  *  - Purple Pad: to the pad read to stand on Purple's pillar pad for, so it comes down on him at the
  *    first check he can be crushed on. Pads are read on the 20-tick checks' eve (phase tick 19 mod
  *    20) and step their pillar 5 blocks over the next 17 ticks, and a read 41 or 61 ticks before a
@@ -79,12 +81,11 @@ object Timers : Module(
             else -> timer("Crush", CRUSH_PERIOD - Math.floorMod(serverTicks - start, CRUSH_PERIOD), CRUSH_PERIOD)
         }
     }
-    private val stormLightningHud by HUD("Storm Lightning", "Counts down to Storm's lightning, 27.4 s into his phase.", true, 10, 145, 1.5f) { example ->
-        val start = stormStart
+    private val stormLightningHud by HUD("Storm Lightning", "Counts down to Storm's Giga Lightning striking, 26 s into his phase.", true, 10, 145, 1.5f) { example ->
         when {
             example -> timer("Lightning", 300, LIGHTNING, true)
-            start == null || stormDead -> 0 to 0
-            else -> left(start + LIGHTNING, LIGHTNING)?.let { timer("Lightning", it, LIGHTNING) } ?: (0 to 0)
+            stormDead -> 0 to 0
+            else -> left(strikeAt, LIGHTNING)?.let { timer("Lightning", it, LIGHTNING) } ?: (0 to 0)
         }
     }
     private val purplePadHud by HUD("Purple Pad", "Storm: counts down to the pad read to be on Purple's pad for (t 599, then t 619 if that one's missed), so he's crushed the moment he gets there. Gone once the pillar comes down.", true, 10, 160, 1.5f) { example ->
@@ -101,7 +102,9 @@ object Timers : Module(
     private const val MAXOR_MOVE = 85
     private const val CRYSTALS_BACK = 40
     private const val CRUSH_PERIOD = 20
-    private const val LIGHTNING = 548
+    /** Giga Lightning strikes this long into his phase, and this long after "I'd be happy to show you what that's like!". */
+    private const val LIGHTNING = 520
+    private const val STRIKE_AFTER_SHOW = 33
     private const val NECRON_DROP = 60
     /** A pad read this long before a check brings its pillar down on him by then, the read 20 earlier too. */
     private const val PAD_LEAD = 41
@@ -118,6 +121,7 @@ object Timers : Module(
     private const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
     private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
+    private const val STORM_SHOW = "[BOSS] Storm: I'd be happy to show you what that's like!"
     private val STORM_LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
     private val STORM_CRUSHED = setOf("[BOSS] Storm: Oof", "[BOSS] Storm: Ouch, that hurt!")
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
@@ -143,6 +147,8 @@ object Timers : Module(
     private var stormStart: Int? = null
     private var stormDead = false
     private var lightningAt: Int? = null
+    /** When Giga Lightning strikes. */
+    private var strikeAt: Int? = null
     private var crushes = 0
     /** When Purple's pillar last stepped down. */
     private var purpleStepAt: Int? = null
@@ -214,8 +220,9 @@ object Timers : Module(
             message == MAXOR_START -> { inMaxor = true; maxorMoveAt = serverTicks + MAXOR_MOVE; maxorHealth = 0f }
             message == STORM_START -> {
                 inMaxor = false; crystalsAt = null; stormStart = serverTicks - 1; stormDead = false
-                lightningAt = null; crushes = 0; purpleStepAt = null
+                lightningAt = null; crushes = 0; purpleStepAt = null; strikeAt = serverTicks - 1 + LIGHTNING
             }
+            message == STORM_SHOW -> strikeAt = serverTicks + STRIKE_AFTER_SHOW
             message == STORM_DEAD -> stormDead = true
             message in STORM_LIGHTNING -> if (stormStart != null && lightningAt == null) lightningAt = serverTicks
             message in STORM_CRUSHED -> if (stormStart != null) crushes++
@@ -265,7 +272,7 @@ object Timers : Module(
         bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
         stormStart = null; stormDead = false; necronDropAt = null
-        lightningAt = null; crushes = 0; purpleStepAt = null
+        lightningAt = null; crushes = 0; purpleStepAt = null; strikeAt = null
     }
 
     init {
