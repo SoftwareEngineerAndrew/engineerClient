@@ -12,6 +12,8 @@
     "ConnectionReadEndMixin",
     "ConnectionTapMixin",
     "DestroyProgressTapMixin",
+    "EarlyJoinHoldMixin",
+    "EarlyJoinQuickPlayMixin",
     "EntityEventPacketAccessor",
     "EntityMoveTapMixin",
     "EntityRemoveTapMixin",
