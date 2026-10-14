@@ -48,7 +48,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 object DungeonSplits : Module(
     name = "All Sub Splits",
     category = Category.custom("Devgineer Client", 860, 10),
-    description = "A sub-split HUD per section of the run (Engineer Client keeps only the blood rush one), and the Scorecard, on the real and server-tick clocks. The splits themselves are Odin's Splits (Look: Engineer Splits).",
+    description = "A sub-split HUD per section of the run (ADM keeps only the blood rush one), and the Scorecard, on the real and server-tick clocks. The splits themselves are Odin's Splits (Look: ADM Splits).",
     key = null,
 ) {
 

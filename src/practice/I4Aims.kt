@@ -63,7 +63,7 @@ import kotlin.math.tan
  */
 object I4Aims : Module(
     name = "i4 Aim",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("ADM", 860, 10),
     description = "i4: paints where to aim now (green) and next (cyan), from a simulated best strategy.",
     key = null,
 ) {

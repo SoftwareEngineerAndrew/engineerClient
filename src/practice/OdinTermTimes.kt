@@ -11,7 +11,7 @@ import java.util.Locale
  * PBs keep Odin's full precision.
  */
 object OdinTermTimes {
-    private val twoDecimals = BooleanSetting("Two Decimals", false, desc = "Times in chat as 5.12s, not 5.123s (the PBs are still kept exact). Added by engineerClient.")
+    private val twoDecimals = BooleanSetting("Two Decimals", false, desc = "Times in chat as 5.12s, not 5.123s (the PBs are still kept exact). Added by ADM.")
 
     fun install() {
         TerminalTimes.registerSetting(twoDecimals)

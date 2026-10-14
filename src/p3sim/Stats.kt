@@ -29,7 +29,7 @@ object Stats {
 
     // ------------------------------------------------------------------ personal bests
 
-    private val bestFile get() = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-pb.properties")
+    private val bestFile get() = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/adm/p3sim-pb.properties")
     private val bests: java.util.Properties by lazy { java.util.Properties().also { p -> runCatching { bestFile.inputStream().use { p.load(it) } } } }
 
     /** Records [ticks] for [key] if it's a best; the chat suffix. */

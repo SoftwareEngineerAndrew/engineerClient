@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * for its own features — it prefetches whole Party Finder listings — lands in this store too.
  *
  * Stats change rarely and the same players show up again and again, so everything is kept on disk
- * for a day: `config/engineerclient/pfstats.json`. Odin's own profile cache only lives five
+ * for a day: `config/adm/pfstats.json`. Odin's own profile cache only lives five
  * minutes, in memory.
  */
 object PlayerStats {
@@ -58,7 +58,7 @@ object PlayerStats {
     private val dirty = AtomicBoolean(false)
     private val refreshing = ConcurrentHashMap.newKeySet<String>()
     private val gson = GsonBuilder().create()
-    private val file = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("pfstats.json")
+    private val file = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("adm").resolve("pfstats.json")
 
     /**
      * The current state for [name], fetching in the background as needed: an unknown player starts
