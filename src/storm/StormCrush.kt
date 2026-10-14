@@ -19,7 +19,7 @@ import kotlin.math.min
  *
  * The zone test is the same as asking whether a 1x1 column with its -x/-z corner on Storm's
  * position fits completely inside the pillar's 7x7 square (the rounded corners included): that
- * column, [HEAD] tall, is the hitbox the Storm Phase module draws.
+ * column, [HEAD] tall, is the hitbox Sub Splits' Show Crush Info draws.
  */
 object StormCrush {
 
