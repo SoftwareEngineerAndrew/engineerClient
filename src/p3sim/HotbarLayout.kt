@@ -29,14 +29,20 @@ object HotbarLayout {
     private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null, val roles: Map<String, Layout>? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-hotbar.json")
-    private var saved: Saved? = null
+    /** Each player's layouts (the host's from this computer, a joiner's from their game: [PlayerFiles]). */
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Saved>()
+    private fun owner() = PlayerFiles.owner()?.toString() ?: ""
 
-    private fun saved(): Saved = saved ?: run {
-        val s = runCatching { if (file.exists()) gson.fromJson(file.readText(), Saved::class.java) else null }
+    /** This game's file changed (the sim's server saved a joiner's): read it again. */
+    fun forgetLocal() { cache.remove("") }
+    /** A joiner's files arrived (or they left): read theirs again. */
+    fun forget(id: java.util.UUID) { cache.remove(id.toString()) }
+
+    private fun saved(): Saved = cache[owner()] ?: run {
+        val s = runCatching { PlayerFiles.read(PlayerFiles.HOTBAR)?.let { gson.fromJson(it, Saved::class.java) } }
             .onFailure { EngineerClient.logger.error("[ec] p3sim hotbar load failed", it) }
             .getOrNull() ?: Saved()
-        saved = s
+        cache[owner()] = s
         s
     }
 
@@ -106,10 +112,7 @@ object HotbarLayout {
     private fun part(p3: Boolean) = (if (p3) "P3" else "P1/P2") + " " + Roles.label(P3Sim.myClass)
 
     private fun write(s: Saved) {
-        saved = s
-        EngineerClient.safely("p3sim hotbar save") {
-            file.parentFile.mkdirs()
-            file.writeText(gson.toJson(s))
-        }
+        cache[owner()] = s
+        EngineerClient.safely("p3sim hotbar save") { PlayerFiles.write(PlayerFiles.HOTBAR, gson.toJson(s)) }
     }
 }

@@ -45,10 +45,10 @@ object P3Sim : Module(
 ) {
     val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim Beta menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
-        if (inSim) SimServer.run("restart") { if (Practice.active) Practice.restart() else Fight.start(Fight.lastStart) }
+        if (inSim) SimActions.send("restart")
     }
     val practiceKey by KeybindSetting("Practice Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts your practice (the menu's Practice tab) again. A left click with the Infinileap does too.").onPress {
-        if (inSim) SimServer.run("practice restart") { Practice.restart() }
+        if (inSim) SimActions.send("practiceRestart")
     }
     enum class ClassOption { HEALER, BERSERK, ARCHER, TANK, MAGE }
     enum class DeathTickOption { OFF, WARN, MASKS }
@@ -68,7 +68,9 @@ object P3Sim : Module(
     val hydraStartS = +NumberSetting("Hydra Stacks At Start", 10, 0..10, 1, desc = "Hydra Strike stacks every start from the menu (P1, P3, a section...) begins with. Going on from one phase to the next keeps what you have.")
     val clickLimitS = +BooleanSetting("Terminal Click Limit", true, desc = "As on Hypixel: a terminal takes at most 5 clicks in any 10 ticks; the rest are dropped without an answer.")
     val noMelodiesS = +BooleanSetting("No Melodies", true, desc = "Random terminals are never melodies.")
-    val termLuckS = +NumberSetting("Terminal Luck", 0, 0..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick). Up to 50% it picks Hypixel's easiest deals; past it, easier than Hypixel ever deals, down to 1 or 2 clicks at 100%. Melody is untouched.")
+    val termLuckS = +NumberSetting("Terminal Luck", 0, -100..100, 5, unit = "%", desc = "0: terminals as Hypixel deals them. Higher: Click in Order's numbers closer together (a neat path at 100%), and fewer clicks in the others (more panes already on, fewer Rubix clicks, fewer items to pick); lower (bad luck): the other way. Toward 40% either way it picks Hypixel's easiest (or hardest) deals; past it, beyond anything Hypixel deals, down to 1 click at 100% and up to the worst at -100% (no pane on, a 10-click Rubix, 16 items to pick, 12 to select, the numbers all over). Melody: each row's purple where the green gets soonest (latest with bad luck). The terminal type: Melodies rarer (more common with bad luck), when they're on.")
+    val ssLuckS = +NumberSetting("SS Luck", 0, -100..100, 5, unit = "%", desc = "0: Simon Says as Hypixel runs it. Higher: the 4 lamps closer together, steadily all the way up (4 neighbours in a line at 100%), and after a wrong press the quick restart (no stray lamp) more often, always at 100%. Lower (bad luck): the lamps spread across the board (corner to corner at -100%) and the slow restart, with a stray lamp.")
+    val mageAllS = +BooleanSetting("Mage Beam On All Classes", false, desc = "Mage Beam (a left click with a sword or the Bonzo Staff) and Guided Sheep whatever your class. Ctrl+Q fires the sheep (as Archer it stays Explosive Shot: 3 quick beam clicks fire the sheep).")
     val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
     val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
@@ -121,27 +123,46 @@ object P3Sim : Module(
     }
 
     val autoStart: Boolean get() = autoStartS.value
-    val showTimes: Boolean get() = showTimesS.value
-    val myClass: DungeonClass get() = Party.CLASSES[classS.index.coerceIn(0, 4)]
-    val speed: Int get() = speedS.value.toInt()
+    val showTimes: Boolean get() = mine("showTimes", { showTimesS.value }) { it.asBoolean }
+
+    /**
+     * A personal setting ([PartySettings.PERSONAL]) for the player it's about: on the sim's server, while a party's
+     * joiner acts ([Sim.asPlayer]), theirs as their game sent it; else (the host, any game's own menu) this game's.
+     */
+    private inline fun <T> mine(key: String, own: () -> T, read: (com.google.gson.JsonElement) -> T): T =
+        Players.joiner()?.vals?.get(key)?.let { runCatching { read(it) }.getOrNull() } ?: own()
+
+    /** This game's own class (its menu's). */
+    val ownClass: DungeonClass get() = Party.CLASSES[classS.index.coerceIn(0, 4)]
+    /** The class of the player it's about: a party's joiner while they act, else this game's own. */
+    val myClass: DungeonClass get() = Sim.acting?.takeIf { !Sim.isHost(it) }?.let { Players.classOf(it) } ?: ownClass
+    val speed: Int get() = mine("speed", { speedS.value.toInt() }) { it.asDouble.toInt() }
     val bots: Boolean get() = botsS.value
     val deathTicks: Int get() = deathTicksS.index
-    val ping: Int get() = pingS.value.toInt()
-    val jitter: Boolean get() = jitterS.value
+    /** The simulated ping; a joiner's real round trip to the host already counts towards theirs. */
+    val ping: Int get() {
+        val v = mine("ping", { pingS.value.toInt() }) { it.asDouble.toInt() }
+        val j = Sim.acting?.takeIf { Players.joiner() != null } ?: return v
+        return (v - j.connection.latency()).coerceAtLeast(0)
+    }
+    val jitter: Boolean get() = mine("jitter", { jitterS.value }) { it.asBoolean }
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
-    val shortbowCooldown: Int get() = shortbowCooldownS.value.toInt()
+    val shortbowCooldown: Int get() = mine("shortbow", { shortbowCooldownS.value.toInt() }) { it.asDouble.toInt() }
     /** Terror armor pieces worn right now (TERROR_* ids in the four armour slots, helmet included): 0 to 4. Hydra Strike follows it. */
     val terrorPieces: Int get() = Sim.player?.let { p ->
         listOf(net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST,
             net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET)
             .count { SimItems.idOf(p.getItemBySlot(it))?.startsWith("TERROR_") == true }
     } ?: 0
-    val hydraStart: Int get() = hydraStartS.value.toInt()
+    val hydraStart: Int get() = mine("hydra", { hydraStartS.value.toInt() }) { it.asDouble.toInt() }
     val lava: Boolean get() = lavaS.value
     val noMelodies: Boolean get() = noMelodiesS.value
-    /** Terminal Luck, 0 to 1 (null-safe: a hotswapped field starts null). */
+    /** Terminal Luck, -1 to 1 (null-safe: a hotswapped field starts null). */
+    /** SS Luck, -1 to 1. */
+    val ssLuck: Double get() = ((ssLuckS as NumberSetting<*>?)?.value?.toDouble() ?: 0.0) / 100.0
     val termLuck: Double get() = ((termLuckS as NumberSetting<*>?)?.value?.toDouble() ?: 0.0) / 100.0
+    val mageAll: Boolean get() = mine("mageAll", { (mageAllS as BooleanSetting?)?.value == true }) { it.asBoolean }
     val firstClickMelody: Boolean get() = (firstClickMelodyS as BooleanSetting?)?.value == true
     val clickLimit: Boolean get() = clickLimitS.value
     val debugBots: Boolean get() = debugBotsS.value
@@ -164,28 +185,51 @@ object P3Sim : Module(
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
     // Null-safe: a hotswapped game has new settings null until it is relaunched.
-    val breakerInfinite: Boolean get() = (breakerInfiniteS as BooleanSetting?)?.value == true
+    val breakerInfinite: Boolean get() = mine("infinite", { (breakerInfiniteS as BooleanSetting?)?.value == true }) { it.asBoolean }
     val breakerPerma: Boolean get() = (breakerPermaS as BooleanSetting?)?.value == true
     fun toggleBreakerInfinite() { (breakerInfiniteS as BooleanSetting?)?.let { it.value = !it.value } }
     fun toggleBreakerPerma() { (breakerPermaS as BooleanSetting?)?.let { it.value = !it.value } }
-    val realMasks: Boolean get() = realMasksS.value
-    val phoenix: Boolean get() = phoenixS.value
+    val realMasks: Boolean get() = mine("realMasks", { realMasksS.value }) { it.asBoolean }
+    val phoenix: Boolean get() = mine("phoenix", { phoenixS.value }) { it.asBoolean }
+    /** Real Masks' worn mask, 0 Spirit / 1 Bonzo, for the player it's about. */
+    val wornMask: Int get() = mine("wornMask", { wornMaskS.index }) { it.asInt }
+
+    /** Sets the pet of the player it's about (a joiner's: theirs, and their game's menu follows). */
+    fun setPhoenix(on: Boolean) = setMine("phoenix", com.google.gson.JsonPrimitive(on)) { phoenixS.value = on }
+    fun setWornMask(i: Int) = setMine("wornMask", com.google.gson.JsonPrimitive(i)) { wornMaskS.index = i }
+
+    private fun setMine(key: String, v: com.google.gson.JsonElement, own: () -> Unit) {
+        val p = Sim.acting?.takeIf { !Sim.isHost(it) }
+        // The server changed it itself (a loadout, /stats, the Pet Rod): not a menu change to act on again.
+        if (p == null) { own(); Sim.player?.let { PartyServer.notePersonal(it) }; return }
+        Players.profile(p).vals[key] = v
+        SimNet.send(p, "set", com.google.gson.JsonObject().also { it.add(key, v) }.toString())
+        PartyServer.notePersonal(p)
+    }
     // Null-safe: a hotswapped game has the setting null until it is relaunched (off till then).
     val realMoves: Boolean get() = (realMovesS as BooleanSetting?)?.value != false
     fun toggleRealMoves() { (realMovesS as BooleanSetting?)?.let { it.value = !it.value } }
-    val terrorAtTerms: Boolean get() = (terrorAtTermsS as BooleanSetting?)?.value == true
+    val terrorAtTerms: Boolean get() = mine("terror", { (terrorAtTermsS as BooleanSetting?)?.value == true }) { it.asBoolean }
     fun toggleTerrorAtTerms() { (terrorAtTermsS as BooleanSetting?)?.let { it.value = !it.value } }
     val forcedTerminal: Terminals.Type? get() = terminalS.index.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
 
-    /** True only in the p3sim singleplayer world (client side). */
+    /** True only in the p3sim singleplayer world, your own (client side). */
     @JvmStatic
-    val inSim: Boolean
+    val localSim: Boolean
         get() {
             val s = SimServer.server ?: return false
             return mc.hasSingleplayerServer() && mc.singleplayerServer === s && mc.level != null
         }
 
+    /** True in a P3 Sim: your own, or a party's you joined ([P3Party]) (client side). */
+    @JvmStatic
+    val inSim: Boolean
+        get() = localSim || (P3Party.joined && mc.level != null)
+
     fun init() {
+        SimNet.register()
+        PartyServer.register()
+        PartyClient.register()
         SimServer.register()
         P3Plan.load()
         Practice.load()
@@ -195,24 +239,24 @@ object P3Sim : Module(
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             dispatcher.register(net.minecraft.commands.Commands.literal("stats")
                 .requires { it.server === SimServer.server }
-                .executes { ctx -> ctx.source.player?.let { p -> Masks.openStats(p) }; 1 })
+                .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Masks.openStats(p) } }; 1 })
             // /loadouts: Hypixel's Loadouts window, same sim-server-only rule.
             dispatcher.register(net.minecraft.commands.Commands.literal("loadouts")
                 .requires { it.server === SimServer.server }
-                .executes { ctx -> ctx.source.player?.let { p -> Loadouts.open(p) }; 1 })
+                .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Loadouts.open(p) } }; 1 })
         }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             val cmd = ClientCommands.literal("p3sim").executes { openMenuOrSim(); 1 }
             for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {
-                if (inSim) SimServer.run("cmd start") { Fight.start(s) } else SimWorld.open(); 1
+                if (inSim) SimActions.send("start", "what" to s.name) else SimWorld.open(); 1
             })
-            cmd.then(ClientCommands.literal("stop").executes { SimServer.run("cmd stop") { Fight.end() }; 1 })
+            cmd.then(ClientCommands.literal("stop").executes { SimActions.send("stop"); 1 })
             cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
             dispatcher.register(cmd)
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
             dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
-        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick() } }
+        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick(); PartyClient.tick() } }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
             // The title screen's Minecraft Realms button becomes two: P3 Sim on the left half, Join
             // Hypixel on the right. No Realms button (another mod's menu): a small P3 Sim button in the corner.
@@ -298,12 +342,21 @@ object P3Sim : Module(
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7
         DungeonListener.inBoss = true
-        if (DungeonListener.dungeonTeammates.size != 5 || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != classS.index || roster != Party.bots().joinToString { it.name }) {
-            teamClass = classS.index
-            roster = Party.bots().joinToString { it.name }
-            val mine = myClass
+        // The party as the sim's server has it (players and bots, in your leap order); none until it says (the server's
+        // own lists aren't this thread's to read).
+        val sent = PartyClient.team.takeIf { PartyClient.me != null && it.isNotEmpty() } ?: return
+        val names = sent.joinToString { "${it.name}/${it.clazz}" }
+        val mine = PartyClient.me ?: return
+        if (DungeonListener.dungeonTeammates.size != 1 + sent.size || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != mine.ordinal || roster != names) {
+            teamClass = mine.ordinal
+            roster = names
             val team = arrayListOf(DungeonPlayer(me, mine, 50, mc.player?.skin))
-            Party.bots().forEach { team += DungeonPlayer(it.name, it.clazz, 50, null) }
+            sent.forEach { m ->
+                // A player's skin from their entity here, when it's loaded.
+                val skin = if (m.player) mc.level?.players()?.firstOrNull { it.gameProfile.name == m.name }?.let { (it as? net.minecraft.client.player.AbstractClientPlayer)?.skin } else null
+                team += DungeonPlayer(m.name, m.clazz, 50, skin)
+            }
+
             val others = team.filter { it.name != me }
             DungeonListener.dungeonTeammates = team
             DungeonListener.dungeonTeammatesNoSelf = others

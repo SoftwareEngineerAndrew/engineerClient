@@ -70,6 +70,8 @@ object SimWorld {
     /** Deletes the world and makes it again (`/p3sim rebuild`). */
     fun rebuild() {
         mc.execute {
+            // A party's world is the host's: only they can rebuild it.
+            if (P3Sim.inSim && !P3Sim.localSim) { mc.player?.sendSystemMessage(Component.literal("§8[§6P3 Sim Beta§8] §7Only the host can rebuild the world.")); return@execute }
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim Beta"))
             opening = true
             EngineerClient.safely("p3sim rebuild") {

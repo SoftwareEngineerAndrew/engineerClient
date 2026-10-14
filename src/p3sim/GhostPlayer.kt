@@ -253,8 +253,8 @@ class GhostPlayer(val run: GhostRun, private val world: World, private val body:
          * there; else a ghost that did in its run ([ghostsThere], in leap order: the first); else the
          * plan's, unless that's a ghost (one of [ghosts]) whose run didn't.
          */
-        fun eeOwner(planned: String?, you: String?, ghostsThere: List<String>, ghosts: Set<String>): String? = when {
-            planned != null && planned == you -> you
+        fun eeOwner(planned: String?, players: Set<String>, ghostsThere: List<String>, ghosts: Set<String>): String? = when {
+            planned != null && planned in players -> planned
             ghostsThere.isNotEmpty() -> ghostsThere.first()
             planned == null || planned in ghosts -> null
             else -> planned

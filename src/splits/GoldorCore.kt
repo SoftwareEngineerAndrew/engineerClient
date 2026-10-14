@@ -12,12 +12,13 @@ import java.util.Locale
  * is in, then sets off (in 35 recorded F7 runs: 0-2 ticks after the last one in, up to 7), and
  * from [GRACE] ticks after that nobody new counts. A time is exact when the player was in view
  * the tick before they came in; someone already in when the watch started has no time (they were
- * in before S4).
+ * in before S4). Someone who dies while it is watched counts as in from their death (they can't be
+ * waited for), and is marked dead.
  * Kept free of Minecraft (the module feeds it), so it tests headlessly.
  */
 class GoldorCore {
-    /** [tick]: when they came in (server ticks); [exact]: seen the tick before; [beforeS4]: in when the watch started. */
-    class Entry(val tick: Int, val exact: Boolean, val beforeS4: Boolean)
+    /** [tick]: when they came in (server ticks); [exact]: seen the tick before; [beforeS4]: in when the watch started; [died]: their death, not a way in. */
+    class Entry(val tick: Int, val exact: Boolean, val beforeS4: Boolean, val died: Boolean = false)
 
     /** The server tick the watch started on (S4's start, or the core opening if S4's wasn't seen). */
     var startTick: Int? = null; private set
@@ -28,6 +29,8 @@ class GoldorCore {
     private val inside = LinkedHashMap<String, Entry>()
     /** The last look ([round]) each player was in view in: a look is a client tick, so server lag can't fake a gap. */
     private val seen = HashMap<String, Int>()
+    /** Dead when the watch started: their death isn't a way in. */
+    private val deadAtStart = HashSet<String>()
     private var round = 0
     /** Necron has spoken: nothing more to watch (it keeps showing until the run ends). */
     private var necron = false
@@ -40,7 +43,7 @@ class GoldorCore {
     /** Following Goldor and the core (from the start until Necron). */
     val active get() = startTick != null && !necron
 
-    fun reset() { startTick = null; openTick = null; goldorMoved = null; pasted = false; inside.clear(); seen.clear(); round = 0; necron = false }
+    fun reset() { startTick = null; openTick = null; goldorMoved = null; pasted = false; inside.clear(); seen.clear(); deadAtStart.clear(); round = 0; necron = false }
 
     /** S4 started on [tick]. */
     fun onS4(tick: Int) { if (startTick == null) startTick = tick }
@@ -71,6 +74,17 @@ class GoldorCore {
         val first = round == 1
         inside[name] = Entry(tick, exact = first || before == round - 1, beforeS4 = first)
     }
+
+    /** [name] died on server tick [tick]: in from then, if they weren't already. */
+    fun onDeath(name: String, tick: Int) {
+        if (!watching || name in inside || name in deadAtStart) return
+        // Dead at the first look: they died before S4, and aren't timed.
+        if (round == 1) { deadAtStart += name; return }
+        inside[name] = Entry(tick, exact = true, beforeS4 = false, died = true)
+    }
+
+    /** [alive] and whoever died while watched: everyone the core split is about. */
+    fun counted(alive: Collection<String>): List<String> = (alive + inside.filterValues { it.died }.keys).distinct()
 
     fun onGoldorMoved(tick: Int) {
         val open = openTick ?: return
@@ -121,7 +135,7 @@ class GoldorCore {
                 open == null || e.tick < open -> "§3"
                 else -> "§a"
             }
-            out += "${if (name == me) "§f" else "§7"}$name $colour${time(e)}"
+            out += "${if (name == me) "§f" else "§7"}$name $colour${if (e.died) "☠ " else ""}${time(e)}"
         }
         for (name in alive) if (name !in inside) out += "${if (name == me) "§f" else "§7"}$name §8..."
         if (open != null) {

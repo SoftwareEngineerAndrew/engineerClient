@@ -105,7 +105,7 @@ object DungeonSplits : Module(
     private val goldorHud = registerSetting(
         HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Shown until the run ends.", true, 750, 10, 1f) { example ->
             if (example) return@HUD draw(this, listOf("§eCore", "§7Teammate §3-2.40s", "§fYou §a0.05s", "§7Another §8~0.50s", "§7Last §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
-            draw(this, core.lines(serverTicks, mc.player?.name?.string, aliveNames()))
+            draw(this, core.lines(serverTicks, mc.player?.name?.string, core.counted(aliveNames())))
         }
     )
     private val pasteCore = registerSetting(
@@ -342,6 +342,9 @@ object DungeonSplits : Module(
                 val at = p?.positionCodec?.base
                 core.observe(mate.name, at?.let { inCoreBox(it.x, it.y, it.z) }, serverTicks)
             }
+            // Dying after S4's start counts as getting in, at the death (DeadPlayers has it before the tab list).
+            for (mate in DungeonUtils.dungeonTeammates) if (com.engineerclient.DeadPlayers.isDead(mate)) core.onDeath(mate.name, serverTicks)
+            me?.name?.string?.let { if (com.engineerclient.DeadPlayers.isDead(it)) core.onDeath(it, serverTicks) }
             pasteLastIn()
         }
         if (core.openTick == null || core.goldorMoved != null) return
@@ -363,11 +366,11 @@ object DungeonSplits : Module(
      * singleplayer (the P3 Sim).
      */
     private fun pasteLastIn() {
-        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer()) return
+        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer() || com.engineerclient.p3sim.P3Sim.inSim) return
         val me = mc.player?.name?.string ?: return
         val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
         if (mates.size != 4 || mates.any { it.isDead }) return
-        val alive = aliveNames()
+        val alive = core.counted(aliveNames())
         if (core.lastIn(alive) == null) return
         core.pasted = true
         core.pasteLine(alive)?.let { sendCommand("pc $it") }
