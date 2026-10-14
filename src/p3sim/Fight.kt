@@ -172,6 +172,10 @@ object Fight {
         epoch++
         later.clear()
         timed.clear()
+        // Their revive went with the queue: a ghost is back to normal now, not left one until the next start.
+        Masks.stopped()
+        // The run's file is closed with the fight (a stopping server never ticks again to close it).
+        Recorder.finish()
         Terminals.closeAll()
         // The Dungeonbreaker's broken blocks would grow back into the next start's world (a gate a
         // later start has open); cooldowns start fresh, as the masks' do.
@@ -360,7 +364,6 @@ object Fight {
     /** Ends the fight (the menu's Stop): everything back to how it was built. */
     fun end() {
         Practice.exit()
-        Recorder.finish()
         stop()
         Sim.clearEntities()
         Blocks.restoreAll()

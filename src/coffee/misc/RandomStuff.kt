@@ -168,4 +168,11 @@ object RandomStuff : Module(
 
         on<LevelEvent.Load> { pendingArmorStands.clear(); keyPositions.clear() }
     }
+
+    // Switched off, the tick above stops running, so the sidebar is handed back to vanilla here:
+    // left on, the mixin would keep skipping it with no HUD left to draw it.
+    override fun onDisable() {
+        super.onDisable()
+        ScoreboardMove.active = false
+    }
 }

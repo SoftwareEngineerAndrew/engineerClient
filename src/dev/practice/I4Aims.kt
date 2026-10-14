@@ -120,8 +120,13 @@ object I4Aims : Module(
     /** One mouse lattice's aims, by their cells. */
     private class Grid(val sc: Scan, val lattice: Lattice) {
         val fine = java.util.concurrent.ConcurrentHashMap<Set<Int>, java.util.Optional<I4Geometry.Aim>>()
-        fun aim(c: I4Geometry.Coarse): I4Geometry.Aim? =
-            fine.computeIfAbsent(c.cells) { java.util.Optional.ofNullable(I4Geometry.fine(sc.board, sc.shooter, lattice, sc.min, c)) }.orElse(null)
+        // Not computeIfAbsent: fine() runs its own parallel stream, so a pool worker waiting on it can steal a sibling
+        // aim() and re-enter the map on the same bin ("Recursive update"). Two threads may work out one aim; both agree.
+        fun aim(c: I4Geometry.Coarse): I4Geometry.Aim? {
+            fine[c.cells]?.let { return it.orElse(null) }
+            val worked: java.util.Optional<I4Geometry.Aim> = java.util.Optional.ofNullable(I4Geometry.fine(sc.board, sc.shooter, lattice, sc.min, c))
+            return (fine.putIfAbsent(c.cells, worked) ?: worked).orElse(null)
+        }
         fun cached(c: I4Geometry.Coarse) = fine.containsKey(c.cells)
     }
     @Volatile private var scan: Scan? = null
@@ -424,7 +429,8 @@ object I4Aims : Module(
      * the board (with a margin, wider once zoomed so the edge doesn't flicker). Eased in and out over [ZOOM_SECONDS].
      */
     @JvmStatic fun zoomFov(fov: Float): Float {
-        if (com.engineerclient.pov.PovCapture.capturing) return fov
+        // Not on a teammate's POV feed; the restore pass after the feeds is your camera again and keeps the zoom.
+        if (com.engineerclient.pov.PovCapture.capturing && mc.cameraEntity !== mc.player) return fov
         val now = System.nanoTime()
         val dt = if (zoomAt == 0L) 0f else ((now - zoomAt) / 1e9f).coerceAtMost(0.1f)
         zoomAt = now

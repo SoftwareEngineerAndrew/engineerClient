@@ -164,7 +164,8 @@ object PositionalMessages : Module(
         val message = argument("message", StringArgumentType.greedyString()).executes { ctx ->
             val name = StringArgumentType.getString(ctx, "color")
             val color = COLORS[name.lowercase()]
-            if (color == null) say("Unknown color $name") else run(ctx, color, BoolArgumentType.getBool(ctx, "send"), StringArgumentType.getString(ctx, "message"))
+            // The argument is "send", the stored field is dontSend: negate so send=true actually sends.
+            if (color == null) say("Unknown color $name") else run(ctx, color, !BoolArgumentType.getBool(ctx, "send"), StringArgumentType.getString(ctx, "message"))
             1
         }
         var node: ArgumentBuilder<FabricClientCommandSource, *> = argument("color", StringArgumentType.word()).suggests(suggest { COLORS.keys.toList() })

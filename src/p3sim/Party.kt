@@ -324,8 +324,12 @@ object Party {
     private class Job(val job: String, val bot: Bot, val timeSection: Int, var sec: Double) { var at = -1 }
 
     private val jobs = ArrayList<Job>()
-    /** Leaps queued: [bot] onto wherever [onto] is at n = [at]; [youAt]: a leap onto you at your early-enter spot, which waits while you're not on it. */
-    private class Leap(val bot: Bot, val at: Int, val youAt: Vec3? = null, val onto: () -> Vec3?)
+    /** Leaps queued: [bot] onto whoever [onto] is at n = [at]; [youAt]: a leap onto you at your early-enter spot, which waits while you're not on it. */
+    private class Leap(val bot: Bot, val at: Int, val youAt: Vec3? = null, val onto: () -> Target?)
+    /** Who a leap lands on, and where: by who it is, not by who stands there (leapers land on the same spot). */
+    private class Target(val pos: Vec3, val name: String? = null, val yaw: Float? = null)
+    private fun Bot.asTarget() = Target(pos, name, yaw)
+    private fun net.minecraft.server.level.ServerPlayer.asTarget() = Target(position(), gameProfile.name, yRot)
     private val leaps = ArrayList<Leap>()
     private var planned = 0
     /** Per section entered early (5 = core): you're on your spot; the bot's on its; when the pre-leap is due; the job whose bot holds. */
@@ -516,7 +520,13 @@ object Party {
             dbg("§d${b.name}§7 (ghost) did $id")
         }
         override fun gate(s: Int) { if (phase.blowGate(s, b.name)) dbg("§d${b.name}§7 (ghost) blew gate $s") }
-        override fun leap(who: String, at: P) { leapTo(b, at.vec(), phase.n); dbg("§d${b.name}§7 (ghost) leaps onto $who") }
+        override fun leap(who: String, at: P) {
+            // Onto [who] (a class: its player, else its bot), where it stands now.
+            val c = Players.classByName(who)
+            val onto = Players.playerOf(c)?.asTarget() ?: botOf(c)?.asTarget()
+            leapTo(b, Target(at.vec(), onto?.name, onto?.yaw), phase.n)
+            dbg("§d${b.name}§7 (ghost) leaps onto $who")
+        }
         override fun swing() = swing(b)
         override fun eeOn(into: Int) {
             if (eeOf(into)?.owner != b.clazz) return
@@ -609,15 +619,20 @@ object Party {
         dbgN = n; dbgS = s; curPhase = phase
         if (P3Sim.debugBots && n % 40 == 0) dbgHolds(phase)
         if (s != planned) { planned = s; sectionN[s.coerceIn(0, 5)] = n; dbg("§bsection $s starts"); sectionStarted(phase, s) }
-        // Jobs someone else (you, on a stack) already did.
-        jobs.removeAll { j -> phase.stations.firstOrNull { it.id == j.job }?.done == true || (j.job.startsWith("gate") && phase.gateIsDown(sectionOf(j.job))) }
+        // Jobs someone else (you, on a stack) already did: their bots go on to their next instead
+        // (one about to leap: once it lands, not walking off ahead of its leap).
+        val beaten = HashSet<Bot>()
+        jobs.removeAll { j ->
+            (phase.stations.firstOrNull { it.id == j.job }?.done == true || (j.job.startsWith("gate") && phase.gateIsDown(sectionOf(j.job)))).also { if (it) beaten += j.bot }
+        }
+        beaten.filter { b -> leaps.none { it.bot === b } }.forEach { walkOn(it, n) }
         youAtEarlyEnter(phase)
         // Leaps that are due.
         leaps.filter { n >= it.at }.forEach { l ->
             // Onto you at your early enter: only while you're in position.
             if (l.youAt != null && Sim.players().none { it.position().distanceTo(l.youAt) <= 3.0 }) return@forEach
             leaps.remove(l)
-            l.onto()?.let { dbg("§e${l.bot.name}§7 leaps (${it.short()})"); leapTo(l.bot, it, n); walkOn(l.bot, n) }
+            l.onto()?.let { dbg("§e${l.bot.name}§7 leaps (${it.pos.short()})"); leapTo(l.bot, it, n); walkOn(l.bot, n) }
         }
         // Jobs that are due (a section's last held while you're on your way to your early enter).
         val held = holding(phase)
@@ -625,7 +640,8 @@ object Party {
         jobs.removeAll { j ->
             if (j.at < 0 || n < j.at) return@removeAll false
             // Done where it's done: not while holding (at an early enter, waiting), not before the bot is there.
-            if (j.bot.hold || lateForEe(j.bot, s)) return@removeAll false
+            // Late for its early enter: only the jobs from before that keep it from going there (earlyEnterBots).
+            if (j.bot.hold || (lateForEe(j.bot, s) && !before(j, s))) return@removeAll false
             if (!inReach(j.bot, j.job)) {
                 if (j.bot.to == null) go(j.bot, spotOf(j.job), n, n, "${j.job} (due now, not there)")
                 return@removeAll false
@@ -697,8 +713,8 @@ object Party {
                 "leaps" -> botOf(Roles.whoIs(plan, m.who))?.takeIf { it.ghost == null }?.let { b ->
                     if (at != null) leaps += Leap(b, at) {
                         // Back into the section: onto someone still working in it (else you).
-                        bots.firstOrNull { it !== b && it.inSection == s && busy(it) }?.pos
-                            ?: Sim.players().firstOrNull { GoldorPhase.dtZone(it.position()) == s }?.position() ?: Sim.host?.position()
+                        bots.firstOrNull { it !== b && it.inSection == s && busy(it) }?.asTarget()
+                            ?: (Sim.players().firstOrNull { GoldorPhase.dtZone(it.position()) == s } ?: Sim.host)?.asTarget()
                     }
                 }
             }
@@ -726,8 +742,8 @@ object Party {
             // 3rd term to the core), no leap into S3.
             if (s == 3 && eeOf(4)?.let { !it.byYou && it.owner == b.clazz } == true && jobs.none { it.bot === b && sectionOf(it.job) <= 3 }) { b.inSection = s; continue }
             b.inSection = s
-            if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.pos }
-            else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { eeOf(5)?.player?.position() }
+            if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.asTarget() }
+            else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { eeOf(5)?.player?.asTarget() }
             else walkOn(b, n)
         }
     }
@@ -738,6 +754,9 @@ object Party {
         val ee = eeOf(s)?.takeIf { !it.byYou } ?: return false
         return botOf(ee.owner) === b && b.ghost == null
     }
+
+    /** A job its early enterer into [into] does before going to its spot (one of the sections before, or timed in them: a pre-done device). */
+    private fun before(j: Job, into: Int) = sectionOf(j.job) < into || j.timeSection < into
 
     /** "ee2" -> 2, "core" -> 5. */
     private fun into(token: String) = if (token == "core") 5 else token.removePrefix("ee").toIntOrNull()
@@ -755,7 +774,7 @@ object Party {
             if (b.ghost != null) continue
             if (into > s && (b.inSection >= into || busy(b) || b.hold)) continue
             // Not before its jobs in the sections before (the EE3 bot does its S2 ones first, not straight from S1).
-            if (jobs.any { it.bot === b && (sectionOf(it.job) < into || it.timeSection < into) }) continue
+            if (jobs.any { it.bot === b && before(it, into) }) continue
             if (b.pos.distanceTo(ee.spot) < 0.5) {
                 b.inSection = into; b.hold = true
                 b.yaw = ee.yaw; b.pitch = ee.pitch
@@ -779,7 +798,7 @@ object Party {
         val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] &&
             n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
         if (!open) return
-        val target: () -> Vec3? = if (eeBot != null) ({ eeBot.pos }) else ({ ee.player?.position() })
+        val target: () -> Target? = if (eeBot != null) ({ eeBot.asTarget() }) else ({ ee.player?.asTarget() })
         for (b in bots) {
             if (b === eeBot || b.ghost != null || b.inSection >= into || busy(b)) continue
             b.inSection = into
@@ -938,7 +957,7 @@ object Party {
         for (b in bots) {
             if (b === cb || b.ghost != null) continue
             b.hold = false
-            if (b.inSection < 5) { b.inSection = 5; leaps += Leap(b, n + 2 + gapTicks() * i++) { cb.pos } }
+            if (b.inSection < 5) { b.inSection = 5; leaps += Leap(b, n + 2 + gapTicks() * i++) { cb.asTarget() } }
         }
         dbg("core open: everyone leaps onto §e${cb.name}§7 by the core first, then it recores")
     }
@@ -963,10 +982,10 @@ object Party {
         val n = phase.n
         dbg("everyone leaps into the core")
         val ee = eeOf(5)
-        val onto: (() -> Vec3?)? = when {
+        val onto: (() -> Target?)? = when {
             ee == null -> null
-            ee.byYou -> ee.player?.takeIf { GoldorPhase.CORE_BOX.inflate(4.0).contains(it.position()) }?.let { p -> { p.position() } }
-            else -> botOf(ee.owner)?.let { b -> { b.pos } }
+            ee.byYou -> ee.player?.takeIf { GoldorPhase.CORE_BOX.inflate(4.0).contains(it.position()) }?.let { p -> { p.asTarget() } }
+            else -> botOf(ee.owner)?.let { b -> { b.asTarget() } }
         }
         bots.forEachIndexed { i, b ->
             if (b.ghost != null) return@forEachIndexed
@@ -981,15 +1000,16 @@ object Party {
 
     private fun gapTicks() = (P3Plan.leapGap * 20).toInt().coerceAtLeast(1)
 
-    private fun next(b: Bot) = jobs.filter { it.bot === b }.minWithOrNull(compareBy<Job> { it.timeSection }.thenBy { it.sec })
+    private fun next(b: Bot, of: (Job) -> Boolean = { true }) = jobs.filter { it.bot === b && of(it) }.minWithOrNull(compareBy<Job> { it.timeSection }.thenBy { it.sec })
 
     /** Has a job due in the section in progress (or earlier). */
     private fun busy(b: Bot) = jobs.any { it.bot === b && it.at >= 0 }
 
     /** Off to the next job if it can be got to now (its time has started, or its section is where the bot is), unless holding. */
     private fun walkOn(b: Bot, n: Int) {
-        if (b.ghost != null || b.hold || lateForEe(b, planned)) return
-        val j = next(b) ?: return
+        if (b.ghost != null || b.hold) return
+        // Late for its early enter: only to a job from before that keeps it from going there (then earlyEnterBots sends it).
+        val j = (if (lateForEe(b, planned)) next(b) { before(it, planned) } else next(b)) ?: return
         // A gate it can throw at from here: it stays.
         if (j.job.startsWith("gate") && inReach(b, j.job)) return
         if (j.at >= 0 || sectionOf(j.job) <= b.inSection) go(b, spotOf(j.job), n, j.at, "${j.job}${if (j.at < 0) " (its section not started)" else ""}", presetStand(j.job)?.let { it.yaw to it.pitch }, lead = leadOf(j.job))
@@ -1195,18 +1215,14 @@ object Party {
         return null
     }
 
-    /** [b] leaps onto [at]: lands there facing as whoever it leapt to; their mod says so in party chat a tick later. */
-    private fun leapTo(b: Bot, at: Vec3, n: Int) {
-        val p = Sim.players().firstOrNull { it.position().distanceTo(at) < 1.0 }
-        val onto: Pair<String, Float>? = when {
-            p != null -> p.gameProfile.name to p.yRot
-            else -> bots.firstOrNull { it !== b && it.pos.distanceTo(at) < 1.0 }?.let { it.name to it.yaw }
-        }
+    /** [b] leaps onto [to]: lands there facing as whoever it leapt to; their mod says so in party chat a tick later. */
+    private fun leapTo(b: Bot, to: Target, n: Int) {
+        val at = to.pos
         b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null
-        onto?.let { b.yaw = it.second }
+        to.yaw?.let { b.yaw = it }
         Sim.sound(net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, at)
         // Most teammates' leaps are announced, usually 1 tick after the tp.
-        val name = onto?.first ?: return
+        val name = to.name ?: return
         // On you: what an early enterer (you, recording) waits for.
         if (name == Sim.hostName) GhostCapture.event("landed", b.clazz.name)
         val gen = generation
