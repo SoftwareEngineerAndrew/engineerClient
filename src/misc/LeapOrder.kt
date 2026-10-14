@@ -104,6 +104,9 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     private var grabY = 0.0
     private var mouseX = 0.0
     private var mouseY = 0.0
+    /** A box sliding into its spot after a drop: where it started (x, y), and when. */
+    private val slideFrom = arrayOfNulls<IntArray>(4)
+    private val slideAt = LongArray(4)
 
     init {
         val me = mc.player?.name?.string
@@ -127,6 +130,26 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         val x0 = if (i % 2 == 0) width / 2 - 24 - w else width / 2 + 24
         val y0 = if (i / 2 == 0) height / 2 - 24 - h else height / 2 + 24
         return intArrayOf(x0, y0, x0 + w, y0 + h)
+    }
+
+    /** Where spot [i]'s box is drawn: its place, or on its way there for [SLIDE_MS] after a drop (easing out). */
+    private fun drawnAt(i: Int): IntArray {
+        val b = box(i)
+        val from = slideFrom[i] ?: return b
+        val t = (System.currentTimeMillis() - slideAt[i]) / SLIDE_MS.toFloat()
+        if (t >= 1f) { slideFrom[i] = null; return b }
+        val e = 1f - (1f - t) * (1f - t) * (1f - t)
+        val x = from[0] + ((b[0] - from[0]) * e).toInt()
+        val y = from[1] + ((b[1] - from[1]) * e).toInt()
+        return intArrayOf(x, y, x + b[2] - b[0], y + b[3] - b[1])
+    }
+
+    private fun slide(i: Int, x: Int, y: Int) { slideFrom[i] = intArrayOf(x, y); slideAt[i] = System.currentTimeMillis() }
+
+    /** Where the dragged box is drawn for the mouse at [x], [y]: held where it was grabbed, kept on screen. */
+    private fun heldAt(x: Double, y: Double): IntArray {
+        val b = box(dragging)
+        return intArrayOf((x - grabX).toInt().coerceIn(0, width - (b[2] - b[0])), (y - grabY).toInt().coerceIn(0, height - (b[3] - b[1])))
     }
 
     /** The spot for a point anywhere on screen: its quarter (the leap menu's boxes sit one per quarter). */
@@ -168,11 +191,12 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
                 continue
             }
             val hovered = dragging >= 0 && spotAt(mouseX, mouseY) == i
-            drawBox(gfx, b[0], b[1], names[i], if (hovered) HOVER else BOX)
+            val at = drawnAt(i)
+            drawBox(gfx, at[0], at[1], names[i], if (hovered) HOVER else BOX)
         }
         if (dragging >= 0) {
-            val b = box(dragging)
-            drawBox(gfx, (mouseX - grabX).toInt().coerceIn(0, width - (b[2] - b[0])), (mouseY - grabY).toInt().coerceIn(0, height - (b[3] - b[1])), names[dragging], DRAGGED)
+            val at = heldAt(mouseX, mouseY)
+            drawBox(gfx, at[0], at[1], names[dragging], DRAGGED)
         }
     }
 
@@ -221,6 +245,11 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     /** Lets go of the dragged player at [x], [y]: swapped with the spot there, if any. */
     private fun drop(x: Double, y: Double) {
         val to = spotAt(x, y)
+        // Both boxes slide the rest of the way: the dropped one from the mouse, the one it swapped with from its old spot.
+        val held = heldAt(x, y)
+        val other = drawnAt(to)
+        slide(to, held[0], held[1])
+        if (to != dragging) slide(dragging, other[0], other[1])
         if (to != dragging) {
             val t = names[to]; names[to] = names[dragging]; names[dragging] = t
             LeapOrder.set(names.toList())
@@ -244,6 +273,8 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     }.getOrNull()
 
     private companion object {
+        /** How long a dropped box takes to slide into its spot. */
+        const val SLIDE_MS = 90L
         val WHITE = Color(255, 255, 255, 1f)
         val BOX = Color(30, 30, 30, 0.85f)
         val HOVER = Color(60, 60, 60, 0.9f)
