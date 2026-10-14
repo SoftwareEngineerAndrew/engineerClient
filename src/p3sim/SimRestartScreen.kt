@@ -532,7 +532,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             val names = listOf(mc.player?.name?.string ?: "You") + PartyClient.team.filter { it.player }.map { it.name }
             line("§7In a party")
             line("§7${names.joinToString(", ")} §8${names.size}/5")
-            addRenderableWidget(Button.builder(Component.literal("Leave Party")) { mc.gui.setScreen(null); SimWorld.leave() }
+            addRenderableWidget(Button.builder(Component.literal("Leave Party")) { mc.setScreen(null); SimWorld.leave() }
                 .tooltip(tip("Back to the title screen; the host's sim goes on.")).bounds(x, y, PARTY_W, 20).build())
             return
         }
