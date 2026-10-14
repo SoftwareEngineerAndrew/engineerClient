@@ -42,6 +42,7 @@
     "RecSwingStateAccessor",
     "RecTabOverlayAccessor",
     "RecThumbFrameMixin",
+    "RenderTweaksBufferStorageMixin",
     "RotateHeadPacketAccessor",
     "RotationTapMixin",
     "SoundPlayTapMixin",
