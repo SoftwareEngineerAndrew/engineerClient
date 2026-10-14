@@ -1,12 +1,13 @@
-package com.engineerclient.practice
+package com.devgineerclient.practice
 
-import com.engineerclient.EngineerClient.mc
-import com.engineerclient.misc.RandomStuff
+import com.devgineerclient.DevgineerClient
+import com.devgineerclient.DevgineerClient.mc
 import com.engineerclient.p3sim.ShotPlan
 import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
+import com.odtheking.odin.features.Category
+import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.itemId
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -21,11 +22,15 @@ import net.minecraft.world.phys.Vec3
  * covers its row.
  *
  * Odin's module draws them (its "Show Aim Positions" on); ArrowsDeviceAimMixin hands Odin these instead of its
- * own, and they're redone whenever your bow, Hydra stacks or stance change. Random Stuff's "i4 Bow Aims" toggle.
+ * own, and they're redone whenever your bow, Hydra stacks or stance change.
  */
-object I4Aims {
-    /** Its handlers are on Odin's bus from here on; they do nothing while the toggle is off. */
-    fun register() = EventBus.subscribe(this)
+object I4Aims : Module(
+    name = "i4 Aim",
+    category = Category.custom("Devgineer Client"),
+    description = "i4: Odin's Arrows Device aim positions for the bow you hold (Terminator, Mosquito, Terror's Hydra arrows), not only the Terminator. Needs Odin's Show Aim Positions.",
+    key = null,
+    toggled = true,
+) {
 
     private val BOWS = setOf("TERMINATOR", "MOSQUITO_BOW", "ITEM_SPIRIT_BOW", "JUJU_SHORTBOW", "ARTISANAL_SHORTBOW", "LAST_BREATH")
     private val STACKS = Regex("(\\d+)⁑")
@@ -88,12 +93,11 @@ object I4Aims {
 
         // Your bow, stacks (Hydra arrows or not) or stance changed: Odin's aims are redone for the target it shows.
         on<TickEvent.End> {
-            if (!RandomStuff.showsI4BowAims()) return@on
             val p = mc.player ?: return@on
             val key = "${bow()}|${stacks >= 10}|${p.isShiftKeyDown}|${p.blockPosition()}"
             if (key == lastKey) return@on
             lastKey = key
-            com.engineerclient.EngineerClient.safely("i4 aims") {
+            DevgineerClient.safely("i4 aims") {
                 val target = field("targetPosition").get(null) as? BlockPos ?: return@safely
                 val aims = aimsFor(target) ?: return@safely
                 field("optimalAimPositions").set(null, aims)

@@ -24,7 +24,7 @@ object DevgineerClient : ClientModInitializer {
     override fun onInitializeClient() {
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PosMsgExtras)
+        ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PosMsgExtras, com.devgineerclient.practice.I4Aims)
         safely("posmsg") { PosMsgSetup.install() }
         safely("pace targets") { PaceTargets.install() }
         safely("witherborn") { Witherborn.register() }
