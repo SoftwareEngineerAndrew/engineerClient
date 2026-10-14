@@ -8,6 +8,7 @@ import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
@@ -148,9 +149,10 @@ object RandomStuff : Module(
     }
 
     private const val HYPIXEL_ADDRESS = "hypixel.net"
-    private const val RETRY_TICKS = 20      // after the first, every 1s until we are on Skyblock
-    private const val TRANSFER_TICKS = 60   // a world load mid-way means a transfer is happening: give it 3s
-    private const val MAX_ATTEMPTS = 8
+    // A retry sent while the transfer is under way gets "Please don't spam the command!", so they're far apart.
+    private const val RETRY_TICKS = 60      // after the first, every 3s until we are on Skyblock
+    private const val TRANSFER_TICKS = 60   // a server switch mid-way means the transfer is happening: give it 3s
+    private const val MAX_ATTEMPTS = 5
 
     /** Skip Loading Screen: read by SkipLoadingScreenMixin on every world change. */
     fun skipsLoadingScreen(): Boolean = enabled && skipLoadingScreen
@@ -308,14 +310,15 @@ object RandomStuff : Module(
 
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
 
-        on<LevelEvent.Load> {
-            // A world load after a /skyblock is the transfer under way: give it time before trying again.
-            if (!enabled || !autoJoinSkyblock || !pendingSkyblockJoin || attempts == 0) return@on
+        // A server switch after a /skyblock is the transfer under way. Lobby to Skyblock is the same dimension,
+        // so no new world (LevelEvent.Load) comes: the respawn packet does.
+        onReceive<net.minecraft.network.protocol.game.ClientboundRespawnPacket> {
+            if (!enabled || !autoJoinSkyblock || !pendingSkyblockJoin || attempts == 0) return@onReceive
             ticksUntilSkyblock = TRANSFER_TICKS
         }
 
         // The lobby can ignore a command sent before it is ready, so /skyblock goes out [skyblockDelay]
-        // after landing and then every second until Odin sees the Skyblock scoreboard. On raw client
+        // after landing and then every 3 seconds until Odin sees the Skyblock scoreboard. On raw client
         // ticks: Odin's TickEvent.End only fires with a world loaded.
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!pendingSkyblockJoin || ticksUntilSkyblock < 0) return@register
