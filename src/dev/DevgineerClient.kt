@@ -31,7 +31,7 @@ object DevgineerClient : ClientModInitializer {
         // Fast Launch pieces: after registration, so they can read its (loaded) settings.
         safely("fast launch default") { com.devgineerclient.misc.FastLaunch.enableByDefault() }
         safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
-        safely("park") { com.devgineerclient.misc.Park.install() }
+        safely("f7 control") { com.devgineerclient.misc.F7Control.install() }
         safely("fast exit") { com.devgineerclient.misc.FastExit.install() }
         safely("leap highlight") { com.devgineerclient.rotation.LeapHighlight.register() }
         safely("role vignette") { com.devgineerclient.rotation.RoleVignette.register() }
