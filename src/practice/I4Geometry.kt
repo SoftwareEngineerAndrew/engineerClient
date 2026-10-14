@@ -154,6 +154,8 @@ object I4Geometry {
         fun noisy(i: Int): Boolean = moved[i]
         /** The cells the volley hits with no noise. */
         val covers: Set<Int> get() = cells.filter { it >= 0 }.toSet()
+        /** Those cells in the order the server ticks their arrows (spawn order), each once. */
+        val order: List<Int> get() = cells.filter { it >= 0 }.distinct()
     }
 
     private fun plan(s: Shooter, yaw: Float, pitch: Float, noise: Vec3) =
@@ -250,11 +252,11 @@ object I4Geometry {
             while (y <= y0) {
                 val v = volley(board, s, y.toFloat(), p.toFloat())
                 val cov = v.covers
-                if (cov.isNotEmpty()) mine.getOrPut(cov) { Coarse(cov) }.add(y, p, chance(board, v, cov), minChance)
+                if (cov.isNotEmpty()) mine.getOrPut(cov) { Coarse(cov, v.order) }.add(y, p, chance(board, v, cov), minChance)
                 y += coarse
             }
             mine
-        }.toList().forEach { m -> m.forEach { (k, c) -> found.getOrPut(k) { Coarse(k) }.merge(c) } }
+        }.toList().forEach { m -> m.forEach { (k, c) -> found.getOrPut(k) { Coarse(k, c.order) }.merge(c) } }
         val picked = keep(found.values.filter { it.bestChance >= minChance })
         return picked.parallelStream().map { c -> fine(board, s, lattice, minChance, coarse, c) }.toList().filterNotNull()
     }
@@ -291,8 +293,11 @@ object I4Geometry {
         return d
     }
 
-    /** A coarse aim: its cells, the box of looks it was found at, its best chance and how many coarse spots reach [minChance]. */
-    class Coarse(val cells: Set<Int>) {
+    /**
+     * A coarse aim: its cells (and [order], the order its arrows tick in), the box of looks it was found at, its best
+     * chance and how many coarse spots reach [minChance].
+     */
+    class Coarse(val cells: Set<Int>, val order: List<Int> = cells.toList()) {
         var minYaw = Double.MAX_VALUE; var maxYaw = -Double.MAX_VALUE
         var minPitch = Double.MAX_VALUE; var maxPitch = -Double.MAX_VALUE
         var bestChance = 0.0; var good = 0

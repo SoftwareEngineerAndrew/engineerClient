@@ -382,16 +382,19 @@ object ShotPlan {
         val pos1 = from.add(u)
         val move = Vec3(0.99 * u.x, 0.99 * u.y - G, 0.99 * u.z).scale(k)
         val fly = move.add(0.0, G, 0.0)
+        // In spawn order, which is the order the server ticks them (entity id): the main arrow, then each side's at +x
+        // (left, from the i4 plate) before -x (i4 recordings, Terminator: 1,606 of 1,606 volleys; Hydra Strike's taken to
+        // match). It decides which arrow of a volley can take an i4 target drawn in the same tick.
         val out = arrayListOf(Planned(from, pos1, fly, owned = true, delay = 0))
         // Hydra Strike at 10 stacks: that move turned +-8 deg.
-        if (stacks >= 10) for (s in listOf(8.0, -8.0)) out += Planned(pos1, pos1, roty(fly, s), owned = false, delay = 0)
+        if (stacks >= 10) for (s in listOf(-8.0, 8.0)) out += Planned(pos1, pos1, roty(fly, s), owned = false, delay = 0)
         when (bow) {
             // The Terminator's side arrows: Hypixel spawns each twice, identical (1 main + 2 pairs = 5 entities, with or
             // without Terror): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
             // tick's gravity given back.
             Bows.TERMINATOR -> {
                 val side = pos1.add(0.0, -0.5, 0.0)
-                for (s in listOf(5.5, -5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
+                for (s in listOf(-5.5, 5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
             }
         }
         // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities.
