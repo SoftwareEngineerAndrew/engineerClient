@@ -90,6 +90,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     /** The names in each spot, as shown ("" for none). */
     private val names = Array(4) { "" }
     private var dragging = -1
+    private var sawHeld = false
     private var grabX = 0.0
     private var grabY = 0.0
     private var mouseX = 0.0
@@ -126,6 +127,13 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     override fun extractRenderState(gfx: GuiGraphicsExtractor, mx: Int, my: Int, delta: Float) {
         super.extractRenderState(gfx, mx, my, delta)
         mouseX = mx.toDouble(); mouseY = my.toDouble()
+        // A release the screen never heard about (focus lost, another button): dropped where the mouse is.
+        // Only once SDL has been seen holding it: if its state can't be read, the release event alone drops.
+        if (dragging >= 0) when (leftHeld()) {
+            true -> sawHeld = true
+            false -> if (sawHeld) drop(mouseX, mouseY)
+            null -> {}
+        }
         val font = mc.font
         fun centred(text: String, y: Int) = gfx.text(text, (width - font.width(text)) / 2, y, WHITE, shadow = true)
         centred("§6§lLeap Order", 12)
@@ -173,8 +181,9 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
         val i = spotAt(event.x(), event.y())
-        if (event.button() == 0 && i >= 0 && names[i].isNotEmpty()) {
+        if (isLeft(event) && i >= 0 && names[i].isNotEmpty()) {
             dragging = i
+            sawHeld = false
             val b = box(i)
             grabX = event.x() - b[0]; grabY = event.y() - b[1]
             return true
@@ -184,15 +193,34 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
 
     override fun mouseReleased(event: MouseButtonEvent): Boolean {
         if (dragging < 0) return super.mouseReleased(event)
-        val to = spotAt(event.x(), event.y())
+        drop(event.x(), event.y())
+        return true
+    }
+
+    /** Lets go of the dragged player at [x], [y]: swapped with the spot there, if any. */
+    private fun drop(x: Double, y: Double) {
+        val to = spotAt(x, y)
         if (to >= 0 && to != dragging) {
             val t = names[to]; names[to] = names[dragging]; names[dragging] = t
             LeapOrder.set(names.toList())
             mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
         }
         dragging = -1
-        return true
     }
+
+    /**
+     * A left click. Under SDL (26.3) the event's button number isn't reliable (a left click can come through as
+     * 1), so anything but SDL saying the right button alone is down counts.
+     */
+    private fun isLeft(event: MouseButtonEvent): Boolean = runCatching {
+        val state = org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?)
+        !((state and 4) != 0 && (state and 1) == 0)
+    }.getOrElse { event.button() == 0 }
+
+    /** The left button is still held (SDL), or null when that can't be told. */
+    private fun leftHeld(): Boolean? = runCatching {
+        (org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?) and 1) != 0
+    }.getOrNull()
 
     private companion object {
         val WHITE = Color(255, 255, 255, 1f)
