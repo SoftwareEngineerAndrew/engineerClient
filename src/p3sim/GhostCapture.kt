@@ -46,11 +46,11 @@ class GhostRecording(val clazz: String, val skill: String) {
     }
 }
 
-/** Your best run per skill preset and class: `config/adm/p3sim-best/<skill>/<CLASS>.json.gz`. */
+/** Your best run per skill preset and class: `config/engineerclient/p3sim-best/<skill>/<CLASS>.json.gz`. */
 object GhostStore {
     private val cache = HashMap<String, GhostRun?>()
     var root: File? = null
-    private val dir get() = root ?: File(Minecraft.getInstance().gameDirectory, "config/adm/p3sim-best")
+    private val dir get() = root ?: File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-best")
 
     private fun file(skill: String, clazz: String) = File(File(dir, skill.replace(Regex("[^A-Za-z0-9 _-]"), "_")), "$clazz.json.gz")
 

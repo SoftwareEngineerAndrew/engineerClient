@@ -10,7 +10,7 @@ import java.io.File
 /**
  * Your P3 plan: the skill preset ([Roles]: who does what, and when), what's yours (your class's
  * role, changeable per job), the early-enter spots and the leap menu. The menu's Plan and Early
- * Enters tabs edit it; it's saved to `config/adm/p3sim-plan.json`.
+ * Enters tabs edit it; it's saved to `config/engineerclient/p3sim-plan.json`.
  *
  * The roles and their times live in [Roles]; the early-enter spots' defaults are here.
  */
@@ -247,7 +247,7 @@ object P3Plan {
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/adm/p3sim-plan.json")
+    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-plan.json")
     private var loaded = false
     private var backedUp = false
 

@@ -547,7 +547,7 @@ object PartyClient {
     }
 
     /** A joiner's own shared settings while they're in a party (the party's are in their config meanwhile). */
-    private val ownFile get() = java.io.File(mc.gameDirectory, "config/adm/p3sim-own-settings.json")
+    private val ownFile get() = java.io.File(mc.gameDirectory, "config/engineerclient/p3sim-own-settings.json")
     private fun keepOwn(o: JsonObject) = EngineerClient.safely("p3sim own settings keep") { ownFile.parentFile.mkdirs(); ownFile.writeText(o.toString()) }
 
     /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. */
@@ -640,7 +640,7 @@ object PlayerFiles {
     const val LOADOUTS = "p3sim-loadouts.json"
     val NAMES = listOf(HOTBAR, LOADOUTS)
 
-    private fun file(name: String) = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/adm/$name")
+    private fun file(name: String) = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/engineerclient/$name")
 
     fun readLocal(name: String): String? = runCatching { file(name).takeIf { it.exists() }?.readText() }.getOrNull()
 

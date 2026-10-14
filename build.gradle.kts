@@ -17,7 +17,7 @@ group = "com.engineerclient"
 version = providers.environmentVariable("EC_VERSION").orElse(providers.environmentVariable("GITHUB_REF_NAME").map { it.removePrefix("v") }).getOrElse("dev")
 
 base {
-    archivesName.set("adm")
+    archivesName.set("engineerclient")
 }
 
 // Code in src/ (package folders without the com/engineerclient root), resources in src/resources/.
