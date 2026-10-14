@@ -55,7 +55,7 @@ const rules = [
   ['addons/engineerclient.json', 'addons/adm.json', false],
   ['logs/engineerclient', 'logs/adm', false],
   // README.
-  ['# EngineerClient\n\nAn [Odin]', '# ADM\n\nAdvanced Dungeons Mod: an [Odin]', true],
+  ['# EngineerClient\n\nAn [Odin]', '# ADM\n\nAdvanced Dungeons Mod: an [Odin]', false],
   ['https://github.com/undonecoffee/EngineerClient/', 'https://github.com/undonecoffee/adm/', false],
   [/EngineerClient-(26[\d.]*)\.jar/g, 'ADM-$1.jar', false],
   ['released yet; EngineerClient 26.3 is built', 'released yet; ADM 26.3 is built', false],
@@ -69,8 +69,6 @@ for (const f of files) {
     if (a instanceof RegExp) { const n = (s.match(a) || []).length; if (n) { hits[i] += n; s = s.replace(a, b); } }
     else if (s.includes(a)) { hits[i] += s.split(a).length - 1; s = s.split(a).join(b); }
   });
-  if (path.basename(f) === 'README.md' && s !== o && !s.includes('ADM was called Engineer Client'))
-    s = s.trimEnd() + '\n\nADM was called Engineer Client before. Updating from it: delete the old `engineerclient` jar from `mods`; your settings and saved data move over by themselves the first time ADM starts.\n';
   if (s !== o) fs.writeFileSync(f, s);
 }
 
