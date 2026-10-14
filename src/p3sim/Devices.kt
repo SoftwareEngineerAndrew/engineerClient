@@ -347,11 +347,16 @@ class Devices(val phase: GoldorPhase) {
          * recordings: 98% of lights on their attempt's phase, 5 of 8 back-to-back attempts on a different one).
          */
         private var grid = Random.nextInt(10)
+        /**
+         * This attempt's first emerald has shown. Before it, a strike on the (hidden) first target does not count, as
+         * on Hypixel (4 of 22 recorded first targets struck early stayed unlit, 4.0 expected if ignored).
+         */
+        private var shownOnce = false
 
         fun place() { reset(); blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
         fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.BLUE_TERRACOTTA.defaultBlockState()) } }
 
-        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled(); grid = Random.nextInt(10) }
+        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled(); grid = Random.nextInt(10); shownOnce = false }
 
         /** The cell that is the target now (shown or not), or -1 when done. */
         private val current get() = if (hits < 9) order[hits] else -1
@@ -402,16 +407,20 @@ class Devices(val phase: GoldorPhase) {
 
         private fun light() {
             lit = current
+            shownOnce = true
             Blocks.set(blocks[lit], B.EMERALD_BLOCK.defaultBlockState())
         }
 
         /**
-         * An arrow (or a bow's shot) hit block [pos]: if it is the target - shown or not yet - it counts. Only a shown
-         * one goes back to blue. The arrow's own vanilla `entity.arrow.hit` is the only sound.
+         * An arrow (or a bow's shot) hit block [pos]: if it is the target - shown or not yet - it counts, once the
+         * attempt's first emerald has shown. Only a shown one goes back to blue. The arrow's own vanilla
+         * `entity.arrow.hit` is the only sound.
          */
         fun hit(pos: BlockPos) {
             val st = station("Target")
             if (st.done || current < 0 || pos != blocks[current]) return
+            // Nothing counts before the attempt's first emerald.
+            if (!shownOnce) return
             // The board runs while someone is on the plate (or a target is up or under way).
             if (lit < 0 && hits == 0 && !onPlate()) return
             if (lit == current) { Blocks.set(pos, B.BLUE_TERRACOTTA.defaultBlockState()); lit = -1 }
