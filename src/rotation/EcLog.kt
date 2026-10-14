@@ -8,7 +8,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /**
- * EC's own log: one file per game session under `logs/engineerclient/`, meant to be attached
+ * EC's own log: one file per game session under `logs/adm/`, meant to be attached
  * as-is to a bug report when a run goes wrong. It is self-contained on purpose — every chat line the mod looked at is in it RAW, in
  * order, next to every decision the engine made from it, so a run can be replayed through the
  * engine offline and the first wrong decision found without a clip.
@@ -37,12 +37,12 @@ object EcLog {
     var path: Path? = null
         private set
 
-    /** Open a fresh session file under [gameDir]/logs/engineerclient, keeping only the last [KEEP]. */
+    /** Open a fresh session file under [gameDir]/logs/adm, keeping only the last [KEEP]. */
     @Synchronized
     fun open(gameDir: Path, header: List<String>) {
         close()
         try {
-            val dir = gameDir.resolve("logs").resolve("engineerclient")
+            val dir = gameDir.resolve("logs").resolve("adm")
             Files.createDirectories(dir)
             val file = dir.resolve("ec-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".log")
             out = PrintWriter(Files.newBufferedWriter(file), true)

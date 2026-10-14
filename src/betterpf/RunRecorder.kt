@@ -365,7 +365,7 @@ class RunRecorder(
         tempFile = temp
         writer = BufferedWriter(OutputStreamWriter(GZIPOutputStream(Files.newOutputStream(temp)), Charsets.UTF_8), 1 shl 16)
         val self = EngineerClient.mc.player?.name?.string ?: "?"
-        val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient")
+        val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("adm")
             .map { it.metadata.version.friendlyString }.orElse("?")
         writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF,"stx":1}""")
         backlog.forEach(::writeNow)
