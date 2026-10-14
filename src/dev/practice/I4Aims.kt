@@ -2,9 +2,11 @@ package com.devgineerclient.practice
 
 import com.devgineerclient.DevgineerClient
 import com.devgineerclient.DevgineerClient.mc
+import com.engineerclient.p3sim.P3Sim
 import com.devgineerclient.practice.I4Geometry.Board
 import com.devgineerclient.practice.I4Geometry.Lattice
 import com.devgineerclient.practice.I4Geometry.Shooter
+import com.devgineerclient.practice.I4Geometry.StanceGeometry
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
@@ -16,50 +18,40 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.itemId
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
-import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
-import net.minecraft.client.gui.GuiGraphicsExtractor
-import net.minecraft.resources.Identifier
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
 import net.minecraft.core.BlockPos
-import net.minecraft.util.Mth
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import net.minecraft.world.entity.projectile.arrow.AbstractArrow
+import net.minecraft.util.Mth
+import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.atan
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.hypot
-import kotlin.math.sin
 import kotlin.math.tan
 
 /**
  * i4 (the Arrows Device): paints the screen pixels where putting your crosshair lands every arrow of the aim to fire
- * NOW (#00FF00), and the aim to move to NEXT (cyan, a pre-aim), for your bow (held, else the first in your hotbar) and
- * Terror (Hydra Strike) stacks ([I4Geometry]). Each pixel is lit when the nearest spot your mouse can reach from there
- * is one.
+ * NOW (#00FF00), and the aim to move to NEXT (cyan, a pre-aim), for your bow (held, else the first in your hotbar,
+ * else the last one seen) and Terror (Hydra Strike) stacks.
  *
- * How the board works (Hypixel recordings, ~/Cluade/maxor-work/i4lag): the device counts a hit the tick the arrow
- * lands and draws the next target then, uniformly from the cells not yet counted; only its emerald waits, for the
- * attempt's 10-server-tick grid (1-10 ticks). A hit on that not-yet-shown target counts too. A hit on the shown one
- * goes blue 1 tick later. Arrows tick in spawn order (main, then the side arrow at +x, then -x).
+ * Three parts:
+ * - [I4Geometry]: every aim's spots for where you stand, what you hold and your mouse (a stance), worked out off the
+ *   client thread when the stance changes (one worker thread splitting the work over a pool of [PARTS]; the other
+ *   sneak stance next, and the last few kept, so a sneak or a stack flicker costs nothing); the old one stays drawn
+ *   until the new one is in.
+ * - [I4Solver] and [I4Arrows]: the board as you can know it, every arrow on its way to it (from its packets, the
+ *   tick it spawns), and NOW and NEXT picked from the stance's aims, on the client thread at each event, on the
+ *   board's clock ([clock]).
+ * - [I4Paint]: NOW and NEXT drawn in the world pass, over every block and under every screen.
  *
- * The policy (simulated against your recordings, ~/Cluade/maxor-work/i4sim: 4.1 s from the first emerald, against
- * 5.4 s today) keeps, per cell, the chance it is still uncounted ([u]) and the chance it is the target now ([pi]):
- * - Before the first emerald: the middle row (strikes don't count yet, but you're on the board and in rhythm).
- * - A shown target none of your arrows is on its way to: its best aim, one volley (a Hydra row on its row).
- * - Otherwise (your volley is on its way to it, or nothing is shown): the aim that covers the most chance of being the
- *   target, a little in favour of the row you're on and the middle row. Your own arrows lower the chance of each cell
- *   they strike, so the guesses move on.
- * Never hold fire: NEXT is where to go while the cooldown runs. Spots under Min Hit Chance (1.8's aim noise on the
- * main and Hydra arrows) aren't painted.
- *
- * Drawn in the HUD under the crosshair: above the world, under any open screen. Auto Zoom narrows the FOV while you
- * look at the board. The server aims a shortbow shot with the newest look it has when the shot fires, so hold the
- * spot until the arrows are out. Odin's own aim cubes are hidden while this is on (ArrowsDeviceAimMixin).
+ * Auto Zoom narrows the FOV while you look at the board from the plate. The server aims a shortbow shot with the
+ * newest look it has when the shot fires, so hold the spot until the arrows are out. Odin's own aim cubes are hidden
+ * while this is on (ArrowsDeviceAimMixin).
  */
 object I4Aims : Module(
     name = "i4 Aim",
@@ -67,7 +59,7 @@ object I4Aims : Module(
     description = "i4: paints where to aim now (green) and next (cyan), from a simulated best strategy.",
     key = null,
 ) {
-    private val minChance by NumberSetting("Min Hit Chance", 90, 50..100, 1, unit = "%", desc = "Spots are drawn when every arrow of the aim lands on its cell at least this often. A Terminator's side arrows have no aim noise (always 100%); the main arrow and Hydra Strike's carry 1.8's.")
+    private val minChance by NumberSetting("Min Hit Chance", 90, 50..100, 1, unit = "%", desc = "Spots are drawn when every arrow of the aim lands on its cell at least this often (1.8's aim noise on the main arrow, which Hydra Strike's inherit).")
     private val showNext by BooleanSetting("Show Next Aim", true, desc = "Also paint (cyan) where to move while the cooldown runs: the aim after the one you fire now.")
     private val autoZoom by BooleanSetting("Auto Zoom", true, desc = "Narrow your FOV while you look at the board from the plate, so each mouse count is a bigger step on screen. Mouse speed in degrees doesn't change.")
     private val zoom by NumberSetting("Zoom", 2.0, 1.25..4.0, 0.25, unit = "x", desc = "How far Auto Zoom magnifies.").withDependency { autoZoom }
@@ -77,64 +69,37 @@ object I4Aims : Module(
     private val STACKS = Regex("(\\d+)⁑")
     private val CODES = Regex("§.")
     private val DEVICE_LINE = Regex("^(.{1,16}) completed a device! \\(\\d/\\d\\)$")
+    private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
 
-    /** Hydra Strike stacks, from the action bar (Hypixel's and P3 Sim's: `N⁑`, nothing at 0). */
-    @Volatile private var stacks = 0
-    /** The lit cell (index), or -1. */
-    private var lit = -1
-    /** Cells hit since the board started (gone emerald to blue). A hit on a target before it lit leaves no trace. */
-    private val marked = HashSet<Int>()
-    /** Arrows of yours in the air: entity id to (cell, the client tick it's gone by). */
-    private val flying = HashMap<Int, Pair<Int, Int>>()
+    /**
+     * Hydra Strike stacks, from the action bar (Hypixel's and P3 Sim's: `N⁑` every 10 ticks while you have any).
+     * Other action bars leave it; Hypixel sends a blank one now and then even at 10, so 0 is when no `N⁑` came for
+     * [STACKS_GONE] ticks (P3 Sim's blank one at 0 is taken at once).
+     */
+    private var stacks = 0
+    private var stacksAt = Int.MIN_VALUE / 2
+    private const val STACKS_GONE = 40
+
+    private val solver = I4Solver()
+    private val arrows = I4Arrows(solver)
+    /** Arrows spawned in front of the board (entity id to client tick), so motion packets of others are dropped on the network thread. */
+    private val tracked = ConcurrentHashMap<Int, Int>()
+
     private var ticks = 0
     private var awayTicks = 0
     private var board: Board? = null
-    /** Your "completed a device!" came while at the board: nothing left to aim at until a target lights again. */
-    private var complete = false
-
-    /** An emerald has shown this attempt: before it, strikes don't count. */
-    private var started = false
-    /** Per cell: the chance it is still uncounted, and the chance it is the target now. */
-    private val u = DoubleArray(9) { 1.0 }
-    private val pi = DoubleArray(9)
-    /** Your arrow is on its way to the shown cell: if it's still shown by this tick, the arrow missed. */
-    private var confirmCell = -1
-    private var confirmBy = 0
-    /** Per-cell strike rates of a row volley, R/C/L column (x 64/66/68; recordings), for volleys not yet in the air. */
-    private val ROW_Q = doubleArrayOf(0.67, 0.73, 0.54)
-
-    /** What is painted: what it was worked out for, and its aims. */
-    private class Result(val key: String, val eye: Vec3, val lattice: Lattice, val now: I4Geometry.Aim?, val next: I4Geometry.Aim?) {
-        val aims get() = listOfNotNull(now, next)
-    }
-    @Volatile private var result: Result? = null
 
     /**
-     * Everything that depends only on where you stand and what you hold: the coarse scan. Each aim's spots depend on
-     * the mouse lattice too ([Grid]): worked out once per lattice, so a new target or a hit only picks among them.
+     * The board's clock: Hypixel's server ticks (its unbundled pings, one a tick: Odin's server tick), counted on the
+     * client thread in the order they came with the board's and the arrows' packets, so lag stretches nothing; client
+     * ticks only while no ping has come for [NO_PINGS] ticks (P3 Sim pings every server tick too).
      */
-    private class Scan(val key: String, val board: Board, val shooter: Shooter, val min: Double, val coarse: List<I4Geometry.Coarse>) {
-        @Volatile var grid: Grid? = null
-    }
+    private var clock = 0
+    private var pingAt = Int.MIN_VALUE / 2
+    private const val NO_PINGS = 100
 
-    /** One mouse lattice's aims, by their cells. */
-    private class Grid(val sc: Scan, val lattice: Lattice) {
-        val fine = java.util.concurrent.ConcurrentHashMap<Set<Int>, java.util.Optional<I4Geometry.Aim>>()
-        // Not computeIfAbsent: fine() runs its own parallel stream, so a pool worker waiting on it can steal a sibling
-        // aim() and re-enter the map on the same bin ("Recursive update"). Two threads may work out one aim; both agree.
-        fun aim(c: I4Geometry.Coarse): I4Geometry.Aim? {
-            fine[c.cells]?.let { return it.orElse(null) }
-            val worked: java.util.Optional<I4Geometry.Aim> = java.util.Optional.ofNullable(I4Geometry.fine(sc.board, sc.shooter, lattice, sc.min, c))
-            return (fine.putIfAbsent(c.cells, worked) ?: worked).orElse(null)
-        }
-        fun cached(c: I4Geometry.Coarse) = fine.containsKey(c.cells)
-    }
-    @Volatile private var scan: Scan? = null
-    private val busy = AtomicBoolean(false)
-    private val worker = Executors.newSingleThreadExecutor { Thread(it, "ec-i4-aims").apply { isDaemon = true } }
-    /** The solver's own few threads (its parallel streams run here, not on every core), so the game keeps its frames. */
-    private val pool = java.util.concurrent.ForkJoinPool(3)
-    private fun <T> inPool(f: () -> T): T = pool.submit(java.util.concurrent.Callable { f() }).get()
+    /** Runs [f] on the client thread: at once when already there (a bundle's packets keep their place), else queued behind what came before. */
+    private inline fun onClient(crossinline f: () -> Unit) { if (mc.isSameThread) f() else mc.execute { f() } }
 
     /** Read by ArrowsDeviceAimMixin: Odin's aim cubes are hidden while this draws its own. */
     @JvmStatic fun replacesOdinAims(): Boolean = enabled
@@ -150,29 +115,187 @@ object I4Aims : Module(
         return lastBow
     }
 
+    // ------------------------------------------------------------------ the stance
+
+    /** Everything a stance's geometry depends on (position in mm, held still 2 ticks). */
+    private data class StanceKey(val board: Int, val bow: String, val stacks: Int, val crouch: Boolean, val x: Long, val y: Long, val z: Long,
+                                 val step: Double, val min: Double, val yaw0: Double, val pitch0: Double)
+
+    /** The last few stances worked out (a sneak or a 10/9/10 stack flicker costs nothing). */
+    private val cache = object : LinkedHashMap<StanceKey, StanceGeometry>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<StanceKey, StanceGeometry>) = size > 6
+    }
+    /** The geometry drawn and picked from (client thread). */
+    private var geo: StanceGeometry? = null
+
+    /** A stance being worked out: the one you need, or one worked out ahead ([ahead]: the other sneak stance, or a warm-up) that gives way to it. */
+    private class Job(val key: StanceKey?, val ahead: Boolean) { @Volatile var cancelled = false }
+    /** The job on the worker (one at a time; client thread). */
+    private var job: Job? = null
+    private val finished = ConcurrentLinkedQueue<Pair<Job, StanceGeometry>>()
+    private val worker = Executors.newSingleThreadExecutor { Thread(it, "ec-i4-geometry").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
+    /**
+     * The stance's rows are split over this many threads, busy only while a stance is worked out. Offline on the
+     * game's JRE: one thread takes about 80-350 ms (Mosquito 0 to Terminator 10); four bring a warm stance to about
+     * 20-100 ms, but in about 4 JVM sessions in 10 the JIT settles on slower code (150-170 ms for a Terminator at 10
+     * stacks); six keep that under about 130 ms. The first one of a session runs cold (about 200 ms for a Terminator at
+     * 10 stacks), so one is worked out ahead at Goldor's start ([warm]).
+     */
+    private const val PARTS = 6
+    private val parts = Executors.newFixedThreadPool(PARTS) { Thread(it, "ec-i4-geometry-part").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
+
+    /** The mouse lattice: kept while your look stays on it (whole counts), moved when it drifts off. */
+    private var lattice: Lattice? = null
+    private var lastPos: Triple<Long, Long, Long>? = null
+    private var stillTicks = 0
+    private var stablePos: Triple<Long, Long, Long>? = null
+    /** Client ticks since you were last on the plate. */
+    private var offPlateTicks = 0
+    private val PLATE_BLOCK = BlockPos(63, 127, 35)
+
+    /** You stand on the plate: your box over its block, feet on it (as I4Complete). */
+    private fun onPlate(): Boolean {
+        val b = mc.player?.boundingBox ?: return false
+        return b.maxX > PLATE_BLOCK.x && b.minX < PLATE_BLOCK.x + 1 && b.maxZ > PLATE_BLOCK.z && b.minZ < PLATE_BLOCK.z + 1 &&
+            b.minY >= PLATE_BLOCK.y - 0.01 && b.minY < PLATE_BLOCK.y + 0.25
+    }
+
+    /** How far (in counts, 0-0.5) your look sits off [l]: whole mouse counts keep it on. */
+    private fun offLattice(l: Lattice, yaw: Float, pitch: Float): Double {
+        fun off(d: Double) = Math.abs(d - Math.rint(d))
+        return maxOf(off(Mth.wrapDegrees(yaw - l.yaw0) / l.step), off((pitch - l.pitch0) / l.step))
+    }
+
+    /** Takes the worker's finished stances in (every tick, at the board or not, so the worker is free again). */
+    private fun drain() {
+        while (true) {
+            val (j, g) = finished.poll() ?: break
+            if (job === j) job = null
+            val k = j.key ?: continue
+            // Given way before it was done (a finished one is kept, as is a failed one, so it isn't tried again and again).
+            if (j.cancelled && g.evaluated == 0) continue
+            cache[k] = g
+            DevgineerClient.logger.info("[dc] i4 stance %.0fms%s %s %d stacks %s, %d volleys flown: %s".format(g.millis, if (j.ahead) " (ahead)" else "", k.bow, k.stacks,
+                if (k.crouch) "sneaking" else "standing", g.evaluated, g.aims.joinToString(" ") { "${it}=${it.spots}@%.2f".format(it.bestChance) }))
+        }
+    }
+
+    /** The current stance is looked up, and the next one needed is started. */
+    private fun updateStance() {
+        val p = mc.player ?: return
+        val b = board ?: return
+        val step = I4Geometry.mouseStep(mc.options.sensitivity().get())
+        var l = lattice
+        if (l == null || l.step != step || offLattice(l, p.yRot, p.xRot) > 0.3) {
+            l = Lattice(Mth.wrapDegrees(p.yRot.toDouble()), p.xRot.toDouble(), step)
+            lattice = l
+        }
+        val pos = p.position()
+        val q = Triple(Math.round(pos.x * 1000), Math.round(pos.y * 1000), Math.round(pos.z * 1000))
+        if (q == lastPos) stillTicks++ else { stillTicks = 0; lastPos = q }
+        if (stillTicks >= 2) stablePos = q
+        val sp = stablePos ?: return
+        val key = StanceKey(System.identityHashCode(b), bow(), stacks, p.isShiftKeyDown, sp.first, sp.second, sp.third, step, minChance / 100.0, l.yaw0, l.pitch0)
+        cache[key]?.let { if (geo !== it) { geo = it; replan() } }
+        val running = job
+        if (running != null) {
+            // Something worked out ahead gives way to the stance you need.
+            if (running.ahead && running.key != key && key !in cache) running.cancelled = true
+            return
+        }
+        val want = if (key !in cache) key else key.copy(crouch = !key.crouch).takeIf { it !in cache } ?: return
+        start(Job(want, ahead = want != key), b, Shooter(want.bow, Vec3(want.x / 1000.0, want.y / 1000.0, want.z / 1000.0), want.crouch, want.stacks),
+            Lattice(want.yaw0, want.pitch0, want.step), want.min)
+    }
+
+    private fun start(j: Job, b: Board, shooter: Shooter, lat: Lattice, min: Double) {
+        job = j
+        worker.execute {
+            val g = try { I4Geometry.stance(b, shooter, lat, min, parts, PARTS) { j.cancelled } } catch (t: Throwable) {
+                DevgineerClient.logger.error("[dc] i4 stance failed", t)
+                StanceGeometry(b, shooter, lat, min, emptyList(), 0, 0.0)
+            }
+            finished += j to g
+        }
+    }
+
+    /**
+     * Works one stance out and throws it away, so the geometry code is compiled before you reach the plate (cold,
+     * the first stance takes about twice as long): at Goldor's start, for the plate's middle with the bow you have.
+     */
+    private fun warm() {
+        drain()
+        if (job != null) return
+        val step = I4Geometry.mouseStep(mc.options.sensitivity().get())
+        val shooter = Shooter(bow(), PLATE, false, 10)
+        val look = I4Geometry.lookAt(shooter.eye, Vec3(66.5, 128.5, I4Geometry.FACE))
+        start(Job(null, ahead = true), I4Geometry.DEFAULT, shooter, Lattice(look.first, look.second, step), minChance / 100.0)
+    }
+
+    // ------------------------------------------------------------------ picking and drawing
+
+    private var pick = I4Solver.Pick(null, null)
+    /** What is drawn, and what it was built for (its geometry, null when nothing is drawn, and its NOW and NEXT). */
+    private var mesh: I4Paint.Mesh? = null
+    private var meshGeo: StanceGeometry? = null
+    private var meshNow: I4Geometry.Aim? = null
+    private var meshNext: I4Geometry.Aim? = null
+
+    /** NOW and NEXT for how the board is; the paint is rebuilt when they change. */
+    private fun replan() {
+        val t0 = System.nanoTime()
+        val g = geo
+        val p = solver.plan(g, showNext)
+        stats.plan(System.nanoTime() - t0)
+        pick = p
+        val drawn = if (g != null && atBoardCached()) g else null
+        if (p.now === meshNow && p.next === meshNext && meshGeo === drawn) return
+        meshNow = p.now; meshNext = p.next; meshGeo = drawn
+        mesh = drawn?.let { I4Paint.build(it.lattice, p.now, p.next) }
+    }
+
+    /** Draw and pick timings, for the log ([clear] after each line). */
+    private class Timings {
+        var since = 0; var frames = 0; var drawNs = 0L; var drawMax = 0L; var plans = 0; var planNs = 0L; var planMax = 0L; var volleys = 0
+        fun frame(ns: Long) { frames++; drawNs += ns; if (ns > drawMax) drawMax = ns }
+        fun plan(ns: Long) { plans++; planNs += ns; if (ns > planMax) planMax = ns }
+        fun clear() { frames = 0; drawNs = 0; drawMax = 0; plans = 0; planNs = 0; planMax = 0; volleys = 0; since = ticks }
+        override fun toString() = "draw %d frames max %.3f ms mean %.3f ms; pick max %d us mean %d us".format(frames, drawMax / 1e6,
+            if (frames > 0) drawNs / 1e6 / frames else 0.0, planMax / 1000, if (plans > 0) planNs / 1000 / plans else 0)
+    }
+    /** Over the attempt (its summary line), and over the last 10 s at the board (a line of its own). */
+    private val attempt = Timings()
+    private val rolling = Timings()
+    private object Stats {
+        fun frame(ns: Long) { attempt.frame(ns); rolling.frame(ns) }
+        fun plan(ns: Long) { attempt.plan(ns); rolling.plan(ns) }
+    }
+    private val stats = Stats
+
+    /** One line for an attempt that ended ([c]: its counts), with its draw and pick timings. */
+    private fun summary(why: String, c: I4Solver.Counts) {
+        if (c.lights > 0 || attempt.volleys > 0) DevgineerClient.logger.info(
+            "[dc] i4 attempt %s: %.1fs, %d lights %d blues, %d volleys %d strikes %d missed; %s; stance %s".format(why, (ticks - attempt.since) / 20.0,
+                c.lights, c.blues, attempt.volleys, c.strikes, c.rollbacks, attempt, geo?.let { "%.0fms".format(it.millis) } ?: "none"))
+        attempt.clear()
+    }
+
+    /** The solver's attempt that a restart just ended, if any, logged. */
+    private fun ended() { solver.ended?.let { solver.ended = null; summary("ended (a new one started)", it) } }
+
     private fun reset() {
-        lit = -1; marked.clear(); flying.clear(); result = null; scan = null; complete = false; drawn = null
-        started = false; u.fill(1.0); pi.fill(0.0); confirmCell = -1
+        if (solver.started && !solver.complete) summary("reset", solver.counts)
+        solver.reset(); arrows.clear(); tracked.clear(); pick = I4Solver.Pick(null, null); mesh = null; meshGeo = null; meshNow = null; meshNext = null
     }
 
-    /** A strike on [c] that counts with [q] if [c] is the target: the target is then redrawn from the uncounted cells. */
-    private fun strike(u: DoubleArray, pi: DoubleArray, c: Int, q: Double) {
-        val h = q * pi[c]
-        if (h <= 0.0) return
-        pi[c] -= h; u[c] -= h
-        val rest = (0 until 9).filter { it != c }.sumOf { u[it] }
-        if (rest > 0) for (o in 0 until 9) if (o != c) pi[o] += h * u[o] / rest
-        val sum = u.sum()
-        if (sum in 1e-9..1.0) for (o in 0 until 9) u[o] /= sum
+    /** Everything read or worked out, as on a new world (the module was off: its events weren't seen). */
+    private fun forget() {
+        reset(); board = null; geo = null; cache.clear(); lattice = null; stablePos = null; lastPos = null; stillTicks = 0
+        job?.cancelled = true
     }
 
-    /** The target is redrawn uniformly from the uncounted cells. */
-    private fun redraw() {
-        val sum = u.sum()
-        if (sum < 1.0 && sum > 1e-9) for (o in 0 until 9) u[o] /= sum
-        val s2 = u.sum()
-        for (o in 0 until 9) pi[o] = if (s2 > 0) u[o] / s2 else 0.0
-    }
+    override fun onEnable() { forget(); super.onEnable() }
+    override fun onDisable() { super.onDisable(); forget() }
 
     /** You're at the plate with the board there (all 9 cells blue terracotta or emerald). */
     private fun atBoard(): Boolean {
@@ -197,223 +320,129 @@ object I4Aims : Module(
         return Board(boxes, cellOf.toIntArray())
     }
 
-    private fun rowOf(cells: Set<Int>): Int = cells.map { it / 3 }.distinct().singleOrNull() ?: -1
-
-    /** The row your crosshair is on (0 bottom to 2 top), or -1 off the board. */
-    private fun crosshairRow(): Int {
-        val p = mc.player ?: return -1
-        val eye = p.eyePosition; val look = p.lookAngle
-        if (look.z <= 1e-3) return -1
-        val t = (I4Geometry.FACE - eye.z) / look.z
-        val x = eye.x + look.x * t; val y = eye.y + look.y * t
-        if (x !in 63.0..70.0 || y !in 125.0..132.0) return -1
-        return ((y - 125.0) / 2).toInt().coerceIn(0, 2)
-    }
-
-    /**
-     * The aims to choose from. With Hydra Strike (a whole row in one volley) only the three row aims (the vertical
-     * strips on the middle column), unless every row has at most one cell that can still be uncounted: then any aim,
-     * to hit those cells directly.
-     */
-    private fun candidates(all: List<I4Geometry.Coarse>, u: DoubleArray): List<I4Geometry.Coarse> {
-        val rows = all.filter { it.cells.size == 3 && rowOf(it.cells) >= 0 }
-        if (rows.size < 3) return all
-        val onePerRow = (0 until 3).all { r -> (0 until 3).count { c -> u[r * 3 + c] > 0.05 } <= 1 }
-        return if (onePerRow) all else rows
-    }
-
-    /** The aim covering the most chance of being the target, +0.03 on row [row] and +0.03 on the middle row. */
-    private fun guess(all: List<I4Geometry.Coarse>, pi: DoubleArray, row: Int): I4Geometry.Coarse? =
-        all.maxWithOrNull(compareBy({ c ->
-            val r = rowOf(c.cells)
-            Math.round(1000 * (c.bestChance * c.cells.sumOf { pi[it] } + (if (r >= 0 && r == row) 0.03 else 0.0) + (if (r == 1) 0.03 else 0.0)))
-        }, { it.good }))?.takeIf { c -> c.cells.sumOf { pi[it] } > 1e-6 }
-
-    /**
-     * NOW and NEXT. Before the first emerald: the middle row. A shown target none of your arrows is on its way to: its
-     * aim worth the most (its chance, plus each uncounted cell a LATER arrow covers, the new target with chance
-     * 1/(cells left)). Otherwise [guess]. NEXT is [guess] after NOW's volley strikes at a row volley's rates.
-     */
-    private fun plan(scanned: List<I4Geometry.Coarse>): Pair<I4Geometry.Coarse?, I4Geometry.Coarse?> {
-        if (complete) return null to null
-        val all = candidates(scanned, u)
-        if (!started) return all.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * it.cells.count { c -> c / 3 == 1 }) }, { it.good })) to null
-        val row = crosshairRow()
-        val now = if (lit >= 0 && pi[lit] > 0.5) {
-            val rest = (0 until 9).filter { it != lit && u[it] > 0.5 }
-            fun expected(cells: List<Int>): Double { var e = 0.0; for (k in cells.indices) if (rest.size - k > 0) e += 1.0 / (rest.size - k); return e }
-            all.filter { lit in it.cells }.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * (1 + expected(it.order.dropWhile { c -> c != lit }.drop(1).filter { c -> c in rest }))) }, { it.good }))
-        } else guess(all, pi, row)
-        if (now == null || !showNext) return now to null
-        val u2 = u.copyOf(); val pi2 = pi.copyOf()
-        for (c in now.order) strike(u2, pi2, c, ROW_Q[c % 3])
-        val next = guess(candidates(scanned, u2), pi2, rowOf(now.cells))
-        return now to next?.takeIf { it.cells != now.cells }
-    }
-
-    private fun step(): Double = I4Geometry.mouseStep(mc.options.sensitivity().get())
-
-    /** How far (in counts, 0-0.5) your look sits off [l]: whole mouse counts keep it on. */
-    private fun offLattice(l: Lattice, yaw: Float, pitch: Float): Double {
-        fun off(d: Double) = Math.abs(d - Math.rint(d))
-        return maxOf(off(Mth.wrapDegrees(yaw - l.yaw0) / l.step), off((pitch - l.pitch0) / l.step))
-    }
-
-    /** Picks NOW and NEXT for how the board is; scans first when where you stand or what you hold changed. */
-    private fun update() {
-        val p = mc.player ?: return
+    private fun onArrow(id: Int, x: Double, y: Double, z: Double, v: Vec3, data: Int) {
         val b = board ?: return
-        val bow = bow()
-        val step = step()
-        val pos = p.position()
-        val legacy = !com.engineerclient.p3sim.P3Sim.inSim
-        val geo = "$bow|$stacks|${p.isShiftKeyDown}|${"%.3f %.3f %.3f".format(pos.x, pos.y, pos.z)}|$step|$minChance|$legacy"
-        val sc = scan
-        if (sc == null || sc.key != geo) {
-            // One scan at a time; the tick after it ends starts the next if anything changed meanwhile.
-            if (!busy.compareAndSet(false, true)) return
-            val shooter = Shooter(bow, pos, p.isShiftKeyDown, stacks, legacy)
-            val min = minChance / 100.0
-            worker.execute {
-                try {
-                    val t0 = System.nanoTime()
-                    scan = Scan(geo, b, shooter, min, inPool { I4Geometry.scan(b, shooter, min) })
-                    DevgineerClient.logger.info("[dc] i4 scan ${(System.nanoTime() - t0) / 1_000_000}ms for $geo")
-                } catch (t: Throwable) {
-                    DevgineerClient.logger.error("[dc] i4 aims failed", t)
-                    scan = Scan(geo, b, shooter, min, emptyList())   // not retried every tick
-                } finally {
-                    busy.set(false)
-                }
-            }
-            return
-        }
-        // The mouse lattice: kept while your look stays on it (whole counts), moved when it drifts off.
-        var grid = sc.grid
-        if (grid == null || offLattice(grid.lattice, p.yRot, p.xRot) > 0.3) {
-            grid = Grid(sc, Lattice(Mth.wrapDegrees(p.yRot.toDouble()), p.xRot.toDouble(), step))
-            sc.grid = grid
-        }
-        val (now, next) = plan(sc.coarse)
-        val key = "$geo|${System.identityHashCode(grid)}|${now?.cells?.sorted()}|${next?.cells?.sorted()}"
-        if (key == result?.key) return
-        val picked = if (now == null) emptyList() else listOfNotNull(now, next)
-        // Already worked out: paint it now.
-        if (picked.all { grid.cached(it) }) { show(grid, key, picked, 0); return }
-        if (!busy.compareAndSet(false, true)) return
-        val g = grid
-        worker.execute {
-            try {
-                val t0 = System.nanoTime()
-                inPool { picked.parallelStream().forEach { g.aim(it) } }
-                show(g, key, picked, (System.nanoTime() - t0) / 1_000_000)
-                // The rest of this lattice's candidates, so the next pick paints at once.
-                inPool { candidates(sc.coarse, DoubleArray(9) { 1.0 }).filter { !g.cached(it) }.parallelStream().forEach { g.aim(it) } }
-            } catch (t: Throwable) {
-                DevgineerClient.logger.error("[dc] i4 aims failed", t); result = Result(key, sc.shooter.eye, g.lattice, null, null)
-            } finally { busy.set(false) }
-        }
+        val me = mc.player?.id ?: return
+        val t0 = System.nanoTime()
+        val strikes = solver.counts.strikes
+        arrows.added(id, x, y, z, v.x, v.y, v.z, data, me, clock, b, bow(), stacks, P3Sim.inSim)
+        replan()
+        val volley = arrows.lastVolley
+        if (volley != null) {
+            arrows.lastVolley = null
+            attempt.volleys++
+            DevgineerClient.logger.info("[dc] i4 volley $volley (%d us) -> now=${pick.now} next=${pick.next} ${solver.describe()}".format((System.nanoTime() - t0) / 1000))
+        } else if (solver.counts.strikes != strikes) logOther(id)
     }
 
-    private fun show(grid: Grid, key: String, picked: List<I4Geometry.Coarse>, ms: Long) {
-        val was = result?.key
-        val r = Result(key, grid.sc.shooter.eye, grid.lattice, picked.getOrNull(0)?.let { grid.aim(it) }, picked.getOrNull(1)?.let { grid.aim(it) })
-        result = r
-        logPass(was, key, r, ms)
-    }
-
-    private val KEY_PARTS = listOf("bow", "stacks", "sneak", "pos", "step", "min", "legacy", "lattice", "now", "next")
-
-    /** One log line per pass: what changed since the last one and what it paints, to trace jumps in what's drawn. */
-    private fun logPass(was: String?, key: String, r: Result, ms: Long) {
-        val old = was?.split('|'); val now = key.split('|')
-        val changed = now.indices.filter { old == null || old.getOrNull(it) != now[it] }.joinToString(",") { KEY_PARTS.getOrElse(it) { "?" } + "=" + now[it] }
-        DevgineerClient.logger.info("[dc] i4 paint ${ms}ms t=$ticks lit=$lit changed[$changed] spots=${r.aims.map { it.pixels.size }} " +
-            "pi=${pi.joinToString(",") { "%.2f".format(it) }} u=${u.joinToString(",") { "%.2f".format(it) }}")
-    }
-
-    /** New arrows near you: where each will cross the board, so a volley in the air on the lit target counts as its hit. */
-    private fun trackArrows() {
-        val p = mc.player ?: return
-        val level = mc.level ?: return
-        val b = board ?: return
-        val eye = p.eyePosition
-        flying.entries.removeIf { it.value.second < ticks }
-        for (a in level.getEntitiesOfClass(AbstractArrow::class.java, p.boundingBox.inflate(6.0)).sortedBy { it.id }) {
-            if (a.id in flying || a.tickCount > 4 || a.position().distanceTo(eye) > 6.0) continue
-            val v = a.deltaMovement
-            if (v.length() < 1.0 || v.z <= 0) continue
-            // Flown with a gravity step given back, as the board registers Hypixel's arrows (ShotPlan).
-            val c = I4Geometry.cross(a.position(), a.position(), v.add(0.0, 0.05, 0.0)) ?: continue
-            val cell = I4Geometry.hit(b, c)
-            if (cell < 0) { flying[a.id] = -1 to ticks + 12; continue }
-            val eta = ((I4Geometry.FACE - a.z) / v.z).toInt() + 4
-            flying[a.id] = cell to ticks + eta
-            // As if landed: the tracker moves on now (main, then +x, then -x: spawn order is tick order).
-            if (started && !complete) {
-                if (cell == lit && pi[lit] > 0.5) { confirmCell = cell; confirmBy = ticks + eta + 3 }
-                strike(u, pi, cell, 1.0)
-            }
-            DevgineerClient.logger.info("[dc] i4 arrow t=$ticks id=${a.id} age=${a.tickCount} -> cell $cell by t=${ticks + eta} (lit=$lit)")
-        }
+    /** Another arrow's (a teammate's, or a Duplex copy's) strike, once known. */
+    private fun logOther(id: Int) {
+        DevgineerClient.logger.info("[dc] i4 arrow id=$id t=$clock -> now=${pick.now} next=${pick.next} ${solver.describe()}")
     }
 
     init {
-        on<LevelEvent.Load> { reset(); board = null }
+        on<LevelEvent.Load> { forget() }
+        // Its pipeline is registered with the game's own, before the shaders load.
+        I4Paint.init()
+
+        on<TickEvent.Server> { onClient { clock++; pingAt = ticks } }
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (!overlay) return@onReceive
-            stacks = STACKS.find(content.string.replace(CODES, ""))?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 10) ?: 0
+            val text = content.string.replace(CODES, "")
+            val n = STACKS.find(text)?.groupValues?.get(1)?.toIntOrNull()
+            if (n != null) onClient { stacks = n.coerceIn(0, 10); stacksAt = ticks }
+            else if (text.isBlank()) onClient { if (P3Sim.inSim) stacks = 0 }
         }
 
         onReceive<ClientboundSystemChatPacket>(ignoreCancelled = true) {
             if (overlay) return@onReceive
             val msg = content.string.replace(CODES, "")
-            if (msg == "[BOSS] Goldor: Who dares trespass into my domain?") mc.execute { reset() }
-            DEVICE_LINE.matchEntire(msg)?.let { m -> mc.execute { if (m.groupValues[1] == mc.player?.gameProfile?.name && atBoard()) complete = true } }
+            if (msg == GOLDOR_START) onClient { reset(); warm() }
+            DEVICE_LINE.matchEntire(msg)?.let { m ->
+                onClient {
+                    if (m.groupValues[1] == mc.player?.gameProfile?.name && atBoard()) { solver.completed(clock); replan(); summary("complete", solver.counts) }
+                }
+            }
+        }
+
+        // Network thread (or the client's, inside a bundle): only arrows that can reach the board are passed on, in order.
+        onReceive<ClientboundAddEntityPacket>(ignoreCancelled = true) {
+            if (type != EntityTypes.ARROW && type != EntityTypes.SPECTRAL_ARROW) return@onReceive
+            if (!I4Arrows.watched(x, y, z)) return@onReceive
+            val arrow = id; val px = x; val py = y; val pz = z; val v = movement; val owner = data
+            tracked[arrow] = ticks
+            onClient { if (enabled) DevgineerClient.safely("i4 arrow") { onArrow(arrow, px, py, pz, v, owner) } }
+        }
+
+        onReceive<ClientboundSetEntityMotionPacket>(ignoreCancelled = true) {
+            val id = id()
+            if (!tracked.containsKey(id)) return@onReceive
+            val v = movement()
+            onClient {
+                val b = board ?: return@onClient
+                if (enabled) DevgineerClient.safely("i4 arrow") {
+                    val strikes = solver.counts.strikes
+                    arrows.motion(id, v.x, v.y, v.z, clock, b, P3Sim.inSim); replan()
+                    if (solver.counts.strikes != strikes) logOther(id)
+                }
+            }
         }
 
         on<BlockUpdateEvent> {
+            // P3 Sim's own server changes its chunks on its thread too: only the client's board counts.
+            if (!mc.isSameThread) return@on
             val i = I4Geometry.CELLS.indexOf(pos)
             if (i < 0) return@on
-            DevgineerClient.logger.info("[dc] i4 block t=$ticks cell $i ${if (updated.`is`(Blocks.EMERALD_BLOCK)) "lit" else "blue"}")
-            if (updated.`is`(Blocks.EMERALD_BLOCK)) {
-                // The first emerald, or a cell you'd hit lighting again (the board started over).
-                if (!started || i in marked) { marked.clear(); u.fill(1.0); started = true }
-                lit = i; complete = false; confirmCell = -1
-                pi.fill(0.0); pi[i] = 1.0; u[i] = 1.0
-            } else if (old.`is`(Blocks.EMERALD_BLOCK) && updated.`is`(Blocks.DYED_TERRACOTTA.blue())) {
-                marked += i
-                if (lit == i) lit = -1
-                if (confirmCell == i) confirmCell = -1
-                if (marked.size >= 9) marked.clear()
-                u[i] = 0.0; redraw()
+            DevgineerClient.safely("i4 block") {
+                if (updated.`is`(Blocks.EMERALD_BLOCK)) solver.emerald(i, clock)
+                else if (old.`is`(Blocks.EMERALD_BLOCK) && updated.`is`(Blocks.DYED_TERRACOTTA.blue())) solver.blue(i, clock)
+                else return@safely
+                ended()
+                // An attempt's summary covers it from its first light.
+                if (solver.counts.lights == 1 && solver.counts.blues == 0 && updated.`is`(Blocks.EMERALD_BLOCK)) attempt.clear()
+                replan()
             }
         }
 
         on<TickEvent.End> {
             ticks++
+            if (ticks - pingAt > NO_PINGS) clock++
+            drain()
+            if (tracked.isNotEmpty()) tracked.entries.removeIf { ticks - it.value > 60 }
             if (!atBoard()) {
-                if (++awayTicks > 40 && (lit >= 0 || marked.isNotEmpty() || board != null)) { reset(); board = null }
-                result = null
+                mesh = null; meshGeo = null
+                // Away 2 s: the attempt is over (the board itself stays read until the world changes).
+                if (++awayTicks > 40 && solver.started) reset()
                 return@on
             }
             awayTicks = 0
             DevgineerClient.safely("i4 aims") {
-                if (board == null) board = readBoard()
-                // Your arrow on the shown cell missed after all: it's still the target.
-                if (confirmCell >= 0 && ticks > confirmBy) {
-                    if (lit == confirmCell) { pi.fill(0.0); pi[lit] = 1.0; u[lit] = 1.0 }
-                    confirmCell = -1
+                if (board == null) { board = readBoard(); attempt.clear(); rolling.clear() }
+                if (stacks > 0 && ticks - stacksAt > STACKS_GONE) stacks = 0
+                // The plate lets go up to 10 server ticks after you step off (a little more for lag).
+                offPlateTicks = if (onPlate()) 0 else offPlateTicks + 1
+                solver.offPlate = offPlateTicks in 1..15
+                updateStance()
+                solver.tick(clock)
+                replan()
+                // Every 10 s at the board: the draw and pick timings (the attempt's own counts wait for its end).
+                if (ticks - rolling.since >= 200) {
+                    DevgineerClient.logger.info("[dc] i4 at the board: %s; stance %s".format(rolling, geo?.let { "%.0fms".format(it.millis) } ?: "none"))
+                    rolling.clear()
                 }
-                trackArrows()
-                update()
             }
         }
 
-        // Under the crosshair, so it stays on top; the HUD is drawn under any open screen.
-        HudElementRegistry.attachElementBefore(VanillaHudElements.CROSSHAIR, Identifier.fromNamespaceAndPath("devgineerclient", "i4_aims")) { g, _ ->
-            DevgineerClient.safely("i4 aims screen") { drawScreen(g) }
+        // The world's pass, after everything in it (translucent blocks and particles too): over every block, under
+        // every screen. With Fabulous graphics (improved transparency) translucent blocks, particles and weather are
+        // composited after this pass and would tint it; the default and Fancy modes draw them before.
+        LevelRenderEvents.END_MAIN.register { ctx ->
+            val m = mesh ?: return@register
+            if (!enabled || !mc.options.cameraType.isFirstPerson || mc.cameraEntity !== mc.player) return@register
+            val t0 = System.nanoTime()
+            DevgineerClient.safely("i4 paint") { I4Paint.draw(ctx, m) }
+            stats.frame(System.nanoTime() - t0)
         }
     }
 
@@ -450,90 +479,5 @@ object I4Aims : Module(
         val t = (I4Geometry.FACE - eye.z) / look.z
         val x = eye.x + look.x * t; val y = eye.y + look.y * t
         return x in 64.0 - margin..69.0 + margin && y in 126.0 - margin..131.0 + margin
-    }
-
-    private const val GREEN = 0xFF00FF00.toInt()
-    private const val CYAN = 0xFF00FFFF.toInt()
-
-    /** The last frame's painted runs (x0, x1, y, colour), reused while the camera and the aims haven't changed. */
-    private class Drawn(val result: Result, val yaw: Float, val pitch: Float, val fov: Float, val w: Int, val h: Int, val runs: IntArray)
-    private var drawn: Drawn? = null
-
-    /**
-     * Green on each screen pixel whose look (through its centre) rounds to a spot of NOW (the nearest whole mouse
-     * count), cyan for NEXT, for the camera's look and (zoomed) FOV this frame. Each aim is worked out over its own
-     * screen box only, as runs along each pixel row, and the runs are kept until the camera or the aims change. Not
-     * drawn while a screen (menu, chat) is open.
-     */
-    private fun drawScreen(g: GuiGraphicsExtractor) {
-        if (!enabled || mc.gui.screen() != null) return
-        val r = result ?: return
-        if (r.aims.isEmpty() || !atBoardCached()) return
-        val camera = mc.gameRenderer.mainCamera()
-        val window = mc.window
-        val w = window.width; val h = window.height
-        val d = drawn
-        val runs = if (d != null && d.result === r && d.yaw == camera.yRot() && d.pitch == camera.xRot() && d.fov == camera.fov && d.w == w && d.h == h) d.runs
-        else IntArrayList().also { out ->
-            // NEXT first, so NOW's runs are painted over it where they meet.
-            r.next?.let { trace(it, r.lattice, camera.yRot(), camera.xRot(), camera.fov, w, h, CYAN, out) }
-            r.now?.let { trace(it, r.lattice, camera.yRot(), camera.xRot(), camera.fov, w, h, GREEN, out) }
-        }.toArray().also { drawn = Drawn(r, camera.yRot(), camera.xRot(), camera.fov, w, h, it) }
-        val gs = window.guiScale.toFloat()
-        g.pose().pushMatrix()
-        g.pose().scale(1f / gs, 1f / gs)
-        for (k in runs.indices step 4) g.fill(runs[k], runs[k + 2], runs[k + 1], runs[k + 2] + 1, runs[k + 3])
-        g.pose().popMatrix()
-    }
-
-    private class IntArrayList {
-        private var a = IntArray(256); private var n = 0
-        fun add(x: Int) { if (n == a.size) a = a.copyOf(n * 2); a[n++] = x }
-        fun toArray(): IntArray = a.copyOf(n)
-    }
-
-    /** [aim]'s pixels as runs (x0, x1, y, [color]) into [out], over the screen box of its counts. */
-    private fun trace(aim: I4Geometry.Aim, l: Lattice, yawDeg: Float, pitchDeg: Float, fov: Float, w: Int, h: Int, color: Int, out: IntArrayList) {
-        val spots = aim.pixels
-        if (spots.isEmpty()) return
-        val i0 = spots.minOf { it.i }; val i1 = spots.maxOf { it.i }
-        val j0 = spots.minOf { it.j }; val j1 = spots.maxOf { it.j }
-        val cols = i1 - i0 + 1
-        val mark = BooleanArray(cols * (j1 - j0 + 1))
-        for (s in spots) mark[(s.j - j0) * cols + (s.i - i0)] = true
-        val focal = h / 2.0 / tan(Math.toRadians(fov / 2.0))
-        val cy = Math.toRadians(yawDeg.toDouble()); val cp = Math.toRadians(pitchDeg.toDouble())
-        val fx = -sin(cy) * cos(cp); val fy = -sin(cp); val fz = cos(cy) * cos(cp)
-        val rx = -cos(cy); val rz = -sin(cy)
-        val ux = -rz * fy; val uy = rz * fx - rx * fz; val uz = rx * fy
-        // The screen box of the counts, a count wider each way.
-        var xMin = Double.MAX_VALUE; var xMax = -Double.MAX_VALUE; var yMin = Double.MAX_VALUE; var yMax = -Double.MAX_VALUE
-        for (ci in listOf(i0 - 1.0, i1 + 1.0)) for (cj in listOf(j0 - 1.0, j1 + 1.0)) {
-            val yaw = Math.toRadians(l.yaw0 + ci * l.step); val pitch = Math.toRadians(l.pitch0 + cj * l.step)
-            val dx = -sin(yaw) * cos(pitch); val dy = -sin(pitch); val dz = cos(yaw) * cos(pitch)
-            val depth = dx * fx + dy * fy + dz * fz
-            if (depth <= 0.1) return
-            val sx = w / 2.0 + focal * (dx * rx + dz * rz) / depth; val sy = h / 2.0 - focal * (dx * ux + dy * uy + dz * uz) / depth
-            xMin = minOf(xMin, sx); xMax = maxOf(xMax, sx); yMin = minOf(yMin, sy); yMax = maxOf(yMax, sy)
-        }
-        val px0 = maxOf(0, xMin.toInt()); val px1 = minOf(w - 1, xMax.toInt() + 1)
-        val py0 = maxOf(0, yMin.toInt()); val py1 = minOf(h - 1, yMax.toInt() + 1)
-        if (px1 < px0 || py1 < py0 || (px1 - px0).toLong() * (py1 - py0) > 1_000_000L) return
-        for (py in py0..py1) {
-            val sv = -(py + 0.5 - h / 2.0) / focal
-            var run = -1
-            for (px in px0..px1 + 1) {
-                var on = false
-                if (px <= px1) {
-                    val su = (px + 0.5 - w / 2.0) / focal
-                    val dx = fx + su * rx + sv * ux; val dy = fy + sv * uy; val dz = fz + su * rz + sv * uz
-                    val i = l.i(l.yaw0 + Mth.wrapDegrees(Math.toDegrees(atan2(-dx, dz)) - l.yaw0))
-                    val j = l.j(Math.toDegrees(atan2(-dy, hypot(dx, dz))))
-                    on = i in i0..i1 && j in j0..j1 && mark[(j - j0) * cols + (i - i0)]
-                }
-                if (on && run < 0) run = px
-                else if (!on && run >= 0) { out.add(run); out.add(px); out.add(py); out.add(color); run = -1 }
-            }
-        }
     }
 }
