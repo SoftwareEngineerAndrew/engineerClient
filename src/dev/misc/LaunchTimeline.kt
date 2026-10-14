@@ -39,6 +39,7 @@ import java.time.LocalDateTime
  *  config2/join2 Hypixel's move to Skyblock
  *  skyblock      Odin sees the Skyblock scoreboard
  *  sb-world      Skyblock drawn
+ *  unpark        a parked launch (Park) told to carry on; the line then also gives the time from here
  */
 object LaunchTimeline {
     private val startMs = ProcessHandle.current().info().startInstant().map { it.toEpochMilli() }.orElse(ManagementFactory.getRuntimeMXBean().startTime)
@@ -55,6 +56,9 @@ object LaunchTimeline {
         if (written || name in marks) return
         marks[name] = now()
     }
+
+    /** A parked launch was released: from here is what you waited for. */
+    fun unparked() { marks["unpark"] = now() }
 
     fun install() {
         // How long the JVM took before any Java ran: its uptime counts from JVM init, the process from exec.
@@ -91,7 +95,9 @@ object LaunchTimeline {
     private fun write() {
         written = true
         var prev = 0L
-        val line = marks.entries.joinToString("  ") { (k, v) -> "$k ${v}ms (+${v - prev})".also { prev = v } }
+        var line = marks.entries.joinToString("  ") { (k, v) -> "$k ${v}ms (+${v - prev})".also { prev = v } }
+        val unpark = marks["unpark"]
+        if (unpark != null) line += "  | from unpark: ${prev - unpark}ms"
         DevgineerClient.logger.info("[dc] launch timeline: {}", line)
         runCatching {
             val file = mc.gameDirectory.toPath().resolve("logs").resolve("launch-timeline.log")
