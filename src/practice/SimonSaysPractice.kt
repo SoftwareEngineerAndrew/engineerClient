@@ -58,18 +58,14 @@ import java.util.Locale
  * arena, facing +x) and turned to face whichever way you look. [solver] is Odin's Simon Says
  * solution drawn on it: Odin's own only works on the real one.
  *
- * How it plays, as measured from recordings of real P3 runs:
- *  - The start button is left of the grid. Presses in the 6 ticks after the first decide the
- *    first show: 1 press shows round 1; 2 or 3 show one stray light first, then the first 1 or 2
- *    of the sequence (the "skip": 3 presses, press 2, then rounds of 3 and 4).
- *  - Lights: one every 8 ticks. Buttons: all 16 come back 10 ticks after the last light goes out;
- *    after a show that started with a stray light they come 5 ticks after the last light comes on,
- *    except that light's own button, which waits until 10 ticks after it goes out.
+ * How it plays: [SimonSaysDevice], the device as Hypixel runs it, the same one the P3 Sim uses.
+ *  - The start button (left of the grid) works as in the game, your presses through the same ~50 ms limiter.
+ *  - Lights: one every 8 ticks. Buttons: back 10 ticks after the last light's tick, on the first show's timer
+ *    after a skip (the lit lamp's own button later).
  *  - A pressed button stays down 3 ticks (pressing it again meanwhile does nothing).
  *  - The next round starts 6 ticks after the round's last correct press; after round 4 (Hypixel's
- *    Oct 2026 update removed round 5) that is the device done. A wrong press: buttons gone 3 ticks later, and 25 ticks
- *    after it a new (in the game) sequence, shown the way the skip shows it. Practice: a wrong press
- *    restarts the run at once.
+ *    Oct 2026 update removed round 5) that is the device done. Practice: a wrong press restarts the run
+ *    at once, with the same start presses as the last run.
  */
 object SimonSaysPractice : Module(
     name = "SS Practice",
@@ -78,9 +74,9 @@ object SimonSaysPractice : Module(
     key = null,
 ) {
     private val summonKey by KeybindSetting("Summon Keybind", InputConstants.UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
-    private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light goes out.")
-    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light goes out (5 after it comes on, on a skip), as in the game.").withDependency { !instantShow }
-    private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after (5 on a skip, the lit one 18), as in the game. Times are as at 1x.")
+    private val solver by BooleanSetting("Solver", true, desc = "Odin's Simon Says solution on the practice device: the button to press next green, the one after gold, the rest red. Each appears as its light comes on, from the newest show only.")
+    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0, 3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light's tick (on a skip, on the first show's), as in the game.").withDependency { !instantShow }
+    private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after it (on a skip, after the first show), as in the game. Times are as at 1x.")
     private val clickSounds by BooleanSetting("Click Sounds", true, desc = "Odin's Simon Says click sounds: one for a right press (and the start button), another for a wrong one. Here and on the real device in P3 (turns Odin's own Custom Click Sounds off).")
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown", desc = "").withDependency { clickSounds }
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
@@ -201,8 +197,7 @@ object SimonSaysPractice : Module(
 
     // ------------------------------------------------------------------ the device
 
-    private enum class Phase { IDLE, STARTING, RUNNING, DONE }
-
+    /** This module's own steps (the side buttons popping back up, a restart's presses): the device keeps its own. */
     private class Job(val at: Long, val gen: Int, val run: () -> Unit)
 
     private var tick = 0L
@@ -210,15 +205,33 @@ object SimonSaysPractice : Module(
     private val jobs = ArrayList<Job>()
     private fun after(ticks: Int, run: () -> Unit) { jobs += Job(tick + ticks, gen, run) }
 
-    private var phase = Phase.IDLE
+    /** The device: the game's start button, rounds and limiter. You press as [YOU]. */
+    private val device = SimonSaysDevice(object : SimonSaysDevice.Io {
+        override fun newSequence() = drawSequence()
+        override fun lamp(cell: Int, on: Boolean) {
+            light(cell, on)
+            if (on && firstLight == 0L) firstLight = tick
+        }
+        override fun button(cell: Int, up: Boolean, pressed: Boolean) = setButton(cell, up, pressed)
+        override fun lampTick(j: Int) = showTick(j)
+        override fun opened(round: Int) {
+            roundUp = tick
+            roundClicks.clear(); lastClickMs = System.currentTimeMillis()
+            if (accepted.isNotEmpty()) lastStart = accepted.toList()
+        }
+        override fun completed(by: String) = onDone()
+    })
+    private const val YOU = "you"
+
+    /**
+     * Show Speed: lamp j of a show at 8j / speed, rounded from the show's start (not per gap) so the pace is
+     * right on average; the buttons still come 10 ticks after the last lamp's tick.
+     */
+    private fun showTick(j: Int) = if (instantShow) 0 else Math.round(8 * j / showSpeed).toInt()
+
     private val rng = java.util.Random()
-    private var sequence = IntArray(FINAL_ROUND)
-    private var expected: List<Int> = emptyList()
-    private var next = 0
-    private var accepting = false
     private val buttonUp = BooleanArray(16)
     private val downUntil = LongArray(16)
-    private var startPresses = 0
     private var firstLight = 0L
     private var roundUp = 0L
     private val rounds = ArrayList<Double>()
@@ -228,9 +241,13 @@ object SimonSaysPractice : Module(
     private var lastClickMs = 0L
     /** Ticks Show Speed took off this run's shows: added back, the times are as at 1x. */
     private var shownFaster = 0L
-    /** The solver's list: this round's cells, each added as its light goes out (a stray light never). */
-    private val revealed = ArrayList<Int>()
     private var fails = 0
+
+    /** A run is on: its first start press came, and it isn't done. */
+    private var running = false
+    private var runStart = 0L
+    /** This run's start presses the limiter let through, in ticks from the first. */
+    private val accepted = ArrayList<Long>()
 
     /** Everything back to a dark, buttonless device, waiting for the start button. */
     private fun reset() {
@@ -238,10 +255,16 @@ object SimonSaysPractice : Module(
         fromRound = 0
         gen++
         jobs.clear()
-        phase = Phase.IDLE
-        accepting = false
-        revealed.clear()
+        device.clear()
+        running = false
         placed?.let { p -> for (c in 0 until 16) { p.set(lampAt(c), Blocks.OBSIDIAN.defaultBlockState()); setButton(c, false) } }
+    }
+
+    /** A new run from its first start press: its times and presses from zero. */
+    private fun beginRun() {
+        running = true; runStart = tick
+        accepted.clear()
+        firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); fails = 0
     }
 
     private fun setButton(cell: Int, up: Boolean, pressed: Boolean = false) {
@@ -259,11 +282,10 @@ object SimonSaysPractice : Module(
      * weight by its distance (in cells) from the one before: tighter levels favour near cells
      * (Easier e^-d, Easiest e^-2d), Harder far ones (e^d).
      */
-    private fun newSequence() {
+    private fun drawSequence(): IntArray {
         if (rngLevel == 0) {
             val cells = (0 until 16).shuffled(rng)
-            sequence = IntArray(FINAL_ROUND) { cells[it] }
-            return
+            return IntArray(FINAL_ROUND) { cells[it] }
         }
         val k = when (rngLevel) { -1 -> -1.0; 1 -> 1.0; else -> 2.0 }
         val out = ArrayList<Int>()
@@ -277,7 +299,7 @@ object SimonSaysPractice : Module(
             for (i in left.indices) { r -= w[i]; if (r <= 0) { pick = left[i]; break } }
             out += pick
         }
-        sequence = out.toIntArray()
+        return out.toIntArray()
     }
 
     /** Pattern tightness: -1 Harder (spread), 0 Normal RNG, 1 Easier, 2 Easiest. Kept across runs. */
@@ -292,7 +314,7 @@ object SimonSaysPractice : Module(
     private var gridCells: Set<BlockPos> = emptySet()
 
     /** The last round of a run: 4 since Hypixel's Oct 2026 update removed round 5. */
-    private const val FINAL_ROUND = 4
+    private const val FINAL_ROUND = SimonSaysDevice.MAX_ROUNDS
 
     /** Odin's solver box for a cell (in front of its lamp): the button's size, or the whole face with Full Block. */
     private fun solverBox(p: Placement, lamp: BlockPos): AABB =
@@ -335,70 +357,25 @@ object SimonSaysPractice : Module(
         after(2) { placed?.set(rngButton(level), BUTTON) }
     }
 
-    /** A cell that isn't [not], for the stray first light. */
-    private fun stray(not: Int): Int { var c: Int; do c = rng.nextInt(16) while (c == not); return c }
-
     /**
-     * Shows [cells] one every 8 ticks, then brings the buttons back for [expect] to be pressed.
-     * [stray]: the show starts with a light that isn't part of it (the skip's way).
+     * The start presses a restart (a left click on the grid, or a wrong press) plays again, in ticks from the
+     * first: the last run's that got through, or at first three.
      */
-    private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean) {
-        accepting = false
-        for (c in 0 until 16) setButton(c, false)
-        expected = expect; next = 0
-        revealed.clear()
-        val n = cells.size
-        val out = { i: Int -> light(cells[i], false); if (!(stray && i == 0)) revealed += cells[i] }
-        // Light i comes on at [at] i: 8 ticks apart, divided by Show Speed. Rounded to whole ticks
-        // from the start (not per gap), so the pace is right on average; the buttons' timings
-        // below count from the last light, never sped up.
-        val at = { i: Int -> if (instantShow) 0 else Math.round(8 * i / showSpeed).toInt() }
-        for (i in 0 until n) after(at(i)) {
-            if (i > 0) out(i - 1)
-            light(cells[i], true)
-            if (firstLight == 0L) firstLight = tick
-        }
-        after(at(n)) { out(n - 1) }
-        val open = {
-            accepting = true; roundUp = tick
-            roundClicks.clear(); lastClickMs = System.currentTimeMillis()
-        }
-        if (stray) {
-            after(at(n - 1) + 5) { for (c in 0 until 16) if (c != cells.last()) setButton(c, true); open() }
-            // The lit cell's: 10 ticks after its light would go out at 1x (13 after the rest), so
-            // the clicking is the same at any speed.
-            after(at(n - 1) + 8 + 10) { setButton(cells.last(), true) }
-            shownFaster += 8 * (n - 1) - at(n - 1)
-        } else {
-            after(at(n) + 10) { for (c in 0 until 16) setButton(c, true); open() }
-            shownFaster += 8 * n - at(n)
-        }
-    }
-
-    /** The last run's start presses, for a restart from the grid (left click) to start the same way. */
-    private var lastStartPresses = 3
-
-    private fun begin() {
-        phase = Phase.RUNNING
-        lastStartPresses = startPresses.coerceAtMost(3)
-        newSequence()
-        val s = sequence
-        when (startPresses.coerceAtMost(3)) {
-            1 -> show(listOf(s[0]), listOf(s[0]), stray = false)
-            2 -> show(listOf(stray(s[0]), s[0]), listOf(s[0]), stray = true)
-            else -> show(listOf(stray(s[0]), s[0], s[1]), listOf(s[0], s[1]), stray = true)
-        }
-    }
+    private var lastStart: List<Long> = listOf(0L, 2L, 4L)
 
     private fun restart(sound: Boolean = true) {
         if (placed == null) return
         if (Inf.on) { startInf(); return }
         if (fromRound > 0) { startFrom(fromRound, sound); return }
+        val presses = lastStart
         reset()
-        phase = Phase.STARTING
-        startPresses = lastStartPresses; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); fails = 0
+        beginRun()
         if (sound && clickSounds) playSoundSettings(correctSound())
-        after(6) { begin() }
+        // As they got through last time: no limiter.
+        for (t in presses) after(t.toInt()) {
+            accepted += t
+            device.start(YOU, 0.0, limit = false)
+        }
     }
 
     // ------------------------------------------------------------------ Inf mode
@@ -497,16 +474,14 @@ object SimonSaysPractice : Module(
         reset()
         fromRound = n
         markMode(n)
-        phase = Phase.RUNNING
         if (sound && clickSounds) playSoundSettings(correctSound())
         after(6) { fromRun() }
     }
 
     private fun fromRun() {
-        newSequence()
+        device.clear()
         firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); fails = 0
-        val cells = sequence.take(fromRound)
-        show(cells, cells, stray = false)
+        device.showRound(fromRound)
     }
 
     /** One finished run in start-on-round mode: a line a round, vs the top healers' medians. */
@@ -514,7 +489,7 @@ object SimonSaysPractice : Module(
         for (i in rounds.indices) {
             val r = fromRound + i
             val t = rounds[i]
-            val top = TOP_ROUNDS.getOrNull(r - 2) ?: continue
+            val top = topFor(r) ?: continue
             val c = if (t <= top) "§a" else if (t <= top + 0.3) "§e" else "§c"
             val presses = splits.getOrNull(i).orEmpty()
             EngineerClient.msg("§8 r$r   $c${fmt(t)}§8/${fmt(top)} §8| " + presses.withIndex().joinToString(" §8› ") { (j, x) -> pressColour(false, j, x) + fmt(x) })
@@ -540,25 +515,16 @@ object SimonSaysPractice : Module(
         after(2) { placed?.set(EXTRA, BUTTON) }
     }
 
-    /** The tick of a run's first start press; presses within [LATE_START_TICKS] of it never restart. */
-    private var startedAt = 0L
-    private const val LATE_START_TICKS = 20
-
+    /**
+     * The start button, as in the game (a toggle, through your limiter). From another mode, or with the device
+     * done, it first goes back to a dark device, so it starts a new run.
+     */
     private fun pressStart() {
         val p = placed ?: return
-        when {
-            phase == Phase.STARTING -> startPresses++
-            // A late press of the start spam (after the 6 ticks that count, as in the game): nothing.
-            phase == Phase.RUNNING && tick - startedAt < LATE_START_TICKS -> {}
-            // Mid-run it's a restart: the lights and buttons go and it starts over, as from idle.
-            else -> {
-                reset()
-                phase = Phase.STARTING
-                startedAt = tick
-                startPresses = 1; firstLight = 0L; shownFaster = 0L; rounds.clear(); splits.clear(); fails = 0
-                after(6) { begin() }
-            }
-        }
+        if (Inf.on || fromRound > 0 || device.done) reset()
+        if (!running) beginRun()
+        val r = device.start(YOU, System.nanoTime() / 1e6)
+        if (r == SimonSaysDevice.Start.STARTED || r == SimonSaysDevice.Start.RESET) accepted += tick - runStart
         // After the reset above, so it doesn't cancel the button coming back up.
         markMode(0)
         click(p.at(START))
@@ -573,53 +539,69 @@ object SimonSaysPractice : Module(
         if (mc.screen != null) return
         val pos = target() ?: return
         val cell = (0 until 16).firstOrNull { p.at(buttonAt(it)) == pos } ?: return
-        if (!buttonUp[cell] || downUntil[cell] > tick) return
-        val due = if (Inf.on) Inf.queue.firstOrNull() else if (accepting) expected.getOrNull(next) else null
-        if (cell != due) return
+        if (Inf.on) {
+            if (!buttonUp[cell] || downUntil[cell] > tick || cell != Inf.queue.firstOrNull()) return
+        } else if (!device.pressable(cell) || cell != device.due()) return
         press(cell)
         mc.player?.let { it.swing(InteractionHand.MAIN_HAND, false) }
     }
 
     private fun press(cell: Int) {
         val p = placed ?: return
-        if (!buttonUp[cell] || downUntil[cell] > tick) return
+        if (Inf.on) {
+            if (!buttonUp[cell] || downUntil[cell] > tick) return
+            click(p.at(buttonAt(cell)))
+            setButton(cell, true, pressed = true)
+            downUntil[cell] = tick + 3
+            after(3) { if (buttonUp[cell]) setButton(cell, true) }
+            infPress(cell)
+            return
+        }
+        val r = device.press(cell, YOU)
+        if (r == SimonSaysDevice.Press.NONE) return
         click(p.at(buttonAt(cell)))
-        setButton(cell, true, pressed = true)
-        downUntil[cell] = tick + 3
-        after(3) { if (buttonUp[cell]) setButton(cell, true) }
-        if (Inf.on) { infPress(cell); return }
-        if (!accepting) return
-        if (cell == expected[next]) {
-            if (clickSounds) playSoundSettings(correctSound())
-            val now = System.currentTimeMillis()
-            roundClicks += (now - lastClickMs) / 1000.0; lastClickMs = now
-            next++
-            if (next < expected.size) return
-            accepting = false
-            rounds += (tick + 6 - roundUp) / 20.0
-            splits += roundClicks.toList()
-            val n = expected.size
-            if (fromRound > 0 && n == FINAL_ROUND) { fromDone(); after(6) { fromRun() }; return }
-            if (n == FINAL_ROUND) after(6) { for (c in 0 until 16) setButton(c, false); revealed.clear(); done() }
-            else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
-        } else {
-            if (clickSounds) playSoundSettings(wrongSound())
-            accepting = false
-            fails++
-            revealed.clear()
-            after(3) { for (c in 0 until 16) setButton(c, false) }
-            // A wrong press: the run starts over at once, as the start button would.
-            restart(sound = false)
+        when (r) {
+            SimonSaysDevice.Press.RIGHT, SimonSaysDevice.Press.ROUND -> {
+                if (clickSounds) playSoundSettings(correctSound())
+                val now = System.currentTimeMillis()
+                roundClicks += (now - lastClickMs) / 1000.0; lastClickMs = now
+                if (r == SimonSaysDevice.Press.RIGHT) return
+                val n = device.round
+                rounds += (tick + 6 - roundUp) / 20.0
+                splits += roundClicks.toList()
+                // As at 1x: what Show Speed took off this round's show.
+                shownFaster += 8 * n - showTick(n)
+            }
+            SimonSaysDevice.Press.WRONG -> {
+                if (clickSounds) playSoundSettings(wrongSound())
+                fails++
+                // A wrong press: the run starts over at once, with the last run's start presses.
+                val f = fails
+                restart(sound = false)
+                fails = f
+            }
+            else -> {}
         }
     }
 
-    private fun done() {
-        phase = Phase.DONE
+    /** The device is done. */
+    private fun onDone() {
+        if (fromRound > 0) {
+            // The next run 6 ticks after the last press, which is now.
+            fromDone()
+            fromRun()
+            return
+        }
+        running = false
+        if (firstLight == 0L) return
         // As at 1x: the time Show Speed saved added back.
         val total = (tick + shownFaster - firstLight) / 20.0
         val speed = if (instantShow) " §8(instant, as at 1x)" else if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
         report(total, rounds, splits, (if (fails > 0) " §c$fails wrong" else "") + speed)
     }
+
+    /** The top healers' median clicking for round [n] (2-4), or null. */
+    private fun topFor(n: Int): Double? = TOP_ROUNDS.getOrNull(n - 2)
 
     /** A run's chat lines (practice or the real device): the total, then a line a round with each press. */
     private fun report(total: Double, rounds: List<Double>, splits: List<List<Double>>, suffix: String) {
@@ -633,15 +615,16 @@ object SimonSaysPractice : Module(
         }
         EngineerClient.msg("§7SS took: $colour${fmt(total)}s$suffix")
         if (!roundTimes) return
-        // One line a round: its clicking time (vs the top healers' median, with the skip start),
-        // then each press, the first from when its button came up, the rest from the press before.
-        val vsTop = rounds.size == TOP_ROUNDS.size
+        // One line a round: its clicking time (vs the top healers' median), then each press, the first from when
+        // its button came up, the rest from the press before. A run's first round past round 1 came from a skip.
         for (i in rounds.indices) {
             val presses = splits.getOrNull(i).orEmpty()
-            val name = if (vsTop && i == 0) "skip" else "r${presses.size}"
-            val c = if (!vsTop) "§f" else if (rounds[i] <= TOP_ROUNDS[i]) "§a" else if (rounds[i] <= TOP_ROUNDS[i] + 0.3) "§e" else "§c"
-            val top = if (vsTop) "§8/${fmt(TOP_ROUNDS[i])}" else ""
-            EngineerClient.msg("§8 ${name.padEnd(4)} $c${fmt(rounds[i])}$top §8| " + presses.withIndex().joinToString(" §8› ") { (j, t) -> pressColour(name == "skip", j, t) + fmt(t) })
+            val skip = i == 0 && presses.size >= 2
+            val name = if (skip) "skip" else "r${presses.size}"
+            val top = topFor(presses.size)
+            val c = if (top == null) "§f" else if (rounds[i] <= top) "§a" else if (rounds[i] <= top + 0.3) "§e" else "§c"
+            val vs = if (top == null) "" else "§8/${fmt(top)}"
+            EngineerClient.msg("§8 ${name.padEnd(4)} $c${fmt(rounds[i])}$vs §8| " + presses.withIndex().joinToString(" §8› ") { (j, t) -> pressColour(skip, j, t) + fmt(t) })
         }
     }
 
@@ -951,10 +934,13 @@ object SimonSaysPractice : Module(
         on<TickEvent.End> {
             if (triggerBot) EngineerClient.safely("ss trigger bot") { trigger() }
             tick++
-            if (jobs.isEmpty()) return@on
-            val due = jobs.filter { it.at <= tick }
-            jobs.removeAll(due.toSet())
-            for (j in due) if (j.gen == gen) EngineerClient.safely("ss practice") { j.run() }
+            if (jobs.isNotEmpty()) {
+                val due = jobs.filter { it.at <= tick }
+                jobs.removeAll(due.toSet())
+                for (j in due) if (j.gen == gen) EngineerClient.safely("ss practice") { j.run() }
+            }
+            // The device's tick, after this tick's presses (yours come between ticks, a restart's just above).
+            EngineerClient.safely("ss practice device") { device.tick() }
         }
         // Minecraft 26.1.2: what is submitted is only drawn this frame from Fabric's collect-submits
         // stage; Odin's render events come later in the frame (after the translucent terrain).
@@ -975,10 +961,13 @@ object SimonSaysPractice : Module(
                 }
                 return@on
             }
-            for (i in next until revealed.size) {
+            // The newest show's lamps as they light, as the solver reads them on the real device.
+            val shown = device.shown
+            val next = device.next
+            for (i in next until shown.size) {
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
-                val lamp = lampAt(revealed[i])
+                val lamp = lampAt(shown[i])
                 drawStyledBox(v.box(solverBox(p, lamp)), colour, 2, true)
             }
         }
@@ -999,7 +988,7 @@ object SimonSaysPractice : Module(
             mc.execute { if (placed != null) EngineerClient.safely("ss practice countdown") { remove(); EngineerClient.msg("§7SS Practice: removed (terminals starting).") } }
         }
         // A new world has none of it: nothing to put back.
-        on<LevelEvent.Unload> { placed = null; hit = null; gen++; jobs.clear(); phase = Phase.IDLE }
+        on<LevelEvent.Unload> { placed = null; hit = null; gen++; jobs.clear(); device.clear(); running = false }
     }
 
     override fun onDisable() {
