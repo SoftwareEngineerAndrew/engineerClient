@@ -15,7 +15,7 @@ object ConfigMigration {
 
     /**
      * The public build is ADM, which was Engineer Client: there, Engineer Client's Odin settings file is copied to
-     * ADM's and its own folder under config (Better PF runs, P3 Sim saves, stats...) moved to ADM's, the first time
+     * ADM's and its own folder under config (ADR runs, P3 Sim saves, stats...) moved to ADM's, the first time
      * it starts, before anything reads either. Nothing to do where the names are the same. [gameDir] is the game's
      * folder.
      */
@@ -34,6 +34,7 @@ object ConfigMigration {
      * One-time moves inside config/odin/addons/engineerclient.json, before Odin reads it, so a
      * module that was renamed or folded into another keeps what was set in it:
      *  - BR Waypoints 2 is BR Roles;
+     *  - Better PF is ADR (its runs folder too);
      *  - the health and mana settings moved from Random Stuff to Health & Mana (on if Random Stuff
      *    was); Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied
      *    to Health & Mana, which provides those HUDs;
@@ -65,6 +66,12 @@ object ConfigMigration {
         module(modules, "BR Waypoints 2")?.let {
             if (module(modules, "BR Roles") == null) { it.addProperty("name", "BR Roles"); changed = true }
         }
+
+        module(modules, "Better PF")?.let {
+            if (module(modules, "ADR") == null) { it.addProperty("name", "ADR"); changed = true }
+        }
+        val own = odinDir.parent.resolve(NAME)
+        if (Files.isDirectory(own.resolve("betterpf")) && !Files.exists(own.resolve("adr"))) Files.move(own.resolve("betterpf"), own.resolve("adr"))
 
         module(modules, "Random Stuff")?.let { rs ->
             val from = settings(rs)

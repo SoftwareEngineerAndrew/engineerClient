@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.Blocks as B
  * Every block the fight changes goes through here, so a restart (or leaving the world) can put the
  * arena back exactly as built. Also plays the arena's scripted animations (gates, doors, the core,
  * the floors between phases) frame by frame as recorded on Hypixel (`anims-*.json`, extracted from
- * Better PF runs), and the world's own rules that are not fixed frames: Maxor's conveyor strip
+ * ADR runs), and the world's own rules that are not fixed frames: Maxor's conveyor strip
  * after its recording ends.
  */
 object Blocks {

@@ -38,7 +38,7 @@ import kotlin.random.Random
  * Nuclear Frenzy pulses on its 20-tick grid while he waits at mid (B1 to volley 2, B2 to the
  * throes). "All this, for nothing..." and "my master" are gone.
  *
- * Measured on 176 post-update F7 Better PF recordings and 3 Boss Recorder files (server gameTime).
+ * Measured on 176 post-update F7 ADR recordings and 3 Boss Recorder files (server gameTime).
  * The script doesn't wait for damage (the sim has no boss health): B1 and B2 are the measured
  * medians of fast runs, so every run is the fastest possible Necron.
  */
