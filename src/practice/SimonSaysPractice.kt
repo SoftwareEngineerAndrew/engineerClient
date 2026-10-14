@@ -86,7 +86,7 @@ object SimonSaysPractice : Module(
     private val soundsDropdown by DropdownSetting("Click Sounds Dropdown", desc = "").withDependency { clickSounds }
     private val correctSound = createSoundSettings("Correct Sound", "entity.experience_orb.pickup") { clickSounds && soundsDropdown }
     private val wrongSound = createSoundSettings("Wrong Sound", "entity.blaze.hurt") { clickSounds && soundsDropdown }
-    private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from Better PF runs), and each press's time from the one before, the first from when its button came up.")
+    private val roundTimes by BooleanSetting("Round Times", true, desc = "After each completion, a line per round: how long its clicking took (next to the fastest healers' medians from ADR runs), and each press's time from the one before, the first from when its button came up.")
     private val realTimes by BooleanSetting("Real Device Times", true, desc = "The same total and round by round press times for F7's real Simon Says in P3, when you do it: your presses timed as you click, the device's lights and buttons as they arrive. Marked (real).")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
     private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
@@ -106,7 +106,7 @@ object SimonSaysPractice : Module(
     private fun buttonAt(cell: Int) = BlockPos(110, 123 - cell / 4, 92 + cell % 4)
     private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
 
-    /** Reference times for each round's clicking (skip, r3, r4): the fastest healers' medians from Better PF runs. */
+    /** Reference times for each round's clicking (skip, r3, r4): the fastest healers' medians from ADR runs. */
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05)
 
     // Odin's Simon Says colours.

@@ -1197,7 +1197,7 @@ object Party {
 
     /**
      * Where a player stands to do each job: the most central of the spots players were on when its line
-     * came (Better PF runs, all five players). Levers are pulled mid-jump on the way past; a lever's is
+     * came (ADR runs, all five players). Levers are pulled mid-jump on the way past; a lever's is
      * the most-used floor spot in reach of it (eyes within 4 of the lever).
      */
     val STANDS: Map<String, Vec3> = mapOf(
