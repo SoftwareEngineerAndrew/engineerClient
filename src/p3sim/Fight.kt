@@ -166,7 +166,7 @@ object Fight {
         if (phase == null) {
             Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)
             later(20, "welcome") {
-                Sim.note("Welcome to P3 Sim. §fRight click the Nether Star§7 (or /p3sim) for the menu.")
+                Sim.note("Welcome to P3 Sim Beta. §fRight click the Nether Star§7 (or /p3sim) for the menu.")
                 if (P3Sim.autoStart) start(Start.P3)
             }
         }

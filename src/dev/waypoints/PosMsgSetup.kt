@@ -1,7 +1,7 @@
 package com.devgineerclient.waypoints
 
 import com.devgineerclient.DevgineerClient
-import com.engineerclient.rotation.SetupCheck
+import com.devgineerclient.rotation.SetupCheck
 import com.engineerclient.waypoints.BrWaypoints2
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray

@@ -38,12 +38,12 @@ import com.mojang.blaze3d.platform.InputConstants
  * [SimServer.isSim] (the server), both of which are only true in that one singleplayer world.
  */
 object P3Sim : Module(
-    name = "P3 Sim",
+    name = "P3 Sim Beta",
     category = Category.custom("Engineer Client"),
     description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
     key = null,
 ) {
-    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
+    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim Beta menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
         if (inSim) SimServer.run("restart") { if (Practice.active) Practice.restart() else Fight.start(Fight.lastStart) }
     }
@@ -221,12 +221,12 @@ object P3Sim : Module(
                 val realms = widgets.filterIsInstance<Button>()
                     .firstOrNull { (it.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key == "menu.online" }
                 if (realms == null) {
-                    widgets.add(Button.builder(Component.literal("P3 Sim")) { SimWorld.open() }.bounds(w - 64, 4, 60, 16).build())
+                    widgets.add(Button.builder(Component.literal("P3 Sim Beta")) { SimWorld.open() }.bounds(w - 84, 4, 80, 16).build())
                     return@safely
                 }
                 val half = (realms.width - 4) / 2
                 widgets.remove(realms)
-                widgets.add(Button.builder(Component.literal("P3 Sim")) { SimWorld.open() }
+                widgets.add(Button.builder(Component.literal("P3 Sim Beta")) { SimWorld.open() }
                     .bounds(realms.x, realms.y, half, realms.height).build())
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
                     .bounds(realms.x + realms.width - half, realms.y, half, realms.height).build())
@@ -240,11 +240,11 @@ object P3Sim : Module(
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val lan = buttons.firstOrNull { key(it) in LAN_KEYS }
                 val quit = buttons.firstOrNull { key(it) in QUIT_KEYS } ?: buttons.maxByOrNull { it.y }
-                val main = Button.builder(Component.literal("§6P3 Sim Menu")) { mc.setScreen(SimRestartScreen()) }
+                val main = Button.builder(Component.literal("§6P3 Sim Beta Menu")) { mc.setScreen(SimRestartScreen()) }
                 val b = when {
                     lan != null -> { widgets.remove(lan); main.bounds(lan.x, lan.y, lan.width, lan.height) }
                     quit != null -> main.bounds(quit.x, quit.y + quit.height + 4, quit.width, 20)
-                    else -> main.bounds(4, 4, 90, 20)
+                    else -> main.bounds(4, 4, 110, 20)
                 }.build()
                 widgets.add(b)
                 if (lan != null || quit != null) {

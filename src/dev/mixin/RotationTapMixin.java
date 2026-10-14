@@ -1,6 +1,6 @@
-package com.engineerclient.mixin;
+package com.devgineerclient.mixin;
 
-import com.engineerclient.rotation.P3Rotation;
+import com.devgineerclient.rotation.P3Rotation;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
@@ -18,13 +18,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * of them. It only reads; it never cancels or modifies, so it cannot affect what they do.
  */
 @Mixin(value = Connection.class, priority = 1)
-public class ConnectionTapMixin {
+public class RotationTapMixin {
 
     @Inject(
         method = "channelRead0(Lio/netty/channel/ChannelHandlerContext;Lnet/minecraft/network/protocol/Packet;)V",
         at = @At("HEAD")
     )
-    private void ec$tap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
+    private void dc$rotationTap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
         P3Rotation.INSTANCE.tap(packet);
     }
 }

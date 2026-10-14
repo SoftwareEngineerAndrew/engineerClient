@@ -2,15 +2,11 @@ package com.engineerclient.chat
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.rotation.EcLog
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
 import net.minecraft.network.chat.Component
 import java.nio.file.Files
 
 /**
- * Hides chat lines its rules mark Block — at the very last step, when the chat GUI is about to
+ * Random Stuff's Clean Chat: hides chat lines its rules mark Block — at the very last step, when the chat GUI is about to
  * add the line to its list (see ChatComponentMixin).
  *
  * That placement is the point. Everything else that reads chat — Odin's parsers, this mod's
@@ -22,15 +18,9 @@ import java.nio.file.Files
  * Rules come from `chat/hidden.json` in the jar; drop a file of the same shape at
  * `config/engineerclient/chat-hider.json` to override without a rebuild (Reload Rules picks it up).
  */
-object ChatHider : Module(
-    name = "Chat Hider",
-    category = Category.custom("Engineer Client"),
-    description = "Hides the chat lines its rules mark Block (built in, or config/engineerclient/chat-hider.json). Other mods still see every line.",
-    key = null,
-    toggled = true,
-) {
-    private val logHidden by BooleanSetting("Log Hidden Lines", false, desc = "Writes every hidden line and the rule that hid it to the EC session log, for checking a rule.")
-    private val reload by ActionSetting("Reload Rules", desc = "Re-reads config/engineerclient/chat-hider.json (or the built-in rules if that file is absent).") { load(announce = true) }
+object ChatHider {
+    /** Clean Chat's Reload Rules. */
+    fun reload() = load(announce = true)
 
     @Volatile
     private var rules: ChatRules = ChatRules(emptyList(), emptyList())
@@ -49,16 +39,16 @@ object ChatHider : Module(
         }
         rules = set
         EngineerClient.logger.info("[ec] chat hider: ${set.size} rules from $from" + if (set.invalid.isNotEmpty()) ", ${set.invalid.size} invalid" else "")
-        if (announce) EngineerClient.msg("§7chat hider: §f${set.size}§7 rules from §f$from" + if (set.invalid.isNotEmpty()) " §c(${set.invalid.size} invalid regex)" else "")
+        if (announce) EngineerClient.msg("§7clean chat: §f${set.size}§7 rules from §f$from" + if (set.invalid.isNotEmpty()) " §c(${set.invalid.size} invalid regex)" else "")
     }
 
     /** Called from the chat GUI's single add-message funnel. True = do not display. */
     fun shouldHide(message: Component): Boolean {
-        if (!enabled) return false
+        if (!com.engineerclient.misc.RandomStuff.cleansChat()) return false
         if (!loaded) load(announce = false)
         val text = ChatRules.strip(message.string)
         val rule = rules.hides(text) ?: return false
-        if (logHidden) EcLog.log("CHAT-HIDE", "$rule ⇐ ${text.replace("\n", "\\n")}")
+        if (com.engineerclient.misc.RandomStuff.logsHiddenChat()) EcLog.log("CHAT-HIDE", "$rule ⇐ ${text.replace("\n", "\\n")}")
         return true
     }
 }

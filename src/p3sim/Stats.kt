@@ -36,7 +36,7 @@ object Stats {
         val old = bests.getProperty(key)?.toIntOrNull()
         if (old != null && ticks >= old) return " §8PB ${s(old)}"
         bests.setProperty(key, ticks.toString())
-        runCatching { bestFile.parentFile.mkdirs(); bestFile.outputStream().use { bests.store(it, "P3 Sim personal bests, server ticks") } }
+        runCatching { bestFile.parentFile.mkdirs(); bestFile.outputStream().use { bests.store(it, "P3 Sim Beta personal bests, server ticks") } }
         return if (old == null) " §6PB" else " §6§lNEW PB §8(was ${s(old)})"
     }
 
