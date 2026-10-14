@@ -108,8 +108,7 @@ class P2Storm : Fight.Phase("P2") {
     )
 
     override fun start() {
-        val p = Sim.player
-        if (p != null && Fight.previous !is P1Maxor) {
+        if (Fight.previous !is P1Maxor) Sim.forEachPlayer { p ->
             val s = Spots.PURPLE_PAD
             Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
             SimItems.giveHotbar(p, p3 = false)
@@ -241,7 +240,7 @@ class P2Storm : Fight.Phase("P2") {
 
     private fun check() {
         // Anyone on the square counts, bots included.
-        val on = listOfNotNull(Sim.player?.position()) + Party.bots().filter { it.entity != null }.map { it.pos }
+        val on = everyone()
         for (pl in pillars) {
             if (pl.pad != null && pl.resting() && on.any { pl.pad.contains(it) }) pl.steps = 5
             if (pl.pad != null && pl.steps > 0 && pl.nextStep < 0) pl.nextStep = t
@@ -271,7 +270,8 @@ class P2Storm : Fight.Phase("P2") {
         pinnedAt = t
         lastCrush = pl
         takeoffAt = -1
-        enrageAt = if (P3Sim.bots && P3Sim.myClass != DungeonClass.MAGE) t + pinLength() else -1
+        // A player Mage's beam frees him; else the bot Mage's.
+        enrageAt = if (P3Sim.bots && !Players.isPlayerClass(DungeonClass.MAGE)) t + pinLength() else -1
     }
 
     /** The enrage line; he holds still until takeoff 2-3 after it (median 2). */
@@ -342,7 +342,7 @@ class P2Storm : Fight.Phase("P2") {
 
     // ------------------------------------------------------------------ lightning and attacks
 
-    private fun everyone(): List<Vec3> = listOfNotNull(Sim.player?.position()) + Party.bots().filter { it.entity != null }.map { it.pos }
+    private fun everyone(): List<Vec3> = Sim.players().map { it.position() } + Party.bots().filter { it.entity != null }.map { it.pos }
 
     /**
      * Giga Lightning: for whoever hides under a pillar, a ring of 40 bolts of radius 7
@@ -361,10 +361,11 @@ class P2Storm : Fight.Phase("P2") {
             val a = 2 * Math.PI * i / 40
             StormFx.bolt(pl.minX + 4 + 7 * cos(a), pl.minZ + 4 + 7 * sin(a), 169.0)
         }
-        val p = Sim.player ?: return
         Sim.sound(SoundEvents.LIGHTNING_BOLT_THUNDER, 2f, 1.4f)
-        if (pillars.any { it.under(p.position()) } || SimItems.cloaked) return
-        StormFx.hit("Giga Lightning", gigaDamage, trueDamage = true)
+        // Each player takes it unless under a pillar.
+        Sim.forEachPlayer { p ->
+            if (pillars.none { it.under(p.position()) } && !SimItems.cloaked) StormFx.hit("Giga Lightning", gigaDamage, trueDamage = true)
+        }
     }
 
     private var nextFireball = -1
@@ -387,10 +388,11 @@ class P2Storm : Fight.Phase("P2") {
         }
         val free = crushes == 1 && !pinnedUntilBeam
         if (free && nextSkull >= 0 && t >= nextSkull) { skulls(); nextSkull = t + 5 }
-        val p = Sim.player
-        if (free && p != null && t % 10 == frenzyPhase && p.position().distanceTo(storm.pos.add(0.0, 1.5, 0.0)) <= 6.3 && !SimItems.cloaked) {
-            val v = if (Random.nextDouble() < 0.7) Random.nextDouble(1990.0, 2170.0) else Random.nextDouble(2170.0, 14000.0)
-            StormFx.hit("Frenzy", Math.round(v * 10) / 10.0)
+        if (free && t % 10 == frenzyPhase) Sim.forEachPlayer { p ->
+            if (p.position().distanceTo(storm.pos.add(0.0, 1.5, 0.0)) <= 6.3 && !SimItems.cloaked) {
+                val v = if (Random.nextDouble() < 0.7) Random.nextDouble(1990.0, 2170.0) else Random.nextDouble(2170.0, 14000.0)
+                StormFx.hit("Frenzy", Math.round(v * 10) / 10.0)
+            }
         }
     }
 
@@ -410,8 +412,9 @@ class P2Storm : Fight.Phase("P2") {
     private fun impact(at: Vec3) {
         if (Fight.phase !== this) return
         StormFx.burst(at)
-        val p = Sim.player
-        if (p != null && p.position().add(0.0, 0.9, 0.0).distanceTo(at) <= 3.5 && !SimItems.cloaked) StormFx.hit("Lightning Fireball", 75000.0)
+        Sim.forEachPlayer { p ->
+            if (p.position().add(0.0, 0.9, 0.0).distanceTo(at) <= 3.5 && !SimItems.cloaked) StormFx.hit("Lightning Fireball", 75000.0)
+        }
         if (Random.nextDouble() < 0.55) fields += Field(at, Random.nextDouble() < 0.55, t)
     }
 
@@ -436,7 +439,8 @@ class P2Storm : Fight.Phase("P2") {
      * lands within 3 blocks of you, in that tick.
      */
     private inner class Field(val c: Vec3, val plus: Boolean, val start: Int) {
-        var hit = false
+        /** Who it has hit (once each). */
+        val hit = HashSet<String>()
 
         fun tick(): Boolean {
             val k = RING_T.indexOf(t - start)
@@ -447,12 +451,15 @@ class P2Storm : Fight.Phase("P2") {
                 plus -> listOf(a to 0.0, -a to 0.0, 0.0 to a, 0.0 to -a)
                 else -> listOf(a to a, a to -a, -a to a, -a to -a)
             }
-            val p = Sim.player?.position()
             for ((dx, dz) in pts) {
                 val b = StormFx.bolt(c.x + dx, c.z + dz, c.y + 0.5)
-                if (!hit && p != null && Math.hypot(b.x - p.x, b.z - p.z) <= 3.0 && Math.abs(b.y - p.y) < 3 && !SimItems.cloaked) {
-                    hit = true
-                    StormFx.hit("Static Field", 10800.0)
+                Sim.forEachPlayer { pl ->
+                    val p = pl.position()
+                    val name = pl.gameProfile.name
+                    if (name !in hit && Math.hypot(b.x - p.x, b.z - p.z) <= 3.0 && Math.abs(b.y - p.y) < 3 && !SimItems.cloaked) {
+                        hit += name
+                        StormFx.hit("Static Field", 10800.0)
+                    }
                 }
             }
             return k < RING_T.size - 1

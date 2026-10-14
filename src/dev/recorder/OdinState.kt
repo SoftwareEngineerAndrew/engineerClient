@@ -464,8 +464,9 @@ object OdinState {
     private val saving: Class<*>? by lazy { runCatching { Class.forName("com.odtheking.odin.clickgui.settings.Saving") }.getOrNull() }
     private val savingWrite by lazy { runCatching { saving?.getMethod("write", com.google.gson.Gson::class.java) }.getOrNull() }
 
-    private val getHidden by lazy { runCatching { Setting::class.java.getDeclaredMethod("getHidden").apply { isAccessible = true } }.getOrNull() }
-    private fun hidden(s: Setting<*>): Boolean = runCatching { getHidden?.invoke(s) as? Boolean }.getOrNull() ?: false
+    // Odin 0.3.4 keeps it in Setting, protected: read by reflection.
+    private val hiddenField by lazy { runCatching { Setting::class.java.getDeclaredField("hidden").apply { isAccessible = true } }.getOrNull() }
+    private fun hidden(s: Setting<*>): Boolean = runCatching { hiddenField?.getBoolean(s) }.getOrNull() ?: false
 
     /**
      * Every module (Odin's and ours, which register through Odin), on or off, with every setting's

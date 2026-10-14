@@ -153,9 +153,13 @@ object BossBar {
             BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS).also { bar = it }
         b.name = Sim.legacy(name)
         b.progress = progress.coerceIn(0f, 1f)
-        val p = Sim.player
-        if (p != null && p !in b.players) { b.removeAllPlayers(); b.addPlayer(p) }
+        // Everyone in the sim sees it.
+        val all = Sim.players()
+        if (b.players.toSet() != all.toSet()) { b.removeAllPlayers(); all.forEach { b.addPlayer(it) } }
     }
+
+    /** A player who just came in sees the bar too. */
+    fun showTo(p: net.minecraft.server.level.ServerPlayer) { bar?.let { if (p !in it.players) it.addPlayer(p) } }
 
     fun progress(f: Float) { bar?.progress = f.coerceIn(0f, 1f) }
 
@@ -180,11 +184,11 @@ object BossBar {
     fun hideOwn(w: WitherBoss) { runCatching { (ownField?.get(w) as? ServerBossEvent)?.isVisible = false } }
 }
 
-/** The 3D-closest player to [p] (you, or a bot standing in for one). */
+/** The 3D-closest player to [p] (a player, or a bot standing in for one). */
 internal fun closest(p: Vec3): Vec3 {
-    val me = Sim.player?.position()
+    val players = Sim.players().map { it.position() }
     val bots = Party.bots().filter { it.entity != null }.map { it.pos }
-    return (listOfNotNull(me) + bots).minByOrNull { it.distanceToSqr(p) } ?: p
+    return (players + bots).minByOrNull { it.distanceToSqr(p) } ?: p
 }
 
 /** Is the player looking at [at] within [degrees] and [range]. */
@@ -290,9 +294,11 @@ class P1Maxor : Fight.Phase("P1") {
     private val pylons = arrayOf(Pylon(0), Pylon(1))
     private val carriers = ArrayList<Carrier>()
     private var lure: Party.Bot? = null
-    private var carrying = 0
+    /** Crystals each player carries ([perPlayer]). */
+    private val carryingBy = perPlayer { 0 }
+    private var carrying by carryingBy
     /** Your hotbar slot the crystal is in (the SkyBlock Menu's). */
-    private var crystalSlot = -1
+    private var crystalSlot by perPlayer { -1 }
     /** Placement ticks this laser cycle (the "X/2" counter). */
     private val placeTimes = ArrayList<Int>()
     /** Placements clicked, taken on the next check (pylon to who). */
@@ -330,10 +336,12 @@ class P1Maxor : Fight.Phase("P1") {
     private var belowAt = -1
 
     override fun start() {
-        val p = Sim.player ?: return
+        if (Sim.players().isEmpty()) return
         val s = Spots.P1
-        Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
-        SimItems.giveHotbar(p, p3 = false)
+        Sim.forEachPlayer { p ->
+            Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
+            SimItems.giveHotbar(p, p3 = false)
+        }
         BossBar.show("§c§lMaxor", 1f)
         Sim.boss("Maxor", "WELL! WELL! WELL! LOOK WHO'S HERE!")
         stripStart()
@@ -358,7 +366,7 @@ class P1Maxor : Fight.Phase("P1") {
         pylons.forEach { it.remove() }
         if (::maxor.isInitialized && !handed) maxor.remove()
         Blocks.stop("p1strip")
-        if (carrying > 0) { carrying = 0; giveBackMenu() }
+        Sim.forEachPlayer { if (carrying > 0) { carrying = 0; giveBackMenu() } }
     }
 
     private fun check() = t % 10 == 0
@@ -457,7 +465,8 @@ class P1Maxor : Fight.Phase("P1") {
             if (killAt >= 0) return true
             take(top)
             carrying++
-            Sim.chat("§b${Sim.me}§r§a picked up an §r§bEnergy Crystal§r§a!")
+            val me = Sim.me
+            Sim.everyone { Sim.chat("§b$me§r§a picked up an §r§bEnergy Crystal§r§a!") }
             holdCrystal()
             return true
         }
@@ -523,7 +532,7 @@ class P1Maxor : Fight.Phase("P1") {
         val x = 1 + placeTimes.count { t >= it + 28 }
         placeTimes += t
         // Green from 2 on ("§a2/2", "§a3/2").
-        Sim.chat(if (x >= 2) "§a$x/2 Energy Crystals are now active!" else "§c$x§r§a/2 Energy Crystals are now active!")
+        Sim.everyone { Sim.chat(if (x >= 2) "§a$x/2 Energy Crystals are now active!" else "§c$x§r§a/2 Energy Crystals are now active!") }
         // The stands' names change on Hypixel's next refresh (3-22 ticks after the line).
         val c = pylon.crystal
         Fight.later(20, "maxor pylon active") { if (Fight.phase === this && pylon.crystal === c && c != null) pylon.active() }
@@ -585,7 +594,7 @@ class P1Maxor : Fight.Phase("P1") {
             if (!c.holding) {
                 // Done for this cycle, but a crystal nobody carries (yours to do) still up after 3 s
                 // of open pylons: fetch that one too, so the fight never stalls.
-                if (c.leaveAt == Int.MAX_VALUE && carrying == 0 && open) {
+                if (c.leaveAt == Int.MAX_VALUE && carryingBy.values().all { it == 0 } && open) {
                     val orphan = (0..1).firstOrNull { s -> tops[s] != null && carriers.none { it.side == s } && t >= lastOpen() + 60 }
                     if (orphan != null) { c.fetch = orphan; c.leaveAt = t }
                 }
@@ -620,6 +629,14 @@ class P1Maxor : Fight.Phase("P1") {
     }
 
     // ------------------------------------------------------------------ hits
+
+    /** [p] left the party: a crystal they carried is back on its stand, as if never taken. */
+    fun playerLeft(p: net.minecraft.server.level.ServerPlayer) = Sim.asPlayer(p) {
+        if (carrying <= 0) return@asPlayer
+        carrying = 0
+        if (killAt >= 0) return@asPlayer
+        for (i in 0..1) if (tops[i] == null && !pylons[i].placed && i !in pending && i !in clicked) tops[i] = Top(i, stands = true)
+    }
 
     private fun hit() {
         hits++
@@ -682,7 +699,7 @@ class P1Maxor : Fight.Phase("P1") {
             // The placed crystals and the pylons' stands go with him; the strip stops.
             pylons.forEach { it.remove() }
             Blocks.stop("p1strip")
-            if (carrying > 0) { carrying = 0; giveBackMenu() }
+            Sim.forEachPlayer { if (carrying > 0) { carrying = 0; giveBackMenu() } }
         }
         // His platforms crumble 3 ticks before Storm's line at the soonest (kill + 60 measured; the recorded frames run -24..-6 from it).
         if (since == STORM_AFTER - 3) Blocks.play("p1end", skip = -24)
@@ -701,7 +718,7 @@ class P1Maxor : Fight.Phase("P1") {
 
     /** You or a bot below y 196: in Storm's arena. */
     private fun inStormArena(): Boolean =
-        (Sim.player?.y ?: 999.0) < 196.0 || Party.bots().any { it.entity != null && it.pos.y < 196.0 }
+        Sim.players().any { it.y < 196.0 } || Party.bots().any { it.entity != null && it.pos.y < 196.0 }
 
     /** After the kill the bots drop to Storm's floor one by one (7, 17, 26, 35 after it), falling ~1.5 a tick. */
     private fun drops(since: Int) {

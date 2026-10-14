@@ -83,7 +83,7 @@ object Loadouts {
     )
 
     private fun maskId(s: ItemStack) = SimItems.idOf(s)?.removePrefix("STARRED_")
-    private fun wantedMask() = if (P3Sim.wornMaskS.value == 0) "SPIRIT_MASK" else "BONZO_MASK"
+    private fun wantedMask() = if (P3Sim.wornMask == 0) "SPIRIT_MASK" else "BONZO_MASK"
 
     // ------------------------------------------------------------------ worn gear: saved with the hotbar and in custom loadouts
 
@@ -110,21 +110,21 @@ object Loadouts {
         }
         val h = helmFor(w.head)
         if (h == Helm.MASK) {
-            P3Sim.wornMaskS.value = if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1
+            P3Sim.setWornMask(if (w.head!!.endsWith("SPIRIT_MASK")) 0 else 1)
             val cur = SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))
             if (cur?.endsWith("_MASK") == true) {
                 if (P3Sim.realMasks) Masks.equip(p)
-                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMaskS.value == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
+                else SimItems.wear(p, EquipmentSlot.HEAD, if (P3Sim.wornMask == 0) Masks.SPIRIT_MASK else Masks.BONZO_MASK)
             } else wearHelmet(p, h)
         } else if (h != null) wearHelmet(p, h)
-        P3Sim.phoenixS.value = w.phoenix
+        P3Sim.setPhoenix(w.phoenix)
         Fight.applySpeed(p)
     }
 
     /** A hotbar reset's gear: the saved worn loadout ([HotbarLayout.worn]) or, with none, Maxor + mask (the pet stays as it is: Black Cat). */
     fun applySaved(p: ServerPlayer) {
         val w = HotbarLayout.worn()
-        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.wornMaskS.value = if (w.head.endsWith("SPIRIT_MASK")) 0 else 1
+        if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.setWornMask(if (w.head.endsWith("SPIRIT_MASK")) 0 else 1)
         Masks.equip(p)
         SimItems.equipArmor(p, SimItems.ArmorSet.MAXOR)
         if (w != null) applyWorn(p, w)
@@ -132,23 +132,24 @@ object Loadouts {
 
     private class Custom(val name: String = "", val worn: Worn = Worn())
 
-    private val customFile get() = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-loadouts.json")
     private val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
-    private var customList: MutableList<Custom>? = null
+    /** Each player's custom loadouts (the host's from this computer, a joiner's from their game: [PlayerFiles]). */
+    private val customLists = java.util.concurrent.ConcurrentHashMap<String, MutableList<Custom>>()
+    private fun owner() = PlayerFiles.owner()?.toString() ?: ""
 
-    private fun customs(): MutableList<Custom> = customList ?: run {
+    /** This game's file changed (the sim's server saved a joiner's): read it again. */
+    fun forgetLocal() { customLists.remove("") }
+
+    private fun customs(): MutableList<Custom> = customLists[owner()] ?: run {
         val l = runCatching {
-            if (customFile.exists()) gson.fromJson(customFile.readText(), Array<Custom>::class.java)?.toMutableList() else null
+            PlayerFiles.read(PlayerFiles.LOADOUTS)?.let { gson.fromJson(it, Array<Custom>::class.java)?.toMutableList() }
         }.onFailure { EngineerClient.logger.error("[ec] p3sim loadouts load failed", it) }.getOrNull() ?: mutableListOf()
-        customList = l
+        customLists[owner()] = l
         l
     }
 
     private fun saveCustoms() {
-        EngineerClient.safely("p3sim loadouts save") {
-            customFile.parentFile.mkdirs()
-            customFile.writeText(gson.toJson(customs().toTypedArray()))
-        }
+        EngineerClient.safely("p3sim loadouts save") { PlayerFiles.write(PlayerFiles.LOADOUTS, gson.toJson(customs().toTypedArray())) }
     }
 
     /** Free panes on the recorded screen, used by custom loadouts (the Save button is at [SAVE_SLOT]). */
@@ -240,7 +241,7 @@ object Loadouts {
                 if (slot != null) inv.setItem(slot, old)
             }
         }
-        if (h == Helm.MASK) SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.let { P3Sim.wornMaskS.value = if (it.endsWith("SPIRIT_MASK")) 0 else 1 }
+        if (h == Helm.MASK) SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.let { P3Sim.setWornMask(if (it.endsWith("SPIRIT_MASK")) 0 else 1) }
     }
 
     private fun sound(id: String, vol: Float, pitch: Float, src: SoundSource) {
@@ -250,9 +251,9 @@ object Loadouts {
     /** [d]'s gear, helmet, pet and speed on at once, quietly. */
     private fun wear(p: ServerPlayer, d: Def) {
         SimItems.equipArmor(p, d.set, d.helm == Helm.TERROR)
-        d.mask?.let { P3Sim.wornMaskS.value = if (it == "SPIRIT_MASK") 0 else 1 }
+        d.mask?.let { P3Sim.setWornMask(if (it == "SPIRIT_MASK") 0 else 1) }
         wearHelmet(p, d.helm)
-        P3Sim.phoenixS.value = d.phoenix
+        P3Sim.setPhoenix(d.phoenix)
         Fight.applySpeed(p)
     }
 

@@ -41,9 +41,10 @@ import net.minecraft.world.phys.Vec3
  * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `core`).
  * **Defaults**: spots (facing too) that replace the Normal PF defaults for this preset: `ee2`... and
  * `spawn/MAGE`... (a class's P3 spawn); one set in the Roles menu still comes first.
+ * **Mines**: blocks an early enterer's bot mines once it's on its spot (`ee3` -> the blocks); yours you mine yourself.
  */
 object Roles {
-    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap(), val defaults: Map<String, Spots.Spot> = emptyMap())
+    class Preset(val name: String, val roles: Map<DungeonClass, String>, val times: List<String>, val moves: List<String>, val helps: List<Help> = emptyList(), val spots: Map<String, Vec3> = emptyMap(), val defaults: Map<String, Spots.Spot> = emptyMap(), val mines: Map<String, List<net.minecraft.core.BlockPos>> = emptyMap())
 
     /**
      * Help on a stack (the menu's Helper): when you're on [yours] (that terminal and the stack's
@@ -166,7 +167,7 @@ object Roles {
         times = listOf(
             // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one.
             "rl lights 0.05 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | gate 5.6 | 3 6.8 | ss 7.8",
-            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 4.0 | 3 4.5",
+            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 3.7 | 3 3.95",
             "3 1.6 | 4 2.5 | 2 3.0 | 1 4.0 | levers gate 4.5",
             "2 2.0 | 4 2.5 | 3 3.0 | levers 3.0 | 1 3.25",
         ),
@@ -185,7 +186,12 @@ object Roles {
             // The mage starts on Lights, the archer by S1's east lever (looking at it).
             "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
             "spawn/ARCHER" to Spots.Spot("Spawn", 107.53, 123.06, 112.45, 47.59f, 19.81f),
+            // S2's 2nd terminal from the top of the stairs (looking at 59, 120, 122).
+            "stand/S2 T2" to Spots.Spot("S2 T2", 59.50, 120.00, 125.20, -179.66f, 23.96f),
         ),
+        // Once on the high EE3, the bers mines the 2x2 quartz platform beside it (x 15-16, y 122, z 93-94); the ledge it
+        // stands on stays.
+        mines = mapOf("ee3" to listOf(15, 16).flatMap { x -> listOf(93, 94).map { net.minecraft.core.BlockPos(x, 122, it) } }),
     )
 
     /** In the skill menu as listed, with Random after the first three ([P3Plan.SKILLS]). */

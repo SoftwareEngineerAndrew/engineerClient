@@ -21,8 +21,9 @@ object Stats {
         if (s !in 1..4 || sections[s] >= 0) return
         sections[s] = ticks
         val best = best("S$s", ticks)
-        if (P3Sim.showTimes) Sim.note("§fS$s§7 ${s(ticks)}$best")
-        com.engineerclient.practice.TermInfo.simSectionTime(ticks)
+        // The host's with their personal best, everyone else's plain; Term Info's on every game.
+        for (p in Sim.players()) Sim.asPlayer(p) { if (P3Sim.showTimes) Sim.note("§fS$s§7 ${s(ticks)}" + if (Sim.isHost(p)) best else "") }
+        PartyClient.send("sectionTime", ticks)
     }
 
     // ------------------------------------------------------------------ personal bests
@@ -32,7 +33,7 @@ object Stats {
 
     /** Records [ticks] for [key] if it's a best; the chat suffix. */
     fun best(what: String, ticks: Int): String {
-        val key = "$what @ ${P3Plan.skillName()} ${Roles.label(P3Sim.myClass)}" + if (P3Plan.skill == P3Plan.RANDOM) " ${P3Plan.botMin}-${P3Plan.botMax}s" else ""
+        val key = "$what @ ${P3Plan.skillName()} ${Roles.label(P3Sim.ownClass)}" + if (P3Plan.skill == P3Plan.RANDOM) " ${P3Plan.botMin}-${P3Plan.botMax}s" else ""
         val old = bests.getProperty(key)?.toIntOrNull()
         if (old != null && ticks >= old) return " §8PB ${s(old)}"
         bests.setProperty(key, ticks.toString())
@@ -43,11 +44,14 @@ object Stats {
     fun deathTick() { deaths++ }
 
     fun p3(n: Int) {
-        if (!P3Sim.showTimes) return
         val parts = (1..4).filter { sections[it] >= 0 }.joinToString(" §8|§7 ") { "S$it ${s(sections[it])}" }
-        val total = if (from == 1) " §8|§f P3 ${s(n)}${best("P3", n)}" else ""
-        Sim.note("$parts$total")
-        Sim.note("You did §f$mine§7 of the jobs; death ticks taken: §f$deaths")
+        val best = if (from == 1) best("P3", n) else ""
+        val total = if (from == 1) " §8|§f P3 ${s(n)}" else ""
+        for (p in Sim.players()) Sim.asPlayer(p) {
+            if (!P3Sim.showTimes) return@asPlayer
+            Sim.note("$parts$total" + if (Sim.isHost(p)) best else "")
+            if (Sim.isHost(p)) Sim.note("You did §f$mine§7 of the jobs; death ticks taken: §f$deaths")
+        }
     }
 
     /** The server tick a full run (from P1) started, or -1. */

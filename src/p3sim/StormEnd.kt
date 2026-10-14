@@ -29,7 +29,8 @@ class StormEnd : Fight.Phase("Storm end") {
     private var body: BossWither? = null
 
     override fun start() {
-        Sim.player?.let { p ->
+        // Everyone on their own spawn.
+        Sim.forEachPlayer { p ->
             val spot = Spots.p3Start(1)
             Sim.tp(p, spot.x, spot.y, spot.z, spot.yaw, spot.pitch)
             SimItems.giveHotbar(p, p3 = true)

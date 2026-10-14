@@ -105,6 +105,8 @@ object Practice {
     private fun launch(m: String, s: Int) {
         mode = m; section = s
         tasks = emptyList(); ticks = 0; endTicks = -1
+        // The last try's times come down at once (the Section Time too, not only once the start timer ends).
+        com.engineerclient.practice.TermInfo.simClearTime()
         Fight.start(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4)[s - 1], practice = true)
     }
 
@@ -261,6 +263,8 @@ object Practice {
 
     /** Where it starts (null: not set), its section, the jobs left to you there, and the checkpoints. */
     @Volatile var customStart: Spots.Spot? = null
+    /** What you held when you set the start ([itemKey]): held again whenever the custom practice places you. */
+    @Volatile var customItem: String? = null
         private set
     @Volatile var customSection = 0
         private set
@@ -280,12 +284,13 @@ object Practice {
     /** The custom practice's jobs picked in section [s]. */
     fun customJobsIn(s: Int): Set<String> = P3Plan.jobsIn(s).filter { it in customJobs }.toSet()
 
-    /** The start where you stand; its section is where it is (or the nearest). Nothing picked yet: your role's jobs there. Returns the section. */
-    fun setStart(spot: Spots.Spot): Int {
+    /** The start where you stand, holding [item] ([itemKey]); its section is where it is (or the nearest). Nothing picked yet: your role's jobs there. Returns the section. */
+    fun setStart(spot: Spots.Spot, item: String? = null): Int {
         val s = sectionAt(spot.x, spot.y, spot.z)
         customSection = s
         if (customJobs.isEmpty()) customJobs += roleJobs(s)
         customStart = spot
+        customItem = item
         save()
         return s
     }
@@ -297,7 +302,38 @@ object Practice {
     }
 
     /** No custom practice: start, jobs and checkpoints gone. */
-    fun clearCustom() { customStart = null; customSection = 0; customJobs.clear(); checkpoints.clear(); leapWaypoints.clear(); save() }
+    fun clearCustom() { customStart = null; customItem = null; customSection = 0; customJobs.clear(); checkpoints.clear(); leapWaypoints.clear(); save() }
+
+    /** An item as the start remembers it: its SkyBlock id, else its name. */
+    fun itemKey(s: net.minecraft.world.item.ItemStack): String? =
+        if (s.isEmpty) null else SimItems.idOf(s) ?: "name:" + s.hoverName.string
+
+    /** In the custom practice: you hold the start's item again (the hotbar slot it's in now, if any). */
+    fun holdStartItem(player: net.minecraft.server.level.ServerPlayer) {
+        if (setup?.name != "Custom") return
+        val key = customItem ?: return
+        val inv = player.inventory
+        val slot = (0..8).firstOrNull { itemKey(inv.getItem(it)) == key } ?: return
+        inv.selectedSlot = slot
+        player.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(slot))
+    }
+
+    /** The custom practice as a code to share ([PracticeCode]). */
+    fun exportCode(): String = PracticeCode.encode(PracticeCode.Custom(customStart, customJobs.toSet(), checkpoints.toList(), leapWaypoints.toList(), startDelay))
+
+    /** Replaces the custom practice with the one in [code]; false: not a code. */
+    fun importCode(code: String): Boolean {
+        val c = PracticeCode.decode(code) ?: return false
+        customStart = c.start
+        customItem = null
+        customSection = c.start?.let { sectionAt(it.x, it.y, it.z) } ?: 0
+        customJobs.clear(); customJobs += c.jobs
+        checkpoints.clear(); checkpoints += c.checkpoints
+        leapWaypoints.clear(); leapWaypoints += c.leaps
+        startDelay = c.delay
+        save()
+        return true
+    }
 
     /** Leap waypoints: the leap menu's slots 1-4 (top left, top right, bottom left, bottom right) land here in a custom practice. */
     val leapWaypoints = ArrayList<Spots.Spot>()
@@ -317,7 +353,7 @@ object Practice {
     fun addCheckpoint(spot: Spots.Spot) { checkpoints += spot; save() }
     fun removeCheckpoint() { if (checkpoints.isNotEmpty()) checkpoints.removeAt(checkpoints.size - 1); save() }
 
-    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null, val leaps: List<List<Double>>? = null)
+    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null, val leaps: List<List<Double>>? = null, val item: String? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-practice.json")
@@ -331,6 +367,7 @@ object Practice {
             val s = gson.fromJson(f.readText(), Saved::class.java) ?: return@safely
             customStart = s.start?.takeIf { it.size >= 5 }?.let { spot("Start", it) }
             customSection = s.section ?: 0
+            customItem = s.item
             customJobs.clear(); s.jobs?.let { customJobs += it }
             startDelay = s.startDelay ?: 0.0
             checkpoints.clear(); s.checkpoints?.forEachIndexed { i, v -> if (v.size >= 5) checkpoints += spot("Checkpoint ${i + 1}", v) }
@@ -341,7 +378,7 @@ object Practice {
     private fun save() {
         EngineerClient.safely("p3sim practice save") {
             file.parentFile.mkdirs()
-            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) })))
+            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) }, customItem)))
         }
     }
 }

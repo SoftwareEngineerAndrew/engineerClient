@@ -1,5 +1,6 @@
 package com.engineerclient.mixin.odin;
 
+import com.engineerclient.OdinCompatKt;
 import com.engineerclient.misc.HealthMana;
 import com.engineerclient.splits.OdinSplitsLook;
 import com.odtheking.odin.clickgui.settings.impl.HudElement;
@@ -21,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *     while the stat is above the threshold. The HUD editor (example = true) always draws them.</li>
  * <li>The Engineer Splits look: for Odin's two Splits HUDs, the render function call is answered by
  *     {@link OdinSplitsLook#render} instead - Odin still positions, scales and sizes the element.</li>
+ * <li>P3 Sim practice: Term Info and Odin's Goldor Hud are not drawn ({@code OdinCompatKt.hiddenInPractice}).</li>
  * </ul>
  */
 @Mixin(value = HudElement.class, remap = false)
@@ -29,6 +31,7 @@ public class HudElementMixin {
     @Inject(method = "draw", at = @At("HEAD"), cancellable = true, remap = false)
     private void ec$hideAboveThreshold(GuiGraphicsExtractor context, boolean example, CallbackInfo ci) {
         if (!example && HealthMana.INSTANCE.hidesOdinHud((HudElement) (Object) this)) ci.cancel();
+        else if (!example && OdinCompatKt.hiddenInPractice((HudElement) (Object) this)) ci.cancel();
     }
 
     @Redirect(method = "draw", at = @At(value = "INVOKE", target = "Lkotlin/jvm/functions/Function2;invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"), remap = false)
