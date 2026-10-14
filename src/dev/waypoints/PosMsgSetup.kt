@@ -24,7 +24,7 @@ object PosMsgSetup {
         val dev = odinDir.resolve("addons").resolve("devgineerclient.json")
         val modules = if (Files.exists(dev)) JsonParser.parseString(Files.readString(dev)).asJsonArray else JsonArray()
         if (module(modules, NAME) != null) return
-        val from = listOf(odinDir.resolve("addons").resolve("adm.json"), odinDir.resolve("odin-config.json"))
+        val from = listOf(odinDir.resolve("addons").resolve("engineerclient.json"), odinDir.resolve("odin-config.json"))
             .firstNotNullOfOrNull { f -> if (Files.exists(f)) module(JsonParser.parseString(Files.readString(f)).asJsonArray, NAME) else null } ?: return
         modules.add(from.deepCopy())
         Files.createDirectories(dev.parent)

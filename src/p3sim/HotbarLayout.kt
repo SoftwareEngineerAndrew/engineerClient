@@ -8,7 +8,7 @@ import net.minecraft.world.item.ItemStack
 import java.io.File
 
 /**
- * Your own layout for the sim's items, kept on this computer in `config/adm/p3sim-hotbar.json`.
+ * Your own layout for the sim's items, kept on this computer in `config/engineerclient/p3sim-hotbar.json`.
  *
  * "Save Hotbar" (sim menu) records where each sim item is in your inventory right now - hotbar and
  * the rest, by item id - and which hotbar slot you hold. From then on every hotbar reset (a fight
@@ -29,7 +29,7 @@ object HotbarLayout {
     private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null, val roles: Map<String, Layout>? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/adm/p3sim-hotbar.json")
+    private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-hotbar.json")
     private var saved: Saved? = null
 
     private fun saved(): Saved = saved ?: run {

@@ -47,7 +47,7 @@ import java.util.Locale
  */
 object StormPhase : Module(
     name = "Storm Phase",
-    category = Category.custom("ADM", 860, 10),
+    category = Category.custom("Engineer Client", 860, 10),
     description = "F7 P2: a server-tick counter from the start of Storm's phase, and Storm's crush hitbox at each 20-tick crush check near a pillar.",
     key = null,
 ) {
