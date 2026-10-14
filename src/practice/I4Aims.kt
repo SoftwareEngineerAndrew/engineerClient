@@ -37,21 +37,25 @@ import kotlin.math.sin
 import kotlin.math.tan
 
 /**
- * i4 (the Arrows Device): paints #00FF00 on every screen pixel where putting your crosshair lands every arrow of
- * your volley on the aim worth the most, for your bow (held, else the first in your hotbar) and Terror (Hydra
- * Strike) stacks ([I4Geometry]). Each pixel is green when the nearest spot your mouse can reach from there is one.
+ * i4 (the Arrows Device): paints the screen pixels where putting your crosshair lands every arrow of the aim to fire
+ * NOW (#00FF00), and the aim to move to NEXT (cyan, a pre-aim), for your bow (held, else the first in your hotbar) and
+ * Terror (Hydra Strike) stacks ([I4Geometry]). Each pixel is lit when the nearest spot your mouse can reach from there
+ * is one.
  *
  * How the board works (Hypixel recordings, ~/Cluade/maxor-work/i4lag): the device counts a hit the tick the arrow
  * lands and draws the next target then, uniformly from the cells not yet counted; only its emerald waits, for the
  * attempt's 10-server-tick grid (1-10 ticks). A hit on that not-yet-shown target counts too. A hit on the shown one
- * goes blue 1 tick later. Arrows tick in spawn order (main, then the side arrow at +x, then -x), so in one volley
- * only an arrow after the one that hit the target can take the newly drawn one.
+ * goes blue 1 tick later. Arrows tick in spawn order (main, then the side arrow at +x, then -x).
  *
- * - Lit target: the aim on it worth the most: its chance, plus each unhit cell a LATER arrow covers, which is the new
- *   target with chance 1/(cells left). A ~98% Hydra row on the middle cell (10 stacks) beats a certain pair.
- * - Hidden target: once your volley is on its way to the lit target, or it's hit and the next hasn't shown, the
- *   target is one of the unhit cells: the aim expected to count the most of them (Hidden Target Guess).
- * Spots under Min Hit Chance (1.8's aim noise on the main and Hydra arrows) aren't painted.
+ * The policy (simulated against your recordings, ~/Cluade/maxor-work/i4sim: 4.1 s from the first emerald, against
+ * 5.4 s today) keeps, per cell, the chance it is still uncounted ([u]) and the chance it is the target now ([pi]):
+ * - Before the first emerald: the middle row (strikes don't count yet, but you're on the board and in rhythm).
+ * - A shown target none of your arrows is on its way to: its best aim, one volley (a Hydra row on its row).
+ * - Otherwise (your volley is on its way to it, or nothing is shown): the aim that covers the most chance of being the
+ *   target, a little in favour of the row you're on and the middle row. Your own arrows lower the chance of each cell
+ *   they strike, so the guesses move on.
+ * Never hold fire: NEXT is where to go while the cooldown runs. Spots under Min Hit Chance (1.8's aim noise on the
+ * main and Hydra arrows) aren't painted.
  *
  * Drawn in the HUD under the crosshair: above the world, under any open screen. Auto Zoom narrows the FOV while you
  * look at the board. The server aims a shortbow shot with the newest look it has when the shot fires, so hold the
@@ -60,12 +64,11 @@ import kotlin.math.tan
 object I4Aims : Module(
     name = "i4 Aim",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "i4: paints the screen pixels where your crosshair lands every arrow of the best aim.",
+    description = "i4: paints where to aim now (green) and next (cyan), from a simulated best strategy.",
     key = null,
 ) {
     private val minChance by NumberSetting("Min Hit Chance", 90, 50..100, 1, unit = "%", desc = "Spots are drawn when every arrow of the aim lands on its cell at least this often. A Terminator's side arrows have no aim noise (always 100%); the main arrow and Hydra Strike's carry 1.8's.")
-    private val inFlight by BooleanSetting("Count Arrows In Flight", true, desc = "Once a volley of yours in the air will hit the lit target, treat it as hit: your next shot goes to the next target.")
-    private val hiddenGuess by BooleanSetting("Hidden Target Guess", true, desc = "After a hit on the lit target the next one is already drawn (from the unhit cells) and counts if hit, but its emerald shows up to 10 ticks later. Meanwhile, paint the aim expected to hit it most.")
+    private val showNext by BooleanSetting("Show Next Aim", true, desc = "Also paint (cyan) where to move while the cooldown runs: the aim after the one you fire now.")
     private val autoZoom by BooleanSetting("Auto Zoom", true, desc = "Narrow your FOV while you look at the board from the plate, so each mouse count is a bigger step on screen. Mouse speed in degrees doesn't change.")
     private val zoom by NumberSetting("Zoom", 2.0, 1.25..4.0, 0.25, unit = "x", desc = "How far Auto Zoom magnifies.").withDependency { autoZoom }
 
@@ -88,6 +91,17 @@ object I4Aims : Module(
     private var board: Board? = null
     /** Your "completed a device!" came while at the board: nothing left to aim at until a target lights again. */
     private var complete = false
+
+    /** An emerald has shown this attempt: before it, strikes don't count. */
+    private var started = false
+    /** Per cell: the chance it is still uncounted, and the chance it is the target now. */
+    private val u = DoubleArray(9) { 1.0 }
+    private val pi = DoubleArray(9)
+    /** Your arrow is on its way to the shown cell: if it's still shown by this tick, the arrow missed. */
+    private var confirmCell = -1
+    private var confirmBy = 0
+    /** Per-cell strike rates of a row volley, R/C/L column (x 64/66/68; recordings), for volleys not yet in the air. */
+    private val ROW_Q = doubleArrayOf(0.67, 0.73, 0.54)
 
     /** What is painted: what it was worked out for, and its aims. */
     private class Result(val key: String, val eye: Vec3, val lattice: Lattice, val aims: List<I4Geometry.Aim>)
@@ -122,7 +136,29 @@ object I4Aims : Module(
         return lastBow
     }
 
-    private fun reset() { lit = -1; marked.clear(); flying.clear(); result = null; scan = null; complete = false }
+    private fun reset() {
+        lit = -1; marked.clear(); flying.clear(); result = null; scan = null; complete = false
+        started = false; u.fill(1.0); pi.fill(0.0); confirmCell = -1
+    }
+
+    /** A strike on [c] that counts with [q] if [c] is the target: the target is then redrawn from the uncounted cells. */
+    private fun strike(u: DoubleArray, pi: DoubleArray, c: Int, q: Double) {
+        val h = q * pi[c]
+        if (h <= 0.0) return
+        pi[c] -= h; u[c] -= h
+        val rest = (0 until 9).filter { it != c }.sumOf { u[it] }
+        if (rest > 0) for (o in 0 until 9) if (o != c) pi[o] += h * u[o] / rest
+        val sum = u.sum()
+        if (sum in 1e-9..1.0) for (o in 0 until 9) u[o] /= sum
+    }
+
+    /** The target is redrawn uniformly from the uncounted cells. */
+    private fun redraw() {
+        val sum = u.sum()
+        if (sum < 1.0 && sum > 1e-9) for (o in 0 until 9) u[o] /= sum
+        val s2 = u.sum()
+        for (o in 0 until 9) pi[o] = if (s2 > 0) u[o] / s2 else 0.0
+    }
 
     /** You're at the plate with the board there (all 9 cells blue terracotta or emerald). */
     private fun atBoard(): Boolean {
@@ -147,26 +183,45 @@ object I4Aims : Module(
         return Board(boxes, cellOf.toIntArray())
     }
 
+    private fun rowOf(cells: Set<Int>): Int = cells.map { it / 3 }.distinct().singleOrNull() ?: -1
+
+    /** The row your crosshair is on (0 bottom to 2 top), or -1 off the board. */
+    private fun crosshairRow(): Int {
+        val p = mc.player ?: return -1
+        val eye = p.eyePosition; val look = p.lookAngle
+        if (look.z <= 1e-3) return -1
+        val t = (I4Geometry.FACE - eye.z) / look.z
+        val x = eye.x + look.x * t; val y = eye.y + look.y * t
+        if (x !in 63.0..70.0 || y !in 125.0..132.0) return -1
+        return ((y - 125.0) / 2).toInt().coerceIn(0, 2)
+    }
+
+    /** The aim covering the most chance of being the target, +0.03 on row [row] and +0.03 on the middle row. */
+    private fun guess(all: List<I4Geometry.Coarse>, pi: DoubleArray, row: Int): I4Geometry.Coarse? =
+        all.maxWithOrNull(compareBy({ c ->
+            val r = rowOf(c.cells)
+            Math.round(1000 * (c.bestChance * c.cells.sumOf { pi[it] } + (if (r >= 0 && r == row) 0.03 else 0.0) + (if (r == 1) 0.03 else 0.0)))
+        }, { it.good }))?.takeIf { c -> c.cells.sumOf { pi[it] } > 1e-6 }
+
     /**
-     * The aim to paint. With [target] lit: the aim on it worth the most, its chance times 1 + the expected extra counts
-     * from the open cells its later arrows cover (the k-th of them is the newly drawn target with chance 1/(R-k), R the
-     * open cells besides the target). With no target ([guess]): the aim expected to count the most of [open], whose
-     * k-th cell counts with chance 1/(R-k). None otherwise.
+     * NOW and NEXT. Before the first emerald: the middle row. A shown target none of your arrows is on its way to: its
+     * aim worth the most (its chance, plus each uncounted cell a LATER arrow covers, the new target with chance
+     * 1/(cells left)). Otherwise [guess]. NEXT is [guess] after NOW's volley strikes at a row volley's rates.
      */
-    private fun pick(all: List<I4Geometry.Coarse>, target: Int, open: Set<Int>, guess: Boolean): List<I4Geometry.Coarse> {
-        fun expected(cells: List<Int>, left: Int): Double {
-            var e = 0.0
-            for (k in cells.indices) if (left - k > 0) e += 1.0 / (left - k)
-            return e
-        }
-        val best = if (target >= 0) {
-            val rest = open - target
-            all.filter { target in it.cells }.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * (1 + expected(it.order.dropWhile { c -> c != target }.drop(1).filter { c -> c in rest }, rest.size))) }, { it.good }))
-        } else if (guess) {
-            all.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * expected(it.order.filter { c -> c in open }, open.size)) }, { it.good }))
-                ?.takeIf { c -> c.cells.any { it in open } }
-        } else null
-        return listOfNotNull(best)
+    private fun plan(all: List<I4Geometry.Coarse>): Pair<I4Geometry.Coarse?, I4Geometry.Coarse?> {
+        if (complete) return null to null
+        if (!started) return all.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * it.cells.count { c -> c / 3 == 1 }) }, { it.good })) to null
+        val row = crosshairRow()
+        val now = if (lit >= 0 && pi[lit] > 0.5) {
+            val rest = (0 until 9).filter { it != lit && u[it] > 0.5 }
+            fun expected(cells: List<Int>): Double { var e = 0.0; for (k in cells.indices) if (rest.size - k > 0) e += 1.0 / (rest.size - k); return e }
+            all.filter { lit in it.cells }.maxWithOrNull(compareBy({ Math.round(1000 * it.bestChance * (1 + expected(it.order.dropWhile { c -> c != lit }.drop(1).filter { c -> c in rest }))) }, { it.good }))
+        } else guess(all, pi, row)
+        if (now == null || !showNext) return now to null
+        val u2 = u.copyOf(); val pi2 = pi.copyOf()
+        for (c in now.order) strike(u2, pi2, c, ROW_Q[c % 3])
+        val next = guess(all, pi2, rowOf(now.cells))
+        return now to next?.takeIf { it.cells != now.cells }
     }
 
     private fun step(): Double = I4Geometry.mouseStep(mc.options.sensitivity().get())
@@ -177,23 +232,18 @@ object I4Aims : Module(
         val b = board ?: return
         val bow = bow()
         val step = step()
-        val inAir = if (inFlight) flying.values.map { it.first }.filter { it >= 0 }.toSet() else emptySet()
-        val litInAir = lit >= 0 && lit in inAir
-        val target = if (lit >= 0 && !litInAir && !complete) lit else -1
-        // The target is drawn but not shown: after a hit on the lit one (yours in the air, or a blue since), until it lights.
-        val guess = hiddenGuess && target < 0 && !complete && (litInAir || (lit < 0 && marked.isNotEmpty()))
-        val open = I4Geometry.CELLS.indices.filter { it !in marked && it !in inAir }.toSet()
         // Where your look sits on the lattice (whole counts move it, so only a teleport or a new sensitivity changes it).
         val phaseY = Math.floorMod((p.yRot / step * 40).toLong(), 40L)
         val phaseP = Math.floorMod((p.xRot / step * 40).toLong(), 40L)
         val pos = p.position()
         val legacy = !com.engineerclient.p3sim.P3Sim.inSim
         val geo = "$bow|$stacks|${p.isShiftKeyDown}|${"%.3f %.3f %.3f".format(pos.x, pos.y, pos.z)}|$step|$phaseY,$phaseP|$minChance|$legacy"
-        val key = "$geo|$target|$guess|${open.sorted()}"
-        if (key == result?.key) return
         val sc = scan
         if (sc != null && sc.key == geo) {
-            val picked = pick(sc.coarse, target, open, guess)
+            val (now, next) = plan(sc.coarse)
+            val key = "$geo|${now?.cells?.sorted()}|${next?.cells?.sorted()}"
+            if (key == result?.key) return
+            val picked = listOfNotNull(now, next)
             // Already worked out: paint it now.
             if (picked.all { sc.cached(it) }) { show(sc, key, picked, 0); return }
             if (!busy.compareAndSet(false, true)) return
@@ -215,12 +265,12 @@ object I4Aims : Module(
                 val t0 = System.nanoTime()
                 val fresh = Scan(geo, b, shooter, lattice, min, I4Geometry.scan(b, shooter, min))
                 scan = fresh
-                show(fresh, key, pick(fresh.coarse, target, open, guess), (System.nanoTime() - t0) / 1_000_000)
-                // Every other aim in the background, so the next target paints at once.
+                EngineerClient.logger.info("[ec] i4 scan ${(System.nanoTime() - t0) / 1_000_000}ms: ${fresh.coarse.size} aims for $geo")
+                // Every aim in the background, so each new target paints at once; the next tick picks.
                 warmer.execute { for (c in fresh.coarse) { if (scan !== fresh) break; runCatching { fresh.aim(c) } } }
             } catch (t: Throwable) {
                 EngineerClient.logger.error("[ec] i4 aims failed", t)
-                result = Result(key, shooter.eye, lattice, emptyList())   // not retried every tick
+                scan = Scan(geo, b, shooter, lattice, min, emptyList())   // not retried every tick
             } finally {
                 busy.set(false)
             }
@@ -234,14 +284,14 @@ object I4Aims : Module(
         logPass(was, key, r, ms)
     }
 
-    private val KEY_PARTS = listOf("bow", "stacks", "sneak", "pos", "step", "phase", "min", "legacy", "target", "guess", "open")
+    private val KEY_PARTS = listOf("bow", "stacks", "sneak", "pos", "step", "phase", "min", "legacy", "now", "next")
 
     /** One log line per pass: what changed since the last one and what it paints, to trace jumps in what's drawn. */
     private fun logPass(was: String?, key: String, r: Result, ms: Long) {
         val old = was?.split('|'); val now = key.split('|')
         val changed = now.indices.filter { old == null || old.getOrNull(it) != now[it] }.joinToString(",") { KEY_PARTS.getOrElse(it) { "?" } + "=" + now[it] }
-        val aim = r.aims.firstOrNull()
-        EngineerClient.logger.info("[ec] i4 pass ${ms}ms lit=$lit marked=${marked.sorted()} changed[$changed] paints=${aim?.cells?.sorted() ?: "-"} spots=${aim?.pixels?.size ?: 0}")
+        EngineerClient.logger.info("[ec] i4 paint ${ms}ms t=$ticks lit=$lit changed[$changed] spots=${r.aims.map { it.pixels.size }} " +
+            "pi=${pi.joinToString(",") { "%.2f".format(it) }} u=${u.joinToString(",") { "%.2f".format(it) }}")
     }
 
     /** New arrows near you: where each will cross the board, so a volley in the air on the lit target counts as its hit. */
@@ -251,7 +301,7 @@ object I4Aims : Module(
         val b = board ?: return
         val eye = p.eyePosition
         flying.entries.removeIf { it.value.second < ticks }
-        for (a in level.getEntitiesOfClass(AbstractArrow::class.java, p.boundingBox.inflate(6.0))) {
+        for (a in level.getEntitiesOfClass(AbstractArrow::class.java, p.boundingBox.inflate(6.0)).sortedBy { it.id }) {
             if (a.id in flying || a.tickCount > 4 || a.position().distanceTo(eye) > 6.0) continue
             val v = a.deltaMovement
             if (v.length() < 1.0 || v.z <= 0) continue
@@ -261,6 +311,11 @@ object I4Aims : Module(
             if (cell < 0) { flying[a.id] = -1 to ticks + 12; continue }
             val eta = ((I4Geometry.FACE - a.z) / v.z).toInt() + 4
             flying[a.id] = cell to ticks + eta
+            // As if landed: the tracker moves on now (main, then +x, then -x: spawn order is tick order).
+            if (started && !complete) {
+                if (cell == lit && pi[lit] > 0.5) { confirmCell = cell; confirmBy = ticks + eta + 3 }
+                strike(u, pi, cell, 1.0)
+            }
             EngineerClient.logger.info("[ec] i4 arrow t=$ticks id=${a.id} age=${a.tickCount} -> cell $cell by t=${ticks + eta} (lit=$lit)")
         }
     }
@@ -285,13 +340,16 @@ object I4Aims : Module(
             if (i < 0) return@on
             EngineerClient.logger.info("[ec] i4 block t=$ticks cell $i ${if (updated.`is`(Blocks.EMERALD_BLOCK)) "lit" else "blue"}")
             if (updated.`is`(Blocks.EMERALD_BLOCK)) {
-                // A cell you'd hit lighting again: the board started over.
-                if (i in marked) marked.clear()
-                lit = i; complete = false
+                // The first emerald, or a cell you'd hit lighting again (the board started over).
+                if (!started || i in marked) { marked.clear(); u.fill(1.0); started = true }
+                lit = i; complete = false; confirmCell = -1
+                pi.fill(0.0); pi[i] = 1.0; u[i] = 1.0
             } else if (old.`is`(Blocks.EMERALD_BLOCK) && updated.`is`(Blocks.DYED_TERRACOTTA.blue())) {
                 marked += i
                 if (lit == i) lit = -1
+                if (confirmCell == i) confirmCell = -1
                 if (marked.size >= 9) marked.clear()
+                u[i] = 0.0; redraw()
             }
         }
 
@@ -305,6 +363,11 @@ object I4Aims : Module(
             awayTicks = 0
             EngineerClient.safely("i4 aims") {
                 if (board == null) board = readBoard()
+                // Your arrow on the shown cell missed after all: it's still the target.
+                if (confirmCell >= 0 && ticks > confirmBy) {
+                    if (lit == confirmCell) { pi.fill(0.0); pi[lit] = 1.0; u[lit] = 1.0 }
+                    confirmCell = -1
+                }
                 trackArrows()
                 update()
             }
