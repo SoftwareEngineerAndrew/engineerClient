@@ -365,9 +365,12 @@ class RunRecorder(
         tempFile = temp
         writer = BufferedWriter(OutputStreamWriter(GZIPOutputStream(Files.newOutputStream(temp)), Charsets.UTF_8), 1 shl 16)
         val self = EngineerClient.mc.player?.name?.string ?: "?"
-        val version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient")
+        fun modVersion(id: String) = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(id)
             .map { it.metadata.version.friendlyString }.orElse("?")
-        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":"26.1.2","self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF,"stx":1}""")
+        val version = modVersion("engineerclient")
+        // The game version as running, not a literal: this file ships on more than one MC version.
+        val mc = modVersion("minecraft")
+        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":${str(mc)},"self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF,"stx":1}""")
         backlog.forEach(::writeNow)
         backlog.clear()
         flushPending()

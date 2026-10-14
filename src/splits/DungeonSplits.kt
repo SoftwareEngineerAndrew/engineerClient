@@ -130,7 +130,7 @@ object DungeonSplits : Module(
         synchronized(lagSamples) { lagShown = false; lagSamples.clear() }
         tracker.reset(); subs.reset(); blood.reset(); moments.reset()
         core.reset(); coreGoldor = null
-        goldorAt = null; goldorMoved = false; necronId = null; watcherAt = null
+        goldorAt = null; goldorMoved = false; necronId = null; necronDiedAt = null; watcherAt = null
         barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
     }
 
@@ -372,7 +372,8 @@ object DungeonSplits : Module(
         val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
         if (mates.size != 4 || mates.any { it.isDead }) return
         val alive = core.counted(aliveNames())
-        if (core.lastIn(alive) == null) return
+        // Everyone can be in before the core opens: wait for it, or there is no time to paste.
+        if (core.lastIn(alive) == null || core.openTick == null) return
         core.pasted = true
         core.pasteLine(alive)?.let { sendCommand("pc $it") }
     }
@@ -417,9 +418,11 @@ object DungeonSplits : Module(
      * Necron dead at [at]. On F7 that is all: his split runs on to the run's end, there being no
      * end animation since Hypixel's boss update. On M7 the Wither King's fight is next, so his steps
      * end here, and Odin's own Necron split (which ends on "All this, for nothing...") is handed
-     * that line.
+     * that line. Once a run: his wither going ~20 ticks after the burst calls this again.
      */
     private fun necronDead(at: Stamp) {
+        if (necronDiedAt != null) return
+        necronDiedAt = at
         if (DungeonUtils.floor?.name?.startsWith("M") == true) {
             subs.onNecronDeath(at)
             OdinSplitsLook.onNecronDead()
@@ -429,6 +432,8 @@ object DungeonSplits : Module(
 
     /** Necron's wither, as last found, for the backup when his burst is missed. */
     private var necronId: Int? = null
+    /** Necron's death this run: on M7 the end of his own time, the tracker's split running on through the Wither King. */
+    private var necronDiedAt: Stamp? = null
 
     private val DEATH_BURST_TNT = 3
     private val DEATH_BURST_TICKS = 2
@@ -571,16 +576,23 @@ object DungeonSplits : Module(
     private var realRun = true
 
     /**
+     * Times this run can be kept as bests and recents. Not in the P3 Sim, also checked directly:
+     * a world load there (a respawn) resets [realRun] while its back-filled times are still up.
+     */
+    private val keepsTimes get() = realRun && !com.engineerclient.p3sim.P3Sim.inSim
+
+    /**
      * Each split as it ends, as a best for its floor (F7, M7) when it is one - every split, the
      * portal too, whatever the splits HUD shows: Pace's targets are these. Only a split that ran
-     * from its own line to the next split's (none missed in between) is a time.
+     * from its own line to the next split's (none missed in between) is a time. On M7 Necron's ends
+     * at his death, not at EXTRA STATS after the Wither King: none if his death wasn't seen.
      */
     private fun recordSplitBests() {
         val floor = DungeonUtils.floor?.name?.takeIf { it == "F7" || it == "M7" } ?: return
-        if (!realRun) return
+        if (!keepsTimes) return
         val splits = tracker.splits()
         splits.forEachIndexed { i, split ->
-            val stop = split.stop ?: return@forEachIndexed
+            val stop = (if (floor == "M7" && split.label == SplitTracker.NECRON) necronDiedAt else split.stop) ?: return@forEachIndexed
             if (!bestsChecked.add(split.label)) return@forEachIndexed
             val order = SplitPace.ORDER.indexOf(split.label)
             val next = splits.getOrNull(i + 1)
@@ -618,9 +630,12 @@ object DungeonSplits : Module(
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
     fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id])
 
-    /** Records a finished [value] of [id] as the best on [floor] when it is one. */
+    /**
+     * Records a finished [value] of [id] as the best on [floor] when it is one. Never in a P3 Sim
+     * run, whose earlier rows (Odin's too, via [SimOdinSplits]) are Pace targets, not times.
+     */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
-        if (!finished || !SubSplitGrades.canBeBest(id, value)) return
+        if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value)) return
         val bests = bests(floor)
         if (value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
     }

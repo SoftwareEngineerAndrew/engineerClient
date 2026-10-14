@@ -391,7 +391,7 @@ class P1Maxor : Fight.Phase("P1") {
             }
             BEACON -> { beacon = true; Blocks.set(BlockPos(73, 221, 73), B.BEACON.defaultBlockState()) }
         }
-        lights.remove(t)?.forEach { (p, on) -> Blocks.set(p, if (on) B.SEA_LANTERN.defaultBlockState() else B.COAL_BLOCK.defaultBlockState()) }
+        lights.remove(t)?.forEach { (p, on) -> lamp(p, on) }
         if (!::maxor.isInitialized) return
         if ((t + 3) % 20 == 0) BossBar.progress(health)
         if (killAt >= 0) { killed(); return }
@@ -554,7 +554,12 @@ class P1Maxor : Fight.Phase("P1") {
         if (centre) CENTRE.forEachIndexed { k, p -> queue(at + 24 + k, p, on) }
     }
 
-    private fun queue(at: Int, p: BlockPos, on: Boolean) { lights.getOrPut(at) { ArrayList() } += p to on }
+    private fun queue(at: Int, p: BlockPos, on: Boolean) {
+        // Due now: a bot's placement runs after this tick's lanterns went, so a queued one would never be read.
+        if (at <= t) lamp(p, on) else { lights.getOrPut(at) { ArrayList() } += p to on }
+    }
+
+    private fun lamp(p: BlockPos, on: Boolean) = Blocks.set(p, if (on) B.SEA_LANTERN.defaultBlockState() else B.COAL_BLOCK.defaultBlockState())
 
     /** The beam column on the checks: yellow (one charged), red (armed), black; 222 too from beacon + 120. */
     private fun column() {
@@ -606,9 +611,9 @@ class P1Maxor : Fight.Phase("P1") {
                     Sim.chat("§a${c.bot.name}§r§a picked up an §r§bEnergy Crystal§r§a!")
                 }
             } else {
-                // Its own pylon, or the other if you took that one.
-                if (pylons[c.pylon].placed || (c.pylon in pending && pending[c.pylon] != c.bot.name)) c.pylon = 1 - c.pylon
-                if (walk(c.bot, PYLON_STANDS[c.pylon], 0.7) && open && !pylons[c.pylon].placed && c.pylon !in pending) {
+                // Its own pylon, or the other if you took that one (or clicked it and your place waits on ping).
+                if (pylons[c.pylon].placed || c.pylon in clicked || (c.pylon in pending && pending[c.pylon] != c.bot.name)) c.pylon = 1 - c.pylon
+                if (walk(c.bot, PYLON_STANDS[c.pylon], 0.7) && open && !pylons[c.pylon].placed && c.pylon !in pending && c.pylon !in clicked) {
                     pending[c.pylon] = c.bot.name
                     c.holding = false
                     c.leaveAt = Int.MAX_VALUE

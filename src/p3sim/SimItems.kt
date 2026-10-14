@@ -23,6 +23,7 @@ import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.SimpleContainer
 import net.minecraft.world.SimpleMenuProvider
+import net.minecraft.world.entity.Relative
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.entity.player.Inventory
@@ -1011,7 +1012,7 @@ object SimItems {
             // Hypixel's click model: a block-aimed click fired from use_item_on; the client's own MAIN-hand use_item
             // for the same item, in the same or the next server tick, is that click's follow-up and does nothing.
             Sim.asPlayer(player) {
-                blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick == t) { blockFired = null; return@asPlayer InteractionResult.SUCCESS } }
+                blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick - t in 0..1) { blockFired = null; return@asPlayer InteractionResult.SUCCESS } }
                 var result: InteractionResult = InteractionResult.PASS
                 EngineerClient.safely("p3sim use $id") { result = use(player, id) }
                 result
@@ -1203,6 +1204,16 @@ object SimItems {
     /** While an [asClicked] action runs: the player's position at the click (the last move packet's). */
     private var clickPos: Vec3? = null
 
+    /**
+     * A teleport that keeps the look: [Sim.tp] sends an absolute rotation, which with any latency snaps the camera
+     * back to an old look. Hypixel's teleport marks the rotation relative, so a 0 delta leaves each client's own.
+     */
+    private fun tpKeepLook(p: ServerPlayer, x: Double, y: Double, z: Double) {
+        p.teleportTo(Sim.level, x, y, z, Relative.ROTATION, 0f, 0f, false)
+        p.deltaMovement = Vec3.ZERO
+        p.fallDistance = 0.0
+    }
+
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
     fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset() }
 
@@ -1370,7 +1381,7 @@ object SimItems {
             return
         }
         etherPuff(p.position())
-        Sim.tp(p, x + 0.5, y + 1.05, z + 0.5)
+        tpKeepLook(p, x + 0.5, y + 1.05, z + 0.5)
         // Etherwarp is ender_dragon.hurt 1/0.54 only, HOSTILE; enderman.teleport is the blink's.
         Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.54f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
     }
@@ -1435,7 +1446,7 @@ object SimItems {
             Sim.chat("§cThere are blocks in the way!"); return
         }
         if (cut) Sim.chat("§cThere are blocks in the way!")
-        Sim.tp(p, cx + 0.5, feetY.toDouble(), cz + 0.5)
+        tpKeepLook(p, cx + 0.5, feetY.toDouble(), cz + 0.5)
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
     }
 

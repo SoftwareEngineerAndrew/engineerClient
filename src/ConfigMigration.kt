@@ -6,6 +6,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 /** Settings kept across renames and moves; see [run]. Pure file work, so it tests without the game. */
 object ConfigMigration {
@@ -132,14 +133,14 @@ object ConfigMigration {
             val odinSplits = module(odin, "Splits")?.let(::settings)
             if (used && odinSplits != null && !odinSplits.has("Look")) {
                 odinSplits.addProperty("Look", "Engineer Splits")
-                Files.writeString(odinFile, GsonBuilder().setPrettyPrinting().create().toJson(odin))
+                write(odinFile, odin)
                 changed = true
             }
         }
 
         if (changed) {
             Files.createDirectories(file.parent)
-            Files.writeString(file, GsonBuilder().setPrettyPrinting().create().toJson(modules))
+            write(file, modules)
         }
         return changed
     }
@@ -156,6 +157,13 @@ object ConfigMigration {
     private val POV_SHOW_IN = mapOf(
         "ONLY_IN_BLOOD_RUSH" to "Only In Blood Rush", "ONLY_IN_BOSS" to "Only In Boss", "ONLY_IN_GOLDOR" to "Only In Goldor",
     )
+
+    /** Through a temp file and an atomic move, so a crash mid-write can't leave the user's settings truncated. */
+    private fun write(file: Path, json: JsonArray) {
+        val tmp = file.resolveSibling(file.fileName.toString() + ".tmp")
+        Files.writeString(tmp, GsonBuilder().setPrettyPrinting().create().toJson(json))
+        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    }
 
     private fun module(list: JsonArray, name: String): JsonObject? =
         list.firstOrNull { it.isJsonObject && it.asJsonObject["name"]?.asString == name }?.asJsonObject

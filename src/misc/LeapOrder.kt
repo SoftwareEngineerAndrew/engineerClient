@@ -214,7 +214,11 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         val to = spotAt(x, y)
         if (to != dragging) {
             val t = names[to]; names[to] = names[dragging]; names[dragging] = t
-            LeapOrder.set(names.toList())
+            // Odin's order has no gaps (its menu fills the spots in rank order), so a player dropped on an
+            // empty spot moves up to the first free one here too: the screen shows the order as it applies.
+            val order = names.filter { it.isNotEmpty() }
+            for (i in 0 until 4) names[i] = order.getOrElse(i) { "" }
+            LeapOrder.set(order)
             mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
         }
         dragging = -1

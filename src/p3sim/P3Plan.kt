@@ -64,8 +64,13 @@ object P3Plan {
     var helper = false
     /** Seconds between the bots leaping onto you once you're at your early enter (pre moves). */
     var leapGap = 0.5
-    /** The four bots' classes, leap menu slot 1 to 4 (your class is left out). */
-    val leapOrder = ArrayList<DungeonClass>()
+    /**
+     * The four bots' classes, leap menu slot 1 to 4 (your class is left out). Replaced whole under [leapLock], never
+     * edited in place: the server reads it every tick while the menu writes it.
+     */
+    @Volatile var leapOrder: List<DungeonClass> = emptyList()
+        private set
+    private val leapLock = Any()
     /** Classes whose bot plays your best run as that class (P3 from S1, when one is saved: [GhostStore]). */
     val ghosts = LinkedHashSet<String>()
 
@@ -189,8 +194,11 @@ object P3Plan {
     /** The bots' classes in leap slot order (fills in, drops your class). */
     fun botOrder(): List<DungeonClass> {
         val mineClass = P3Sim.ownClass
-        val order = (leapOrder + Party.CLASSES).distinct().filter { it != mineClass }
-        leapOrder.clear(); leapOrder += order
+        // Locked: a menu click between reading it and writing it back would be lost.
+        val order = synchronized(leapLock) {
+            val cur = leapOrder
+            (cur + Party.CLASSES).distinct().filter { it != mineClass }.also { if (it != cur) leapOrder = it }
+        }
         return if (odinSort) odinOrder(order) ?: order else order
     }
 
@@ -214,13 +222,15 @@ object P3Plan {
 
     /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */
     fun cycleSlot(slot: Int, back: Boolean = false) {
-        // From Odin's order to your own, starting from what it showed.
-        val order = botOrder().toMutableList()
-        odinSort = false
-        val i = slot - 1
-        val j = (i + (if (back) order.size - 1 else 1)) % order.size
-        val t = order[i]; order[i] = order[j]; order[j] = t
-        leapOrder.clear(); leapOrder += order
+        synchronized(leapLock) {
+            // From Odin's order to your own, starting from what it showed.
+            val order = botOrder().toMutableList()
+            odinSort = false
+            val i = slot - 1
+            val j = (i + (if (back) order.size - 1 else 1)) % order.size
+            val t = order[i]; order[i] = order[j]; order[j] = t
+            leapOrder = order.toList()
+        }
         save()
     }
 
@@ -264,7 +274,7 @@ object P3Plan {
             s.stacked?.let { stackSet().clear(); stackSet() += it }
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
-            s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
+            s.leapOrder?.let { names -> synchronized(leapLock) { leapOrder = names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } } }
             // [x, y, z] or [x, y, z, yaw, pitch]. A saved EE2 spot at (69, 109, 124.7), S2's 1st terminal and an
             // earlier default, is ignored so the current default applies.
             s.spots?.forEach { (k, v) ->

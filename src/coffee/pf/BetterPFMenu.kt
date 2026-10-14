@@ -22,8 +22,10 @@ import java.net.http.HttpClient
 import java.net.http.WebSocket
 import java.time.Duration
 import java.util.Optional
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Better PF Menu: while it's on and you're in a world, undonecoffee.com/betterpf/menu lists you
@@ -67,6 +69,9 @@ object BetterPFMenu : Module(
     private var backoffMs = 1_000L
     private var pending: String? = null
     private var failSaid = false
+    /** The last frame handed to the socket; the next one waits for it (see [sendText]). */
+    private var sending: CompletableFuture<WebSocket> = CompletableFuture.completedFuture(null)
+    private var retryScheduled = false
 
     // client thread
     @Volatile private var auto = false
@@ -107,7 +112,7 @@ object BetterPFMenu : Module(
                 io.execute { pending = body; flush() }
             }
         }
-        if (now - lastPing >= PING_MS) { lastPing = now; io.execute { ws?.sendText("ping", true) } }
+        if (now - lastPing >= PING_MS) { lastPing = now; io.execute { ws?.let { sendText(it, "ping") } } }
         if (open && auto && allowAuto && now - lastRefresh >= refreshGap) {
             lastRefresh = now
             refreshGap = refreshGap()
@@ -184,11 +189,33 @@ object BetterPFMenu : Module(
         if (socket == null) { connect(); return }
         val body = pending ?: return
         pending = null
-        socket.sendText(body, true).exceptionally { t -> io.execute { fail("send: $t") }; null }
+        val gen = generation
+        sendText(socket, body).exceptionally { t -> io.execute { if (gen == generation) fail("send: $t") }; null }
+    }
+
+    /**
+     * The JDK socket takes one text frame at a time: a second sendText while the first is still out
+     * fails ("Send pending"), and a menu send failing that way would drop the connection. So a ping
+     * and a menu update never overlap: each frame waits for the one before it, whether that one went or not.
+     */
+    private fun sendText(socket: WebSocket, text: String): CompletableFuture<WebSocket> {
+        sending = sending.handle { _, _ -> Unit }.thenCompose { socket.sendText(text, true) }
+        return sending
     }
 
     private fun connect() {
-        if (ws != null || connecting || System.currentTimeMillis() < nextTry) return
+        if (ws != null || connecting) return
+        val wait = nextTry - System.currentTimeMillis()
+        if (wait > 0) {
+            // Backing off: try again when it's up rather than at the next menu change or resend,
+            // which with an unchanged menu is 15 s away. Nothing to send (left the world, turned
+            // off) means nothing to reconnect for.
+            if (!retryScheduled) {
+                retryScheduled = true
+                io.schedule(Runnable { retryScheduled = false; if (pending != null) flush() }, wait, TimeUnit.MILLISECONDS)
+            }
+            return
+        }
         connecting = true
         val gen = ++generation
         val listener = object : WebSocket.Listener {
@@ -197,7 +224,7 @@ object BetterPFMenu : Module(
                 io.execute {
                     connecting = false
                     if (gen != generation) { webSocket.abort(); return@execute }
-                    ws = webSocket; backoffMs = 1_000L
+                    ws = webSocket; sending = CompletableFuture.completedFuture(null); backoffMs = 1_000L
                     if (failSaid) CoffeeClient.msg("§7Better PF Menu: connected again.")
                     failSaid = false
                     CoffeeClient.logger.info("[cc] pf menu: connected")

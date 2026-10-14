@@ -206,8 +206,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         devices.stop()
         // Handed over to Necron: his body stays where he died until Necron's own body goes (in the same
         // tick since the boss update; ~280 after Necron's first line before it); else gone with the phase.
+        // This runs in the hand-off tick and Necron's t = 0 is the next one, hence the + 1.
         val g = goldor
-        if (necronAt >= 0) Fight.later(P4Necron.GONE, "goldor body") { g.remove() } else g.remove()
+        if (necronAt >= 0) Fight.later(P4Necron.GONE + 1, "goldor body") { g.remove() } else g.remove()
     }
 
     override fun tick() {

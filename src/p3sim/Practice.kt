@@ -202,10 +202,13 @@ object Practice {
         if (tasks.all { it.at >= 0 }) finish()
     }
 
-    /** On [s]: within [r] blocks of it across, and on its exact height (to the hundredth). */
+    /**
+     * On [s]: within [r] blocks of it across, and on its exact height (to the hundredth). Both heights cut down the
+     * same way: an imported spot is to 1/32 block ([PracticeCode]), so rounding its 109.9375 would want 109.94.
+     */
     private fun onSpot(s: Spots.Spot, r: Double, x: Double, y: Double, z: Double): Boolean {
         val dx = x - s.x; val dz = z - s.z
-        return dx * dx + dz * dz <= r * r && Math.floor(y * 100 + 1e-6).toLong() == Math.round(s.y * 100)
+        return dx * dx + dz * dz <= r * r && Math.floor(y * 100 + 1e-6).toLong() == Math.floor(s.y * 100 + 1e-6).toLong()
     }
 
     private fun finish() {
