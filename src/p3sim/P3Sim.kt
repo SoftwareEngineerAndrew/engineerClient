@@ -151,6 +151,14 @@ object P3Sim : Module(
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
     val termsOnly: Boolean get() = (termsOnlyS as BooleanSetting?)?.value == true
+
+    /** Stop After Terms and Stop After Goldor: at most one on (turning one on turns the other off). */
+    fun toggleStopAfter(terms: Boolean) {
+        val (it, other) = if (terms) (termsOnlyS as BooleanSetting?) to p3OnlyS else p3OnlyS to (termsOnlyS as BooleanSetting?)
+        it ?: return
+        it.value = !it.value
+        if (it.value) other?.value = false
+    }
     val shortbowCooldown: Int get() = mine("shortbow", { shortbowCooldownS.value.toInt() }) { it.asDouble.toInt() }
     /** Terror armor pieces worn right now (TERROR_* ids in the four armour slots, helmet included): 0 to 4. Hydra Strike follows it. */
     val terrorPieces: Int get() = Sim.player?.let { p ->
