@@ -27,6 +27,12 @@ import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import java.nio.file.Files
 import java.util.Locale
+import java.util.Optional
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import net.minecraft.client.resources.DefaultPlayerSkin
+import net.minecraft.util.Util
+import net.minecraft.world.entity.player.PlayerSkin
 
 /**
  * Odin's custom leap order (`/od leaporder a b c d`, Leap Menu sorting Custom), kept across restarts: Odin holds
@@ -87,6 +93,29 @@ object LeapOrder {
     private val COMMAND by lazy { com.mojang.brigadier.tree.CommandNode::class.java.getDeclaredField("command").apply { isAccessible = true } }
 
     private fun open() = mc.schedule { mc.setScreen(LeapOrderScreen()) }
+
+    /**
+     * [name]'s skin: from the tab list when they're in your lobby, else looked up by name (Mojang's profile, then
+     * the skin, in the background, kept for the session). Steve's while that loads or when the name has none.
+     */
+    fun skin(name: String): PlayerSkin {
+        mc.connection?.getPlayerInfoIgnoreCase(name)?.let { return it.skin }
+        if (name.equals(mc.player?.name?.string, ignoreCase = true)) mc.player?.let { return it.skin }
+        val key = name.lowercase(Locale.ROOT)
+        skins[key]?.let { return it }
+        if (looking.add(key)) {
+            CompletableFuture.supplyAsync({ mc.services().profileResolver().fetchByName(name) }, Util.nonCriticalIoPool())
+                .thenCompose { p -> p.map { mc.skinManager.get(it) }.orElse(CompletableFuture.completedFuture(Optional.empty())) }
+                .whenComplete { s, e ->
+                    if (e != null) EngineerClient.logger.warn("[ec] leap order: no skin for {} ({})", name, e.toString())
+                    s?.ifPresent { skins[key] = it }
+                }
+        }
+        return DefaultPlayerSkin.getDefaultSkin()
+    }
+    private val skins = ConcurrentHashMap<String, PlayerSkin>()
+    private val looking = ConcurrentHashMap.newKeySet<String>()
+
 
     /** Odin's order, Odin-style (lower case, ranks 0-3: top left, top right, bottom left, bottom right). */
     fun set(names: List<String>) {
@@ -250,8 +279,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
             gfx.text("§8Empty", 15, h / 2 - 4, WHITE, shadow = false)
         } else {
             val face = (h * 0.76).toInt()
-            val skin = mc.connection?.getPlayerInfoIgnoreCase(name)?.skin ?: mc.player?.skin
-            if (skin != null) PlayerFaceExtractor.extractRenderState(gfx, skin, 9, 9, face)
+            PlayerFaceExtractor.extractRenderState(gfx, LeapOrder.skin(name), 9, 9, face)
             gfx.text(name, 15 + face, (h / 2.5).toInt(), c?.color ?: WHITE, shadow = true)
             gfx.text(c?.name?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "§7In party", 15 + face, (h / 1.7).toInt(), WHITE, shadow = true)
         }
