@@ -113,6 +113,8 @@ object TermInfo {
             lastIgn = ""; lastIndex = 0; lastType = ""
         }
         active = -1
+        coreOpen = false
+        TerminalHitboxes.reset()
     }
 
     private fun start() {
@@ -148,6 +150,24 @@ object TermInfo {
     fun simSectionTime(ticks: Int) {
         if (com.engineerclient.p3sim.P3Sim.inSim && !com.engineerclient.p3sim.Practice.active)
             shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
+    }
+
+    /** "The Core entrance is opening!" came: terminals are over until the next P3. */
+    @Volatile private var coreOpen = false
+    val coreOpened: Boolean get() = coreOpen
+
+    /**
+     * The section whose terminals answer clicks now (1-4), 0 outside terminals, for Terminal Hitboxes. Measured: a
+     * section's terminals open once the section before has its last task and its gate both in, which is when
+     * [onTaskChat] moves [active] on. Your own sim: its own section, none during a practice's start timer.
+     */
+    fun liveSection(): Int {
+        if (com.engineerclient.p3sim.P3Sim.localSim) {
+            val g = com.engineerclient.p3sim.Fight.phase as? com.engineerclient.p3sim.GoldorPhase ?: return 0
+            if (g.isHolding) return 0
+            return simSection()?.number ?: 0
+        }
+        return if (active in 0..3) active + 1 else 0
     }
 
     /** Devonian's TerminalSection.onChat, for the active section only. */
@@ -200,26 +220,67 @@ object TermInfo {
         }
     }
 
+    /**
+     * Every inbound packet, first of all mods (TerminalTapMixin, priority 1, read-only), on the network thread.
+     * blade-addons' Terminal Timestamps cancels each task line and each section's first gate line in channelRead0
+     * ahead of Odin's hook (and posts its own copy into the chat window), so Odin's event never fires for them and
+     * the count would stay at S1. Hypixel also sends a completion inside a bundle with its sound and title, which is
+     * opened here by hand.
+     */
+    @JvmStatic
+    fun tap(packet: net.minecraft.network.protocol.Packet<*>) {
+        com.engineerclient.EngineerClient.safely("term info tap") {
+            when (packet) {
+                is ClientboundSystemChatPacket -> take(packet)
+                is net.minecraft.network.protocol.game.ClientboundOpenScreenPacket -> TerminalHitboxes.opened(packet.title.string)
+                is net.minecraft.network.protocol.game.ClientboundBundlePacket -> packet.subPackets().forEach {
+                    if (it is ClientboundSystemChatPacket) take(it)
+                    else if (it is net.minecraft.network.protocol.game.ClientboundOpenScreenPacket) TerminalHitboxes.opened(it.title.string)
+                }
+                else -> {}
+            }
+        }
+    }
+
+    /** Chat packets already read, by identity: [tap] and Odin's event can both deliver one. */
+    private val seenChat: MutableSet<ClientboundSystemChatPacket> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
+    private val seenChatOrder = ArrayDeque<ClientboundSystemChatPacket>()
+
+    private fun take(p: ClientboundSystemChatPacket) {
+        if (p.overlay()) return
+        synchronized(seenChat) {
+            if (!seenChat.add(p)) return
+            seenChatOrder.addLast(p)
+            while (seenChatOrder.size > 256) seenChat.remove(seenChatOrder.removeFirst())
+        }
+        // On the game thread, in the order they came, ahead of the game's own handling of each.
+        val msg = p.content().string.replace(CONTROL_CODES, "")
+        mc.execute { com.engineerclient.EngineerClient.safely("term info chat") { onChat(msg) } }
+    }
+
+    private fun onChat(msg: String) {
+        when {
+            // A lever can be flicked the tick before Goldor speaks: its message has started
+            // terminals already, and starting again here would lose it.
+            msg == GOLDOR_START -> if (active == -1) start()
+            msg == CORE_OPEN -> { active = -1; coreOpen = true }
+            else -> {
+                // The first task message starts terminals too (Goldor's line missed).
+                if (active == -1 && TASK.matches(msg)) start()
+                onTaskChat(msg)
+                TerminalHitboxes.chat(msg)
+            }
+        }
+    }
+
     /** Starts tracking (from client init). */
     fun init() {
         on<LevelEvent.Load> { reset(); shownTime = null }
         on<TickEvent.Server> { serverTicks++ }
 
-        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
-            if (overlay) return@onReceive
-            val msg = content.string.replace(CONTROL_CODES, "")
-            when {
-                // A lever can be flicked the tick before Goldor speaks: its message has started
-                // terminals already, and starting again here would lose it.
-                msg == GOLDOR_START -> if (active == -1) start()
-                msg == CORE_OPEN -> active = -1
-                else -> {
-                    // The first task message starts terminals too (Goldor's line missed).
-                    if (active == -1 && TASK.matches(msg)) start()
-                    onTaskChat(msg)
-                }
-            }
-        }
+        // The second path to [take] ([tap] is the first): only what reaches Odin's hook.
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) { take(this) }
+        onReceive<net.minecraft.network.protocol.game.ClientboundOpenScreenPacket>(priority = 1000, ignoreCancelled = true) { TerminalHitboxes.opened(title.string) }
         EventBus.subscribe(this)
     }
 

@@ -22,7 +22,8 @@
     "LcmStyleMixin",
     "LcmMapInfoMixin",
     "MapPathHintsMixin",
-    "TpMazeRenderMixin"
+    "TpMazeRenderMixin",
+    "TerminalClickLimitMixin"
   ],
   "injectors": {
     "defaultRequire": 0
