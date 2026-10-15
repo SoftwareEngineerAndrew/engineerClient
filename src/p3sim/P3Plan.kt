@@ -174,9 +174,16 @@ object P3Plan {
         save()
     }
 
-    /** One of your jobs a bot does too, with the Helper on (whoever's first): a stack you made. */
-    fun isStacked(job: String) = jobKey(job) in stackSet()
-    fun toggleStacked(job: String) { if (!stackSet().remove(jobKey(job))) stackSet() += jobKey(job); save() }
+    /**
+     * One of your jobs a bot does too, with the Helper on (whoever's first): a stack you made, or one the roles make (in
+     * yours and another's role: stacked unless you unstacked it, kept as "!key").
+     */
+    fun isStacked(job: String) = if (isStack(job)) "!${jobKey(job)}" !in stackSet() else jobKey(job) in stackSet()
+    fun toggleStacked(job: String) {
+        val key = if (isStack(job)) "!${jobKey(job)}" else jobKey(job)
+        if (!stackSet().remove(key)) stackSet() += key
+        save()
+    }
 
     /** The bot that helps on your stacked [job]: the one you picked, its role's, else the first bot. */
     fun helperOf(job: String): DungeonClass? = picked(job) ?: roleDoer(job) ?: Party.CLASSES.firstOrNull { it != P3Sim.ownClass }
