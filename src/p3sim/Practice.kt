@@ -85,7 +85,6 @@ object Practice {
         coded(1, "i4", "1F?x8!EwzD)T=q", FIRST_BOW, restartMs = 700),
         coded(2, "ee3", "4VT^EC9D6Qi+=DN9E5yAi", BONZO),
         coded(2, "cee3", "6tNQ?NDFPO??+/!(m8Y", BONZO, start = p(36.03, 131.00, 139.01, 92.64f, 3.45f)),
-        coded(2, "i2 -> cee3", "6n&gk{WrY(HE%C\$FroE", BONZO),
         coded(2, "ee2 -> 4 rl", "4VV3(]4y?RkzMM!0O2j8W", BREAKER),
         coded(2, "ee2 -> 53", "cVx+bCagN)P7c-", BONZO),
         coded(2, "ee2 -> 23", "cVx+bCagN)P7V}", BREAKER),
