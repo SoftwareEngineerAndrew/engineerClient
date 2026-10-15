@@ -2,6 +2,7 @@ package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
+import com.engineerclient.adr.PartyTracker
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Color
@@ -117,14 +118,38 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     private val slideFrom = arrayOfNulls<IntArray>(4)
     private val slideAt = LongArray(4)
 
+    /** The party as last shown ([PartyTracker]'s version), to redo the spots when it changes. */
+    private var partyVersion = -1
+
     init {
+        fill()
+        EngineerClient.safely("leap order party") { PartyTracker.askIfUnknown() }
+    }
+
+    /**
+     * Who goes where: your party (or dungeon teammates) in the order's ranks, those not in the order after them.
+     * With the party known, names in the order that aren't in it are left out (a past party's order would hide
+     * the people you're with now); with it unknown, the order is shown as it is.
+     */
+    private fun fill() {
+        partyVersion = PartyTracker.state.version
         val me = mc.player?.name?.string
-        val known = (DungeonUtils.dungeonTeammates.map { it.name } + PartyUtils.members).filter { it != me }.distinct()
-        fun proper(n: String) = known.firstOrNull { it.equals(n, ignoreCase = true) } ?: n
-        DungeonUtils.customLeapOrder.take(4).forEachIndexed { i, n -> names[i] = proper(n) }
-        // Spots the order leaves empty: your teammates or party not in it yet.
-        val rest = known.filter { k -> names.none { it.equals(k, ignoreCase = true) } }.iterator()
-        for (i in 0 until 4) if (names[i].isEmpty() && rest.hasNext()) names[i] = rest.next()
+        val party = party().filter { !it.equals(me, ignoreCase = true) }
+        val order = DungeonUtils.customLeapOrder.take(4)
+        val shown = if (party.isEmpty()) order
+            else order.mapNotNull { n -> party.firstOrNull { it.equals(n, ignoreCase = true) } } +
+                party.filter { p -> order.none { it.equals(p, ignoreCase = true) } }
+        for (i in 0 until 4) names[i] = shown.getOrElse(i) { "" }
+    }
+
+    /** The people you're with: the dungeon's teammates in one, else the party (ADR's tracker, else Odin's). */
+    private fun party(): List<String> {
+        val team = DungeonUtils.dungeonTeammates.map { it.name }
+        if (DungeonUtils.inDungeons && team.isNotEmpty()) return team
+        val tracked = synchronized(PartyTracker.state) {
+            PartyTracker.state.members.values.map { it.name }.takeIf { PartyTracker.state.known }
+        }
+        return (tracked ?: PartyUtils.members).distinct()
     }
 
     override fun isPauseScreen() = false
@@ -171,6 +196,8 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
     override fun extractRenderState(gfx: GuiGraphicsExtractor, mx: Int, my: Int, delta: Float) {
         super.extractRenderState(gfx, mx, my, delta)
         mouseX = mx.toDouble(); mouseY = my.toDouble()
+        // The party changed (or a /p list answered) while open: redo the spots, unless one is being dragged.
+        if (dragging < 0 && PartyTracker.state.version != partyVersion) fill()
         // A release the screen never heard about (focus lost, another button): dropped where the mouse is.
         // Only once SDL has been seen holding it: if its state can't be read, the release event alone drops.
         if (dragging >= 0) when (leftHeld()) {
