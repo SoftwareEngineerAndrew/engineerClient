@@ -152,21 +152,22 @@ object Roles {
      * The fastest terms, in theory (2026-10-10). The mage pre-does Lights and holds a far EE2 spot for the bers, tank and archer
      * (the healer leaps to the tank on S2's 2nd term instead); the bers holds a high EE3 for the tank, healer and mage, the tank
      * doing S3's device from there in S2; the archer early-enters S4 by the core (lava bounce, mined in) for the healer, mage and bers.
-     * S1's gate: the healer, with an explosive bow during SS's 4th cycle. S2's: the mage, right after its first lever.
+     * S1's gate: the mage, an explosive bow shot from Lights right after doing it, just before the terms start (0.35-0.75 s
+     * in its recorded runs). S2's: the mage, right after its first lever.
      * (The bots don't bonzo, lava bounce or go through walls: they get there on these times.)
      */
     val THEORETICAL = Preset(
         "Theoretical",
         roles = linkedMapOf(
-            HEALER to "ss gate / 1 / 1 / 1",
+            HEALER to "ss / 1 / 1 / 1",
             BERSERK to "i4 / ee3 / 3 bl / bl",
             TANK to "21 / 2 / i3 4 / 2",
-            MAGE to "i2 ee2 / bl 4 / 2 / 3",
+            MAGE to "i2 gate ee2 / bl 4 / 2 / 3",
             ARCHER to "bl 43 / 53 / ee4 / 4",
         ),
         times = listOf(
             // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one.
-            "rl lights 0.05 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | gate 5.6 | 3 6.8 | ss 7.8",
+            "rl lights 0.05 | gate 0.35 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | 3 6.8 | ss 7.8",
             "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 3.7 | 3 3.95",
             "3 1.6 | 4 2.5 | 2 3.0 | 1 4.0 | levers gate 4.5",
             "2 2.0 | 4 2.5 | 3 3.0 | levers 3.0 | 1 3.25",
