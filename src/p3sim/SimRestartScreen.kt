@@ -4,6 +4,7 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.index
 import com.odtheking.odin.features.ModuleManager
+import net.minecraft.world.phys.Vec3
 import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.StringWidget
@@ -410,21 +411,48 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     // ------------------------------------------------------------------ teleport
 
     /** A column for each group (a long one split in two), early enters last. */
+    /**
+     * A column per part of the run (P1, P2, S1-S4), its places top to bottom in the order you get to them. CEE3 is
+     * yours to set (right click where you stand). The spots are here, not in [Spots], so a hotswap brings them in.
+     */
     private fun teleportPanel() {
-        val cols = ArrayList<LayoutElement>()
-        for ((group, spots) in Spots.teleportGroups) {
-            spots.chunked(4).forEachIndexed { i, chunk ->
-                cols += stack(if (i == 0) "§e$group" else "", SPOT_W, "Teleports: $group.", chunk.map { spot ->
-                    act(spot.name.substringBefore(" (").trim(), SPOT_W, "To ${spot.name}: ${xyz(spot.x, spot.y, spot.z)}, facing ${facing(spot.yaw)}.") { tp(spot.x, spot.y, spot.z, spot.yaw, spot.pitch) }
-                })
-            }
+        val w = 64
+        fun spot(name: String, x: Double, y: Double, z: Double, yaw: Float, pitch: Float): Pair<String, Spots.Spot?> = name to Spots.Spot(name, x, y, z, yaw, pitch)
+        fun of(name: String, s: Spots.Spot?): Pair<String, Spots.Spot?> = name to s
+        // A job's stand, facing it (as recorded at P3's start where that was measured).
+        val stations = Station.all().associateBy { it.id }
+        fun job(name: String, id: String): Pair<String, Spots.Spot?> = name to Party.STANDS[id]?.let { p ->
+            val look = Spots.startLook(id).takeIf { it != 180f to 0f } ?: stations[id]?.let { st ->
+                val aim = st.lever?.let { Vec3(it.x + 0.5, it.y + 0.5, it.z + 0.5) } ?: st.at.add(0.0, 1.0, 0.0)
+                val d = aim.subtract(p.add(0.0, 1.62, 0.0))
+                Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat() to (-Math.toDegrees(Math.atan2(d.y, Math.hypot(d.x, d.z)))).toFloat()
+            } ?: (180f to 0f)
+            Spots.Spot("${jobName(id)}", p.x, p.y, p.z, look.first, look.second)
         }
-        cols += stack("§eEarly Enters", 70, "The early-enter spots (set in Advanced).", P3Plan.earlyEnters.filter { it.into != 4 || it.on }.map { ee ->
-            val who = ee.owner?.let { if (ee.byYou) "yours" else "the ${Roles.label(it)}'s" } ?: "nobody's in this skill"
-            val s = P3Plan.eeSpot(ee)
-            act(ee.label, 70, "To the ${ee.label} spot (${who}): ${xyz(s.x, s.y, s.z)}. Set it in Advanced.") { tp(s.x, s.y, s.z, s.yaw, s.pitch) }
+        fun ee(name: String, key: String): Pair<String, Spots.Spot?> = name to P3Plan.earlyEnters.firstOrNull { it.key == key }?.let { P3Plan.eeSpot(it) }
+        val groups = listOf(
+            "P1" to listOf(of("Start", Spots.P1), spot("Agro Spot", 69.53, 225.0, 65.12, -0.25f, 6.57f),
+                spot("LC Pad", 95.61, 224.0, 40.38, 45.78f, 13.31f), spot("RC Pad", 51.64, 224.0, 40.61, -45.13f, 18.90f)),
+            "P2" to listOf(spot("Start", 77.5, 165.0, 40.5, -84.99f, 2.72f), spot("Yellow Pad", 27.75, 170.0, 94.55, -119.09f, 9.95f),
+                spot("Purple Pad", 119.95, 170.0, 95.10, 137.35f, 11.10f), spot("YP DPS", 57.5, 169.0, 65.5, -89.74f, -14.13f)),
+            // Levers: yours (the west one if that's yours, else the east).
+            "S1" to listOf(of("Start", Spots.S1), job("SS", "S1 SS"), job("T2", "S1 T2"), job("T4", "S1 T4"),
+                job("Levers", if (P3Plan.isMine("S1 west lever") && !P3Plan.isMine("S1 east lever")) "S1 west lever" else "S1 east lever")),
+            "S2" to listOf(ee("EE2", "ee2"), job("T2", "S2 T2"), job("T4", "S2 T4"), job("T5", "S2 T5")),
+            "S3" to listOf(ee("EE3", "ee3"), of("CEE3", P3Plan.customSpot("cee3")), job("Dev", "S3 Arrows"), job("T4", "S3 T4")),
+            "S4" to listOf(ee("Core", "core"), ee("Recore", "recore"), job("T1", "S4 T1"), job("T4", "S4 T4")),
+        )
+        row(groups.map { (group, spots) ->
+            stack("§e$group", w, "Teleports: $group, in the order you get to them.", spots.map { (name, s) ->
+                if (name == "CEE3") ClickButton(w, if (s != null) name else "§7$name",
+                    tip(if (s != null) "To your CEE3 spot: ${xyz(s.x, s.y, s.z)}, facing ${facing(s.yaw)}. Right click: it's where you stand now."
+                        else "Not set: right click to make it where you stand now (facing as you are)."),
+                    left = { if (s != null) { mc.gui.setScreen(null); tp(s.x, s.y, s.z, s.yaw, s.pitch) } else EngineerClient.msg("§7CEE3 isn't set: right click it where you stand.") },
+                    right = { here()?.let { h -> P3Plan.setCustomSpot("cee3", Spots.Spot("CEE3", h.x, h.y, h.z, h.yaw, h.pitch)); EngineerClient.msg("§7CEE3 spot: ${at(h)}.") }; rebuildWidgets() })
+                else if (s == null) label("§8$name", w, "Not set.")
+                else act(name, w, "To ${if (s.name == name) "$group $name" else s.name}: ${xyz(s.x, s.y, s.z)}, facing ${facing(s.yaw)}.") { tp(s.x, s.y, s.z, s.yaw, s.pitch) }
+            })
         })
-        row(cols)
     }
 
     private fun tp(x: Double, y: Double, z: Double, yaw: Float?, pitch: Float?) =
