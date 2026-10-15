@@ -503,6 +503,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.title("", "§aThe Core entrance is opening!", 0, 40, 0)
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
         if (from != 5) Stats.section(4, n - sectionStart[4])
+        // Stop After Terms: the run ends here, as the menu's Stop (not in a section practice).
+        if (P3Sim.termsOnly && !practice) Fight.later(1, "stop after terms") { Sim.note("Terms done: stopped §7(Stop After Terms)."); Fight.end() }
         if (!practice) Blocks.play("core", delay = 1)
         Stats.p3(n)
     }
@@ -558,7 +560,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (deadAt >= 0 && necronAt < 0 && n >= deadAt + NECRON_AFTER) {
             necronAt = n
             // Stopping here, the run's recording ends here too (else it grows until the next start).
-            if (P3Sim.p3Only) { Recorder.finish(); Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
+            // Stop After Goldor: the run ends here, as the menu's Stop.
+            if (P3Sim.p3Only) { Fight.later(1, "stop after goldor") { Sim.note("Goldor done: stopped §7(Stop After Goldor)."); Fight.end() }; return }
             handOff = true
         }
     }

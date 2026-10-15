@@ -274,6 +274,7 @@ object PartySettings {
         bool("realMoves") { P3Sim.realMovesS },
         bool("lava") { P3Sim.lavaS },
         bool("p3Only") { P3Sim.p3OnlyS },
+        bool("termsOnly") { P3Sim.termsOnlyS },
     ) }
 
     val PERSONAL: List<Opt> by lazy { listOf(
