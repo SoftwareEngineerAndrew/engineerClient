@@ -41,8 +41,15 @@ object OdinSimonSays {
 
     private val solver = SimonSaysSolver<BlockPos>()
     @Volatile private var tick = 0L
-    /** The server tick of the device block packet being applied (stamped when it arrived). */
-    private var packetTick = 0L
+    /**
+     * Each lamp as its packets left it, in the order they arrived. The world can't say what a lamp was before a
+     * packet: since 26.x packets are applied from their own queue (PacketProcessor), apart from the tasks this
+     * handler queues, so by the time the handler runs the packet may already be in the world (every lighting would
+     * look like a re-send, and nothing would ever be drawn).
+     */
+    private val lampLit = java.util.concurrent.ConcurrentHashMap<BlockPos, Boolean>()
+    /** The server tick each button's last packet arrived in (its block event comes when the packet is applied). */
+    private val buttonTick = java.util.concurrent.ConcurrentHashMap<BlockPos, Long>()
 
     private val GRID = (120..123).flatMap { y -> (92..95).map { z -> BlockPos(110, y, z) } }
 
@@ -53,11 +60,11 @@ object OdinSimonSays {
     fun install() {
         SimonSays.registerSetting(better)
         on<TickEvent.Server> { tick++ }
-        on<LevelEvent.Load> { solver.reset() }
+        on<LevelEvent.Load> { solver.reset(); lampLit.clear(); buttonTick.clear() }
         // Lamps come from their block packets, re-sends included: a lamp sent lit while lit (cleared and
         // relit in one tick) is how a skip's chain starts show, and Odin's BlockUpdateEvent skips it as no
-        // change. Stamped with the server tick on arrival, handled on the client thread just before the
-        // packet is applied, so the lamp's state then is its state before the packet.
+        // change. Stamped with the server tick on arrival, and what the lamp was taken from the packets before
+        // it (in arrival order), then handled on the client thread.
         on<PacketEvent.Receive> {
             val changes = when (val p = packet) {
                 is ClientboundBlockUpdatePacket -> if (onDevice(p.pos)) listOf(p.pos.immutable() to p.blockState) else return@on
@@ -67,17 +74,18 @@ object OdinSimonSays {
                 else -> return@on
             }
             val at = tick
+            // A lamp not seen since the world loaded: taken as a change (packets come for changes, re-sends aside).
+            val lamps = changes.filter { it.first.x == 111 }.map { (pos, state) ->
+                val lit = state.block == Blocks.SEA_LANTERN
+                Triple(pos, lit, lampLit.put(pos, lit) ?: !lit)
+            }
+            for ((pos, _) in changes) if (pos.x == 110) buttonTick[pos] = at
+            if (lamps.isEmpty()) return@on
             val handle = Runnable {
-                packetTick = at
                 if (!active() || SimonSaysPractice.practicing || DungeonUtils.getF7Phase() != M7Phases.P3) return@Runnable
-                val level = EngineerClient.mc.level ?: return@Runnable
                 EngineerClient.safely("ss solver lamps") {
-                    var any = false
-                    for ((pos, state) in changes) if (pos.x == 111) {
-                        solver.lamp(pos, state.block == Blocks.SEA_LANTERN, level.getBlockState(pos).block == Blocks.SEA_LANTERN, at)
-                        any = true
-                    }
-                    if (any) sync()
+                    for ((pos, lit, was) in lamps) solver.lamp(pos, lit, was, at)
+                    sync()
                 }
             }
             if (EngineerClient.mc.isSameThread) handle.run() else EngineerClient.mc.execute(handle)
@@ -93,6 +101,7 @@ object OdinSimonSays {
             EngineerClient.safely("ss solver") {
                 val level = EngineerClient.mc.level ?: return@safely
                 // Odin's event comes before the change is applied: the grid as it was.
+                val packetTick = buttonTick[pos] ?: tick
                 when {
                     updated.block is ButtonBlock && old.block !is ButtonBlock ->
                         if (GRID.count { level.getBlockState(it).block is ButtonBlock } >= 8) solver.buttonsUp(packetTick)
