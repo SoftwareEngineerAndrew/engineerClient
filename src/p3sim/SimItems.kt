@@ -1141,12 +1141,13 @@ object SimItems {
         Blocks.clientHit(at)
         val held = idOf(p.mainHandItem)
         fun sendBack() { if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, at)) }
-        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) { if (held == "DUNGEONBREAKER") Fight.afterPing("hit refused") { sendBack() }; return }
+        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) { if (held == "DUNGEONBREAKER") sendBack(); return }
         // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
         // refusal ("digging there" in S4's device).
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) ph.devices.leftClick(at); if (held != "DUNGEONBREAKER") return } }
         if (held == "SUPERBOOM_TNT") { if (!again) Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } }; return }
-        if (held == "DUNGEONBREAKER") Fight.afterPing("dungeonbreaker") { mine(p, at) }
+        // Broken as the hit arrives, before the moves your game sends after it: never a block you already walked into.
+        if (held == "DUNGEONBREAKER") mine(p, at)
         else Fight.afterPing("hit ignored") { sendBack() }
     }
 
