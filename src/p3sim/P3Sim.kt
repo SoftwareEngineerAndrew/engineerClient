@@ -269,7 +269,7 @@ object P3Sim : Module(
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
             dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
-        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick(); PartyClient.tick() } }
+        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick(); PartyClient.tick(); GhostGuard.clientTick() } }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
             // The title screen's Minecraft Realms button becomes two: P3 Sim on the left half, Join
             // Hypixel on the right. No Realms button (another mod's menu): a small P3 Sim button in the corner.
