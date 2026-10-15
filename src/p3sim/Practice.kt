@@ -130,19 +130,19 @@ object Practice {
         Setup("2 -> 1", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T1"), listOf(Spots.Spot("Checkpoint", 69.70, 109.00, 122.43, 0f)), delay = 0.0),
         Setup("2 -> 3", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T3"), delay = 0.0),
     ) + listOf(
-        // S3 (BL: both levers; no start timer of their own: the slider's). c ->: from the high EE3 (CEE3), its 2x2 platform
+        // S3 (BL: both levers; no start timer). c ->: from the high EE3 (CEE3), its 2x2 platform
         // already mined as Theoretical's bers does.
-        Setup("1 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T1", "S3 west lever", "S3 east lever"), item = BREAKER),
-        Setup("4 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T4", "S3 west lever", "S3 east lever", "gate 3"), item = BREAKER),
-        Setup("2 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T2", "S3 Arrows"), item = BREAKER),
-        Setup("3 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T3", "S3 Arrows"), listOf(Spots.Spot("CEE3", 18.70, 121.50, 91.30, 0f)), item = BONZO),
-        Setup("c -> 1", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T1"), item = BREAKER, mines = HEE3_MINES),
-        Setup("c -> 2", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T2"), item = BONZO, mines = HEE3_MINES),
-        Setup("c -> i3 4", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4"), item = BONZO, mines = HEE3_MINES),
-        Setup("c -> 3 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T3", "S3 west lever", "S3 east lever"), item = BREAKER, mines = HEE3_MINES),
-        Setup("c -> i3 4 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4", "S3 west lever", "S3 east lever"), item = BONZO, mines = HEE3_MINES),
-        Setup("4 -> 4 BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 T4", "S3 west lever", "S3 east lever"), item = BREAKER),
-        Setup("4 -> BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 west lever", "S3 east lever"), item = BONZO),
+        Setup("1 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T1", "S3 west lever", "S3 east lever"), delay = 0.0, item = BREAKER),
+        Setup("4 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T4", "S3 west lever", "S3 east lever", "gate 3"), delay = 0.0, item = BREAKER),
+        Setup("2 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T2", "S3 Arrows"), delay = 0.0, item = BREAKER),
+        Setup("3 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T3", "S3 Arrows"), listOf(Spots.Spot("CEE3", 18.70, 121.50, 91.30, 0f)), delay = 0.0, item = BONZO),
+        Setup("c -> 1", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T1"), delay = 0.0, item = BREAKER, mines = HEE3_MINES),
+        Setup("c -> 2", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T2"), delay = 0.0, item = BONZO, mines = HEE3_MINES),
+        Setup("c -> i3 4", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4"), delay = 0.0, item = BONZO, mines = HEE3_MINES),
+        Setup("c -> 3 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T3", "S3 west lever", "S3 east lever"), delay = 0.0, item = BREAKER, mines = HEE3_MINES),
+        Setup("c -> i3 4 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4", "S3 west lever", "S3 east lever"), delay = 0.0, item = BONZO, mines = HEE3_MINES),
+        Setup("4 -> 4 BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 T4", "S3 west lever", "S3 east lever"), delay = 0.0, item = BREAKER),
+        Setup("4 -> BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 west lever", "S3 east lever"), delay = 0.0, item = BONZO),
     ) + codedPresets().filter { it.section > 3 }
 
     /** The menu's columns per section: each a heading and its presets by name, in order (any not listed last, under Other). */
