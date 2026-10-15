@@ -96,13 +96,24 @@ object P3Plan {
      */
     fun defaultSpot(c: DungeonClass?, key: String): Spots.Spot? = preset().defaults["$key/${c?.name}"] ?: preset().defaults[key] ?: when (key) {
         "spawn" -> if (c == DungeonClass.BERSERK) Spots.Spot("Spawn", 63.5, 127.0, 35.5, -11.18f, 0.33f)
-            else Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
+            else earlyDeviceSpawn(c) ?: Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
         "ee2" -> Spots.Spot("EE2", 60.5, 132.0, 139.0, 90.47f, 1.64f)
         "ee3" -> Spots.Spot("EE3", 2.0, 109.0, 102.0, -175.24f, 5.83f)
         "ee4" -> Spots.Spot("EE4", 54.5, 115.06, 50.5, 179.91f, 0.57f)
         "core" -> Spots.Spot("Core", 54.5, 115.06, 50.5, 179.91f, 0.57f)
         "recore" -> Spots.Spot("Recore", 52.5, 115.0, 57.6, -159.12f, 2.63f)
         else -> null
+    }
+
+    /** [c] starts on a later section's device it does in S1 (i3, i4: yours, or its role's): that device's stand. */
+    private fun earlyDeviceSpawn(c: DungeonClass?): Spots.Spot? {
+        val p = plan()
+        val dev = listOf("S4 Target", "S3 Arrows").firstOrNull { j ->
+            p.times[j]?.first == 1 && (if (c == P3Sim.ownClass) isMine(j) else p.owners[j]?.contains(c) == true)
+        } ?: return null
+        val at = Party.STANDS[dev] ?: return null
+        val look = Spots.startLook(dev)
+        return Spots.Spot("Spawn", at.x, at.y, at.z, look.first, look.second)
     }
 
     /** Where [e] is stood on with this skill and class: the one set for them, else the default, else the preset's, else the Early Enters tab's. */
