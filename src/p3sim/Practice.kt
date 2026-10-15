@@ -83,7 +83,7 @@ object Practice {
         coded(1, "i3 21", "yq&oxU6Wr3h49kw", BREAKER),
         // i4: a left click right after it (the bow still drawn) doesn't start it again for 0.7 s; the Infinileap's does.
         coded(1, "i4", "1F?x8!EwzD)T=q", FIRST_BOW, restartMs = 700),
-        coded(2, "ll ee3", "4VT^EC9D6Qi+=DN9E5yAi", BONZO),
+        coded(2, "ee3", "4VT^EC9D6Qi+=DN9E5yAi", BONZO),
         coded(2, "ll cee3", "4VT^EC9D6Qi+=DONSDQDG", BONZO),
         coded(2, "cee3", "6tNQ?NDFPO??+/!(m8Y", BONZO),
         coded(2, "i2 -> cee3", "6n&gk{WrY(HE%C\$FroE", BONZO),
