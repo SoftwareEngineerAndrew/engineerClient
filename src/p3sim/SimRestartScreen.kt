@@ -413,7 +413,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     /** A column for each group (a long one split in two), early enters last. */
     /**
      * A column per part of the run (P1, P2, S1-S4), its places top to bottom in the order you get to them. CEE3 is
-     * yours to set (right click where you stand). The spots are here, not in [Spots], so a hotswap brings them in.
+     * the high EE3. The spots are here, not in [Spots], so a hotswap brings them in.
      */
     private fun teleportPanel() {
         val w = 64
@@ -439,17 +439,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             "S1" to listOf(of("Start", Spots.S1), job("SS", "S1 SS"), job("T2", "S1 T2"), job("T4", "S1 T4"),
                 job("Levers", if (P3Plan.isMine("S1 west lever") && !P3Plan.isMine("S1 east lever")) "S1 west lever" else "S1 east lever")),
             "S2" to listOf(ee("EE2", "ee2"), job("T2", "S2 T2"), job("T4", "S2 T4"), job("T5", "S2 T5")),
-            "S3" to listOf(ee("EE3", "ee3"), of("CEE3", P3Plan.customSpot("cee3")), job("Dev", "S3 Arrows"), job("T4", "S3 T4")),
+            "S3" to listOf(ee("EE3", "ee3"), spot("CEE3", 18.5, 121.5, 91.5, 0.02f, -8.14f), job("Dev", "S3 Arrows"), job("T4", "S3 T4")),
             "S4" to listOf(ee("Core", "core"), ee("Recore", "recore"), job("T1", "S4 T1"), job("T4", "S4 T4")),
         )
         row(groups.map { (group, spots) ->
             stack("§e$group", w, "Teleports: $group, in the order you get to them.", spots.map { (name, s) ->
-                if (name == "CEE3") ClickButton(w, if (s != null) name else "§7$name",
-                    tip(if (s != null) "To your CEE3 spot: ${xyz(s.x, s.y, s.z)}, facing ${facing(s.yaw)}. Right click: it's where you stand now."
-                        else "Not set: right click to make it where you stand now (facing as you are)."),
-                    left = { if (s != null) { mc.gui.setScreen(null); tp(s.x, s.y, s.z, s.yaw, s.pitch) } else EngineerClient.msg("§7CEE3 isn't set: right click it where you stand.") },
-                    right = { here()?.let { h -> P3Plan.setCustomSpot("cee3", Spots.Spot("CEE3", h.x, h.y, h.z, h.yaw, h.pitch)); EngineerClient.msg("§7CEE3 spot: ${at(h)}.") }; rebuildWidgets() })
-                else if (s == null) label("§8$name", w, "Not set.")
+                if (s == null) label("§8$name", w, "Not set.")
                 else act(name, w, "To ${if (s.name == name) "$group $name" else s.name}: ${xyz(s.x, s.y, s.z)}, facing ${facing(s.yaw)}.") { tp(s.x, s.y, s.z, s.yaw, s.pitch) }
             })
         })
@@ -635,11 +630,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         override fun isValidClickButton(info: MouseButtonInfo) = info.button() == 0 || info.button() == 1
         override fun onClick(event: MouseButtonEvent, doubleClick: Boolean) {
             EngineerClient.logger.info("[ec] p3sim menu click: button ${event.button()} on ${message.string}")
-            // Right only when SDL has the right button down and not the left (a left click once came through as button 1 here).
-            val isRight = runCatching {
-                val s = org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?)
-                (s and 4) != 0 && (s and 1) == 0
-            }.getOrElse { event.button() == 1 }
+            // Right: button 1 without the left down in SDL (a left click once came through as button 1 here). SDL's state
+            // often hasn't the right button down yet when the click comes, so it only rules the left out.
+            val isRight = event.button() == 1 && runCatching {
+                (org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?) and 1) == 0
+            }.getOrElse { true }
             if (isRight) right() else left()
         }
         override fun extractContents(g: net.minecraft.client.gui.GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partial: Float) {
