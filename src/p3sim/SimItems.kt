@@ -1089,6 +1089,8 @@ object SimItems {
         // With the Dungeonbreaker the click also reaches the mining refusal ("digging there" in S4's device).
         // The server decides ([serverHit]: the hit goes to it, a joiner's as theirs); the client only predicts.
         val held = idOf(player.mainHandItem)
+        // A practice's first 0.15 s: the Dungeonbreaker breaks nothing (not even on screen).
+        if (held == "DUNGEONBREAKER" && Practice.noBreaking()) return true
         val state = level.getBlockState(at)
         val lever = state.block is LeverBlock
         if (!again || held == "DUNGEONBREAKER") SimNet.send("hit", "${at.x},${at.y},${at.z},${face.ordinal},${if (again) 1 else 0}")
@@ -2011,6 +2013,13 @@ object SimItems {
         brokenBy.values().forEach { l -> l.forEach { Blocks.set(it.pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) } }
     }
 
+    /** Every block the Dungeonbreaker has broken back now, everyone's (not with Perma Break: those stay). */
+    fun unbreakAll() {
+        if (P3Sim.breakerPerma) return
+        brokenBy.values().forEach { l -> l.forEach { restore(it) }; l.clear() }
+        Sim.forEachPlayer { window.clear() }
+    }
+
     /** Perma Break turned off: every block it kept broken comes back now. */
     fun unPerma() { broken.forEach { restore(it) }; broken.clear(); window.clear() }
 
@@ -2022,6 +2031,8 @@ object SimItems {
         val level = Sim.level
         val s = level.getBlockState(pos)
         if (s.isAir) return
+        // A practice's first 0.15 s: nothing breaks (the game's block put right).
+        if (Practice.noBreaking()) { p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos)); return }
         val now = Fight.serverTick
         val why = refusal(p, pos, s)
         if (why != null || charges <= 0) {

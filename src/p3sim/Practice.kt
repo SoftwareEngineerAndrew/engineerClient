@@ -107,8 +107,19 @@ object Practice {
         tasks = emptyList(); ticks = 0; endTicks = -1
         // The last try's times come down at once (the Section Time too, not only once the start timer ends).
         com.engineerclient.practice.TermInfo.simClearTime()
+        startedMs = System.currentTimeMillis()
         Fight.start(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4)[s - 1], practice = true)
+        // Its first 0.15 s breaks nothing ([noBreaking]); whatever the Dungeonbreaker took around the (re)start comes back after.
+        Fight.later(NO_BREAK_TICKS + 1, "practice blocks back") { SimItems.unbreakAll() }
     }
+
+    /** When the practice last (re)started (System ms). */
+    @Volatile private var startedMs = 0L
+    private const val NO_BREAK_MS = 150L
+    private const val NO_BREAK_TICKS = 3
+
+    /** A practice's first 0.15 s: the Dungeonbreaker breaks nothing (a held left click from the restart). Either thread. */
+    fun noBreaking() = active && System.currentTimeMillis() - startedMs < NO_BREAK_MS
 
     /** The same practice again (the Restart keybinds, the Infinileap, a left click once done). */
     fun restart() {
