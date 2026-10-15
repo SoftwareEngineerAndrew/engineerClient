@@ -96,9 +96,10 @@ object Party {
     /**
      * One piece of a bot's legs ([Legs]): [type] "move" (your movement, [frames], into [id]: the anchor it ends at), "job"
      * ([id]: held there till it's done), "leap" ([id]: onto that class), "ee" (on early-enter spot [k] till everyone's leapt
-     * on) or "sec" (held till section [k] starts).
+     * on) or "sec" (held till section [k] starts). A move that ended in the air has [land]: how you came down after it,
+     * played while the bot holds at what comes next.
      */
-    class Piece(val type: String, val frames: List<GhostRun.Frame>, val id: String, val k: Int)
+    class Piece(val type: String, val frames: List<GhostRun.Frame>, val id: String, val k: Int, val land: List<GhostRun.Frame> = emptyList())
 
     /**
      * A bot's role played as you move: the fastest of each of your movements between its anchors (from every recorded run,
@@ -109,6 +110,8 @@ object Party {
         var i = 0
         var t = 0.0
         var from: Vec3? = null
+        /** How far into the last move's [Piece.land] it is. */
+        var land = 0
         val leaptOnto = HashSet<String>()
         /** Still has a leap onto class [c] to come. */
         fun expectsLeap(c: String) = pieces.drop(i).any { it.type == "leap" && it.id == c }
@@ -475,6 +478,8 @@ object Party {
     private fun Bot.asTarget() = Target(pos, name, yaw)
     private fun net.minecraft.server.level.ServerPlayer.asTarget() = Target(position(), gameProfile.name, yRot)
     private val leaps = ArrayList<Leap>()
+    /** The plan's "2 onto 1" moves of the sections begun: a leap onto someone at their terminal instead of the early enterer. */
+    private val ontoLeaps = ArrayList<Roles.Move>()
     private var planned = 0
     /** Per section entered early (5 = core): you're on your spot; the bot's on its; when the pre-leap is due; the job whose bot holds. */
     private val youArrived = BooleanArray(6)
@@ -526,6 +531,7 @@ object Party {
         youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.forEach { it.clear() }; holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
         allInAt.fill(-1)
         eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false
+        ontoLeaps.clear()
         planned = 0
         lastLeap = 0
         if (planOn) { bots(); if (botsOn && phase.from == 1) startGhosts(phase) }
@@ -842,6 +848,7 @@ object Party {
         ghosts(phase)
         earlyEnterBots(phase)
         preleaps(phase)
+        ontoLeapsTick(phase)
         releaseEarlyEnterers(phase)
         intoCoreWhenRecored(phase)
         for (b in bots) when { b.legs != null -> legTick(b, phase); b.ghost == null -> move(b, n); else -> place(b) }
@@ -888,12 +895,12 @@ object Party {
                 c to v.asJsonObject.getAsJsonArray("pieces").map { pe ->
                     val p = pe.asJsonObject
                     val type = p.get("t").asString
-                    val frames = p.getAsJsonArray("f")?.map { fe ->
+                    fun frames(key: String) = p.getAsJsonArray(key)?.map { fe ->
                         val a = fe.asJsonArray
                         GhostRun.Frame(P(a[0].asDouble, a[1].asDouble, a[2].asDouble), a[3].asFloat, a[4].asFloat, if (a.size() > 5) a[5].asString else "")
                     }.orEmpty()
                     val id = when (type) { "job" -> p.get("id").asString; "leap" -> p.get("onto").asString; "move" -> p.get("to")?.asString ?: ""; else -> "" }
-                    Piece(type, frames, id, p.get("k")?.asInt ?: 0)
+                    Piece(type, frames("f"), id, p.get("k")?.asInt ?: 0, frames("land"))
                 }
             }
         }.onFailure { dbg("§clegs file ${f.name}: ${it.message}") }.getOrNull()?.also { legsRead = it }
@@ -931,7 +938,7 @@ object Party {
                     val last = (p.frames.size - 1).toDouble()
                     lg.t = minOf(last, lg.t + legSpeed(b, lg, n))
                     showFrame(b, lg, p, n)
-                    if (lg.t >= last) { lg.i++; lg.t = 0.0; lg.from = null }
+                    if (lg.t >= last) { lg.i++; lg.t = 0.0; lg.from = null; lg.land = 0 }
                     place(b)
                     return
                 }
@@ -948,7 +955,9 @@ object Party {
                 "leap" -> {
                     val c = CLASSES.firstOrNull { it.name == p.id }
                     if (c == null || c == b.clazz) { lg.i++; continue }
-                    if (!leapReady(c, phase)) break
+                    // Onto someone at their terminal (the plan's "2 onto 1"): once they're there; else onto an early enterer on its spot.
+                    val om = ontoLeaps.firstOrNull { whoFor(it.who, it.section + 1) == b.clazz && whoFor(it.args.firstOrNull() ?: "", it.section + 1) == c }
+                    if (om != null) { if (ontoTarget(om) == null) break } else if (!leapReady(c, phase)) break
                     lg.i++
                     val to = Players.playerOf(c)?.position() ?: botOf(c)?.pos ?: continue
                     b.pos = to; b.to = null; b.vy = 0.0; b.leaptAt = n
@@ -965,7 +974,19 @@ object Party {
                 else -> lg.i++
             }
         }
+        settle(b, lg)
         place(b)
+    }
+
+    /**
+     * [b] holding (a job, its early-enter spot, a section start, a leap) is never stood still in mid-air: your landing after
+     * the move before plays out first (you did the job falling, or mid-bonzo), then it falls at vanilla gravity onto the floor.
+     */
+    private fun settle(b: Bot, lg: Legs) {
+        val f = lg.pieces.getOrNull(lg.i - 1)?.takeIf { it.type == "move" }?.land?.getOrNull(lg.land)
+        if (f != null) { lg.land++; b.vy = f.p.y - b.pos.y; b.pos = f.p.vec(); b.yaw = f.yaw; b.pitch = f.pitch; return }
+        val g = ground(b.pos.x, b.pos.z, b.pos.y)
+        if (g != null && g < b.pos.y - 0.01) fall(b, b.pos.x, b.pos.z, g) else b.vy = 0.0
     }
 
     /** A leap onto [c] can go: they aren't an early enterer still to get on their spot (the leap waits for them there). */
@@ -1044,6 +1065,7 @@ object Party {
                 "preleap" -> into(m.who)?.let { if (at != null) preleapAt[it] = at }
                 "hold" -> holdJob[s + 1] = "S${s + 1} T${m.who}"
                 "waits" -> into(m.who)?.let { waitsFor[it] = m.args }
+                "onto" -> ontoLeaps += m
                 "leaps" -> botOf(Roles.whoIs(plan, m.who))?.takeIf { it.ghost == null }?.let { b ->
                     if (at != null) leaps += Leap(b, at) {
                         // Back into the section: onto someone still working in it (else you).
@@ -1077,6 +1099,8 @@ object Party {
             // The EE4 bot with nothing left in S3 goes straight to its spot from where it is (Theoretical's archer: S2's
             // 3rd term to the core), no leap into S3.
             if (s == 3 && eeOf(4)?.let { !it.byYou && it.owner == b.clazz } == true && jobs.none { it.bot === b && sectionOf(it.job) <= 3 }) { b.inSection = s; continue }
+            // Leaping onto someone at their terminal: once they're there ([ontoLeapsTick]).
+            if (ontoFor(b.clazz, s) != null) continue
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.asTarget() }
             else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { eeOf(5)?.player?.asTarget() }
@@ -1200,11 +1224,38 @@ object Party {
         val target: () -> Target? = if (eeBot != null) ({ eeBot.asTarget() }) else ({ ee.player?.asTarget() })
         for (b in bots) {
             // The core early enterer goes from S2 through the core, never onto the next section's early enterer.
-            if (b === eeBot || b.ghost != null || b.inSection >= into || busy(b) || onWayToCore(b)) continue
+            if (b === eeBot || b.ghost != null || b.inSection >= into || busy(b) || onWayToCore(b) || ontoFor(b.clazz, into) != null) continue
             b.inSection = into
             lastLeap = maxOf(n + 1, lastLeap + if (eeBot != null) 2 else gapTicks())
             if (holdJob[into] != null && jobs.any { it.bot === b && it.job == holdJob[into] }) b.hold = true
             leaps += Leap(b, lastLeap, if (ee.byYou) ee.spot else null, target)
+        }
+    }
+
+    /** [c]'s "onto" move into section [into] ("2 onto 1": that section's T2 doer leaps onto its T1 doer), if it has one. */
+    private fun ontoFor(c: DungeonClass, into: Int) = ontoLeaps.firstOrNull { it.section + 1 == into && whoFor(it.who, into) == c }
+
+    /** Whoever [m] leaps onto, once they're at their terminal (within 3 blocks of its stand); null: not there yet. */
+    private fun ontoTarget(m: Roles.Move): Target? {
+        val into = m.section + 1
+        val t = m.args.firstOrNull() ?: return null
+        val c = whoFor(t, into) ?: return null
+        val stand = spotOf("S$into T$t")
+        Players.playerOf(c)?.let { return if (it.position().distanceTo(stand) <= 3.0) it.asTarget() else null }
+        return botOf(c)?.takeIf { it.pos.distanceTo(stand) <= 3.0 }?.asTarget()
+    }
+
+    /** "2 onto 1": the leaper (a bot, done with its jobs before that section) leaps once whoever it's onto is at their terminal. */
+    private fun ontoLeapsTick(phase: GoldorPhase) {
+        for (m in ontoLeaps) {
+            val into = m.section + 1
+            val b = botOf(whoFor(m.who, into))?.takeIf { it.ghost == null && it.legs == null && it.inSection < into } ?: continue
+            if (leaps.any { it.bot === b } || jobs.any { it.bot === b && sectionOf(it.job) < into }) continue
+            val t = ontoTarget(m) ?: continue
+            b.inSection = into
+            b.hold = false
+            leaps += Leap(b, phase.n + 1) { ontoTarget(m) ?: t }
+            dbg("§e${b.name}§7 leaps onto ${t.name} at S$into T${m.args.first()}")
         }
     }
 
