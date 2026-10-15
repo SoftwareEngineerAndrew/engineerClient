@@ -21,11 +21,11 @@ import java.util.Locale
 /**
  * The sim's main menu: Esc > P3 Sim Menu, the SkyBlock Menu star (hotbar), `/p3sim` or the keybind.
  *
- * The top half: Restart P3 with Stop above it; on their left the Practice, Teleport and Settings tabs;
+ * The top half: Restart P3 with Stop above it; on their left the Practice, Plan, Teleport and Settings tabs;
  * on their right the skill level and, right of that, your role (class). The bottom half is the tab
- * you're on: the section plan (each section's jobs: who does them) with Advanced under it (spawn and
- * early-enter spots, the leap menu, the bots' options), Settings, Teleport or Practice. A tab's button
- * is green while it's open; a second click goes back to the plan. Toggles are green when on. Every
+ * you're on (none when the menu opens): the section plan (each section's jobs: who does them) with Advanced
+ * under it (spawn and early-enter spots, the leap menu, the bots' options), Settings, Teleport or Practice.
+ * A tab's button is green while it's open; a second click closes it. Toggles are green when on. Every
  * button says what it does when hovered; changes save at once, starts and teleports close the menu.
  */
 class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
@@ -33,8 +33,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     private lateinit var panel: LinearLayout
 
-    // Each time the menu opens: no tab, the section plan.
-    init { tab = Tab.PLAN }
+    // Each time the menu opens: no tab.
+    init { tab = null }
 
     override fun init() {
         super.init()
@@ -59,9 +59,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
         party()
 
-        // Left: the tabs, Practice level with Restart, Teleport and Settings above it.
-        tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 2 * ROW)
-        tabButton(Tab.TELEPORT, "Teleport", "Every place in the arena: section starts, devices, pads, phases, early-enter spots.", left, restartY - ROW)
+        // Left: the tabs, Practice level with Restart, then Plan, Teleport and Settings above it.
+        tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 3 * ROW)
+        tabButton(Tab.TELEPORT, "Teleport", "Every place in the arena: section starts, devices, pads, phases, early-enter spots.", left, restartY - 2 * ROW)
+        tabButton(Tab.PLAN, "Plan", "The section plan: each section's jobs and who does them (yours, a bot's), with Advanced under it.", left, restartY - ROW, Tab.ADVANCED)
         tabButton(Tab.PRACTICE, "Practice", "Practice: a section (your role's part of it), or your own custom one; timed.", left, restartY)
 
         // Right: the skill level, the chosen one highlighted (its P3 time on hover). Shown names only: the presets keep theirs.
@@ -104,6 +105,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         panel = LinearLayout.vertical().spacing(2)
         panel.defaultCellSetting().alignHorizontallyCenter()
         when (tab) {
+            null -> {}
             Tab.PLAN -> planPanel()
             Tab.ADVANCED -> advancedPanel()
             Tab.SETTINGS -> settingsPanel()
@@ -130,11 +132,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     // ------------------------------------------------------------------ the top half
 
-    private fun tabButton(t: Tab, name: String, about: String, x: Int, y: Int) {
-        addRenderableWidget(Button.builder(Component.literal(if (tab == t) "§a$name" else name)) {
-            tab = if (tab == t) Tab.PLAN else t
+    /** A tab's button on the left: green while it (or [also], a tab inside it) is open; a second click closes it. */
+    private fun tabButton(t: Tab, name: String, about: String, x: Int, y: Int, also: Tab? = null) {
+        val open = tab == t || tab == also
+        addRenderableWidget(Button.builder(Component.literal(if (open) "§a$name" else name)) {
+            tab = if (open) null else t
             rebuildWidgets()
-        }.tooltip(tip("$about Click again: back to the section plan.")).bounds(x, y, SIDE_W, 20).build())
+        }.tooltip(tip("$about Click again: closes it.")).bounds(x, y, SIDE_W, 20).build())
     }
 
     /** A column's title, centred over it (its first button at [y]). */
@@ -635,8 +639,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         const val MIN_SPEED = 100
         const val MAX_SPEED = 750
 
-        /** The tab open (the plan each time the menu opens). */
-        private var tab = Tab.PLAN
+        /** The tab open (null: none, as each time the menu opens). */
+        private var tab: Tab? = null
 
         /** The type a terminal type pick last chose. */
         var lastType = Terminals.Type.ORDER
