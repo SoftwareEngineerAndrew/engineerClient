@@ -166,13 +166,18 @@ object ArenaFixes {
     /**
      * An S3 crusher: granite columns sliding out of the wall at x [back] towards x [front] over z [z]. Each starts
      * fully back at Terms (not where the recording caught it then) and comes out on the run's first push after
-     * [CRUSHER_HOLD], whole (the columns behind its front filled).
+     * [CRUSHER_HOLD], whole (the columns behind its front filled). One with a [cycle] ignores the recording: from the
+     * start it steps every [CRUSHER_STEP] ticks through [cycle] (how many columns are out), as Hypixel's does.
      */
-    private class Crusher(val back: Int, val front: Int, val z: IntRange) {
+    private class Crusher(val back: Int, val front: Int, val z: IntRange, val cycle: IntArray? = null) {
         val xs = minOf(back, front)..maxOf(back, front)
         fun has(x: Int, y: Int, z: Int) = x in xs && z in this.z && y in 116..124
+        /** Its granite rows (the gap at 120 is the walkway). */
+        val ys get() = listOf(117, 118, 119, 121, 122, 123)
     }
-    private val CRUSHERS get() = listOf(Crusher(14, 12, 101..102), Crusher(2, 3, 82..84))
+    // The low one (x 2-3) starts one back from all the way out, on its way in.
+    private val CRUSHERS get() = listOf(Crusher(14, 12, 101..102), Crusher(2, 3, 82..84, intArrayOf(1, 0, 1, 2)))
+    private const val CRUSHER_STEP = 35
     private const val CRUSHER_HOLD = 40
     private fun crusherAt(x: Int, y: Int, z: Int) = CRUSHERS.firstOrNull { it.has(x, y, z) }
 
@@ -180,8 +185,33 @@ object ArenaFixes {
     class Replay internal constructor(private val run: Run, private val states: Array<BlockState>) {
         private var ptr = 0
 
+        /** The tick the driven crushers' cycles count from, and how many columns each has out. */
+        private var crushBase = 0
+        private var crushOut: HashMap<Int, Int>? = null
+
+        private fun driveCrushers(n: Int) {
+            val out = crushOut ?: HashMap<Int, Int>().also { crushOut = it }
+            CRUSHERS.forEachIndexed { ci, c ->
+                val cyc = c.cycle ?: return@forEachIndexed
+                val k = if (n <= crushBase) 0 else (n - crushBase) / CRUSHER_STEP
+                val want = cyc[k % cyc.size]
+                if (out[ci] == want) return@forEachIndexed
+                out[ci] = want
+                val step = if (c.front < c.back) -1 else 1
+                for (i in 0..kotlin.math.abs(c.front - c.back)) {
+                    val x = c.back + i * step
+                    for (y in c.ys) for (z in c.z) {
+                        val pos = BlockPos(x, y, z)
+                        Blocks.set(pos, if (i < want) B.POLISHED_GRANITE.defaultBlockState() else Arena.data.get(x, y, z))
+                    }
+                }
+            }
+        }
+
         /** Start state at Terms (granite blobs already up, the plate's press), then the changes up to [n0] at once. */
         fun begin(n0: Int) {
+            crushBase = n0; crushOut = null
+            driveCrushers(n0)
             val a = run.init
             for (i in 0 until a.size step 4) if (a[i] != -3 && crusherAt(a[i], a[i + 1], a[i + 2]) == null) place(a[i], a[i + 1], a[i + 2], states[a[i + 3]])
             catchUp = true
@@ -192,6 +222,7 @@ object ArenaFixes {
         private var catchUp = false
 
         fun tick(n: Int) {
+            if (!catchUp) driveCrushers(n)
             val e = run.events
             while (ptr * 5 < e.size && e[ptr * 5] <= n) {
                 val i = ptr * 5; ptr++
@@ -199,7 +230,7 @@ object ArenaFixes {
                 val s = e[i + 4]
                 val pos = BlockPos(e[i + 1], e[i + 2], e[i + 3])
                 val crusher = crusherAt(pos.x, pos.y, pos.z)
-                if (crusher != null && e[i] < CRUSHER_HOLD) continue // still back at the start
+                if (crusher != null && (crusher.cycle != null || e[i] < CRUSHER_HOLD)) continue // driven, or still back at the start
                 if (crusher != null && s >= 0 && states[s].`is`(B.POLISHED_GRANITE)) {
                     // Out to here: the columns behind it too (it started back in the wall).
                     val step = if (crusher.front < crusher.back) -1 else 1
