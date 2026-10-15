@@ -440,7 +440,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                 job("Levers", if (P3Plan.isMine("S1 west lever") && !P3Plan.isMine("S1 east lever")) "S1 west lever" else "S1 east lever")),
             "S2" to listOf(ee("EE2", "ee2"), spot("2", 59.53, 120.0, 126.0, -179.59f, 19.56f), spot("4", 39.48, 109.0, 139.61, -0.25f, 29.06f), spot("5", 40.53, 124.0, 125.54, 179.81f, 21.45f)),
             "S3" to listOf(ee("EE3", "ee3"), spot("CEE3", 18.5, 121.5, 91.5, 0.02f, -8.14f), spot("Dev", 2.54, 120.0, 77.48, 89.63f, 8.13f), spot("4", 1.11, 109.0, 77.55, 90.40f, 22.47f)),
-            "S4" to listOf(ee("Core", "core"), ee("Recore", "recore"), job("1", "S4 T1"), job("4", "S4 T4")),
+            "S4" to listOf(ee("Core", "core"), ee("Recore", "recore"), spot("1", 41.51, 109.0, 33.36, -179.36f, 17.01f), spot("4", 72.45, 115.0, 45.31, -0.77f, 22.35f)),
         )
         row(groups.map { (group, spots) ->
             stack("§e$group", w, "Teleports: $group, in the order you get to them.", spots.map { (name, s) ->
