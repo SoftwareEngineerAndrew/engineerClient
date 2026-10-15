@@ -120,7 +120,7 @@ object P3Plan {
     fun skillName() = SKILLS[skill.coerceIn(0, SKILLS.size - 1)]
 
     fun mine(): Set<String> {
-        val key = "$skill/${P3Sim.ownClass}"
+        val key = "$skill/${P3Sim.ownClass}/${PlanFile.version}"
         if (mineFor != key) {
             mineFor = key
             mine.clear()

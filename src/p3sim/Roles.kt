@@ -220,7 +220,8 @@ object Roles {
     )
 
     private val cache = HashMap<Preset, Plan>()
-    fun plan(p: Preset): Plan = cache.getOrPut(p) { parse(p) }
+    /** [p]'s plan: its plan file's ([PlanFile]) if it has one, else the roles and times above. */
+    fun plan(p: Preset): Plan = PlanFile.of(p.name)?.plan ?: synchronized(cache) { cache.getOrPut(p) { parse(p) } }
 
     private fun device(s: Int) = when (s) { 1 -> "S1 SS"; 2 -> "S2 Lights"; 3 -> "S3 Arrows"; else -> "S4 Target" }
     private fun terms(s: Int) = (1..(if (s == 2) 5 else 4)).map { "S$s T$it" }

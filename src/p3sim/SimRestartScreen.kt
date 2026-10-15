@@ -162,6 +162,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
      * yours: a stack, its bot does it too with Helpers on (whoever's first).
      */
     private fun planPanel() {
+        val script = PlanFile.of(P3Plan.skillName())
+        if (script != null) row(listOf(
+            change("§eEdit Plan File", 110, "Opens config/engineerclient/p3sim-plans/${script.name}.txt: every class's steps, which the bots play exactly. Saved changes count from the next start.") { PlanFile.open(script.name) },
+            label(if (script.errors.isEmpty()) "§7Bots play §f${script.name}.txt§7 exactly" else "§c${script.errors.size} problem${if (script.errors.size > 1) "s" else ""} in ${script.name}.txt§7 (shown at start)", 300,
+                script.errors.take(8).joinToString("\n").ifEmpty { null }),
+        ))
         row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         for (s in 1..4) {
             val cells = arrayOfNulls<String>(COLUMNS.size)
