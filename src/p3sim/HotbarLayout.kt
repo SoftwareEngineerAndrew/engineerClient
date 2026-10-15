@@ -10,13 +10,13 @@ import java.util.concurrent.ConcurrentHashMap
  * Where the sim's items go on every hotbar reset (a start or restart, each phase's start, Reset Items), through
  * [SimItems.giveHotbar], in this order:
  *
- * 1. **As you left them.** Whatever you did with your items, armour and pet since the last reset stays: the next
- *    reset lays them out the same (for each skill, part and class: [keep]; in the file too, so a relaunch keeps them). Black Cat At Start puts
- *    Black Cat back on at every start; Terror At Terms still puts the Terror loadout on at P3.
- * 2. **Your saved hotbar** for this skill (P3Plan's preset), part and class: "Save Hotbar" (sim menu) records where each
+ * 1. **Your saved hotbar** for this skill (P3Plan's preset), part and class: "Save Hotbar" (sim menu) records where each
  *    sim item is right now (hotbar and inventory, by item id), the slot you hold, what you wear and your pet, in
- *    `config/engineerclient/p3sim-hotbar.json`. Reset Items goes back to it (forgetting 1). Older files' per-class and
- *    shared layouts are used where a skill has none of its own.
+ *    `config/engineerclient/p3sim-hotbar.json`. Every reset lays it out again. Older files' per-class and shared
+ *    layouts are used where a skill has none of its own.
+ * 2. **As you left them**, with none saved: whatever you did with your items, armour and pet since the last reset
+ *    stays (for each skill, part and class: [keep]; in the file too, so a relaunch keeps them).
+ *    Black Cat At Start puts Black Cat back on at every start; Terror At Terms still puts the Terror loadout on at P3.
  * 3. **The sim's default.** "Default Hotbar" forgets this skill's, part's and class's saved one.
  *
  * P1/P2 and P3 have different items on the bar (Hyperion or Superboom), so each part has its own. Masks stay out of
@@ -67,14 +67,14 @@ object HotbarLayout {
     private fun classKey(p3: Boolean) = "${partKey(p3)}/${P3Sim.myClass.name}"
 
     private fun savedLayout(p3: Boolean): Layout? = saved().roles?.let { it[key(p3)] ?: it[classKey(p3)] } ?: if (p3) saved().p3 else saved().p12
-    private fun layout(p3: Boolean): Layout? = lives()[key(p3)] ?: savedLayout(p3)
+    /** A saved hotbar for this skill, part and class wins; as you left it only where there's none. */
+    private fun layout(p3: Boolean): Layout? = savedLayout(p3) ?: lives()[key(p3)]
 
-    /** What to wear for [p3]'s part: as you left it, else as saved; null: the defaults. */
+    /** What to wear for [p3]'s part: as saved (with the hotbar), else as you left it; null: the defaults. */
     fun worn(p3: Boolean): Loadouts.Worn? {
-        val l = lives()[key(p3)]
         val s = savedLayout(p3)
-        if (l == null && s == null) return null
-        return l?.worn ?: s?.worn ?: saved().worn
+        if (s != null) return s.worn ?: saved().worn
+        return lives()[key(p3)]?.worn
     }
 
     /** Whether [p3]'s part has a saved layout for this skill and class (or an older one that covers it). */
