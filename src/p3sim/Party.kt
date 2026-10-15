@@ -1300,6 +1300,8 @@ object Party {
 
     /** The fastest a route plays: to be at a job by its time at all (later than that: the job's late). */
     private const val HURRY = 4.0
+    /** Theoretical's: its simple ways go as fast as its times need. */
+    private const val THEORY_HURRY = 10.0
     /** What a route shows the bot holding where the player held it (anything else: what it holds anyway). */
     private val ROUTE_ITEMS = setOf("STARRED_BONZO_STAFF", "BONZO_STAFF", "JERRY_STAFF", "SUPERBOOM_TNT", "HYPERION", "ASPECT_OF_THE_VOID", "ENDER_PEARL")
 
@@ -1312,7 +1314,8 @@ object Party {
         if (!P3Sim.realMoves) return false
         if (b.routeTo != to) {
             b.routeTo = to; b.routeT = 0.0
-            val r = Routes.find(b.pos, to, ::closed)
+            // Theoretical: the recorded way made simple (straight between its turns, at a steady 1 block a tick, faster when it must be).
+            val r = Routes.find(b.pos, to, ::closed)?.let { if (P3Plan.preset() === Roles.THEORETICAL) Routes.simplify(it) else it }
             b.route = r
             if (r == null) dbg("§e${b.name}§7: no real route to ${to.short()}, walking")
             else dbg("§e${b.name}§7: route ${"%.1f".format(r.ticks / 20)}s at a player's pace" +
@@ -1349,11 +1352,12 @@ object Party {
         if (b.due < 0 || left <= 0) return 1.0
         // Theoretical: the fastest recorded way at the speed it was played (ADR's best players); never faster than a
         // player can go, so a time tighter than that is simply met late.
-        if (P3Plan.preset() === Roles.THEORETICAL) return 1.0
         val min = minOf(b.lead, MIN_LEAD)
         if (n + left <= b.due - min) return 1.0
         val by = b.due - min - n
-        return if (by <= 0) HURRY else (left / by).coerceIn(1.0, HURRY)
+        // Theoretical: its simple ways go as fast as its times need.
+        val most = if (P3Plan.preset() === Roles.THEORETICAL) THEORY_HURRY else HURRY
+        return if (by <= 0) most else (left / by).coerceIn(1.0, most)
     }
 
     /** An opening bots can't go through yet (by [Routes] id): a gate standing, a door or the core shut. */
