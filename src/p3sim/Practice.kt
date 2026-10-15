@@ -281,9 +281,6 @@ object Practice {
             ?: GoldorPhase.DT_ZONES.minBy { (_, box) -> box.distanceToSqr(v) }.first
     }
 
-    /** Your role's jobs in section [s], for a custom practice there. */
-    fun roleJobs(s: Int) = P3Plan.jobsIn(s).filter { P3Plan.isMine(it) }
-
     /** The custom practice's jobs picked in section [s]. */
     fun customJobsIn(s: Int): Set<String> = P3Plan.jobsIn(s).filter { it in customJobs }.toSet()
 
@@ -291,7 +288,7 @@ object Practice {
     fun setStart(spot: Spots.Spot, item: String? = null): Int {
         val s = sectionAt(spot.x, spot.y, spot.z)
         customSection = s
-        if (customJobs.isEmpty()) customJobs += roleJobs(s)
+        // Never filled in from your role: the jobs are only the ones you pick.
         customStart = spot
         customItem = item
         save()
@@ -304,8 +301,8 @@ object Practice {
         save()
     }
 
-    /** No custom practice: start, jobs and checkpoints gone. */
-    fun clearCustom() { customStart = null; customItem = null; customSection = 0; customJobs.clear(); checkpoints.clear(); leapWaypoints.clear(); save() }
+    /** No custom practice: start, jobs, checkpoints and leap waypoints gone, the start timer back to 0. */
+    fun clearCustom() { customStart = null; customItem = null; customSection = 0; customJobs.clear(); checkpoints.clear(); leapWaypoints.clear(); startDelay = 0.0; save() }
 
     /** An item as the start remembers it: its SkyBlock id, else its name. */
     fun itemKey(s: net.minecraft.world.item.ItemStack): String? =
