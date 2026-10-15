@@ -12,6 +12,7 @@ import com.odtheking.odin.utils.skyblock.PartyUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
@@ -53,16 +54,21 @@ object LeapOrder {
             if (now != saved) EngineerClient.safely("leap order save") { save(now) }
         }
 
-        // After Odin's commands: Odin's /od is a redirect to /odin, and an "od" literal registered before it would
-        // take its place without the redirect, breaking every other /od subcommand (/od ep, /od sb, ...).
+        // After Odin's commands, without adding or merging any node into /odin or /od (so nothing else under /od can
+        // be affected): Odin's own "leaporder" node just gets a run for the
+        // bare form, opening the screen. With names it is untouched, Odin's command as always. /od points at a copy
+        // of /odin's node whose children are the same node objects, so both see the one change.
         val afterOdin = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")
         ClientCommandRegistrationCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterOdin)
         ClientCommandRegistrationCallback.EVENT.register(afterOdin) { dispatcher, _ ->
-            // Brigadier merges this into Odin's /odin leaporder: the bare literal opens the screen, its 4 names still
-            // set it. /od gets it on the node it redirects to; "od" itself is never registered here.
-            val leaporder = literal("leaporder").executes { open(); 1 }
-            dispatcher.register(literal("odin").then(leaporder))
-            dispatcher.root.getChild("od")?.redirect?.addChild(leaporder.build())
+            EngineerClient.safely("leap order /od") {
+                val nodes = listOfNotNull(
+                    dispatcher.root.getChild("odin")?.getChild("leaporder"),
+                    dispatcher.root.getChild("od")?.let { it.redirect ?: it }?.getChild("leaporder"),
+                ).distinct()
+                for (node in nodes) COMMAND.set(node, com.mojang.brigadier.Command<FabricClientCommandSource> { open(); 1 })
+                if (nodes.isEmpty()) EngineerClient.logger.info("[ec] leap order: Odin has no /od leaporder here, /lo only")
+            }
             dispatcher.register(literal("lo").executes { open(); 1 }
                 .then(argument("member1", StringArgumentType.word())
                     .then(argument("member2", StringArgumentType.word())
@@ -75,6 +81,9 @@ object LeapOrder {
                             })))))
         }
     }
+
+    /** Brigadier's node command (no setter: Odin's node is given the bare run in place). */
+    private val COMMAND by lazy { com.mojang.brigadier.tree.CommandNode::class.java.getDeclaredField("command").apply { isAccessible = true } }
 
     private fun open() = mc.schedule { mc.gui.setScreen(LeapOrderScreen()) }
 
