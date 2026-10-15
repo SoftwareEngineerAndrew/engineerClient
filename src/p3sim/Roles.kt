@@ -172,19 +172,19 @@ object Roles {
         times = listOf(
             // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one, then T4, T3. The
             // tank starts on T2, the bers on i4, the mage on Lights (and shoots the gate); the healer's SS ends S1.
-            "ll 0.05 | lights 0.25 | gate 0.35 | rl 0.7 | 2 1.3 | i4 2.05 | 4 2.95 | 1 3.0 | 3 5.05 | ss 7.8",
+            "ll 0.05 | lights gate 0.2 | rl 0.7 | 2 1.3 | i4 2.05 | 4 2.95 | 1 3.0 | 3 5.05 | ss 7.8",
             // The mage's Superboom and high lever from the far EE2, low lever, then T4 (S2's last); the tank on T2 as S2
             // starts, the archer on T5 (then T3), the healer leaps to the tank for T1. The tank's Arrows: as S3 starts.
-            "gate 0.05 | ll 0.25 | rl 1.05 | 2 1.25 | 5 1.6 | 1 2.9 | 3 2.95 | 4 4.25 | arrows 4.5",
+            "gate 0.05 | ll 0.25 | rl 1.05 | 2 1.25 | 5 1.6 | 1 2.9 | 3 2.95 | 4 4.15 | arrows 4.5",
             // The bers' T3 from the high EE3; the bers leaps to the tank on T4 for the Superboom and the levers (S3's last).
-            "3 1.25 | 4 2.75 | 1 2.95 | 2 3.45 | gate 3.4 | ll 3.85 | rl 4.5",
+            "3 1.25 | 4 2.75 | 1 2.95 | 2 3.35 | gate 3.4 | ll 3.85 | rl 4.5",
             // Everyone off the archer at EE4; the bers leaps onto it after S3's levers, for S4's (the low one first).
             "3 1.7 | 2 1.85 | 1 2.0 | 4 2.6 | ll 2.2 | rl 3.0",
         ),
         moves = listOf(
-            // The mage on its EE2 spot 1.9 s in; the bers leaps on after i4 (3.55), the tank after its terms (3.9), the archer
+            // The mage on its EE2 spot 1.85 s in; the bers leaps on after i4 (3.55), the tank after its terms (3.9), the archer
             // last (6.1). The bers goes on to the high EE3 as soon as its way there allows (it can be before S2 starts).
-            "ee2 spot 1.9 | leap ee2 3.5 | ee2 waits ee3 2 5",
+            "ee2 spot 1.85 | leap ee2 3.5 | ee2 waits ee3 2 5",
             // The tank (1.9 s), healer (3.4 s) and mage (S3) leap onto the bers on the high EE3.
             "ee3 waits 1 2 4",
             // The archer by the core 2.95 s into S3 (from S2's T3); the tank, healer and mage leap on, then it walks to its 4th term.
