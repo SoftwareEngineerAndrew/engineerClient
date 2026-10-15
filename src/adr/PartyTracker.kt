@@ -92,5 +92,18 @@ object PartyTracker {
         sendCommand("p list")
     }
 
+    /**
+     * Asks Hypixel for the party now (its answer kept out of chat), for a screen that needs it: when it isn't
+     * known, at most every 10 s. Needs ADR on (it reads the answer).
+     */
+    fun askIfUnknown() = synchronized(state) {
+        val now = System.currentTimeMillis()
+        if (state.known || !onHypixel || EngineerClient.mc.player == null || now - lastAsk < 10_000L) return
+        lastAsk = now
+        hideUntil = now + HIDE_MS
+        EngineerClient.logger.info("[ec] adr: /p list (asked for)")
+        sendCommand("p list")
+    }
+
     private val NAME = Regex("""^\w{1,16}$""")
 }
