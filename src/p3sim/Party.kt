@@ -89,6 +89,8 @@ object Party {
         var dig: ArrayDeque<Vec3>? = null
         /** Where it set off for in the lead-in ([startLeadIn]); null: it didn't. */
         var leadTo: Vec3? = null
+        /** The lead-in as you moved in it, a frame a tick ([legLead]); null: it walks to [leadTo]. */
+        var leadFrames: List<GhostRun.Frame>? = null
         /** Moving as you did: your best run as its class, timed to the plan ([legTick]); null: it moves on its own. */
         var legs: Legs? = null
     }
@@ -345,7 +347,7 @@ object Party {
         bots.forEach {
             it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0
             it.vy = 0.0; it.blinkReady = 0; it.blinkAt = -100; it.leaptAt = -100; it.heldKey = ""; it.ghost = null
-            it.route = null; it.routeTo = null; it.routeHeld = null; it.routeHeldUntil = -1; it.leadTo = null; it.legs = null
+            it.route = null; it.routeTo = null; it.routeHeld = null; it.routeHeldUntil = -1; it.leadTo = null; it.leadFrames = null; it.legs = null
         }
         leadIn = false
     }
@@ -357,6 +359,8 @@ object Party {
      * The lead-in began, [ticks] before P3 does: each bot sets off from the SS landing, as players do, for its first
      * S1 job's spot, or its early enter's when that comes first (the EE2 bot: straight to its spot), there by P3's
      * start. A ghost, and the i4 bot (on the S4 device from the start), stay as they were.
+     * With Real Bot Movement and a lead-in of yours as its class in the skill's legs file ([legLead]), it moves as you did
+     * instead, from where you started.
      */
     fun startLeadIn(ticks: Int) {
         if (!botsOn) return
@@ -366,6 +370,14 @@ object Party {
         for (b in bots()) {
             // The i4 bot is on the S4 device's plate from the start.
             if (i4First(b, plan)) { b.pos = I4_STAND; Spots.startLook("S4 Target").let { b.yaw = it.first; b.pitch = it.second }; place(b); continue }
+            if (P3Plan.ghostOn(b.clazz) && GhostStore.best(P3Plan.skillName(), b.clazz.name) != null) continue
+            val lead = if (P3Sim.realMoves) legLead(b.clazz.name) else null
+            if (lead != null) {
+                b.leadFrames = lead; b.leadTo = lead.last().p.vec()
+                leadFrame(b, 0)
+                dbg("§e${b.name}§7 lead-in as yours: ${"%.1f %.1f %.1f".format(java.util.Locale.ROOT, b.leadTo!!.x, b.leadTo!!.y, b.leadTo!!.z)}")
+                continue
+            }
             val to = leadInTarget(b, plan) ?: continue
             b.leadTo = to
             go(b, to, 0, ticks, "where it starts P3 (lead-in)")
@@ -434,7 +446,16 @@ object Party {
     }
 
     /** A lead-in tick ([t]: ticks since Storm's death line). */
-    fun tickLeadIn(t: Int) { if (leadIn) for (b in bots) { move(b, t); hold(b, t) } }
+    fun tickLeadIn(t: Int) { if (leadIn) for (b in bots) { if (b.leadFrames != null) leadFrame(b, t) else { move(b, t); hold(b, t) } } }
+
+    /** [b] where you were [t] ticks into your lead-in (its last frame after), holding what you held. */
+    private fun leadFrame(b: Bot, t: Int) {
+        val fr = b.leadFrames ?: return
+        val f = fr[t.coerceIn(0, fr.size - 1)]
+        b.pos = f.p.vec(); b.yaw = f.yaw; b.pitch = f.pitch; b.to = null; b.vy = 0.0
+        setHeld(b, f.held.ifEmpty { "breaker" })
+        place(b)
+    }
 
     /** [b]'s first job is i4 (as startP3 starts it on the plate). */
     private fun i4First(b: Bot, plan: Roles.Plan): Boolean {
@@ -614,7 +635,8 @@ object Party {
             // Your legs as its class: from where the first one starts.
             val lg = legsFor(b, from)
             val f = lg?.pieces?.firstOrNull { it.frames.isNotEmpty() }?.frames?.first()
-            if (lg != null && f != null) { b.legs = lg; b.yaw = f.yaw; b.pitch = f.pitch; put(b, f.p.vec()); place(b); continue }
+            // Its lead-in ended near there: on from where it got to (blended onto your route).
+            if (lg != null && f != null) { b.legs = lg; b.yaw = f.yaw; b.pitch = f.pitch; put(b, walked[b.clazz]?.first?.takeIf { it.distanceTo(f.p.vec()) <= 3.0 } ?: f.p.vec()); place(b); continue }
             val core = eeOf(5)?.owner == b.clazz && from >= 3
             // Starting from S3/S4: the core early enterer is already on its spot (by the core), holding.
             if (core) { b.inSection = 5; eeArrived[5] = true; b.hold = from < 5; eeOf(5)?.let { b.yaw = it.yaw; b.pitch = it.pitch } }
@@ -870,41 +892,47 @@ object Party {
      */
     private fun legsFor(b: Bot, from: Int): Legs? {
         if (!P3Sim.realMoves || !botsOn || from != 1) return null
-        val pieces = legPieces(b.clazz.name) ?: return null
+        val pieces = legPieces(b.clazz.name)?.takeIf { it.isNotEmpty() } ?: return null
         dbg("§e${b.name}§7 moves as your legs: ${pieces.count { it.type == "move" && it.frames.isNotEmpty() }} pieces" +
             pieces.filter { it.type == "move" && it.frames.isEmpty() }.let { m -> if (m.isEmpty()) "" else " (§cnone recorded§7 into ${m.joinToString { it.id }})" })
         return Legs(pieces)
     }
 
-    /** The skill's legs file read ("file@modified" -> pieces by class), kept till the file changes. */
-    private var legsRead: Pair<String, Map<String, List<Piece>>>? = null
+    /** The skill's legs file read ("file@modified" -> pieces and lead-in by class), kept till the file changes. */
+    private var legsRead: Pair<String, Map<String, Pair<List<Piece>, List<GhostRun.Frame>>>>? = null
 
     /**
      * Class [clazz]'s pieces from `config/engineerclient/p3sim-legs/<skill>.json` (built from your recorded runs outside the
-     * game): `{"classes": {"MAGE": {"pieces": [...]}}}`, each piece `{"t": "move", "to": "job S2 T4", "f": [[x, y, z, yaw,
-     * pitch, held], ...]}`, `{"t": "job", "id": "S2 T4"}`, `{"t": "leap", "onto": "BERSERK"}`, `{"t": "ee", "k": 3}` or
-     * `{"t": "sec", "k": 3}`.
+     * game): `{"classes": {"MAGE": {"pieces": [...], "lead": [...]}}}`, each piece `{"t": "move", "to": "job S2 T4", "f":
+     * [[x, y, z, yaw, pitch, held], ...]}`, `{"t": "job", "id": "S2 T4"}`, `{"t": "leap", "onto": "BERSERK"}`, `{"t": "ee",
+     * "k": 3}` or `{"t": "sec", "k": 3}`; "lead": your lead-in ([legLead]).
      */
-    private fun legPieces(clazz: String): List<Piece>? {
+    private fun legPieces(clazz: String): List<Piece>? = legsFile()?.get(clazz)?.first
+
+    /** Class [clazz]'s lead-in from the legs file: where you were each tick from Storm's death line to P3; null: none. */
+    private fun legLead(clazz: String): List<GhostRun.Frame>? = legsFile()?.get(clazz)?.second?.takeIf { it.isNotEmpty() }
+
+    private fun legsFile(): Map<String, Pair<List<Piece>, List<GhostRun.Frame>>>? {
         val f = java.io.File(net.minecraft.client.Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-legs/${P3Plan.skillName()}.json")
         if (!f.exists()) return null
         val key = "${f.path}@${f.lastModified()}"
+        fun frames(arr: com.google.gson.JsonArray?) = arr?.map { fe ->
+            val a = fe.asJsonArray
+            GhostRun.Frame(P(a[0].asDouble, a[1].asDouble, a[2].asDouble), a[3].asFloat, a[4].asFloat, if (a.size() > 5) a[5].asString else "")
+        }.orEmpty()
         val read = legsRead?.takeIf { it.first == key } ?: runCatching {
             val o = com.google.gson.JsonParser.parseString(f.readText()).asJsonObject.getAsJsonObject("classes")
             key to o.entrySet().associate { (c, v) ->
-                c to v.asJsonObject.getAsJsonArray("pieces").map { pe ->
+                val pieces = v.asJsonObject.getAsJsonArray("pieces")?.map { pe ->
                     val p = pe.asJsonObject
                     val type = p.get("t").asString
-                    fun frames(key: String) = p.getAsJsonArray(key)?.map { fe ->
-                        val a = fe.asJsonArray
-                        GhostRun.Frame(P(a[0].asDouble, a[1].asDouble, a[2].asDouble), a[3].asFloat, a[4].asFloat, if (a.size() > 5) a[5].asString else "")
-                    }.orEmpty()
                     val id = when (type) { "job" -> p.get("id").asString; "leap" -> p.get("onto").asString; "move" -> p.get("to")?.asString ?: ""; else -> "" }
-                    Piece(type, frames("f"), id, p.get("k")?.asInt ?: 0, frames("land"))
-                }
+                    Piece(type, frames(p.getAsJsonArray("f")), id, p.get("k")?.asInt ?: 0, frames(p.getAsJsonArray("land")))
+                }.orEmpty()
+                c to (pieces to frames(v.asJsonObject.getAsJsonArray("lead")))
             }
         }.onFailure { dbg("§clegs file ${f.name}: ${it.message}") }.getOrNull()?.also { legsRead = it }
-        return read?.second?.get(clazz)
+        return read?.second
     }
 
     /** Ticks a piece blends from where the bot really is onto its recorded start (a leap landing elsewhere, the piece before's end). */
