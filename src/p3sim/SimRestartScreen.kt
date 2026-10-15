@@ -516,7 +516,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                     Practice.removeLeapWaypoint(); rebuildWidgets()
                 }),
             DelaySlider(100),
-            change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
+            change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints; the timer back to 0.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
         ))
         val io = stack("", 64, "Your custom practice as a short code, to send to someone or take theirs.", listOf(
             change("Export", 64, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
