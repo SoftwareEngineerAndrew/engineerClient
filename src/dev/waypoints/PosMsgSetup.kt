@@ -15,7 +15,7 @@ import java.nio.file.Path
 /**
  * Positional Messages lives here (it was Engineer Client's, and Odin's before 0.3.6): its module's
  * saved state comes over once, its editor joins BR Roles' wand, its boxes feed Engineer Client's
- * /ec setup, and /posmsg (with /posmsg edit) is registered.
+ * /adm setup, and /posmsg (with /posmsg edit) is registered.
  */
 object PosMsgSetup {
 

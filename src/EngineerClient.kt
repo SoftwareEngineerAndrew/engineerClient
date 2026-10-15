@@ -176,13 +176,16 @@ object EngineerClient : ClientModInitializer {
 
     fun msg(text: Component) = chat(Component.literal(PREFIX).append(text))
 
-    /** /ec on its own: what the rest of it does. Other parts of the mod add their own lines. */
+    /** The command's names: /adm and its aliases. Other parts of the mod add their subcommands under these. */
+    val COMMANDS = listOf("adm", "ADM", "advanceddungeonsmod", "eclient", "ea", "eec", "em")
+
+    /** /adm help: what the rest of it does. Other parts of the mod add their own lines. */
     val HELP = mutableListOf(
         "${PREFIX}§7commands:",
-        "§f /ec log§7 [mark <note>] — the session log; §f/ec memreport",
+        "§f /adm log§7 [mark <note>] — the session log; §f/adm memreport",
     )
 
-    /** More lines for /ec log mark to stamp under the note (other parts of the mod add theirs). */
+    /** More lines for /adm log mark to stamp under the note (other parts of the mod add theirs). */
     val markLines = mutableListOf<() -> List<String>>()
 
     private fun mark(note: String) {
@@ -196,24 +199,22 @@ object EngineerClient : ClientModInitializer {
             // /adr online: ADR Online in your browser, signed in.
             for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
                 .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
-            // Odin's settings menu, as its /od opens it.
-            for (name in listOf("adm", "ADM", "advanceddungeonsmod", "eclient", "ea", "eec", "em"))
-                dispatcher.register(literal(name).executes { mc.schedule { mc.gui.setScreen(com.odtheking.odin.clickgui.ClickGUI) }; 1 })
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
-            // Same tree registered under the formal name (both casings, since Brigadier
-            // literals are case-sensitive) and the short alias. Built fresh per name —
-            // a bare redirect would not run the root executes on the alias itself.
-            for (name in listOf("engineerclient", "EngineerClient", "ec")) dispatcher.register(
+            // /adm on its own: Odin's settings menu, as its /od opens it; /adm help lists the rest.
+            // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
+            // name — a bare redirect would not run the root executes on the alias itself.
+            for (name in COMMANDS) dispatcher.register(
                 literal(name)
-                    .executes { ctx ->
+                    .executes { mc.schedule { mc.gui.setScreen(com.odtheking.odin.clickgui.ClickGUI) }; 1 }
+                    .then(literal("help").executes { ctx ->
                         HELP.forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1
-                    }
+                    })
                     .then(literal("log")
                         .executes { ctx ->
                             ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7log: §f${EcLog.path ?: "not open"}"))
-                            ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/ec log mark <note>§7 stamps a note into it"))
+                            ctx.source.sendFeedback(Component.literal("§7 send that file to debug a run; §f/adm log mark <note>§7 stamps a note into it"))
                             1
                         }
                         .then(literal("mark")
