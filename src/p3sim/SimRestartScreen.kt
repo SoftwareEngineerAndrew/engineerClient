@@ -436,10 +436,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             "P2" to listOf(spot("Start", 77.5, 165.0, 40.5, -84.99f, 2.72f), spot("Yellow Pad", 27.75, 170.0, 94.55, -119.09f, 9.95f),
                 spot("Purple Pad", 119.95, 170.0, 95.10, 137.35f, 11.10f), spot("YP DPS", 57.5, 169.0, 65.5, -89.74f, -14.13f)),
             // Levers: yours (the west one if that's yours, else the east).
-            "S1" to listOf(job("SS", "S1 SS"), job("2", "S1 T2"), job("4", "S1 T4"),
+            "S1" to listOf(spot("SS", 108.30, 120.0, 94.0, -89.16f, 1.72f), job("2", "S1 T2"), spot("4", 93.57, 122.0, 101.52, 90.47f, 16.44f),
                 job("Levers", if (P3Plan.isMine("S1 west lever") && !P3Plan.isMine("S1 east lever")) "S1 west lever" else "S1 east lever")),
-            "S2" to listOf(ee("EE2", "ee2"), job("2", "S2 T2"), job("4", "S2 T4"), job("5", "S2 T5")),
-            "S3" to listOf(ee("EE3", "ee3"), spot("CEE3", 18.5, 121.5, 91.5, 0.02f, -8.14f), job("Dev", "S3 Arrows"), job("4", "S3 T4")),
+            "S2" to listOf(ee("EE2", "ee2"), spot("2", 59.53, 120.0, 126.0, -179.59f, 19.56f), spot("4", 39.48, 109.0, 139.61, -0.25f, 29.06f), spot("5", 40.53, 124.0, 125.54, 179.81f, 21.45f)),
+            "S3" to listOf(ee("EE3", "ee3"), spot("CEE3", 18.5, 121.5, 91.5, 0.02f, -8.14f), spot("Dev", 2.54, 120.0, 77.48, 89.63f, 8.13f), spot("4", 1.11, 109.0, 77.55, 90.40f, 22.47f)),
             "S4" to listOf(ee("Core", "core"), ee("Recore", "recore"), job("1", "S4 T1"), job("4", "S4 T4")),
         )
         row(groups.map { (group, spots) ->
