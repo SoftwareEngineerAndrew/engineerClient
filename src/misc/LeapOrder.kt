@@ -4,6 +4,8 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.adr.PartyTracker
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.render.roundedRect
@@ -41,10 +43,19 @@ import net.minecraft.world.entity.player.PlayerSkin
  *
  * `/od leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: Odin's leap menu as it would look, the
  * order's players in their spots, to drag between them. `/lo a b c d` sets it as Odin's command does.
+ *
+ * Changing the order (any way) switches Odin's Leap Menu sorting to Custom, and the next change in who's in the
+ * party switches it back to what it was (Odin Sorting if it was already Custom). Kept across restarts in
+ * config/engineerclient/leaporder-sorting.txt: the sorting to go back to, then the party it was set for.
  */
 object LeapOrder {
     private val file by lazy { FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("leaporder.txt") }
     private var saved: List<String> = emptyList()
+    private val autoFile by lazy { file.resolveSibling("leaporder-sorting.txt") }
+    /** The sorting to put back when the party changes, while this switched it to Custom. */
+    private var revertTo: LeapMenu.Sorting? = null
+    /** Who (besides you) was in the party when the order was set; null until the party is known. */
+    private var orderParty: Set<String>? = null
 
     fun install() {
         runCatching {
@@ -54,11 +65,19 @@ object LeapOrder {
                 saved = names
             }
         }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't read $file", it) }
+        runCatching {
+            if (Files.exists(autoFile)) {
+                val lines = Files.readAllLines(autoFile)
+                revertTo = LeapMenu.Sorting.entries.firstOrNull { it.name == lines.getOrNull(0)?.trim() }
+                orderParty = lines.getOrNull(1)?.takeIf { it.trim() != "?" }?.let { l -> l.split(' ').filter { it.isNotBlank() }.toSet() }
+            }
+        }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't read $autoFile", it) }
 
         // Saved on any change, also from Odin's own command.
         ClientTickEvents.END_CLIENT_TICK.register {
             val now = DungeonUtils.customLeapOrder
-            if (now != saved) EngineerClient.safely("leap order save") { save(now) }
+            if (now != saved) EngineerClient.safely("leap order save") { save(now); if (now.isNotEmpty()) useCustom() }
+            EngineerClient.safely("leap order party") { checkParty() }
         }
 
         // After Odin's commands, without adding or merging any node into /odin or /od (so nothing else under /od can
@@ -120,6 +139,59 @@ object LeapOrder {
     fun set(names: List<String>) {
         DungeonUtils.customLeapOrder = names.filter { it.isNotBlank() }.map { it.lowercase(Locale.ROOT) }
     }
+
+    private val sorting get() = LeapMenu.settings["Sorting"] as? SelectorSetting<LeapMenu.Sorting>
+
+    /** The order was just set: sort the leap menu by it, for this party. */
+    private fun useCustom() {
+        val s = sorting ?: return
+        if (s.value != LeapMenu.Sorting.CUSTOM) {
+            revertTo = s.value
+            s.value = LeapMenu.Sorting.CUSTOM
+            ModuleManager.saveConfigurations()
+            EngineerClient.msg("§7Leap Menu sorting: §fCustom§7 (back to ${label(revertTo!!)} when the party changes)")
+        } else if (revertTo == null) revertTo = LeapMenu.Sorting.ODIN
+        orderParty = party()
+        saveAuto()
+    }
+
+    /** The party changed since the order was set: back to the sorting from before. */
+    private fun checkParty() {
+        val back = revertTo ?: return
+        val s = sorting ?: return
+        // Set back to something else by hand: nothing to put back.
+        if (s.value != LeapMenu.Sorting.CUSTOM) { revertTo = null; orderParty = null; saveAuto(); return }
+        val now = party() ?: return
+        val was = orderParty ?: run { orderParty = now; saveAuto(); return }
+        if (now == was) return
+        s.value = back
+        revertTo = null
+        orderParty = null
+        ModuleManager.saveConfigurations()
+        saveAuto()
+        EngineerClient.msg("§7Party changed, Leap Menu sorting back to §f${label(back)}")
+    }
+
+    /** Who's in your party besides you (lower case), or null while that isn't known: ADR's tracker, else Odin's. */
+    private fun party(): Set<String>? {
+        val me = mc.user.name.lowercase(Locale.ROOT)
+        val names = synchronized(PartyTracker.state) {
+            PartyTracker.state.members.keys.toList().takeIf { PartyTracker.state.known }
+        } ?: PartyUtils.members.toList().takeIf { it.isNotEmpty() } ?: return null
+        return names.map { it.lowercase(Locale.ROOT) }.filter { it != me }.toSet()
+    }
+
+    /** Its name as Odin's setting shows it ("Odin Sorting"). */
+    private fun label(s: LeapMenu.Sorting) = s.toString()
+
+    private fun saveAuto() = runCatching {
+        val back = revertTo
+        if (back == null) Files.deleteIfExists(autoFile)
+        else {
+            Files.createDirectories(autoFile.parent)
+            Files.write(autoFile, listOf(back.name, orderParty?.sorted()?.joinToString(" ") ?: "?"))
+        }
+    }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't write $autoFile", it) }
 
     private fun save(names: List<String>) {
         saved = names
