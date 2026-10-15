@@ -169,6 +169,8 @@ object Fight {
 
     fun stop() {
         phase?.let { EngineerClient.safely("p3sim stop ${it.name}") { it.stop() } }
+        // Whatever title the run left up ("The gate will open in 5 seconds!"...) goes with it.
+        Sim.players().forEach { it.connection.send(net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(true)) }
         phase = null
         epoch++
         later.clear()
