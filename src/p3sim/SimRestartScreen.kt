@@ -35,7 +35,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     private lateinit var panel: LinearLayout
 
     // Each time the menu opens: no tab.
-    init { tab = null; practiceSec = 0 }
+    init { tab = null; practiceSec = 1 }
 
     override fun init() {
         super.init()
@@ -112,7 +112,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         else if (t === Tab.ADVANCED) advancedPanel()
         else if (t === Tab.SETTINGS) settingsPanel()
         else if (t === Tab.TELEPORT) teleportPanel()
-        else if (t === Tab.PRACTICE) { val s = practiceSec; if (s in 1..4) practiceSectionPanel(s) else practicePanel() }
+        else if (t === Tab.PRACTICE) practicePanel()
         else if (t != null && t === Tab.BOSS) bossPanel()
         panel.arrangeElements()
         val top = restartY + 20 + 10
@@ -139,7 +139,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val open = tab === t || (also != null && tab === also)
         addRenderableWidget(Button.builder(Component.literal(if (open) "§a$name" else name)) {
             tab = if (open) null else t
-            practiceSec = 0
+            practiceSec = 1
             rebuildWidgets()
         }.tooltip(tip("$about Click again: closes it.")).bounds(x, y, SIDE_W, 20).build())
     }
@@ -478,8 +478,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val sec = mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
         val picked = Practice.customJobsIn(sec)
         val cols = ArrayList<LayoutElement>()
-        cols += sectionTabs()
-        cols += label("", 8)
         cols += stack("§eCustom", 100, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
             change(if (start != null) "§aStart Position" else "Start Position", 100,
                 "Click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
@@ -536,22 +534,10 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                 change((if (on) "§a" else "§8") + COLUMNS[column(job)].first, JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job) }
             })
         }
-        val r = LinearLayout.horizontal().spacing(2)
-        r.defaultCellSetting().alignVerticallyTop()
-        panel.addChild(r)
-        cols.forEach { r.addChild(it) }
-    }
-
-    /** Practice's section tabs, on the left of its pages: a section's own page; a second click, back to Custom. */
-    private fun sectionTabs(): LayoutElement = stack("§eSections", 64, "Each section's own practices.", (1..4).map { s ->
-        val open = practiceSec == s
-        change(if (open) "§aS$s" else "S$s", 64, if (open) "Back to the custom practice." else "Section $s's practices.") { practiceSec = if (open) 0 else s }
-    })
-
-    /** Section [s]'s page in Practice: its presets (6 a column), each a start, jobs, checkpoints and its own start timer. */
-    private fun practiceSectionPanel(s: Int) {
-        val cols = ArrayList<LayoutElement>()
-        cols += sectionTabs()
+        // Right of Custom: the section tabs, and the open section's page (S1 when the menu opens).
+        cols += label("", 16)
+        val s = practiceSec.takeIf { it in 1..4 } ?: 1
+        cols += sectionTabs(s)
         cols += label("", 8)
         Practice.presets().filter { it.section == s }.chunked(6).forEachIndexed { i, part ->
             cols += stack(if (i == 0) "§eS$s Presets" else "", 64, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
@@ -565,6 +551,11 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         panel.addChild(r)
         cols.forEach { r.addChild(it) }
     }
+
+    /** Practice's section tabs: [open]'s page shows beside them (one always open). */
+    private fun sectionTabs(open: Int): LayoutElement = stack("§eSections", 64, "Each section's own practices.", (1..4).map { s ->
+        change(if (open == s) "§aS$s" else "S$s", 64, "Section $s's practices.") { practiceSec = s }
+    })
 
     // ------------------------------------------------------------------ pieces
 
@@ -688,7 +679,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
         /** The tab open (null: none, as each time the menu opens). */
         private var tab: Tab? = null
-        /** Practice's page: 0 the custom practice, 1-4 that section's ([sectionTabs]); 0 each time the menu opens. */
+        /** Practice's open section page, 1-4 ([sectionTabs]); S1 each time the menu opens. */
         private var practiceSec = 0
 
         /** The type a terminal type pick last chose. */
