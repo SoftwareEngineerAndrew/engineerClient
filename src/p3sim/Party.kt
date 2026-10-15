@@ -1082,6 +1082,8 @@ object Party {
         // Nobody early-enters S4 (there's no EE4): everyone leaps onto the core early enterer holding by the core, and walks on from there.
         val coreHold = if (s == 4 && ee == null) coreBot()?.takeIf { it.ghost == null && eeArrived[5] && it.hold } else null
         val coreYou = s == 4 && ee == null && eeOf(5)?.let { it.byYou && it.player?.position()?.let { p -> p.distanceTo(it.spot) <= 3.0 } == true } == true
+        // Your early enter into it: the ones still out (busy till the section before ended) leap onto you there, as onto a bot's.
+        val eeYou = ee?.takeIf { it.byYou && s > phase.from && it.player?.position()?.let { p -> p.distanceTo(it.spot) <= 3.0 } == true }
         val onto = eeBot ?: coreHold
         var i = 0
         for (b in bots) {
@@ -1103,6 +1105,7 @@ object Party {
             if (ontoFor(b.clazz, s) != null) continue
             b.inSection = s
             if (onto != null) leaps += Leap(b, n + 2 + gapTicks() * i++) { onto.asTarget() }
+            else if (eeYou != null) leaps += Leap(b, n + 2 + gapTicks() * i++, eeYou.spot) { eeYou.player?.asTarget() }
             else if (coreYou) leaps += Leap(b, n + 2 + gapTicks() * i++) { eeOf(5)?.player?.asTarget() }
             else walkOn(b, n)
         }
