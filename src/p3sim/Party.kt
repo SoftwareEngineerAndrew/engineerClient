@@ -368,8 +368,9 @@ object Party {
         resolveEes()
         val plan = P3Plan.plan()
         for (b in bots()) {
-            // The i4 bot is on the S4 device's plate from the start.
-            if (i4First(b, plan)) { b.pos = I4_STAND; Spots.startLook("S4 Target").let { b.yaw = it.first; b.pitch = it.second }; place(b); continue }
+            // The i4 bot is on the S4 device's plate from the start (the i3 bot on the S3 device's).
+            val dev = earlyDevice(b, plan)
+            if (dev != null) { b.pos = STANDS.getValue(dev); Spots.startLook(dev).let { b.yaw = it.first; b.pitch = it.second }; place(b); continue }
             if (P3Plan.ghostOn(b.clazz) && GhostStore.best(P3Plan.skillName(), b.clazz.name) != null) continue
             val lead = if (P3Sim.realMoves) legLead(b.clazz.name) else null
             if (lead != null) {
@@ -457,12 +458,15 @@ object Party {
         place(b)
     }
 
-    /** [b]'s first job is i4 (as startP3 starts it on the plate). */
-    private fun i4First(b: Bot, plan: Roles.Plan): Boolean {
+    /** A later section's device done from S1's start (i3, i4): its bot starts on it, as its player does. */
+    private val EARLY_DEVICES get() = setOf("S3 Arrows", "S4 Target")
+
+    /** [b]'s first job, when it's a later section's device done in S1 (as startP3 starts it on it); null: it isn't. */
+    private fun earlyDevice(b: Bot, plan: Roles.Plan): String? {
         fun time(j: String) = plan.times[j] ?: (sectionOf(j) to 5.0)
         val mine = P3Plan.allJobs().filter { j -> !Players.isPlayerJob(j) &&
             (P3Plan.doer(j)?.takeIf { !Players.isPlayerClass(it) } ?: plan.owners[j]?.firstOrNull()) == b.clazz }
-        return mine.minWithOrNull(compareBy({ time(it).first }, { time(it).second })) == "S4 Target"
+        return mine.minWithOrNull(compareBy({ time(it).first }, { time(it).second }))?.takeIf { it in EARLY_DEVICES && time(it).first == 1 }
     }
 
     private fun leadInTarget(b: Bot, plan: Roles.Plan): Vec3? {
@@ -477,7 +481,7 @@ object Party {
             if (ee.owner == c && !ee.byYou && mine.none { time(it).first < k }) return ee.spot
         }
         val first = mine.filter { time(it).first == 1 }.minWithOrNull(compareBy({ time(it).second }, { it })) ?: return null
-        if (first == "S4 Target") return null
+        if (first in EARLY_DEVICES) return null
         return spotOf(first)
     }
 
@@ -643,8 +647,8 @@ object Party {
             val first = next(b)?.takeIf { sectionOf(it.job) == from }
             val start = when {
                 core -> CORE_EE
-                // The i4 bot starts on the S4 device, as an i4 player does (nobody walks there from S1).
-                from == 1 && next(b)?.job == "S4 Target" -> STANDS.getValue("S4 Target")
+                // The i4 bot starts on the S4 device, as an i4 player does (nobody walks there from S1); the i3 bot on S3's.
+                from == 1 && next(b)?.let { it.job in EARLY_DEVICES && it.timeSection == 1 } == true -> STANDS.getValue(next(b)!!.job)
                 // A job due in the first second (a lever at 0.35 s): it starts on it, as its player does.
                 from == 1 && next(b)?.let { it.timeSection == 1 && it.sec <= 1.0 } == true -> spotOf(next(b)!!.job)
                 from == 1 -> startPos(1)
@@ -654,7 +658,7 @@ object Party {
             // Walked there in the lead-in: where it got to; not there yet, it goes on (its job's due now; an early
             // enter's spot: earlyEnterBots sends it).
             val w = walked[b.clazz]
-            if (w != null && !core && next(b)?.job != "S4 Target") {
+            if (w != null && !core && next(b)?.job !in EARLY_DEVICES) {
                 put(b, w.first)
                 if (w.first.distanceTo(w.second) > 0.5 && w.second == start) go(b, start, phase.n, phase.n, "where it starts P3 (still on its way)")
             } else put(b, start)
