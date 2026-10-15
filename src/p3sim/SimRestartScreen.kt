@@ -539,8 +539,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val s = practiceSec.takeIf { it in 1..4 } ?: 1
         cols += sectionTabs(s)
         cols += label("", 8)
-        Practice.presets().filter { it.section == s }.chunked(6).forEachIndexed { i, part ->
-            cols += stack(if (i == 0) "§eS$s Presets" else "", 64, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
+        // As many columns whichever section is open (the widest's; empty ones after), so switching moves nothing.
+        val all = Practice.presets()
+        val width = (1..4).maxOf { k -> (all.count { it.section == k } + 5) / 6 }
+        val parts = all.filter { it.section == s }.chunked(6)
+        for (i in 0 until width) {
+            val part = parts.getOrNull(i) ?: emptyList()
+            cols += stack("", 64, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
                 act(p.name, 64, "Practice ${p.name} (S$s): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                     (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
                     (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
