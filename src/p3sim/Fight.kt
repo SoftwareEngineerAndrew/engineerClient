@@ -265,6 +265,12 @@ object Fight {
      * Odin's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
      * a world load; a sim restart is a new P3, so it starts clean too.
      */
+    /**
+     * Odin's i4 solver forgets its marked blocks once the restore's block changes are in the games: the board's lit
+     * (emerald) block going back to blue terracotta reads to it as a hit, so the reset at the start alone isn't enough.
+     */
+    private fun resetI4Solver() = later(2, "i4 solver reset") { PartyClient.send("arrowsReset") }
+
     fun resetArrowsDevice() {
         val c = com.odtheking.odin.features.impl.boss.ArrowsDevice::class.java
         fun field(name: String) = c.getDeclaredField(name).apply { isAccessible = true }
@@ -313,6 +319,7 @@ object Fight {
         // The world as the phases before this one leave it; the 2nd and 3rd devices as before terms (not blank till Goldor's line).
         Blocks.prepare(what)
         if (what != Start.P4) Devices.showIdle()
+        resetI4Solver()
         SimItems.rebreak()
         Sim.forEachPlayer { pl ->
             setup(pl)
@@ -373,6 +380,7 @@ object Fight {
         Sim.clearEntities()
         Blocks.restoreAll()
         Devices.showIdle()
+        resetI4Solver()
         Party.clear()
         // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
         // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
