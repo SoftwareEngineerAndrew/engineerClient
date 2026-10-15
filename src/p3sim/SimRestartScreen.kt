@@ -281,6 +281,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val p3Part = PartyClient.phase != "P1" && PartyClient.phase != "P2"
         val part = if (p3Part) "P3" else "P1/P2"
         val saved = HotbarLayout.has(p3Part)
+        val who = Roles.label(P3Sim.myClass)
         row(listOf(
             stack("§eDeath Ticks", 84, P3Sim.deathTicksS.description, DEATH_TICKS.mapIndexed { i, (name, about) ->
                 change(pick(name, P3Sim.deathTicks == i), 84, about) { P3Sim.deathTicksS.index = i }
@@ -323,18 +324,20 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                 toggle("Stop After P3", P3Sim.p3Only, 92, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
                 toggle("Start On Join", P3Sim.autoStart, 92, P3Sim.autoStartS.description) { P3Sim.autoStartS.value = !P3Sim.autoStart },
                 toggle("Terror At Terms", P3Sim.terrorAtTerms, 92, P3Sim.terrorAtTermsS.description) { P3Sim.toggleTerrorAtTerms() },
+                toggle("Black Cat Start", P3Sim.blackCatAtStart, 92, "Black Cat At Start: " + P3Sim.blackCatS.description) { P3Sim.toggleBlackCatAtStart() },
                 toggle("Section Times", P3Sim.showTimes, 92, P3Sim.showTimesS.description) { P3Sim.showTimesS.value = !P3Sim.showTimes },
                 toggle("Hide Players", P3Sim.hidePlayers, 92, "On (green): other players out of sight.") { P3Sim.toggleHidePlayers() },
                 toggle("Debug Bots", P3Sim.debugBots, 92, P3Sim.debugBotsS.description) { P3Sim.debugBotsS.value = !P3Sim.debugBots },
             )),
             stack("§eOther", 100, "Your hotbar, recording, leaving.", listOf(
-                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet: every $part hotbar reset (a start, Reset Items) lays them out so. Arrange them first.") {
+                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who on ${P3Plan.skillName()} ($part). " +
+                    "Restarts keep your items as you left them anyway; this is what Reset Items, and a skill or class you switch to, go back to.") {
                     SimActions.send("hotbarSave", "p3" to p3Part)
                 },
-                act("Default Hotbar", 100, "Forgets your saved $part layout: its resets go back to the sim's default.") {
+                act("Default Hotbar", 100, "Forgets your saved $part hotbar for the $who on ${P3Plan.skillName()} and lays out the sim's default.") {
                     SimActions.send("hotbarReset", "p3" to p3Part)
                 }.also { it.active = saved },
-                act("Reset Items", 100, "Your hotbar back as it is at a start.") { SimActions.send("resetItems", "p3" to p3Part) },
+                act("Reset Items", 100, "Your $part items, gear and pet back to your saved hotbar for the $who on ${P3Plan.skillName()} (or the default), instead of as you left them.") { SimActions.send("resetItems", "p3" to p3Part) },
                 toggle("Record", P3Sim.record, 100, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
                 act("§7Leave", 100, "Leaves the sim world.") { SimWorld.leave() },
             )),

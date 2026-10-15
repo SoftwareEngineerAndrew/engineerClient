@@ -975,18 +975,24 @@ object SimItems {
 
     /**
      * The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory -
-     * laid out as your saved layout for that part has them ([HotbarLayout]), else as below.
+     * laid out as you left them, else as your saved layout for that part has them ([HotbarLayout]), else as below.
+     * [start]: a start or Reset Items, the pet as laid out too; else (a phase changing) the pet you have stays.
      */
-    fun giveHotbar(p: ServerPlayer, p3: Boolean = true) {
+    fun giveHotbar(p: ServerPlayer, p3: Boolean = true, start: Boolean = false) {
         val inv = p.inventory
+        // What they did with their items since the last reset stays.
+        HotbarLayout.keep(p)
+        val pet = P3Sim.phoenix
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         // 9: the spare mask (Masks.equip, Real Masks).
         val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH, 16 to EXPLOSIVE_BOW)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
-        Loadouts.applySaved(p)  // your saved gear and pet, else the defaults: Maxor + mask (+ Black Cat)
+        Loadouts.applySaved(p, p3)  // your gear and pet as left or saved, else the defaults: Maxor + mask
+        if (!start && P3Sim.phoenix != pet) { P3Sim.setPhoenix(pet); Fight.applySpeed(p) }
         if (p3 && P3Sim.terrorAtTerms) Loadouts.wearTerror(p)
+        HotbarLayout.gave(p3, held)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()

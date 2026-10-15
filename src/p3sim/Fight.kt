@@ -248,7 +248,7 @@ object Fight {
         player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
         // P1/P2's hotbar mid-run there (a joiner arriving), else P3's.
-        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm)
+        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm, start = true)
         // Nothing left of a ghost (a rejoin keeps the saved effects and flight).
         if (player.gameMode() != GameType.CREATIVE) {
             player.removeEffect(MobEffects.INVISIBILITY)
@@ -310,10 +310,10 @@ object Fight {
         // The world as the phases before this one leave it.
         Blocks.prepare(what)
         SimItems.rebreak()
-        // Every start (and restart) is with Black Cat out; the Pet Rod or a Phoenix proc swaps it.
         Sim.forEachPlayer { pl ->
-            P3Sim.setPhoenix(false)
             setup(pl)
+            // Black Cat At Start: every start (and restart) with Black Cat out, else the pet you had; the Pet Rod or a Phoenix proc swaps it.
+            if (P3Sim.blackCatAtStart && P3Sim.phoenix) { P3Sim.setPhoenix(false); applySpeed(pl) }
             Bows.start()
             Lava.reset()
         }
