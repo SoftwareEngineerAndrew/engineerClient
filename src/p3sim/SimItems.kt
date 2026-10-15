@@ -1058,12 +1058,36 @@ object SimItems {
     /** The block the held left click last hit (null once the button is up): [clientHitBlock] handles it once a press. */
     private var hitHeld: BlockPos? = null
 
+    /** Blocks this game broke ahead of the server (pos -> client tick, what it was), watched to log any coming back. */
+    private val predicted = HashMap<BlockPos, Pair<Int, String>>()
+    private var clientTicks = 0
+
+    /** Logs a block this game broke that's back within 2 s (the server sent it again), with what the server has now. */
+    private fun watchPredicted() {
+        clientTicks++
+        if (predicted.isEmpty()) return
+        val level = mc.level ?: run { predicted.clear(); return }
+        val it = predicted.entries.iterator()
+        while (it.hasNext()) {
+            val (pos, v) = it.next()
+            val age = clientTicks - v.first
+            val now = level.getBlockState(pos)
+            if (!now.isAir) {
+                val server = SimServer.level?.getBlockState(pos)?.block?.descriptionId?.substringAfterLast('.')
+                EngineerClient.logger.info("[p3sim] breaker: {},{},{} ({}) back in the game {} ticks after the hit as {}; server has {}", pos.x, pos.y, pos.z, v.second, age,
+                    now.block.descriptionId.substringAfterLast('.'), server)
+                it.remove()
+            } else if (age > 40) it.remove()
+        }
+    }
+
     /**
      * Client tick: a released attack key ends the press. Held on a block with the Dungeonbreaker, it keeps swinging as
      * mining does (our cancelled break gives vanilla nothing to swing for).
      */
     @JvmStatic
     fun clientTick() {
+        EngineerClient.safely("p3sim breaker watch") { watchPredicted() }
         if (!mc.options.keyAttack.isDown) { hitHeld = null; return }
         val player = mc.player ?: return
         val level = mc.level ?: return
@@ -1101,7 +1125,7 @@ object SimItems {
         if (held != "DUNGEONBREAKER") return false
         if (state.isAir) return true
         // The client breaks it at once (as Hypixel's do); the server keeps it or sends it back.
-        if (state.getDestroySpeed(level, at) >= 0) level.destroyBlock(at, false)
+        if (state.getDestroySpeed(level, at) >= 0) { predicted[at] = clientTicks to state.block.descriptionId.substringAfterLast('.'); level.destroyBlock(at, false) }
         return true
     }
 
@@ -2042,6 +2066,8 @@ object SimItems {
         if (Practice.noBreaking()) { p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos)); return }
         val now = Fight.serverTick
         val why = refusal(p, pos, s)
+        EngineerClient.logger.info("[p3sim] breaker: server hit {},{},{} ({}) at tick {}: {}", pos.x, pos.y, pos.z, s.block.descriptionId.substringAfterLast('.'), now,
+            when { why != null -> "refused (${why.ifEmpty { "quietly" }})"; charges <= 0 -> "refused (no charges)"; else -> "broken, ${charges - (if (P3Sim.breakerInfinite) 0 else 1)} charges left" })
         if (why != null || charges <= 0) {
             p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos))
             if (why == null) { if (now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(NO_CHARGES) } }
@@ -2058,6 +2084,7 @@ object SimItems {
     }
 
     private fun restore(b: Broken) {
+        EngineerClient.logger.info("[p3sim] breaker: {},{},{} back on the server (regen) at tick {}", b.pos.x, b.pos.y, b.pos.z, Fight.serverTick)
         Blocks.set(b.pos, b.state) // over whatever is there, the core-door barrier too
     }
 
