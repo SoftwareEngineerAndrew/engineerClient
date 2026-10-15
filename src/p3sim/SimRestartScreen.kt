@@ -547,15 +547,17 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val s = practiceSec.takeIf { it in 1..4 } ?: 1
         secCols += sectionTabs(s)
         secCols += label("", 8)
-        // As many columns whichever section is open (the widest's; empty ones after), so switching moves nothing.
+        // Each group its own column(s), headed (6 a column); as many columns whichever section is open (the widest's; empty ones
+        // after), so switching moves nothing.
         val all = Practice.presets()
-        val width = (1..4).maxOf { k -> (all.count { it.section == k } + 5) / 6 }
-        // Every section's preset buttons as wide as the longest name (no scrolling text; the same width in each section).
-        val pw = maxOf(64, all.maxOfOrNull { font.width(it.name) + 10 } ?: 0)
-        val parts = all.filter { it.section == s }.chunked(6)
+        fun columns(k: Int) = Practice.presetGroups(k).flatMap { (h, ps) -> ps.chunked(6).mapIndexed { i, part -> (if (i == 0) h else "") to part } }
+        val width = (1..4).maxOf { columns(it).size }
+        // Every section's preset buttons as wide as the longest name or heading (no scrolling text; the same width in each section).
+        val pw = maxOf(64, all.maxOfOrNull { font.width(it.name) + 10 } ?: 0, (1..4).flatMap { columns(it) }.maxOfOrNull { font.width(it.first) + 6 } ?: 0)
+        val parts = columns(s)
         for (i in 0 until width) {
-            val part = parts.getOrNull(i) ?: emptyList()
-            secCols += stack("", pw, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
+            val (head, part) = parts.getOrNull(i) ?: ("" to emptyList())
+            secCols += stack(if (head.isNotEmpty()) "§7$head" else "", pw, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
                 act(p.name, pw, "Practice ${p.name} (S$s): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                     (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
                     (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }

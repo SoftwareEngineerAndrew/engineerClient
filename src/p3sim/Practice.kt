@@ -145,6 +145,37 @@ object Practice {
         Setup("4 -> BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 west lever", "S3 east lever"), item = BONZO),
     ) + codedPresets().filter { it.section > 3 }
 
+    /** The menu's columns per section: each a heading and its presets by name, in order (any not listed last, under Other). */
+    private val GROUPS get() = mapOf(
+        1 to listOf("Terms" to listOf("123", "2 1", "4 3", "43 bl"), "Devs / EE" to listOf("i4", "i3 21", "ee2")),
+        2 to listOf(
+            "EE2 ->" to listOf("ee2 -> 23", "ee2 -> 53", "ee2 -> 4 rl", "ee2 -> 23 core", "ee2 -> 53 core"),
+            "i2 ->" to listOf("i2 -> 2", "i2 -> 53", "i2 -> gbl 4"),
+            "To EE3" to listOf("ee3", "cee3"),
+            "Term ->" to listOf("2 -> 1", "2 -> 3", "2 -> 23", "5 -> 53", "2 -> core", "3 -> core"),
+        ),
+        3 to listOf(
+            "EE3 ->" to listOf("1 bl", "4 bl", "2 dev", "3 dev"),
+            "CEE3 ->" to listOf("c -> 1", "c -> 2", "c -> i3 4", "c -> 3 bl", "c -> i3 4 bl"),
+            "4 ->" to listOf("4 -> 4 BL", "4 -> BL"),
+        ),
+        4 to listOf(
+            "Core ->" to listOf("1", "2", "3", "4"),
+            "Core -> BL" to listOf("bl", "3 bl", "4 bl"),
+            "Term ->" to listOf("1 -> 2", "3 -> 3 bl", "3 -> bl", "4 -> 4 bl", "4 -> bl"),
+        ),
+    )
+
+    /** Section [s]'s presets as the menu's groups: (heading, presets). */
+    fun presetGroups(s: Int): List<Pair<String, List<Setup>>> {
+        val all = presets().filter { it.section == s }
+        val byName = all.associateBy { it.name }
+        val groups = GROUPS[s].orEmpty().map { (h, names) -> h to names.mapNotNull { byName[it] } }.filter { it.second.isNotEmpty() }
+        val listed = groups.flatMap { it.second }.toSet()
+        val rest = all.filter { it !in listed }
+        return if (rest.isEmpty()) groups else groups + ("Other" to rest)
+    }
+
     /** Starts preset [name] (again). */
     fun startPreset(name: String) { presets().firstOrNull { it.name == name }?.let { launch(it) } }
 
