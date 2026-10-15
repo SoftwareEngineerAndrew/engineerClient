@@ -249,7 +249,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         // The core: everyone in, then Goldor flies in and dies.
         if (section == 5) coreTick()
         Party.tickP3(this)
-        if (practice) { Practice.tick(this); Moves.tick() }
+        if (practice) Practice.tick(this)
         GhostCapture.tick(this)
         if (handOff) { handOff = false; handDialogueOver(); Fight.begin(P4Necron(fromP3 = true)) }
     }

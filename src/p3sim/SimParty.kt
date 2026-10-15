@@ -720,10 +720,6 @@ object SimActions {
             "hotbarSave" -> Sim.chat("§8[§6P3 Sim Beta§8] " + HotbarLayout.save(p, b("p3")))
             "hotbarReset" -> { Sim.chat("§8[§6P3 Sim Beta§8] " + HotbarLayout.reset(b("p3"))); SimItems.giveHotbar(p, b("p3"), start = true) }
             "resetItems" -> { HotbarLayout.dropLive(b("p3")); SimItems.giveHotbar(p, b("p3"), start = true) }
-            // The bots' moves, recorded by the host ([Moves]).
-            "moveRecord" -> if (Sim.isHost(p)) Moves.record(s("id"), b("chain") || s("id") == null) else Sim.note("Recording the bots' moves is the host's.")
-            "moveForget" -> if (Sim.isHost(p)) Moves.forget(s("id") ?: return)
-            "moveClear" -> if (Sim.isHost(p)) Moves.clearSkill()
             // Practice runs on the host's own setup (their start, jobs, checkpoints, timer).
             "practiceCustom", "practicePreset" -> if (!Sim.isHost(p)) Sim.note("Practice is the host's: their start, jobs and checkpoints.")
                 else if (s("a") == "practiceCustom") Practice.startCustom() else Practice.startPreset(s("name") ?: return)
