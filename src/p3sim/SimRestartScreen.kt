@@ -104,14 +104,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         // The bottom half: the tab.
         panel = LinearLayout.vertical().spacing(2)
         panel.defaultCellSetting().alignHorizontallyCenter()
-        when (tab) {
-            null -> {}
-            Tab.PLAN -> planPanel()
-            Tab.ADVANCED -> advancedPanel()
-            Tab.SETTINGS -> settingsPanel()
-            Tab.TELEPORT -> teleportPanel()
-            Tab.PRACTICE -> practicePanel()
-        }
+        // By identity, not a when over the enum (its ordinal table goes stale when the tabs change in a hotswapped game).
+        val t = tab
+        if (t === Tab.PLAN) planPanel()
+        else if (t === Tab.ADVANCED) advancedPanel()
+        else if (t === Tab.SETTINGS) settingsPanel()
+        else if (t === Tab.TELEPORT) teleportPanel()
+        else if (t === Tab.PRACTICE) practicePanel()
         panel.arrangeElements()
         val top = restartY + 20 + 10
         panel.setPosition(cx - panel.width / 2, top)
