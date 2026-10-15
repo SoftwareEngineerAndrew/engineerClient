@@ -16,7 +16,7 @@ import java.nio.file.Path
 /**
  * Positional Messages is Odin's own on the Minecraft 26.1.2 build (Odin 0.3.4): [PosMsgExtras]'
  * settings come over once, the editor joins BR Roles' wand, Odin's boxes feed Engineer Client's
- * /ec setup, and /posmsg edit and /posmsg wand join Odin's /posmsg.
+ * /adm setup, and /posmsg edit and /posmsg wand join Odin's /posmsg.
  */
 object PosMsgSetup {
 
