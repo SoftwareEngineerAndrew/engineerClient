@@ -34,11 +34,35 @@ object Blocks {
         anims.clear()
         done.clear()
         conveyor = null
+        // Every block the run changed or a player's game broke ahead of the server: told to every game again after.
+        val sync = HashSet<BlockPos>(touched)
+        clientHits?.let { sync += it }
+        clientHits = null
         touched.forEach { Arena.restore(level, it) }
         touched.clear()
         // Then the whole arena checked against how it was built: anything else that changed goes back too.
         val fixed = Arena.resync(level)
         if (fixed > 0) EngineerClient.logger.info("[p3sim] restore: {} more arena blocks put back", fixed)
+        // No ghost blocks: the true blocks sent now, and again once hits still on their way (dropped with the run's queue)
+        // have landed in the games.
+        resend(sync)
+        Fight.later(10, "ghost block sync") { resend(sync) }
+        Fight.later(40, "ghost block sync") { resend(sync) }
+    }
+
+    /**
+     * Blocks a player's game broke before the server said so (the Dungeonbreaker breaks at once on the client): if the
+     * server never answers (a reset dropped the hit, it refused it quietly), the game would keep a ghost.
+     */
+    private var clientHits: HashSet<BlockPos>? = null
+
+    /** A player's game hit [pos] (and may have broken it already). */
+    fun clientHit(pos: BlockPos) { (clientHits ?: HashSet<BlockPos>().also { clientHits = it }) += pos.immutable() }
+
+    /** The server's blocks at [positions] to every player in the sim. */
+    fun resend(positions: Collection<BlockPos>) {
+        val level = SimServer.level ?: return
+        for (p in Sim.players()) for (pos in positions) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos))
     }
 
     // ------------------------------------------------------------------ recorded animations
