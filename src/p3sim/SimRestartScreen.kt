@@ -584,15 +584,16 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
      */
     private fun movesPanel() {
         val moves = Moves.list()
-        val done = moves.count { it.recorded }
-        text("§eMoves §7(${P3Plan.skillName()}): §f$done/${moves.size}§7 recorded. Bots play your recordings, sped up to the plan's times.")
+        val built = moves.associateWith { it.builtIn }
+        val done = moves.count { it.recorded || built[it] != null }
+        text("§eMoves §7(${P3Plan.skillName()}): §f$done/${moves.size}§7 set (§ayours§7, §bbuilt in§7 from your best runs, §7grey§7 to record). Bots play them the same every run, never sped up.")
         if (moves.isEmpty()) {
             text("§7Run a P3 with the bots on this skill once: every move they make is listed here to record.")
             return
         }
         row(listOf(
             act(if (done < moves.size) "§aRecord Missing" else "§8Record Missing", 110,
-                "Puts you on each unrecorded move's start in turn: go when ready, it stops as you get there and the next one starts. The Infinileap or Restart takes one again; Stop ends it.") { SimActions.send("moveRecord", "chain" to true) },
+                "Puts you on each move that's neither yours nor built in, in turn: go when ready, it stops as you get there and the next one starts. The Infinileap or Restart takes one again; Stop ends it.") { SimActions.send("moveRecord", "chain" to true) },
             change("§cClear List", 110, "Forgets this skill's list and every recording on it (the next run with bots lists the moves again).") { SimActions.send("moveClear") },
         ))
         val w = maxOf(120, moves.maxOf { font.width(it.label + " 0.00s") + 12 })
@@ -602,8 +603,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             val inS = moves.filter { it.section == s }
             if (inS.isEmpty()) continue
             r.addChild(stack("§6S$s", w, "Section $s's moves.", inS.map { m ->
-                ClickButton(w, if (m.recorded) "§a${m.label} §f${"%.2f".format(Locale.ROOT, m.ticks / 20.0)}s" else "§7${m.label}",
-                    tip("${m.label} in S$s. Click: record it${if (m.recorded) " again" else ""} (you go on its start; it stops as you get there). Right click: forget the recording (the bots go back to the recorded runs)."),
+                ClickButton(w, when {
+                    m.recorded -> "§a${m.label} §f${"%.2f".format(Locale.ROOT, m.ticks / 20.0)}s"
+                    built[m] != null -> "§b${m.label} §f${"%.2f".format(Locale.ROOT, built[m]!!.ticks / 20.0)}s"
+                    else -> "§7${m.label}"
+                },
+                    tip("${m.label} in S$s${built[m]?.let { " (built in: ${it.from} → ${it.to}, from your ${it.src} best run)" } ?: ""}. Click: record it${if (m.recorded) " again" else ""} (you go on its start; it stops as you get there). Right click: forget your recording (the bots go back to the built-in move, else the recorded runs)."),
                     left = { mc.gui.setScreen(null); SimActions.send("moveRecord", "id" to m.id) },
                     right = { SimActions.send("moveForget", "id" to m.id); rebuildWidgets() })
             }))

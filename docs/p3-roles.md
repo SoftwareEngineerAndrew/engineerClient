@@ -227,16 +227,46 @@ Things the fixed moves show up:
   The archer's S2 (`2`: T2 after the levers and T1) and its S3 dev (Arrows from core) have no clean
   moves. Your Prototype archer run took 100 t+ legs there. E.
 
-## How the sim should use this (proposal)
+## How the sim uses this
 
-1. **One table of legs** (`Legs.kt`). Each leg has its from-stand, its to-stand, how it's done, a fixed
-   path of turn points (taken from your best-run frames where you've done it, else from the ADR fastest
-   sample) and its fixed ticks. It covers everything in the catalogue above.
-2. **Bots play the leg exactly**: the same path at the same speed, every run. They stop being sped up to
-   meet the plan, they stop searching the recorded-runs graph, and they no longer use Routes.simplify,
-   THEORY_HURRY or the Moves recorder. If a plan time can't be met, the job is what gives (it's done
-   the tick the bot arrives); the move doesn't.
-3. **Times that check themselves**: at plan load, each role's timeline (fixed moves plus its jobs) is
-   checked against the plan's times, and the Plan tab shows each job's slack (red when negative). The
-   tight spots above would show up there, as would the PF mage problem.
-4. A leg with no path yet (marked E) falls back to today's route search until it's filled in.
+Every move a bot makes between two spots is one fixed move. It's played the same way and at the same
+speed every run, and it's never sped up. When a plan time is tighter than the move, the job is done the
+tick the bot arrives. A bot chooses its move in this order:
+
+1. **Your recording** of that move: menu → Moves (`p3sim-moves.json`, [Moves]).
+2. **The built-in leg** (`src/resources/assets/engineerclient/p3sim/legs.json`, [Legs]). This is every tick
+   of the move from your best sim runs: the fastest run per pair of spots, keeping only clean ones that
+   aren't slower than the usual way. Rebuild it with `mklegs.js` (scratchpad) after better runs.
+3. Otherwise the recorded-runs graph (`Routes`) at a player's pace, sped up only when a job needs it.
+   These are the moves still to record.
+
+The Moves tab lists every move the bots made on the skill. Green means yours, blue means built in, and
+grey means still to record. Record Missing goes through the grey ones.
+
+### Built in (32, from your best runs)
+
+S1: east → west lever 12, west lever → T4 12, T4 → T3 15.
+S2 and the EE2: Lights → i2 25, Lights → S2 T4 44, i2 → high lever 11, i2 → S2 T5 18, i2 → S2 T2 32,
+**i2 → high EE3 (cee3) 102**, high lever → low lever 16, high lever → EE3 low 65, high lever → high EE3 82,
+low lever → T4 31, T4 → low lever 38, T2 → T1 28, **T3 → core front 86**.
+S3: EE3 low → T1 10, → T4 32, → high EE3 45; high EE3 → T1 30, → T2 17, → Arrows 25; Arrows → T4 8;
+T4 → east lever 44.
+S4: core front → T1 24, → T2 37, → T3 22, → T4 18, → low lever 44; low → high lever 16; T4 → low lever 28;
+T4 → core front 18.
+
+### Still to record (none of your runs has a clean one)
+
+Theoretical needs these four:
+- **S1 T2 → S1 T1** (tank; ADR drop 12 / best 9)
+- **S2 T5 → S2 T3** (archer; ADR drop 17 / best 12; your run took 33)
+- **S3 T4 → S3 west lever** (bers; lava bounce, ADR 39.5 / best 35)
+- **S3 west → east lever** (bers; bonzo, ADR 16 / best 7)
+
+The others:
+- S1: SS → T2, SS → T4, T2 → T1, T1 → T3
+- S1 west lever → Lights (the PF and Quality PF mage's EE2)
+- S2: T5 → T1, T1 → T3, T3 → low lever, T3 → T2, Lights → T1 / T2 / T5 / high lever
+- S3: EE3 low → T2, T2 → Arrows
+- S4: T1 → T2, T2 → T1, T3 → low lever, T3 → T1, T4 → high lever, high → low lever
+- core front ↔ recore
+- S2 T2 → core front (the PF mage)

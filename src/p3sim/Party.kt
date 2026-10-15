@@ -84,6 +84,8 @@ object Party {
         /** What the route has it hold (a Bonzo staff, a Superboom...) until n = [routeHeldUntil]. */
         var routeHeld: String? = null
         var routeHeldUntil = -1
+        /** The route is a fixed move (yours or built in, [Moves]): played at its own speed, never sped up. */
+        var routeFixed = false
         /** Mining through to these, in order ([digCore]: the core early enterer's way in from S2); null: not. */
         var dig: ArrayDeque<Vec3>? = null
         /** Where it set off for in the lead-in ([startLeadIn]); null: it didn't. */
@@ -317,7 +319,7 @@ object Party {
         bots.forEach {
             it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0
             it.vy = 0.0; it.blinkReady = 0; it.blinkAt = -100; it.leaptAt = -100; it.heldKey = ""; it.ghost = null
-            it.route = null; it.routeTo = null; it.routeHeld = null; it.routeHeldUntil = -1; it.leadTo = null
+            it.route = null; it.routeTo = null; it.routeFixed = false; it.routeHeld = null; it.routeHeldUntil = -1; it.leadTo = null
         }
         leadIn = false
     }
@@ -1300,10 +1302,8 @@ object Party {
 
     /** The fastest a route plays: to be at a job by its time at all (later than that: the job's late). */
     private const val HURRY = 4.0
-    /** Theoretical's: its simple ways go as fast as its times need. */
-    private const val THEORY_HURRY = 10.0
     /** What a route shows the bot holding where the player held it (anything else: what it holds anyway). */
-    private val ROUTE_ITEMS = setOf("STARRED_BONZO_STAFF", "BONZO_STAFF", "JERRY_STAFF", "SUPERBOOM_TNT", "HYPERION", "ASPECT_OF_THE_VOID", "ENDER_PEARL")
+    private val ROUTE_ITEMS = setOf("STARRED_BONZO_STAFF", "BONZO_STAFF", "JERRY_STAFF", "SUPERBOOM_TNT", "HYPERION", "ASPECT_OF_THE_VOID", "ENDER_PEARL", "PET_ROD")
 
     /**
      * A tick along the way a real player went to [to] ([Routes]: sprints, jumps, lava bounces, boosts,
@@ -1314,14 +1314,15 @@ object Party {
         if (!P3Sim.realMoves) return false
         if (b.routeTo != to) {
             b.routeTo = to; b.routeT = 0.0
-            // Theoretical: the recorded way made simple (straight between its turns, at a steady 1 block a tick, faster when it must be).
-            // Listed for recording (the menu's Moves tab); yours played if you've recorded it.
+            // Listed for recording (the menu's Moves tab). The fixed move (yours, else built in) if there is one, at its
+            // own speed every run; else the recorded-runs graph.
             Moves.seen(b.name, curPhase?.section ?: 0, b.pos, to)
-            val r = Moves.route(b.pos, to)
-                ?: Routes.find(b.pos, to, ::closed)?.let { if (P3Plan.preset() === Roles.THEORETICAL) Routes.simplify(it) else it }
+            val fixed = Moves.route(b.pos, to)
+            val r = fixed ?: Routes.find(b.pos, to, ::closed)
             b.route = r
+            b.routeFixed = fixed != null
             if (r == null) dbg("§e${b.name}§7: no real route to ${to.short()}, walking")
-            else dbg("§e${b.name}§7: route ${"%.1f".format(r.ticks / 20)}s at a player's pace" +
+            else dbg("§e${b.name}§7: ${if (fixed != null) "fixed move" else "route"} ${"%.1f".format(r.ticks / 20)}s" +
                 if (b.due >= 0) ", ${"%.1f".format((b.due - b.lead - n) / 20.0)}s to be there" else "")
         }
         val r = b.route ?: return false
@@ -1352,15 +1353,12 @@ object Party {
      * that (up to [HURRY]).
      */
     private fun pace(b: Bot, left: Double, n: Int): Double {
-        if (b.due < 0 || left <= 0) return 1.0
-        // Theoretical: the fastest recorded way at the speed it was played (ADR's best players); never faster than a
-        // player can go, so a time tighter than that is simply met late.
+        // A fixed move is the same every run: a time tighter than it is met late (the job's done as it gets there).
+        if (b.due < 0 || left <= 0 || b.routeFixed) return 1.0
         val min = minOf(b.lead, MIN_LEAD)
         if (n + left <= b.due - min) return 1.0
         val by = b.due - min - n
-        // Theoretical: its simple ways go as fast as its times need.
-        val most = if (P3Plan.preset() === Roles.THEORETICAL) THEORY_HURRY else HURRY
-        return if (by <= 0) most else (left / by).coerceIn(1.0, most)
+        return if (by <= 0) HURRY else (left / by).coerceIn(1.0, HURRY)
     }
 
     /** An opening bots can't go through yet (by [Routes] id): a gate standing, a door or the core shut. */
@@ -1384,7 +1382,7 @@ object Party {
     }
 
     private fun arrive(b: Bot, to: Vec3) {
-        b.pos = to; b.to = null; b.vy = 0.0; b.route = null; b.routeTo = null
+        b.pos = to; b.to = null; b.vy = 0.0; b.route = null; b.routeTo = null; b.routeFixed = false
         b.face?.let { b.yaw = it.first; b.pitch = it.second }
     }
 
@@ -1451,7 +1449,7 @@ object Party {
     /** [b] leaps onto [to]: lands there facing as whoever it leapt to; their mod says so in party chat a tick later. */
     private fun leapTo(b: Bot, to: Target, n: Int) {
         val at = to.pos
-        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null
+        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null; b.routeFixed = false
         to.yaw?.let { b.yaw = it }
         Sim.sound(net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, at)
         // Most teammates' leaps are announced, usually 1 tick after the tp.
