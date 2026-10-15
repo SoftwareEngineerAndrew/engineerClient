@@ -325,14 +325,8 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         dragging = -1
     }
 
-    /**
-     * A left click. Under SDL (26.3) the event's button number isn't reliable (a left click can come through as
-     * 1), so anything but SDL saying the right button alone is down counts.
-     */
-    private fun isLeft(event: MouseButtonEvent): Boolean = runCatching {
-        val state = org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?)
-        !((state and 4) != 0 && (state and 1) == 0)
-    }.getOrElse { event.button() == 0 }
+    /** A left click: 26.3 numbers the buttons as SDL does (left 1, middle 2, right 3), not GLFW's (left 0). */
+    private fun isLeft(event: MouseButtonEvent): Boolean = event.button() == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT
 
     /** The left button is still held (SDL), or null when that can't be told. */
     private fun leftHeld(): Boolean? = runCatching {

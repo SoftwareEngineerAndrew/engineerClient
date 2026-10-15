@@ -14,6 +14,7 @@ import net.minecraft.client.gui.layouts.FrameLayout
 import net.minecraft.client.gui.layouts.LayoutElement
 import net.minecraft.client.gui.layouts.LinearLayout
 import net.minecraft.client.gui.screens.Screen
+import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.input.MouseButtonInfo
 import net.minecraft.network.chat.Component
@@ -126,14 +127,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     override fun isPauseScreen(): Boolean = false
 
-    /** Every click in the menu logged (which mouse button, the widget under it and whether it took it), to trace clicks. */
-    override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
-        val under = children().firstOrNull { it.isMouseOver(event.x(), event.y()) }
-        val took = super.mouseClicked(event, doubleClick)
-        EngineerClient.logger.info("[ec] p3sim menu mouse: button ${event.button()} at ${event.x().toInt()},${event.y().toInt()} on " +
-            "${(under as? net.minecraft.client.gui.components.AbstractWidget)?.message?.string ?: under?.javaClass?.simpleName ?: "nothing"} -> ${if (took) "taken" else "not taken"}")
-        return took
-    }
 
     /** Odin's settings save when the menu closes (dragging the speed slider would write every step). */
     override fun removed() {
@@ -664,15 +657,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     private class ClickButton(w: Int, text: String, tooltip: Tooltip, private val left: () -> Unit, private val right: () -> Unit) :
         Button(0, 0, w, 20, Component.literal(text), { left() }, { it.get() }) {
         init { setTooltip(tooltip) }
-        override fun isValidClickButton(info: MouseButtonInfo) = info.button() == 0 || info.button() == 1
+        // 26.3 numbers the buttons as SDL does: left 1, middle 2, right 3 (not GLFW's 0 / 2 / 1).
+        override fun isValidClickButton(info: MouseButtonInfo) =
+            info.button() == InputConstants.MOUSE_BUTTON_LEFT || info.button() == InputConstants.MOUSE_BUTTON_RIGHT
         override fun onClick(event: MouseButtonEvent, doubleClick: Boolean) {
             EngineerClient.logger.info("[ec] p3sim menu click: button ${event.button()} on ${message.string}")
-            // Right: button 1 without the left down in SDL (a left click once came through as button 1 here). SDL's state
-            // often hasn't the right button down yet when the click comes, so it only rules the left out.
-            val isRight = event.button() == 1 && runCatching {
-                (org.lwjgl.sdl.SDLMouse.SDL_GetMouseState(null as java.nio.FloatBuffer?, null as java.nio.FloatBuffer?) and 1) == 0
-            }.getOrElse { true }
-            if (isRight) right() else left()
+            if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) right() else left()
         }
         override fun extractContents(g: net.minecraft.client.gui.GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partial: Float) {
             extractDefaultSprite(g)
