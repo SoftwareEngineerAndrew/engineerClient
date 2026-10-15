@@ -99,7 +99,35 @@ object Arena {
     /** Puts [pos] back to the arena's start state (with the client told, no neighbour updates). */
     fun restore(level: net.minecraft.server.level.ServerLevel, pos: BlockPos) {
         val s = data.get(pos.x, pos.y, pos.z)
-        if (level.getBlockState(pos) != s) level.setBlock(pos, s, FLAGS)
+        if (level.getBlockState(pos) != s) { level.setBlock(pos, s, FLAGS); ArenaFixes.reskull(level, pos) }
+    }
+
+    /**
+     * Every block of the arena as built: the whole arena compared, chunk section by section, and any block that
+     * differs put back (whatever changed it, in this game or a saved one). Returns how many were.
+     */
+    fun resync(level: net.minecraft.server.level.ServerLevel): Int {
+        val a = data
+        var fixed = 0
+        for (cx in (a.x0 shr 4)..((a.x0 + a.w - 1) shr 4)) for (cz in (a.z0 shr 4)..((a.z0 + a.d - 1) shr 4)) {
+            val chunk = level.getChunk(cx, cz)
+            val xs = maxOf(a.x0, cx shl 4) until minOf(a.x0 + a.w, (cx shl 4) + 16)
+            val zs = maxOf(a.z0, cz shl 4) until minOf(a.z0 + a.d, (cz shl 4) + 16)
+            for (y in a.y0 until a.y0 + a.h) {
+                val si = chunk.getSectionIndex(y)
+                if (si < 0 || si >= chunk.sections.size) continue
+                val section = chunk.getSection(si)
+                for (z in zs) for (x in xs) {
+                    val want = a.get(x, y, z)
+                    if (section.getBlockState(x and 15, y and 15, z and 15) == want) continue
+                    val pos = BlockPos(x, y, z)
+                    level.setBlock(pos, want, FLAGS)
+                    ArenaFixes.reskull(level, pos)
+                    fixed++
+                }
+            }
+        }
+        return fixed
     }
 
     fun set(level: net.minecraft.server.level.ServerLevel, pos: BlockPos, state: BlockState) {
