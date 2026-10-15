@@ -153,8 +153,7 @@ object Roles {
      * (the healer leaps to the tank on S2's 2nd term instead); the bers holds a high EE3 for the tank, healer and mage, the tank
      * doing S3's device from there in S2; the archer early-enters S4 by the core (lava bounce, mined in) for the healer, mage and bers.
      * S1's gate: the healer, with an explosive bow during SS's 4th cycle. S2's: the mage, right after its first lever.
-     * The bots take the fastest recorded way (ADR players) made simple: straight between its turns, at a steady speed (at least
-     * a block a tick, never slower than the player went), as fast as these times need.
+     * The bots make each move the one fixed way ([Legs], [Moves]), at its own speed: a time tighter than that is met late.
      */
     val THEORETICAL = Preset(
         "Theoretical",

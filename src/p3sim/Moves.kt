@@ -8,17 +8,17 @@ import java.io.File
 import java.util.Locale
 
 /**
- * Your own recordings of the bots' moves: the bots play them (lined up with their jobs, sped up to the plan's
- * times) instead of the recorded-runs graph ([Routes]).
+ * Your own recordings of the bots' moves: the bots play them, the same way at the same speed every run, before the
+ * built-in ones ([Legs]) and the recorded-runs graph ([Routes]).
  *
  * 1. **The list fills itself**: every move a bot sets off on in a P3 ([seen]: who, section, from where to where) is
- *    listed, per skill, in the menu's Moves tab.
+ *    listed, per skill, in the menu's Moves tab, with whether it's built in (from your best runs) or yours to record.
  * 2. **Record**: a move's button (or Record Missing, which goes through every unrecorded one) puts you on its start
  *    in a practice of its section, facing where it goes. Recording starts as you move and stops as you get there
  *    (within 1.2 blocks across, 1.5 up or down); the next missing one starts a second later. The Infinileap or the
  *    Restart keybind takes it again; Stop ends the chain.
  * 3. **Played**: a bot setting off within [FROM_NEAR] of a recording's start, to within [TO_NEAR] of its end, plays it
- *    (getting on and off it in a straight line), at the recording's own speed or as much faster as its job's time needs.
+ *    (getting on and off it in a straight line) at the recording's own speed: a job it's late for is done as it gets there.
  *
  * Saved in `config/engineerclient/p3sim-moves.json`.
  */
@@ -33,6 +33,8 @@ object Moves {
         val fromV get() = Vec3(from[0], from[1], from[2])
         val toV get() = Vec3(to[0], to[1], to[2])
         val recorded get() = (frames?.size ?: 0) >= 2
+        /** The built-in leg the bots play here when it isn't recorded (null: none, it's yours to record). */
+        val builtIn get() = Legs.find(fromV, toV)
         val ticks get() = (frames?.size ?: 1) - 1
         val label get() = "$who: $fromName → $toName"
     }
@@ -89,28 +91,15 @@ object Moves {
     // ------------------------------------------------------------------ the bots
 
     /**
-     * A bot at [from] going to [to]: your recording of it (this skill's first, any skill's else), as a route from
-     * where the bot is, along the recording, to the spot. Null: none recorded.
+     * A bot at [from] going to [to]: your recording of it (this skill's first, any skill's else), else the built-in
+     * leg ([Legs]), as a route from where the bot is, along it, to the spot. Null: neither (the bot takes [Routes]).
      */
     fun route(from: Vec3, to: Vec3): Routes.Route? {
         val skill = P3Plan.skillName()
         val m = moves().filter { it.recorded && it.toV.distanceTo(to) <= TO_NEAR && it.fromV.distanceTo(from) <= FROM_NEAR }
-            .minWithOrNull(compareBy({ if (it.skill == skill) 0 else 1 }, { it.fromV.distanceTo(from) + it.toV.distanceTo(to) })) ?: return null
-        val f = m.frames ?: return null
-        val k = f.size + 2
-        val x = DoubleArray(k); val y = DoubleArray(k); val z = DoubleArray(k); val t = DoubleArray(k)
-        val yaw = FloatArray(k) { Float.NaN }; val pitch = FloatArray(k) { Float.NaN }; val held = arrayOfNulls<String>(k)
-        x[0] = from.x; y[0] = from.y; z[0] = from.z
-        val on = Math.sqrt((f[0][0] - from.x).let { it * it } + (f[0][1] - from.y).let { it * it } + (f[0][2] - from.z).let { it * it }) / 0.9
-        for ((i, fr) in f.withIndex()) {
-            val q = i + 1
-            x[q] = fr[0]; y[q] = fr[1]; z[q] = fr[2]; yaw[q] = fr[3].toFloat(); pitch[q] = fr[4].toFloat()
-            held[q] = m.held?.getOrNull(i)
-            t[q] = on + i
-        }
-        x[k - 1] = to.x; y[k - 1] = to.y; z[k - 1] = to.z
-        t[k - 1] = t[k - 2] + Math.sqrt((to.x - x[k - 2]).let { it * it } + (to.y - y[k - 2]).let { it * it } + (to.z - z[k - 2]).let { it * it }) / 0.9
-        return Routes.Route(x, y, z, t, yaw, pitch, held)
+            .minWithOrNull(compareBy({ if (it.skill == skill) 0 else 1 }, { it.fromV.distanceTo(from) + it.toV.distanceTo(to) }))
+        val f = m?.frames ?: return Legs.route(from, to)
+        return Legs.play(from, to, f, m.held)
     }
 
     // ------------------------------------------------------------------ recording
@@ -124,10 +113,13 @@ object Moves {
     private var started = false
     private var waitTicks = 0
 
-    /** Records [id] (again), or with null the first one not recorded yet; [chainOn]: then the next missing one, and so on. */
+    /** Neither recorded nor built in: yours to record. */
+    private fun missing(m: Move) = !m.recorded && m.builtIn == null
+
+    /** Records [id] (again), or with null the first missing one; [chainOn]: then the next missing one, and so on. */
     fun record(id: String?, chainOn: Boolean) {
-        val m = (if (id != null) moves().firstOrNull { it.id == id } else list().firstOrNull { !it.recorded })
-        if (m == null) { Sim.note(if (list().isEmpty()) "No moves listed for §f${P3Plan.skillName()}§7 yet: run a P3 with the bots once and every move they make is listed." else "Every §f${P3Plan.skillName()}§7 move is recorded."); chain = false; return }
+        val m = (if (id != null) moves().firstOrNull { it.id == id } else list().firstOrNull(::missing))
+        if (m == null) { Sim.note(if (list().isEmpty()) "No moves listed for §f${P3Plan.skillName()}§7 yet: run a P3 with the bots once and every move they make is listed." else "Every §f${P3Plan.skillName()}§7 move is recorded or built in."); chain = false; return }
         chain = chainOn
         arm(m)
     }
@@ -140,7 +132,7 @@ object Moves {
         val yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat()
         val jobs = P3Plan.jobsIn(m.section).filter { !it.startsWith("gate ") }
         Practice.startSetup(Practice.Setup("Move", m.section, Spots.Spot("Start", m.from[0], m.from[1], m.from[2], yaw, 0f), jobs, delay = 0.0))
-        val left = list().count { !it.recorded }
+        val left = list().count(::missing)
         Sim.note("§eRecording§7 §f${m.label}§7 (S${m.section}): go when ready, it stops as you get there. ${if (left > 0) "$left left." else ""}")
     }
 
@@ -173,8 +165,8 @@ object Moves {
         if (arrived) {
             m.frames = frames.toList(); m.held = held.toList(); m.recordedAt = System.currentTimeMillis()
             save()
-            val left = list().count { !it.recorded }
-            Sim.note("§aRecorded§7 §f${m.label}§7: §f${String.format(Locale.ROOT, "%.2f", m.ticks / 20.0)}s§7. ${if (left == 0) "§aEvery ${P3Plan.skillName()} move is recorded." else "$left left."}")
+            val left = list().count(::missing)
+            Sim.note("§aRecorded§7 §f${m.label}§7: §f${String.format(Locale.ROOT, "%.2f", m.ticks / 20.0)}s§7. ${if (left == 0) "§aEvery ${P3Plan.skillName()} move is recorded or built in." else "$left left."}")
             if (chain && left > 0) waitTicks = 20 else recording = null
         } else if (frames.size > 30 * 20) {
             Sim.note("§cNot recorded§7 (over 30 s): the Infinileap or Restart takes it again.")
@@ -183,7 +175,7 @@ object Moves {
     }
 
     private fun next() {
-        val m = list().firstOrNull { !it.recorded }
+        val m = list().firstOrNull(::missing)
         if (m == null) { recording = null; chain = false; return }
         arm(m)
     }

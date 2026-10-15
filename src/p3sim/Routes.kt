@@ -194,42 +194,6 @@ object Routes {
         return Route(x, y, z, t, yaw, pitch, held)
     }
 
-    /**
-     * [r] made simple: its points cut down to the few that keep it within [tol] blocks of the recorded way
-     * (Douglas-Peucker), timed at a steady [speed] blocks a tick, looking where it goes. The way real players
-     * went, without their stops, wiggles and detours.
-     */
-    fun simplify(r: Route, tol: Double = 1.0, speed: Double = 1.0): Route {
-        val k = r.size
-        if (k <= 2) return r
-        val keep = BooleanArray(k).also { it[0] = true; it[k - 1] = true }
-        fun dp(a: Int, b: Int) {
-            if (b <= a + 1) return
-            val ax = r.x[a]; val ay = r.y[a]; val az = r.z[a]
-            val dx = r.x[b] - ax; val dy = r.y[b] - ay; val dz = r.z[b] - az
-            val len2 = dx * dx + dy * dy + dz * dz
-            var far = -1.0; var at = -1
-            for (i in a + 1 until b) {
-                val px = r.x[i] - ax; val py = r.y[i] - ay; val pz = r.z[i] - az
-                val f = if (len2 < 1e-9) 0.0 else ((px * dx + py * dy + pz * dz) / len2).coerceIn(0.0, 1.0)
-                val ex = px - dx * f; val ey = py - dy * f; val ez = pz - dz * f
-                val d = Math.sqrt(ex * ex + ey * ey + ez * ez)
-                if (d > far) { far = d; at = i }
-            }
-            if (far > tol) { keep[at] = true; dp(a, at); dp(at, b) }
-        }
-        dp(0, k - 1)
-        val ids = (0 until k).filter { keep[it] }
-        val m = ids.size
-        val x = DoubleArray(m) { r.x[ids[it]] }; val y = DoubleArray(m) { r.y[ids[it]] }; val z = DoubleArray(m) { r.z[ids[it]] }
-        val t = DoubleArray(m)
-        for (i in 1 until m) t[i] = t[i - 1] + Math.sqrt((x[i] - x[i - 1]).let { it * it } + (y[i] - y[i - 1]).let { it * it } + (z[i] - z[i - 1]).let { it * it })
-        // Never slower than the player who went that way (a lava bounce is faster than a block a tick).
-        val v = maxOf(speed, if (r.ticks > 0) t[m - 1] / r.ticks else speed)
-        for (i in 1 until m) t[i] /= v
-        return Route(x, y, z, t, FloatArray(m) { Float.NaN }, FloatArray(m) { Float.NaN }, arrayOfNulls(m))
-    }
-
     private fun edgeTicks(g: Graph, a: Int, b: Int): Double {
         for (e in g.off[a] until g.off[a + 1]) if (g.to[e] == b) return g.ticks[e].toDouble()
         return 1.0
