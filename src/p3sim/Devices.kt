@@ -240,46 +240,16 @@ class Devices(val phase: GoldorPhase) {
         private val frames = HashMap<Int, ItemFrame>()
         private var solution = SOLUTIONS[0]
 
+        /** The board as it stood before terms ([showIdle]: frames turned since stay turned), else a new one. */
         fun place() {
             remove()
-            // Layouts 1-8 come about equally often; Odin's layout 0 has not been seen on Hypixel.
-            val layout = (1 until SOLUTIONS.size).random()
-            solution = SOLUTIONS[layout]
-            for (i in 0 until 25) {
-                val wool = EXTRAS[layout][i]
-                if (solution[i] < 0 && wool == null) continue
-                val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
-                val f = ItemFrame(EntityTypes.ITEM_FRAME, Sim.level, pos, Direction.EAST)
-                f.isPermanentlyInvulnerable = true
-                if (solution[i] >= 0) {
-                    f.setItem(ItemStack(Items.ARROW), false)
-                    f.setRotation(solution[i])
-                } else f.setItem(
-                    // Hypixel names them: "Start" (green) on the lime wool, "End" (red) on the red, non-italic.
-                    if (wool == true) Terminals.named(Items.WOOL.lime(), "Start", color = net.minecraft.ChatFormatting.GREEN)
-                    else Terminals.named(Items.WOOL.red(), "End", color = net.minecraft.ChatFormatting.RED), false)
-                frames[i] = Sim.spawn(f)
-            }
-            drawWall()
-            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
-            frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
-                ?.let { (j, f) -> f.setRotation((solution[j] + 7) % 8) }
+            val b = idleBoard?.takeIf { it.frames.values.none { f -> f.isRemoved } } ?: newBoard()
+            idleBoard = null
+            solution = SOLUTIONS[b.layout]
+            frames.putAll(b.frames)
         }
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }
-
-        /**
-         * The back wall (x -3, y120-124, z75-79, the board's own y/z): sea lanterns on the layout's frame
-         * cells, blue terracotta elsewhere. At the start every wool cell is lit, an arrow cell only about one in
-         * eight (in practice one already turned right), no other cell ever; it does not follow clicks. On
-         * completion every frame cell (6-15 of them) goes lantern in one tick.
-         */
-        private fun drawWall() {
-            for (i in 0 until 25) {
-                val lit = i in frames && (solution[i] < 0 || Random.nextInt(8) == 0)
-                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.DYED_TERRACOTTA.blue()).defaultBlockState())
-            }
-        }
 
         /** The device is done (a click of yours, or a teammate): every frame cell of the layout lights. */
         private fun lightWall() {
@@ -440,6 +410,67 @@ class Devices(val phase: GoldorPhase) {
     }
 
     companion object {
+        /** An Arrow Align board up: its layout and frames (by index (y-120) + (z-75)*5). */
+        class Board(val layout: Int, val frames: Map<Int, ItemFrame>)
+
+        /** The board shown before terms ([showIdle]), for the next P3's Arrow Align to take over. */
+        private var idleBoard: Board? = null
+
+        /**
+         * The 2nd and 3rd devices as a run has them before terms start (Lights pre-done, Arrow Align up but for one
+         * arrow), at every Stop and start: not blank until Goldor's line (some do them right as terms start).
+         */
+        fun showIdle() {
+            idleBoard?.frames?.values?.forEach { it.discard() }
+            idleBoard = null
+            val right = setOf(58 to 133, 58 to 136, 60 to 134, 60 to 135, 62 to 133, 62 to 136)
+            for (x in 58..62) for (y in 133..136) {
+                val lever = BlockPos(x, y, 142)
+                val st = Blocks.get(lever)
+                if (st != null && st.hasProperty(LeverBlock.POWERED)) Blocks.set(lever, st.setValue(LeverBlock.POWERED, (x to y) in right))
+                val lit = listOf(x to y, x - 1 to y, x + 1 to y, x to y - 1, x to y + 1).any { it in right }
+                Blocks.set(BlockPos(x, y, 143), B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lit))
+            }
+            idleBoard = newBoard()
+        }
+
+        /**
+         * A new Arrow Align board: frames only on one of Odin's nine layouts' arrow cells plus its few extra (non-arrow)
+         * frames, all solved but the arrow nearest the bottom left; and its back wall (x -3, the board's own y/z): sea
+         * lanterns on the layout's frame cells, blue terracotta elsewhere. At the start every wool cell is lit, an arrow
+         * cell only about one in eight (in practice one already turned right), no other cell ever; it does not follow
+         * clicks. On completion every frame cell (6-15 of them) goes lantern in one tick.
+         */
+        private fun newBoard(): Board {
+            // Layouts 1-8 come about equally often; Odin's layout 0 has not been seen on Hypixel.
+            val layout = (1 until SOLUTIONS.size).random()
+            val solution = SOLUTIONS[layout]
+            val frames = HashMap<Int, ItemFrame>()
+            for (i in 0 until 25) {
+                val wool = EXTRAS[layout][i]
+                if (solution[i] < 0 && wool == null) continue
+                val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
+                val f = ItemFrame(EntityTypes.ITEM_FRAME, Sim.level, pos, Direction.EAST)
+                f.isPermanentlyInvulnerable = true
+                if (solution[i] >= 0) {
+                    f.setItem(ItemStack(Items.ARROW), false)
+                    f.setRotation(solution[i])
+                } else f.setItem(
+                    // Hypixel names them: "Start" (green) on the lime wool, "End" (red) on the red, non-italic.
+                    if (wool == true) Terminals.named(Items.WOOL.lime(), "Start", color = net.minecraft.ChatFormatting.GREEN)
+                    else Terminals.named(Items.WOOL.red(), "End", color = net.minecraft.ChatFormatting.RED), false)
+                frames[i] = Sim.spawn(f)
+            }
+            for (i in 0 until 25) {
+                val lit = i in frames && (solution[i] < 0 || Random.nextInt(8) == 0)
+                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.DYED_TERRACOTTA.blue()).defaultBlockState())
+            }
+            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
+            frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
+                ?.let { (j, f) -> f.setRotation((solution[j] + 7) % 8) }
+            return Board(layout, frames)
+        }
+
         /** Odin's Arrow Align layouts: each frame's rotation, -1 = no arrow. */
         val SOLUTIONS = listOf(
             listOf(7, 7, -1, -1, -1, 1, -1, -1, -1, -1, 1, 3, 3, 3, 3, -1, -1, -1, -1, 1, -1, -1, -1, 7, 1),

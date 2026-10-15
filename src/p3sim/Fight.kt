@@ -164,6 +164,7 @@ object Fight {
         Sim.command("time set noon")
         Sim.command("weather clear")
         Blocks.restoreAll()
+        Devices.showIdle()
     }
 
     fun stop() {
@@ -307,8 +308,9 @@ object Fight {
         // The bots too: a start that spawns none (P2, P4 with Party Bots off) must not see the last run's.
         Party.clear()
         Blocks.restoreAll()
-        // The world as the phases before this one leave it.
+        // The world as the phases before this one leave it; the 2nd and 3rd devices as before terms (not blank till Goldor's line).
         Blocks.prepare(what)
+        if (what != Start.P4) Devices.showIdle()
         SimItems.rebreak()
         Sim.forEachPlayer { pl ->
             setup(pl)
@@ -368,6 +370,7 @@ object Fight {
         stop()
         Sim.clearEntities()
         Blocks.restoreAll()
+        Devices.showIdle()
         Party.clear()
         // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
         // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
