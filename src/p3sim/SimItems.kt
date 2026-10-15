@@ -1561,7 +1561,7 @@ object SimItems {
     private fun bonzo(p: ServerPlayer) {
         // Hard 4-tick gate: never 1-3 ticks apart; a refused click sets nothing.
         val gap = Fight.serverTick - bonzoLast
-        if (gap < 4) return
+        if (gap < 4) { EngineerClient.logger.info("[ec] bonzo: refused, {} ticks after the last (4-tick gate)", gap); return }
         // The held item is sent again on ~77% of accepted clicks, by idle time: ~50% under 8 ticks since the last
         // balloon, ~81% over 10. First, before the stand bundle.
         val resend = when { gap < 8 -> 0.5; gap > 10 -> 0.81; else -> 0.65 }
@@ -1601,7 +1601,7 @@ object SimItems {
                     bonzoBurst(p, o.add(dir.scale(BONZO_SPEED * k)), stand); return@later
                 }
                 // No block within ~128: the stand flies on and goes with no burst.
-                if (j > BONZO_STEPS) { stand.discard(); return@later }
+                if (j > BONZO_STEPS) { EngineerClient.logger.info("[ec] bonzo: no block within reach, no burst"); stand.discard(); return@later }
                 // Drawn 1.5 below the projectile (the vanilla tracker sends updates on its 3-tick cadence, the
                 // first about spawn+4, as Hypixel's).
                 val q = o.add(dir.scale(BONZO_SPEED * j))
@@ -1636,7 +1636,12 @@ object SimItems {
         // The server's position of you (from the move packets that arrived), for the gate and the push.
         val pos = Fight.seenPos(p)
         // Boost iff the burst is within 3.5 of feet+1.5 (no random roll).
-        if (bTrue.distanceTo(pos.add(0.0, 1.5, 0.0)) > 3.5) return
+        val dist = bTrue.distanceTo(pos.add(0.0, 1.5, 0.0))
+        EngineerClient.logger.info("[ec] bonzo: burst at {} {} {}, {} from you (seen {} {} {}, live {} {} {}): {}",
+            "%.2f".format(bTrue.x), "%.2f".format(bTrue.y), "%.2f".format(bTrue.z), "%.2f".format(dist),
+            "%.2f".format(pos.x), "%.2f".format(pos.y), "%.2f".format(pos.z), "%.2f".format(p.x), "%.2f".format(p.y), "%.2f".format(p.z),
+            if (dist > 3.5) "no boost (over 3.5)" else "boost")
+        if (dist > 3.5) return
         // SET 1.5 * unit(P.xz - B.xz), vy 0.5; exactly over it: (0, 0.5, 0).
         val dx = pos.x - bTrue.x; val dz = pos.z - bTrue.z
         val h = Math.sqrt(dx * dx + dz * dz)
