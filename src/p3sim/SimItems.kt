@@ -1161,6 +1161,8 @@ object SimItems {
         val id = idOf(p.mainHandItem)
         // The host's practice: their clicks only.
         if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && id == "INFINITE_SPIRIT_LEAP")) { Practice.restart(); return }
+        // Stopped (no phase running): the Bonzo's Staff's left click is an etherwarp, to get around the arena.
+        if (Fight.phase == null && id == "STARRED_BONZO_STAFF") { asClicked(p, "bonzo etherwarp") { etherwarp(p) }; return }
         // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
         if (Mage.isMage() && Mage.beamItem(id)) { Fight.afterPing("mage beam") { Mage.click(p) }; return }
         if (id in Bows.SHORTBOWS) Bows.click(p, id!!, left = true)
