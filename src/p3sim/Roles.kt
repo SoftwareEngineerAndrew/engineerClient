@@ -151,10 +151,14 @@ object Roles {
     /**
      * The fastest terms, in theory (2026-10-10). The mage pre-does Lights and holds a far EE2 spot for the bers, tank and archer
      * (the healer leaps to the tank on S2's 2nd term instead); the bers holds a high EE3 for the tank, healer and mage, the tank
-     * doing S3's device from there in S2; the archer early-enters S4 by the core (lava bounce, mined in) for the healer, mage and bers.
-     * S1's gate: the mage, an explosive bow shot from Lights right after doing it, just before the terms start (0.35-0.75 s
-     * in its recorded runs). S2's: the mage, right after its first lever.
-     * (The bots don't bonzo, lava bounce or go through walls: they get there on these times.)
+     * leaping there after its S2 term and walking down to S3's device (done as S3 starts); the archer early-enters S4 by the
+     * core (from S2's 3rd term) for the healer, tank and mage, the bers leaping onto it once S3's levers are done.
+     * S1's gate: the mage, an explosive bow shot from Lights right after doing it, just before the terms start. S2's: the
+     * mage, a Superboom as S2 starts, then its levers.
+     *
+     * The times are the user's own (2026-10-15): every job is when it was done in the best recorded run of that movement
+     * (from the job before, or the leap, to it), each role played in the sim on this plan. P3 ~21.1 s: S1 8.2 (SS),
+     * S2 4.25 (the mage's T4), S3 5.0 (the bers' levers), S4 3.65 (the bers' levers).
      */
     val THEORETICAL = Preset(
         "Theoretical",
@@ -166,19 +170,24 @@ object Roles {
             ARCHER to "bl 43 / 53 / ee4 / 4",
         ),
         times = listOf(
-            // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one.
-            "rl lights 0.05 | gate 0.35 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | 3 6.8 | ss 7.8",
-            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 3.7 | 3 3.95",
-            "3 1.6 | 4 2.5 | 2 3.0 | 1 4.0 | levers gate 4.5",
-            "2 2.0 | 4 2.5 | 3 3.0 | levers 3.0 | 1 3.25",
+            // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one, then T4, T3. The
+            // tank starts on T2, the bers on i4, the mage on Lights (and shoots the gate); the healer's SS ends S1.
+            "ll 0.05 | lights 0.25 | gate 0.35 | rl 0.7 | 2 1.3 | i4 2.05 | 4 2.95 | 1 3.0 | 3 5.05 | ss 8.2",
+            // The mage's Superboom and high lever from the far EE2, low lever, then T4 (S2's last); the tank on T2 as S2
+            // starts, the archer on T5 (then T3), the healer leaps to the tank for T1. The tank's Arrows: as S3 starts.
+            "gate 0.05 | ll 0.25 | rl 1.05 | 2 1.25 | 5 1.6 | 1 2.9 | 3 2.95 | 4 4.25 | arrows 4.35",
+            // The bers' T3 from the high EE3; the bers leaps to the tank on T4 for the Superboom and the levers (S3's last).
+            "3 1.25 | 4 2.75 | 1 2.95 | 2 3.45 | gate 3.75 | ll 4.25 | rl 5.0",
+            // Everyone off the archer at EE4; the bers leaps onto it after S3's levers, for S4's (the low one first).
+            "3 1.7 | 2 1.85 | 1 2.0 | 4 2.6 | ll 2.7 | rl 3.65",
         ),
         moves = listOf(
-            // The mage on its EE2 spot right after Lights; the bers leaps on after i4, the tank after its terms, the archer last.
-            "ee2 spot 1.0 | leap ee2 3.4 | ee2 waits ee3 2 5",
-            // The bers on the high EE3 by 1 s; the tank (2 s), healer and mage leap on.
-            "ee3 spot 1.0 | ee3 waits 1 2 4",
-            // The archer by the core; the healer, mage and bers leap on, then it walks to its 4th term.
-            "ee4 waits 1 3 ee3",
+            // The mage on its EE2 spot 1.9 s in; the bers leaps on after i4 (3.55), the tank after its terms (3.9), the archer last (6.1).
+            "ee2 spot 1.9 | leap ee2 3.5 | ee2 waits ee3 2 5",
+            // The bers on the high EE3 0.85 s into S2 (once the gate's down); the tank (1.9 s), healer (3.4 s) and mage (S3) leap on.
+            "ee3 spot 0.85 | ee3 waits 1 2 4",
+            // The archer by the core 2.95 s into S3 (from S2's T3); the tank, healer and mage leap on, then it walks to its 4th term.
+            "ee4 spot 2.95 | ee4 waits 1 2 3",
             "",
         ),
         defaults = mapOf(
