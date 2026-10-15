@@ -198,8 +198,9 @@ object Roles {
     val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC, PROTOTYPE_1, THEORETICAL)
 
     /** `ll` and `rl` per section coming in along the track (S2: the high lever on the left, the low one by T4 on the right; S4, heading east: the low lever by T3 on the left, the high one by T4 on the right). */
-    val LEFT = mapOf(1 to "S1 west lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
-    val RIGHT = mapOf(1 to "S1 east lever", 2 to "S2 low lever", 3 to "S3 east lever", 4 to "S4 high lever")
+    // Left and right as you come in along the track: in S1 that's heading for the gate (north), so the east lever's on the left.
+    val LEFT = mapOf(1 to "S1 east lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
+    val RIGHT = mapOf(1 to "S1 west lever", 2 to "S2 low lever", 3 to "S3 east lever", 4 to "S4 high lever")
 
     // ------------------------------------------------------------------ parsed
 
