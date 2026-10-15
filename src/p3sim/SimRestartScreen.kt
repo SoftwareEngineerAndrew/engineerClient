@@ -429,8 +429,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     /** The boss fight: where the run stops. Green when on. */
     private fun bossPanel() {
         row(listOf(stack("§eStop", 120, "Where the run stops on its own (as the menu's Stop: everything back as built).", listOf(
-            toggle("Stop After Terms", P3Sim.termsOnly, 120, P3Sim.termsOnlyS.description) { (P3Sim.termsOnlyS as com.odtheking.odin.clickgui.settings.impl.BooleanSetting?)?.let { it.value = !it.value } },
-            toggle("Stop After Goldor", P3Sim.p3Only, 120, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
+            toggle("Stop After Terms", P3Sim.termsOnly, 120, P3Sim.termsOnlyS.description) { P3Sim.toggleStopAfter(terms = true) },
+            toggle("Stop After Goldor", P3Sim.p3Only, 120, P3Sim.p3OnlyS.description) { P3Sim.toggleStopAfter(terms = false) },
         ))))
     }
 
@@ -486,8 +486,12 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         // The jobs: always the section you're in now (picks from other sections stay).
         val sec = mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
         val picked = Practice.customJobsIn(sec)
-        val cols = ArrayList<LayoutElement>()
-        cols += stack("§eCustom", 100, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
+        // Left to right: Import / Export, the section tabs with the open section's page, then Custom and its jobs.
+        val custom = ArrayList<LayoutElement>()
+        custom += stack("§eCustom", 100, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
+            act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
+                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { SimActions.send("practiceCustom") }
+                .also { it.active = start != null },
             change(if (start != null) "§aStart Position" else "Start Position", 100,
                 "Click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
                     (start?.let { "Now: S${Practice.customSection}, ${at(it)}." } ?: "Not set.")) {
@@ -518,33 +522,34 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                     EngineerClient.msg(if (n == 0) "§7No leap waypoints to remove." else "§7Leap waypoint §f$n§7 (${QUADRANTS[n - 1]}) removed.")
                     Practice.removeLeapWaypoint(); rebuildWidgets()
                 }),
+            DelaySlider(100),
             change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
-            change("Export", 100, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
+        ))
+        val io = stack("§eCode", 64, "Your custom practice as a short code, to send to someone or take theirs.", listOf(
+            change("Export", 64, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
                 val code = Practice.exportCode()
                 mc.keyboardHandler.clipboard = code
                 EngineerClient.msg("§7Custom practice code copied: §f$code")
             },
-            change("Import", 100, "Replaces your custom practice with the code on your clipboard.") {
+            change("Import", 64, "Replaces your custom practice with the code on your clipboard.") {
                 if (Practice.importCode(mc.keyboardHandler.clipboard)) EngineerClient.msg("§7Custom practice imported (S${Practice.customSection}, ${Practice.customJobs.size} job(s), ${Practice.checkpoints.size} checkpoint(s), ${Practice.leapWaypoints.size} leap waypoint(s)).")
                 else EngineerClient.msg("§cYour clipboard doesn't hold a custom practice code.")
             },
-            DelaySlider(100),
-            act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
-                if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { SimActions.send("practiceCustom") }
-                .also { it.active = start != null },
         ))
         val others = (1..4).filter { it != sec }.mapNotNull { s -> Practice.customJobsIn(s).takeIf { it.isNotEmpty() }?.let { j -> "S$s ${j.joinToString(" ") { COLUMNS[column(it)].first }}" } }.joinToString(", ")
         // The section's jobs, in the plan's column order, 6 a column.
         val jobs = P3Plan.jobsIn(sec).sortedBy { column(it) }
         jobs.chunked(6).forEachIndexed { i, part ->
-            cols += stack(if (i == 0) "§6§lS$sec" else "", JOB_W, "The section you're in: go to another to pick its jobs too (the picks of every section stay)." +
+            custom += stack(if (i == 0) "§6§lS$sec" else "", JOB_W, "The section you're in: go to another to pick its jobs too (the picks of every section stay)." +
                     (others.takeIf { it.isNotEmpty() }?.let { " Picked elsewhere: $it." } ?: ""), part.map { job ->
                 val on = job in picked
                 change((if (on) "§a" else "§8") + COLUMNS[column(job)].first, JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job) }
             })
         }
-        // Right of Custom: the section tabs, and the open section's page (S1 when the menu opens).
-        cols += label("", 16)
+        val cols = ArrayList<LayoutElement>()
+        cols += io
+        cols += label("", 8)
+        // The section tabs, and the open section's page (S1 when the menu opens).
         val s = practiceSec.takeIf { it in 1..4 } ?: 1
         cols += sectionTabs(s)
         cols += label("", 8)
@@ -560,6 +565,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                     (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
             })
         }
+        cols += label("", 16)
+        cols += custom
         val r = LinearLayout.horizontal().spacing(2)
         r.defaultCellSetting().alignVerticallyTop()
         panel.addChild(r)
