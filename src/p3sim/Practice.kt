@@ -194,7 +194,10 @@ object Practice {
         launch(Setup("Custom", s, at, jobs, checkpoints.toList()))
     }
 
-    private fun launch(set: Setup) { setup = set; launch(set.name, set.section) }
+    private fun launch(set: Setup) { if (set.name != "Move") Moves.cancel(); setup = set; launch(set.name, set.section) }
+
+    /** A setup of someone else's ([Moves]: recording a bot's move). */
+    fun startSetup(set: Setup) = launch(set)
 
     private fun launch(m: String, s: Int) {
         mode = m; section = s
@@ -220,6 +223,7 @@ object Practice {
     /** The same practice again (the Restart keybinds, the Infinileap, a left click once done). */
     fun restart() {
         val set = setup
+        Moves.restarted()
         when {
             set?.name == "Custom" -> startCustom()
             set != null -> launch(set)
@@ -231,7 +235,7 @@ object Practice {
     fun clickRestarts() = active && endTicks >= 0 && System.currentTimeMillis() - endMs >= (setup?.restartMs ?: 250)
 
     /** Out of practice mode (any other start, Stop). */
-    fun exit() { mode = null; section = 0; setup = null; tasks = emptyList(); endTicks = -1 }
+    fun exit() { mode = null; section = 0; setup = null; tasks = emptyList(); endTicks = -1; Moves.cancel() }
 
     /** Your jobs that are section [s]'s in practice: done in it, as the plan times them, in that order. */
     fun jobs(s: Int): List<String> {
@@ -278,7 +282,8 @@ object Practice {
             ee?.let { list += Task("ee ${it.key}", it.label) }
         }
         tasks = list; ticks = 0; endTicks = -1
-        if (list.isEmpty()) Sim.note("Practice §f$mode§7: nothing to do in it.")
+        if (mode == "Move") Unit
+        else if (list.isEmpty()) Sim.note("Practice §f$mode§7: nothing to do in it.")
         else Sim.note("Practice §f$mode§7: ${list.joinToString("§8, §7") { it.label }}.")
     }
 

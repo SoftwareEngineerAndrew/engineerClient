@@ -1315,7 +1315,10 @@ object Party {
         if (b.routeTo != to) {
             b.routeTo = to; b.routeT = 0.0
             // Theoretical: the recorded way made simple (straight between its turns, at a steady 1 block a tick, faster when it must be).
-            val r = Routes.find(b.pos, to, ::closed)?.let { if (P3Plan.preset() === Roles.THEORETICAL) Routes.simplify(it) else it }
+            // Listed for recording (the menu's Moves tab); yours played if you've recorded it.
+            Moves.seen(b.name, curPhase?.section ?: 0, b.pos, to)
+            val r = Moves.route(b.pos, to)
+                ?: Routes.find(b.pos, to, ::closed)?.let { if (P3Plan.preset() === Roles.THEORETICAL) Routes.simplify(it) else it }
             b.route = r
             if (r == null) dbg("§e${b.name}§7: no real route to ${to.short()}, walking")
             else dbg("§e${b.name}§7: route ${"%.1f".format(r.ticks / 20)}s at a player's pace" +
