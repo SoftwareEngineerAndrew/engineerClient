@@ -1023,7 +1023,8 @@ object Party {
 
     /** A leap onto [c] can go: they aren't an early enterer still to get on their spot (the leap waits for them there). */
     private fun leapReady(c: DungeonClass, phase: GoldorPhase): Boolean {
-        val into = (phase.section..5).firstOrNull { eeOf(it)?.owner == c && !released[it] } ?: return true
+        // Only the next section's (onto the core early enterer in S2: onto them where they are, not held till the core).
+        val into = (phase.section..minOf(5, phase.section + 1)).firstOrNull { eeOf(it)?.owner == c && !released[it] } ?: return true
         if (phase.section >= into) return true
         val ee = eeOf(into) ?: return true
         return if (Players.isPlayerClass(c)) ee.player?.position()?.let { it.distanceTo(ee.spot) <= 3.0 } == true else eeArrived[into]
