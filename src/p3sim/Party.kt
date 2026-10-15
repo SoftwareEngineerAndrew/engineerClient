@@ -468,6 +468,11 @@ object Party {
     private val readyAt = IntArray(6) { -1 }
     /** Ticks an early enterer waits after the last leap before moving on (0.3 s). */
     private const val RELEASE_DELAY = 6
+    /**
+     * An early enterer's section has begun and everyone it waits for is in it, but not all by leaping onto it (a leap onto
+     * someone else, a walk in): it moves on after this long anyway.
+     */
+    private const val IN_GRACE = 40
     private var lastLeap = 0
     private val sectionN = IntArray(6)
     /** n each early enterer got on its spot (bot or ghost), and you on yours (-1: not yet); n you left yours. */
@@ -489,6 +494,7 @@ object Party {
         val walked = if (leadIn && phase.arrived && phase.from == 1) bots.filter { it.leadTo != null }.associate { it.clazz to (it.pos to it.leadTo!!) } else emptyMap()
         clear()
         youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.forEach { it.clear() }; holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
+        allInAt.fill(-1)
         eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false
         planned = 0
         lastLeap = 0
@@ -1030,15 +1036,22 @@ object Party {
             // You're waited for if you're one who leaps onto it (on SS you leap to the 2nd term instead).
             val players = Players.playerClasses().filter { it != b.clazz }
             val needed = if (waits == null) players else waits.mapNotNull { whoFor(it, into) }.filter { it in players }
+            // In once its section's begun: leapt onto it, or in the section anyway (leapt onto someone else, walked in).
+            fun there(c: DungeonClass?) = leapt(c, b, into) || into == s && inSectionNow(c, into)
             val ok = when {
                 // Never without you (a safety net at 30 s); the bots get 10 s.
                 into == s && n - sectionN[s] >= 600 -> true
-                needed.any { !leapt(it, b, into) } -> false
+                needed.any { !there(it) } -> { allInAt[into] = -1; false }
+                // Everyone's in the section, not all through this early enterer (someone leapt wrong): a short wait, then on.
+                needed.any { !leapt(it, b, into) } -> {
+                    if (allInAt[into] < 0) { allInAt[into] = n; dbg("§e${b.name}§7: everyone's in S$into, not all by EE$into: moving on in ${IN_GRACE / 20.0}s") }
+                    n - allInAt[into] >= IN_GRACE
+                }
                 into == s && n - sectionN[s] >= 200 -> true
-                waits != null -> waits.all { t -> leapt(whoFor(t, into), b, into) }
+                waits != null -> waits.all { t -> there(whoFor(t, into)) }
                 // No list: everyone - every bot (busy ones too, once they're done and leapt) and you.
                 else -> (into == s || preleapOpen(into, n)) &&
-                    bots.all { it === b || leapt(it.clazz, b, into) } && players.all { leapt(it, b, into) }
+                    bots.all { it === b || there(it.clazz) } && players.all { there(it) }
             }
             // Everyone's on: it moves 0.3 s later (as a player reacts).
             if (!ok) { readyAt[into] = -1; continue }
@@ -1053,6 +1066,16 @@ object Party {
             if (recore != null) go(b, recore.spot, n, -1, "the recore (in the core)", recore.yaw to recore.pitch)
             else { b.hold = false; walkOn(b, n) }
         }
+    }
+
+    /** When everyone an early enterer waits for was first in its section without all having leapt onto it (-1: not). */
+    private val allInAt = IntArray(7) { -1 }
+
+    /** [c] (a player, else its bot) is in section [into] or past it now (into 5: in the core). */
+    private fun inSectionNow(c: DungeonClass?, into: Int): Boolean {
+        val p = posOf(c) ?: botOf(c)?.takeIf { it.entity != null }?.pos ?: return false
+        if (into >= 5) return GoldorPhase.CORE_BOX.contains(p)
+        return GoldorPhase.dtZone(p) >= into
     }
 
     /** Debug: who an early enterer has (+) and hasn't (-) had leap onto it. */
