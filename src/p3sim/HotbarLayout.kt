@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * [SimItems.giveHotbar], in this order:
  *
  * 1. **As you left them.** Whatever you did with your items, armour and pet since the last reset stays: the next
- *    reset lays them out the same (kept in memory, for each skill, part and class: [keep]). Black Cat At Start puts
+ *    reset lays them out the same (for each skill, part and class: [keep]; in the file too, so a relaunch keeps them). Black Cat At Start puts
  *    Black Cat back on at every start; Terror At Terms still puts the Terror loadout on at P3.
  * 2. **Your saved hotbar** for this skill (P3Plan's preset), part and class: "Save Hotbar" (sim menu) records where each
  *    sim item is right now (hotbar and inventory, by item id), the slot you hold, what you wear and your pet, in
@@ -27,8 +27,12 @@ object HotbarLayout {
 
     /** [worn]: what you wore and your pet with it (null in older files: [Saved.worn]). */
     private class Layout(val slots: Map<String, Int> = emptyMap(), val selected: Int = 3, val worn: Loadouts.Worn? = null)
-    /** [roles]: "Normal PF/P3/ARCHER" (older files: "P3/ARCHER", one for every skill). [p12]/[p3]/[worn]: from before layouts were per class. */
-    private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null, val roles: Map<String, Layout>? = null)
+    /**
+     * [roles]: "Normal PF/P3/ARCHER" (older files: "P3/ARCHER", one for every skill). [p12]/[p3]/[worn]: from before layouts were per class.
+     * [live]: each key's items as you last left them ([keep]), so they stay so after the game is closed too.
+     */
+    private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null, val roles: Map<String, Layout>? = null,
+                             val live: Map<String, Layout>? = null)
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     /** Each player's saved layouts (the host's from this computer, a joiner's from their game: [PlayerFiles]). */
@@ -38,7 +42,10 @@ object HotbarLayout {
     /** The [key] each player's items were last laid out for (their inventory is that one, as they've moved it since), and the slot it held. */
     private val given = ConcurrentHashMap<String, Pair<String, Int>>()
     private fun owner() = PlayerFiles.owner()?.toString() ?: ""
-    private fun lives() = live.getOrPut(owner()) { ConcurrentHashMap() }
+    private fun lives() = live.getOrPut(owner()) { ConcurrentHashMap(saved().live.orEmpty().filterValues { it.slots != null }) }
+
+    /** How you left your items, written to the file (it reads them back after a relaunch). */
+    private fun keepLives() = write(saved().copy(live = lives().toMap()))
 
     /** This game's file changed (the sim's server saved a joiner's): read it again. */
     fun forgetLocal() { cache.remove("") }
@@ -96,14 +103,14 @@ object HotbarLayout {
         // Terror At Terms put that on (it does again): what they wore before stays.
         val worn = if (k.contains("/P3/") && P3Sim.terrorAtTerms) was?.worn else Loadouts.capture(p)
         // The slot held is the layout's (a restart mid-swing shouldn't start you on that item).
-        capture(p, worn, held)?.let { lives()[k] = it }
+        capture(p, worn, held)?.let { lives()[k] = it; keepLives() }
     }
 
     /** [p3]'s part was just laid out, holding [held]: the player's items are its from now on. */
     fun gave(p3: Boolean, held: Int) { given[owner()] = key(p3) to held }
 
     /** Reset Items: [p3]'s part back to the saved layout (or the default), not as left. */
-    fun dropLive(p3: Boolean) { lives().remove(key(p3)); given.remove(owner()) }
+    fun dropLive(p3: Boolean) { lives().remove(key(p3)); given.remove(owner()); keepLives() }
 
     /**
      * Where the items go: [defaults] is each item at its default inventory slot. Returns every item at
@@ -129,17 +136,17 @@ object HotbarLayout {
     /** Saves [p]'s current layout as [p3]'s part's for this skill and class. Returns what to tell them. */
     fun save(p: ServerPlayer, p3: Boolean): String {
         val l = capture(p, Loadouts.capture(p)) ?: return "§cnothing to save: no sim items in your inventory"
-        val s = saved()
-        write(s.copy(roles = s.roles.orEmpty() + (key(p3) to l)))
         lives()[key(p3)] = l
+        val s = saved()
+        write(s.copy(roles = s.roles.orEmpty() + (key(p3) to l), live = lives().toMap()))
         return "§7saved your §f${part(p3)}§7 hotbar (${l.slots.size} items, holding slot ${l.selected + 1}) with your armour, helmet and pet; Reset Items brings it back"
     }
 
     /** Forgets [p3]'s part's saved layout for this skill and class (and how it was left): its resets go back to the sim's default. */
     fun reset(p3: Boolean): String {
-        lives().remove(key(p3)); given.remove(owner())
+        lives().remove(key(p3)); given.remove(owner()); keepLives()
         if (!has(p3)) return "§7the ${part(p3)} hotbar is already the default"
-        val s = saved()
+        val s = saved().copy(live = lives().toMap())
         val roles = s.roles.orEmpty()
         when {
             key(p3) in roles -> write(s.copy(roles = roles - key(p3)))
