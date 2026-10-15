@@ -183,8 +183,8 @@ object Roles {
         ),
         moves = listOf(
             // The mage on its EE2 spot 1.9 s in; the bers leaps on after i4 (3.55), the tank after its terms (3.9), the archer
-            // last (6.1). The bers goes on to the high EE3, on it before S2 starts (7.5 s).
-            "ee2 spot 1.9 | ee3 spot 7.5 | leap ee2 3.5 | ee2 waits ee3 2 5",
+            // last (6.1). The bers goes on to the high EE3 as soon as its way there allows (it can be before S2 starts).
+            "ee2 spot 1.9 | leap ee2 3.5 | ee2 waits ee3 2 5",
             // The tank (1.9 s), healer (3.4 s) and mage (S3) leap onto the bers on the high EE3.
             "ee3 waits 1 2 4",
             // The archer by the core 2.95 s into S3 (from S2's T3); the tank, healer and mage leap on, then it walks to its 4th term.
