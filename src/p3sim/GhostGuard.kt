@@ -37,7 +37,8 @@ object GhostGuard {
     private fun compare(snap: Map<BlockPos, BlockState>) {
         val level = SimServer.level ?: return
         val player = SimServer.player ?: return
-        val diff = snap.filter { (pos, s) -> level.getBlockState(pos) != s }
+        // Different blocks only (a wall's or pane's connections can differ and change nothing).
+        val diff = snap.filter { (pos, s) -> level.getBlockState(pos).block !== s.block }
         val last = suspects.orEmpty()
         val ghosts = diff.filter { (pos, s) -> last[pos] == s }
         suspects = diff - ghosts.keys

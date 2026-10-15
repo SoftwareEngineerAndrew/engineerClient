@@ -1112,16 +1112,18 @@ object SimItems {
         val at = BlockPos(v[0].toIntOrNull() ?: return, v[1].toIntOrNull() ?: return, v[2].toIntOrNull() ?: return)
         val face = net.minecraft.core.Direction.entries.getOrNull(v[3].toIntOrNull() ?: return) ?: return
         val again = v[4] == "1"
-        // Whatever comes of the hit (broken, refused, ignored), the game gets the server's block after it: never a ghost.
+        // Remembered for a restore's re-send (a reset can drop the hit). A hit that breaks nothing sends the server's block
+        // back when it's decided (never on a timer of its own: one landing before the break put broken blocks back).
         Blocks.clientHit(at)
-        Fight.afterPing("hit sync") { Fight.later(2, "hit sync") { if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, at)) } }
-        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) return
         val held = idOf(p.mainHandItem)
+        fun sendBack() { if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, at)) }
+        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) { if (held == "DUNGEONBREAKER") Fight.afterPing("hit refused") { sendBack() }; return }
         // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
         // refusal ("digging there" in S4's device).
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) ph.devices.leftClick(at); if (held != "DUNGEONBREAKER") return } }
         if (held == "SUPERBOOM_TNT") { if (!again) Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } }; return }
         if (held == "DUNGEONBREAKER") Fight.afterPing("dungeonbreaker") { mine(p, at) }
+        else Fight.afterPing("hit ignored") { sendBack() }
     }
 
     /**
