@@ -41,6 +41,10 @@ object Party {
      * walked or leapt. A bot blinks only where it can't walk (a wall, a climb) or is late.
      */
     private const val BLINK = 10.0
+    /** Mining through to the core ([digCore]), blocks a tick: a sprint with the Dungeonbreaker out. */
+    private const val DIG = 0.6
+    /** The core's S2 side (CORE_BOX's north edge), and where the core early enterer starts mining in, just north of it at x 54.5. */
+    private const val CORE_N = 118.0
 
     class Bot(val clazz: DungeonClass, val slot: Int) {
         val name = Roles.label(clazz)
@@ -80,6 +84,8 @@ object Party {
         /** What the route has it hold (a Bonzo staff, a Superboom...) until n = [routeHeldUntil]. */
         var routeHeld: String? = null
         var routeHeldUntil = -1
+        /** Mining through to these, in order ([digCore]: the core early enterer's way in from S2); null: not. */
+        var dig: ArrayDeque<Vec3>? = null
     }
 
     /** An early enter as this run has it: whose (a ghost's: as in its run, on its spot), where. [into] 6: the recore. */
@@ -444,6 +450,7 @@ object Party {
         }
         for (b in bots) {
             b.inSection = from
+            b.dig = null
             // A ghost: where you stood at Goldor's first line.
             val g = b.ghost
             if (g != null) { val f = g.run.frame(0); b.yaw = f.yaw; b.pitch = f.pitch; spawn(b, f.p.vec()); g.tick(phase.n); place(b); continue }
@@ -781,11 +788,68 @@ object Party {
                 arrivedOnEe(b, into, phase.n)
                 continue
             }
+            if (into == 5 && digCore(b, ee, phase)) break
             // Straight there once free, at etherwarp pace: on the spot (ready for leaps) as early as it can be.
             // By the preset's "spot" time if it has one, else at a player's pace (the old walker: etherwarp pace).
             if (b.to != ee.spot) go(b, ee.spot, phase.n, if (P3Sim.realMoves) eeSpotBy[into] else phase.n, "its ${ee.label} spot", ee.yaw to ee.pitch)
             break
         }
+    }
+
+    /**
+     * The core early enterer goes in from S2, never by S3: to the core's S2-side wall, then mines straight into the core,
+     * through its middle and out of its door to its spot in S4. Only from S1/S2 (or the gap north of the core); one already
+     * in S3 or S4 goes as it would. True: it's on that way.
+     */
+    private fun digCore(b: Bot, ee: Ee, phase: GoldorPhase): Boolean {
+        if (b.dig != null) return true
+        val zone = GoldorPhase.dtZone(b.pos)
+        if (!(zone == 1 || zone == 2 || (zone == -1 && b.pos.z > CORE_N))) return false
+        val wall = Vec3(54.5, ground(54.5, CORE_N + 3.0, 125.0)?.takeIf { it != WALL } ?: 120.0, CORE_N + 3.0)
+        val way = listOf(Vec3(54.5, 115.0, CORE_N - 1.0), Vec3(54.5, 115.0, 56.0), ee.spot)
+        if (b.pos.distanceTo(wall) > 0.6) {
+            // There by the preset's spot time less the mining (else a player's pace).
+            val mining = ((wall.distanceTo(way[0]) + way[0].distanceTo(way[1]) + way[1].distanceTo(way[2])) / DIG).toInt()
+            val due = if (!P3Sim.realMoves) phase.n else eeSpotBy[5].takeIf { it >= 0 }?.let { it - mining } ?: -1
+            if (b.to != wall) go(b, wall, phase.n, due, "the core's S2 wall (mining in to ${ee.label})")
+            return true
+        }
+        b.to = null
+        b.dig = ArrayDeque(way)
+        dbg("§e${b.name}§7 mines into the core from S2, through it and out of its door to its ${ee.label} spot")
+        return true
+    }
+
+    /** A tick of mining on along [way]: straight at its next point, through whatever's there (broken as it goes, back after the regen). */
+    private fun digOn(b: Bot, way: ArrayDeque<Vec3>, n: Int) {
+        var left = DIG * (if (b.due in 0..n) 2.0 else 1.0)
+        while (left > 1e-6 && way.isNotEmpty()) {
+            val d = way.first().subtract(b.pos)
+            val len = d.length()
+            if (Math.hypot(d.x, d.z) > 0.01) { b.yaw = Math.toDegrees(Math.atan2(-d.x, d.z)).toFloat(); b.pitch = 10f }
+            if (len <= left) { b.pos = way.removeFirst(); left -= len } else { b.pos = b.pos.add(d.scale(left / len)); left = 0.0 }
+        }
+        b.vy = 0.0
+        var broke = false
+        val level = Sim.level
+        for (bx in Math.floor(b.pos.x - 0.3).toInt()..Math.floor(b.pos.x + 0.3).toInt())
+            for (by in Math.floor(b.pos.y).toInt()..Math.floor(b.pos.y + 1.79).toInt())
+                for (bz in Math.floor(b.pos.z - 0.3).toInt()..Math.floor(b.pos.z + 0.3).toInt()) {
+                    val pos = net.minecraft.core.BlockPos(bx, by, bz)
+                    val s = level.getBlockState(pos)
+                    // What the Dungeonbreaker can't break it just goes through.
+                    if (s.isAir || s.getDestroySpeed(level, pos) < 0 || s.`is`(net.minecraft.world.level.block.Blocks.BARRIER) ||
+                        s.`is`(net.minecraft.world.level.block.Blocks.BEDROCK) || s.block is net.minecraft.world.level.block.CommandBlock) continue
+                    level.levelEvent(2001, pos, net.minecraft.world.level.block.Block.getId(s))
+                    Blocks.set(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())
+                    broke = true
+                    // Back after the regen, as the Dungeonbreaker's are; not once the core's open (its door would come back).
+                    Fight.later(Math.round(P3Sim.breakerRegen * 20).toInt(), "bot dig regen") {
+                        if (level.getBlockState(pos).isAir && (Fight.phase as? GoldorPhase)?.let { it.section < 5 } == true) Blocks.set(pos, s)
+                    }
+                }
+        if (broke) swing(b)
+        if (way.isEmpty()) b.dig = null
     }
 
     /** The pre-leap onto the early enterer of the next section: everyone free, one after another; the busy ones after their last job. */
@@ -1047,6 +1111,7 @@ object Party {
      * the blinks stand in for those (no walking path exists between most job spots on the sim's arena).
      */
     private fun move(b: Bot, n: Int) {
+        b.dig?.let { way -> digOn(b, way, n); place(b); return }
         val to = b.to
         if (to != null && n >= b.goAt && follow(b, to, n)) { place(b); return }
         if (to != null && n >= b.goAt) {
