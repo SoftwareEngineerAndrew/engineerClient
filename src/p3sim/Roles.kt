@@ -93,17 +93,17 @@ object Roles {
             BERSERK to "i4 / 53 / 3 / 3 bl",
         ),
         times = listOf(
-            // ll 0.15, rl 1.75, i3 2.0, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
-            "ll 0.15 | rl 1.75 | i3 2.0 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
+            // ll 0.15, i3 0.1, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
+            "ll 0.15 | i3 0.1 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
             "ll 0.8 | gate 1.0 | 1 4 5 2.1 | 2 3 rl 5.0",
             // S3's device was done in S1 (i3).
             "1 3 4 2.1 | 2 4.0 | levers gate 6.0",
             "1 3 4 2.1 | 2 4.0 | levers 5.2",
         ),
         moves = listOf(
-            // The i3 tank leaps back into S1 at 2.3, the i4 bot out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone
+            // The i3 tank leaps back into S1 at 0.3, the i4 bot out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone
             // but SS leapt there by 6.4, and the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
-            "i3 leaps 2.3 | i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
+            "i3 leaps 0.3 | i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
             "ee3 spot 3.2 | ee3 waits 1 2 3 4",
             "", "",
         ),
