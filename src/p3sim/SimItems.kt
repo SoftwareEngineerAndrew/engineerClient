@@ -1110,6 +1110,9 @@ object SimItems {
         val at = BlockPos(v[0].toIntOrNull() ?: return, v[1].toIntOrNull() ?: return, v[2].toIntOrNull() ?: return)
         val face = net.minecraft.core.Direction.entries.getOrNull(v[3].toIntOrNull() ?: return) ?: return
         val again = v[4] == "1"
+        // Whatever comes of the hit (broken, refused, ignored), the game gets the server's block after it: never a ghost.
+        Blocks.clientHit(at)
+        Fight.afterPing("hit sync") { Fight.later(2, "hit sync") { if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, at)) } }
         if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) return
         val held = idOf(p.mainHandItem)
         // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
