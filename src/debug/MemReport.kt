@@ -8,7 +8,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * `/ec memreport`: who holds LWJGL's native memory - Minecraft's MemoryUtil, backed here by LWJGL's
+ * `/adm memreport`: who holds LWJGL's native memory - Minecraft's MemoryUtil, backed here by LWJGL's
  * jemalloc, which rendering, fonts, textures and LWJGL's bundled C libraries (NanoVG, stb) all use.
  * Every allocation still live, grouped by the code that made it, largest total first, written to
  * `logs/engineerclient/memreport-<stamp>.txt`; the top few are said in chat.

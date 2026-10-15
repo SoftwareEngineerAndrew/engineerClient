@@ -96,8 +96,6 @@ const rules = [
   // Panel, prefix, commands, text.
   ['Category.custom("Engineer Client"', 'Category.custom("ADM"', true],
   ['const val PREFIX = "§8[§6EC§8] "', 'const val PREFIX = "§8[§6ADM§8] "', true],
-  // /adm opens Odin's menu; /ec stays the command for the rest.
-  ['listOf("engineerclient", "EngineerClient", "ec")', 'listOf("ec")', true],
   ['Added by engineerClient.', 'Added by ADM.', true],
   ['desc = "engineerClient\'s solver', 'desc = "ADM\'s solver', false],
   ['"EC Dynamic Term Roles is OFF", "enable it in the Engineer Client panel"', '"ADM Dynamic Term Roles is OFF", "enable it in the ADM panel"', false],
