@@ -83,6 +83,7 @@ object P3Sim : Module(
     val phoenixS = +BooleanSetting("Phoenix Pet", false, desc = "Your pet: Phoenix (saves you from a death, no Black Cat speed bonus) or Black Cat (+100 speed). The Pet Rod swaps them.")
     val realMovesS = +BooleanSetting("Real Bot Movement", true, desc = "P3 bots move as real players do: along routes recorded in ADR runs (sprints, jumps, lava bounces, Bonzo boosts, stonks), sped up only when a job's time needs it. Off: the old straight walk and Hyperion blinks.")
     val terrorAtTermsS = +BooleanSetting("Terror At Terms", false, desc = "Every P3 start puts the Terror loadout on (Terror armour, Bonzo's Mask, Black Cat) over your saved gear.")
+    val blackCatS = +BooleanSetting("Black Cat At Start", true, desc = "Every start and restart puts Black Cat out. Off: the pet you had stays (as your items and gear do).")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
     val p3OnlyS = +BooleanSetting("Stop After P3", false, desc = "End at Goldor's death instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
@@ -211,6 +212,8 @@ object P3Sim : Module(
     fun toggleRealMoves() { (realMovesS as BooleanSetting?)?.let { it.value = !it.value } }
     val terrorAtTerms: Boolean get() = mine("terror", { (terrorAtTermsS as BooleanSetting?)?.value == true }) { it.asBoolean }
     fun toggleTerrorAtTerms() { (terrorAtTermsS as BooleanSetting?)?.let { it.value = !it.value } }
+    val blackCatAtStart: Boolean get() = mine("blackCat", { (blackCatS as BooleanSetting?)?.value != false }) { it.asBoolean }
+    fun toggleBlackCatAtStart() { (blackCatS as BooleanSetting?)?.let { it.value = !it.value } }
     val forcedTerminal: Terminals.Type? get() = terminalS.index.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
 
     /** True only in the p3sim singleplayer world, your own (client side). */
