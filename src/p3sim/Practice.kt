@@ -119,7 +119,15 @@ object Practice {
     private fun p(x: Double, y: Double, z: Double, yaw: Float, pitch: Float) = Spots.Spot("Start", x, y, z, yaw, pitch)
 
     /** The presets, by section (the menu's columns). */
-    fun presets(): List<Setup> = codedPresets().filter { it.section < 3 } + listOf(
+    fun presets(): List<Setup> = codedPresets().filter { it.section == 1 } + listOf(
+        Setup("4 3", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 T4", "S1 T3"), delay = 3.0),
+        Setup("2 1", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 T2", "S1 T1"), delay = 3.0),
+        Setup("ee2", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 west lever", "S1 east lever", "gate 1", "S2 Lights"),
+            listOf(Spots.Spot("EE2", 60.53, 132.00, 138.98, 0f)), delay = 3.0),
+    ) + codedPresets().filter { it.section == 2 } + listOf(
+        Setup("2 -> 1", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T1"), listOf(Spots.Spot("Checkpoint", 69.70, 109.00, 122.43, 0f)), delay = 0.0),
+        Setup("2 -> 3", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T3"), delay = 0.0),
+    ) + listOf(
         // S3 (BL: both levers; no start timer of their own: the slider's). c ->: from the high EE3 (CEE3), its 2x2 platform
         // already mined as Theoretical's bers does.
         Setup("1 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T1", "S3 west lever", "S3 east lever"), item = BREAKER),
