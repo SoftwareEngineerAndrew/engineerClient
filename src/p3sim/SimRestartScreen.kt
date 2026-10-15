@@ -113,7 +113,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         else if (t === Tab.SETTINGS) settingsPanel()
         else if (t === Tab.TELEPORT) teleportPanel()
         else if (t === Tab.PRACTICE) practicePanel()
-        else if (t === Tab.BOSS) bossPanel()
+        else if (t != null && t === Tab.BOSS) bossPanel()
         panel.arrangeElements()
         val top = restartY + 20 + 10
         panel.setPosition(cx - panel.width / 2, top)
@@ -419,7 +419,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     /** The boss fight: where the run stops. Green when on. */
     private fun bossPanel() {
         row(listOf(stack("§eStop", 120, "Where the run stops on its own (as the menu's Stop: everything back as built).", listOf(
-            toggle("Stop After Terms", P3Sim.termsOnly, 120, P3Sim.termsOnlyS.description) { P3Sim.termsOnlyS.value = !P3Sim.termsOnly },
+            toggle("Stop After Terms", P3Sim.termsOnly, 120, P3Sim.termsOnlyS.description) { (P3Sim.termsOnlyS as com.odtheking.odin.clickgui.settings.impl.BooleanSetting?)?.let { it.value = !it.value } },
             toggle("Stop After Goldor", P3Sim.p3Only, 120, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
         ))))
     }
@@ -537,7 +537,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         // Presets: a column for each section (a long one takes more, 6 a column), its title over the first.
         Practice.presets().groupBy { it.section }.toSortedMap().forEach { (ps, list) ->
             list.chunked(6).forEachIndexed { i, part ->
-                cols += stack(if (i == 0) "§eS$ps Presets" else "", 64, "Section $ps's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
+                cols += stack(if (i == 0) "§eS$ps" else "", 64, "Section $ps's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
                     act(p.name, 64, "Practice ${p.name} (S$ps): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                         (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
                         (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
