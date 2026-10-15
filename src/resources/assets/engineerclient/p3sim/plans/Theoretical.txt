@@ -1,0 +1,90 @@
+# P3 Sim plan: Theoretical
+#
+# The bots do exactly this. Edit it, save, and start a P3: it's read again every start. Your own class's
+# lines are what you do (they set when sections end); the other four are the bots'.
+#
+# Each class: where it starts, then its steps in order, one a line:   <section> <seconds into it>  <what>
+#
+#   T1 .. T5             that section's terminal (done at that time; the bot's there up to 2 s before, solving)
+#   ll / rl              the section's left / right lever (or by name: east lever, west lever, high lever, low lever)
+#   SS  Lights  Arrows  i4    a device (Lights, Arrows and i4 can be done in an earlier section)
+#   gate                 blow the section's gate (from where it stands)
+#   at <spot>            be standing on a spot by then
+#   ee2 / ee3 / ee4 <spot>    the same, as that section's early enter (the party leaps onto it there)
+#   leap <class>         Infinileap onto them (wherever they are; on the move: once they stop)
+#   start <spot>         where it stands when P3 starts
+#
+# Section 5 is the core, open. Spots: any job's stand (T2, west lever...), i2, Lights, high EE3, EE3,
+# core (the core front, EE4), recore, or "x y z".
+#
+# Between steps a bot moves the one fixed way (your recording in the Moves tab, else built in, else the
+# recorded runs), leaving as late as it can, sped up only where these times are tighter than the move.
+# A section that starts late (someone's slow) moves everything in it later; a leap onto you waits until
+# you're on your spot.
+
+[Mage]
+start Lights
+S1 0.05  Lights
+S1 1.0   ee2 i2          # holds i2: the bers, tank and archer leap on
+S2 0.05  ll              # high lever
+S2 0.1   gate            # superboom
+S2 0.85  rl              # low lever
+S2 3.7   T4
+S2 3.75  leap Berserk    # high EE3
+S3 3.0   T2
+S3 4.35  leap Archer     # core front
+S4 3.0   T3
+S5 1.2   leap Archer
+
+[Archer]
+start east lever
+S1 0.05  east lever
+S1 0.75  west lever      # bonzo across
+S1 5.3   T4
+S1 6.8   T3
+S1 6.85  leap Mage       # i2
+S2 2.0   T5
+S2 3.95  T3
+S3 4.3   ee4 core        # lava bounce, mined in: the healer, mage and bers leap on
+S4 2.5   T4
+S5 0.8   at recore
+
+[Tank]
+start T2
+S1 2.6   T2
+S1 4.9   T1
+S1 4.95  leap Mage       # i2
+S2 1.8   T2              # from the top of the stairs
+S2 1.85  leap Berserk    # high EE3
+S2 3.5   Arrows
+S3 2.5   T4
+S3 4.35  leap Archer     # core front
+S4 2.0   T2
+S5 1.15  leap Archer
+
+[Healer]
+start SS
+S1 5.6   gate            # explosive bow, during SS's 4th cycle
+S1 7.8   SS
+S2 0.05  leap Tank       # S2 T2
+S2 3.5   T1
+S2 3.55  leap Berserk    # high EE3
+S3 4.0   T1
+S3 4.35  leap Archer     # core front
+S4 3.25  T1
+S5 1.1   leap Archer
+
+[Berserk]
+start i4
+S1 3.4   i4
+S1 3.45  leap Mage       # i2
+S2 1.0   ee3 high EE3    # cee3; mines the quartz beside it. The tank, healer and mage leap on
+S3 1.6   T3
+S3 1.65  leap Tank       # S3 T4
+S3 4.2   ll              # west lever
+S3 4.5   rl              # east lever
+S3 4.5   gate
+S3 4.55  leap Archer     # core front
+S4 2.2   ll              # low lever
+S4 3.0   rl              # high lever
+S5 1.25  leap Archer

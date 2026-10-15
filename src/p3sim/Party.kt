@@ -601,16 +601,26 @@ object Party {
         }
     }
 
-    /** The bots that play your best runs instead (the menu's Plan tab), P3 from S1 with a run saved for this skill. */
+    /**
+     * The bots that play your best runs instead (the menu's Plan tab), P3 from S1 with a run saved for this skill; the
+     * rest, if the skill has a plan file ([PlanFile]), play it exactly: each one's whole P3 worked out from it.
+     */
     private fun startGhosts(phase: GoldorPhase) {
         val names = ArrayList<String>()
+        val script = PlanFile.of(P3Plan.skillName())
+        val warnings = ArrayList<String>()
+        val scripted = script?.let { PlanFile.ghostRuns(it, warnings) }.orEmpty()
         for (b in bots) {
-            if (!P3Plan.ghostOn(b.clazz)) continue
-            val run = GhostStore.best(P3Plan.skillName(), b.clazz.name) ?: continue
+            val best = if (P3Plan.ghostOn(b.clazz)) GhostStore.best(P3Plan.skillName(), b.clazz.name) else null
+            val run = best ?: scripted[b.clazz] ?: continue
             b.ghost = GhostPlayer(run, GhostWorld(b, phase), GhostBody(b, phase))
-            names += "§d${b.name}§7 (${"%.2f".format(java.util.Locale.ROOT, run.time / 20.0)}s)"
+            if (best != null) names += "§d${b.name}§7 (${"%.2f".format(java.util.Locale.ROOT, run.time / 20.0)}s)"
         }
         if (names.isNotEmpty()) Sim.note("Your best runs play: ${names.joinToString(", ")}.")
+        if (script != null) {
+            Sim.note("Bots play §f${script.name}.txt§7 (P3 ${"%.2f".format(java.util.Locale.ROOT, script.sectionN[5] / 20.0)}s on time).")
+            (script.errors + warnings).take(6).forEach { Sim.note("§c$it") }
+        }
     }
 
     private fun P.vec() = Vec3(x, y, z)
@@ -1353,8 +1363,8 @@ object Party {
      * that (up to [HURRY]).
      */
     private fun pace(b: Bot, left: Double, n: Int): Double {
-        // A fixed move is the same every run: a time tighter than it is met late (the job's done as it gets there).
-        if (b.due < 0 || left <= 0 || b.routeFixed) return 1.0
+
+        if (b.due < 0 || left <= 0) return 1.0
         val min = minOf(b.lead, MIN_LEAD)
         if (n + left <= b.due - min) return 1.0
         val by = b.due - min - n

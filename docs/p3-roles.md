@@ -229,9 +229,27 @@ Things the fixed moves show up:
 
 ## How the sim uses this
 
-Every move a bot makes between two spots is one fixed move. It's played the same way and at the same
-speed every run, and it's never sped up. When a plan time is tighter than the move, the job is done the
-tick the bot arrives. A bot chooses its move in this order:
+**Plan files** (`config/engineerclient/p3sim-plans/<skill>.txt`; the menu's Plan tab has an Edit Plan File
+button). Theoretical ships with one; the shipped copy is
+`src/resources/assets/engineerclient/p3sim/plans/Theoretical.txt`. The file lists every class's steps in
+order (`<section> <seconds> <job | at spot | ee2 spot | leap Class>`), and it is the plan: your jobs, who
+does the rest and the early enters.
+
+Before a P3 from S1, `PlanFile.ghostRuns` works out each bot's whole P3 tick by tick and plays it as a
+ghost (`GhostPlayer`).
+- Each move between steps is the fixed move below. The bot leaves as late as it can and is sped up only
+  where the plan is tighter than the move. Those cases are listed in chat at the start.
+- A bot stays put while a leap onto it is due.
+- Live, only two things shift the timeline: a section that starts late moves its steps later, and a leap
+  onto an early enterer waits until they're on their spot (you included).
+
+Check a plan outside the game with the scratchpad harness (`harness/run.sh <skill> <file>`). It prints
+each bot's events and moves.
+
+Skills without a plan file still use the old reactive bots (`Roles.kt` presets).
+
+**Moves between steps.** Each one is a fixed move, played the same way every run. A bot chooses its
+move in this order:
 
 1. **Your recording** of that move: menu → Moves (`p3sim-moves.json`, [Moves]).
 2. **The built-in leg** (`src/resources/assets/engineerclient/p3sim/legs.json`, [Legs]). This is every tick
