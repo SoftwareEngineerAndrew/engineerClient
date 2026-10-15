@@ -133,7 +133,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     /** A tab's button on the left: green while it (or [also], a tab inside it) is open; a second click closes it. */
     private fun tabButton(t: Tab, name: String, about: String, x: Int, y: Int, also: Tab? = null) {
-        val open = tab == t || tab == also
+        val open = tab === t || (also != null && tab === also)
         addRenderableWidget(Button.builder(Component.literal(if (open) "§a$name" else name)) {
             tab = if (open) null else t
             rebuildWidgets()
