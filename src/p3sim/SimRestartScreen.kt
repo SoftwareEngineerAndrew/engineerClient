@@ -479,7 +479,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         // The jobs: always the section you're in now (picks from other sections stay).
         val sec = mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
         val picked = Practice.customJobsIn(sec)
-        // Left to right: Import / Export, the section tabs with the open section's page, then Custom and its jobs.
+        // Left to right: Export / Import, the custom practice's jobs, Custom, then the section tabs with the open section's page.
         val custom = ArrayList<LayoutElement>()
         custom += stack("§eCustom", 100, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
             act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
@@ -518,7 +518,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             DelaySlider(100),
             change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
         ))
-        val io = stack("§eCode", 64, "Your custom practice as a short code, to send to someone or take theirs.", listOf(
+        val io = stack("", 64, "Your custom practice as a short code, to send to someone or take theirs.", listOf(
             change("Export", 64, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
                 val code = Practice.exportCode()
                 mc.keyboardHandler.clipboard = code
@@ -539,27 +539,30 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                 change((if (on) "§a" else "§8") + COLUMNS[column(job)].first, JOB_W, "${jobName(job)}: ${if (on) "yours to do in the custom practice" else "done at its start"}. Click: ${if (on) "done at the start" else "yours"}.") { Practice.toggleJob(job) }
             })
         }
-        val cols = ArrayList<LayoutElement>()
-        cols += io
-        cols += label("", 8)
+        val secCols = ArrayList<LayoutElement>()
         // The section tabs, and the open section's page (S1 when the menu opens).
         val s = practiceSec.takeIf { it in 1..4 } ?: 1
-        cols += sectionTabs(s)
-        cols += label("", 8)
+        secCols += sectionTabs(s)
+        secCols += label("", 8)
         // As many columns whichever section is open (the widest's; empty ones after), so switching moves nothing.
         val all = Practice.presets()
         val width = (1..4).maxOf { k -> (all.count { it.section == k } + 5) / 6 }
         val parts = all.filter { it.section == s }.chunked(6)
         for (i in 0 until width) {
             val part = parts.getOrNull(i) ?: emptyList()
-            cols += stack("", 64, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
+            secCols += stack("", 64, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
                 act(p.name, 64, "Practice ${p.name} (S$s): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                     (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
                     (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
             })
         }
+        val cols = ArrayList<LayoutElement>()
+        cols += io
+        cols += label("", 8)
+        cols += custom.drop(1)
+        cols += custom.first()
         cols += label("", 16)
-        cols += custom
+        cols += secCols
         val r = LinearLayout.horizontal().spacing(2)
         r.defaultCellSetting().alignVerticallyTop()
         panel.addChild(r)

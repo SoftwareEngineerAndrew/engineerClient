@@ -384,8 +384,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (s == 4) { openCore(); return@everyone }
         if (gateDown[s]) openDoor(s)
         else {
-            Sim.chat("§aThe gate will open in 5 seconds!")
-            Sim.title("", "§aThe gate will open in 5 seconds!", 0, 40, 0)
+            // Practice: the gate never opens by itself, so no "5 seconds" (just the pling).
+            if (!practice) {
+                Sim.chat("§aThe gate will open in 5 seconds!")
+                Sim.title("", "§aThe gate will open in 5 seconds!", 0, 40, 0)
+            }
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
             // Practice: the gate stays until you blow it (a gate job is yours to do).
             if (!practice) autoGateAt[s] = n + 100
