@@ -740,6 +740,8 @@ object Party {
             if (b.ghost != null) continue
             // Holding for a later early enter (the core bot by the core through S4): it keeps holding.
             if (b.hold && b.inSection > s && eeArrived[b.inSection.coerceAtMost(5)] && !released[b.inSection.coerceAtMost(5)]) continue
+            // The core early enterer with nothing left before the core: it goes (or keeps going) through the core, no leap into this section.
+            if (b !== onto && onWayToCore(b)) continue
             if (b.hold && b !== onto) dbg("§e${b.name}§7 stops holding (section $s started)")
             b.hold = false
             // Holding (or on its way) unless it already moved on in the section before.
@@ -771,12 +773,16 @@ object Party {
     /** The bot early-entering into section [into] walks to its spot once its jobs before are done; it's in when it's there. */
     private fun earlyEnterBots(phase: GoldorPhase) {
         val s = phase.section
+        // Each bot to its earliest early enter only (the mage's EE2 before its core); different bots go at once (the core
+        // bot doesn't wait for the EE3 bot to get to its spot).
+        val sent = HashSet<Bot>()
         // The section in progress too: an early enterer that didn't make it before its section started still goes and waits.
         for (into in s..5) {
             if (into == s && (into > 4 || eeArrived[into])) continue
             val ee = eeOf(into) ?: continue
             if (ee.byYou) continue
-            val b = botOf(ee.owner) ?: continue
+            val b = botOf(ee.owner)?.takeIf { it !in sent } ?: continue
+            sent += b
             // A ghost gets there as you did.
             if (b.ghost != null) continue
             if (into > s && (b.inSection >= into || busy(b) || b.hold)) continue
@@ -788,13 +794,15 @@ object Party {
                 arrivedOnEe(b, into, phase.n)
                 continue
             }
-            if (into == 5 && digCore(b, ee, phase)) break
+            if (into == 5 && digCore(b, ee, phase)) continue
             // Straight there once free, at etherwarp pace: on the spot (ready for leaps) as early as it can be.
             // By the preset's "spot" time if it has one, else at a player's pace (the old walker: etherwarp pace).
             if (b.to != ee.spot) go(b, ee.spot, phase.n, if (P3Sim.realMoves) eeSpotBy[into] else phase.n, "its ${ee.label} spot", ee.yaw to ee.pitch)
-            break
         }
     }
+
+    /** [b] is the core early enterer with nothing left before the core: on its way there (from S2, through the core), never leapt into S3/S4. */
+    private fun onWayToCore(b: Bot) = eeOf(5)?.let { !it.byYou && it.owner == b.clazz } == true && b.inSection < 5 && jobs.none { it.bot === b && before(it, 5) }
 
     /**
      * The core early enterer goes in from S2, never by S3: to the core's S2-side wall, then mines straight into the core,
@@ -864,7 +872,8 @@ object Party {
         if (!open) return
         val target: () -> Target? = if (eeBot != null) ({ eeBot.asTarget() }) else ({ ee.player?.asTarget() })
         for (b in bots) {
-            if (b === eeBot || b.ghost != null || b.inSection >= into || busy(b)) continue
+            // The core early enterer goes from S2 through the core, never onto the next section's early enterer.
+            if (b === eeBot || b.ghost != null || b.inSection >= into || busy(b) || onWayToCore(b)) continue
             b.inSection = into
             lastLeap = maxOf(n + 1, lastLeap + if (eeBot != null) 2 else gapTicks())
             if (holdJob[into] != null && jobs.any { it.bot === b && it.job == holdJob[into] }) b.hold = true
