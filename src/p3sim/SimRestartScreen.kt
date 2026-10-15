@@ -247,7 +247,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         row(listOf(
             toggle("Helpers", P3Plan.helper, 64, "On (green): the bots help with your stacks: a stacked job of yours (right click it in the plan) and the preset's stacks are done by their bot too, whoever gets there first.") { P3Plan.helper = !P3Plan.helper; P3Plan.save() },
             toggle("Wait For You", P3Plan.waitForYou, 84, "On (green): a section's last bot job waits until you're at your early enter for the next section.") { P3Plan.waitForYou = !P3Plan.waitForYou; P3Plan.save() },
-            toggle("Bots", P3Sim.bots, 44, "On (green): the other four are bots playing their roles.") { P3Sim.botsS.value = !P3Sim.bots },
+            toggle("Bots", P3Sim.bots, 44, "The plan does the other four's jobs at its times either way. On (green): bots show them (just the look: a late one is put on its job). Off: nobody's shown.") { P3Sim.botsS.value = !P3Sim.bots },
             toggle("Real Movement", P3Sim.realMoves, 90, P3Sim.realMovesS.description) { P3Sim.toggleRealMoves() },
             change("Reset Role", 70, "Your jobs, the bots you picked and your stacks back to the ${Roles.label(P3Sim.myClass)}'s $skill role.") { P3Plan.resetMine() },
         ))

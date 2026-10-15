@@ -21,8 +21,9 @@ import kotlin.random.Random
  * The other four of the party: one bot per class you're not, named after its class, in leap menu
  * slots 1-4 ([P3Plan.botOrder]).
  *
- * In P3 they play the skill preset's roles ([Roles]): every job that isn't yours, done at the
- * preset's time; the early enterer goes to its spot after its last job, the others pre-leap onto it
+ * In P3 the plan runs ([Roles]): every job that isn't a player's is done at the preset's time, exactly (a bot not
+ * there by then is put there; with the Bots setting off nobody's shown and the jobs are still done on time). The bots
+ * are only the look of it: the early enterer goes to its spot after its last job, the others pre-leap onto it
  * (onto you once you're at yours) and walk on to their next terminals; a section's last job waits
  * for you if you're early-entering the next one; at the core, everyone leaps in at once.
  */
@@ -128,7 +129,7 @@ object Party {
         (Fight.phase as? P1Maxor)?.botsChanged()
         (Fight.phase as? P2Storm)?.botsChanged()
         val ph = Fight.phase as? GoldorPhase ?: return
-        if (!botsOn || botsFor !== ph) return
+        if (!planOn || botsFor !== ph) return
         // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its
         // role's jobs; then whatever a removed bot had and no player does goes to the bots.
         for (c in P3Plan.botOrder()) if (!Players.isPlayerClass(c) && botOf(c)?.entity == null) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
@@ -268,7 +269,7 @@ object Party {
      * what they left undone (this section's now, later ones on the plan's times).
      */
     fun takeOver(phase: GoldorPhase, c: DungeonClass, at: Vec3?, theirs: Set<String>) {
-        if (!botsOn || botsFor !== phase || Players.isPlayerClass(c)) return
+        if (!planOn || botsFor !== phase || Players.isPlayerClass(c)) return
         // Its bot may be there already without a body (a full party's roster change makes one).
         val had = botOf(c)
         if (had?.entity != null) return
@@ -289,7 +290,7 @@ object Party {
         // (The one leaving is still listed while they go: theirs count as nobody's.)
         val others = Sim.players().filter { Players.classOf(it) != c }
         val todo = theirs.filter { j -> others.none { j in Players.jobsOf(it) } && jobs.none { it.job == j } && phase.stations.firstOrNull { it.id == j }?.done != true }
-        spawn(b, at ?: todo.firstOrNull { (phase.stations.firstOrNull { s -> s.id == it }?.section ?: 0) == phase.section }?.let { spotOf(it) } ?: Sim.host?.position() ?: CORE_SPOT)
+        put(b, at ?: todo.firstOrNull { (phase.stations.firstOrNull { s -> s.id == it }?.section ?: 0) == phase.section }?.let { spotOf(it) } ?: Sim.host?.position() ?: CORE_SPOT)
         for (job in todo) {
             val st = phase.stations.firstOrNull { it.id == job }
             if (st == null && job.startsWith("gate") && phase.gateIsDown(job.removePrefix("gate ").toIntOrNull() ?: 0)) continue
@@ -357,7 +358,7 @@ object Party {
         val n = phase.n
         val target = phase.devices.target
         val st = phase.stations.firstOrNull { it.id == "S4 Target" }
-        val b = jobs.firstOrNull { it.job == "S4 Target" }?.bot?.takeIf { it.ghost == null && it.to == null && it.pos.distanceTo(I4_STAND) <= 1.0 }
+        val b = jobs.firstOrNull { it.job == "S4 Target" }?.bot?.takeIf { it.entity != null && it.ghost == null && it.to == null && it.pos.distanceTo(I4_STAND) <= 1.0 }
         if (b == null || st == null || st.done || n < 0) { target.botOn = null; return }
         target.botOn = b.name
         b.routeHeld = "TERMINATOR"; b.routeHeldUntil = n + 5
@@ -488,6 +489,11 @@ object Party {
 
     /** Bots in P3: the setting, never in practice (only your part is left there). */
     private val botsOn get() = P3Sim.bots && !Practice.active
+    /** The plan runs (every job no player has, done at its time; shown by bots or not): any P3 but practice. */
+    private val planOn get() = !Practice.active
+
+    /** [b] at [at]: a body only with the Bots setting on (off: its jobs are still done on time, nobody shown). */
+    private fun put(b: Bot, at: Vec3) { if (P3Sim.bots) spawn(b, at) else { b.pos = at; b.entity = null } }
 
     fun startP3(phase: GoldorPhase) {
         // From the lead-in: where each bot got to, and where it was going.
@@ -498,10 +504,10 @@ object Party {
         eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false
         planned = 0
         lastLeap = 0
-        if (botsOn) { bots(); if (phase.from == 1) startGhosts(phase) }
-        botsFor = if (botsOn) phase else null
+        if (planOn) { bots(); if (botsOn && phase.from == 1) startGhosts(phase) }
+        botsFor = if (planOn) phase else null
         resolveEes()
-        if (!botsOn) return
+        if (!planOn) return
         if (P3Sim.realMoves) Routes.preload()
         val from = phase.from.coerceIn(1, 5)
         // No early enter into the section you start in (or before).
@@ -593,9 +599,9 @@ object Party {
             // enter's spot: earlyEnterBots sends it).
             val w = walked[b.clazz]
             if (w != null && !core && next(b)?.job != "S4 Target") {
-                spawn(b, w.first)
+                put(b, w.first)
                 if (w.first.distanceTo(w.second) > 0.5 && w.second == start) go(b, start, phase.n, phase.n, "where it starts P3 (still on its way)")
-            } else spawn(b, start)
+            } else put(b, start)
         }
     }
 
@@ -748,7 +754,7 @@ object Party {
 
     fun tickP3(phase: GoldorPhase) {
         trackYou(phase)
-        if (!botsOn) return
+        if (!planOn) return
         val n = phase.n
         val s = phase.section
         dbgN = n; dbgS = s; curPhase = phase
@@ -774,12 +780,11 @@ object Party {
         val finished = ArrayList<Bot>()
         jobs.removeAll { j ->
             if (j.at < 0 || n < j.at) return@removeAll false
-            // Done where it's done: not while holding (at an early enter, waiting), not before the bot is there.
-            // Late for its early enter: only the jobs from before that keep it from going there (earlyEnterBots).
-            if (j.bot.hold || (lateForEe(j.bot, s) && !before(j, s))) return@removeAll false
+            // The plan's time is the time: a bot that isn't there yet (holding on an early enter, on its way, late) is put there.
             if (!inReach(j.bot, j.job)) {
-                if (j.bot.to == null) go(j.bot, spotOf(j.job), n, n, "${j.job} (due now, not there)")
-                return@removeAll false
+                dbg("§e${j.bot.name}§7 wasn't at ${j.job} on time: put there")
+                j.bot.hold = false; j.bot.dig = null
+                arrive(j.bot, spotOf(j.job))
             }
             val st = phase.stations.firstOrNull { it.id == j.job }
             if (st != null) {
