@@ -51,8 +51,8 @@ object Spots {
     fun startLook(job: String): Pair<Float, Float> = when (job) {
         "S1 east lever", "S1 west lever" -> 10f to -19f
         "S4 Target" -> 283f to 19f
-        // Facing the arrow frames (x -3, y 120-124, z 75-79).
-        "S3 Arrows" -> 128f to -39f
+        // On the 3rd device, facing its arrow frames (as on Hypixel).
+        "S3 Arrows" -> 89.7f to 3.2f
         "S1 T4" -> 40f to 1f
         "S1 T2" -> 179f to 48f
         "S1 SS" -> -131f to 1.4f
