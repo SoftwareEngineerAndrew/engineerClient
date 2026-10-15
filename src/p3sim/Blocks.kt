@@ -35,8 +35,8 @@ object Blocks {
         done.clear()
         conveyor = null
         // Every block the run changed or a player's game broke ahead of the server: told to every game again after.
-        val sync = HashSet<BlockPos>(touched)
-        clientHits?.let { sync += it }
+        val hits: Set<BlockPos> = clientHits ?: emptySet()
+        val sync = HashSet<BlockPos>(touched).also { it += hits }
         clientHits = null
         touched.forEach { Arena.restore(level, it) }
         touched.clear()
@@ -44,10 +44,12 @@ object Blocks {
         val fixed = Arena.resync(level)
         if (fixed > 0) EngineerClient.logger.info("[p3sim] restore: {} more arena blocks put back", fixed)
         // No ghost blocks: the true blocks sent now, and again once hits still on their way (dropped with the run's queue)
-        // have landed in the games.
-        resend(sync)
+        // have landed in the games. A section a packet (a P3 start's world has thousands: Maxor's strip, the P1 floors),
+        // not a block each: those were tens of thousands of packets to a joiner's game, a long freeze.
+        // The run's own blocks go back through the server's usual updates: only resent once, after.
+        resend(hits)
         Fight.later(10, "ghost block sync") { resend(sync) }
-        Fight.later(40, "ghost block sync") { resend(sync) }
+        Fight.later(40, "ghost block sync") { resend(hits) }
     }
 
     /**
@@ -59,10 +61,20 @@ object Blocks {
     /** A player's game hit [pos] (and may have broken it already). */
     fun clientHit(pos: BlockPos) { (clientHits ?: HashSet<BlockPos>().also { clientHits = it }) += pos.immutable() }
 
-    /** The server's blocks at [positions] to every player in the sim. */
+    /** The server's blocks at [positions] to every player in the sim: one packet per chunk section. */
     fun resend(positions: Collection<BlockPos>) {
         val level = SimServer.level ?: return
-        for (p in Sim.players()) for (pos in positions) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos))
+        if (positions.isEmpty()) return
+        val bySection = positions.groupBy { net.minecraft.core.SectionPos.of(it) }
+        val packets = bySection.mapNotNull { (sp, ps) ->
+            val chunk = level.getChunkSource().getChunkNow(sp.x(), sp.z()) ?: return@mapNotNull null
+            val si = chunk.getSectionIndexFromSectionY(sp.y())
+            if (si < 0 || si >= chunk.sections.size) return@mapNotNull null
+            val shorts = it.unimi.dsi.fastutil.shorts.ShortOpenHashSet()
+            ps.forEach { shorts.add(net.minecraft.core.SectionPos.sectionRelativePos(it)) }
+            net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket(sp, shorts, chunk.getSection(si))
+        }
+        for (p in Sim.players()) packets.forEach { p.connection.send(it) }
     }
 
     // ------------------------------------------------------------------ recorded animations
