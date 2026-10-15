@@ -69,7 +69,8 @@ class Station(
     /**
      * The stands' names as they should read now (Hypixel refreshes them on a 20-tick grid). A
      * terminal's or device's pair reads "" while you are 25+ blocks away (Hypixel sends the status
-     * names within ~25 blocks only, blanks beyond). Levers keep theirs.
+     * names within ~25 blocks only, blanks beyond). Levers keep theirs. A done terminal's top stand
+     * drops 0.375 onto the bottom one's height at any distance, as Hypixel's does.
      */
     fun refreshStands() {
         fun name(s: ArmorStand?, n: String) {
@@ -79,15 +80,15 @@ class Station(
                 s.setCustomName(c); s.isCustomNameVisible = c != null
             }
         }
+        if (kind == Kind.TERMINAL) top?.let {
+            val y = at.y + if (done) BOTTOM_DY else TOP_DY
+            if (kotlin.math.abs(it.y - y) > 1e-3) it.snapTo(at.x, y, at.z, 0f, 0f)
+        }
         val ps = Sim.players()
         val far = kind != Kind.LEVER && ps.isNotEmpty() && ps.none { it.position().distanceTo(at) < 25.0 }
         if (far) { name(top, ""); name(bottom, ""); return }
         when (kind) {
-            Kind.TERMINAL -> if (done) {
-                // Done: the top stand moves down 0.375, onto the bottom one's height.
-                top?.let { if (kotlin.math.abs(it.y - (at.y + BOTTOM_DY)) > 1e-3) it.snapTo(at.x, at.y + BOTTOM_DY, at.z, 0f, 0f) }
-                name(top, "§aTerminal Active"); name(bottom, "")
-            } else { top?.let { if (kotlin.math.abs(it.y - (at.y + TOP_DY)) > 1e-3) it.snapTo(at.x, at.y + TOP_DY, at.z, 0f, 0f) }; name(top, INACTIVE); name(bottom, CLICK_HERE) }
+            Kind.TERMINAL -> if (done) { name(top, "§aTerminal Active"); name(bottom, "") } else { name(top, INACTIVE); name(bottom, CLICK_HERE) }
             Kind.DEVICE -> if (done) { name(top, "§aDevice"); name(bottom, "§aActive") } else { name(top, "§cInactive"); name(bottom, "§cDevice") }
             Kind.LEVER -> name(top, if (done) "§aActivated" else "§cNot Activated")
         }
