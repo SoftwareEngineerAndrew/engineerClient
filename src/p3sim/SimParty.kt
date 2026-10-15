@@ -328,7 +328,7 @@ object PartyServer {
         SimNet.onServer("plan") { p, data -> plan(p, data) }
         SimNet.onServer("act") { p, data -> SimActions.run(p, data) }
         SimNet.onServer("hit") { p, data -> SimItems.serverHit(p, data) }
-        SimNet.onServer("left") { p, _ -> SimItems.serverLeftClick(p) }
+        SimNet.onServer("left") { p, data -> SimItems.serverLeftClick(p, data) }
         SimNet.onServer("drop") { p, data -> SimItems.serverDrop(p, data == "1") }
     }
 

@@ -1156,14 +1156,15 @@ object SimItems {
         if (!simClient(level)) return
         // Practice: a left click with the Infinileap starts it again; once it's done (0.25 s on), a left click with anything.
         val id = idOf(player.mainHandItem)
-        if (id != null || Practice.active || Practice.clickRestarts()) SimNet.send("left")
+        // With what the game holds: a swap just before the click may not have reached the server yet.
+        if (id != null || Practice.active || Practice.clickRestarts()) SimNet.send("left", id ?: "")
     }
 
-    /** A left click from a player's game ([clientLeftClick]), as theirs. */
-    fun serverLeftClick(p: ServerPlayer) {
+    /** A left click from a player's game ([clientLeftClick]), as theirs; [held]: the item the game held for it. */
+    fun serverLeftClick(p: ServerPlayer, held: String = "") {
         val id = idOf(p.mainHandItem)
-        // The host's practice: their clicks only.
-        if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && id == "INFINITE_SPIRIT_LEAP")) { Practice.restart(); return }
+        // The host's practice: their clicks only. The Infinileap as the game held it (its swap can still be on the way).
+        if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && (id == "INFINITE_SPIRIT_LEAP" || held == "INFINITE_SPIRIT_LEAP"))) { Practice.restart(); return }
         // Stopped (no phase running): the Bonzo's Staff's left click is the AOTV's, to get around the arena (sneaking: an etherwarp, else a 12-block teleport).
         if (Fight.phase == null && id == "STARRED_BONZO_STAFF") { val sneak = p.isShiftKeyDown; asClicked(p, "bonzo aotv") { if (sneak) etherwarp(p) else blink(p, 12) }; return }
         // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
