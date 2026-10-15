@@ -163,6 +163,19 @@ object ArenaFixes {
 
     // ------------------------------------------------------------------ the recorded run's changes
 
+    /**
+     * An S3 crusher: granite columns sliding out of the wall at x [back] towards x [front] over z [z]. Each starts
+     * fully back at Terms (not where the recording caught it then) and comes out on the run's first push after
+     * [CRUSHER_HOLD], whole (the columns behind its front filled).
+     */
+    private class Crusher(val back: Int, val front: Int, val z: IntRange) {
+        val xs = minOf(back, front)..maxOf(back, front)
+        fun has(x: Int, y: Int, z: Int) = x in xs && z in this.z && y in 116..124
+    }
+    private val CRUSHERS get() = listOf(Crusher(14, 12, 101..102), Crusher(2, 3, 82..84))
+    private const val CRUSHER_HOLD = 40
+    private fun crusherAt(x: Int, y: Int, z: Int) = CRUSHERS.firstOrNull { it.has(x, y, z) }
+
     /** One recorded run's block changes, relative to n (server ticks since Goldor's first line). */
     class Replay internal constructor(private val run: Run, private val states: Array<BlockState>) {
         private var ptr = 0
@@ -170,7 +183,7 @@ object ArenaFixes {
         /** Start state at Terms (granite blobs already up, the plate's press), then the changes up to [n0] at once. */
         fun begin(n0: Int) {
             val a = run.init
-            for (i in 0 until a.size step 4) if (a[i] != -3) place(a[i], a[i + 1], a[i + 2], states[a[i + 3]])
+            for (i in 0 until a.size step 4) if (a[i] != -3 && crusherAt(a[i], a[i + 1], a[i + 2]) == null) place(a[i], a[i + 1], a[i + 2], states[a[i + 3]])
             catchUp = true
             try { tick(n0 - 1) } finally { catchUp = false }
         }
@@ -185,6 +198,14 @@ object ArenaFixes {
                 if (e[i + 1] == -3) continue // the Arrow Align wall: Devices.Arrows draws it
                 val s = e[i + 4]
                 val pos = BlockPos(e[i + 1], e[i + 2], e[i + 3])
+                val crusher = crusherAt(pos.x, pos.y, pos.z)
+                if (crusher != null && e[i] < CRUSHER_HOLD) continue // still back at the start
+                if (crusher != null && s >= 0 && states[s].`is`(B.POLISHED_GRANITE)) {
+                    // Out to here: the columns behind it too (it started back in the wall).
+                    val step = if (crusher.front < crusher.back) -1 else 1
+                    var x = crusher.back
+                    while (x != pos.x) { if (Blocks.get(BlockPos(x, pos.y, pos.z))?.`is`(B.POLISHED_GRANITE) != true) place(x, pos.y, pos.z, states[s]); x += step }
+                }
                 if (s < 0) {
                     // A blob going away: back to as built, if it is still there.
                     if (Blocks.get(pos)?.`is`(B.POLISHED_GRANITE) == true) Blocks.set(pos, Arena.data.get(pos.x, pos.y, pos.z))
