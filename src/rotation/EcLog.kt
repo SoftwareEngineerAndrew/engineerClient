@@ -23,7 +23,7 @@ import java.time.format.DateTimeFormatter
  *   LEAP     leap cue: target chosen, became ready, and by which signal
  *   MASK     invincibility procs, mine and the party's
  *   ROLE     starting-role announcements heard
- *   MARK     a note typed by the player with /ec log mark
+ *   MARK     a note typed by the player with /adm log mark
  *   WARN     anything the mod could not make sense of
  *
  * Free of Minecraft so the engine can write to it; with no file open every call is a no-op.

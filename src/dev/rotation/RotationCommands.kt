@@ -11,20 +11,20 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.minecraft.network.chat.Component
 
 /**
- * Dynamic Term Roles' part of /ec: role, roles, setup and debug. Brigadier merges these into the /ec tree
+ * Dynamic Term Roles' part of /adm: role, roles, setup and debug. Brigadier merges these into the /adm tree
  * Engineer Client registers (its log and memreport), so they read as one command.
  */
 object RotationCommands {
     fun install() {
         EngineerClient.HELP += listOf(
-            "§f /ec role <role>|clear§7 — your P3 starting role; §f/ec roles§7 — everyone's",
-            "§f /ec setup§7 — checks the Odin setup Dynamic Term Roles relies on; §f/ec debug",
+            "§f /adm role <role>|clear§7 — your P3 starting role; §f/adm roles§7 — everyone's",
+            "§f /adm setup§7 — checks the Odin setup Dynamic Term Roles relies on; §f/adm debug",
         )
         EngineerClient.markLines += { P3Rotation.debugLines() }
         EcLog.log("SESSION", "spec v${RotationSpec.graph.version}  starting role: ${RotationSpec.graph.name(EcConfig.data.myStartingRole)}")
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            for (name in listOf("engineerclient", "EngineerClient", "ec")) dispatcher.register(
+            for (name in EngineerClient.COMMANDS) dispatcher.register(
                 literal(name)
                     .then(literal("debug").executes { ctx ->
                         P3Rotation.debugLines().forEach { ctx.source.sendFeedback(Component.literal(it)) }
@@ -66,7 +66,7 @@ object RotationCommands {
     private fun roleLines(): List<String> {
         val me = mc.player?.name?.string
         val mineId = EcConfig.data.myStartingRole
-        val lines = mutableListOf("${EngineerClient.PREFIX}§7phase-3 starting roles §8(/ec role <role> sets yours; the rest are heard from party chat)")
+        val lines = mutableListOf("${EngineerClient.PREFIX}§7phase-3 starting roles §8(/adm role <role> sets yours; the rest are heard from party chat)")
         RotationSpec.graph.startingRoles.forEach { role ->
             val ign = P3Rotation.teamRoles[role.id] ?: if (role.id == mineId) me else null
             val mine = if (role.id == mineId) " §8(you)" else ""

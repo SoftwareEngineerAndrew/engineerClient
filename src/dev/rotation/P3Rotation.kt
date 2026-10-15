@@ -113,7 +113,7 @@ object P3Rotation : Module(
 
     /**
      * Everything the mod believes, on screen, so a clip of a run is enough to see where it went
-     * wrong. Off by default; the same content is in `/ec debug` and in the game log under `[ec]`.
+     * wrong. Off by default; the same content is in `/adm debug` and in the game log under `[ec]`.
      */
     private val debugHud by HUD("Debug HUD", "Full internal state of the rotation: every player's role, tasks, masks, arrivals, pot exits used, and the last decisions.", true, x = 5, y = 60, scale = 0.5f) { example ->
         drawDebugHud(this, example)
@@ -177,7 +177,7 @@ object P3Rotation : Module(
                 check.forEach { EcLog.log("SETUP", (if (it.ok) "ok   " else "FAIL ") + it.what + (if (!it.ok) " — ${it.fix}" else "")) }
                 check.filter { !it.ok }.takeIf { it.isNotEmpty() && !setupWarned }?.let { bad ->
                     setupWarned = true
-                    EngineerClient.msg("§c${bad.size} setup problem${if (bad.size == 1) "" else "s"} — §7/ec setup")
+                    EngineerClient.msg("§c${bad.size} setup problem${if (bad.size == 1) "" else "s"} — §7/adm setup")
                 }
             }
             wasInBoss = inBoss
@@ -366,7 +366,7 @@ object P3Rotation : Module(
         EcLog.log("SECTION", "phase 3 start — team: " + teamRoles.entries.joinToString { "${it.value}=${RotationSpec.graph.name(it.key)}" })
         val me = EngineerClient.mc.player?.name?.string
         if (EcConfig.data.myStartingRole == null) {
-            EngineerClient.msg("§cYou have no starting role — §7set it with §f/ec role <role>§7.")
+            EngineerClient.msg("§cYou have no starting role — §7set it with §f/adm role <role>§7.")
         }
         RotationEngine.begin(teamRoles)
         // The starting role is told in the line below, not cued as a hand-off.
@@ -513,7 +513,7 @@ object P3Rotation : Module(
 
     private val LEAP_READY_COLOR = Color(255, 200, 70)
 
-    /** The debug lines, shared by the HUD and `/ec debug`. */
+    /** The debug lines, shared by the HUD and `/adm debug`. */
     fun debugLines(): List<String> {
         val me = EngineerClient.mc.player?.name?.string ?: "?"
         val g = RotationSpec.graph
