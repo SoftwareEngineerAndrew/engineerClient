@@ -126,6 +126,15 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     override fun isPauseScreen(): Boolean = false
 
+    /** Every click in the menu logged (which mouse button, the widget under it and whether it took it), to trace clicks. */
+    override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
+        val under = children().firstOrNull { it.isMouseOver(event.x(), event.y()) }
+        val took = super.mouseClicked(event, doubleClick)
+        EngineerClient.logger.info("[ec] p3sim menu mouse: button ${event.button()} at ${event.x().toInt()},${event.y().toInt()} on " +
+            "${(under as? net.minecraft.client.gui.components.AbstractWidget)?.message?.string ?: under?.javaClass?.simpleName ?: "nothing"} -> ${if (took) "taken" else "not taken"}")
+        return took
+    }
+
     /** Odin's settings save when the menu closes (dragging the speed slider would write every step). */
     override fun removed() {
         super.removed()
