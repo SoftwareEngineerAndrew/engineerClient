@@ -480,12 +480,15 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val sec = mc.player?.let { Practice.sectionAt(it.x, it.y, it.z) } ?: 1
         val picked = Practice.customJobsIn(sec)
         // Left to right: Export / Import, the custom practice's jobs, Custom, then the section tabs with the open section's page.
+        // Custom's buttons: as wide as their longest label (no scrolling text).
+        val cw = maxOf(100, listOf("Start Custom", "Start Position", "Checkpoint §7($cps)", "Leap Waypoint §7(4/4)", "Clear")
+            .maxOf { font.width(it) } + 10)
         val custom = ArrayList<LayoutElement>()
-        custom += stack("§eCustom", 100, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
-            act(if (start != null) "§aStart Custom" else "§8Start Custom", 100,
+        custom += stack("§eCustom", cw, "Your own practice: a start position (its section is where you stand), that section's jobs you pick and checkpoints to reach in order (within 1 block, the same height), all timed.", listOf(
+            act(if (start != null) "§aStart Custom" else "§8Start Custom", cw,
                 if (start != null) "Starts the custom practice from your start position: your jobs (every section's picks) then the $cps checkpoint(s), timed." else "Set the Start Position first.") { SimActions.send("practiceCustom") }
                 .also { it.active = start != null },
-            change(if (start != null) "§aStart Position" else "Start Position", 100,
+            change(if (start != null) "§aStart Position" else "Start Position", cw,
                 "Click: the custom practice starts where you stand, facing as you are; its section is the one you're in (or the nearest). " +
                     (start?.let { "Now: S${Practice.customSection}, ${at(it)}." } ?: "Not set.")) {
                 here()?.let { h ->
@@ -494,14 +497,14 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                     EngineerClient.msg("§7Custom practice start: §fS$n§7, ${at(h)}${held?.takeIf { !it.isEmpty }?.let { "§7, holding §f${it.hoverName.string}" } ?: ""}§7.")
                 }
             },
-            ClickButton(100, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
+            ClickButton(cw, if (cps > 0) "§aCheckpoint §7($cps)" else "Checkpoint",
                 tip("Left click: a checkpoint where you stand (reached within 1 block across, at this exact height; in order). Right click: removes the last one. Now: $cps."),
                 left = { here()?.let { h -> Practice.addCheckpoint(h); EngineerClient.msg("§7Checkpoint §f${Practice.checkpoints.size}§7: ${at(h)}.") }; rebuildWidgets() },
                 right = {
                     EngineerClient.msg(if (Practice.checkpoints.isEmpty()) "§7No checkpoints to remove." else "§7Checkpoint §f${Practice.checkpoints.size}§7 removed.")
                     Practice.removeCheckpoint(); rebuildWidgets()
                 }),
-            ClickButton(100, if (Practice.leapWaypoints.isNotEmpty()) "§aLeap Waypoint §7(${Practice.leapWaypoints.size}/4)" else "Leap Waypoint",
+            ClickButton(cw, if (Practice.leapWaypoints.isNotEmpty()) "§aLeap Waypoint §7(${Practice.leapWaypoints.size}/4)" else "Leap Waypoint",
                 tip("Left click: where you stand becomes a leap's landing in the custom practice: the 1st the leap menu's top left, then top right, bottom left, bottom right. Right click: removes the last one. Now: ${Practice.leapWaypoints.size}/4."),
                 left = {
                     here()?.let { h ->
@@ -515,8 +518,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
                     EngineerClient.msg(if (n == 0) "§7No leap waypoints to remove." else "§7Leap waypoint §f$n§7 (${QUADRANTS[n - 1]}) removed.")
                     Practice.removeLeapWaypoint(); rebuildWidgets()
                 }),
-            DelaySlider(100),
-            change("§cClear", 100, "Clears the custom practice: start, jobs, checkpoints and leap waypoints; the timer back to 0.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
+            DelaySlider(cw),
+            change("§cClear", cw, "Clears the custom practice: start, jobs, checkpoints and leap waypoints; the timer back to 0.") { Practice.clearCustom(); EngineerClient.msg("§7Custom practice cleared.") },
         ))
         val io = stack("", 64, "Your custom practice as a short code, to send to someone or take theirs.", listOf(
             change("Export", 64, "Copies the custom practice as a short code (start, jobs, checkpoints, leap waypoints, start timer) to send to someone.") {
@@ -547,11 +550,13 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         // As many columns whichever section is open (the widest's; empty ones after), so switching moves nothing.
         val all = Practice.presets()
         val width = (1..4).maxOf { k -> (all.count { it.section == k } + 5) / 6 }
+        // Every section's preset buttons as wide as the longest name (no scrolling text; the same width in each section).
+        val pw = maxOf(64, all.maxOfOrNull { font.width(it.name) + 10 } ?: 0)
         val parts = all.filter { it.section == s }.chunked(6)
         for (i in 0 until width) {
             val part = parts.getOrNull(i) ?: emptyList()
-            secCols += stack("", 64, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
-                act(p.name, 64, "Practice ${p.name} (S$s): ${p.jobs.joinToString(", ") { jobName(it) }}" +
+            secCols += stack("", pw, "Section $s's presets: a start, the jobs and checkpoints (the rest of the section done), and their own start timer.", part.map { p ->
+                act(p.name, pw, "Practice ${p.name} (S$s): ${p.jobs.joinToString(", ") { jobName(it) }}" +
                     (if (p.checkpoints.isNotEmpty()) ", then ${p.checkpoints.size} checkpoint(s)" else "") +
                     (p.delay?.let { ". Start timer ${"%.1f".format(Locale.ROOT, it)}s." } ?: ". Start timer: the slider's.")) { SimActions.send("practicePreset", "name" to p.name) }
             })
