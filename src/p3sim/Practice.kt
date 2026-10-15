@@ -67,12 +67,12 @@ object Practice {
 
     /**
      * Preset [name] in section [section] from a custom practice's [code] ([PracticeCode]: its start, jobs (unless [jobs]),
-     * checkpoints and start timer), holding [item].
+     * checkpoints and start timer), holding [item]; [start] in place of the code's.
      */
-    private fun coded(section: Int, name: String, code: String, item: String?, jobs: List<String>? = null, restartMs: Long = 250): Setup? {
+    private fun coded(section: Int, name: String, code: String, item: String?, jobs: List<String>? = null, restartMs: Long = 250, start: Spots.Spot? = null): Setup? {
         val c = PracticeCode.decode(code) ?: return null.also { EngineerClient.logger.warn("[p3sim] practice preset {}: bad code {}", name, code) }
         val picked = jobs ?: P3Plan.allJobs().filter { it in c.jobs }
-        return Setup(name, section, c.start ?: return null, picked, c.checkpoints, c.delay, item, restartMs = restartMs)
+        return Setup(name, section, start ?: c.start ?: return null, picked, c.checkpoints, c.delay, item, restartMs = restartMs)
     }
 
     /** The presets made from codes, decoded once. */
@@ -84,8 +84,7 @@ object Practice {
         // i4: a left click right after it (the bow still drawn) doesn't start it again for 0.7 s; the Infinileap's does.
         coded(1, "i4", "1F?x8!EwzD)T=q", FIRST_BOW, restartMs = 700),
         coded(2, "ee3", "4VT^EC9D6Qi+=DN9E5yAi", BONZO),
-        coded(2, "ll cee3", "4VT^EC9D6Qi+=DONSDQDG", BONZO),
-        coded(2, "cee3", "6tNQ?NDFPO??+/!(m8Y", BONZO),
+        coded(2, "cee3", "6tNQ?NDFPO??+/!(m8Y", BONZO, start = p(36.03, 131.00, 139.01, 92.64f, 3.45f)),
         coded(2, "i2 -> cee3", "6n&gk{WrY(HE%C\$FroE", BONZO),
         coded(2, "ee2 -> 4 rl", "4VV3(]4y?RkzMM!0O2j8W", BREAKER),
         coded(2, "ee2 -> 53", "cVx+bCagN)P7c-", BONZO),
