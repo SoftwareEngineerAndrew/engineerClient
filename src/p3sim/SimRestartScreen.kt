@@ -645,8 +645,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
         /** Terminals 1-5, then L, R, D, G, as [P3Plan.short] names them. */
         val COLUMNS = (1..5).map { "$it" to "Terminal $it." } + listOf(
-            "L" to "The left lever, coming in along the track (S1 west, S2 high, S3 west, S4 low).",
-            "R" to "The right lever (S1 east, S2 low, S3 east, S4 high).",
+            "L" to "The left lever, coming in along the track (S1 east, S2 high, S3 west, S4 low).",
+            "R" to "The right lever (S1 west, S2 low, S3 east, S4 high).",
             "D" to "The section's device: S1 Simon Says, S2 Lights, S3 Arrows, S4 Target (i4).",
             "G" to "The section's gate: blown with Superboom or a Dungeonbreaker (or open by itself 5 s after the section ends).",
         )

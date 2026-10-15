@@ -378,7 +378,14 @@ class Devices(val phase: GoldorPhase) {
         /** Who last stood on the plate: the device is theirs when it's done. */
         private var plateBy: String? = null
 
+        /** The i4 bot on the plate (its name), doing it: the board runs for it as for a player. Set by Party each tick. */
+        var botOn: String? = null
+
+        /** The cell showing emerald now (to shoot at), or null. */
+        val shown: BlockPos? get() = if (lit >= 0) blocks[lit] else null
+
         private fun rawOnPlate(): Boolean {
+            botOn?.let { plateBy = it; return true }
             // A pressure plate: pressed while someone's box overlaps its block (feet within its lower quarter).
             val p = Sim.players().firstOrNull { pl ->
                 val b = pl.boundingBox
