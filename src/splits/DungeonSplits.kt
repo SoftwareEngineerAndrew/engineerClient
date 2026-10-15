@@ -251,6 +251,8 @@ object DungeonSplits : Module(
             EngineerClient.mc.execute {
                 EngineerClient.safely("splits chat") {
                     if (!DungeonUtils.inDungeons) return@safely
+                    // A P3 Sim practice: no splits (its own timer counts); its boss and terminal lines would start them again.
+                    if (com.engineerclient.p3sim.P3Sim.inSim && com.engineerclient.p3sim.Practice.active) return@safely
                     tracker.onChat(text, at)
                     moments.onChat(text, at)
                     subs.onChat(text, at)
