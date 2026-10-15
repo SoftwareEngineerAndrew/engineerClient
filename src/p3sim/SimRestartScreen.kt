@@ -35,8 +35,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
     private lateinit var panel: LinearLayout
 
-    // Each time the menu opens: no tab.
-    init { tab = null; practiceSec = 1 }
+    // Each time the menu opens: the tab and Practice section it closed on.
+    init { tab = Tab.entries.firstOrNull { it.name == Practice.menuTab }; practiceSec = Practice.menuSection }
 
     override fun init() {
         super.init()
@@ -131,6 +131,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
     /** Odin's settings save when the menu closes (dragging the speed slider would write every step). */
     override fun removed() {
         super.removed()
+        Practice.saveMenu(tab?.name, practiceSec.takeIf { it in 1..4 } ?: 1)
         ModuleManager.saveConfigurations()
     }
 
@@ -141,7 +142,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val open = tab === t || (also != null && tab === also)
         addRenderableWidget(Button.builder(Component.literal(if (open) "§a$name" else name)) {
             tab = if (open) null else t
-            practiceSec = 1
             rebuildWidgets()
         }.tooltip(tip("$about Click again: closes it.")).bounds(x, y, SIDE_W, 20).build())
     }
@@ -693,7 +693,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
         /** The tab open (null: none, as each time the menu opens). */
         private var tab: Tab? = null
-        /** Practice's open section page, 1-4 ([sectionTabs]); S1 each time the menu opens. */
+        /** Practice's open section page, 1-4 ([sectionTabs]); the last one each time the menu opens. */
         private var practiceSec = 0
 
         /** The type a terminal type pick last chose. */

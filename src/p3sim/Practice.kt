@@ -50,8 +50,67 @@ object Practice {
     /**
      * A set practice: [name], its [section], where you start, the jobs left to you (the rest of the section done; a
      * later section's device done early counts too), checkpoints to reach in order, and its start timer (null: the slider's).
+     * [item]: what you hold at the start ([holdStartItem]: an item key, or [FIRST_BOW]); [mines]: blocks already mined away
+     * at the start; [restartMs]: once it's done, how long before a left click with anything starts it again (the
+     * Infinileap's always does).
      */
-    class Setup(val name: String, val section: Int, val start: Spots.Spot, val jobs: List<String>, val checkpoints: List<Spots.Spot> = emptyList(), val delay: Double? = null)
+    class Setup(val name: String, val section: Int, val start: Spots.Spot, val jobs: List<String>, val checkpoints: List<Spots.Spot> = emptyList(), val delay: Double? = null,
+                val item: String? = null, val mines: List<net.minecraft.core.BlockPos> = emptyList(), val restartMs: Long = 250)
+
+    /** [Setup.item]: the first bow on your hotbar. */
+    const val FIRST_BOW = "first bow"
+    private const val BREAKER = "DUNGEONBREAKER"
+    private const val BONZO = "STARRED_BONZO_STAFF"
+
+    /** The high EE3's 2x2 quartz platform (x 15-16, y 122, z 93-94), as Theoretical's bers mines it there. */
+    private val HEE3_MINES get() = listOf(15, 16).flatMap { x -> listOf(93, 94).map { net.minecraft.core.BlockPos(x, 122, it) } }
+
+    /**
+     * Preset [name] in section [section] from a custom practice's [code] ([PracticeCode]: its start, jobs (unless [jobs]),
+     * checkpoints and start timer), holding [item].
+     */
+    private fun coded(section: Int, name: String, code: String, item: String?, jobs: List<String>? = null, restartMs: Long = 250): Setup? {
+        val c = PracticeCode.decode(code) ?: return null.also { EngineerClient.logger.warn("[p3sim] practice preset {}: bad code {}", name, code) }
+        val picked = jobs ?: P3Plan.allJobs().filter { it in c.jobs }
+        return Setup(name, section, c.start ?: return null, picked, c.checkpoints, c.delay, item, restartMs = restartMs)
+    }
+
+    /** The presets made from codes, decoded once. */
+    private var codedPresets: List<Setup>? = null
+    private fun codedPresets(): List<Setup> = codedPresets ?: listOfNotNull(
+        coded(1, "123", "\$b4RW/r\$6-sy!h8", BREAKER),
+        coded(1, "43 bl", "Pu0y8Q2!sz]64YV!", BREAKER),
+        coded(1, "i3 21", "yq&oxU6Wr3h49kw", BREAKER),
+        // i4: a left click right after it (the bow still drawn) doesn't start it again for 0.7 s; the Infinileap's does.
+        coded(1, "i4", "1F?x8!EwzD)T=q", FIRST_BOW, restartMs = 700),
+        coded(2, "ll ee3", "4VT^EC9D6Qi+=DN9E5yAi", BONZO),
+        coded(2, "ll cee3", "4VT^EC9D6Qi+=DONSDQDG", BONZO),
+        coded(2, "cee3", "6tNQ?NDFPO??+/!(m8Y", BONZO),
+        coded(2, "i2 -> cee3", "6n&gk{WrY(HE%C\$FroE", BONZO),
+        coded(2, "ee2 -> 4 rl", "4VV3(]4y?RkzMM!0O2j8W", BREAKER),
+        coded(2, "ee2 -> 53", "cVx+bCagN)P7c-", BONZO),
+        coded(2, "ee2 -> 23", "cVx+bCagN)P7V}", BREAKER),
+        coded(2, "ee2 -> 53 core", "4VV3(]4y?}3?tk}Z1vXtL", BONZO),
+        // Its code has terminals 2 and 5: 2 and 3, as its name and "ee2 -> 23".
+        coded(2, "ee2 -> 23 core", "4VV3(]4y?}3?s)SzW9E7R", BREAKER, jobs = listOf("S2 T2", "S2 T3")),
+        coded(2, "3 -> core", "6qVDsKr0.Ni]JM)q5m4", BREAKER),
+        coded(2, "2 -> core", "6t431)u?S&6POjy(s7/", BREAKER),
+        coded(2, "2 -> 23", "cUIyVshnIF6L[7", BREAKER),
+        coded(2, "5 -> 53", "c6Ecf4/uscbw2n", BREAKER),
+        coded(4, "1", "A&XXR!e.OWkVS+.gHRxy", BREAKER),
+        coded(4, "2", "1FiRWUShfWt!!}", BREAKER),
+        coded(4, "3", "1FiRWUShfWt!\$F", BREAKER),
+        coded(4, "4", "1FiRWUShfWt!\$V", BREAKER),
+        coded(4, "bl", "cN^89NinzJlbXT", BREAKER),
+        coded(4, "3 bl", "!4&OC5EOpIxz5%4", BREAKER),
+        coded(4, "4 bl", "!4&OC5EOpIxz8YZ", BREAKER),
+        coded(4, "1 -> 2", "1F30?WCBnGmO}}", BREAKER),
+        coded(4, "3 -> 3 bl", "!V8vZu}h7d{Y0r.", BREAKER),
+        // Its code is 3 -> 3 bl's: just the levers, as "4 -> bl".
+        coded(4, "3 -> bl", "!V8vZu}h7d{Y0r.", BONZO, jobs = listOf("S4 low lever", "S4 high lever")),
+        coded(4, "4 -> 4 bl", "!gOrno7IArJ3^&j", BREAKER),
+        coded(4, "4 -> bl", "cl7&FG8D3dpRat", BONZO),
+    ).also { codedPresets = it }
 
     /** The preset or custom practice running (null: a role's section practice). */
     @Volatile private var setup: Setup? = null
@@ -61,26 +120,21 @@ object Practice {
     private fun p(x: Double, y: Double, z: Double, yaw: Float, pitch: Float) = Spots.Spot("Start", x, y, z, yaw, pitch)
 
     /** The presets, by section (the menu's columns). */
-    fun presets(): List<Setup> = listOf(
-        Setup("4 3", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 T4", "S1 T3"), delay = 3.0),
-        Setup("2 1", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 T2", "S1 T1"), delay = 3.0),
-        Setup("ee2", 1, p(108.20, 120.00, 94.00, -90.41f, 2.79f), listOf("S1 west lever", "S1 east lever", "gate 1", "S2 Lights"),
-            listOf(Spots.Spot("EE2", 60.53, 132.00, 138.98, 0f)), delay = 3.0),
-        Setup("2 -> 1", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T1"), listOf(Spots.Spot("Checkpoint", 69.70, 109.00, 122.43, 0f)), delay = 0.0),
-        Setup("2 -> 3", 2, p(59.47, 120.00, 125.98, -179.50f, 23.01f), listOf("S2 T3"), delay = 0.0),
-        // S3 (BL: both levers; no start timer of their own: the slider's).
-        Setup("1 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T1", "S3 west lever", "S3 east lever")),
-        Setup("4 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T4", "S3 west lever", "S3 east lever", "gate 3")),
-        Setup("2 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T2", "S3 Arrows")),
-        Setup("3 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T3", "S3 Arrows")),
-        Setup("h -> 1", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T1")),
-        Setup("h -> 2", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T2")),
-        Setup("h -> i3 4", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4")),
-        Setup("h -> 3 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T3", "S3 west lever", "S3 east lever")),
-        Setup("h -> i3 4 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4", "S3 west lever", "S3 east lever")),
-        Setup("4 -> 4 BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 T4", "S3 west lever", "S3 east lever")),
-        Setup("4 -> BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 west lever", "S3 east lever")),
-    )
+    fun presets(): List<Setup> = codedPresets().filter { it.section < 3 } + listOf(
+        // S3 (BL: both levers; no start timer of their own: the slider's). c ->: from the high EE3 (CEE3), its 2x2 platform
+        // already mined as Theoretical's bers does.
+        Setup("1 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T1", "S3 west lever", "S3 east lever"), item = BREAKER),
+        Setup("4 bl", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T4", "S3 west lever", "S3 east lever", "gate 3"), item = BREAKER),
+        Setup("2 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T2", "S3 Arrows"), item = BREAKER),
+        Setup("3 dev", 3, p(2.00, 109.00, 102.00, -175.24f, 5.83f), listOf("S3 T3", "S3 Arrows"), listOf(Spots.Spot("CEE3", 18.70, 121.50, 91.30, 0f)), item = BONZO),
+        Setup("c -> 1", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T1"), item = BREAKER, mines = HEE3_MINES),
+        Setup("c -> 2", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T2"), item = BONZO, mines = HEE3_MINES),
+        Setup("c -> i3 4", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4"), item = BONZO, mines = HEE3_MINES),
+        Setup("c -> 3 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 T3", "S3 west lever", "S3 east lever"), item = BREAKER, mines = HEE3_MINES),
+        Setup("c -> i3 4 bl", 3, p(18.70, 121.50, 91.30, 1.15f, -7.73f), listOf("S3 Arrows", "S3 T4", "S3 west lever", "S3 east lever"), item = BONZO, mines = HEE3_MINES),
+        Setup("4 -> 4 BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 T4", "S3 west lever", "S3 east lever"), item = BREAKER),
+        Setup("4 -> BL", 3, p(0.97, 109.00, 77.89, 96.99f, 19.23f), listOf("S3 west lever", "S3 east lever"), item = BONZO),
+    ) + codedPresets().filter { it.section > 3 }
 
     /** Starts preset [name] (again). */
     fun startPreset(name: String) { presets().firstOrNull { it.name == name }?.let { launch(it) } }
@@ -109,6 +163,8 @@ object Practice {
         com.engineerclient.practice.TermInfo.simClearTime()
         startedMs = System.currentTimeMillis()
         Fight.start(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4)[s - 1], practice = true)
+        // The preset's blocks already mined away (back with the next start's restore).
+        setup?.mines?.forEach { Blocks.set(it, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) }
         // Its first 0.15 s breaks nothing ([noBreaking]); whatever the Dungeonbreaker took around the (re)start comes back after.
         Fight.later(NO_BREAK_TICKS + 1, "practice blocks back") { SimItems.unbreakAll() }
     }
@@ -131,8 +187,8 @@ object Practice {
         }
     }
 
-    /** A left click with anything, 0.25 s after it's done, starts it again. Client thread. */
-    fun clickRestarts() = active && endTicks >= 0 && System.currentTimeMillis() - endMs >= 250
+    /** A left click with anything, 0.25 s after it's done (the preset's own wait: i4's 0.7 s), starts it again. Client thread. */
+    fun clickRestarts() = active && endTicks >= 0 && System.currentTimeMillis() - endMs >= (setup?.restartMs ?: 250)
 
     /** Out of practice mode (any other start, Stop). */
     fun exit() { mode = null; section = 0; setup = null; tasks = emptyList(); endTicks = -1 }
@@ -319,12 +375,12 @@ object Practice {
     fun itemKey(s: net.minecraft.world.item.ItemStack): String? =
         if (s.isEmpty) null else SimItems.idOf(s) ?: "name:" + s.hoverName.string
 
-    /** In the custom practice: you hold the start's item again (the hotbar slot it's in now, if any). */
+    /** In a custom practice or a preset with one: you hold its start item again (the hotbar slot it's in now, if any). */
     fun holdStartItem(player: net.minecraft.server.level.ServerPlayer) {
-        if (setup?.name != "Custom") return
-        val key = customItem ?: return
+        val set = setup ?: return
+        val key = (if (set.name == "Custom") customItem else set.item) ?: return
         val inv = player.inventory
-        val slot = (0..8).firstOrNull { itemKey(inv.getItem(it)) == key } ?: return
+        val slot = (0..8).firstOrNull { val s = inv.getItem(it); if (key == FIRST_BOW) s.item is net.minecraft.world.item.BowItem else itemKey(s) == key } ?: return
         inv.selectedSlot = slot
         player.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(slot))
     }
@@ -364,7 +420,19 @@ object Practice {
     fun addCheckpoint(spot: Spots.Spot) { checkpoints += spot; save() }
     fun removeCheckpoint() { if (checkpoints.isNotEmpty()) checkpoints.removeAt(checkpoints.size - 1); save() }
 
-    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null, val leaps: List<List<Double>>? = null, val item: String? = null)
+    private class Saved(val start: List<Double>? = null, val section: Int? = null, val jobs: List<String>? = null, val checkpoints: List<List<Double>>? = null, val startDelay: Double? = null, val leaps: List<List<Double>>? = null, val item: String? = null,
+                        val menuTab: String? = null, val menuSection: Int? = null)
+
+    /** The sim menu's tab and Practice section when it last closed (SimRestartScreen opens on them). */
+    @Volatile var menuTab: String? = null
+        private set
+    @Volatile var menuSection = 1
+        private set
+
+    fun saveMenu(tab: String?, section: Int) {
+        if (tab == menuTab && section == menuSection) return
+        menuTab = tab; menuSection = section; save()
+    }
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file get() = File(Minecraft.getInstance().gameDirectory, "config/engineerclient/p3sim-practice.json")
@@ -383,13 +451,16 @@ object Practice {
             startDelay = s.startDelay ?: 0.0
             checkpoints.clear(); s.checkpoints?.forEachIndexed { i, v -> if (v.size >= 5) checkpoints += spot("Checkpoint ${i + 1}", v) }
             leapWaypoints.clear(); s.leaps?.forEachIndexed { i, v -> if (v.size >= 5 && i < 4) leapWaypoints += spot("Leap ${i + 1}", v) }
+            menuTab = s.menuTab
+            menuSection = s.menuSection?.takeIf { it in 1..4 } ?: 1
         }
     }
 
     private fun save() {
         EngineerClient.safely("p3sim practice save") {
             file.parentFile.mkdirs()
-            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) }, customItem)))
+            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) }, customItem,
+                menuTab, menuSection)))
         }
     }
 }
