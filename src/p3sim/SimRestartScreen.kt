@@ -559,7 +559,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         val cols = ArrayList<LayoutElement>()
         cols += io
         cols += label("", 8)
-        cols += custom.drop(1)
+        cols += custom.drop(1).reversed()  // the overflow jobs (past 6: D, G, 5...) on the left
         cols += custom.first()
         cols += label("", 16)
         cols += secCols
