@@ -181,7 +181,7 @@ object Roles {
             "",
         ),
         defaults = mapOf(
-            "ee2" to Spots.Spot("EE2", 35.99, 131.0, 138.96, 92.20f, 3.86f),
+            "ee2" to Spots.Spot("i2", 35.99, 131.0, 138.96, 92.20f, 3.86f),
             "ee3" to Spots.Spot("EE3", 18.70, 121.50, 91.30, 0.82f, -8.64f),
             // The mage starts on Lights, the archer by S1's east lever (looking at it).
             "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
