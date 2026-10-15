@@ -1347,6 +1347,9 @@ object Party {
      */
     private fun pace(b: Bot, left: Double, n: Int): Double {
         if (b.due < 0 || left <= 0) return 1.0
+        // Theoretical: the fastest recorded way at the speed it was played (ADR's best players); never faster than a
+        // player can go, so a time tighter than that is simply met late.
+        if (P3Plan.preset() === Roles.THEORETICAL) return 1.0
         val min = minOf(b.lead, MIN_LEAD)
         if (n + left <= b.due - min) return 1.0
         val by = b.due - min - n
