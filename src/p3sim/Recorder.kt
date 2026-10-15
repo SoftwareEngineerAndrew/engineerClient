@@ -15,8 +15,9 @@ import java.time.format.DateTimeFormatter
  * the sim sent and the bots' debug lines as events. The last 20 runs are kept. Server thread only.
  */
 object Recorder {
-    /** Runs kept at most: once there are this many it stops (and says so) rather than delete any. */
-    private const val KEEP = 50
+    /** Runs recorded in a row at most: then it turns itself off (and says so); turning it back on starts the count again. */
+    private const val IN_A_ROW = 50
+    private var inRow = 0
     private var out: BufferedWriter? = null
     private var file: File? = null
     private val events = ArrayList<String>()
@@ -25,14 +26,16 @@ object Recorder {
 
     fun begin(what: String) {
         finish()
-        if (!P3Sim.record) return
+        if (!P3Sim.record) { inRow = 0; return }
+        if (inRow >= IN_A_ROW) {
+            P3Sim.recordS.value = false
+            inRow = 0
+            Sim.note("§cRecord Runs is off: $IN_A_ROW runs recorded in a row (config/engineerclient/p3sim-runs). Turn it back on for $IN_A_ROW more.")
+            return
+        }
+        inRow++
         runCatching {
             dir.mkdirs()
-            if ((dir.listFiles { f -> f.name.endsWith(".jsonl") }?.size ?: 0) >= KEEP) {
-                P3Sim.recordS.value = false
-                Sim.note("§cRecord Runs is off: $KEEP runs in config/engineerclient/p3sim-runs already. Move or delete some, then turn it back on.")
-                return
-            }
             val f = File(dir, "run-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}.jsonl")
             file = f
             out = f.bufferedWriter()
