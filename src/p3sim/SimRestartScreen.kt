@@ -30,7 +30,7 @@ import java.util.Locale
  * button says what it does when hovered; changes save at once, starts and teleports close the menu.
  */
 class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
-    private enum class Tab { PLAN, ADVANCED, SETTINGS, TELEPORT, PRACTICE }
+    private enum class Tab { PLAN, ADVANCED, SETTINGS, TELEPORT, PRACTICE, BOSS }
 
     private lateinit var panel: LinearLayout
 
@@ -60,7 +60,8 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
 
         party()
 
-        // Left: the tabs, Practice level with Restart, then Plan, Teleport and Settings above it.
+        // Left: the tabs, Practice level with Restart, then Plan, Teleport, Settings and Boss above it.
+        tabButton(Tab.BOSS, "Boss", "The boss fight: where the run stops (after terms, after Goldor).", left, restartY - 4 * ROW)
         tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 3 * ROW)
         tabButton(Tab.TELEPORT, "Teleport", "Every place in the arena: section starts, devices, pads, phases, early-enter spots.", left, restartY - 2 * ROW)
         tabButton(Tab.PLAN, "Plan", "The section plan: each section's jobs and who does them (yours, a bot's), with Advanced under it.", left, restartY - ROW, Tab.ADVANCED)
@@ -112,6 +113,7 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         else if (t === Tab.SETTINGS) settingsPanel()
         else if (t === Tab.TELEPORT) teleportPanel()
         else if (t === Tab.PRACTICE) practicePanel()
+        else if (t === Tab.BOSS) bossPanel()
         panel.arrangeElements()
         val top = restartY + 20 + 10
         panel.setPosition(cx - panel.width / 2, top)
@@ -325,7 +327,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
             )),
             stack("§eFight", 92, "How the fight goes on.", listOf(
                 toggle("Lava Bounce", P3Sim.lava, 92, P3Sim.lavaS.description) { P3Sim.lavaS.value = !P3Sim.lava },
-                toggle("Stop After P3", P3Sim.p3Only, 92, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
                 toggle("Start On Join", P3Sim.autoStart, 92, P3Sim.autoStartS.description) { P3Sim.autoStartS.value = !P3Sim.autoStart },
                 toggle("Terror At Terms", P3Sim.terrorAtTerms, 92, P3Sim.terrorAtTermsS.description) { P3Sim.toggleTerrorAtTerms() },
                 toggle("Black Cat Start", P3Sim.blackCatAtStart, 92, "Black Cat At Start: " + P3Sim.blackCatS.description) { P3Sim.toggleBlackCatAtStart() },
@@ -415,6 +416,14 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
      * A column per part of the run (P1, P2, S1-S4), its places top to bottom in the order you get to them. CEE3 is
      * the high EE3. The spots are here, not in [Spots], so a hotswap brings them in.
      */
+    /** The boss fight: where the run stops. Green when on. */
+    private fun bossPanel() {
+        row(listOf(stack("§eStop", 120, "Where the run stops on its own (as the menu's Stop: everything back as built).", listOf(
+            toggle("Stop After Terms", P3Sim.termsOnly, 120, P3Sim.termsOnlyS.description) { P3Sim.termsOnlyS.value = !P3Sim.termsOnly },
+            toggle("Stop After Goldor", P3Sim.p3Only, 120, P3Sim.p3OnlyS.description) { P3Sim.p3OnlyS.value = !P3Sim.p3Only },
+        ))))
+    }
+
     private fun teleportPanel() {
         val w = 64
         fun spot(name: String, x: Double, y: Double, z: Double, yaw: Float, pitch: Float): Pair<String, Spots.Spot?> = name to Spots.Spot(name, x, y, z, yaw, pitch)

@@ -85,7 +85,8 @@ object P3Sim : Module(
     val terrorAtTermsS = +BooleanSetting("Terror At Terms", false, desc = "Every P3 start puts the Terror loadout on (Terror armour, Bonzo's Mask, Black Cat) over your saved gear.")
     val blackCatS = +BooleanSetting("Black Cat At Start", true, desc = "Every start and restart puts Black Cat out. Off: the pet you had stays (as your items and gear do).")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
-    val p3OnlyS = +BooleanSetting("Stop After P3", false, desc = "End at Goldor's death instead of going on to Necron.")
+    val termsOnlyS = +BooleanSetting("Stop After Terms", false, desc = "The run stops (as Stop does) when the core opens: no Goldor fight.")
+    val p3OnlyS = +BooleanSetting("Stop After Goldor", false, desc = "The run stops (as Stop does) when Necron would speak, after Goldor's death, instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimesS = +BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
 
@@ -149,6 +150,7 @@ object P3Sim : Module(
     val jitter: Boolean get() = mine("jitter", { jitterS.value }) { it.asBoolean }
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
+    val termsOnly: Boolean get() = (termsOnlyS as BooleanSetting?)?.value == true
     val shortbowCooldown: Int get() = mine("shortbow", { shortbowCooldownS.value.toInt() }) { it.asDouble.toInt() }
     /** Terror armor pieces worn right now (TERROR_* ids in the four armour slots, helmet included): 0 to 4. Hydra Strike follows it. */
     val terrorPieces: Int get() = Sim.player?.let { p ->
