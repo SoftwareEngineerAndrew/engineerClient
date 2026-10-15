@@ -333,7 +333,8 @@ object Fight {
             Start.CORE -> com.engineerclient.splits.SplitTracker.GOLDOR to 0
             Start.P4 -> com.engineerclient.splits.SplitTracker.NECRON to 0
         }
-        PartyClient.send("splitsStart", termsDone, split)
+        // Practice: no splits (its own timer is the one that counts); the last run's are cleared.
+        if (practice) PartyClient.send("splitsStop") else PartyClient.send("splitsStart", termsDone, split)
         Recorder.begin(what.label)
         // No "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
         val p: Phase = when (what) {
