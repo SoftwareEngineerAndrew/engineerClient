@@ -25,8 +25,8 @@ import net.minecraft.world.level.block.Blocks as B
  * Static and per-run corrections to the arena that arena.bin (built from the ADR library) does not carry,
  * from packet captures of Hypixel P3s (`arena-fixes.json`, `arena-ext.bin`):
  * - the thicker east wall (x128-134) and the NW column ([Arena.Data] patch, `arena-ext.bin`);
- * - the y63 floor layer, rolled per cell from the recorded spread, and the sparse removals before Terms
- *   (lava y162, quartz, dirt, red terracotta, stone bricks), each cell with its recorded frequency;
+ * - the y63 floor layer, each cell's most common solid block from the recorded spread (no block is removed:
+ *   every block stays as built);
  * - player-head textures;
  * - [Replay]: that same recorded run's block changes from Terms on (TNT cubes, polished granite blobs,
  *   the S4 plate), so a fight gets the timing of a real one.
@@ -95,21 +95,14 @@ object ArenaFixes {
         if (t != null) {
             val st = t.states
             val root = t.root
-            // The y63 layer varies per run; each cell drawn from its recorded spread.
+            // The y63 layer varies per run on Hypixel: here always each cell's most common solid block, the same every
+            // load (a roll per load left holes, and a world saved with one roll never matched the next load's).
             for (e in root.getAsJsonArray("y63")) {
                 val a = e.asJsonArray
-                val opts = a[2].asJsonArray
-                var total = 0; opts.forEach { total += it.asJsonArray[1].asInt }
-                var r = Random.nextInt(total)
-                for (o in opts) { val oa = o.asJsonArray; r -= oa[1].asInt; if (r < 0) { put(a[0].asInt, 63, a[1].asInt, st[oa[0].asInt]); break } }
+                val best = a[2].asJsonArray.map { it.asJsonArray }.filter { !st[it[0].asInt].isAir }.maxByOrNull { it[1].asInt } ?: continue
+                put(a[0].asInt, 63, a[1].asInt, st[best[0].asInt])
             }
-            // Sparse removals, each cell with its recorded frequency.
-            val runs = root.get("removeRuns").asInt
-            for (e in root.getAsJsonArray("remove")) {
-                val a = e.asJsonArray
-                val x = a[0].asInt; val y = a[1].asInt; val z = a[2].asInt
-                if (at(x, y, z) == st[a[3].asInt] && Random.nextInt(runs) < a[4].asInt) put(x, y, z, air)
-            }
+            // (No removals: the blocks Hypixel's arena has lost by Terms stay, every block as built.)
             // The run this world's Replay copies. The Arrow Align wall (x -3) is drawn by Devices.Arrows.
             pick = Random.nextInt(t.runs.size)
         }
@@ -139,6 +132,19 @@ object ArenaFixes {
     }
 
     private object ChunkPosKey { fun of(cx: Int, cz: Int): Long = (cx.toLong() shl 32) or (cz.toLong() and 0xffffffffL) }
+
+    /** A player head put back at [pos] ([Arena.restore], [Arena.resync]) gets its texture again, the clients told. */
+    fun reskull(level: net.minecraft.server.level.ServerLevel, pos: BlockPos) {
+        val state = level.getBlockState(pos)
+        if (state.block !is SkullBlock) return
+        val s = skulls[ChunkPosKey.of(pos.x shr 4, pos.z shr 4)]?.firstOrNull { it.x == pos.x && it.y == pos.y && it.z == pos.z } ?: return
+        val be = level.getBlockEntity(pos) as? SkullBlockEntity ?: return
+        val stack = ItemStack(Items.PLAYER_HEAD)
+        stack.set(DataComponents.PROFILE, s.profile)
+        be.applyComponentsFromItemStack(stack)
+        be.setChanged()
+        level.sendBlockUpdated(pos, state, state, 3)
+    }
 
     /** Gives the player heads of a freshly filled chunk their texture (block entities on the proto chunk). */
     fun skulls(chunk: ChunkAccess) {
@@ -180,20 +186,30 @@ object ArenaFixes {
                 val s = e[i + 4]
                 val pos = BlockPos(e[i + 1], e[i + 2], e[i + 3])
                 if (s < 0) {
-                    // A blob going away: only if it is still there (Goldor's carving may have taken it already).
+                    // A blob going away: back to as built, if it is still there.
                     if (Blocks.get(pos)?.`is`(B.POLISHED_GRANITE) == true) Blocks.set(pos, Arena.data.get(pos.x, pos.y, pos.z))
                 } else place(pos.x, pos.y, pos.z, states[s])
             }
         }
 
+        /** The blocks this replay put up itself (TNT cubes, granite blobs...): the only ones it ever takes away. */
+        private var placed: HashSet<BlockPos>? = null
+        private fun placed() = placed ?: HashSet<BlockPos>().also { placed = it }
+
         private fun place(x: Int, y: Int, z: Int, s: BlockState) {
             val pos = BlockPos(x, y, z)
             val cur = Blocks.get(pos) ?: return
+            // Goldor breaks nothing: only a block this replay put up goes, back to what was built there (air only if nothing was).
+            if (s.isAir) {
+                if (!placed().remove(pos)) return
+                val built = Arena.data.get(x, y, z)
+                if (built.isAir && cur.`is`(B.TNT) && !catchUp) { primeCube(pos); return }
+                Blocks.set(pos, built)
+                return
+            }
             // Block entities (heads, dispensers) are left alone: replacing one would drop its data.
-            if (cur.hasBlockEntity() && !s.isAir) return
-            // Goldor breaks nothing in P3: no block the arena was built with goes (a built TNT cube stays).
-            if (s.isAir && cur == Arena.data.get(x, y, z)) return
-            if (s.isAir && cur.`is`(B.TNT) && !catchUp) { primeCube(pos); return }
+            if (cur.hasBlockEntity()) return
+            placed() += pos
             Blocks.set(pos, s)
         }
 

@@ -36,6 +36,9 @@ object Blocks {
         conveyor = null
         touched.forEach { Arena.restore(level, it) }
         touched.clear()
+        // Then the whole arena checked against how it was built: anything else that changed goes back too.
+        val fixed = Arena.resync(level)
+        if (fixed > 0) EngineerClient.logger.info("[p3sim] restore: {} more arena blocks put back", fixed)
     }
 
     // ------------------------------------------------------------------ recorded animations
