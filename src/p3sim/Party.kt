@@ -849,6 +849,9 @@ object Party {
      * [b]'s legs ([Legs]): your best run as its class for this skill, from section [from]'s start in it; null: Real Movement
      * is off, there's none, or it never reached [from].
      */
+    /** Standing this long (ticks) as a section started: you were waiting for it there. */
+    private const val WAITED = 4
+
     private fun legsFor(b: Bot, from: Int): Legs? {
         if (!P3Sim.realMoves || !botsOn) return null
         val run = GhostStore.best(P3Plan.skillName(), b.clazz.name) ?: return null
@@ -869,7 +872,8 @@ object Party {
     /**
      * A tick of [b] moving as you did: on through your run toward its next job, so it's done there at the plan's time (faster
      * when the plan's tighter; at your pace, then standing on it, when there's time to spare). A job whose time isn't known yet
-     * (its section hasn't started): at your pace, waiting where you were as that section started. Its leaps, swings and items
+     * (its section hasn't started): at your pace, waiting where you waited for that section to start (if you were standing
+     * still then; on the move, it keeps going: it gets there when it gets there). Its leaps, swings and items
      * as yours; an early enter it gets on is on for the party (leaps onto it, the blocks it mines).
      */
     private fun legTick(b: Bot, phase: GoldorPhase) {
@@ -892,8 +896,10 @@ object Party {
             a != null && due != null && due <= n -> a.first.toDouble()
             a != null && due != null -> minOf(a.first.toDouble(), lg.at + maxOf(1.0, (a.first - lg.at) / (due - n)))
             else -> {
-                // Not known yet: your pace, held where you were as the next section to start did (and at the job).
-                val cap = ((phase.section + 1)..5).mapNotNull { s -> run.sectionN.getOrNull(s)?.takeIf { it >= 0 && it > lg.at } }.minOrNull()
+                // Not known yet: your pace, held where you stood waiting for the next section to start (and at the job).
+                val cap = ((phase.section + 1)..5).mapNotNull { s ->
+                    run.sectionN.getOrNull(s)?.takeIf { it >= 0 && it > lg.at && run.frame(it - WAITED).p.dist(run.frame(it).p) < 0.3 }
+                }.minOrNull()
                 minOf(lg.at + 1.0, a?.first?.toDouble() ?: end, cap?.toDouble() ?: end, end)
             }
         }
