@@ -84,8 +84,6 @@ object Party {
         /** What the route has it hold (a Bonzo staff, a Superboom...) until n = [routeHeldUntil]. */
         var routeHeld: String? = null
         var routeHeldUntil = -1
-        /** The route is a fixed move (yours or built in, [Moves]): played at its own speed, never sped up. */
-        var routeFixed = false
         /** Mining through to these, in order ([digCore]: the core early enterer's way in from S2); null: not. */
         var dig: ArrayDeque<Vec3>? = null
         /** Where it set off for in the lead-in ([startLeadIn]); null: it didn't. */
@@ -319,7 +317,7 @@ object Party {
         bots.forEach {
             it.entity?.discard(); it.entity = null; it.to = null; it.due = -1; it.working = null; it.hold = false; it.inSection = 0
             it.vy = 0.0; it.blinkReady = 0; it.blinkAt = -100; it.leaptAt = -100; it.heldKey = ""; it.ghost = null
-            it.route = null; it.routeTo = null; it.routeFixed = false; it.routeHeld = null; it.routeHeldUntil = -1; it.leadTo = null
+            it.route = null; it.routeTo = null; it.routeHeld = null; it.routeHeldUntil = -1; it.leadTo = null
         }
         leadIn = false
     }
@@ -601,26 +599,16 @@ object Party {
         }
     }
 
-    /**
-     * The bots that play your best runs instead (the menu's Plan tab), P3 from S1 with a run saved for this skill; the
-     * rest, if the skill has a plan file ([PlanFile]), play it exactly: each one's whole P3 worked out from it.
-     */
+    /** The bots that play your best runs instead (the menu's Plan tab), P3 from S1 with a run saved for this skill. */
     private fun startGhosts(phase: GoldorPhase) {
         val names = ArrayList<String>()
-        val script = PlanFile.of(P3Plan.skillName())
-        val warnings = ArrayList<String>()
-        val scripted = script?.let { PlanFile.ghostRuns(it, warnings) }.orEmpty()
         for (b in bots) {
-            val best = if (P3Plan.ghostOn(b.clazz)) GhostStore.best(P3Plan.skillName(), b.clazz.name) else null
-            val run = best ?: scripted[b.clazz] ?: continue
+            if (!P3Plan.ghostOn(b.clazz)) continue
+            val run = GhostStore.best(P3Plan.skillName(), b.clazz.name) ?: continue
             b.ghost = GhostPlayer(run, GhostWorld(b, phase), GhostBody(b, phase))
-            if (best != null) names += "§d${b.name}§7 (${"%.2f".format(java.util.Locale.ROOT, run.time / 20.0)}s)"
+            names += "§d${b.name}§7 (${"%.2f".format(java.util.Locale.ROOT, run.time / 20.0)}s)"
         }
         if (names.isNotEmpty()) Sim.note("Your best runs play: ${names.joinToString(", ")}.")
-        if (script != null) {
-            Sim.note("Bots play §f${script.name}.txt§7 (P3 ${"%.2f".format(java.util.Locale.ROOT, script.sectionN[5] / 20.0)}s on time).")
-            (script.errors + warnings).take(6).forEach { Sim.note("§c$it") }
-        }
     }
 
     private fun P.vec() = Vec3(x, y, z)
@@ -1313,7 +1301,7 @@ object Party {
     /** The fastest a route plays: to be at a job by its time at all (later than that: the job's late). */
     private const val HURRY = 4.0
     /** What a route shows the bot holding where the player held it (anything else: what it holds anyway). */
-    private val ROUTE_ITEMS = setOf("STARRED_BONZO_STAFF", "BONZO_STAFF", "JERRY_STAFF", "SUPERBOOM_TNT", "HYPERION", "ASPECT_OF_THE_VOID", "ENDER_PEARL", "PET_ROD")
+    private val ROUTE_ITEMS = setOf("STARRED_BONZO_STAFF", "BONZO_STAFF", "JERRY_STAFF", "SUPERBOOM_TNT", "HYPERION", "ASPECT_OF_THE_VOID", "ENDER_PEARL")
 
     /**
      * A tick along the way a real player went to [to] ([Routes]: sprints, jumps, lava bounces, boosts,
@@ -1324,15 +1312,10 @@ object Party {
         if (!P3Sim.realMoves) return false
         if (b.routeTo != to) {
             b.routeTo = to; b.routeT = 0.0
-            // Listed for recording (the menu's Moves tab). The fixed move (yours, else built in) if there is one, at its
-            // own speed every run; else the recorded-runs graph.
-            Moves.seen(b.name, curPhase?.section ?: 0, b.pos, to)
-            val fixed = Moves.route(b.pos, to)
-            val r = fixed ?: Routes.find(b.pos, to, ::closed)
+            val r = Routes.find(b.pos, to, ::closed)
             b.route = r
-            b.routeFixed = fixed != null
             if (r == null) dbg("§e${b.name}§7: no real route to ${to.short()}, walking")
-            else dbg("§e${b.name}§7: ${if (fixed != null) "fixed move" else "route"} ${"%.1f".format(r.ticks / 20)}s" +
+            else dbg("§e${b.name}§7: route ${"%.1f".format(r.ticks / 20)}s at a player's pace" +
                 if (b.due >= 0) ", ${"%.1f".format((b.due - b.lead - n) / 20.0)}s to be there" else "")
         }
         val r = b.route ?: return false
@@ -1363,7 +1346,6 @@ object Party {
      * that (up to [HURRY]).
      */
     private fun pace(b: Bot, left: Double, n: Int): Double {
-
         if (b.due < 0 || left <= 0) return 1.0
         val min = minOf(b.lead, MIN_LEAD)
         if (n + left <= b.due - min) return 1.0
@@ -1392,7 +1374,7 @@ object Party {
     }
 
     private fun arrive(b: Bot, to: Vec3) {
-        b.pos = to; b.to = null; b.vy = 0.0; b.route = null; b.routeTo = null; b.routeFixed = false
+        b.pos = to; b.to = null; b.vy = 0.0; b.route = null; b.routeTo = null
         b.face?.let { b.yaw = it.first; b.pitch = it.second }
     }
 
@@ -1459,7 +1441,7 @@ object Party {
     /** [b] leaps onto [to]: lands there facing as whoever it leapt to; their mod says so in party chat a tick later. */
     private fun leapTo(b: Bot, to: Target, n: Int) {
         val at = to.pos
-        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null; b.routeFixed = false
+        b.pos = at; b.to = null; b.vy = 0.0; b.leaptAt = n; b.route = null; b.routeTo = null
         to.yaw?.let { b.yaw = it }
         Sim.sound(net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, at)
         // Most teammates' leaps are announced, usually 1 tick after the tp.

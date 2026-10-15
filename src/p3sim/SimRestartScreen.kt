@@ -31,7 +31,7 @@ import java.util.Locale
  * button says what it does when hovered; changes save at once, starts and teleports close the menu.
  */
 class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
-    private enum class Tab { PLAN, ADVANCED, SETTINGS, TELEPORT, PRACTICE, BOSS, MOVES }
+    private enum class Tab { PLAN, ADVANCED, SETTINGS, TELEPORT, PRACTICE, BOSS }
 
     private lateinit var panel: LinearLayout
 
@@ -62,7 +62,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         party()
 
         // Left: the tabs, Practice level with Restart, then Plan, Teleport, Settings and Boss above it.
-        tabButton(Tab.MOVES, "Moves", "Record the bots' moves yourself: they play your recordings, sped up to the plan's times.", left, restartY - 5 * ROW)
         tabButton(Tab.BOSS, "Boss", "The boss fight: where the run stops (after terms, after Goldor).", left, restartY - 4 * ROW)
         tabButton(Tab.SETTINGS, "Settings", "Every setting: death ticks, terminals, your speed, hotbar, gear, the bots, masks...", left, restartY - 3 * ROW)
         tabButton(Tab.TELEPORT, "Teleport", "Every place in the arena: section starts, devices, pads, phases, early-enter spots.", left, restartY - 2 * ROW)
@@ -116,7 +115,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         else if (t === Tab.TELEPORT) teleportPanel()
         else if (t === Tab.PRACTICE) practicePanel()
         else if (t != null && t === Tab.BOSS) bossPanel()
-        else if (t != null && t === Tab.MOVES) movesPanel()
         panel.arrangeElements()
         val top = restartY + 20 + 10
         panel.setPosition(cx - panel.width / 2, top)
@@ -162,12 +160,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
      * yours: a stack, its bot does it too with Helpers on (whoever's first).
      */
     private fun planPanel() {
-        val script = PlanFile.of(P3Plan.skillName())
-        if (script != null) row(listOf(
-            change("§eEdit Plan File", 110, "Opens config/engineerclient/p3sim-plans/${script.name}.txt: every class's steps, which the bots play exactly. Saved changes count from the next start.") { PlanFile.open(script.name) },
-            label(if (script.errors.isEmpty()) "§7Bots play §f${script.name}.txt§7 exactly" else "§c${script.errors.size} problem${if (script.errors.size > 1) "s" else ""} in ${script.name}.txt§7 (shown at start)", 300,
-                script.errors.take(8).joinToString("\n").ifEmpty { null }),
-        ))
         row(listOf(label("", SEC_W)) + COLUMNS.map { (head, about) -> label("§e$head", JOB_W, about) })
         for (s in 1..4) {
             val cells = arrayOfNulls<String>(COLUMNS.size)
@@ -582,44 +574,6 @@ class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
         r.defaultCellSetting().alignVerticallyTop()
         panel.addChild(r)
         cols.forEach { r.addChild(it) }
-    }
-
-    /**
-     * Moves: every move the bots make on this skill (listed as they make them), by section; recorded ones green with their
-     * time. Click: record it (again); right click: forget the recording. Record Missing goes through every unrecorded one.
-     */
-    private fun movesPanel() {
-        val moves = Moves.list()
-        val built = moves.associateWith { it.builtIn }
-        val done = moves.count { it.recorded || built[it] != null }
-        text("§eMoves §7(${P3Plan.skillName()}): §f$done/${moves.size}§7 set (§ayours§7, §bbuilt in§7 from your best runs, §7grey§7 to record). Bots play them the same every run, never sped up.")
-        if (moves.isEmpty()) {
-            text("§7Run a P3 with the bots on this skill once: every move they make is listed here to record.")
-            return
-        }
-        row(listOf(
-            act(if (done < moves.size) "§aRecord Missing" else "§8Record Missing", 110,
-                "Puts you on each move that's neither yours nor built in, in turn: go when ready, it stops as you get there and the next one starts. The Infinileap or Restart takes one again; Stop ends it.") { SimActions.send("moveRecord", "chain" to true) },
-            change("§cClear List", 110, "Forgets this skill's list and every recording on it (the next run with bots lists the moves again).") { SimActions.send("moveClear") },
-        ))
-        val w = maxOf(120, moves.maxOf { font.width(it.label + " 0.00s") + 12 })
-        val r = LinearLayout.horizontal().spacing(2)
-        r.defaultCellSetting().alignVerticallyTop()
-        for (s in 1..4) {
-            val inS = moves.filter { it.section == s }
-            if (inS.isEmpty()) continue
-            r.addChild(stack("§6S$s", w, "Section $s's moves.", inS.map { m ->
-                ClickButton(w, when {
-                    m.recorded -> "§a${m.label} §f${"%.2f".format(Locale.ROOT, m.ticks / 20.0)}s"
-                    built[m] != null -> "§b${m.label} §f${"%.2f".format(Locale.ROOT, built[m]!!.ticks / 20.0)}s"
-                    else -> "§7${m.label}"
-                },
-                    tip("${m.label} in S$s${built[m]?.let { " (built in: ${it.from} → ${it.to}, from your ${it.src} best run)" } ?: ""}. Click: record it${if (m.recorded) " again" else ""} (you go on its start; it stops as you get there). Right click: forget your recording (the bots go back to the built-in move, else the recorded runs)."),
-                    left = { mc.gui.setScreen(null); SimActions.send("moveRecord", "id" to m.id) },
-                    right = { SimActions.send("moveForget", "id" to m.id); rebuildWidgets() })
-            }))
-        }
-        panel.addChild(r)
     }
 
     /** Practice's section tabs: [open]'s page shows beside them (one always open). */

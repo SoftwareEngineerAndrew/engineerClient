@@ -153,7 +153,7 @@ object Roles {
      * (the healer leaps to the tank on S2's 2nd term instead); the bers holds a high EE3 for the tank, healer and mage, the tank
      * doing S3's device from there in S2; the archer early-enters S4 by the core (lava bounce, mined in) for the healer, mage and bers.
      * S1's gate: the healer, with an explosive bow during SS's 4th cycle. S2's: the mage, right after its first lever.
-     * The bots make each move the one fixed way ([Legs], [Moves]), at its own speed: a time tighter than that is met late.
+     * (The bots don't bonzo, lava bounce or go through walls: they get there on these times.)
      */
     val THEORETICAL = Preset(
         "Theoretical",
@@ -220,8 +220,7 @@ object Roles {
     )
 
     private val cache = HashMap<Preset, Plan>()
-    /** [p]'s plan: its plan file's ([PlanFile]) if it has one, else the roles and times above. */
-    fun plan(p: Preset): Plan = PlanFile.of(p.name)?.plan ?: synchronized(cache) { cache.getOrPut(p) { parse(p) } }
+    fun plan(p: Preset): Plan = cache.getOrPut(p) { parse(p) }
 
     private fun device(s: Int) = when (s) { 1 -> "S1 SS"; 2 -> "S2 Lights"; 3 -> "S3 Arrows"; else -> "S4 Target" }
     private fun terms(s: Int) = (1..(if (s == 2) 5 else 4)).map { "S$s T$it" }
