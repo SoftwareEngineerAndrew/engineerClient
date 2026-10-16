@@ -54,7 +54,7 @@ object HotbarLayout {
 
     private fun saved(): Saved = cache[owner()] ?: run {
         val s = runCatching { PlayerFiles.read(PlayerFiles.HOTBAR)?.let { gson.fromJson(it, Saved::class.java) } }
-            .onFailure { EngineerClient.logger.error("[ec] p3sim hotbar load failed", it) }
+            .onFailure { EngineerClient.logger.error("[ec] p3sim hotbar load failed", it); PlayerFiles.setAsideLocal(PlayerFiles.HOTBAR) }
             .getOrNull() ?: Saved()
         cache[owner()] = s
         s

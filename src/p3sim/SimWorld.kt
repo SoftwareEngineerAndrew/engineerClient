@@ -44,7 +44,7 @@ object SimWorld {
             if (P3Sim.inSim) return@execute
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening P3 Sim Beta"))
             opening = true
-            EngineerClient.safely("p3sim open") { openOrCreate() }
+            try { openOrCreate() } catch (t: Throwable) { failed("open", t) }
         }
     }
 
@@ -74,10 +74,10 @@ object SimWorld {
             if (P3Sim.inSim && !P3Sim.localSim) { mc.player?.sendSystemMessage(Component.literal("§8[§6P3 Sim Beta§8] §7Only the host can rebuild the world.")); return@execute }
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim Beta"))
             opening = true
-            EngineerClient.safely("p3sim rebuild") {
+            try {
                 mc.levelSource.createAccess(NAME).use { it.deleteLevel() }
                 create()
-            }
+            } catch (t: Throwable) { failed("rebuild", t) }
         }
     }
 
@@ -95,6 +95,13 @@ object SimWorld {
             val flat = FlatLevelGeneratorSettings(Optional.empty(), void, emptyList())
             provider.lookupOrThrow(net.minecraft.core.registries.Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).value().createWorldDimensions().replaceOverworldGenerator(provider, FlatLevelSource(flat))
         }, TitleScreen())
+    }
+
+    /** Opening or rebuilding failed (the p3sim folder locked, say): back to the title screen, not left on the message screen. */
+    private fun failed(what: String, t: Throwable) {
+        EngineerClient.logger.error("[ec] p3sim $what failed", t)
+        opening = false
+        mc.gui.setScreen(TitleScreen())
     }
 
     /** The mod is opening (or making) the sim world right now. */

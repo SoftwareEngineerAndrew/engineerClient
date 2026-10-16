@@ -6,12 +6,14 @@ package com.engineerclient.p3sim
  */
 object Stats {
     private var from = 1
+    /** A section practice: its times are said but never kept as the run's personal bests (Practice keeps its own). */
+    private var practice = false
     private val sections = IntArray(5) { -1 }
     /** Each player's own completions and death ticks taken, by name. */
     private val mine = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private val deaths = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
-    fun reset(from: Int) { this.from = from; sections.fill(-1); mine.clear(); deaths.clear() }
+    fun reset(from: Int, practice: Boolean = false) { this.from = from; this.practice = practice; sections.fill(-1); mine.clear(); deaths.clear() }
 
     private fun s(ticks: Int) = "%.2fs".format(java.util.Locale.ROOT, ticks / 20.0)
 
@@ -21,7 +23,7 @@ object Stats {
     fun section(s: Int, ticks: Int) {
         if (s !in 1..4 || sections[s] >= 0) return
         sections[s] = ticks
-        val best = best("S$s", ticks)
+        val best = if (practice) "" else best("S$s", ticks)
         // The host's with their personal best, everyone else's plain; Term Info's on every game.
         for (p in Sim.players()) Sim.asPlayer(p) { if (P3Sim.showTimes) Sim.note("§fS$s§7 ${s(ticks)}" + if (Sim.isHost(p)) best else "") }
         PartyClient.send("sectionTime", ticks)
@@ -47,7 +49,7 @@ object Stats {
     fun p3(n: Int) {
         val parts = (1..4).filter { sections[it] >= 0 }.joinToString(" §8|§7 ") { "S$it ${s(sections[it])}" }
         // The host's PB only with their Section Times on (as before parties).
-        val best = if (from == 1 && P3Sim.showTimesS.value) best("P3", n) else ""
+        val best = if (from == 1 && !practice && P3Sim.showTimesS.value) best("P3", n) else ""
         val total = if (from == 1) " §8|§f P3 ${s(n)}" else ""
         for (p in Sim.players()) Sim.asPlayer(p) {
             if (!P3Sim.showTimes) return@asPlayer

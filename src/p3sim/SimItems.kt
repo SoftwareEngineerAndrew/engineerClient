@@ -1073,9 +1073,9 @@ object SimItems {
             val age = clientTicks - v.first
             val now = level.getBlockState(pos)
             if (!now.isAir) {
-                val server = SimServer.level?.getBlockState(pos)?.block?.descriptionId?.substringAfterLast('.')
-                EngineerClient.logger.info("[p3sim] breaker: {},{},{} ({}) back in the game {} ticks after the hit as {}; server has {}", pos.x, pos.y, pos.z, v.second, age,
-                    now.block.descriptionId.substringAfterLast('.'), server)
+                // Not the server's block too: a server level read off its thread waits on the server (and can hang a quit).
+                EngineerClient.logger.info("[p3sim] breaker: {},{},{} ({}) back in the game {} ticks after the hit as {}", pos.x, pos.y, pos.z, v.second, age,
+                    now.block.descriptionId.substringAfterLast('.'))
                 it.remove()
             } else if (age > 40) it.remove()
         }
@@ -2277,7 +2277,8 @@ object SimItems {
 
         /** Main's tail: container_close(N), player_position, the sound, the chat line, then container_close(0). */
         private fun leap(sp: ServerPlayer, bot: Party.Mate) {
-            if (sp.isRemoved) return
+            // A second click (a double click, or another head) arrives after the first leap closed this window: nothing.
+            if (sp.isRemoved || sp.containerMenu !== this) return
             sp.closeContainer()
             val e = bot.pos
             leapReady = Fight.serverTick + 40

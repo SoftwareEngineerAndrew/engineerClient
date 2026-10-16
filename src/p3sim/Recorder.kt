@@ -36,7 +36,7 @@ object Recorder {
         inRow++
         runCatching {
             dir.mkdirs()
-            val f = File(dir, "run-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}.jsonl")
+            val f = File(dir, "run-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS"))}.jsonl")
             file = f
             out = f.bufferedWriter()
             line(JsonObject().apply {

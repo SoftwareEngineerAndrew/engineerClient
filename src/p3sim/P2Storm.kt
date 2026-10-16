@@ -274,8 +274,8 @@ class P2Storm : Fight.Phase("P2") {
         pinnedAt = t
         lastCrush = pl
         takeoffAt = -1
-        // A player Mage's beam frees him; else the bot Mage's.
-        enrageAt = if (P3Sim.bots && !Players.isPlayerClass(DungeonClass.MAGE)) t + pinLength() else -1
+        // A player Mage's beam frees him; else the bot Mage's (no bots and nobody who can beam: the bot Mage's time too, not pinned for good).
+        enrageAt = if (!Players.isPlayerClass(DungeonClass.MAGE) && (P3Sim.bots || !P3Sim.mageAll)) t + pinLength() else -1
     }
 
     /** The enrage line; he holds still until takeoff 2-3 after it (median 2). */

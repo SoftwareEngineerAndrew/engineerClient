@@ -40,7 +40,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     val stations = Station.all()
     /** A section practice ([Practice]): only your role's part of this section is left to do. */
-    private val practice = Practice.section == from && from in 1..4
+    val practice = Practice.section == from && from in 1..4
     /** The section in progress (1-4), 5 once the core is open. */
     var section = 1
         private set
@@ -110,7 +110,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun begin() {
         stations.forEach { it.spawnStands() }
         devices.start()
-        Stats.reset(from)
+        Stats.reset(from, practice)
         val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
         // n = startN now, whenever that is (a start timer's ticks don't count).
         nOffset = startN - t
@@ -507,7 +507,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
         if (from != 5) Stats.section(4, n - sectionStart[4])
         // Stop After Terms: the run ends here, as the menu's Stop (not in a section practice).
-        if (P3Sim.termsOnly && !practice) Fight.later(1, "stop after terms") { Sim.note("Terms done: stopped §7(Stop After Terms)."); Fight.end() }
+        if (P3Sim.termsOnly && !practice && from != 5) Fight.later(1, "stop after terms") { Sim.note("Terms done: stopped §7(Stop After Terms)."); Fight.end() }
         if (!practice) Blocks.play("core", delay = 1)
         Stats.p3(n)
     }
@@ -778,7 +778,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                     // Distance left, round the loop's seam (a sprint from the S4 line into S1).
                     val left = ((sprintTo - s) % LOOP + LOOP) % LOOP
                     if (left <= SPRINT) { s = sprintTo; sprintTo = -1.0; speed = WALK } else s += SPRINT
-                } else s += walkStep(n - spawnedN)
+                } else s += walkStep(n)  // his age is the phase's n, as [spawn] placed him (a later start is past the slow stretch)
                 if (s >= LOOP) firstLap = false
                 s %= LOOP
                 pos = trackPos(s)
@@ -894,7 +894,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (st.done) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal has already been completed!") }; return }
         if (st.section != section) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal doesn't seem to be responsive at the moment.") }; return }
         // The window opens a tick after the click (almost always on Hypixel), on top of the ping.
-        Fight.later(1, "term open") { Terminals.open(p, st) }
+        Fight.later(1, "term open") { if (!st.done && st.section == section && !holding) Terminals.open(p, st) }
     }
 
     /** Player-facing state for the menu's status line. */

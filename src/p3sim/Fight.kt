@@ -153,6 +153,8 @@ object Fight {
         epoch++
         later.clear()
         timed.clear(); posHistories.clear()
+        // Not a practice left on from the last world (its restart would relaunch it, its bots and plan stay off).
+        Practice.exit()
         Terminals.closeAll()
         Sim.forEachPlayer { SimItems.reset() }
         SimItems.resetShared()
@@ -412,9 +414,10 @@ object Fight {
             while (h.size > 40) h.removeFirst()
         }
         EngineerClient.safely("p3sim party") { PartyServer.tick() }
-        Blocks.tick()
-        Terminals.tick()
-        SimItems.tick()
+        // Each on its own: one throwing must not stop the phase's tick (the fight would freeze).
+        EngineerClient.safely("p3sim blocks") { Blocks.tick() }
+        EngineerClient.safely("p3sim terminals") { Terminals.tick() }
+        EngineerClient.safely("p3sim items") { SimItems.tick() }
         Sim.forEachPlayer { EngineerClient.safely("p3sim bows") { Bows.tick() } }
         Sim.forEachPlayer { pl -> if (P3Sim.lava) EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase

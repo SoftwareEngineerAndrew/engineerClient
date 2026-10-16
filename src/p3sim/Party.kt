@@ -279,7 +279,9 @@ object Party {
         val order = P3Plan.botOrder()
         val want = order.filter { !Players.isPlayerClass(it) }
         if (bots.map { it.clazz } == want) return bots
-        val live = bots.any { it.entity != null }
+        // Mid-P3 the bots' jobs and leaps are kept even when none has a body (Bots off: the plan still does their jobs).
+        val midP3 = botsFor != null && Fight.phase === botsFor
+        val live = bots.any { it.entity != null } || midP3
         if (live) {
             val gone = bots.filter { it.clazz !in want }
             for (b in gone) {
@@ -287,7 +289,7 @@ object Party {
                 jobs.removeAll { it.bot === b }; leaps.removeAll { it.bot === b }
             }
             bots.removeAll(gone.toSet())
-            if (bots.map { it.clazz }.toSet() == want.toSet() || bots.any { it.entity != null }) return bots
+            if (bots.map { it.clazz }.toSet() == want.toSet() || bots.any { it.entity != null } || midP3) return bots
         }
         clear(); bots.clear(); want.forEach { c -> bots += Bot(c, order.indexOf(c) + 1) }
         return bots
@@ -555,7 +557,7 @@ object Party {
         clear()
         youArrived.fill(false); eeArrived.fill(false); preleapAt.fill(-1); eeSpotBy.fill(-1); holdJob.fill(null); waitsFor.fill(null); youOn.forEach { it.clear() }; holdNoted.fill(false); released.fill(false); readyAt.fill(-1); coreIn = false
         allInAt.fill(-1)
-        eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false
+        eeArrivedN.fill(-1); youArrivedN.fill(-1); youLeftN.fill(-1); recoredN = -1; youInCoreN = -1; coreEeLeaps = false; i4Shot = 0; ssClick = 0
         ontoLeaps.clear()
         planned = 0
         lastLeap = 0
@@ -822,7 +824,13 @@ object Party {
         if (s != planned) {
             planned = s; sectionN[s.coerceIn(0, 5)] = n; dbg("§bsection $s starts")
             // The core's open: the bots playing your runs go in with the rest (everyone leaps in).
-            if (s >= 5) for (b in bots) if (b.legs != null) { b.legs = null; b.to = null; b.hold = false; b.inSection = 4 }
+            if (s >= 5) for (b in bots) if (b.legs != null) {
+                b.legs = null; b.to = null
+                // The core early enterer holding by the core keeps holding: everyone leaps onto it, then it recores
+                // ([releaseEarlyEnterers] needs it held, else nobody is ever released into the core).
+                if (b.hold && b === coreBot() && eeArrived[5] && !released[5]) { b.inSection = 5; continue }
+                b.hold = false; b.inSection = 4
+            }
             sectionStarted(phase, s)
         }
         // Jobs someone else (you, on a stack) already did: their bots go on to their next instead
@@ -927,15 +935,20 @@ object Party {
         val read = legsRead?.takeIf { it.first == key } ?: runCatching {
             val o = com.google.gson.JsonParser.parseString(f.readText()).asJsonObject.getAsJsonObject("classes")
             key to o.entrySet().associate { (c, v) ->
-                val pieces = v.asJsonObject.getAsJsonArray("pieces")?.map { pe ->
-                    val p = pe.asJsonObject
-                    val type = p.get("t").asString
-                    val id = when (type) { "job" -> p.get("id").asString; "leap" -> p.get("onto").asString; "move" -> p.get("to")?.asString ?: ""; else -> "" }
-                    Piece(type, frames(p.getAsJsonArray("f")), id, p.get("k")?.asInt ?: 0, frames(p.getAsJsonArray("land")))
-                }.orEmpty()
-                c to (pieces to frames(v.asJsonObject.getAsJsonArray("lead")))
-            }
-        }.onFailure { dbg("§clegs file ${f.name}: ${it.message}") }.getOrNull()?.also { legsRead = it }
+                // A broken class is left out (its bot plays its role), not the whole file.
+                c to runCatching {
+                    val pieces = v.asJsonObject.getAsJsonArray("pieces")?.map { pe ->
+                        val p = pe.asJsonObject
+                        val type = p.get("t").asString
+                        val id = when (type) { "job" -> p.get("id").asString; "leap" -> p.get("onto").asString; "move" -> p.get("to")?.asString ?: ""; else -> "" }
+                        Piece(type, frames(p.getAsJsonArray("f")), id, p.get("k")?.asInt ?: 0, frames(p.getAsJsonArray("land")))
+                    }.orEmpty()
+                    pieces to frames(v.asJsonObject.getAsJsonArray("lead"))
+                }.onFailure { Sim.note("§cLegs file ${f.name}: ${c} left out (${it.message})") }.getOrNull()
+            }.filterValues { it != null }.mapValues { it.value!! }
+        }.onFailure { Sim.note("§cLegs file ${f.name} can't be read: ${it.message}") }
+            // A broken file is read once per change (not again on every call), as no legs.
+            .getOrElse { key to emptyMap() }.also { legsRead = it }
         return read?.second
     }
 
@@ -1045,7 +1058,7 @@ object Party {
                     val j = jobs.firstOrNull { it.bot === b && it.job == p.id } ?: return 2.0
                     if (j.at < 0) return 1.0
                     val ticks = j.at - n
-                    return if (ticks <= 0) 3.0 else maxOf(1.0, left / ticks)
+                    return if (ticks <= 0) 3.0 else (left.toDouble() / ticks).coerceIn(1.0, HURRY)
                 }
                 else -> return 1.0
             }

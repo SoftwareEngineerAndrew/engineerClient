@@ -146,7 +146,7 @@ object Loadouts {
     private fun customs(): MutableList<Custom> = customLists[owner()] ?: run {
         val l = runCatching {
             PlayerFiles.read(PlayerFiles.LOADOUTS)?.let { gson.fromJson(it, Array<Custom>::class.java)?.toMutableList() }
-        }.onFailure { EngineerClient.logger.error("[ec] p3sim loadouts load failed", it) }.getOrNull() ?: mutableListOf()
+        }.onFailure { EngineerClient.logger.error("[ec] p3sim loadouts load failed", it); PlayerFiles.setAsideLocal(PlayerFiles.LOADOUTS) }.getOrNull() ?: mutableListOf()
         customLists[owner()] = l
         l
     }
