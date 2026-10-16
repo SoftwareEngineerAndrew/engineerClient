@@ -36,6 +36,7 @@ object DevgineerClient : ClientModInitializer {
         safely("leap highlight") { com.devgineerclient.rotation.LeapHighlight.register() }
         safely("role vignette") { com.devgineerclient.rotation.RoleVignette.register() }
         safely("rotation commands") { com.devgineerclient.rotation.RotationCommands.install() }
+        safely("edt") { com.devgineerclient.misc.Edt.install() }
         safely("posmsg") { PosMsgSetup.install() }
         safely("pace targets") { PaceTargets.install() }
         safely("witherborn") { Witherborn.register() }
