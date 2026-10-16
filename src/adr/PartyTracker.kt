@@ -8,7 +8,8 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
  * Your party, live, for ADR Online: [PartyState] reading Hypixel's chat, plus the dungeon's
  * teammates once in one. A /p list is sent only when the state has a doubt it can't settle (right
  * after joining Hypixel, after joining a Party Finder group, or chat that doesn't add up) - at most
- * one a minute, and its answer is kept out of your chat.
+ * one a minute, and its answer is kept out of your chat. One that gets no answer stops the asking for
+ * [FAIL_PAUSE_MS]; a second stops it until the game is closed.
  */
 object PartyTracker {
     val state = PartyState { EngineerClient.mc.user.name }
@@ -20,6 +21,15 @@ object PartyTracker {
     private const val ASK_GAP_MS = 60_000L
     /** How long after asking the answer is hidden. */
     private const val HIDE_MS = 4_000L
+    /** No asking for this long after a /p list got no answer. */
+    private const val FAIL_PAUSE_MS = 30 * 60_000L
+
+    /** /p lists in a row that got no answer (kept across servers: one per game at most). */
+    private var failures = 0
+    /** When the /p list sent last should have been answered by, or 0 when it was (or none is out). */
+    private var answerBy = 0L
+    /** No asking before this (after one went unanswered). */
+    private var pausedUntil = 0L
 
     private var joinedAt = 0L
     private var onHypixel = false
@@ -51,6 +61,7 @@ object PartyTracker {
     fun onDisconnect() = synchronized(state) {
         onHypixel = false
         connected = false
+        answerBy = 0L // cut off, not unanswered
         state.reset("not connected")
     }
 
@@ -65,6 +76,7 @@ object PartyTracker {
         var hide = now < hideUntil
         for ((i, l) in lines.withIndex()) {
             val listLine = state.line(l, colors?.getOrNull(i), now)
+            if (answerBy != 0L && (listLine || NOT_IN_PARTY.matches(l.trim()))) { answerBy = 0L; failures = 0 }
             if (hide && !listLine && !SEPARATOR.matches(l.trim()) && l.isNotBlank() && !NOT_IN_PARTY.matches(l.trim())) hide = false
         }
         // Answered: nothing more to hide.
@@ -75,6 +87,12 @@ object PartyTracker {
     /** Every client tick while ADR is on. */
     fun tick() = synchronized(state) {
         val now = System.currentTimeMillis()
+        if (answerBy != 0L && now > answerBy) {
+            answerBy = 0L
+            failures++
+            pausedUntil = now + FAIL_PAUSE_MS
+            EngineerClient.logger.info("[ec] adr: /p list got no answer, " + if (failures >= 2) "not asking again until the game restarts" else "not asking for ${FAIL_PAUSE_MS / 60_000} min")
+        }
         // In a dungeon, its teammates are the party.
         if (DungeonUtils.inDungeons) {
             val team = DungeonUtils.dungeonTeammates.map { it.name }.filter { it.matches(NAME) }
@@ -86,10 +104,7 @@ object PartyTracker {
         if (doubtSince == 0L) doubtSince = now
         if (!onHypixel || EngineerClient.mc.player == null) return
         if (now - joinedAt < JOIN_WAIT_MS || now - doubtSince < DOUBT_WAIT_MS || now - lastAsk < ASK_GAP_MS) return
-        lastAsk = now
-        hideUntil = now + HIDE_MS
-        EngineerClient.logger.info("[ec] adr: /p list ($doubt)")
-        sendCommand("p list")
+        ask(now, doubt)
     }
 
     /**
@@ -99,9 +114,16 @@ object PartyTracker {
     fun askIfUnknown() = synchronized(state) {
         val now = System.currentTimeMillis()
         if (state.known || !onHypixel || EngineerClient.mc.player == null || now - lastAsk < 10_000L) return
+        ask(now, "asked for")
+    }
+
+    /** Sends a /p list, unless one went unanswered lately (twice: ever, this game). */
+    private fun ask(now: Long, why: String) {
+        if (answerBy != 0L || failures >= 2 || now < pausedUntil) return
         lastAsk = now
         hideUntil = now + HIDE_MS
-        EngineerClient.logger.info("[ec] adr: /p list (asked for)")
+        answerBy = now + HIDE_MS
+        EngineerClient.logger.info("[ec] adr: /p list ($why)")
         sendCommand("p list")
     }
 
