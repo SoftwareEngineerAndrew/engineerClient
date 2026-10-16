@@ -184,10 +184,13 @@ object PovPreviews : Module(
         // boxes, the names, EC's own ring — is submitted after the previews and lands on top.
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
             // Runs before Odin draws its boxes (see the priority note above), so this frame picks it up.
-            val active = wants()
-            overlayScale = if (active) leapBoxScale else 1f
-            overlayAlpha = if (active) leapBoxOpacity else 1f
-            EngineerClient.safely("pov gui") { PovCapture.onScreenExtract(guiGraphics) }
+            // All of it guarded: Odin's bus doesn't catch, so a throw here would crash the game in the leap menu.
+            overlayScale = 1f
+            overlayAlpha = 1f
+            EngineerClient.safely("pov gui") {
+                if (wants()) { overlayScale = leapBoxScale; overlayAlpha = leapBoxOpacity }
+                PovCapture.onScreenExtract(guiGraphics)
+            }
         }
 
         // CUSTOM keeps a short ring of packet poses per player; it is fed here, once per client
