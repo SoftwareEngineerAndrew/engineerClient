@@ -90,7 +90,7 @@ object Bows {
     fun reset() {
         clicks.clear(); later.clear(); history.clear()
         shotReady = 0; biteReady = 0; pendingShot = null; pendingBite = false
-        live.clear()
+        live.forEach { if (!it.isRemoved) it.discard() }; live.clear()
         Hydra.reset()
     }
 
