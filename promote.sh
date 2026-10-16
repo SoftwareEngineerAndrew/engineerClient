@@ -22,6 +22,8 @@ PUB="${EC_PUBLIC:-$HOME/Projects/engineerclient-public}"
 GRADLE="$HOME/.cache/ec-build/gradle-9.6.1/bin/gradle"
 # Every Minecraft version with a release (tag release-<mc>, jar ADM-<mc>.jar), newest first.
 VERSIONS="26.3 26.2 26.1.2"
+# ADM's own version (the jar's mod version and the release notes); this dev build keeps its date+commit versions.
+export ADM_VERSION="1.0.0"
 
 [ -z "$(git -C "$PUB" status --porcelain)" ] || { echo "promote: $PUB has uncommitted changes" >&2; exit 1; }
 git -C "$PUB" fetch -q origin
@@ -88,6 +90,7 @@ const rules = [
   ['archivesName.set("engineerclient")', 'archivesName.set("adm")', true],
   ['# releases/download/release-<channel>/EngineerClient-<mc>.jar', '# releases/download/release-<channel>/ADM-<mc>.jar', false],
   ['jar="EngineerClient-$MC.jar"', 'jar="ADM-$MC.jar"', true],
+  ['echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}"', 'echo "EC_VERSION=' + process.env.ADM_VERSION + '"', true],
   ['**[Download EngineerClient for Minecraft %s](%s)**', '**[Download ADM for Minecraft %s](%s)**', true],
   ['--title "EngineerClient for Minecraft $MC"', '--title "ADM for Minecraft $MC"', true],
   // Panel, prefix, commands, text.
