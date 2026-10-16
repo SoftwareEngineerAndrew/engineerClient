@@ -12,6 +12,8 @@
     "LeapMenuRenderMixin",
     "OdinTermTimesMixin",
     "PanelOrderMixin",
+    "PanelOnScreenMixin",
+    "HudOnScreenMixin",
     "PersonalBestSimMixin",
     "SecretsCounterMixin",
     "SimonSaysBlocksMixin",
