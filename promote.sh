@@ -52,13 +52,17 @@ sed -i -E \
 jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON after stripping" >&2; exit 1; }
 
 # The README is just the download table, written fresh on every promote so its links always point at the
-# release jars (newest Minecraft first, in bold).
+# release jars (newest Minecraft first, in bold), with each one's ADM version: this branch's is ADM_VERSION,
+# the others' are read from their releases' notes (the "· <version>" after the link).
+MC_HERE="$(grep -oP 'com\.mojang:minecraft:\K[^"]+' "$TEAM/build.gradle.kts")"
 {
-  echo "| Version | Download |"
-  echo "|---|---|"
+  echo "| Minecraft | ADM | Download |"
+  echo "|---|---|---|"
   for v in $VERSIONS; do
     link="[ADM-$v.jar](https://github.com/undonecoffee/adm/releases/download/release-$v/ADM-$v.jar)"
-    if [ "$v" = "${VERSIONS%% *}" ]; then echo "| **$v** | **$link** |"; else echo "| $v | $link |"; fi
+    if [ "$v" = "$MC_HERE" ]; then ver="$ADM_VERSION"
+    else ver="$(gh release view "release-$v" -R undonecoffee/adm --json body -q .body 2>/dev/null | grep -oP '· \K[0-9][^ ]*' | head -1 || true)"; fi
+    if [ "$v" = "${VERSIONS%% *}" ]; then echo "| **$v** | **${ver:-?}** | **$link** |"; else echo "| $v | ${ver:-?} | $link |"; fi
   done
 } > "$PUB/README.md"
 
