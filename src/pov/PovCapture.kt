@@ -362,6 +362,7 @@ object PovCapture {
             // The per-pass `finally` has already put the client's state back; all that is left is
             // to stop doing this for the session and say so once.
             fail(t)
+            EngineerClient.safely("pov frame release") { releasePreparedFrame() }
             EngineerClient.safely("pov camera restore") { restoreMainCamera(deltaTracker) }
         } finally {
             capturing = false
@@ -618,6 +619,29 @@ object PovCapture {
 
     private fun findByName(name: String): Player? =
         EngineerClient.mc.level?.players()?.firstOrNull { it.name.string.equals(name, ignoreCase = true) }
+
+    /**
+     * `LevelRenderer.render` takes the one shared `PreparedFrame` and frees it at its end, with no `finally`: a pass
+     * that threw part way leaves it taken, and the next real frame dies on "PreparedFrame already in use". Freed here
+     * (as the render would have), or, if that throws too, simply marked free.
+     */
+    private fun releasePreparedFrame() {
+        val dispatcher = EngineerClient.mc.gameRenderer.featureRenderDispatcher()
+        val frame = FRAME_FIELD.get(dispatcher) as net.minecraft.client.renderer.feature.FeatureRenderDispatcher.PreparedFrame
+        if (CONTEXT_FIELD.get(frame) == null) return
+        try {
+            frame.close()
+        } catch (t: Throwable) {
+            EngineerClient.logger.warn("[ec] pov: closing the left-over frame failed, marking it free", t)
+            CONTEXT_FIELD.set(frame, null)
+            STORAGE_FIELD.set(frame, null)
+        }
+        EngineerClient.logger.info("[ec] pov: freed the frame a failed pass left in use")
+    }
+
+    private val FRAME_FIELD by lazy { net.minecraft.client.renderer.feature.FeatureRenderDispatcher::class.java.getDeclaredField("preparedFrame").apply { isAccessible = true } }
+    private val CONTEXT_FIELD by lazy { net.minecraft.client.renderer.feature.FeatureRenderDispatcher.PreparedFrame::class.java.getDeclaredField("context").apply { isAccessible = true } }
+    private val STORAGE_FIELD by lazy { net.minecraft.client.renderer.feature.FeatureRenderDispatcher.PreparedFrame::class.java.getDeclaredField("submitNodeStorage").apply { isAccessible = true } }
 
     private fun fail(t: Throwable) {
         disabledForSession = true
