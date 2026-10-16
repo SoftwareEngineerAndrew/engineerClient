@@ -41,7 +41,8 @@ object EngineerClient : ClientModInitializer {
      * Fullscreen GLFW windows minimize themselves when they lose focus (Alt-Tab, a click on another
      * screen), and on KDE Wayland a window minimized that way comes back blank: the game never hears
      * it was restored, so it keeps skipping its frames. Auto-minimize off, and a window that is
-     * already stuck minimized is restored.
+     * already stuck minimized is restored. Only on Wayland: elsewhere a fullscreen window that doesn't
+     * minimize stays in front of whatever you Alt-Tab to (Windows), so tabbing out looks broken.
      */
     /** [noExclusiveFullscreen] has run. */
     private var exclusiveChecked = false
@@ -68,6 +69,7 @@ object EngineerClient : ClientModInitializer {
     }
 
     private fun keepWindowUp() {
+        if (System.getenv("XDG_SESSION_TYPE") != "wayland") { windowKept = true; return }
         val h = mc.window.handle()
         if (h == 0L) return
         org.lwjgl.glfw.GLFW.glfwSetWindowAttrib(h, org.lwjgl.glfw.GLFW.GLFW_AUTO_ICONIFY, org.lwjgl.glfw.GLFW.GLFW_FALSE)
