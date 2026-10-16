@@ -53,7 +53,7 @@ object LeapOrder {
     private var saved: List<String> = emptyList()
     private val autoFile by lazy { file.resolveSibling("leaporder-sorting.txt") }
     /** The sorting to put back when the party changes, while this switched it to Custom. */
-    private var revertTo: LeapMenu.Sorting? = null
+    private var revertTo: Int? = null
     /** Who (besides you) was in the party when the order was set; null until the party is known. */
     private var orderParty: Set<String>? = null
 
@@ -68,7 +68,7 @@ object LeapOrder {
         runCatching {
             if (Files.exists(autoFile)) {
                 val lines = Files.readAllLines(autoFile)
-                revertTo = LeapMenu.Sorting.entries.firstOrNull { it.name == lines.getOrNull(0)?.trim() }
+                revertTo = lines.getOrNull(0)?.trim()?.toIntOrNull()?.takeIf { it in SORTINGS.indices }
                 orderParty = lines.getOrNull(1)?.takeIf { it.trim() != "?" }?.let { l -> l.split(' ').filter { it.isNotBlank() }.toSet() }
             }
         }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't read $autoFile", it) }
@@ -141,17 +141,17 @@ object LeapOrder {
         DungeonUtils.customLeapOrder = names.filter { it.isNotBlank() }.map { it.lowercase(Locale.ROOT) }
     }
 
-    private val sorting get() = LeapMenu.settings["Sorting"] as? SelectorSetting<LeapMenu.Sorting>
+    private val sorting get() = LeapMenu.settings["Sorting"] as? SelectorSetting
 
     /** The order was just set: sort the leap menu by it, for this party. */
     private fun useCustom() {
         val s = sorting ?: return
-        if (s.value != LeapMenu.Sorting.CUSTOM) {
+        if (s.value != CUSTOM) {
             revertTo = s.value
-            s.value = LeapMenu.Sorting.CUSTOM
+            s.value = CUSTOM
             ModuleManager.saveConfigurations()
             EngineerClient.msg("§7Leap Menu sorting: §fCustom§7 (back to ${label(revertTo!!)} when the party changes)")
-        } else if (revertTo == null) revertTo = LeapMenu.Sorting.ODIN
+        } else if (revertTo == null) revertTo = 0
         orderParty = party()
         saveAuto()
     }
@@ -161,7 +161,7 @@ object LeapOrder {
         val back = revertTo ?: return
         val s = sorting ?: return
         // Set back to something else by hand: nothing to put back.
-        if (s.value != LeapMenu.Sorting.CUSTOM) { revertTo = null; orderParty = null; saveAuto(); return }
+        if (s.value != CUSTOM) { revertTo = null; orderParty = null; saveAuto(); return }
         val now = party() ?: return
         val was = orderParty ?: run { orderParty = now; saveAuto(); return }
         if (now == was) return
@@ -183,14 +183,17 @@ object LeapOrder {
     }
 
     /** Its name as Odin's setting shows it ("Odin Sorting"). */
-    private fun label(s: LeapMenu.Sorting) = s.toString()
+    private fun label(s: Int) = SORTINGS.getOrElse(s) { "$s" }
+    /** Odin 0.3.4's Leap Menu "Sorting" options, by index (3 is Custom). */
+    private const val CUSTOM = 3
+    private val SORTINGS = listOf("Odin Sorting", "A-Z Class", "A-Z Name", "Custom sorting", "No Sorting")
 
     private fun saveAuto() = runCatching {
         val back = revertTo
         if (back == null) Files.deleteIfExists(autoFile)
         else {
             Files.createDirectories(autoFile.parent)
-            Files.write(autoFile, listOf(back.name, orderParty?.sorted()?.joinToString(" ") ?: "?"))
+            Files.write(autoFile, listOf(back.toString(), orderParty?.sorted()?.joinToString(" ") ?: "?"))
         }
     }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't write $autoFile", it) }
 
