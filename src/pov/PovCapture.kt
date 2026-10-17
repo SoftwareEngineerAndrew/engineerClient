@@ -362,7 +362,6 @@ object PovCapture {
             // The per-pass `finally` has already put the client's state back; all that is left is
             // to stop doing this for the session and say so once.
             fail(t)
-            EngineerClient.safely("pov frame release") { releasePreparedFrame() }
             EngineerClient.safely("pov camera restore") { restoreMainCamera(deltaTracker) }
         } finally {
             capturing = false
@@ -421,6 +420,9 @@ object PovCapture {
         )
         var pose: PovPose.Restore? = null
         var cullingWas: Boolean? = null
+        // Vanilla's level render pushes the model-view stack and takes the PreparedFrame with no
+        // `finally`; remember where the stack stood so the `finally` below can undo a pass that threw.
+        val modelViewDepth = modelViewDepth()
 
         try {
             val worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false)
@@ -461,6 +463,7 @@ object PovCapture {
 
             gameRenderer.renderLevel()
         } finally {
+            unwindVanillaState(modelViewDepth)
             invoker.`ec$setMainRenderTarget`(saved.target)
             invoker.`ec$setHud3DTarget`(saved.hud3D)
             window.setWidth(saved.windowWidth)
@@ -621,9 +624,54 @@ object PovCapture {
         EngineerClient.mc.level?.players()?.firstOrNull { it.name.string.equals(name, ignoreCase = true) }
 
     /**
-     * `LevelRenderer.render` takes the one shared `PreparedFrame` and frees it at its end, with no `finally`: a pass
-     * that threw part way leaves it taken, and the next real frame dies on "PreparedFrame already in use". Freed here
-     * (as the render would have), or, if that throws too, simply marked free.
+     * `LevelRenderer.render` takes shared state at its start and gives it back at its end with no `finally`, so a
+     * pass that threw part way leaves it taken. Everything that would hurt a later frame is undone here, after
+     * every pass, and does nothing when the pass finished (vanilla already gave it all back):
+     *  - the model-view stack is one push deep, holding the teammate's view rotation (every later frame draws wrong);
+     *  - the PreparedFrame is still in use (the next real frame dies on "PreparedFrame already in use").
+     * Left alone on purpose, because the next frame overwrites or ignores them: `RenderSystem.isRenderingLevel`
+     * (only changes whether text draws solid), the LevelTargetBundle handles (every one is reassigned at the start
+     * of a render), the projection matrix and fog buffer (set again by each render), the profiler push/pop (a
+     * no-op unless the profiler is running), and the frame graph's pooled targets (a one-off leak, the pass is
+     * then switched off). The section dispatcher lock is only taken after the last thing a pass can throw from.
+     */
+    private fun unwindVanillaState(modelViewDepth: Int) {
+        EngineerClient.safely("pov model-view unwind") { popModelViewTo(modelViewDepth) }
+        EngineerClient.safely("pov frame release") { releasePreparedFrame() }
+    }
+
+    /** JOML's `Matrix4fStack` keeps its depth in the private int `curr`; null when that can't be read. */
+    private val CURR_FIELD: java.lang.reflect.Field? by lazy {
+        try {
+            org.joml.Matrix4fStack::class.java.getDeclaredField("curr").apply { isAccessible = true }
+        } catch (t: Throwable) {
+            EngineerClient.logger.warn("[ec] pov: can't read the model-view stack depth, a failed pass won't be unwound", t)
+            null
+        }
+    }
+
+    /** How many pushes deep the model-view stack is, or -1 when that can't be read. */
+    private fun modelViewDepth(): Int = try {
+        CURR_FIELD?.getInt(RenderSystem.getModelViewStack()) ?: -1
+    } catch (t: Throwable) {
+        -1
+    }
+
+    /** Pops the model-view stack back to [depth], never below it. */
+    private fun popModelViewTo(depth: Int) {
+        if (depth < 0) return
+        val stack = RenderSystem.getModelViewStack()
+        var current = modelViewDepth()
+        if (current <= depth) return
+        while (current > depth) {
+            stack.popMatrix()
+            current--
+        }
+        EngineerClient.logger.info("[ec] pov: popped the model-view stack a failed pass left pushed")
+    }
+
+    /**
+     * The one shared `PreparedFrame` is freed here as the render would have, or, if that throws too, simply marked free.
      */
     private fun releasePreparedFrame() {
         val dispatcher = EngineerClient.mc.gameRenderer.featureRenderDispatcher()
