@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.LeverBlock
 object HighlightLevers : Module(
     name = "Highlight Levers",
     category = Category.custom("Coffee Client", 860, 10),
-    description = "A blue box around each P3 lever's hitbox in F7/M7 boss (and the P3 Sim Beta), so you can see where to click.",
+    description = "A blue box around each P3 lever's hitbox in F7/M7 boss (and ADS), so you can see where to click.",
 ) {
     private val leverColor by ColorSetting("Lever Color", Color(40, 120, 255, 1f), true, desc = "")
     private val leverFill by BooleanSetting("Lever Fill", false, desc = "Fills the box too, faintly.")
