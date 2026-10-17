@@ -1,7 +1,6 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient.mc
-import com.engineerclient.splits.CoreLeap
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
@@ -21,7 +20,7 @@ import java.util.Locale
  *    (green once the gate is down), or in detail its terms, levers, device and gate.
  *  - Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
  *    (server ticks). S1 runs from Goldor's first line, each next one from the last one's end.
- *  - Sub Splits' Core Leap Highlight ([CoreLeap], [watchingCore]): once S3 is done.
+ *  - Recore: told when S3 is done by this count ([Recore.s3Done]) and when the sim starts ([Recore.simStart]).
  *  - Coffee Client's Hide Completion Titles ([isCompletionTitle]).
  *
  * Terminals run from Goldor's first line (or the first task message) to "The Core entrance is
@@ -54,7 +53,6 @@ object TermInfo {
     private const val GATE = "The gate has been destroyed!"
     private val TASK = Regex("^(\\w+) (?:activated|completed) a (terminal|lever|device)! \\((\\d)/\\d\\)$")
     private val GATE_CORE_TITLE = Regex("gate (?:has been )?destroyed|core entrance is opening", RegexOption.IGNORE_CASE)
-    private val TASK_COUNT = Regex("^\\w+ (?:activated|completed) a (?:terminal|lever|device)! \\((\\d+)/(\\d+)\\)$")
     private val TITLE = Regex("^(\\w{1,16}) (?:activated a (?:terminal|lever)|completed a device)! \\(\\d+/\\d+\\)$")
 
     private class Section(val terms: Int, val number: Int) {
@@ -103,38 +101,7 @@ object TermInfo {
         return (lines.maxOfOrNull { mc.font.width(it) } ?: 0) to lines.size * 10
     }
 
-    /** S3 done: watching for the first teammate in the core, until Necron or a new world. */
-    @Volatile private var coreWatch = false
-
-    /** Core Leap's cue: S3 done (or the sim in S4), until Necron or a new world. */
-    fun watchingCore() = coreWatch || simSection()?.number == 4
-    /**
-     * Sections over, counted for Core Leap as Sub Splits does: a section is over once its last completion
-     * (n/n) and its gate are both in, in either order. Doesn't lean on every single term/lever/device
-     * message being read the way [active] does, so a missed one doesn't keep Core Leap from showing in S4.
-     */
-    private var sectionsOver = 0
-    private var lastIn = false
-    private var gateIn = false
-
-    private fun countSectionEnd(msg: String) {
-        if (sectionsOver >= 3) return
-        if (msg == GATE) gateIn = true
-        else {
-            val m = TASK_COUNT.matchEntire(msg) ?: return
-            if (m.groupValues[1] != m.groupValues[2]) return
-            lastIn = true
-        }
-        if (!lastIn || !gateIn) return
-        sectionsOver++; lastIn = false; gateIn = false
-        if (sectionsOver == 3) coreWatch = true
-    }
-
-
     private fun reset() {
-        coreWatch = false
-        CoreLeap.reset()
-        sectionsOver = 0; lastIn = false; gateIn = false
         for (s in sections) with(s) {
             termsDone = 0; deviceDone = false; leversDone = 0; gateDestroyed = number == 4
             lastIgn = ""; lastIndex = 0; lastType = ""
@@ -156,12 +123,10 @@ object TermInfo {
     fun simStart(section: Int) {
         reset()
         shownTime = null
+        Recore.simStart(section)
         if (section !in 1..4) return
         for (i in 0 until section - 1) with(sections[i]) { termsDone = terms; leversDone = 2; deviceDone = true; gateDestroyed = true }
         active = section - 1
-        sectionsOver = section - 1
-        // S1-S3 done: the core's watched from S4's start (as simSection() has it on the host's game).
-        coreWatch = section == 4
         sectionStart = serverTicks
     }
 
@@ -225,7 +190,7 @@ object TermInfo {
             if (!com.engineerclient.p3sim.P3Sim.inSim) shownTime = "§5${String.format(Locale.ROOT, "%.2f", (serverTicks - sectionStart) / 20.0)}" to System.currentTimeMillis()
             sectionStart = serverTicks
             active++
-            if (active == 3) coreWatch = true
+            if (active == 3) Recore.s3Done()
         }
     }
 
@@ -241,13 +206,11 @@ object TermInfo {
                 // A lever can be flicked the tick before Goldor speaks: its message has started
                 // terminals already, and starting again here would lose it.
                 msg == GOLDOR_START -> if (active == -1) start()
-                msg == CORE_OPEN -> { active = -1; coreWatch = true }
-                msg.startsWith("[BOSS] Necron:") -> coreWatch = false
+                msg == CORE_OPEN -> active = -1
                 else -> {
                     // The first task message starts terminals too (Goldor's line missed).
                     if (active == -1 && TASK.matches(msg)) start()
                     onTaskChat(msg)
-                    if (active != -1) countSectionEnd(msg)
                 }
             }
         }
