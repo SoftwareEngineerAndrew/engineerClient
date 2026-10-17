@@ -127,7 +127,8 @@ class P2Storm : Fight.Phase("P2") {
 
     override fun stop() {
         if (::storm.isInitialized && !handed) storm.remove()
-        StormFx.clearSpeech()
+        // Handed on to Goldor: his last lines' stands stay their 40 ticks, as from StormEnd (the son line lasts past P3's start).
+        if (!handed) StormFx.clearSpeech()
     }
 
     private fun line(text: String) = StormFx.line(storm, text)

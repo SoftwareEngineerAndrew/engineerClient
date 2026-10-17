@@ -515,7 +515,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** True when everyone (the players and the bots) is in the core. */
     private fun everyoneIn(): Boolean {
         val ps = Sim.players()
-        if (ps.isEmpty() || ps.any { !CORE_BOX.contains(Fight.seenPos(it)) }) return false
+        // A ghost (dead, waiting for a revive) isn't waited for.
+        if (ps.isEmpty() || ps.any { !Sim.asPlayer(it) { Masks.ghost } && !CORE_BOX.contains(Fight.seenPos(it)) }) return false
         return Party.allIn(CORE_BOX)
     }
 
