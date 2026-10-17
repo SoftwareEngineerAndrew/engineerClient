@@ -13,6 +13,7 @@
     "OdinTermTimesMixin",
     "PanelOrderMixin",
     "PersonalBestSimMixin",
+    "SecretsCounterMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
