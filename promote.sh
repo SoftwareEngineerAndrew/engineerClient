@@ -99,10 +99,6 @@ const rules = [
   ['Added by engineerClient.', 'Added by ADM.', true],
   ['desc = "engineerClient\'s solver', 'desc = "ADM\'s solver', false],
   ['"EC Dynamic Term Roles is OFF", "enable it in the Engineer Client panel"', '"ADM Dynamic Term Roles is OFF", "enable it in the ADM panel"', false],
-  ['ENGINEER_SPLITS("Engineer Splits")', 'ENGINEER_SPLITS("ADM Splits")', true],
-  ['desc = "Odin Splits, or Engineer Splits:', 'desc = "Odin Splits, or ADM Splits:', false],
-  ['desc = "Engineer Splits: ', 'desc = "ADM Splits: ', false],
-  ['Look: Engineer Splits', 'Look: ADM Splits', false],
   // Settings and folders (ConfigMigration moves an Engineer Client install's over on first start).
   ['private const val NAME = "engineerclient"', 'private const val NAME = "adm"', true],
   ['ModuleConfig("engineerclient.json")', 'ModuleConfig("adm.json")', true],
