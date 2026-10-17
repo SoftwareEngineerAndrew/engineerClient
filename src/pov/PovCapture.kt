@@ -382,6 +382,8 @@ object PovCapture {
         )
         var pose: PovPose.Restore? = null
         var cullingWas: Boolean? = null
+        // Where vanilla's model-view stack stood before the nested pass; see [repairVanillaState].
+        val modelViewDepth = modelViewDepth()
 
         try {
             val worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false)
@@ -418,6 +420,7 @@ object PovCapture {
 
             gameRenderer.renderLevel(deltaTracker)
         } finally {
+            repairVanillaState(mc, modelViewDepth)
             (mc as MinecraftAccessor).`ec$setMainRenderTarget`(saved.target)
             window.setWidth(saved.windowWidth)
             window.setHeight(saved.windowHeight)
@@ -428,6 +431,89 @@ object PovCapture {
             mc.setCameraEntity(saved.cameraEntity)
             pose?.restore()
             EntityCullingBridge.restore(cullingWas)
+        }
+    }
+
+    // --------------------------------------------------------------- unwinding a thrown pass
+
+    private var repairWarned = false
+
+    private fun repairFailed(what: String, t: Throwable) {
+        if (repairWarned) return
+        repairWarned = true
+        EngineerClient.logger.warn("[ec] pov repair '$what' failed (logged once)", t)
+    }
+
+    /** JOML keeps a Matrix4fStack's depth in its private `curr`; there is no getter. */
+    private val stackDepthField: java.lang.reflect.Field? by lazy {
+        try {
+            org.joml.Matrix4fStack::class.java.getDeclaredField("curr").also { it.isAccessible = true }
+        } catch (t: Throwable) {
+            repairFailed("matrix stack depth field", t)
+            null
+        }
+    }
+
+    /** `LevelRenderer.targets`, private; cleared by vanilla at the end of `renderLevel`. */
+    private val levelTargetsField: java.lang.reflect.Field? by lazy {
+        try {
+            net.minecraft.client.renderer.LevelRenderer::class.java.getDeclaredField("targets").also { it.isAccessible = true }
+        } catch (t: Throwable) {
+            repairFailed("level targets field", t)
+            null
+        }
+    }
+
+    /** Current depth of the model-view stack, or -1 if it can't be read. */
+    private fun modelViewDepth(): Int = try {
+        stackDepthField?.getInt(RenderSystem.getModelViewStack()) ?: -1
+    } catch (t: Throwable) {
+        repairFailed("matrix stack depth", t)
+        -1
+    }
+
+    /**
+     * Puts back what vanilla's tail would have if the nested `renderLevel` threw. Vanilla takes
+     * state at the start and gives it back at the end with no `finally`, so our catch swallowing the
+     * throw would otherwise leave the REAL frame running on the leftovers. Runs on every exit and
+     * does nothing on the normal path (vanilla has already done all of it). Never throws.
+     *
+     * What `GameRenderer.renderLevel` / `LevelRenderer.renderLevel` / `renderItemInHand` skip:
+     *  - model-view stack push (all three): left one or more deep holding the teammate's rotation,
+     *    so every later frame draws through it. Popped back to [depth].
+     *  - `LevelRenderState.reset()`: the nested extract's entity lists would be drawn again.
+     *  - `LevelTargetBundle.clear()`: stale frame-graph handles could be picked up if a later
+     *    frame has no transparency chain.
+     *  - `FeatureRenderDispatcher.clearSubmitNodes()`: only the main pass and `renderAllFeatures` clear it,
+     *    so the teammate's submitted nodes would be drawn again, from the wrong camera, in the next frame.
+     * Left alone, harmless: the profiler push/pop (a no-op unless the debug profiler is running, and
+     * then only mislabels that tick), projection and fog uniforms (set again every frame), and
+     * frame-graph resources not returned to the pool (a one-off leak; the feature turns itself off).
+     */
+    private fun repairVanillaState(mc: net.minecraft.client.Minecraft, depth: Int) {
+        try {
+            if (depth >= 0) {
+                val stack = RenderSystem.getModelViewStack()
+                // Never pop below where we started.
+                while (modelViewDepth() > depth) stack.popMatrix()
+            }
+        } catch (t: Throwable) {
+            repairFailed("matrix stack", t)
+        }
+        try {
+            mc.gameRenderer.gameRenderState.levelRenderState.reset()
+        } catch (t: Throwable) {
+            repairFailed("level render state", t)
+        }
+        try {
+            (levelTargetsField?.get(mc.levelRenderer) as? net.minecraft.client.renderer.LevelTargetBundle)?.clear()
+        } catch (t: Throwable) {
+            repairFailed("level targets", t)
+        }
+        try {
+            mc.gameRenderer.featureRenderDispatcher.clearSubmitNodes()
+        } catch (t: Throwable) {
+            repairFailed("submit nodes", t)
         }
     }
 
