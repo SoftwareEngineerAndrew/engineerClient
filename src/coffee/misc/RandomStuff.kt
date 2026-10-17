@@ -27,7 +27,7 @@ import net.minecraft.world.phys.Vec3
 
 /** Small independent toggles that don't warrant their own module. */
 object RandomStuff : Module(
-    name = "Random Stuff",
+    name = "Coffee Random Stuff",
     key = null,
     category = Category.custom("Coffee Client", 860, 10),
     description = "A collection of small unrelated QoL toggles."
