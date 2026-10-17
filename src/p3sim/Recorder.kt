@@ -10,12 +10,14 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Records every sim run (the menu's Record runs) to `config/engineerclient/p3sim-runs/`, one JSON
- * line a server tick: you (position, look, open window), the section, what's left in it, every bot
+ * line a server tick: you (position, look, open window, held item), the section, what's left in it, every bot
  * (where, heading where, holding, its jobs) and the party's early-enter state; plus every chat line
  * the sim sent and the bots' debug lines as events. The last 20 runs are kept. Server thread only.
  */
 object Recorder {
-    private const val KEEP = 20
+    /** Runs recorded in a row at most: then it turns itself off (and says so); turning it back on starts the count again. */
+    private const val IN_A_ROW = 50
+    private var inRow = 0
     private var out: BufferedWriter? = null
     private var file: File? = null
     private val events = ArrayList<String>()
@@ -24,11 +26,17 @@ object Recorder {
 
     fun begin(what: String) {
         finish()
-        if (!P3Sim.record) return
+        if (!P3Sim.record) { inRow = 0; return }
+        if (inRow >= IN_A_ROW) {
+            P3Sim.recordS.value = false
+            inRow = 0
+            Sim.note("§cRecord Runs is off: $IN_A_ROW runs recorded in a row (config/engineerclient/p3sim-runs). Turn it back on for $IN_A_ROW more.")
+            return
+        }
+        inRow++
         runCatching {
             dir.mkdirs()
-            dir.listFiles { f -> f.name.endsWith(".jsonl") }?.sortedBy { it.name }?.dropLast(KEEP - 1)?.forEach { it.delete() }
-            val f = File(dir, "run-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}.jsonl")
+            val f = File(dir, "run-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS"))}.jsonl")
             file = f
             out = f.bufferedWriter()
             line(JsonObject().apply {
@@ -58,6 +66,7 @@ object Recorder {
             Sim.player?.let { p ->
                 o.add("you", JsonArray().apply { add(r(p.x)); add(r(p.y)); add(r(p.z)); add(r(p.yRot.toDouble())); add(r(p.xRot.toDouble())) })
                 if (p.containerMenu !== p.inventoryMenu) o.addProperty("window", p.containerMenu.javaClass.simpleName)
+                SimItems.idOf(p.mainHandItem)?.let { o.addProperty("held", it) }
             }
             if (phase is GoldorPhase) {
                 o.addProperty("n", phase.n)

@@ -27,7 +27,7 @@ import net.minecraft.world.phys.Vec3
 
 /** Small independent toggles that don't warrant their own module. */
 object RandomStuff : Module(
-    name = "Random Stuff",
+    name = "Coffee Random Stuff",
     key = null,
     category = Category.custom("Coffee Client"),
     description = "A collection of small unrelated QoL toggles."
@@ -167,5 +167,12 @@ object RandomStuff : Module(
         }
 
         on<LevelEvent.Load> { pendingArmorStands.clear(); keyPositions.clear() }
+    }
+
+    // Switched off, the tick above stops running, so the sidebar is handed back to vanilla here:
+    // left on, the mixin would keep skipping it with no HUD left to draw it.
+    override fun onDisable() {
+        super.onDisable()
+        ScoreboardMove.active = false
     }
 }

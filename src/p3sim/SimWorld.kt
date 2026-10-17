@@ -44,7 +44,7 @@ object SimWorld {
             if (P3Sim.inSim) return@execute
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening P3 Sim Beta"))
             opening = true
-            EngineerClient.safely("p3sim open") { openOrCreate() }
+            try { openOrCreate() } catch (t: Throwable) { failed("open", t) }
         }
     }
 
@@ -74,10 +74,10 @@ object SimWorld {
             if (P3Sim.inSim && !P3Sim.localSim) { mc.player?.sendSystemMessage(Component.literal("§8[§6P3 Sim Beta§8] §7Only the host can rebuild the world.")); return@execute }
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim Beta"))
             opening = true
-            EngineerClient.safely("p3sim rebuild") {
+            try {
                 mc.levelSource.createAccess(NAME).use { it.deleteLevel() }
                 create()
-            }
+            } catch (t: Throwable) { failed("rebuild", t) }
         }
     }
 
@@ -97,10 +97,18 @@ object SimWorld {
         }, TitleScreen())
     }
 
+    /** Opening or rebuilding failed (the p3sim folder locked, say): back to the title screen, not left on the message screen. */
+    private fun failed(what: String, t: Throwable) {
+        EngineerClient.logger.error("[ec] p3sim $what failed", t)
+        opening = false
+        mc.setScreen(TitleScreen())
+    }
+
     /** The mod is opening (or making) the sim world right now. */
     @Volatile var opening = false
 
-    fun isBuilt(worldDir: java.nio.file.Path) = Files.exists(worldDir.resolve(MARKER))
+    /** Built by the mod from the arena this jar carries: one from another build (opened from the world list) isn't the sim's. */
+    fun isBuilt(worldDir: java.nio.file.Path) = runCatching { Files.readString(worldDir.resolve(MARKER)).trim() == arenaVersion }.getOrDefault(false)
 
     /** Called on the server once it runs: stamps which arena the world was built from. */
     fun markBuilt(worldDir: java.nio.file.Path) {

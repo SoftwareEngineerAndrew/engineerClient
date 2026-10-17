@@ -31,11 +31,11 @@ import kotlin.random.Random
  * Hypixel's shortbows as the main server fires them, arrow for arrow:
  * the Terminator, the Spirit Shortbow and the Mosquito Shortbow, with Terror armor's Hydra Strike ([Hydra]).
  *
- * A shot handled on server tick N: the main arrow leaves your eye - 0.1 (1.27 sneaking), 0.01745 to your right, at
- * 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and moves that tick: pos1, v0 = 0.99u - g (what its spawn
- * packet says). On N+1 its velocity is k*v0 (k = 1 + 0.01 x Hydra stacks), but it flies from pos1 as if that tick's
- * gravity had not been taken: k*v0 + g, which is where the i4 board registers it (2,423 of 2,453 recorded hits; flown
- * from the packets alone they land 0.2 low). At 10 stacks two more launch on N+1 at +-8 deg of that move.
+ * A shot handled on server tick N: the main arrow leaves your eye - 0.1 (1.27 sneaking, Hypixel too: 728 of 730
+ * recorded sneaking volleys), 0.01745 to your right, at 3.0 x (your look + 1.8's gaussian 0.0075 aim noise), and
+ * moves that tick: pos1, v0 = 0.99u - g (what its spawn packet says). On N+1 it moves k*v0 (k = 1 + 0.01 x Hydra
+ * stacks) from pos1, as its next motion packet (0.99 k v0 - g) says; flown that way it lands where the i4 board
+ * registers it (96.6% of 917 recorded lit-cell trials). At 10 stacks two more launch on N+1 at +-8 deg of that move.
  * The Terminator's side arrows launch on N+1 from 0.5 under pos1 at your clean look +-5.5 deg; the Mosquito's
  * Duplex replays the main arrow's N+1 move 3 or 4 ticks later. A Terminator volley is 5 entities (the side arrows
  * twice each, identical), a Duplex is 2 identical entities, Hydra Strike's two are distinct. Arrows are spawned at the end of a tick in the
@@ -90,7 +90,7 @@ object Bows {
     fun reset() {
         clicks.clear(); later.clear(); history.clear()
         shotReady = 0; biteReady = 0; pendingShot = null; pendingBite = false
-        live.clear()
+        live.forEach { if (!it.isRemoved) it.discard() }; live.clear()
         Hydra.reset()
     }
 
@@ -343,10 +343,14 @@ class SimArrow(level: Level, x: Double, y: Double, z: Double, private val whenHi
 }
 
 /**
- * Every arrow of one shortbow shot, as Hypixel's server moves them. Pure (no world),
- * so it tests against recorded shots. Fired on tick N by someone standing at [pos] looking [yaw]/[pitch] ([crouch]:
- * eye 1.27), with [stacks] Hydra Strike stacks; [noise]: the aim noise added to the unit look (1.8: three gaussians
- * x 0.0075); [duplexDelay]: 3 or 4.
+ * Every arrow of one shortbow shot, as Hypixel's server moves them. Pure (no world), so it tests against recorded
+ * shots, and i4 Aim (I4Geometry) works out its spots with the same numbers ([planInto]). Fired on tick N by someone
+ * standing at [pos] looking [yaw]/[pitch] ([crouch]: eye 1.27, on Hypixel too), with [stacks] Hydra Strike stacks;
+ * [noise]: the aim noise added to the unit look (1.8: three gaussians x 0.0075); [duplexDelay]: 3 or 4.
+ *
+ * Measured on the i4 board (1,623 recorded main arrows, 917 lit-cell trials): the main arrow, Hydra Strike's and
+ * Duplex's fly their move with no gravity step given back (96.6% of trials right, 92.0% with one); only the
+ * Terminator's side arrows get the tick's gravity back, as their motion packet is sent after their first tick.
  */
 object ShotPlan {
     /** One arrow: it left [from] and is at [at] at the end of tick N + [delay], moving [v] on its next tick. */
@@ -370,35 +374,118 @@ object ShotPlan {
     /** Bows with Duplex: an extra arrow replaying the main one's tick-2 move 3-4 ticks later. */
     val DUPLEX = setOf(Bows.MOSQUITO, Bows.LAST_BREATH)
 
+    /** Hydra Strike's two arrows, in spawn order: the one that lands at +x (left, from the i4 plate) first. */
+    private val HYDRA = doubleArrayOf(-8.0, 8.0)
+    /**
+     * The Terminator's side arrows, in spawn order: each side twice, interleaved -x, +x, -x, +x (188 of 218 recorded
+     * board volleys). Only the order changes which arrow can take an i4 target drawn in the same tick, and the two
+     * sides land 2.3 blocks apart, so at most one of them is on a cell.
+     */
+    private val SIDES = doubleArrayOf(5.5, -5.5, 5.5, -5.5)
+    private val HYDRA_C = DoubleArray(2) { cos(Math.toRadians(HYDRA[it])) }
+    private val HYDRA_S = DoubleArray(2) { sin(Math.toRadians(HYDRA[it])) }
+    private val SIDES_C = DoubleArray(4) { cos(Math.toRadians(SIDES[it])) }
+    private val SIDES_S = DoubleArray(4) { sin(Math.toRadians(SIDES[it])) }
+
+    /**
+     * One shot's arrows as plain numbers, filled by [planInto] and reused, so working out many shots allocates
+     * nothing. Per arrow i (spawn order): where it left ([from]) and is ([at]) at the end of tick N + [delay], its
+     * move on its next tick ([v]), and how those change with the aim noise: d([from])/d(noise) and d([at])/d(noise)
+     * are [dFrom] and [dAt] times the identity (every arrow starts at the main arrow's first position, 0.5 under it,
+     * or at your eye), d([v])/d(noise) is the 3x3 [dV] (row-major).
+     */
+    class Arrows {
+        var n = 0
+        val from = DoubleArray(3 * MAX)
+        val at = DoubleArray(3 * MAX)
+        val v = DoubleArray(3 * MAX)
+        val dFrom = DoubleArray(MAX)
+        val dAt = DoubleArray(MAX)
+        val dV = DoubleArray(9 * MAX)
+        val delay = IntArray(MAX)
+        val owned = BooleanArray(MAX)
+
+        internal fun add(fx: Double, fy: Double, fz: Double, ax: Double, ay: Double, az: Double, vx: Double, vy: Double, vz: Double,
+                         dFrom: Double, dAt: Double, owned: Boolean, delay: Int): Int {
+            val i = n++
+            from[3 * i] = fx; from[3 * i + 1] = fy; from[3 * i + 2] = fz
+            at[3 * i] = ax; at[3 * i + 1] = ay; at[3 * i + 2] = az
+            v[3 * i] = vx; v[3 * i + 1] = vy; v[3 * i + 2] = vz
+            this.dFrom[i] = dFrom; this.dAt[i] = dAt; this.owned[i] = owned; this.delay[i] = delay
+            return i
+        }
+
+        companion object {
+            /** Main, 2 Hydra Strike, 4 Terminator side arrows or 2 Duplex. */
+            const val MAX = 9
+        }
+    }
+
     /** [speed]: the launch speed (3.0; a drawn bow's power x 3.0). */
     fun plan(bow: String, pos: Vec3, yaw: Float, pitch: Float, crouch: Boolean, stacks: Int, noise: Vec3, duplexDelay: Int, speed: Double = 3.0): List<Planned> {
+        val a = Arrows()
+        planInto(a, bow, pos.x, pos.y, pos.z, yaw, pitch, crouch, stacks, noise.x, noise.y, noise.z, duplexDelay, speed)
+        return List(a.n) { i ->
+            Planned(Vec3(a.from[3 * i], a.from[3 * i + 1], a.from[3 * i + 2]), Vec3(a.at[3 * i], a.at[3 * i + 1], a.at[3 * i + 2]),
+                Vec3(a.v[3 * i], a.v[3 * i + 1], a.v[3 * i + 2]), a.owned[i], a.delay[i])
+        }
+    }
+
+    /** [plan] into [out], in plain numbers: the noise is ([nx], [ny], [nz]). */
+    fun planInto(out: Arrows, bow: String, px: Double, py: Double, pz: Double, yaw: Float, pitch: Float, crouch: Boolean, stacks: Int,
+                 nx: Double, ny: Double, nz: Double, duplexDelay: Int, speed: Double = 3.0) {
+        out.n = 0
         val k = 1 + 0.01 * stacks
-        val y = Math.toRadians(yaw.toDouble())
-        val dir = look(yaw, pitch)
-        // The main arrow: from your eye - 0.1, a hair to your right, at 3 x (look + noise); it moves that tick (pos1,
-        // v0 = 0.99u - g), and on the next its velocity is k*v0 - flown with g given back ([fly]), as the side arrows are.
-        val u = dir.add(noise).scale(speed)
-        val from = pos.add(-cos(y) * RIGHT, (if (crouch) 1.27 else 1.62) - 0.1, -sin(y) * RIGHT)
-        val pos1 = from.add(u)
-        val move = Vec3(0.99 * u.x, 0.99 * u.y - G, 0.99 * u.z).scale(k)
-        val fly = move.add(0.0, G, 0.0)
-        // In spawn order, which is the order the server ticks them (entity id): the main arrow, then each side's at +x
-        // (left, from the i4 plate) before -x (i4 recordings, Terminator: 1,606 of 1,606 volleys; Hydra Strike's taken to
-        // match). It decides which arrow of a volley can take an i4 target drawn in the same tick.
-        val out = arrayListOf(Planned(from, pos1, fly, owned = true, delay = 0))
-        // Hydra Strike at 10 stacks: that move turned +-8 deg.
-        if (stacks >= 10) for (s in listOf(-8.0, 8.0)) out += Planned(pos1, pos1, roty(fly, s), owned = false, delay = 0)
-        when (bow) {
-            // The Terminator's side arrows: Hypixel spawns each twice, identical (1 main + 2 pairs = 5 entities, with or
-            // without Terror): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the
-            // tick's gravity given back.
-            Bows.TERMINATOR -> {
-                val side = pos1.add(0.0, -0.5, 0.0)
-                for (s in listOf(-5.5, 5.5)) repeat(2) { out += Planned(side, side, roty(dir.scale(move.length()), s).add(0.0, G, 0.0), owned = false, delay = 0) }
+        val yr = Math.toRadians(yaw.toDouble()); val pr = Math.toRadians(pitch.toDouble())
+        val cy = cos(yr); val sy = sin(yr); val cp = cos(pr); val sp = sin(pr)
+        // Your clean look, and the main arrow's launch: 3 x (look + noise).
+        val dx = -sy * cp; val dy = -sp; val dz = cy * cp
+        val ux = (dx + nx) * speed; val uy = (dy + ny) * speed; val uz = (dz + nz) * speed
+        // The main arrow: from your eye - 0.1, a hair to your right; it moves that tick (pos1, v0 = 0.99u - g), and
+        // on the next its move is k*v0, flown as it is (no gravity step given back).
+        val fx = px - cy * RIGHT; val fy = py + (if (crouch) 1.27 else 1.62) - 0.1; val fz = pz - sy * RIGHT
+        val p1x = fx + ux; val p1y = fy + uy; val p1z = fz + uz
+        val mx = 0.99 * ux * k; val my = (0.99 * uy - G) * k; val mz = 0.99 * uz * k
+        // How the move changes with the noise: 0.99 k speed per unit.
+        val dm = 0.99 * k * speed
+        // In spawn order, which is the order the server ticks them (entity id): the main arrow, Hydra Strike's
+        // (+x first), then the Terminator's side arrows. It decides which arrow of a volley can take an i4 target
+        // drawn in the same tick.
+        diag(out, out.add(fx, fy, fz, p1x, p1y, p1z, mx, my, mz, 0.0, speed, owned = true, delay = 0), dm)
+        // Hydra Strike at 10 stacks: that move turned +-8 deg, from pos1.
+        if (stacks >= 10) for (h in 0 until 2) {
+            val c = HYDRA_C[h]; val s = HYDRA_S[h]
+            val i = out.add(p1x, p1y, p1z, p1x, p1y, p1z, mx * c - mz * s, my, mx * s + mz * c, speed, speed, owned = false, delay = 0)
+            val d = out.dV; val o = 9 * i
+            d[o] = dm * c; d[o + 1] = 0.0; d[o + 2] = -dm * s
+            d[o + 3] = 0.0; d[o + 4] = dm; d[o + 5] = 0.0
+            d[o + 6] = dm * s; d[o + 7] = 0.0; d[o + 8] = dm * c
+        }
+        // The Terminator's side arrows: Hypixel spawns each twice, identical (1 main + 2 pairs = 5 entities, with or
+        // without Terror): from 0.5 under pos1, your clean look +-5.5 deg at the main arrow's speed, with the tick's
+        // gravity given back.
+        if (bow == Bows.TERMINATOR) {
+            val ml = Math.sqrt(mx * mx + my * my + mz * mz)
+            // d|move|/d(noise) = 0.99 k speed (move / |move|).
+            val gx = dm * mx / ml; val gy = dm * my / ml; val gz = dm * mz / ml
+            for (t in 0 until 4) {
+                val c = SIDES_C[t]; val s = SIDES_S[t]
+                val rx = dx * c - dz * s; val rz = dx * s + dz * c
+                val i = out.add(p1x, p1y - 0.5, p1z, p1x, p1y - 0.5, p1z, rx * ml, dy * ml + G, rz * ml, speed, speed, owned = false, delay = 0)
+                val d = out.dV; val o = 9 * i
+                d[o] = rx * gx; d[o + 1] = rx * gy; d[o + 2] = rx * gz
+                d[o + 3] = dy * gx; d[o + 4] = dy * gy; d[o + 5] = dy * gz
+                d[o + 6] = rz * gx; d[o + 7] = rz * gy; d[o + 8] = rz * gz
             }
         }
         // Duplex: the main arrow's tick-2 move again, [duplexDelay] ticks later: two identical entities.
-        if (bow in DUPLEX) repeat(2) { out += Planned(pos1, pos1, fly, owned = false, delay = duplexDelay) }
-        return out
+        if (bow in DUPLEX) repeat(2) { diag(out, out.add(p1x, p1y, p1z, p1x, p1y, p1z, mx, my, mz, speed, speed, owned = false, delay = duplexDelay), dm) }
+    }
+
+    /** Arrow [i]'s move changes with the noise as [d] times the identity. */
+    private fun diag(out: Arrows, i: Int, d: Double) {
+        val o = 9 * i
+        for (r in 0 until 9) out.dV[o + r] = 0.0
+        out.dV[o] = d; out.dV[o + 4] = d; out.dV[o + 8] = d
     }
 }

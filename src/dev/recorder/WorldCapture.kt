@@ -102,6 +102,7 @@ object WorldCapture {
             val level = DevgineerClient.mc.level ?: return@safely
             val id = packet.mapId().id()
             val data = level.getMapData(packet.mapId()) ?: return@safely
+            syncSession()
             mapFull(id, data, kf = null)
         }
     }
@@ -123,6 +124,7 @@ object WorldCapture {
     }
 
     private fun blockChange(e: BlockUpdateEvent) {
+        syncSession()
         val p = e.pos
         val x = p.x; val y = p.y; val z = p.z
         val old = e.old; val new = e.updated
@@ -134,13 +136,21 @@ object WorldCapture {
         }
     }
 
-    private fun tick() {
+    /**
+     * A new recording starts clean: the last one's dirty chunks, maps and queued snapshots are not its.
+     * Run by whatever touches that state first (a keyframe, a block change, a map, [tick]), so nothing
+     * the new recording queued or marked before this tick's listener runs is wiped.
+     */
+    private fun syncSession() {
         val s = Rec.session
-        if (s !== lastSession) {
-            lastSession = s
-            dirty.clear(); mapHashes.clear(); snapshotQueue.clear()
-            lastDirtyPassTick = Rec.tick
-        }
+        if (s === lastSession) return
+        lastSession = s
+        dirty.clear(); mapHashes.clear(); snapshotQueue.clear()
+        lastDirtyPassTick = Rec.tick
+    }
+
+    private fun tick() {
+        syncSession()
         val level = DevgineerClient.mc.level ?: return
 
         // Chunk packets the client never loaded (out of view range, or for a level already gone).
@@ -223,6 +233,7 @@ object WorldCapture {
      */
     private fun keyframe(reason: String) {
         if (!Rec.active) return
+        syncSession()
         val level = DevgineerClient.mc.level ?: return
         val kf = Rec.keyframeId
         val loaded = loadedChunks(level)

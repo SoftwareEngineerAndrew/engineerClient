@@ -95,7 +95,8 @@ object GhostCapture {
     fun start(p: GoldorPhase) {
         rec = null
         phase = null
-        if (p.from != 1) return
+        // A section practice has the others' jobs done for you: never a best.
+        if (p.from != 1 || p.practice) return
         val c = P3Sim.myClass ?: return
         rec = GhostRecording(c.name, P3Plan.skillName())
         phase = p

@@ -159,7 +159,7 @@ object P3Party {
                     "error" -> {
                         runCatching { local.close() }
                         val msg = m.get("msg").asString
-                        val theirs = Regex("host has EngineerClient (\\S+?),").find(msg)?.groupValues?.get(1)
+                        val theirs = Regex("host has (?:EngineerClient|ADM) (\\S+?),").find(msg)?.groupValues?.get(1)
                         if (theirs != null && theirs != asVersion && theirs.substringBefore('+').substringBefore('-') == version) mc.execute { join(c, theirs) }
                         else EngineerClient.msg("§c$msg")
                     }
