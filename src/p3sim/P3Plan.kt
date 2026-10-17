@@ -64,8 +64,13 @@ object P3Plan {
     var helper = false
     /** Seconds between the bots leaping onto you once you're at your early enter (pre moves). */
     var leapGap = 0.5
-    /** The four bots' classes, leap menu slot 1 to 4 (your class is left out). */
-    val leapOrder = ArrayList<DungeonClass>()
+    /**
+     * The four bots' classes, leap menu slot 1 to 4 (your class is left out). Replaced whole under [leapLock], never
+     * edited in place: the server reads it every tick while the menu writes it.
+     */
+    @Volatile var leapOrder: List<DungeonClass> = emptyList()
+        private set
+    private val leapLock = Any()
     /** Classes whose bot plays your best run as that class (P3 from S1, when one is saved: [GhostStore]). */
     val ghosts = LinkedHashSet<String>()
 
@@ -91,13 +96,24 @@ object P3Plan {
      */
     fun defaultSpot(c: DungeonClass?, key: String): Spots.Spot? = preset().defaults["$key/${c?.name}"] ?: preset().defaults[key] ?: when (key) {
         "spawn" -> if (c == DungeonClass.BERSERK) Spots.Spot("Spawn", 63.5, 127.0, 35.5, -11.18f, 0.33f)
-            else Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
+            else earlyDeviceSpawn(c) ?: Spots.Spot("Spawn", 108.3, 120.0, 94.0, 269.6f, 0.57f)
         "ee2" -> Spots.Spot("EE2", 60.5, 132.0, 139.0, 90.47f, 1.64f)
         "ee3" -> Spots.Spot("EE3", 2.0, 109.0, 102.0, -175.24f, 5.83f)
         "ee4" -> Spots.Spot("EE4", 54.5, 115.06, 50.5, 179.91f, 0.57f)
         "core" -> Spots.Spot("Core", 54.5, 115.06, 50.5, 179.91f, 0.57f)
         "recore" -> Spots.Spot("Recore", 52.5, 115.0, 57.6, -159.12f, 2.63f)
         else -> null
+    }
+
+    /** [c] starts on a later section's device it does in S1 (i3, i4: yours, or its role's): that device's stand. */
+    private fun earlyDeviceSpawn(c: DungeonClass?): Spots.Spot? {
+        val p = plan()
+        val dev = listOf("S4 Target", "S3 Arrows").firstOrNull { j ->
+            p.times[j]?.first == 1 && (if (c == P3Sim.ownClass) isMine(j) else p.owners[j]?.contains(c) == true)
+        } ?: return null
+        val at = Party.STANDS[dev] ?: return null
+        val look = Spots.startLook(dev)
+        return Spots.Spot("Spawn", at.x, at.y, at.z, look.first, look.second)
     }
 
     /** Where [e] is stood on with this skill and class: the one set for them, else the default, else the preset's, else the Early Enters tab's. */
@@ -169,9 +185,16 @@ object P3Plan {
         save()
     }
 
-    /** One of your jobs a bot does too, with the Helper on (whoever's first): a stack you made. */
-    fun isStacked(job: String) = jobKey(job) in stackSet()
-    fun toggleStacked(job: String) { if (!stackSet().remove(jobKey(job))) stackSet() += jobKey(job); save() }
+    /**
+     * One of your jobs a bot does too, with the Helper on (whoever's first): a stack you made, or one the roles make (in
+     * yours and another's role: stacked unless you unstacked it, kept as "!key").
+     */
+    fun isStacked(job: String) = if (isStack(job)) "!${jobKey(job)}" !in stackSet() else jobKey(job) in stackSet()
+    fun toggleStacked(job: String) {
+        val key = if (isStack(job)) "!${jobKey(job)}" else jobKey(job)
+        if (!stackSet().remove(key)) stackSet() += key
+        save()
+    }
 
     /** The bot that helps on your stacked [job]: the one you picked, its role's, else the first bot. */
     fun helperOf(job: String): DungeonClass? = picked(job) ?: roleDoer(job) ?: Party.CLASSES.firstOrNull { it != P3Sim.ownClass }
@@ -194,9 +217,11 @@ object P3Plan {
     /** The bots' classes in leap slot order (fills in, drops your class). */
     fun botOrder(): List<DungeonClass> {
         val mineClass = P3Sim.ownClass
-        val order = (leapOrder + Party.CLASSES).distinct().filter { it != mineClass }
-        // Only when it changed: the server reads it every tick while the menu may write it.
-        if (order != leapOrder) { leapOrder.clear(); leapOrder += order }
+        // Locked: a menu click between reading it and writing it back would be lost.
+        val order = synchronized(leapLock) {
+            val cur = leapOrder
+            (cur + Party.CLASSES).distinct().filter { it != mineClass }.also { if (it != cur) leapOrder = it }
+        }
         return if (odinSort) odinOrder(order) ?: order else order
     }
 
@@ -220,13 +245,15 @@ object P3Plan {
 
     /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */
     fun cycleSlot(slot: Int, back: Boolean = false) {
-        // From Odin's order to your own, starting from what it showed.
-        val order = botOrder().toMutableList()
-        odinSort = false
-        val i = slot - 1
-        val j = (i + (if (back) order.size - 1 else 1)) % order.size
-        val t = order[i]; order[i] = order[j]; order[j] = t
-        leapOrder.clear(); leapOrder += order
+        synchronized(leapLock) {
+            // From Odin's order to your own, starting from what it showed.
+            val order = botOrder().toMutableList()
+            odinSort = false
+            val i = slot - 1
+            val j = (i + (if (back) order.size - 1 else 1)) % order.size
+            val t = order[i]; order[i] = order[j]; order[j] = t
+            leapOrder = order.toList()
+        }
         save()
     }
 
@@ -257,7 +284,8 @@ object P3Plan {
         EngineerClient.safely("p3sim plan load") {
             val f = file
             if (!f.exists()) return@safely
-            val s = gson.fromJson(f.readText(), Saved::class.java) ?: return@safely
+            val s = runCatching { gson.fromJson(f.readText(), Saved::class.java) }
+                .onFailure { PlayerFiles.setAside(f) }.getOrThrow() ?: return@safely
             s.skill?.let { skill = (if (it == PROTOTYPE_1) THEORETICAL else it).coerceIn(0, SKILLS.size - 1) }
             if (s.mine != null && s.mineFor != null && s.skill != PROTOTYPE_1) { mine.clear(); mine += s.mine; mineFor = s.mineFor }
             s.botMin?.let { botMin = it }
@@ -270,7 +298,7 @@ object P3Plan {
             s.stacked?.let { stackSet().clear(); stackSet() += it }
             s.leapGap?.let { leapGap = it }
             s.odinSort?.let { odinSort = it }
-            s.leapOrder?.let { names -> leapOrder.clear(); leapOrder += names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } }
+            s.leapOrder?.let { names -> synchronized(leapLock) { leapOrder = names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } } }
             // [x, y, z] or [x, y, z, yaw, pitch]. A saved EE2 spot at (69, 109, 124.7), S2's 1st terminal and an
             // earlier default, is ignored so the current default applies.
             s.spots?.forEach { (k, v) ->
@@ -361,7 +389,7 @@ object P3Plan {
             file.parentFile.mkdirs()
             // A backup of the file before this session's first save, should a save ever lose something.
             if (!backedUp && file.exists()) { backedUp = true; file.copyTo(File(file.path + ".bak"), overwrite = true) }
-            file.writeText(gson.toJson(s))
+            PlayerFiles.writeAtomic(file, gson.toJson(s))
         }
     }
 }

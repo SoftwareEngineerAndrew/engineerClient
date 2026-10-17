@@ -192,7 +192,7 @@ object BrWaypoints2 : Module(
             wasInDungeon = false
             entryDoors.clear(); noPlanSaid.clear(); walkedIn.clear(); myTile = null
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
-            rushing = false; rushRoom = null; rushed.clear(); barriers.clear(); witherSides.clear(); path = emptyMap(); entrances = emptyMap(); lastRoom = null
+            rushing = false; rushRoom = null; rushed.clear(); startDoor = false; barriers.clear(); witherSides.clear(); path = emptyMap(); exits = emptyMap(); entrances = emptyMap(); lastRoom = null
         }
 
         // Chat straight off the network, before any mod can hide it: the rush starts with the

@@ -167,7 +167,7 @@ object DungeonSplits : Module(
     private fun resetRun() {
         bestsChecked.clear()
         tracker.reset(); subs.reset(); detail.reset(); boss.reset(); blood.reset(); card.reset(); necronCue.reset(); pinnedStorm = null
-        goldorAt = null; goldorMoved = false; necronAt = null; necronId = null; goldorBar = null
+        goldorAt = null; goldorMoved = false; necronAt = null; necronId = null; necronDiedAt = null; goldorBar = null
         portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
         maxorAt = null; maxorCheck = null
         barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
@@ -431,9 +431,12 @@ object DungeonSplits : Module(
 
     /**
      * Necron dead at [at]. On F7 that is all: his split runs on to the run's end, as the fight has
-     * no end animation. On M7 the Wither King's fight is next, so his steps end here.
+     * no end animation. On M7 the Wither King's fight is next, so his steps end here. Once a run:
+     * his wither going ~20 ticks after the burst calls this again.
      */
     private fun necronDead(at: Stamp, how: String) {
+        if (necronDiedAt != null) return
+        necronDiedAt = at
         necronCue.onDeath()
         boss.extra(SplitTracker.NECRON, at, "§cdead", how)
         if (DungeonUtils.floor?.name?.startsWith("M") == true) {
@@ -443,6 +446,8 @@ object DungeonSplits : Module(
 
     /** Necron's wither, as last found, for the backup when his burst is missed. */
     private var necronId: Int? = null
+    /** Necron's death this run: on M7 the end of his own time, the tracker's split running on through the Wither King. */
+    private var necronDiedAt: Stamp? = null
 
     private val DEATH_BURST_TNT = 3
     private val DEATH_BURST_TICKS = 2
@@ -790,7 +795,8 @@ object DungeonSplits : Module(
     /**
      * Each split as it ends, as a best for its floor (F7, M7) when it is one - every split, the
      * portal too, whatever the splits HUD shows: Pace's targets are these. Only a split that ran
-     * from its own line to the next split's (none missed in between) is a time.
+     * from its own line to the next split's (none missed in between) is a time. On M7 Necron's ends
+     * at his death, not at EXTRA STATS after the Wither King: none if his death wasn't seen.
      */
     private fun recordSplitBests() {
         val floor = DungeonUtils.floor?.name?.takeIf { it == "F7" || it == "M7" } ?: return
@@ -798,7 +804,7 @@ object DungeonSplits : Module(
         if (DevgineerClient.mc.hasSingleplayerServer()) return
         val splits = tracker.splits()
         splits.forEachIndexed { i, split ->
-            val stop = split.stop ?: return@forEachIndexed
+            val stop = (if (floor == "M7" && split.label == SplitTracker.NECRON) necronDiedAt else split.stop) ?: return@forEachIndexed
             if (!bestsChecked.add(split.label)) return@forEachIndexed
             val order = SplitPace.ORDER.indexOf(split.label)
             val next = splits.getOrNull(i + 1)

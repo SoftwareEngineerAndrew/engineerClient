@@ -121,8 +121,8 @@ object TermInfo : Module(
     private val timeHud by HUD("Section Time", "The last terminal section's time, for a few seconds after it's done.", true, 420, 330, 5f) { example ->
         if (example) return@HUD lines(this, listOf("§514.35"))
         if (!sectionTimes) return@HUD 0 to 0
-        // P3 Sim practice: the Practice Time HUD has the screen while it shows a practice's end.
-        if (com.engineerclient.p3sim.Practice.endTicks >= 0 && System.currentTimeMillis() - com.engineerclient.p3sim.Practice.endMs < 4000) return@HUD 0 to 0
+        // P3 Sim practice: no section times at all (the Practice Time HUD is its clock).
+        if (com.engineerclient.p3sim.P3Sim.inSim && com.engineerclient.p3sim.Practice.active) return@HUD 0 to 0
         val (text, at) = shownTime ?: return@HUD 0 to 0
         if (System.currentTimeMillis() - at > sectionSeconds * 1000) return@HUD 0 to 0
         lines(this, listOf(text))
@@ -448,7 +448,8 @@ object TermInfo : Module(
      */
     @JvmStatic
     fun simSectionTime(ticks: Int) {
-        if (com.engineerclient.p3sim.P3Sim.inSim) shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
+        if (com.engineerclient.p3sim.P3Sim.inSim && !com.engineerclient.p3sim.Practice.active)
+            shownTime = "§5${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}" to System.currentTimeMillis()
     }
 
     /** Devonian's TerminalSection.onChat, for the active section only. */

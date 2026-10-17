@@ -121,9 +121,9 @@ object Loadouts {
         Fight.applySpeed(p)
     }
 
-    /** A hotbar reset's gear: the saved worn loadout ([HotbarLayout.worn]) or, with none, Maxor + mask (the pet stays as it is: Black Cat). */
-    fun applySaved(p: ServerPlayer) {
-        val w = HotbarLayout.worn()
+    /** A hotbar reset's gear for [p3]'s part: as left or saved ([HotbarLayout.worn]) or, with neither, Maxor + mask (the pet stays as it is). */
+    fun applySaved(p: ServerPlayer, p3: Boolean) {
+        val w = HotbarLayout.worn(p3)
         if (w != null && w.head?.endsWith("_MASK") == true) P3Sim.setWornMask(if (w.head.endsWith("SPIRIT_MASK")) 0 else 1)
         Masks.equip(p)
         SimItems.equipArmor(p, SimItems.ArmorSet.MAXOR)
@@ -145,7 +145,7 @@ object Loadouts {
     private fun customs(): MutableList<Custom> = customLists[owner()] ?: run {
         val l = runCatching {
             PlayerFiles.read(PlayerFiles.LOADOUTS)?.let { gson.fromJson(it, Array<Custom>::class.java)?.toMutableList() }
-        }.onFailure { EngineerClient.logger.error("[ec] p3sim loadouts load failed", it) }.getOrNull() ?: mutableListOf()
+        }.onFailure { EngineerClient.logger.error("[ec] p3sim loadouts load failed", it); PlayerFiles.setAsideLocal(PlayerFiles.LOADOUTS) }.getOrNull() ?: mutableListOf()
         customLists[owner()] = l
         l
     }

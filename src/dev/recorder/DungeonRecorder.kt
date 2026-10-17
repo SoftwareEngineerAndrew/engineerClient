@@ -207,7 +207,13 @@ object DungeonRecorder : Module(
      * its own line tagged with the bundle's seq and its index.
      */
     internal fun inbound(p: Packet<*>, ph: String, raw: String?, rawLen: Int = 0) {
-        if (!inbound) return
+        if (!inbound) {
+            // No lines, but the mirror and the world's height still follow every packet: the entity
+            // and chunk captures read them, and the lines may be turned back on mid-world.
+            val all: Iterable<Packet<*>> = if (p is ClientboundBundlePacket) p.subPackets() else listOf(p)
+            all.forEach { follow(it) }
+            return
+        }
         val rawM = raw?.let { ",\"raw\":$it" } ?: ""
         if (p is ClientboundBundlePacket) {
             val subs = p.subPackets().toList()
@@ -224,10 +230,9 @@ object DungeonRecorder : Module(
 
     private fun inboundOne(p: Packet<*>, extra: String, rawLen: Int) {
         // Before any filter: the mirror must see every entity packet to keep its bases right.
-        val abs = try { EntityMirror.annotate(p) } catch (t: Throwable) { "\"absErr\":${q(t.toString())}" }
+        val abs = follow(p)
         val type = PacketJson.type(p)
         if ((type in MOVEMENT && !movement) || (type in EFFECTS && !effects)) return
-        ChunkCapture.observe(p)
         val body: () -> String = when {
             hiddenPrivate(p) -> ({ "{\"hidden\":\"private\"}" })
             p is ClientboundLevelChunkWithLightPacket -> ChunkCapture.capture(p)
@@ -235,6 +240,16 @@ object DungeonRecorder : Module(
             else -> PacketJson.capture(p)
         }
         packetLine("in", type, p, body, extra, abs, rawLen)
+    }
+
+    /**
+     * Steps the entity mirror and the world's height on [p], whether or not it gets a line; returns
+     * the mirror's members for the line.
+     */
+    private fun follow(p: Packet<*>): String? {
+        val abs = try { EntityMirror.annotate(p) } catch (t: Throwable) { "\"absErr\":${q(t.toString())}" }
+        ChunkCapture.observe(p)
+        return abs
     }
 
     /**

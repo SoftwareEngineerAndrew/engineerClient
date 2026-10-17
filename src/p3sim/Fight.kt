@@ -153,6 +153,8 @@ object Fight {
         epoch++
         later.clear()
         timed.clear(); posHistories.clear()
+        // Not a practice left on from the last world (its restart would relaunch it, its bots and plan stay off).
+        Practice.exit()
         Terminals.closeAll()
         Sim.forEachPlayer { SimItems.reset() }
         SimItems.resetShared()
@@ -164,14 +166,21 @@ object Fight {
         Sim.command("time set noon")
         Sim.command("weather clear")
         Blocks.restoreAll()
+        Devices.showIdle()
     }
 
     fun stop() {
         phase?.let { EngineerClient.safely("p3sim stop ${it.name}") { it.stop() } }
+        // Whatever title the run left up ("The gate will open in 5 seconds!"...) goes with it.
+        Sim.players().forEach { it.connection.send(net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(true)) }
         phase = null
         epoch++
         later.clear()
         timed.clear()
+        // Their revive went with the queue: a ghost is back to normal now, not left one until the next start.
+        Masks.stopped()
+        // The run's file is closed with the fight (a stopping server never ticks again to close it).
+        Recorder.finish()
         Terminals.closeAll()
         // The Dungeonbreaker's broken blocks would grow back into the next start's world (a gate a
         // later start has open); cooldowns start fresh, as the masks' do.
@@ -244,7 +253,7 @@ object Fight {
         player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
         // P1/P2's hotbar mid-run there (a joiner arriving), else P3's.
-        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm)
+        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm, start = true)
         // Nothing left of a ghost (a rejoin keeps the saved effects and flight).
         if (player.gameMode() != GameType.CREATIVE) {
             player.removeEffect(MobEffects.INVISIBILITY)
@@ -258,6 +267,12 @@ object Fight {
      * Odin's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
      * a world load; a sim restart is a new P3, so it starts clean too.
      */
+    /**
+     * Odin's i4 solver forgets its marked blocks once the restore's block changes are in the games: the board's lit
+     * (emerald) block going back to blue terracotta reads to it as a hit, so the reset at the start alone isn't enough.
+     */
+    private fun resetI4Solver() = later(2, "i4 solver reset") { PartyClient.send("arrowsReset") }
+
     fun resetArrowsDevice() {
         val c = com.odtheking.odin.features.impl.boss.ArrowsDevice::class.java
         fun field(name: String) = c.getDeclaredField(name).apply { isAccessible = true }
@@ -303,13 +318,15 @@ object Fight {
         // The bots too: a start that spawns none (P2, P4 with Party Bots off) must not see the last run's.
         Party.clear()
         Blocks.restoreAll()
-        // The world as the phases before this one leave it.
+        // The world as the phases before this one leave it; the 2nd and 3rd devices as before terms (not blank till Goldor's line).
         Blocks.prepare(what)
+        if (what != Start.P4) Devices.showIdle()
+        resetI4Solver()
         SimItems.rebreak()
-        // Every start (and restart) is with Black Cat out; the Pet Rod or a Phoenix proc swaps it.
         Sim.forEachPlayer { pl ->
-            P3Sim.setPhoenix(false)
             setup(pl)
+            // Black Cat At Start: every start (and restart) with Black Cat out, else the pet you had; the Pet Rod or a Phoenix proc swaps it.
+            if (P3Sim.blackCatAtStart && P3Sim.phoenix) { P3Sim.setPhoenix(false); applySpeed(pl) }
             Bows.start()
             Lava.reset()
         }
@@ -329,7 +346,8 @@ object Fight {
             Start.CORE -> com.engineerclient.splits.SplitTracker.GOLDOR to 0
             Start.P4 -> com.engineerclient.splits.SplitTracker.NECRON to 0
         }
-        PartyClient.send("splitsStart", termsDone, split)
+        // Practice: no splits (its own timer is the one that counts); the last run's are cleared.
+        if (practice) PartyClient.send("splitsStop") else PartyClient.send("splitsStart", termsDone, split)
         Recorder.begin(what.label)
         // No "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
         val p: Phase = when (what) {
@@ -360,10 +378,11 @@ object Fight {
     /** Ends the fight (the menu's Stop): everything back to how it was built. */
     fun end() {
         Practice.exit()
-        Recorder.finish()
         stop()
         Sim.clearEntities()
         Blocks.restoreAll()
+        Devices.showIdle()
+        resetI4Solver()
         Party.clear()
         // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
         // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
@@ -395,9 +414,10 @@ object Fight {
             while (h.size > 40) h.removeFirst()
         }
         EngineerClient.safely("p3sim party") { PartyServer.tick() }
-        Blocks.tick()
-        Terminals.tick()
-        SimItems.tick()
+        // Each on its own: one throwing must not stop the phase's tick (the fight would freeze).
+        EngineerClient.safely("p3sim blocks") { Blocks.tick() }
+        EngineerClient.safely("p3sim terminals") { Terminals.tick() }
+        EngineerClient.safely("p3sim items") { SimItems.tick() }
         Sim.forEachPlayer { EngineerClient.safely("p3sim bows") { Bows.tick() } }
         Sim.forEachPlayer { pl -> if (P3Sim.lava) EngineerClient.safely("p3sim lava") { Lava.tick(pl) } }
         val p = phase

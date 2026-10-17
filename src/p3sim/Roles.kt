@@ -36,6 +36,8 @@ import net.minecraft.world.phys.Vec3
  * - `ee3 waits 1 2 3 4`: the ee3 bot stays on its spot until those have leapt onto it (the next
  *   section's terminals by number, or `ee3` / `core`...: whoever does that); without it, until
  *   everyone free has
+ * - `2 onto 1`: the next section's T2 doer leaps onto its T1 doer once they're at their terminal
+ *   (after its own jobs), not onto the early enterer
  * Bots that pre-leapt walk on to their next terminals; at the core, everyone leaps in at once.
  *
  * **Spots**: early-enter spots this preset stands on instead of the menu's (`ee2`, `ee3`, `core`).
@@ -85,21 +87,23 @@ object Roles {
         roles = linkedMapOf(
             MAGE to "bl ee2 / dev 2 3 / core / recore",
             ARCHER to "43 / 4 rl / 4 bl / 2",
-            HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
-            TANK to "21 / ll ee3 / 1 bl / 1",
+            HEALER to "ss / (leap to 2nd term) 1 / 2 / 4 bl",
+            // Starts on the S3 device (i3), then S1's T2 and T1.
+            TANK to "i3 21 / ll ee3 / 1 bl / 1",
             BERSERK to "i4 / 53 / 3 / 3 bl",
         ),
         times = listOf(
-            // ll 0.15, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
-            "ll 0.15 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
+            // ll 0.15, i3 0.1, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
+            "ll 0.15 | i3 0.1 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
             "ll 0.8 | gate 1.0 | 1 4 5 2.1 | 2 3 rl 5.0",
-            "1 3 4 2.1 | 2 4.0 | levers gate 6.0 | dev 6.5",
+            // S3's device was done in S1 (i3).
+            "1 3 4 2.1 | 2 4.0 | levers gate 6.0",
             "1 3 4 2.1 | 2 4.0 | levers 5.2",
         ),
         moves = listOf(
-            // The i4 bot leaps out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone but SS leapt there by 6.4,
-            // and the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
-            "i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
+            // The i3 tank leaps back into S1 at 0.3, the i4 bot out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone
+            // but SS leapt there by 6.4, and the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
+            "i3 leaps 0.3 | i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
             "ee3 spot 3.2 | ee3 waits 1 2 3 4",
             "", "",
         ),
@@ -151,37 +155,51 @@ object Roles {
     /**
      * The fastest terms, in theory (2026-10-10). The mage pre-does Lights and holds a far EE2 spot for the bers, tank and archer
      * (the healer leaps to the tank on S2's 2nd term instead); the bers holds a high EE3 for the tank, healer and mage, the tank
-     * doing S3's device from there in S2; the archer early-enters S4 by the core (lava bounce, mined in) for the healer, mage and bers.
-     * S1's gate: the healer, with an explosive bow during SS's 4th cycle. S2's: the mage, right after its first lever.
-     * (The bots don't bonzo, lava bounce or go through walls: they get there on these times.)
+     * leaping there after its S2 term and walking down to S3's device (done as S3 starts); the archer early-enters S4 by the
+     * core (from S2's 3rd term) for the healer and mage, the bers leaping onto it once S3's levers are done; the tank leaps onto
+     * the healer at S4's 1st term, drops off to the right and lava bounces up, doing its 2nd term on the way up.
+     * S1's gate: the mage, an explosive bow shot from Lights right after doing it, just before the terms start. S2's: the
+     * mage, a Superboom as S2 starts, then its levers.
+     *
+     * The times are the user's own (2026-10-15): every job is when it was done in the best recorded run of that movement
+     * (from the job before, or the leap, to it), each role played in the sim on this plan; where that's slower than the plan's
+     * sections (S1 7.8 with SS, S2 4.5, S3 4.5, S4 3.0) the jobs are faster: SS, and the bers' S3 and S4 levers.
      */
     val THEORETICAL = Preset(
         "Theoretical",
         roles = linkedMapOf(
-            HEALER to "ss gate / 1 / 1 / 1",
+            HEALER to "ss / 1 / 1 / 1",
             BERSERK to "i4 / ee3 / 3 bl / bl",
             TANK to "21 / 2 / i3 4 / 2",
-            MAGE to "i2 ee2 / bl 4 / 2 / 3",
+            MAGE to "i2 gate ee2 / bl 4 / 2 / 3",
             ARCHER to "bl 43 / 53 / ee4 / 4",
         ),
         times = listOf(
-            // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one.
-            "rl lights 0.05 | ll 0.75 | 2 2.6 | i4 3.4 | 1 4.9 | 4 5.3 | gate 5.6 | 3 6.8 | ss 7.8",
-            "ll 0.05 | gate 0.1 | rl 0.85 | 2 1.8 | 5 2.0 | arrows 3.5 | 1 3.5 | 4 3.7 | 3 3.95",
-            "3 1.6 | 4 2.5 | 2 3.0 | 1 4.0 | levers gate 4.5",
-            "2 2.0 | 4 2.5 | 3 3.0 | levers 3.0 | 1 3.25",
+            // The archer starts on the east lever (its left, facing the gate) and bonzos to the west one, then T4, T3. The
+            // tank starts on T2, the bers on i4, the mage on Lights (and shoots the gate); the healer's SS ends S1.
+            "ll 0.05 | lights gate 0.2 | rl 0.7 | 2 1.3 | i4 2.05 | 4 2.95 | 1 3.0 | 3 5.05 | ss 7.8",
+            // The mage's Superboom and high lever from the far EE2, low lever, then T4 (S2's last); the tank on T2 as S2
+            // starts, the archer on T5 (then T3), the healer leaps to the tank for T1. The tank's Arrows: as S3 starts.
+            "gate 0.05 | ll 0.25 | rl 1.05 | 2 1.25 | 5 1.6 | 1 2.9 | 3 2.95 | 4 4.15 | arrows 4.5",
+            // The bers' T3 from the high EE3; the bers leaps to the tank on T4 for the Superboom and the levers (S3's last).
+            "3 1.25 | 4 2.75 | 1 2.95 | 2 3.35 | gate 3.4 | ll 3.85 | rl 4.5",
+            // The healer and mage off the archer at EE4, the tank off the healer at T1 (lava bounce to T2); the bers leaps
+            // onto the archer after S3's levers, for S4's (the low one first).
+            "3 1.7 | 2 1.85 | 1 2.0 | 4 2.6 | ll 2.2 | rl 3.0",
         ),
         moves = listOf(
-            // The mage on its EE2 spot right after Lights; the bers leaps on after i4, the tank after its terms, the archer last.
-            "ee2 spot 1.0 | leap ee2 3.4 | ee2 waits ee3 2 5",
-            // The bers on the high EE3 by 1 s; the tank (2 s), healer and mage leap on.
-            "ee3 spot 1.0 | ee3 waits 1 2 4",
-            // The archer by the core; the healer, mage and bers leap on, then it walks to its 4th term.
-            "ee4 waits 1 3 ee3",
+            // The mage on its EE2 spot 1.85 s in; the bers leaps on after i4 (3.55), the tank after its terms (3.9), the archer
+            // last (6.1). The bers goes on to the high EE3 as soon as its way there allows (it can be before S2 starts).
+            "ee2 spot 1.85 | leap ee2 3.5 | ee2 waits ee3 2 5",
+            // The tank (1.9 s), healer (3.4 s) and mage (S3) leap onto the bers on the high EE3.
+            "ee3 waits 1 2 4",
+            // The archer by the core 2.95 s into S3 (from S2's T3); the healer and mage leap on, then it walks to its 4th term.
+            // The tank leaps onto the healer once it's at S4's T1.
+            "ee4 spot 2.95 | ee4 waits 1 3 | 2 onto 1",
             "",
         ),
         defaults = mapOf(
-            "ee2" to Spots.Spot("EE2", 35.99, 131.0, 138.96, 92.20f, 3.86f),
+            "ee2" to Spots.Spot("i2", 35.99, 131.0, 138.96, 92.20f, 3.86f),
             "ee3" to Spots.Spot("EE3", 18.70, 121.50, 91.30, 0.82f, -8.64f),
             // The mage starts on Lights, the archer by S1's east lever (looking at it).
             "spawn/MAGE" to Spots.Spot("Spawn", 60.5, 132.0, 139.0, 90.47f, 1.64f),
@@ -198,8 +216,9 @@ object Roles {
     val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC, PROTOTYPE_1, THEORETICAL)
 
     /** `ll` and `rl` per section coming in along the track (S2: the high lever on the left, the low one by T4 on the right; S4, heading east: the low lever by T3 on the left, the high one by T4 on the right). */
-    val LEFT = mapOf(1 to "S1 west lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
-    val RIGHT = mapOf(1 to "S1 east lever", 2 to "S2 low lever", 3 to "S3 east lever", 4 to "S4 high lever")
+    // Left and right as you come in along the track: in S1 that's heading for the gate (north), so the east lever's on the left.
+    val LEFT = mapOf(1 to "S1 east lever", 2 to "S2 high lever", 3 to "S3 west lever", 4 to "S4 low lever")
+    val RIGHT = mapOf(1 to "S1 west lever", 2 to "S2 low lever", 3 to "S3 east lever", 4 to "S4 high lever")
 
     // ------------------------------------------------------------------ parsed
 

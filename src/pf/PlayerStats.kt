@@ -114,15 +114,20 @@ object PlayerStats {
 
     private fun odinFetch(name: String, key: String) {
         OdinMod.scope.launch {
-            val result = runCatching { RequestUtils.getProfile(name) }.getOrElse { Result.failure(it) }
-            val fresh = result.getOrNull()?.memberData?.let { Ready(toStats(it)) }
+            // toStats inside the catch too: Gson leaves a missing "dungeons" object null (an alt or
+            // fresh profile), and an escaped throw would leave this player Loading until a restart.
+            val fresh = runCatching { RequestUtils.getProfile(name).getOrNull()?.memberData?.let { Ready(toStats(it)) } }.getOrNull()
+            val refreshFailed = fresh == null && cache[key] is Ready
             when {
                 fresh != null -> { cache[key] = fresh; dirty.set(true) }
                 // A failed refresh keeps yesterday's numbers rather than replacing them with "?".
-                cache[key] !is Ready -> cache[key] = Failed(System.currentTimeMillis())
+                !refreshFailed -> cache[key] = Failed(System.currentTimeMillis())
             }
-            refreshing -= key
             if (dirty.compareAndSet(true, false)) save()
+            // ...and holds its place in the refreshing set for a minute, like a failed fetch, so the
+            // next lookup (every frame for a hub nametag) doesn't start another one straight away.
+            if (refreshFailed) delay(RETRY_FAILED_MS)
+            refreshing -= key
         }
     }
 
@@ -174,8 +179,11 @@ object PlayerStats {
         }
     }
 
+    /** Two saves at once would share the tmp file; one at a time, each writing the newest map. */
+    private val saveLock = Any()
+
     /** Off the render thread (called from a fetch coroutine). Atomic rename, oldest evicted past the cap. */
-    private fun save() {
+    private fun save() = synchronized(saveLock) {
         EngineerClient.safely("player stats save") {
             val ready = cache.entries.mapNotNull { (k, v) -> (v as? Ready)?.let { k to it.stats } }
                 .sortedByDescending { it.second.fetchedAt }
