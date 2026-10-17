@@ -53,9 +53,9 @@ import kotlin.math.floor
  * sync on its own connection, [OdinSync], and green checkmarks) for what nobody saw, all settled
  * against each player's run total from the Hypixel API.
  *
- * Only a run that is won posts (its "☠ Defeated" line, then Hypixel's end line); one that ends any
- * other way posts nothing, and a world load starts over. While this is on, Odin's Secrets Counter
- * stays quiet (SecretsCounterMixin): the totals are here.
+ * Only a run that is won posts (Hypixel's end line and the "☠ Defeated" line, [RunGate]); one that
+ * ends any other way posts nothing, and a world load starts over. While this is on, Odin's Secrets
+ * Counter stays quiet (SecretsCounterMixin): the totals are here.
  */
 object ClearBreakdown : Module(
     name = "Clear Breakdown",
@@ -64,24 +64,24 @@ object ClearBreakdown : Module(
     key = null,
 ) {
     private val CONTROL_CODES = Regex("§.")
-    private val DEFEATED = Regex("^\\s*☠ Defeated ")
-    private val END = Regex("^\\s*(?:Master Mode )?(?:The )?Catacombs - (?:Entrance|Floor .{1,3})$")
     /** Rooms that don't count as clears: fairy rooms and the green start room. */
     private val NOT_CLEARS = setOf(RoomType.FAIRY, RoomType.ENTRANCE)
+    /** Every so often the party hears everything this client sees, not just changes: a lost frame heals. */
+    private const val FULL_RESEND_TICKS = 100
 
     // Fresh objects each run (not cleared in place): a breakdown waiting on the API keeps its run's.
     var clears = ClearCredit(); private set
     var secrets = SecretCredit(); private set
     /** A run is being tracked: from Mort until it posts or the world changes. */
     var active = false; private set
-    private var won = false
-    private var syncOpen = false
+    private val gate = RunGate()
+    @Volatile private var syncOpen = false
     /** Everyone in the run, in party order: name -> class colour. */
     val roster = LinkedHashMap<String, Char>()
     /** Lifetime secrets at the start, from the API. */
     private val before = ConcurrentHashMap<String, Long>()
-    /** Party members' sightings of where players are: (sender, player) -> room key, "" for no room. */
-    val relayed = HashMap<Pair<String, String>, String>()
+    /** Where party members' clients see players (ADR Online). */
+    val relayed = RelayedPresence()
     /** Where this client last told the party it sees each player (room key, "" for no room). */
     private val toldSeen = HashMap<String, String>()
     private var relayTick = 0
@@ -102,7 +102,8 @@ object ClearBreakdown : Module(
 
     init {
         on<LevelEvent.Load> { EngineerClient.safely("clear breakdown reset") { reset(); closeSync() } }
-        on<FloorEnterEvent> { EngineerClient.safely("clear breakdown sync") { OdinSync.connect(); syncOpen = true } }
+        // Odin posts this one (and checkmarks) from the network thread: over to the client thread.
+        on<FloorEnterEvent> { mc.execute { EngineerClient.safely("clear breakdown sync") { OdinSync.connect(); syncOpen = true } } }
 
         // Chat straight off the network, as Splits takes it: a chat cleaner can't hide the run's lines.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
@@ -133,17 +134,21 @@ object ClearBreakdown : Module(
         on<BlockUpdateEvent> { EngineerClient.safely("clear breakdown block") { Sightings.onBlockChange(pos, updated) } }
 
         on<CheckmarkUpdateEvent> {
-            EngineerClient.safely("clear breakdown checkmark") {
-                if (!active) return@safely
-                val key = roomKey(room)
-                if (room.type !in NOT_CLEARS) clears.onCheckmark(key, roomName(room), when (checkmark) {
-                    MapCheckmark.WHITE -> Mark.WHITE
-                    MapCheckmark.GREEN -> Mark.GREEN
-                    MapCheckmark.RED -> Mark.RED
-                    else -> Mark.OTHER
-                })
-                // Green: every secret in the room is found.
-                if (checkmark == MapCheckmark.GREEN) room.data?.maxSecrets?.let { secrets.observe(key, roomName(room), it) }
+            val key = roomKey(room); val name = roomName(room); val counts = room.type !in NOT_CLEARS
+            val mark = when (checkmark) {
+                MapCheckmark.WHITE -> Mark.WHITE
+                MapCheckmark.GREEN -> Mark.GREEN
+                MapCheckmark.RED -> Mark.RED
+                else -> Mark.OTHER
+            }
+            // Green: every secret in the room is found.
+            val max = if (mark == Mark.GREEN) room.data?.maxSecrets else null
+            mc.execute {
+                EngineerClient.safely("clear breakdown checkmark") {
+                    if (!active) return@safely
+                    if (counts) clears.onCheckmark(key, name, mark)
+                    max?.let { secrets.observe(key, name, it) }
+                }
             }
         }
 
@@ -175,7 +180,7 @@ object ClearBreakdown : Module(
 
     private fun reset() {
         clears = ClearCredit(); secrets = SecretCredit()
-        active = false; won = false
+        active = false; gate.reset()
         roster.clear(); before.clear(); relayed.clear(); toldSeen.clear()
         Sightings.reset()
     }
@@ -188,11 +193,8 @@ object ClearBreakdown : Module(
         if (!DungeonUtils.inDungeons) return
         // A P3 Sim practice is no run.
         if (P3Sim.inSim && Practice.active) return
-        when {
-            text == SplitTracker.MORT -> start()
-            DEFEATED.containsMatchIn(text) -> if (active) won = true
-            END.containsMatchIn(text) -> if (active && won) finish()
-        }
+        if (text == SplitTracker.MORT) start()
+        else if (active && gate.line(text)) finish()
     }
 
     private fun start() {
@@ -218,17 +220,17 @@ object ClearBreakdown : Module(
         val where = presence()
         clears.tick(where)
         secrets.tick(where)
-        if (++relayTick % 20 == 0) toParty()
+        if (++relayTick % 20 == 0) toParty(full = relayTick % FULL_RESEND_TICKS == 0)
     }
 
     /**
      * Once a second: what this client saw for the party - its secret sightings, and where it sees
-     * players by their entity (room changes only, and when it stops seeing someone). Map icons and
-     * Odin's counts aren't sent; every client has those.
+     * players by their entity (room changes, and when it stops seeing someone; everything it sees
+     * when [full]). Map icons and Odin's counts aren't sent; every client has those. Nothing counts
+     * as told without a socket to tell it on.
      */
-    private fun toParty() {
+    private fun toParty(full: Boolean) {
         val items = ArrayList<Relayed>(Sightings.outbox)
-        Sightings.outbox.clear()
         val team = DungeonUtils.dungeonTeammates.associateBy { it.name }
         val seen = HashMap<String, String>()
         for (name in roster.keys) {
@@ -237,40 +239,42 @@ object ClearBreakdown : Module(
             val e = (if (name == me) mc.player else p.entity) ?: continue
             seen[name] = roomAt(e.x, e.z)?.let(::roomKey) ?: ""
         }
-        for ((name, room) in seen) if (toldSeen.put(name, room) != room) items += Relayed.Presence(name, room)
-        for (name in toldSeen.keys.filter { it !in seen }) { toldSeen.remove(name); items += Relayed.Presence(name, null) }
-        if (items.isNotEmpty()) OnlineLink.sendRelay(RelayCodec.frames(items))
+        for ((name, room) in seen) if (full || toldSeen[name] != room) items += Relayed.Presence(name, room)
+        for (name in toldSeen.keys) if (name !in seen) items += Relayed.Presence(name, null)
+        if (items.isEmpty() || !OnlineLink.sendRelay(RelayCodec.frames(items))) return
+        Sightings.outbox.clear()
+        toldSeen.clear(); toldSeen.putAll(seen)
     }
 
     /** A party member's sightings: only about people in this run, and only from one of them. */
     private fun fromParty(from: String, items: List<Relayed>) {
         if (!active || from == me || from !in roster) return
+        val now = System.currentTimeMillis()
         for (item in items) when (item) {
             is Relayed.Secret -> {
                 val candidates = item.candidates.filter { it in roster }.toSet()
-                if (candidates.isNotEmpty()) secrets.sighting(item.key, item.roomKey, item.roomName, candidates, item.exact, System.currentTimeMillis())
+                if (candidates.isNotEmpty()) secrets.sighting(item.key, item.roomKey, item.roomName, candidates, item.exact, now)
             }
-            is Relayed.Presence -> if (item.player in roster) {
-                if (item.roomKey == null) relayed.remove(from to item.player) else relayed[from to item.player] = item.roomKey
-            }
+            is Relayed.Presence -> if (item.player in roster) relayed.update(from, item.player, item.roomKey, now)
         }
     }
 
     /** Which room each player is in this tick (null: none, dead or gone). */
     private fun presence(): Map<String, String?> {
         val team = DungeonUtils.dungeonTeammates.associateBy { it.name }
+        val now = System.currentTimeMillis()
         val out = HashMap<String, String?>()
         for (name in roster.keys) {
             val p = team[name]
-            out[name] = if (p == null || p.isDead) null else roomOf(p)
+            out[name] = if (p == null || p.isDead) null else roomOf(p, now)
         }
         return out
     }
 
-    private fun roomOf(p: DungeonPlayer): String? {
+    private fun roomOf(p: DungeonPlayer, now: Long): String? {
         val entity = if (p.name == me) mc.player else p.entity
         if (entity != null) return roomAt(entity.x, entity.z)?.let(::roomKey)
-        relayed.entries.firstOrNull { it.key.second == p.name }?.let { return it.value.ifEmpty { null } }
+        relayed.roomOf(p.name, now)?.let { return it.ifEmpty { null } }
         // Odin's map icon, the way its map draws it (RunRecorder's formula): not placed yet is 0.
         if (p.mapPos.data == 0L) return null
         val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
