@@ -82,8 +82,9 @@ object ConfigMigration {
         module(modules, "Better PF")?.let {
             if (module(modules, "ADR") == null) { it.addProperty("name", "ADR"); changed = true }
         }
-        module(modules, "P3 Sim")?.let {
-            if (module(modules, "P3 Sim Beta") == null) { it.addProperty("name", "P3 Sim Beta"); changed = true }
+        // P3 Sim -> P3 Sim Beta -> ADS (Advanced Dungeon Simulator): its settings keep under the new name.
+        for (old in listOf("P3 Sim Beta", "P3 Sim")) module(modules, old)?.let {
+            if (module(modules, "ADS") == null) { it.addProperty("name", "ADS"); changed = true }
         }
 
         module(modules, "Random Stuff")?.let(::settings)?.let { rs ->
