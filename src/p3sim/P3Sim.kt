@@ -293,8 +293,8 @@ object P3Sim : Module(
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val buttons = widgets.filterIsInstance<Button>()
                 val single = buttons.firstOrNull { key(it) == "menu.singleplayer" }
-                widgets.add(Button.builder(Component.literal(NAME)) { SimWorld.open() }.let {
-                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width, single.height) else it.bounds(w - 84, 4, 80, 16)
+                widgets.add(Button.builder(Component.literal(FULL_NAME)) { SimWorld.open() }.let {
+                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width, single.height) else it.bounds(w - 164, 4, 160, 16)
                 }.build())
                 val realms = buttons.firstOrNull { key(it) == "menu.online" } ?: return@safely
                 widgets.remove(realms)
