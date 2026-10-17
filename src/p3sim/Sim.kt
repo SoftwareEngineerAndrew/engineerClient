@@ -139,7 +139,7 @@ object Sim {
     }
 
     /** A line from the sim itself (not something Hypixel says): marked so it can't be mistaken. */
-    fun note(text: String) = chat("§8[§6P3 Sim Beta§8] §7$text")
+    fun note(text: String) = chat("§8[§6ADS§8] §7$text")
 
     /** `§` text as a styled component (no codes left in its string), as Hypixel's names come. */
     fun legacy(text: String): Component {

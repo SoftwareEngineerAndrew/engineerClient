@@ -741,8 +741,8 @@ object SimActions {
                 if (Sim.isHost(p)) GhostCapture.invalidate("a menu teleport")
                 Sim.tp(p, d("x") ?: return, d("y") ?: return, d("z") ?: return, d("yaw")?.toFloat(), d("pitch")?.toFloat())
             }
-            "hotbarSave" -> Sim.chat("§8[§6P3 Sim Beta§8] " + HotbarLayout.save(p, b("p3")))
-            "hotbarReset" -> { Sim.chat("§8[§6P3 Sim Beta§8] " + HotbarLayout.reset(b("p3"))); SimItems.giveHotbar(p, b("p3"), start = true) }
+            "hotbarSave" -> Sim.chat("§8[§6ADS§8] " + HotbarLayout.save(p, b("p3")))
+            "hotbarReset" -> { Sim.chat("§8[§6ADS§8] " + HotbarLayout.reset(b("p3"))); SimItems.giveHotbar(p, b("p3"), start = true) }
             "resetItems" -> { HotbarLayout.dropLive(b("p3")); SimItems.giveHotbar(p, b("p3"), start = true) }
             // Practice runs on the host's own setup (their start, jobs, checkpoints, timer).
             "practiceCustom", "practicePreset" -> if (!Sim.isHost(p)) Sim.note("Practice is the host's: their start, jobs and checkpoints.")
