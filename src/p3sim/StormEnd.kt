@@ -37,6 +37,8 @@ class StormEnd : Fight.Phase("Storm end") {
             SimItems.giveHotbar(p, p3 = true)
         }
         Party.standAt(SS_LANDING)
+        // The bots set off for where they start P3 now, there by its start.
+        Party.startLeadIn(LEAD - GoldorPhase.LEAD_IN)
         val b = BossWither("Storm", DEATH_AT, armoured = false)
         body = b
         StormFx.line(b, "I should have known that I stood no chance.")
@@ -46,6 +48,7 @@ class StormEnd : Fight.Phase("Storm end") {
     }
 
     override fun tick() {
+        Party.tickLeadIn(t)
         when (t) {
             4 -> BossBar.progress(0f)
             SON -> StormFx.line(body, "At least my son died by your hands.")

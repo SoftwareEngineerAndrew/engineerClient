@@ -58,7 +58,7 @@ object P3Sim : Module(
     // Kept as objects (not delegates) so the sim's own menu can change them.
     val classS = +SelectorSetting("Your Class", ClassOption.ARCHER, desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
     val speedS = +NumberSetting("Speed", 600, 100..750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
-    val botsS = +BooleanSetting("Party Bots", true, desc = "Four bots do the rest of the party's terminals, levers, devices and gates at the pace of fast ADR runs. Off: you do everything.")
+    val botsS = +BooleanSetting("Party Bots", true, desc = "The rest of the party's terminals, levers, devices and gates are always done at the plan's times; on, four bots show it (a late one is put on its job). Off: nobody's shown, the plan still runs.")
     val deathTicksS = +SelectorSetting("Death Ticks", DeathTickOption.MASKS, desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
     val terminalS = +SelectorSetting("Terminals", TerminalOption.RANDOM, desc = "Every terminal as this type, or random as on Hypixel.")
     val pingS = +NumberSetting("Simulated Ping", 0, 0..300, 10, unit = "ms", desc = "Delays the server's answer to your clicks and items by this much, like playing on Hypixel with that ping.")
@@ -72,7 +72,7 @@ object P3Sim : Module(
     val ssLuckS = +NumberSetting("SS Luck", 0, -100..100, 5, unit = "%", desc = "0: Simon Says as Hypixel runs it. Higher: the 4 lamps closer together, steadily all the way up (4 neighbours in a line at 100%), and after a wrong press the quick restart (no stray lamp) more often, always at 100%. Lower (bad luck): the lamps spread across the board (corner to corner at -100%) and the slow restart, with a stray lamp.")
     val mageAllS = +BooleanSetting("Mage Beam On All Classes", false, desc = "Mage Beam (a left click with a sword or the Bonzo Staff) and Guided Sheep whatever your class. Ctrl+Q fires the sheep (as Archer it stays Explosive Shot: 3 quick beam clicks fire the sheep).")
     val firstClickMelodyS = +BooleanSetting("Always First Click Melody", false, desc = "Melody's first row always has its purple in the first slot, where the green starts: lock it at once. The other rows are as usual.")
-    val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs (last 20 kept), to look at what went wrong.")
+    val recordS = +BooleanSetting("Record Runs", false, desc = "Writes each run, tick by tick (you, the bots, what's left, chat), to config/engineerclient/p3sim-runs, to look at what went wrong. After 50 runs in a row it turns itself off (nothing's deleted); turn it back on for 50 more.")
     val debugBotsS = +BooleanSetting("Debug Bots", false, desc = "Chat lines for everything the P3 bots do: where they head and why, jobs, leaps, early enters (on the spot, who they wait for, why they move on).")
     val breakerRefillS = +NumberSetting("Dungeonbreaker Refill", 3, 1..10, 1, unit = "/s", desc = "Charges back each second (20 max), in irregular +2 steps. Main server: ~6 a second; alpha ~2.")
     val breakerRegenS = +NumberSetting("Dungeonbreaker Regen", 11.0, 1.0..30.0, 0.5, unit = "s", desc = "How long a broken block stays broken (recordings: ~11 s; the 21st break brings back the oldest 41 ticks later).")
@@ -81,10 +81,12 @@ object P3Sim : Module(
     val realMasksS = +BooleanSetting("Real Masks", true, desc = "Masks are real helmets: only the one you wear can save you, swap them in /stats (cooldowns stay with each mask). Off: whichever is ready saves you.")
     val wornMaskS = +SelectorSetting("Starting Mask", MaskOption.SPIRIT, desc = "Real Masks: the mask you wear (/stats swaps it).")
     val phoenixS = +BooleanSetting("Phoenix Pet", false, desc = "Your pet: Phoenix (saves you from a death, no Black Cat speed bonus) or Black Cat (+100 speed). The Pet Rod swaps them.")
-    val realMovesS = +BooleanSetting("Real Bot Movement", true, desc = "P3 bots move as real players do: along routes recorded in ADR runs (sprints, jumps, lava bounces, Bonzo boosts, stonks), sped up only when a job's time needs it. Off: the old straight walk and Hyperion blinks.")
+    val realMovesS = +BooleanSetting("Real Bot Movement", true, desc = "P3 bots move as you did: each plays your best run as its class for the skill (P3 from S1), timed so its jobs are done at the plan's times (faster where the plan's tighter). A class with no run of yours: along routes recorded in ADR runs. Off: the old straight walk and Hyperion blinks.")
     val terrorAtTermsS = +BooleanSetting("Terror At Terms", false, desc = "Every P3 start puts the Terror loadout on (Terror armour, Bonzo's Mask, Black Cat) over your saved gear.")
+    val blackCatS = +BooleanSetting("Black Cat At Start", true, desc = "Every start and restart puts Black Cat out. Off: the pet you had stays (as your items and gear do).")
     val lavaS = +BooleanSetting("Lava Bounce", true, desc = "Lava bounces you up as on Hypixel. Off: plain vanilla lava (no damage).")
-    val p3OnlyS = +BooleanSetting("Stop After P3", false, desc = "End at Goldor's death instead of going on to Necron.")
+    val termsOnlyS = +BooleanSetting("Stop After Terms", false, desc = "The run stops (as Stop does) when the core opens: no Goldor fight.")
+    val p3OnlyS = +BooleanSetting("Stop After Goldor", false, desc = "The run stops (as Stop does) when Necron would speak, after Goldor's death, instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimesS = +BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
 
@@ -148,6 +150,15 @@ object P3Sim : Module(
     val jitter: Boolean get() = mine("jitter", { jitterS.value }) { it.asBoolean }
     val goldorKill: Int get() = goldorKillS.value.toInt()
     val p3Only: Boolean get() = p3OnlyS.value
+    val termsOnly: Boolean get() = (termsOnlyS as BooleanSetting?)?.value == true
+
+    /** Stop After Terms and Stop After Goldor: at most one on (turning one on turns the other off). */
+    fun toggleStopAfter(terms: Boolean) {
+        val (it, other) = if (terms) (termsOnlyS as BooleanSetting?) to p3OnlyS else p3OnlyS to (termsOnlyS as BooleanSetting?)
+        it ?: return
+        it.value = !it.value
+        if (it.value) other?.value = false
+    }
     val shortbowCooldown: Int get() = mine("shortbow", { shortbowCooldownS.value.toInt() }) { it.asDouble.toInt() }
     /** Terror armor pieces worn right now (TERROR_* ids in the four armour slots, helmet included): 0 to 4. Hydra Strike follows it. */
     val terrorPieces: Int get() = Sim.player?.let { p ->
@@ -211,6 +222,8 @@ object P3Sim : Module(
     fun toggleRealMoves() { (realMovesS as BooleanSetting?)?.let { it.value = !it.value } }
     val terrorAtTerms: Boolean get() = mine("terror", { (terrorAtTermsS as BooleanSetting?)?.value == true }) { it.asBoolean }
     fun toggleTerrorAtTerms() { (terrorAtTermsS as BooleanSetting?)?.let { it.value = !it.value } }
+    val blackCatAtStart: Boolean get() = mine("blackCat", { (blackCatS as BooleanSetting?)?.value != false }) { it.asBoolean }
+    fun toggleBlackCatAtStart() { (blackCatS as BooleanSetting?)?.let { it.value = !it.value } }
     val forcedTerminal: Terminals.Type? get() = terminalS.index.let { if (it == 0) null else Terminals.Type.entries[it - 1] }
 
     /** True only in the p3sim singleplayer world, your own (client side). */
@@ -256,7 +269,13 @@ object P3Sim : Module(
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
             dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
-        ClientTickEvents.START_CLIENT_TICK.register { EngineerClient.safely("p3sim bridge") { bridge(); SimItems.clientTick(); PartyClient.tick() } }
+        ClientTickEvents.START_CLIENT_TICK.register {
+            // Each on its own: Odin drift breaking the bridge must not stop the party's hello and roster.
+            EngineerClient.safely("p3sim bridge") { bridge() }
+            EngineerClient.safely("p3sim client items") { SimItems.clientTick() }
+            EngineerClient.safely("p3sim party client") { PartyClient.tick() }
+            EngineerClient.safely("p3sim ghost guard") { GhostGuard.clientTick() }
+        }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
             // The title screen's Minecraft Realms button becomes two: P3 Sim on the left half, Join
             // Hypixel on the right. No Realms button (another mod's menu): a small P3 Sim button in the corner.

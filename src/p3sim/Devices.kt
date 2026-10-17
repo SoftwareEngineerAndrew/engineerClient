@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim
 
+import com.engineerclient.practice.SimonSaysDevice
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -48,11 +49,11 @@ class Devices(val phase: GoldorPhase) {
     // ------------------------------------------------------------------ Simon Says
 
     /**
-     * Simon Says (S1), as measured on Hypixel (the same timings as SS
-     * Practice): the start button; lights one every 8 ticks; the buttons back 10 ticks after the
-     * last light goes out (18 after the stray lamp, the lit one's 18 after its own); a press stays
-     * down 3 ticks; the next round 6 ticks after a round's last press; four rounds (the update cut the fifth). A wrong press:
-     * buttons gone 3 ticks later and a new sequence shown 26-34 ticks after that.
+     * Simon Says (S1): [SimonSaysDevice], the device as Hypixel runs it (the start button a start/reset toggle,
+     * round tasks nothing cancels, four rounds, each player's ~50 ms limiter), drawn here in the arena's
+     * blocks. A press reaches it after the presser's simulated ping. A press stays down 3 ticks; the next round
+     * 6 ticks after a round's last press. A wrong press: buttons gone 3 ticks later and a new pattern shown
+     * 26-34 ticks after that.
      */
     inner class SimonSays {
         private val START = BlockPos(110, 121, 91)
@@ -60,78 +61,58 @@ class Devices(val phase: GoldorPhase) {
         private fun lampAt(cell: Int) = BlockPos(111, 123 - cell / 4, 92 + cell % 4)
         private val BUTTON: BlockState get() = B.STONE_BUTTON.defaultBlockState().setValue(ButtonBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(ButtonBlock.FACING, Direction.WEST)
 
-        private var sequence = listOf<Int>()
-        private var expected = listOf<Int>()
-        private var next = 0
-        private var accepting = false
-        private val up = BooleanArray(16)
-        private val downUntil = IntArray(16)
-        private var gen = 0
-        private var startPresses = 0
-        private var starting = false
-        private var startedAt = -100
-        private var running = false
+        /** Each presser by name, to complete the device as them (their own section times and lines). */
+        private val pressers = HashMap<String, net.minecraft.server.level.ServerPlayer?>()
 
-
-        private val jobs = ArrayList<Job>()
-        private fun after(ticks: Int, run: () -> Unit) { jobs += Job(phase.t + ticks, gen, run) }
+        private val device = SimonSaysDevice(object : SimonSaysDevice.Io {
+            override fun newSequence() = this@SimonSays.newSequence().toIntArray()
+            override fun lamp(cell: Int, on: Boolean) = light(cell, on)
+            override fun button(cell: Int, up: Boolean, pressed: Boolean) =
+                Blocks.set(buttonAt(cell), if (up) BUTTON.setValue(ButtonBlock.POWERED, pressed) else B.AIR.defaultBlockState())
+            override fun completed(by: String) {
+                Sim.asPlayer(pressers[by]) { station("SS").complete(by) }
+            }
+        })
 
         private val done get() = station("SS").done
 
         fun place() {
             Blocks.set(START, BUTTON)
-            for (c in 0 until 16) { light(c, false); button(c, false) }
+            clear()
         }
 
         fun clear() {
-            gen++; jobs.clear(); running = false; accepting = false
-            for (c in 0 until 16) { light(c, false); button(c, false) }
+            device.clear()
+            pressers.clear()
+            for (c in 0 until 16) { light(c, false); Blocks.set(buttonAt(c), B.AIR.defaultBlockState()) }
         }
 
-        fun tick() {
-            if (jobs.isEmpty()) return
-            val due = jobs.filter { it.at <= phase.t }
-            jobs.removeAll(due.toSet())
-            due.forEach { if (it.gen == gen) it.run() }
-        }
+        fun tick() = device.tick()
 
         private fun light(cell: Int, on: Boolean) = Blocks.set(lampAt(cell), if (on) B.SEA_LANTERN.defaultBlockState() else B.OBSIDIAN.defaultBlockState())
-        private fun button(cell: Int, show: Boolean, pressed: Boolean = false) {
-            up[cell] = show
-            Blocks.set(buttonAt(cell), if (show) BUTTON.setValue(ButtonBlock.POWERED, pressed) else B.AIR.defaultBlockState())
-        }
 
         fun use(pos: BlockPos): Boolean {
-            if (pos == START) { Fight.afterPing("ss start") { pressStart() }; return true }
+            if (pos == START) {
+                // The limiter goes by when presses reach the server: sent now, there a ping later.
+                val ping = Fight.pingMs()
+                val at = System.nanoTime() / 1e6 + ping
+                Fight.afterMs(ping, "ss start") { pressStart(at) }
+                return true
+            }
             val cell = (0 until 16).firstOrNull { buttonAt(it) == pos } ?: return false
             Fight.afterPing("ss press") { press(cell) }
             return true
         }
 
-        private fun pressStart() {
+        private fun pressStart(ms: Double) {
             Blocks.set(START, BUTTON.setValue(ButtonBlock.POWERED, true))
             Fight.later(2, "ss start up") { if (phase === Fight.phase) Blocks.set(START, BUTTON) }
             if (done || phase.section != 1) return
-            if (starting) { startPresses++; return }
-            if (running && phase.t - startedAt < 20) return
-            // Hypixel sends no button click: a start plays entity.enderman.teleport (vol 8, pitch 0) at
-            // the presser, once per start (one per burst of start presses in the runs looked at).
-            Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f)
-            // A press mid-run starts it over, as from idle.
-            clear()
-            starting = true; startPresses = 1; startedAt = phase.t
-            after(6) { starting = false; begin() }
-        }
-
-        private fun begin() {
-            running = true
-            sequence = newSequence()
-            val s = sequence
-            when (startPresses.coerceAtMost(3)) {
-                1 -> show(listOf(s[0]), listOf(s[0]), stray = false)
-                2 -> show(listOf(stray(), s[0]), listOf(s[0]), stray = true)
-                else -> show(listOf(stray(), s[0], s[1]), listOf(s[0], s[1]), stray = true)
-            }
+            val who = Sim.me
+            pressers[who] = Sim.acting
+            // Hypixel sends no button click. A reset plays entity.enderman.teleport (vol 8, pitch 0) at the presser:
+            // in the runs looked at it came with exactly the presses that were resets (one per burst).
+            if (device.start(who, ms) == SimonSaysDevice.Start.RESET) Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 8f, 0f)
         }
 
         /**
@@ -150,71 +131,26 @@ class Devices(val phase: GoldorPhase) {
         /** Lamp to lamp, in blocks. */
         private fun path(s: List<Int>) = s.zipWithNext().sumOf { (a, b) -> Math.hypot((a % 4 - b % 4).toDouble(), (a / 4 - b / 4).toDouble()) }
 
-        /** The stray light: not part of the sequence, so a cell outside it. */
-        private fun stray(): Int = ((0 until 16) - sequence.toSet()).random()
-
-        /** The cell whose lamp is on now, or -1. */
-        private var litCell = -1
-
-        /**
-         * A show. Lamps every 8 ticks, except the stray's gap to the next, 4-8 (median 6). The first lamp
-         * is in the call's own tick, as the buttons vanish. After a stray the 15 buttons are back 18 ticks
-         * after the stray lit and the lit one's 18 after its own lamp; a plain show brings all 16 back 10
-         * after the last lamp goes out. [stale]: a restart after a wrong press, where Hypixel's old button timer
-         * fires 1-4 ticks in, so the buttons stay clickable, and a lit lamp's button vanishes.
-         */
-        private fun show(cells: List<Int>, expect: List<Int>, stray: Boolean, stale: Boolean = false) {
-            accepting = false
-            for (c in 0 until 16) button(c, false)
-            expected = expect; next = 0
-            val n = cells.size
-            val gap = if (stray) listOf(4, 5, 5, 6, 6, 6, 6, 7, 7, 8).random() else 8
-            val at = IntArray(n) { if (it == 0) 0 else if (it == 1) gap else gap + 8 * (it - 1) }
-            for (i in 0 until n) {
-                val lamp: () -> Unit = {
-                    if (i > 0) light(cells[i - 1], false); light(cells[i], true); litCell = cells[i]
-                    if (stale) button(cells[i], false)
-                }
-                if (at[i] == 0) lamp() else after(at[i]) { lamp() }
-            }
-            after(at[n - 1] + 8) { light(cells[n - 1], false); litCell = -1 }
-            if (stale) after(1 + Random.nextInt(4)) { for (c in 0 until 16) if (c != litCell) button(c, true) }
-            if (stray) {
-                after(18) { for (c in 0 until 16) if (c != cells.last()) button(c, true); accepting = true }
-                after(at[n - 1] + 18) { button(cells.last(), true) }
-            } else {
-                after(at[n - 1] + 18) { for (c in 0 until 16) button(c, true); accepting = true }
-            }
-        }
-
         private fun press(cell: Int) {
-            if (!up[cell] || downUntil[cell] > phase.t) return
-            button(cell, true, pressed = true)
-            downUntil[cell] = phase.t + 3
+            val who = Sim.me
+            pressers[who] = Sim.acting
+            val r = device.press(cell, who)
+            if (r == SimonSaysDevice.Press.NONE) return
             // Each press: note_block.pling (vol 8, pitch 4.05 as sent) at the presser, never a button click.
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f)
-            val g = gen
-            Fight.later(3, "ss up") { if (g == gen && up[cell]) button(cell, true) }
-            if (!accepting) return
-            if (cell == expected[next]) {
-                next++
-                if (next < expected.size) return
-                accepting = false
-                val n = expected.size
-                if (n == 4) after(6) { clear(); station("SS").complete(Sim.me) }
-                else after(6) { val cells = sequence.take(n + 1); show(cells, cells, stray = false) }
-            } else {
-                accepting = false
-                after(3) { for (c in 0 until 16) button(c, false) }
-                // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26)
-                // or stray + [a, b] (34); the buttons stay stale-clickable through it.
-                // SS Luck: the quick one (26, no stray) more often, always at 100%; bad luck the slow one.
-                val plain = Random.nextDouble() < 0.5 + 0.5 * P3Sim.ssLuck
-                after(3 + if (plain) 26 else 34) {
-                    sequence = newSequence()
-                    val ex = listOf(sequence[0], sequence[1])
-                    show(if (plain) ex else listOf(stray()) + ex, ex, stray = !plain, stale = true)
-                }
+            if (r != SimonSaysDevice.Press.WRONG) return
+            // A new show 26 or 34 ticks after the buttons vanish, in the two shapes seen: [a, b] plain (26), or a
+            // stray lamp then [a, b] (34, the stray 4-8 ticks before, median 6): a round 1 show, then a round 2
+            // one with a new pattern, as a skip shows it. The old buttons come back 1-4 ticks into each show
+            // (stale: they press, nothing counts), and a lamp lighting takes its own.
+            // SS Luck: the quick one (26, no stray) more often, always at 100%; bad luck the slow one.
+            val plain = Random.nextDouble() < 0.5 + 0.5 * P3Sim.ssLuck
+            val stale = { device.after(1 + Random.nextInt(4)) { device.buttonsBack() } }
+            if (plain) device.after(3 + 26) { device.showRound(2); stale() }
+            else {
+                val gap = listOf(4, 5, 5, 6, 6, 6, 6, 7, 7, 8).random()
+                device.after(3 + 34 - gap) { device.showRound(1); stale() }
+                device.after(3 + 34) { device.showRound(2); stale() }
             }
         }
     }
@@ -304,46 +240,16 @@ class Devices(val phase: GoldorPhase) {
         private val frames = HashMap<Int, ItemFrame>()
         private var solution = SOLUTIONS[0]
 
+        /** The board as it stood before terms ([showIdle]: frames turned since stay turned), else a new one. */
         fun place() {
             remove()
-            // Layouts 1-8 come about equally often; Odin's layout 0 has not been seen on Hypixel.
-            val layout = (1 until SOLUTIONS.size).random()
-            solution = SOLUTIONS[layout]
-            for (i in 0 until 25) {
-                val wool = EXTRAS[layout][i]
-                if (solution[i] < 0 && wool == null) continue
-                val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
-                val f = ItemFrame(EntityTypes.ITEM_FRAME, Sim.level, pos, Direction.EAST)
-                f.isInvulnerable = true
-                if (solution[i] >= 0) {
-                    f.setItem(ItemStack(Items.ARROW), false)
-                    f.setRotation(solution[i])
-                } else f.setItem(
-                    // Hypixel names them: "Start" (green) on the lime wool, "End" (red) on the red, non-italic.
-                    if (wool == true) Terminals.named(Items.WOOL.lime(), "Start", color = net.minecraft.ChatFormatting.GREEN)
-                    else Terminals.named(Items.WOOL.red(), "End", color = net.minecraft.ChatFormatting.RED), false)
-                frames[i] = Sim.spawn(f)
-            }
-            drawWall()
-            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
-            frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
-                ?.let { (j, f) -> f.setRotation((solution[j] + 7) % 8) }
+            val b = idleBoard?.takeIf { it.frames.values.none { f -> f.isRemoved } } ?: newBoard()
+            idleBoard = null
+            solution = SOLUTIONS[b.layout]
+            frames.putAll(b.frames)
         }
 
         fun remove() { frames.values.forEach { it.discard() }; frames.clear() }
-
-        /**
-         * The back wall (x -3, y120-124, z75-79, the board's own y/z): sea lanterns on the layout's frame
-         * cells, blue terracotta elsewhere. At the start every wool cell is lit, an arrow cell only about one in
-         * eight (in practice one already turned right), no other cell ever; it does not follow clicks. On
-         * completion every frame cell (6-15 of them) goes lantern in one tick.
-         */
-        private fun drawWall() {
-            for (i in 0 until 25) {
-                val lit = i in frames && (solution[i] < 0 || Random.nextInt(8) == 0)
-                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.DYED_TERRACOTTA.blue()).defaultBlockState())
-            }
-        }
 
         /** The device is done (a click of yours, or a teammate): every frame cell of the layout lights. */
         private fun lightWall() {
@@ -412,11 +318,16 @@ class Devices(val phase: GoldorPhase) {
          * recordings: 98% of lights on their attempt's phase, 5 of 8 back-to-back attempts on a different one).
          */
         private var grid = Random.nextInt(10)
+        /**
+         * This attempt's first emerald has shown. Before it, a strike on the (hidden) first target does not count, as
+         * on Hypixel (4 of 22 recorded first targets struck early stayed unlit, 4.0 expected if ignored).
+         */
+        private var shownOnce = false
 
         fun place() { reset(); blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
         fun clear() { lit = -1; blocks.forEach { Blocks.set(it, B.DYED_TERRACOTTA.blue().defaultBlockState()) } }
 
-        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled(); grid = Random.nextInt(10) }
+        private fun reset() { lit = -1; hits = 0; order = (0 until 9).shuffled(); grid = Random.nextInt(10); shownOnce = false }
 
         /** The cell that is the target now (shown or not), or -1 when done. */
         private val current get() = if (hits < 9) order[hits] else -1
@@ -437,7 +348,14 @@ class Devices(val phase: GoldorPhase) {
         /** Who last stood on the plate: the device is theirs when it's done. */
         private var plateBy: String? = null
 
+        /** The i4 bot on the plate (its name), doing it: the board runs for it as for a player. Set by Party each tick. */
+        var botOn: String? = null
+
+        /** The cell showing emerald now (to shoot at), or null. */
+        val shown: BlockPos? get() = if (lit >= 0) blocks[lit] else null
+
         private fun rawOnPlate(): Boolean {
+            botOn?.let { plateBy = it; return true }
             // A pressure plate: pressed while someone's box overlaps its block (feet within its lower quarter).
             val p = Sim.players().firstOrNull { pl ->
                 val b = pl.boundingBox
@@ -467,16 +385,20 @@ class Devices(val phase: GoldorPhase) {
 
         private fun light() {
             lit = current
+            shownOnce = true
             Blocks.set(blocks[lit], B.EMERALD_BLOCK.defaultBlockState())
         }
 
         /**
-         * An arrow (or a bow's shot) hit block [pos]: if it is the target - shown or not yet - it counts. Only a shown
-         * one goes back to blue. The arrow's own vanilla `entity.arrow.hit` is the only sound.
+         * An arrow (or a bow's shot) hit block [pos]: if it is the target - shown or not yet - it counts, once the
+         * attempt's first emerald has shown. Only a shown one goes back to blue. The arrow's own vanilla
+         * `entity.arrow.hit` is the only sound.
          */
         fun hit(pos: BlockPos) {
             val st = station("Target")
             if (st.done || current < 0 || pos != blocks[current]) return
+            // Nothing counts before the attempt's first emerald.
+            if (!shownOnce) return
             // The board runs while someone is on the plate (or a target is up or under way).
             if (lit < 0 && hits == 0 && !onPlate()) return
             if (lit == current) { Blocks.set(pos, B.DYED_TERRACOTTA.blue().defaultBlockState()); lit = -1 }
@@ -488,6 +410,67 @@ class Devices(val phase: GoldorPhase) {
     }
 
     companion object {
+        /** An Arrow Align board up: its layout and frames (by index (y-120) + (z-75)*5). */
+        class Board(val layout: Int, val frames: Map<Int, ItemFrame>)
+
+        /** The board shown before terms ([showIdle]), for the next P3's Arrow Align to take over. */
+        private var idleBoard: Board? = null
+
+        /**
+         * The 2nd and 3rd devices as a run has them before terms start (Lights pre-done, Arrow Align up but for one
+         * arrow), at every Stop and start: not blank until Goldor's line (some do them right as terms start).
+         */
+        fun showIdle() {
+            idleBoard?.frames?.values?.forEach { it.discard() }
+            idleBoard = null
+            val right = setOf(58 to 133, 58 to 136, 60 to 134, 60 to 135, 62 to 133, 62 to 136)
+            for (x in 58..62) for (y in 133..136) {
+                val lever = BlockPos(x, y, 142)
+                val st = Blocks.get(lever)
+                if (st != null && st.hasProperty(LeverBlock.POWERED)) Blocks.set(lever, st.setValue(LeverBlock.POWERED, (x to y) in right))
+                val lit = listOf(x to y, x - 1 to y, x + 1 to y, x to y - 1, x to y + 1).any { it in right }
+                Blocks.set(BlockPos(x, y, 143), B.REDSTONE_LAMP.defaultBlockState().setValue(RedstoneLampBlock.LIT, lit))
+            }
+            idleBoard = newBoard()
+        }
+
+        /**
+         * A new Arrow Align board: frames only on one of Odin's nine layouts' arrow cells plus its few extra (non-arrow)
+         * frames, all solved but the arrow nearest the bottom left; and its back wall (x -3, the board's own y/z): sea
+         * lanterns on the layout's frame cells, blue terracotta elsewhere. At the start every wool cell is lit, an arrow
+         * cell only about one in eight (in practice one already turned right), no other cell ever; it does not follow
+         * clicks. On completion every frame cell (6-15 of them) goes lantern in one tick.
+         */
+        private fun newBoard(): Board {
+            // Layouts 1-8 come about equally often; Odin's layout 0 has not been seen on Hypixel.
+            val layout = (1 until SOLUTIONS.size).random()
+            val solution = SOLUTIONS[layout]
+            val frames = HashMap<Int, ItemFrame>()
+            for (i in 0 until 25) {
+                val wool = EXTRAS[layout][i]
+                if (solution[i] < 0 && wool == null) continue
+                val pos = BlockPos(-2, 120 + i % 5, 75 + i / 5)
+                val f = ItemFrame(EntityTypes.ITEM_FRAME, Sim.level, pos, Direction.EAST)
+                f.isInvulnerable = true
+                if (solution[i] >= 0) {
+                    f.setItem(ItemStack(Items.ARROW), false)
+                    f.setRotation(solution[i])
+                } else f.setItem(
+                    // Hypixel names them: "Start" (green) on the lime wool, "End" (red) on the red, non-italic.
+                    if (wool == true) Terminals.named(Items.WOOL.lime(), "Start", color = net.minecraft.ChatFormatting.GREEN)
+                    else Terminals.named(Items.WOOL.red(), "End", color = net.minecraft.ChatFormatting.RED), false)
+                frames[i] = Sim.spawn(f)
+            }
+            for (i in 0 until 25) {
+                val lit = i in frames && (solution[i] < 0 || Random.nextInt(8) == 0)
+                Blocks.set(-3, 120 + i % 5, 75 + i / 5, (if (lit) B.SEA_LANTERN else B.DYED_TERRACOTTA.blue()).defaultBlockState())
+            }
+            // All solved but one: the arrow nearest the bottom left as you face it (y 120, z 79), one click off.
+            frames.entries.filter { solution[it.key] >= 0 }.minByOrNull { (j, _) -> val dy = j % 5; val dz = 4 - j / 5; dy * dy + dz * dz }
+                ?.let { (j, f) -> f.setRotation((solution[j] + 7) % 8) }
+            return Board(layout, frames)
+        }
+
         /** Odin's Arrow Align layouts: each frame's rotation, -1 = no arrow. */
         val SOLUTIONS = listOf(
             listOf(7, 7, -1, -1, -1, 1, -1, -1, -1, -1, 1, 3, 3, 3, 3, -1, -1, -1, -1, 1, -1, -1, -1, 7, 1),
@@ -518,12 +501,4 @@ class Devices(val phase: GoldorPhase) {
             mapOf(20 to true, 22 to true, 24 to true, 1 to false, 3 to false),
         )
     }
-}
-
-/** A delayed step of a device (dropped when [gen] is stale). */
-/** A device's queued step, run as whoever caused it ([Sim.asPlayer]: the presser's credit stays theirs). */
-private class Job(val at: Int, val gen: Int, private val body: () -> Unit) {
-    private val actor = Sim.acting
-    private val all = Sim.toAll
-    fun run() = Sim.asPlayer(actor, all, body)
 }

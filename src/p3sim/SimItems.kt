@@ -23,6 +23,7 @@ import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.SimpleContainer
 import net.minecraft.world.SimpleMenuProvider
+import net.minecraft.world.entity.Relative
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.entity.player.Inventory
@@ -974,18 +975,24 @@ object SimItems {
 
     /**
      * The boss hotbar (P3's, or P1/P2's with a Hyperion in slot 1), and the extras in the inventory -
-     * laid out as your saved layout for that part has them ([HotbarLayout]), else as below.
+     * laid out as you left them, else as your saved layout for that part has them ([HotbarLayout]), else as below.
+     * [start]: a start or Reset Items, the pet as laid out too; else (a phase changing) the pet you have stays.
      */
-    fun giveHotbar(p: ServerPlayer, p3: Boolean = true) {
+    fun giveHotbar(p: ServerPlayer, p3: Boolean = true, start: Boolean = false) {
         val inv = p.inventory
+        // What they did with their items since the last reset stays.
+        HotbarLayout.keep(p)
+        val pet = P3Sim.phoenix
         inv.clearContent()
         val bar = listOf(if (p3) SUPERBOOM else HYPERION, BONZO, TERMINATOR, DUNGEONBREAKER, PET_ROD, LEAP, JERRY, CLOAK, MENU)
         // 9: the spare mask (Masks.equip, Real Masks).
         val extras = listOf(10 to (if (p3) HYPERION else SUPERBOOM), 11 to AOTV, 12 to SPIRIT_BOW, 13 to PEARLS, 14 to MOSQUITO, 15 to LAST_BREATH, 16 to EXPLOSIVE_BOW)
         val (items, held) = HotbarLayout.arrange(bar.mapIndexed { i, s -> i to s } + extras, p3)
         items.forEach { (slot, s) -> inv.setItem(slot, s) }
-        Loadouts.applySaved(p)  // your saved gear and pet, else the defaults: Maxor + mask (+ Black Cat)
+        Loadouts.applySaved(p, p3)  // your gear and pet as left or saved, else the defaults: Maxor + mask
+        if (!start && P3Sim.phoenix != pet) { P3Sim.setPhoenix(pet); Fight.applySpeed(p) }
         if (p3 && P3Sim.terrorAtTerms) Loadouts.wearTerror(p)
+        HotbarLayout.gave(p3, held)
         inv.selectedSlot = held
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
@@ -1011,7 +1018,7 @@ object SimItems {
             // Hypixel's click model: a block-aimed click fired from use_item_on; the client's own MAIN-hand use_item
             // for the same item, in the same or the next server tick, is that click's follow-up and does nothing.
             Sim.asPlayer(player) {
-                blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick == t) { blockFired = null; return@asPlayer InteractionResult.SUCCESS } }
+                blockFired?.let { (bid, t) -> if (bid == id && Fight.serverTick - t in 0..1) { blockFired = null; return@asPlayer InteractionResult.SUCCESS } }
                 var result: InteractionResult = InteractionResult.PASS
                 EngineerClient.safely("p3sim use $id") { result = use(player, id) }
                 result
@@ -1051,12 +1058,36 @@ object SimItems {
     /** The block the held left click last hit (null once the button is up): [clientHitBlock] handles it once a press. */
     private var hitHeld: BlockPos? = null
 
+    /** Blocks this game broke ahead of the server (pos -> client tick, what it was), watched to log any coming back. */
+    private val predicted = HashMap<BlockPos, Pair<Int, String>>()
+    private var clientTicks = 0
+
+    /** Logs a block this game broke that's back within 2 s (the server sent it again), with what the server has now. */
+    private fun watchPredicted() {
+        clientTicks++
+        if (predicted.isEmpty()) return
+        val level = mc.level ?: run { predicted.clear(); return }
+        val it = predicted.entries.iterator()
+        while (it.hasNext()) {
+            val (pos, v) = it.next()
+            val age = clientTicks - v.first
+            val now = level.getBlockState(pos)
+            if (!now.isAir) {
+                // Not the server's block too: a server level read off its thread waits on the server (and can hang a quit).
+                EngineerClient.logger.info("[p3sim] breaker: {},{},{} ({}) back in the game {} ticks after the hit as {}", pos.x, pos.y, pos.z, v.second, age,
+                    now.block.descriptionId.substringAfterLast('.'))
+                it.remove()
+            } else if (age > 40) it.remove()
+        }
+    }
+
     /**
      * Client tick: a released attack key ends the press. Held on a block with the Dungeonbreaker, it keeps swinging as
      * mining does (our cancelled break gives vanilla nothing to swing for).
      */
     @JvmStatic
     fun clientTick() {
+        EngineerClient.safely("p3sim breaker watch") { watchPredicted() }
         if (!mc.options.keyAttack.isDown) { hitHeld = null; return }
         val player = mc.player ?: return
         val level = mc.level ?: return
@@ -1082,6 +1113,8 @@ object SimItems {
         // With the Dungeonbreaker the click also reaches the mining refusal ("digging there" in S4's device).
         // The server decides ([serverHit]: the hit goes to it, a joiner's as theirs); the client only predicts.
         val held = idOf(player.mainHandItem)
+        // A practice's first 0.15 s: the Dungeonbreaker breaks nothing (not even on screen).
+        if (held == "DUNGEONBREAKER" && Practice.noBreaking()) return true
         val state = level.getBlockState(at)
         val lever = state.block is LeverBlock
         if (!again || held == "DUNGEONBREAKER") SimNet.send("hit", "${at.x},${at.y},${at.z},${face.ordinal},${if (again) 1 else 0}")
@@ -1092,7 +1125,7 @@ object SimItems {
         if (held != "DUNGEONBREAKER") return false
         if (state.isAir) return true
         // The client breaks it at once (as Hypixel's do); the server keeps it or sends it back.
-        if (state.getDestroySpeed(level, at) >= 0) level.destroyBlock(at, false)
+        if (state.getDestroySpeed(level, at) >= 0) { predicted[at] = clientTicks to state.block.descriptionId.substringAfterLast('.'); level.destroyBlock(at, false) }
         return true
     }
 
@@ -1103,13 +1136,19 @@ object SimItems {
         val at = BlockPos(v[0].toIntOrNull() ?: return, v[1].toIntOrNull() ?: return, v[2].toIntOrNull() ?: return)
         val face = net.minecraft.core.Direction.entries.getOrNull(v[3].toIntOrNull() ?: return) ?: return
         val again = v[4] == "1"
-        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) return
+        // Remembered for a restore's re-send (a reset can drop the hit). A hit that breaks nothing sends the server's block
+        // back when it's decided (never on a timer of its own: one landing before the break put broken blocks back).
+        Blocks.clientHit(at)
         val held = idOf(p.mainHandItem)
+        fun sendBack() { if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, at)) }
+        if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) { if (held == "DUNGEONBREAKER") sendBack(); return }
         // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
         // refusal ("digging there" in S4's device).
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) ph.devices.leftClick(at); if (held != "DUNGEONBREAKER") return } }
         if (held == "SUPERBOOM_TNT") { if (!again) Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } }; return }
-        if (held == "DUNGEONBREAKER") Fight.afterPing("dungeonbreaker") { mine(p, at) }
+        // Broken as the hit arrives, before the moves your game sends after it: never a block you already walked into.
+        if (held == "DUNGEONBREAKER") mine(p, at)
+        else Fight.afterPing("hit ignored") { sendBack() }
     }
 
     /**
@@ -1146,14 +1185,17 @@ object SimItems {
         if (!simClient(level)) return
         // Practice: a left click with the Infinileap starts it again; once it's done (0.25 s on), a left click with anything.
         val id = idOf(player.mainHandItem)
-        if (id != null || Practice.active || Practice.clickRestarts()) SimNet.send("left")
+        // With what the game holds: a swap just before the click may not have reached the server yet.
+        if (id != null || Practice.active || Practice.clickRestarts()) SimNet.send("left", id ?: "")
     }
 
-    /** A left click from a player's game ([clientLeftClick]), as theirs. */
-    fun serverLeftClick(p: ServerPlayer) {
+    /** A left click from a player's game ([clientLeftClick]), as theirs; [held]: the item the game held for it. */
+    fun serverLeftClick(p: ServerPlayer, held: String = "") {
         val id = idOf(p.mainHandItem)
-        // The host's practice: their clicks only.
-        if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && id == "INFINITE_SPIRIT_LEAP")) { Practice.restart(); return }
+        // The host's practice: their clicks only. The Infinileap as the game held it (its swap can still be on the way).
+        if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && (id == "INFINITE_SPIRIT_LEAP" || held == "INFINITE_SPIRIT_LEAP"))) { Practice.restart(); return }
+        // Stopped (no phase running): the Bonzo's Staff's left click is the AOTV's, to get around the arena (sneaking: an etherwarp, else a 12-block teleport).
+        if (Fight.phase == null && id == "STARRED_BONZO_STAFF") { val sneak = p.isShiftKeyDown; asClicked(p, "bonzo aotv") { if (sneak) etherwarp(p) else blink(p, 12) }; return }
         // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
         if (Mage.isMage() && Mage.beamItem(id)) { Fight.afterPing("mage beam") { Mage.click(p) }; return }
         if (id in Bows.SHORTBOWS) Bows.click(p, id!!, left = true)
@@ -1203,6 +1245,16 @@ object SimItems {
 
     /** While an [asClicked] action runs: the player's position at the click (the last move packet's). */
     private var clickPos: Vec3? = null
+
+    /**
+     * A teleport that keeps the look: [Sim.tp] sends an absolute rotation, which with any latency snaps the camera
+     * back to an old look. Hypixel's teleport marks the rotation relative, so a 0 delta leaves each client's own.
+     */
+    private fun tpKeepLook(p: ServerPlayer, x: Double, y: Double, z: Double) {
+        p.teleportTo(Sim.level, x, y, z, Relative.ROTATION, 0f, 0f, false)
+        p.deltaMovement = Vec3.ZERO
+        p.fallDistance = 0.0
+    }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
     fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; volleyReady = 0; blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset() }
@@ -1371,7 +1423,7 @@ object SimItems {
             return
         }
         etherPuff(p.position())
-        Sim.tp(p, x + 0.5, y + 1.05, z + 0.5)
+        tpKeepLook(p, x + 0.5, y + 1.05, z + 0.5)
         // Etherwarp is ender_dragon.hurt 1/0.54 only, HOSTILE; enderman.teleport is the blink's.
         Sim.sound(SoundEvents.ENDER_DRAGON_HURT, 1f, 0.54f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
     }
@@ -1436,7 +1488,7 @@ object SimItems {
             Sim.chat("§cThere are blocks in the way!"); return
         }
         if (cut) Sim.chat("§cThere are blocks in the way!")
-        Sim.tp(p, cx + 0.5, feetY.toDouble(), cz + 0.5)
+        tpKeepLook(p, cx + 0.5, feetY.toDouble(), cz + 0.5)
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, p.position(), net.minecraft.sounds.SoundSource.HOSTILE)
     }
 
@@ -1536,7 +1588,7 @@ object SimItems {
     private fun bonzo(p: ServerPlayer) {
         // Hard 4-tick gate: never 1-3 ticks apart; a refused click sets nothing.
         val gap = Fight.serverTick - bonzoLast
-        if (gap < 4) return
+        if (gap < 4) { EngineerClient.logger.info("[ec] bonzo: refused, {} ticks after the last (4-tick gate)", gap); return }
         // The held item is sent again on ~77% of accepted clicks, by idle time: ~50% under 8 ticks since the last
         // balloon, ~81% over 10. First, before the stand bundle.
         val resend = when { gap < 8 -> 0.5; gap > 10 -> 0.81; else -> 0.65 }
@@ -1576,7 +1628,7 @@ object SimItems {
                     bonzoBurst(p, o.add(dir.scale(BONZO_SPEED * k)), stand); return@later
                 }
                 // No block within ~128: the stand flies on and goes with no burst.
-                if (j > BONZO_STEPS) { stand.discard(); return@later }
+                if (j > BONZO_STEPS) { EngineerClient.logger.info("[ec] bonzo: no block within reach, no burst"); stand.discard(); return@later }
                 // Drawn 1.5 below the projectile (the vanilla tracker sends updates on its 3-tick cadence, the
                 // first about spawn+4, as Hypixel's).
                 val q = o.add(dir.scale(BONZO_SPEED * j))
@@ -1611,7 +1663,12 @@ object SimItems {
         // The server's position of you (from the move packets that arrived), for the gate and the push.
         val pos = Fight.seenPos(p)
         // Boost iff the burst is within 3.5 of feet+1.5 (no random roll).
-        if (bTrue.distanceTo(pos.add(0.0, 1.5, 0.0)) > 3.5) return
+        val dist = bTrue.distanceTo(pos.add(0.0, 1.5, 0.0))
+        EngineerClient.logger.info("[ec] bonzo: burst at {} {} {}, {} from you (seen {} {} {}, live {} {} {}): {}",
+            "%.2f".format(bTrue.x), "%.2f".format(bTrue.y), "%.2f".format(bTrue.z), "%.2f".format(dist),
+            "%.2f".format(pos.x), "%.2f".format(pos.y), "%.2f".format(pos.z), "%.2f".format(p.x), "%.2f".format(p.y), "%.2f".format(p.z),
+            if (dist > 3.5) "no boost (over 3.5)" else "boost")
+        if (dist > 3.5) return
         // SET 1.5 * unit(P.xz - B.xz), vy 0.5; exactly over it: (0, 0.5, 0).
         val dx = pos.x - bTrue.x; val dz = pos.z - bTrue.z
         val h = Math.sqrt(dx * dx + dz * dz)
@@ -1988,6 +2045,13 @@ object SimItems {
         brokenBy.values().forEach { l -> l.forEach { Blocks.set(it.pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()) } }
     }
 
+    /** Every block the Dungeonbreaker has broken back now, everyone's (not with Perma Break: those stay). */
+    fun unbreakAll() {
+        if (P3Sim.breakerPerma) return
+        brokenBy.values().forEach { l -> l.forEach { restore(it) }; l.clear() }
+        Sim.forEachPlayer { window.clear() }
+    }
+
     /** Perma Break turned off: every block it kept broken comes back now. */
     fun unPerma() { broken.forEach { restore(it) }; broken.clear(); window.clear() }
 
@@ -1999,8 +2063,12 @@ object SimItems {
         val level = Sim.level
         val s = level.getBlockState(pos)
         if (s.isAir) return
+        // A practice's first 0.15 s: nothing breaks (the game's block put right).
+        if (Practice.noBreaking()) { p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos)); return }
         val now = Fight.serverTick
         val why = refusal(p, pos, s)
+        EngineerClient.logger.info("[p3sim] breaker: server hit {},{},{} ({}) at tick {}: {}", pos.x, pos.y, pos.z, s.block.descriptionId.substringAfterLast('.'), now,
+            when { why != null -> "refused (${why.ifEmpty { "quietly" }})"; charges <= 0 -> "refused (no charges)"; else -> "broken, ${charges - (if (P3Sim.breakerInfinite) 0 else 1)} charges left" })
         if (why != null || charges <= 0) {
             p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, pos))
             if (why == null) { if (now - refusedSaidAt >= 20) { refusedSaidAt = now; Sim.chat(NO_CHARGES) } }
@@ -2017,6 +2085,7 @@ object SimItems {
     }
 
     private fun restore(b: Broken) {
+        EngineerClient.logger.info("[p3sim] breaker: {},{},{} back on the server (regen) at tick {}", b.pos.x, b.pos.y, b.pos.z, Fight.serverTick)
         Blocks.set(b.pos, b.state) // over whatever is there, the core-door barrier too
     }
 
@@ -2208,7 +2277,8 @@ object SimItems {
 
         /** Main's tail: container_close(N), player_position, the sound, the chat line, then container_close(0). */
         private fun leap(sp: ServerPlayer, bot: Party.Mate) {
-            if (sp.isRemoved) return
+            // A second click (a double click, or another head) arrives after the first leap closed this window: nothing.
+            if (sp.isRemoved || sp.containerMenu !== this) return
             sp.closeContainer()
             val e = bot.pos
             leapReady = Fight.serverTick + 40

@@ -30,9 +30,13 @@ object OdinMasksUsed {
     )
     private val used = BooleanArray(3)
 
-    /** Odin's Show setting for item [index] (0 Spirit, 1 Bonzo, 2 Phoenix), less the unused ones with Only Used on. */
+    /**
+     * Odin's Show setting for item [index] (0 Spirit, 1 Bonzo, 2 Phoenix), less the unused ones with Only Used on, and
+     * none in P3 Sim while it's stopped (no phase running).
+     */
     @JvmStatic
-    fun shows(index: Int, setting: Boolean): Boolean = setting && (!onlyUsed.value || used[index])
+    fun shows(index: Int, setting: Boolean): Boolean = setting && (!onlyUsed.value || used[index]) &&
+        !(com.engineerclient.p3sim.P3Sim.inSim && com.engineerclient.p3sim.PartyClient.phase.isEmpty())
 
     /**
      * P3 Sim restarted its masks and Phoenix (Masks.reset, every start): Odin's timers go back to ready as well, and

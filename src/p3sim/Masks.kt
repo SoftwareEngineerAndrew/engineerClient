@@ -212,6 +212,9 @@ object Masks {
         PartyClient.send("masksReset")
     }
 
+    /** The fight stopped (a pending revive with it): a ghost gets back what they had, as a revive gives it. */
+    fun stopped() = Sim.forEachPlayer { p -> if (ghost) endGhost(p) }
+
     /** [p] left: their masks and ghost state go. */
     fun leftOne(p: ServerPlayer) = Sim.asPlayer(p) { resetOne() }
 

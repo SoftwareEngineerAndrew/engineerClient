@@ -10,6 +10,8 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
+import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
@@ -60,12 +62,34 @@ object BossRecorder : Module(
     @Volatile var current: BossRecording? = null
         private set
 
+    /** The recording ended last, whose file may still be being written: the game waits for it at exit. */
+    private var closing: BossRecording? = null
+
+    /** Ends the current recording, if any. */
+    private fun end() {
+        current?.let { it.finish(); closing = it }
+        current = null
+    }
+
     private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > )""")
     private val CONTROL_CODES = Regex("§.")
 
     init {
-        on<LevelEvent.Load> { DevgineerClient.safely("boss recorder start") { current?.finish(); current = BossRecording(dir) } }
-        on<LevelEvent.Unload> { DevgineerClient.safely("boss recorder end") { current?.finish(); current = null } }
+        on<LevelEvent.Load> { DevgineerClient.safely("boss recorder start") { end(); current = BossRecording(dir) } }
+        on<LevelEvent.Unload> { DevgineerClient.safely("boss recorder end") { end() } }
+        // Closing the game: end the recording and wait for its file (its writer thread is a daemon,
+        // so the exit would not wait for the gzip's end and the rename).
+        ClientLifecycleEvents.CLIENT_STOPPING.register {
+            DevgineerClient.safely("boss recorder exit") { end(); closing?.awaitFinished(3000) }
+        }
+        // A recording the game did not get to finish (a crash) is saved as far as it got. Listed now,
+        // before any world opens this game's own, and read off the game thread.
+        val leftovers = runCatching {
+            BossRecording.leftovers(FabricLoader.getInstance().gameDir.resolve("config").resolve("devgineerclient").resolve("bossrecorder"))
+        }.getOrDefault(emptyList())
+        if (leftovers.isNotEmpty()) Thread({
+            leftovers.forEach { DevgineerClient.safely("boss recorder recovery") { BossRecording.salvage(it) } }
+        }, "dc-bossrecorder-recover").start()
         on<TickEvent.End> { DevgineerClient.safely("boss recorder tick") { current?.onTick() } }
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
@@ -102,7 +126,7 @@ object BossRecorder : Module(
 
     override fun onDisable() {
         super.onDisable()
-        DevgineerClient.safely("boss recorder off") { current?.finish(); current = null }
+        DevgineerClient.safely("boss recorder off") { end() }
     }
 
     /** Every inbound packet, on the network thread, ahead of any mod that could cancel it (ConnectionTapMixin). */

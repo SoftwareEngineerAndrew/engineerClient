@@ -71,8 +71,20 @@ object HubNametags {
         return attachment.y + 0.5 + if (scoreShown) LINE else 0.0
     }
 
-    /** The tab list's "Area: Dungeon Hub" info line (all entries: the info lines are fake players that need not be listed). */
+    /**
+     * The tab list's "Area: Dungeon Hub" info line (all entries: the info lines are fake players that need not be listed).
+     * Looked up at most every half second: rendering every tab name each frame showed up in profiles.
+     */
+    private var hubCheckedAt = 0L
+    private var hubCached = false
     private fun inDungeonHub(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - hubCheckedAt < 500) return hubCached
+        hubCheckedAt = now
+        return scanDungeonHub().also { hubCached = it }
+    }
+
+    private fun scanDungeonHub(): Boolean {
         val infos = net.minecraft.client.Minecraft.getInstance().connection?.onlinePlayers ?: return false
         return infos.any { info ->
             val s = info.tabListDisplayName?.string?.trim() ?: return@any false

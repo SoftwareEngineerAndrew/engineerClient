@@ -38,8 +38,9 @@ object SplitFormat {
 
     /** Minutes and seconds, for Pace and Enter: `3m 8.2s`. */
     fun minutes(ms: Long): String {
-        val s = ms / 1000.0
-        return "${(s / 60).toInt()}m " + String.format(Locale.ROOT, "%.1f", s % 60) + "s"
+        // Rounded to the tenth before splitting, so 119.97 s carries to 2m 0.0s, not 1m 60.0s.
+        val tenths = Math.round(ms / 100.0)
+        return "${tenths / 600}m " + String.format(Locale.ROOT, "%.1f", tenths % 600 / 10.0) + "s"
     }
 
     /**

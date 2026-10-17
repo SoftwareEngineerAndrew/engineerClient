@@ -46,6 +46,17 @@ object OdinTickTimers {
         return format(elapsed, max, prefix, colour)
     }
 
+    /**
+     * The sim stopped (or a practice started): every one of Odin's tick timers off (Goldor's tick and start, Storm's
+     * pad, lightning and PY, Necron's drop, Fire Freeze), as if no boss line had come, and the count-up with them.
+     */
+    fun stopAll() {
+        goldorStart = null
+        for (f in listOf("goldorTickTime", "goldorStartTime", "padTickTime", "lightningTickTime", "pyTickTime", "stormTick", "necronTime", "fireFreezeTime"))
+            runCatching { TickTimers::class.java.getDeclaredField(f).apply { isAccessible = true }.setInt(TickTimers, -1) }
+        runCatching { TickTimers::class.java.getDeclaredField("pyTriggered").apply { isAccessible = true }.setBoolean(TickTimers, false) }
+    }
+
     /** Adds the setting to Odin's module; before OdinSplitsLook.install, which re-reads Odin's config. */
     fun install() {
         TickTimers.registerSetting(countUp)
