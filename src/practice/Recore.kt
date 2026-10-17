@@ -3,6 +3,7 @@ package com.engineerclient.practice
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
@@ -26,7 +27,8 @@ import net.minecraft.util.ARGB
 import net.minecraft.world.entity.player.Player
 
 /**
- * F7/M7 core leap (was Term Info's Core Leap): once S3 is done, the side of the screen where the first teammate
+ * F7/M7 core leap (was Term Info's Core Leap, then Sub Splits'). Paste Last In Core is set here and sent by
+ * DungeonSplits, whose Goldor tracking times everyone into the core. Core Leap Highlight: once S3 is done, the side of the screen where the first teammate
  * inside the core will be in Odin's Leap Menu, in gold, so you're already flicking there when you open the menu.
  * Highlight All Players In Core: every teammate who got to the core before you, each in their own part of the
  * screen. Behind terminals too: only ever drawn as part of the HUD, which every screen draws over, so it never
@@ -35,33 +37,38 @@ import net.minecraft.world.entity.player.Player
 object Recore : Module(
     name = "Recore",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.",
+    description = "The core after S4: the Core Leap Highlight (where the teammates already in the core are in Odin's Leap Menu, so you flick there as it opens) and Paste Last In Core.",
     key = null,
 ) {
-    private val allInCore by BooleanSetting("Highlight All Players In Core", false, desc = "Highlights every teammate who made it to the core before you, each where they'll be in the leap menu, not just the first one. All of them go once you're in the core yourself (with Hide When In Core).")
-    private val preview by BooleanSetting("Preview", false, desc = "Shows the highlight now, top right, as if someone were in the core (also over this menu), to try the looks below; with Highlight All Players In Core, bottom left too. Turn it off after.")
-    private val style by SelectorSetting("Style", Style.QUADRANT, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.")
-    private val color by ColorSetting("Color", Color(255, 170, 0, 0.25f), true, desc = "The highlight's colour and opacity.")
-    private val fill by SelectorSetting("Fill", Fill.SOLID, desc = "Solid, or fading out toward the crosshair (strongest at the screen's edge), or the other way round. Quadrant, Side and Top / Bottom.").withDependency { style.area }
-    private val gap by NumberSetting("Centre Gap", 0, 0..120, 2, desc = "Leaves this much room around the crosshair clear (Odin's boxes start 24 from the centre). Quadrant, Side, Top / Bottom, Corner Bracket.", unit = "px").withDependency { style != Style.LEAP_BOX && style != Style.EDGE_GLOW }
-    private val glowDepth by NumberSetting("Glow Depth", 16, 4..50, 1, desc = "How far in from the edge the Edge Glow reaches, in % of the screen.", unit = "%").withDependency { style == Style.EDGE_GLOW }
-    private val bracketSize by NumberSetting("Bracket Size", 24, 6..120, 2, desc = "Length of the Corner Bracket's arms.", unit = "px").withDependency { style == Style.BRACKET }
-    private val bracketWidth by NumberSetting("Bracket Width", 3, 1..12, 1, desc = "Thickness of the Corner Bracket's arms.", unit = "px").withDependency { style == Style.BRACKET }
-    private val outline by BooleanSetting("Outline", false, desc = "A line around the highlighted area. Quadrant, Side, Top / Bottom and Leap Box.").withDependency { style.area || style == Style.LEAP_BOX }
-    private val outlineWidth by NumberSetting("Outline Width", 2, 1..8, 1, desc = "", unit = "px").withDependency { outline && (style.area || style == Style.LEAP_BOX) }
-    private val outlineColor by ColorSetting("Outline Color", Color(255, 170, 0, 0.8f), true, desc = "").withDependency { outline && (style.area || style == Style.LEAP_BOX) }
-    private val showName by BooleanSetting("Show Name", false, desc = "Their name on the highlight.")
-    private val showClass by BooleanSetting("Show Class", false, desc = "Their class under the name.").withDependency { showName }
-    private val nameAt by SelectorSetting("Name Position", NamePos.AREA, desc = "In the middle of the highlighted area, or just off the crosshair toward it.").withDependency { showName }
-    private val nameScale by NumberSetting("Name Scale", 1.5, 0.5..4.0, 0.25, desc = "", unit = "x").withDependency { showName }
-    private val nameColor by ColorSetting("Name Color", Color(255, 170, 0, 0.8f), true, desc = "").withDependency { showName }
-    private val pulse by BooleanSetting("Pulse", false, desc = "Breathes between the colour's opacity and a fraction of it.")
-    private val pulseSpeed by NumberSetting("Pulse Speed", 1.5, 0.25..6.0, 0.25, desc = "Pulses a second.", unit = "/s").withDependency { pulse }
-    private val pulseLow by NumberSetting("Pulse Low", 30, 0..100, 5, desc = "The faintest point of the pulse, in % of the colour's opacity.", unit = "%").withDependency { pulse }
-    private val fadeIn by NumberSetting("Fade In", 0, 0..1000, 50, desc = "Fades in over this long once someone is in the core.", unit = "ms")
-    private val overScreens by BooleanSetting("Over Screens", true, desc = "Also shown while a screen is open (terminals, chat, your inventory), in the background behind it: the screen always draws over it, so it never hides or recolours a terminal. Off: only with no screen open.")
-    private val overLeap by BooleanSetting("Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, behind it.").withDependency { overScreens }
-    private val hideInCore by BooleanSetting("Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.")
+    val pasteLast by BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died. Timed by Sub Splits' Goldor tracking, so Sub Splits has to be on.")
+    private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.")
+    private val allInCore by BooleanSetting("Highlight All Players In Core", false, desc = "Highlights every teammate who made it to the core before you, each where they'll be in the leap menu, not just the first one. All of them go once you're in the core yourself (with Hide When In Core).").withDependency { coreLeap }
+    private val lookDropdown by DropdownSetting("Core Leap Look", desc = "").withDependency { coreLeap }
+    /** The look settings show: Core Leap Highlight on and its dropdown open. */
+    private val look get() = coreLeap && lookDropdown
+    private val preview by BooleanSetting("Preview", false, desc = "Shows the highlight now, top right, as if someone were in the core (also over this menu), to try the looks below; with Highlight All Players In Core, bottom left too. Turn it off after.").withDependency { look }
+    private val style by SelectorSetting("Style", Style.QUADRANT, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.").withDependency { look }
+    private val color by ColorSetting("Color", Color(255, 170, 0, 0.25f), true, desc = "The highlight's colour and opacity.").withDependency { look }
+    private val fill by SelectorSetting("Fill", Fill.SOLID, desc = "Solid, or fading out toward the crosshair (strongest at the screen's edge), or the other way round. Quadrant, Side and Top / Bottom.").withDependency { look && (style.area) }
+    private val gap by NumberSetting("Centre Gap", 0, 0..120, 2, desc = "Leaves this much room around the crosshair clear (Odin's boxes start 24 from the centre). Quadrant, Side, Top / Bottom, Corner Bracket.", unit = "px").withDependency { look && (style != Style.LEAP_BOX && style != Style.EDGE_GLOW) }
+    private val glowDepth by NumberSetting("Glow Depth", 16, 4..50, 1, desc = "How far in from the edge the Edge Glow reaches, in % of the screen.", unit = "%").withDependency { look && (style == Style.EDGE_GLOW) }
+    private val bracketSize by NumberSetting("Bracket Size", 24, 6..120, 2, desc = "Length of the Corner Bracket's arms.", unit = "px").withDependency { look && (style == Style.BRACKET) }
+    private val bracketWidth by NumberSetting("Bracket Width", 3, 1..12, 1, desc = "Thickness of the Corner Bracket's arms.", unit = "px").withDependency { look && (style == Style.BRACKET) }
+    private val outline by BooleanSetting("Outline", false, desc = "A line around the highlighted area. Quadrant, Side, Top / Bottom and Leap Box.").withDependency { look && (style.area || style == Style.LEAP_BOX) }
+    private val outlineWidth by NumberSetting("Outline Width", 2, 1..8, 1, desc = "", unit = "px").withDependency { look && (outline && (style.area || style == Style.LEAP_BOX)) }
+    private val outlineColor by ColorSetting("Outline Color", Color(255, 170, 0, 0.8f), true, desc = "").withDependency { look && (outline && (style.area || style == Style.LEAP_BOX)) }
+    private val showName by BooleanSetting("Show Name", false, desc = "Their name on the highlight.").withDependency { look }
+    private val showClass by BooleanSetting("Show Class", false, desc = "Their class under the name.").withDependency { look && showName }
+    private val nameAt by SelectorSetting("Name Position", NamePos.AREA, desc = "In the middle of the highlighted area, or just off the crosshair toward it.").withDependency { look && showName }
+    private val nameScale by NumberSetting("Name Scale", 1.5, 0.5..4.0, 0.25, desc = "", unit = "x").withDependency { look && showName }
+    private val nameColor by ColorSetting("Name Color", Color(255, 170, 0, 0.8f), true, desc = "").withDependency { look && showName }
+    private val pulse by BooleanSetting("Pulse", false, desc = "Breathes between the colour's opacity and a fraction of it.").withDependency { look }
+    private val pulseSpeed by NumberSetting("Pulse Speed", 1.5, 0.25..6.0, 0.25, desc = "Pulses a second.", unit = "/s").withDependency { look && pulse }
+    private val pulseLow by NumberSetting("Pulse Low", 30, 0..100, 5, desc = "The faintest point of the pulse, in % of the colour's opacity.", unit = "%").withDependency { look && pulse }
+    private val fadeIn by NumberSetting("Fade In", 0, 0..1000, 50, desc = "Fades in over this long once someone is in the core.", unit = "ms").withDependency { look }
+    private val overScreens by BooleanSetting("Over Screens", true, desc = "Also shown while a screen is open (terminals, chat, your inventory), in the background behind it: the screen always draws over it, so it never hides or recolours a terminal. Off: only with no screen open.").withDependency { look }
+    private val overLeap by BooleanSetting("Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, behind it.").withDependency { look && overScreens }
+    private val hideInCore by BooleanSetting("Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.").withDependency { look }
 
     private enum class Style(private val label: String, val area: Boolean) {
         QUADRANT("Quadrant", true), SIDE("Side", true), VERTICAL("Top / Bottom", true), EDGE_GLOW("Edge Glow", false),
@@ -149,7 +156,7 @@ object Recore : Module(
 
     /** Keeps [inCoreSince] up to date: teammates in the core box, by when they were first seen there. */
     private fun trackCore() {
-        if (!enabled || !watchingCore()) { inCoreSince.clear(); return }
+        if (!enabled || !coreLeap || !watchingCore()) { inCoreSince.clear(); return }
         val level = mc.level ?: return
         if (mc.player?.let { inCore(it) && !inFlight(it) } == true) selfBeenInCore = true
         val now = System.currentTimeMillis()
@@ -178,7 +185,7 @@ object Recore : Module(
      * recolours a slot.
      */
     private fun drawRecore(gfx: GuiGraphicsExtractor) {
-        if (!enabled || mc.gui.hud.isHidden) return
+        if (!enabled || !coreLeap || mc.gui.hud.isHidden) return
         val self = mc.player ?: return
         val screen = mc.gui.screen()
         if (screen != null) {
