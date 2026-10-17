@@ -20,7 +20,6 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import com.engineerclient.storm.StormCrush
 import com.engineerclient.storm.StormCrushView
-import com.engineerclient.storm.StormPhase
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Colors
@@ -236,7 +235,7 @@ object DungeonSplits : Module(
                     storm.onServerTick(now)
                     // Show Crush Info: each 20-tick crush check from his lightning until he dies.
                     val t = storm.phase(now)
-                    if (showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t + StormPhase.checkOffset))
+                    if (showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t))
                         crushView.check(now)?.let { (v, armed) -> storm.onCheck(now, v, armed) }
                 }
             }
