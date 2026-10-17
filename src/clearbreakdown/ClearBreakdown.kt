@@ -6,6 +6,8 @@ import com.engineerclient.p3sim.P3Sim
 import com.engineerclient.p3sim.Practice
 import com.engineerclient.splits.SplitTracker
 import com.odtheking.odin.OdinMod
+import com.odtheking.odin.events.BlockInteractEvent
+import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.CheckmarkUpdateEvent
 import com.odtheking.odin.events.FloorEnterEvent
 import com.odtheking.odin.events.LevelEvent
@@ -26,7 +28,12 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import kotlinx.coroutines.launch
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
+import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket
+import net.minecraft.sounds.SoundEvents
+import net.minecraft.world.level.block.Blocks
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.floor
 
@@ -102,6 +109,25 @@ object ClearBreakdown : Module(
 
         on<TickEvent.End> { EngineerClient.safely("clear breakdown tick") { tick() } }
 
+        // Secrets seen happening (Sightings), off the same packets ADR records them from.
+        onReceive<ClientboundTakeItemEntityPacket> {
+            val item = itemId; val by = playerId
+            mc.execute { EngineerClient.safely("clear breakdown pickup") { Sightings.onPickup(item, by) } }
+        }
+        onReceive<ClientboundBlockEventPacket> {
+            if (b0 != 1 || b1 <= 0 || (block != Blocks.CHEST && block != Blocks.TRAPPED_CHEST)) return@onReceive
+            val at = pos.immutable()
+            mc.execute { EngineerClient.safely("clear breakdown chest") { Sightings.onChestOpen(at) } }
+        }
+        onReceive<ClientboundSoundPacket> {
+            val sound = sound.value()
+            if ((sound != SoundEvents.BAT_HURT && sound != SoundEvents.BAT_DEATH) || volume != 0.1f) return@onReceive
+            val x = x; val y = y; val z = z
+            mc.execute { EngineerClient.safely("clear breakdown bat") { Sightings.onBat(x, y, z) } }
+        }
+        on<BlockInteractEvent> { EngineerClient.safely("clear breakdown click") { Sightings.onClick(pos) } }
+        on<BlockUpdateEvent> { EngineerClient.safely("clear breakdown block") { Sightings.onBlockChange(pos, updated) } }
+
         on<CheckmarkUpdateEvent> {
             EngineerClient.safely("clear breakdown checkmark") {
                 if (!active) return@safely
@@ -142,6 +168,7 @@ object ClearBreakdown : Module(
         clears = ClearCredit(); secrets = SecretCredit()
         active = false; won = false
         roster.clear(); before.clear(); relayed.clear()
+        Sightings.reset()
     }
 
     private fun closeSync() {
@@ -178,6 +205,7 @@ object ClearBreakdown : Module(
         // Teammates the tab list hadn't listed yet at Mort.
         for (p in DungeonUtils.dungeonTeammates) join(p)
         if (DungeonUtils.inBoss) return closeSync()
+        Sightings.tick()
         val where = presence()
         clears.tick(where)
         secrets.tick(where)
