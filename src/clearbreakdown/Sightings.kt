@@ -3,12 +3,14 @@ package com.engineerclient.clearbreakdown
 import com.engineerclient.EngineerClient.mc
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
+import net.minecraft.world.entity.ambient.Bat
 import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.SkullBlock
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
+import net.minecraft.world.phys.AABB
 
 /**
  * Secrets this client sees happen, the way ADR records them: an item picked up (the packet names
@@ -73,8 +75,11 @@ object Sightings {
 
     fun onBat(x: Double, y: Double, z: Double) {
         if (!tracking) return
-        // A bat's hurt and death squeaks come together: one key for both.
-        val key = "bat:${Math.floorDiv(x.toInt(), 2)},${Math.floorDiv(y.toInt(), 2)},${Math.floorDiv(z.toInt(), 2)}:${System.currentTimeMillis() / 1000}"
+        // Keyed by the bat (its entity id is the server's, the same on every client, and its hurt and
+        // death squeaks are one key); by place and second only if it's already gone.
+        val bat = mc.level?.getEntitiesOfClass(Bat::class.java, AABB(x - 3, y - 3, z - 3, x + 3, y + 3, z + 3))?.minByOrNull { it.distanceToSqr(x, y, z) }
+        val key = if (bat != null) "bat:${bat.id}"
+        else "bat:${Math.floorDiv(x.toInt(), 2)},${Math.floorDiv(y.toInt(), 2)},${Math.floorDiv(z.toInt(), 2)}:${System.currentTimeMillis() / 1000}"
         seen(key, x, z, near(x, y, z), false)
     }
 

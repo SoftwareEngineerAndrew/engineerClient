@@ -143,9 +143,11 @@ object OnlineLink {
      */
     @Volatile var onRelay: ((String) -> Unit)? = null
 
-    /** Clear Breakdown's frames for the party, in line with the rest; nothing goes without a socket. */
-    fun sendRelay(frames: List<String>) {
+    /** Clear Breakdown's frames for the party, in line with the rest. False (nothing sent) without a socket. */
+    fun sendRelay(frames: List<String>): Boolean {
+        if (socket == null) return false
         for (f in frames) sendText(f)
+        return true
     }
 
     /** ADR turned off: offline. */

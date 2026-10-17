@@ -20,8 +20,16 @@ class SecretCreditTest {
 
     @Test fun exactReplacesProximity() {
         s.sighting("chest:1", "r1", "M", setOf("A", "B"), false, 0)
-        s.sighting("chest:1", "r1", "M", setOf("A"), true, 5000)
+        s.sighting("chest:1", "r1", "M", setOf("A"), true, 2000)
         assertEquals(listOf(RoomSecrets("M", 1, false)), s.resolve(mapOf("A" to 5, "B" to 5))["A"]!!.rooms)
+    }
+
+    @Test fun laterExactSightingIsAReopenNotTheFinder() {
+        s.sighting("chest:1", "r1", "M", setOf("A"), false, 0)
+        s.sighting("chest:1", "r1", "M", setOf("B"), true, 30_000)
+        val r = s.resolve(mapOf("A" to 5, "B" to 5))
+        assertEquals(1, r["A"]!!.rooms.single().count)
+        assertEquals(emptyList(), r["B"]!!.rooms)
     }
 
     @Test fun laterProximitySightingOfSameKeyIgnored() {

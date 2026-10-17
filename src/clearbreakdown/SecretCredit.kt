@@ -13,7 +13,7 @@ data class PlayerSecrets(val total: Int?, val rooms: List<RoomSecrets>, val unkn
  *    going, a secret bat): one secret, with the players who could have got it. Keyed by what the
  *    server calls it (entity id, block), so the same secret seen by two clients counts once: the
  *    first sighting is the secret, an exact one (the pickup packet's collector, your own click)
- *    replaces a "who was in reach" one, and two in-reach sightings of the same moment are joined.
+ *    replaces a "who was in reach" one of the same moment, and two in-reach sightings of the same moment are joined.
  *  - [observe]: Odin's count of a room's secrets going up (action bar, its map sync, a green
  *    checkmark). Whatever the sightings since the last count don't explain is a gap, given to
  *    everyone who was in that room since that last count: a count is often first seen when someone
@@ -26,7 +26,7 @@ data class PlayerSecrets(val total: Int?, val rooms: List<RoomSecrets>, val unkn
  *
  * Nothing here touches Minecraft, so it tests headlessly.
  */
-class SecretCredit(private val mergeMs: Long = 1000) {
+class SecretCredit(private val mergeMs: Long = 1000, private val exactMs: Long = 3000) {
     private class Group(val roomKey: String, val roomName: String, var candidates: Set<String>, var exact: Boolean, val atMs: Long, var units: Int, val gap: Boolean = false)
 
     private val groups = ArrayList<Group>()
@@ -46,7 +46,9 @@ class SecretCredit(private val mergeMs: Long = 1000) {
     fun sighting(key: String, roomKey: String, roomName: String, candidates: Set<String>, exact: Boolean, atMs: Long) {
         val known = byKey[key]
         if (known != null) {
-            if (exact && !known.exact) { known.candidates = candidates; known.exact = true }
+            // Exact beats in-reach only for the same moment (a party member's copy can be a few seconds
+            // late): a click on a chest long after it was looted is a re-open, not its finder.
+            if (exact && !known.exact && kotlin.math.abs(atMs - known.atMs) <= exactMs) { known.candidates = candidates; known.exact = true }
             else if (!exact && !known.exact && kotlin.math.abs(atMs - known.atMs) <= mergeMs) known.candidates = known.candidates + candidates
             return
         }
