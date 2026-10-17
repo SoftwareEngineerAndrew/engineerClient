@@ -29,7 +29,9 @@ object FrameCapture {
 
     fun install() {
         LevelExtractionEvents.END_EXTRACTION.register { ctx -> if (Rec.active) guard("frame") { frame(ctx.camera(), ctx.deltaTracker()) } }
-        ClientTickEvents.START_CLIENT_TICK.register { _ -> if (Rec.active) tickStartNs = System.nanoTime() }
+        // Every tick, recording or not: a recording that opens mid-tick still gets this tick's own start,
+        // never the last recording's.
+        ClientTickEvents.START_CLIENT_TICK.register { _ -> tickStartNs = System.nanoTime() }
         ClientTickEvents.END_CLIENT_TICK.register { mc -> if (Rec.active) guard("tick") { endTick(mc) } else { rows.setLength(0); frames = 0 } }
     }
 

@@ -203,6 +203,7 @@ object P3Rotation : Module(
             RoleVignette.clear()
             MaskTracker.reset()
             RotationEngine.reset()
+            lastSignalledRole = null
             section = 1
             sectionComplete = false
             gateBlown = false
@@ -300,6 +301,7 @@ object P3Rotation : Module(
             P3ChatParser.isPhaseEnd(raw) -> {
                 EcLog.log("SECTION", "phase 3 over (core opening)")
                 RotationEngine.reset()
+                lastSignalledRole = null
                 section = 1
                 sectionComplete = false
                 gateBlown = false
@@ -367,6 +369,8 @@ object P3Rotation : Module(
             EngineerClient.msg("§cYou have no starting role — §7set it with §f/adm role <role>§7.")
         }
         RotationEngine.begin(teamRoles)
+        // The starting role is told in the line below, not cued as a hand-off.
+        lastSignalledRole = me?.let { cueOf(it) }
         val missing = RotationSpec.graph.startingRoles.filter { it.id !in teamRoles }.map { it.name }
         if (missing.isNotEmpty()) EngineerClient.msg("§cnobody announced: §f${missing.joinToString(", ")}")
         val mine = me?.let { RotationEngine.roleOf(it) }
@@ -380,11 +384,19 @@ object P3Rotation : Module(
         sendCommand("pc brw s1 ${role.name}")
     }
 
-    /** After a section sweep my role may have changed without a line of mine — signal it like any hand-off. */
+    /**
+     * The role (or "recore") last cued to me, so the same one is never cued twice. Seeded with my
+     * starting role at phase start and cleared with the phase, so nothing carries into the next run.
+     */
     private var lastSignalledRole: String? = null
+
+    /** What [lastSignalledRole] would hold for [me] right now. */
+    private fun cueOf(me: String): String? = RotationEngine.roleOf(me)?.id ?: if (RotationEngine.isFinished(me)) "recore" else null
+
+    /** After a section sweep my role may have changed without a line of mine — signal it like any hand-off. */
     private fun myAfterSweep() {
         val me = EngineerClient.mc.player?.name?.string ?: return
-        val now = RotationEngine.roleOf(me)?.id ?: if (RotationEngine.isFinished(me)) "recore" else null
+        val now = cueOf(me)
         if (now == lastSignalledRole) return
         lastSignalledRole = now
         val role = RotationEngine.roleOf(me)

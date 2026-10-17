@@ -19,6 +19,7 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.render.textDim
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
@@ -195,9 +196,12 @@ object PovPreviews : Module(
         // CUSTOM keeps a short ring of packet poses per player; it is fed here, once per client
         // tick, on the render thread. Odin only delivers this while the module is enabled, which
         // is also the only time anything reads the ring.
-        on<TickEvent.End> {
-            PovPose.onClientTick()
-            if (!wants()) PovCapture.releaseNow()
+        on<TickEvent.End> { PovPose.onClientTick() }
+
+        // The feeds are freed off Fabric's tick, not an Odin listener: Odin stops delivering those once the module
+        // is off, which would leave a disable from inside the leap menu holding the targets until it is turned back on.
+        ClientTickEvents.END_CLIENT_TICK.register {
+            EngineerClient.safely("pov release") { if (!wants()) PovCapture.releaseNow() }
         }
 
         // Blood rush ends at the blood door (as in BR Waypoints), read straight off the network.
@@ -216,8 +220,8 @@ object PovPreviews : Module(
         overlayScale = 1f
         overlayAlpha = 1f
         PovPose.reset()
-        // The feeds are GPU targets; they are freed on the render thread, next time the capture
-        // path runs, not here — a module toggle can come from a keybind at any point in the frame.
+        // The feeds are GPU targets; they are freed on the render thread at the end of the next client
+        // tick, not here — a module toggle can come from a keybind at any point in the frame.
         PovCapture.requestFree()
         super.onDisable()
     }

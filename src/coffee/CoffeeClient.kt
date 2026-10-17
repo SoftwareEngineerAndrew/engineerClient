@@ -30,7 +30,9 @@ object CoffeeClient : ClientModInitializer {
 
         safely("leap extras settings") { adoptLeapExtrasSettings() }
         safely("adr menu settings") { renameModule("Better PF Menu", "ADR Menu") }
-        safely("completion titles setting") { adoptSetting("Term Info", "Random Stuff", "Hide Completion Titles") }
+        // Engineer Client has a Random Stuff too: Odin keeps modules by name (/od toggle), so this one is named apart.
+        safely("coffee random stuff name") { renameModule("Random Stuff", "Coffee Random Stuff") }
+        safely("completion titles setting") { adoptSetting("Term Info", "Coffee Random Stuff", "Hide Completion Titles") }
         safely("highlight levers settings") { adoptHighlightLevers() }
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file

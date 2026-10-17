@@ -40,7 +40,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     val stations = Station.all()
     /** A section practice ([Practice]): only your role's part of this section is left to do. */
-    private val practice = Practice.section == from && from in 1..4
+    val practice = Practice.section == from && from in 1..4
     /** The section in progress (1-4), 5 once the core is open. */
     var section = 1
         private set
@@ -110,7 +110,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun begin() {
         stations.forEach { it.spawnStands() }
         devices.start()
-        Stats.reset(from)
+        Stats.reset(from, practice)
         val startN = when (from) { 2 -> 252; 3 -> 433; 4 -> 629; 5 -> 797; else -> 0 }
         // n = startN now, whenever that is (a start timer's ticks don't count).
         nOffset = startN - t
@@ -207,8 +207,9 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         devices.stop()
         // Handed over to Necron: his body stays where he died until Necron's own body goes (in the same
         // tick since the boss update; ~280 after Necron's first line before it); else gone with the phase.
+        // This runs in the hand-off tick and Necron's t = 0 is the next one, hence the + 1.
         val g = goldor
-        if (necronAt >= 0) Fight.later(P4Necron.GONE, "goldor body") { g.remove() } else g.remove()
+        if (necronAt >= 0) Fight.later(P4Necron.GONE + 1, "goldor body") { g.remove() } else g.remove()
     }
 
     override fun tick() {
@@ -383,8 +384,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (s == 4) { openCore(); return@everyone }
         if (gateDown[s]) openDoor(s)
         else {
-            Sim.chat("§aThe gate will open in 5 seconds!")
-            Sim.title("", "§aThe gate will open in 5 seconds!", 0, 40, 0)
+            // Practice: the gate never opens by itself, so no "5 seconds" (just the pling).
+            if (!practice) {
+                Sim.chat("§aThe gate will open in 5 seconds!")
+                Sim.title("", "§aThe gate will open in 5 seconds!", 0, 40, 0)
+            }
             Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
             // Practice: the gate stays until you blow it (a gate job is yours to do).
             if (!practice) autoGateAt[s] = n + 100
@@ -502,6 +506,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.title("", "§aThe Core entrance is opening!", 0, 40, 0)
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
         if (from != 5) Stats.section(4, n - sectionStart[4])
+        // Stop After Terms: the run ends here, as the menu's Stop (not in a section practice).
+        if (P3Sim.termsOnly && !practice && from != 5) Fight.later(1, "stop after terms") { Sim.note("Terms done: stopped §7(Stop After Terms)."); Fight.end() }
         if (!practice) Blocks.play("core", delay = 1)
         Stats.p3(n)
     }
@@ -509,7 +515,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     /** True when everyone (the players and the bots) is in the core. */
     private fun everyoneIn(): Boolean {
         val ps = Sim.players()
-        if (ps.isEmpty() || ps.any { !CORE_BOX.contains(Fight.seenPos(it)) }) return false
+        // A ghost (dead, waiting for a revive) isn't waited for.
+        if (ps.isEmpty() || ps.any { !Sim.asPlayer(it) { Masks.ghost } && !CORE_BOX.contains(Fight.seenPos(it)) }) return false
         return Party.allIn(CORE_BOX)
     }
 
@@ -557,7 +564,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (deadAt >= 0 && necronAt < 0 && n >= deadAt + NECRON_AFTER) {
             necronAt = n
             // Stopping here, the run's recording ends here too (else it grows until the next start).
-            if (P3Sim.p3Only) { Recorder.finish(); Sim.note("P3 done. §fMenu > P4§7 to go on to Necron."); return }
+            // Stop After Goldor: the run ends here, as the menu's Stop.
+            if (P3Sim.p3Only) { Fight.later(1, "stop after goldor") { Sim.note("Goldor done: stopped §7(Stop After Goldor)."); Fight.end() }; return }
             handOff = true
         }
     }
@@ -771,7 +779,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
                     // Distance left, round the loop's seam (a sprint from the S4 line into S1).
                     val left = ((sprintTo - s) % LOOP + LOOP) % LOOP
                     if (left <= SPRINT) { s = sprintTo; sprintTo = -1.0; speed = WALK } else s += SPRINT
-                } else s += walkStep(n - spawnedN)
+                } else s += walkStep(n)  // his age is the phase's n, as [spawn] placed him (a later start is past the slow stretch)
                 if (s >= LOOP) firstLap = false
                 s %= LOOP
                 pos = trackPos(s)
@@ -887,7 +895,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (st.done) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal has already been completed!") }; return }
         if (st.section != section) { Fight.later(1, "term refusal") { Sim.chatStyled("§cThis Terminal doesn't seem to be responsive at the moment.") }; return }
         // The window opens a tick after the click (almost always on Hypixel), on top of the ping.
-        Fight.later(1, "term open") { Terminals.open(p, st) }
+        Fight.later(1, "term open") { if (!st.done && st.section == section && !holding) Terminals.open(p, st) }
     }
 
     /** Player-facing state for the menu's status line. */

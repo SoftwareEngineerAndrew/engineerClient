@@ -22,7 +22,8 @@ object EntityDistance : Module(
     category = Category.custom("Coffee Client", 860, 10),
     description = "Turns Entity Distance down for fps, except in Storm's phase (F7/M7 P2), where it's back to 100%.",
 ) {
-    private val distance by NumberSetting("Entity Distance", 60.0, 50.0..100.0, 5.0, desc = "Entity Distance (%) outside Storm's phase. Vanilla's own slider goes no lower than 50.")
+    // Vanilla keeps this option in quarter steps (50%, 75%, 100%...), so the setting does too.
+    private val distance by NumberSetting("Entity Distance", 50.0, 50.0..100.0, 25.0, desc = "Entity Distance (%) outside Storm's phase. Vanilla's own slider goes no lower than 50, in steps of 25.")
 
     private val CONTROL_CODES = Regex("§.")
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
@@ -44,10 +45,15 @@ object EntityDistance : Module(
         on<TickEvent.End> { apply(if (inStorm) 1.0 else distance / 100.0) }
     }
 
-    /** Sets vanilla's option, only when it differs (it's the same value the video settings show). */
+    /**
+     * Sets vanilla's option, only when it differs (it's the same value the video settings show).
+     * Rounded to the option's quarter steps first: it stores nothing between them, so an off-step
+     * value (a config saved before the setting moved in 25s) would land a step low and differ forever.
+     */
     private fun apply(scale: Double) {
         val opt = mc.options.entityDistanceScaling()
-        if (opt.get() != scale) opt.set(scale)
+        val stepped = Math.round(scale * 4) / 4.0
+        if (opt.get() != stepped) opt.set(stepped)
     }
 
     override fun onDisable() {

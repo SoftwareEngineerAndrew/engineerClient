@@ -36,7 +36,9 @@ object Spots {
         // A party's joiner: their own spawn (their plan's, else their class's default).
         else -> Sim.acting?.takeIf { !Sim.isHost(it) }?.let { Players.spotOf(it, "spawn") } ?: P3Plan.customSpot("spawn") ?: run {
             // Your first S1 terminal as your role lists it (Tank's 21: T2), else your first S1 job in menu order (the Mage's levers).
+            // i4, or i3 (the S3 device timed in S1): on that device.
             val first = if (P3Plan.isMine("S4 Target")) "S4 Target"
+                else if (P3Plan.isMine("S3 Arrows") && P3Plan.plan().times["S3 Arrows"]?.first == 1) "S3 Arrows"
                 else P3Plan.mine().firstOrNull { it.startsWith("S1 T") } ?: P3Plan.jobsIn(1).firstOrNull { P3Plan.isMine(it) }
             first?.let { j -> Party.STANDS[j]?.let { startLook(j).let { l -> Spot(j, it.x, it.y, it.z, l.first, l.second) } } } ?: SS
         }
@@ -46,9 +48,11 @@ object Spots {
      * How you face at P3's first tick on each job spot, as recorded: the S1 levers yaw 357-25 / pitch -22..-16, the S4 target 281-286 / 17-21,
      * T4 about 10-44 / 0-2, T2 -181 / 48 and Simon Says -131 / 1.4; the rest face 180 / 0 (not measured).
      */
-    private fun startLook(job: String): Pair<Float, Float> = when (job) {
+    fun startLook(job: String): Pair<Float, Float> = when (job) {
         "S1 east lever", "S1 west lever" -> 10f to -19f
         "S4 Target" -> 283f to 19f
+        // On the 3rd device, facing its arrow frames (as on Hypixel).
+        "S3 Arrows" -> 89.7f to 3.2f
         "S1 T4" -> 40f to 1f
         "S1 T2" -> 179f to 48f
         "S1 SS" -> -131f to 1.4f

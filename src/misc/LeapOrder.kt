@@ -387,7 +387,10 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         if (to != dragging) slide(dragging, other[0], other[1])
         if (to != dragging) {
             val t = names[to]; names[to] = names[dragging]; names[dragging] = t
-            LeapOrder.set(names.toList())
+            // Odin's order has no gaps: slide everyone up to the first free spots.
+            val order = names.filter { it.isNotEmpty() }
+            for (i in 0 until 4) names[i] = order.getOrElse(i) { "" }
+            LeapOrder.set(order)
             mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
         }
         dragging = -1
