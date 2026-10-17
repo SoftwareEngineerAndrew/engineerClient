@@ -415,6 +415,10 @@ object PovCapture {
         )
         var pose: PovPose.Restore? = null
         var cullingWas: Boolean? = null
+        // Set once the nested render starts (nothing to undo before it), with the model-view stack's depth then
+        // (-1 if it can't be read: everything else is still put back).
+        var renderStarted = false
+        var modelViewDepth = -1
 
         try {
             val worldPartialTicks = deltaTracker.getGameTimeDeltaPartialTick(false)
@@ -450,8 +454,13 @@ object PovCapture {
             carried?.into(gameRenderer.gameRenderState().levelRenderState)
             carried = null
 
+            modelViewDepth = readModelViewDepth()
+            renderStarted = true
             gameRenderer.renderLevel(deltaTracker)
         } finally {
+            // First, so the vanilla state is whole again before anything else is touched. Does nothing
+            // when the render finished normally.
+            if (renderStarted) EngineerClient.safely("pov render unwind") { unwindLevelRender(modelViewDepth) }
             invoker.`ec$setMainRenderTarget`(saved.target)
             window.setWidth(saved.windowWidth)
             window.setHeight(saved.windowHeight)
@@ -606,6 +615,66 @@ object PovCapture {
 
     private fun findByName(name: String): Player? =
         EngineerClient.mc.level?.players()?.firstOrNull { it.name.string.equals(name, ignoreCase = true) }
+
+    /**
+     * `LevelRenderer.render` takes shared state at its start and gives it back at its end, with no `finally`, so a
+     * pass that threw part way leaves all of it taken. Put back here exactly as the vanilla tail would have (and a
+     * no-op when the render ran to its end):
+     *  - the one shared `PreparedFrame` (next real frame dies on "PreparedFrame already in use"),
+     *  - the model-view stack, one push deep with the teammate's view rotation (every later frame would be rotated),
+     *  - the `LevelTargetBundle` handles (a later frame without a transparency chain would reuse the stale ones).
+     * Left alone as harmless: the profiler push/pop (only unbalanced while the F3 profiler is recording).
+     */
+    private fun unwindLevelRender(depthBefore: Int) {
+        // Each part on its own, so one failing reflection cannot stop the others.
+        EngineerClient.safely("pov frame release") { releasePreparedFrame() }
+        if (depthBefore >= 0) EngineerClient.safely("pov model view unwind") {
+            val stack = RenderSystem.getModelViewStack()
+            var depth = readModelViewDepth()
+            if (depth > depthBefore) {
+                while (depth > depthBefore) { stack.popMatrix(); depth-- }
+                EngineerClient.logger.info("[ec] pov: popped the model-view stack a failed pass left pushed")
+            }
+        }
+        EngineerClient.safely("pov targets clear") {
+            (TARGETS_FIELD.get(EngineerClient.mc.levelRenderer) as net.minecraft.client.renderer.LevelTargetBundle).clear()
+        }
+    }
+
+    /** JOML's Matrix4fStack keeps its depth in the private int `curr`. -1 if that cannot be read: nothing is popped. */
+    private fun readModelViewDepth(): Int =
+        try { DEPTH_FIELD.getInt(RenderSystem.getModelViewStack()) } catch (t: Throwable) { warnReflectionOnce(t); -1 }
+
+    private var reflectionWarned = false
+    private fun warnReflectionOnce(t: Throwable) {
+        if (reflectionWarned) return
+        reflectionWarned = true
+        EngineerClient.logger.warn("[ec] pov: cannot read vanilla render state for the unwind", t)
+    }
+
+    /**
+     * `LevelRenderer.render` takes the one shared `PreparedFrame` and frees it at its end: a pass that threw part way
+     * leaves it taken. Freed here (as the render would have), or, if that throws too, simply marked free.
+     */
+    private fun releasePreparedFrame() {
+        val dispatcher = EngineerClient.mc.gameRenderer.featureRenderDispatcher()
+        val frame = FRAME_FIELD.get(dispatcher) as net.minecraft.client.renderer.feature.FeatureRenderDispatcher.PreparedFrame
+        if (CONTEXT_FIELD.get(frame) == null) return
+        try {
+            frame.close()
+        } catch (t: Throwable) {
+            EngineerClient.logger.warn("[ec] pov: closing the left-over frame failed, marking it free", t)
+            CONTEXT_FIELD.set(frame, null)
+            STORAGE_FIELD.set(frame, null)
+        }
+        EngineerClient.logger.info("[ec] pov: freed the frame a failed pass left in use")
+    }
+
+    private val FRAME_FIELD by lazy { net.minecraft.client.renderer.feature.FeatureRenderDispatcher::class.java.getDeclaredField("preparedFrame").apply { isAccessible = true } }
+    private val CONTEXT_FIELD by lazy { net.minecraft.client.renderer.feature.FeatureRenderDispatcher.PreparedFrame::class.java.getDeclaredField("context").apply { isAccessible = true } }
+    private val STORAGE_FIELD by lazy { net.minecraft.client.renderer.feature.FeatureRenderDispatcher.PreparedFrame::class.java.getDeclaredField("submitNodeStorage").apply { isAccessible = true } }
+    private val TARGETS_FIELD by lazy { net.minecraft.client.renderer.LevelRenderer::class.java.getDeclaredField("targets").apply { isAccessible = true } }
+    private val DEPTH_FIELD by lazy { org.joml.Matrix4fStack::class.java.getDeclaredField("curr").apply { isAccessible = true } }
 
     private fun fail(t: Throwable) {
         disabledForSession = true
