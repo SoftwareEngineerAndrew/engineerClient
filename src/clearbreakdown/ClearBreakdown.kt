@@ -2,6 +2,7 @@ package com.engineerclient.clearbreakdown
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
+import com.engineerclient.adr.OnlineLink
 import com.engineerclient.p3sim.P3Sim
 import com.engineerclient.p3sim.Practice
 import com.engineerclient.splits.SplitTracker
@@ -81,6 +82,9 @@ object ClearBreakdown : Module(
     private val before = ConcurrentHashMap<String, Long>()
     /** Party members' sightings of where players are: (sender, player) -> room key, "" for no room. */
     val relayed = HashMap<Pair<String, String>, String>()
+    /** Where this client last told the party it sees each player (room key, "" for no room). */
+    private val toldSeen = HashMap<String, String>()
+    private var relayTick = 0
 
     val me: String get() = mc.user.name
 
@@ -147,6 +151,11 @@ object ClearBreakdown : Module(
             EngineerClient.safely("clear breakdown secrets") { if (active) secrets.observe(roomKey(room), roomName(room), foundSecrets) }
         }
 
+        // Party members' sightings, through ADR Online.
+        OnlineLink.onRelay = { text ->
+            RelayCodec.decode(text)?.let { (from, items) -> mc.execute { EngineerClient.safely("clear breakdown relay") { fromParty(from, items) } } }
+        }
+
         OdinSync.onPayload = { player, tiles, found ->
             val key = tiles.sorted().joinToString(",")
             mc.execute {
@@ -167,7 +176,7 @@ object ClearBreakdown : Module(
     private fun reset() {
         clears = ClearCredit(); secrets = SecretCredit()
         active = false; won = false
-        roster.clear(); before.clear(); relayed.clear()
+        roster.clear(); before.clear(); relayed.clear(); toldSeen.clear()
         Sightings.reset()
     }
 
@@ -209,6 +218,42 @@ object ClearBreakdown : Module(
         val where = presence()
         clears.tick(where)
         secrets.tick(where)
+        if (++relayTick % 20 == 0) toParty()
+    }
+
+    /**
+     * Once a second: what this client saw for the party - its secret sightings, and where it sees
+     * players by their entity (room changes only, and when it stops seeing someone). Map icons and
+     * Odin's counts aren't sent; every client has those.
+     */
+    private fun toParty() {
+        val items = ArrayList<Relayed>(Sightings.outbox)
+        Sightings.outbox.clear()
+        val team = DungeonUtils.dungeonTeammates.associateBy { it.name }
+        val seen = HashMap<String, String>()
+        for (name in roster.keys) {
+            val p = team[name] ?: continue
+            if (p.isDead) continue
+            val e = (if (name == me) mc.player else p.entity) ?: continue
+            seen[name] = roomAt(e.x, e.z)?.let(::roomKey) ?: ""
+        }
+        for ((name, room) in seen) if (toldSeen.put(name, room) != room) items += Relayed.Presence(name, room)
+        for (name in toldSeen.keys.filter { it !in seen }) { toldSeen.remove(name); items += Relayed.Presence(name, null) }
+        if (items.isNotEmpty()) OnlineLink.sendRelay(RelayCodec.frames(items))
+    }
+
+    /** A party member's sightings: only about people in this run, and only from one of them. */
+    private fun fromParty(from: String, items: List<Relayed>) {
+        if (!active || from == me || from !in roster) return
+        for (item in items) when (item) {
+            is Relayed.Secret -> {
+                val candidates = item.candidates.filter { it in roster }.toSet()
+                if (candidates.isNotEmpty()) secrets.sighting(item.key, item.roomKey, item.roomName, candidates, item.exact, System.currentTimeMillis())
+            }
+            is Relayed.Presence -> if (item.player in roster) {
+                if (item.roomKey == null) relayed.remove(from to item.player) else relayed[from to item.player] = item.roomKey
+            }
+        }
     }
 
     /** Which room each player is in this tick (null: none, dead or gone). */

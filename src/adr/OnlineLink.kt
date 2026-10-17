@@ -137,6 +137,17 @@ object OnlineLink {
         sending = sending.handle { _, _ -> Unit }.thenCompose { ws.sendText(text, true) }
     }
 
+    /**
+     * Clear Breakdown's frames ({"t":"cb",...}) as the site relays them from party members who name
+     * each other in their party reports; everything else the site sends is ignored.
+     */
+    @Volatile var onRelay: ((String) -> Unit)? = null
+
+    /** Clear Breakdown's frames for the party, in line with the rest; nothing goes without a socket. */
+    fun sendRelay(frames: List<String>) {
+        for (f in frames) sendText(f)
+    }
+
     /** ADR turned off: offline. */
     fun close() {
         val ws = socket
@@ -145,7 +156,19 @@ object OnlineLink {
     }
 
     private class Listener : WebSocket.Listener {
-        override fun onText(ws: WebSocket, data: CharSequence, last: Boolean): CompletionStage<*>? { ws.request(1); return null }
+        // A frame can come in parts: whole ones only.
+        private val text = StringBuilder()
+
+        override fun onText(ws: WebSocket, data: CharSequence, last: Boolean): CompletionStage<*>? {
+            text.append(data)
+            if (last) {
+                val whole = text.toString()
+                text.setLength(0)
+                if (whole.startsWith("{\"t\":\"cb\"")) EngineerClient.safely("adr online relay") { onRelay?.invoke(whole) }
+            }
+            ws.request(1)
+            return null
+        }
         override fun onClose(ws: WebSocket, statusCode: Int, reason: String): CompletionStage<*>? {
             if (socket === ws) { if (statusCode == 4002) { stopped = true; socket = null } else retryLater() }
             return null
