@@ -42,7 +42,7 @@ object SimWorld {
     fun open() {
         mc.execute {
             if (P3Sim.inSim) return@execute
-            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening P3 Sim Beta"))
+            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening ADS"))
             opening = true
             try { openOrCreate() } catch (t: Throwable) { failed("open", t) }
         }
@@ -62,7 +62,7 @@ object SimWorld {
     fun leave() {
         mc.execute {
             if (!P3Sim.inSim) return@execute
-            mc.disconnectFromWorld(Component.literal("Leaving P3 Sim Beta"))
+            mc.disconnectFromWorld(Component.literal("Leaving ADS"))
             mc.setScreen(TitleScreen())
         }
     }
@@ -71,8 +71,8 @@ object SimWorld {
     fun rebuild() {
         mc.execute {
             // A party's world is the host's: only they can rebuild it.
-            if (P3Sim.inSim && !P3Sim.localSim) { mc.player?.sendSystemMessage(Component.literal("§8[§6P3 Sim Beta§8] §7Only the host can rebuild the world.")); return@execute }
-            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding P3 Sim Beta"))
+            if (P3Sim.inSim && !P3Sim.localSim) { mc.player?.sendSystemMessage(Component.literal("§8[§6ADS§8] §7Only the host can rebuild the world.")); return@execute }
+            if (mc.level != null) mc.disconnectFromWorld(Component.literal("Rebuilding ADS"))
             opening = true
             try {
                 mc.levelSource.createAccess(NAME).use { it.deleteLevel() }

@@ -30,7 +30,7 @@ import java.util.Locale
  * A tab's button is green while it's open; a second click closes it. Toggles are green when on. Every
  * button says what it does when hovered; changes save at once, starts and teleports close the menu.
  */
-class SimRestartScreen : Screen(Component.literal("P3 Sim Beta")) {
+class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
     private enum class Tab { PLAN, ADVANCED, SETTINGS, TELEPORT, PRACTICE, BOSS }
 
     private lateinit var panel: LinearLayout

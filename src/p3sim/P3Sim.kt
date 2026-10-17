@@ -27,7 +27,8 @@ import net.minecraft.network.chat.Component
 import com.mojang.blaze3d.platform.InputConstants
 
 /**
- * P3 Sim: F7's boss fight in a singleplayer world of its own ("p3sim"), to practice it alone.
+ * ADS (Advanced Dungeon Simulator, once P3 Sim): F7's boss fight in a singleplayer world of its own ("p3sim"), to
+ * practice it alone. The code, files and world keep the p3sim name (saved runs, plans and settings stay where they are).
  *
  * The world is the real arena at Hypixel's coordinates; the fight runs on the world's own
  * (integrated) server ([SimServer], [Fight]): Goldor, terminals, levers, devices, gates, death
@@ -38,12 +39,17 @@ import com.mojang.blaze3d.platform.InputConstants
  * [SimServer.isSim] (the server), both of which are only true in that one singleplayer world.
  */
 object P3Sim : Module(
-    name = "P3 Sim Beta",
+    name = "ADS",
     category = Category.custom("Engineer Client"),
-    description = "F7's boss in a singleplayer world of its own: /p3sim (or the title screen button) opens it. Only ever active in that world.",
+    description = "Advanced Dungeon Simulator: F7's boss in a singleplayer world of its own. /ads (or the title screen button) opens it. Only ever active in that world.",
     key = null,
 ) {
-    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the P3 Sim Beta menu (a big Restart) in the sim world, as /p3sim and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
+    /** The short name, on buttons and in chat. */
+    const val NAME = "ADS"
+    /** The full name. */
+    const val FULL_NAME = "Advanced Dungeon Simulator"
+
+    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the ADS menu (a big Restart) in the sim world, as /ads and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
         if (inSim) SimActions.send("restart")
     }
@@ -259,13 +265,16 @@ object P3Sim : Module(
                 .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Loadouts.open(p) } }; 1 })
         }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            val cmd = ClientCommands.literal("p3sim").executes { openMenuOrSim(); 1 }
-            for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {
-                if (inSim) SimActions.send("start", "what" to s.name) else SimWorld.open(); 1
-            })
-            cmd.then(ClientCommands.literal("stop").executes { SimActions.send("stop"); 1 })
-            cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
-            dispatcher.register(cmd)
+            // /ads, and /p3sim as before.
+            for (name in listOf("ads", "p3sim")) {
+                val cmd = ClientCommands.literal(name).executes { openMenuOrSim(); 1 }
+                for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {
+                    if (inSim) SimActions.send("start", "what" to s.name) else SimWorld.open(); 1
+                })
+                cmd.then(ClientCommands.literal("stop").executes { SimActions.send("stop"); 1 })
+                cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
+                dispatcher.register(cmd)
+            }
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
             dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
@@ -277,24 +286,22 @@ object P3Sim : Module(
             EngineerClient.safely("p3sim ghost guard") { GhostGuard.clientTick() }
         }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
-            // The title screen's Minecraft Realms button becomes two: P3 Sim on the left half, Join
-            // Hypixel on the right. No Realms button (another mod's menu): a small P3 Sim button in the corner.
-            if (screen is TitleScreen) EngineerClient.safely("p3sim title button") {
+            // The title screen: ADS above Singleplayer, the same size; the Minecraft Realms button becomes Join Hypixel.
+            // No Singleplayer button (another mod's menu): a small ADS button in the corner.
+            if (screen is TitleScreen) EngineerClient.safely("ads title button") {
                 val widgets = Screens.getWidgets(screen)
-                val realms = widgets.filterIsInstance<Button>()
-                    .firstOrNull { (it.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key == "menu.online" }
-                if (realms == null) {
-                    widgets.add(Button.builder(Component.literal("P3 Sim Beta")) { SimWorld.open() }.bounds(w - 84, 4, 80, 16).build())
-                    return@safely
-                }
-                val half = (realms.width - 4) / 2
+                fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
+                val buttons = widgets.filterIsInstance<Button>()
+                val single = buttons.firstOrNull { key(it) == "menu.singleplayer" }
+                widgets.add(Button.builder(Component.literal(NAME)) { SimWorld.open() }.let {
+                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width, single.height) else it.bounds(w - 84, 4, 80, 16)
+                }.build())
+                val realms = buttons.firstOrNull { key(it) == "menu.online" } ?: return@safely
                 widgets.remove(realms)
-                widgets.add(Button.builder(Component.literal("P3 Sim Beta")) { SimWorld.open() }
-                    .bounds(realms.x, realms.y, half, realms.height).build())
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
-                    .bounds(realms.x + realms.width - half, realms.y, half, realms.height).build())
+                    .bounds(realms.x, realms.y, realms.width, realms.height).build())
             }
-            // In the sim, Esc's P3 Sim Menu takes Open to LAN's place (right under Save and Quit if that
+            // In the sim, Esc's ADS Menu takes Open to LAN's place (right under Save and Quit if that
             // isn't there), and the whole menu shifts so the cursor, which opening it puts in the middle of
             // the screen, is already on it.
             if (screen is net.minecraft.client.gui.screens.PauseScreen && inSim) EngineerClient.safely("p3sim pause button") {
@@ -303,7 +310,7 @@ object P3Sim : Module(
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val lan = buttons.firstOrNull { key(it) in LAN_KEYS }
                 val quit = buttons.firstOrNull { key(it) in QUIT_KEYS } ?: buttons.maxByOrNull { it.y }
-                val main = Button.builder(Component.literal("§6P3 Sim Beta Menu")) { mc.setScreen(SimRestartScreen()) }
+                val main = Button.builder(Component.literal("§6$NAME Menu")) { mc.setScreen(SimRestartScreen()) }
                 val b = when {
                     lan != null -> { widgets.remove(lan); main.bounds(lan.x, lan.y, lan.width, lan.height) }
                     quit != null -> main.bounds(quit.x, quit.y + quit.height + 4, quit.width, 20)
