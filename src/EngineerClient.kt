@@ -79,7 +79,7 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            com.engineerclient.practice.TermInfo, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
+            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
         )
     }
 
@@ -102,6 +102,8 @@ object EngineerClient : ClientModInitializer {
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }
+        safely("terminals look") { com.engineerclient.practice.TerminalsStatusLook.install() }
+        safely("term info") { com.engineerclient.practice.TermInfo.init() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }

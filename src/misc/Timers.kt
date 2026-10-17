@@ -1,5 +1,8 @@
 package com.engineerclient.misc
 
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.HudElement
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
@@ -41,12 +44,14 @@ import com.engineerclient.storm.StormCrush
  *    Hypixel's boss update: he is in Purple's zone 107-113 ticks after his lightning line, crushed on
  *    the first check from lightning + 109 (t 660): the reads at t 599 and t 619 (both crush, 97% and
  *    100% with him there). Gone once its pillar steps from one of them.
- *  - Necron: he takes the platform 60 ticks after "I'm afraid, your journey ends now."
+ *  - Section Time: when a terminal section is done, how long it took (TermInfo), for Section Time Seconds.
+ *  - Necron: the platform gives way under you 25 server ticks after "I'm afraid, your journey ends now." (the first
+ *    players resting on it start to fall 25-26 ticks after it in 32 recorded runs; later only with lag).
  */
 object Timers : Module(
     name = "Timers",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Storm and Purple's pad, and Necron (Goldor's death tick: Odin's Goldor Hud).",
+    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Storm and Purple's pad, terminal section times, and Necron's drop (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {
     // --- Clear Countdown ---------------------------------------------------------------------------
@@ -91,7 +96,11 @@ object Timers : Module(
     private val purplePadHud by HUD("Purple Pad", "Storm: counts down to the pad read to be on Purple's pad for (t 599, then t 619 if that one's missed), so he's crushed the moment he gets there. Gone once the pillar comes down.", true, 10, 160, 1.5f) { example ->
         if (example) timer("Purple", 30, PAD_TOTAL, true) else padLeft(purpleReads())?.let { timer("Purple", it, PAD_TOTAL) } ?: (0 to 0)
     }
-    private val necronHud by HUD("Necron Drop", "Counts down to Necron taking the platform, 3 s after \"I'm afraid, your journey ends now.\"", true, 10, 175, 1.5f) { example ->
+    private val sectionHud: HudElement by HUD("Section Time", "When a terminal section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.", true, 420, 330, 5f) { example ->
+        draw(if (example) "§514.35" else com.engineerclient.practice.TermInfo.sectionTime(sectionSeconds) ?: return@HUD 0 to 0)
+    }
+    private val sectionSeconds: Double by NumberSetting("Section Time Seconds", 1.5, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionHud.enabled }
+    private val necronHud by HUD("Necron Drop", "Counts down to the platform giving way under you, 1.25 s after Necron's \"I'm afraid, your journey ends now.\"", true, 10, 175, 1.5f) { example ->
         if (example) timer("Necron", 35, NECRON_DROP, true) else left(necronDropAt, NECRON_DROP)?.let { timer("Necron", it, NECRON_DROP) } ?: (0 to 0)
     }
 
@@ -105,7 +114,8 @@ object Timers : Module(
     /** Giga Lightning strikes this long into his phase, and this long after "I'd be happy to show you what that's like!". */
     private const val LIGHTNING = 520
     private const val STRIKE_AFTER_SHOW = 33
-    private const val NECRON_DROP = 60
+    /** Necron takes the platform this long after "I'm afraid, your journey ends now." (25-26 at the earliest in 32 recorded runs). */
+    private const val NECRON_DROP = 25
     /** A pad read this long before a check brings its pillar down on him by then, the read 20 earlier too. */
     private const val PAD_LEAD = 41
     /** He's in Purple's zone for the first check this long after his lightning line. */
@@ -278,7 +288,7 @@ object Timers : Module(
     init {
         clearHud.enabled = true; portalHud.enabled = true
         maxorHud.enabled = true; crystalHud.enabled = true; stormCheckHud.enabled = true; stormLightningHud.enabled = true
-        necronHud.enabled = true; purplePadHud.enabled = true
+        necronHud.enabled = true; purplePadHud.enabled = true; sectionHud.enabled = true
 
         on<MessageEvent.Chat> { chat(message) }
 
