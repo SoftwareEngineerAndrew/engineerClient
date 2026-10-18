@@ -126,7 +126,7 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
             GONE - 20 -> necron.dieAnim()
             GONE -> necron.remove()
             STATS -> stats(first = true)
-            STATS + 3 -> { stats(first = false); Sim.note("Done. §fMenu§7 to go again.") }
+            STATS + 3 -> { stats(first = false); if (com.engineerclient.p3sim.run.Runs.current == null) Sim.note("Done. §fMenu§7 to go again.") }
         }
         move()
         if (t % 20 == barPhase) BossBar.progress(round(health() * 100) / 100f)
@@ -246,6 +246,8 @@ class P4Necron(val fromP3: Boolean = false) : Fight.Phase("P4") {
 
     /** [p]'s copy: their own class's experience and damage. */
     private fun stats(first: Boolean, p: net.minecraft.server.level.ServerPlayer) {
+        // A full run prints its own end screen with the real score (EngineModule, the score module); the made-up numbers are for the practice.
+        if (com.engineerclient.p3sim.run.Runs.current != null) return
         val bar = "§a§l" + "▬".repeat(64)
         val classes = CLASSES.split(",")
         val mine = classes[Party.CLASSES.indexOf(Players.classOf(p)).coerceIn(0, 4)]
