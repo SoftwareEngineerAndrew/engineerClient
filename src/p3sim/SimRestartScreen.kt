@@ -60,7 +60,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
 
         // The full run: its start screen, and while one is on, a restart of the room or of the whole run (savepoint restores, not a rebuilt world).
-        addRenderableWidget(Button.builder(Component.literal("§bFull Run")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
+        if (com.engineerclient.EngineerClient.BETA) addRenderableWidget(Button.builder(Component.literal("§bFull Run")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
             .tooltip(tip("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first. Rebuilds the world."))
             .bounds(cx - RESTART_W / 2, restartY - 2 * ROW, RESTART_W, 20).build())
         if (com.engineerclient.p3sim.run.ClientRun.inClear) {
