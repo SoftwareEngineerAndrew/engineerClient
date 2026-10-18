@@ -54,11 +54,12 @@ object SimServer {
 
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { s ->
-            if (isSim(s)) { server = s; EngineerClient.logger.info("[p3sim] sim server starting") }
+            if (isSim(s)) { server = s; EngineerClient.logger.info("[p3sim] sim server starting"); com.engineerclient.p3sim.run.EngineSpikes.mark("server-starting") }
             SimWorld.opening = false
         }
         ServerLifecycleEvents.SERVER_STARTED.register { s ->
             if (s !== server) return@register
+            com.engineerclient.p3sim.run.EngineSpikes.mark("server-started")
             EngineerClient.safely("p3sim started") {
                 rules(s)
                 commands(s)
@@ -69,15 +70,25 @@ object SimServer {
         ServerLifecycleEvents.SERVER_STOPPING.register { s ->
             if (s !== server) return@register
             // Saved as built: no fight entities, every changed block back.
+            // A run ends first (its modules clean up, the view distance pin is released), then the boss sim's own cleanup as before.
+            EngineerClient.safely("p3sim stopping run") { com.engineerclient.p3sim.run.Runs.stop() }
             EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
         }
         ServerLifecycleEvents.SERVER_STOPPED.register { s ->
             if (s !== server) return@register
             server = null
             Arena.unload()
+            // The regions this world used (a run's dungeon, the clipped arena) go with it; the next world's, registered already, stay.
+            com.engineerclient.p3sim.run.WorldRegions.worldStopped()
+            com.engineerclient.p3sim.run.ArenaRegion.reset()
+            com.engineerclient.p3sim.run.LagRuntime.reset()
         }
         ServerTickEvents.END_SERVER_TICK.register { s ->
-            if (s === server) EngineerClient.safely("p3sim tick") { Fight.tick(s) }
+            if (s === server) {
+                EngineerClient.safely("p3sim tick") { Fight.tick(s) }
+                // The lag layer last: it stalls this thread (a freeze) once the tick's work is done.
+                EngineerClient.safely("ads lag") { com.engineerclient.p3sim.run.EngineModule.lagTick(s) }
+            }
         }
         ServerPlayConnectionEvents.JOIN.register { handler, _, s ->
             if (s === server) EngineerClient.safely("p3sim join") { Fight.join(handler.player) }
