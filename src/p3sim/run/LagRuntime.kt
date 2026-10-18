@@ -2,6 +2,7 @@ package com.engineerclient.p3sim.run
 
 import com.engineerclient.p3sim.pack.Packs
 import net.minecraft.server.MinecraftServer
+import net.minecraft.util.Util
 import org.slf4j.LoggerFactory
 import java.lang.reflect.Field
 
@@ -90,7 +91,8 @@ object LagRuntime {
         // The server fell [behind] ticks behind; the burst recovers [recoveredTicks] of them and the rest are forgotten.
         val keep = ev.recoveredTicks.coerceAtMost(behind)
         val forget = behind - keep
-        if (forget > 0) nextTickField?.let { f -> f.setLong(server, f.getLong(server) + forget * (LagGenerator.TICK_MS * 1e6).toLong()) }
+        // Never past now: the forgotten ticks only stop vanilla from running them, they must not make it wait.
+        if (forget > 0) nextTickField?.let { f -> f.setLong(server, minOf(f.getLong(server) + forget * (LagGenerator.TICK_MS * 1e6).toLong(), Util.getNanos())) }
         burstLeft = LagBurst.ticksFor(keep, burstRate)
         lastTickNs = System.nanoTime()
     }
@@ -99,7 +101,9 @@ object LagRuntime {
     private fun behindTicks(server: MinecraftServer): Int? {
         lookField()
         val f = nextTickField ?: return null
-        val behindNs = System.nanoTime() - f.getLong(server)
+        // The server's own clock: its next-tick time is in Util.getNanos' frame, which is not System.nanoTime's (comparing the two once
+        // pushed the next tick days ahead, and the server, waiting for it, never ticked or stopped again).
+        val behindNs = Util.getNanos() - f.getLong(server)
         return if (behindNs <= 0) 0 else (behindNs / (LagGenerator.TICK_MS * 1e6)).toInt()
     }
 
