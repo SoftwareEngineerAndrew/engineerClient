@@ -24,6 +24,8 @@ object P3Plan {
     /** The menu's Theoretical (Prototype 1, before it, isn't shown: a saved choice of it becomes this). */
     val THEORETICAL = SKILLS.indexOf("Theoretical")
     private val PROTOTYPE_1 = SKILLS.indexOf("Prototype 1")
+    /** Between Advanced PF and Theoretical in the menu (saved last: [Roles.PRESETS]). */
+    val NEAR_OPTIMAL = SKILLS.indexOf("Near Optimal")
 
     /**
      * Where each early enter stands (into: 5 = the core, just outside it in S4; 6 = the recore,
