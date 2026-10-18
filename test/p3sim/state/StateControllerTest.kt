@@ -40,9 +40,9 @@ class StateControllerTest {
 
     @Test fun theCountdownRunsOnTheMeasuredClock() {
         val r = Rig()
-        // delay 40 + 60 + 20 lead: T0 is 120 ticks after the run began
-        assertEquals(220, r.run.t0Tick)
-        assertEquals(-120, r.run.t)
+        // delay 60 + 60 + 20 lead: T0 is 140 ticks after the run began
+        assertEquals(240, r.run.t0Tick)
+        assertEquals(-140, r.run.t)
         val a = r.run.state.players
         StatePlans.addPlayer(r.run, "Ann"); StatePlans.addPlayer(r.run, "Bo", bot = true)
         r.until(300)
