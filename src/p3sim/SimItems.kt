@@ -1681,7 +1681,7 @@ object SimItems {
     /**
      * A balloon cell that stops it: cell level, so stairs, slabs and walls are solid. Passable:
      * air, liquids, fire, levers, buttons, signs, torches, tripwire, pressure plates, carpet, heads, grass, light,
-     * ladders, vines and glass panes (TNT, plants, doors and bars unresolved).
+     * ladders and vines (TNT, plants, doors and bars unresolved). Glass panes stop it, a whole cell as any block.
      */
     private fun bonzoSolid(at: Vec3): Boolean {
         val s = state(floor(at.x).toInt(), floor(at.y).toInt(), floor(at.z).toInt())
@@ -1691,9 +1691,12 @@ object SimItems {
             b is TripWireHookBlock || b is net.minecraft.world.level.block.BasePressurePlateBlock || b is net.minecraft.world.level.block.CarpetBlock ||
             b is net.minecraft.world.level.block.AbstractSkullBlock || b is net.minecraft.world.level.block.TallGrassBlock ||
             b is net.minecraft.world.level.block.LightBlock || b is LadderBlock || b is net.minecraft.world.level.block.VineBlock) return false
-        if (b is net.minecraft.world.level.block.IronBarsBlock && net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).path.endsWith("glass_pane")) return false
         return true
     }
+
+    /** A glass pane (any colour): the balloon and the Jerry bullet stop in its whole cell, not just its thin post. */
+    private fun isGlassPane(s: BlockState) =
+        s.block is net.minecraft.world.level.block.IronBarsBlock && net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(s.block).path.endsWith("glass_pane")
 
     /** One of the 9 balloon heads, uniformly random. */
     private val BALLOON_HASHES = listOf(
@@ -1782,10 +1785,12 @@ object SimItems {
         Sim.level.sendParticles(ParticleTypes.POOF, true, true, b.x, b.y, b.z, 1, 0.0, 0.0, 0.0, 0.0)
     }
 
-    /** A bullet point inside a block's collision shape (Hypixel's exact solidity rule is unverified). */
+    /** A bullet point inside a block's collision shape, or anywhere in a glass pane's cell (Hypixel's exact solidity rule is unverified). */
     private fun jerrySolid(b: Vec3): Boolean {
         val pos = BlockPos.containing(b)
-        val shape = Sim.level.getBlockState(pos).getCollisionShape(Sim.level, pos, CollisionContext.empty())
+        val s = Sim.level.getBlockState(pos)
+        if (isGlassPane(s)) return true
+        val shape = s.getCollisionShape(Sim.level, pos, CollisionContext.empty())
         return !shape.isEmpty && shape.toAabbs().any { it.move(pos).contains(b) }
     }
 
