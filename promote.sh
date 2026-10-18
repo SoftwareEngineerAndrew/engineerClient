@@ -95,6 +95,8 @@ const rules = [
   ['--title "EngineerClient for Minecraft $MC"', '--title "ADM for Minecraft $MC"', true],
   // Panel, prefix, commands, text.
   ['Category.custom("Engineer Client"', 'Category.custom("ADM"', true],
+  // ADM hides the beta's unfinished ADS buttons: the title screen's Run and GUI, the ADS menu's Full Run.
+  ['const val BETA = true', 'const val BETA = false', true],
   ['const val PREFIX = "§8[§6EC§8] "', 'const val PREFIX = "§8[§6ADM§8] "', true],
   ['Added by engineerClient.', 'Added by ADM.', true],
   ['desc = "engineerClient\'s solver', 'desc = "ADM\'s solver', false],
