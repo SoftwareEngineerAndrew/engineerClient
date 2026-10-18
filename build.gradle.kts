@@ -27,6 +27,13 @@ sourceSets.main {
     resources.setSrcDirs(listOf("src/resources"))
 }
 
+// Tests for the headless model classes, in test/ laid out like src/. Nothing in test/ touches Minecraft.
+sourceSets.test {
+    java.setSrcDirs(listOf("test"))
+    kotlin.setSrcDirs(listOf("test"))
+    resources.setSrcDirs(listOf<String>())
+}
+
 repositories {
     mavenCentral()
     maven("https://api.modrinth.com/maven") { content { includeGroup("maven.modrinth") } }
@@ -55,6 +62,10 @@ dependencies {
     // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
     // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
     compileOnly("maven.modrinth:devonian:k8Mog4wx")
+
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation(kotlin("test-junit5"))
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks {
@@ -71,6 +82,10 @@ tasks {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_25
         }
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     compileJava {
