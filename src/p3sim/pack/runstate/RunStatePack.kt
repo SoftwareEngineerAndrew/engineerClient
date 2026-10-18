@@ -215,11 +215,14 @@ class RunStatePack internal constructor(
         const val SUPPORTED_VERSION = 1
 
         /** Loads `runstate.json.gz` from [dir]. Null, with the reason in [report], when missing/unreadable/wrong format. Never throws. */
-        fun load(dir: Path, report: PackReport = PackReport()): RunStatePack? {
-            val path = dir.resolve(PackFiles.RUNSTATE)
-            if (!Files.isRegularFile(path)) { report.error("The run-state tables ${PackFiles.RUNSTATE} are missing from $dir."); return null }
+        fun load(dir: Path, report: PackReport = PackReport()): RunStatePack? = load(PackSource.ofDir(dir), report)
+
+        /** [load] from a resolved [PackSource] (the jar's copy or the override folder's). */
+        fun load(source: PackSource, report: PackReport = PackReport()): RunStatePack? {
+            val path = source.file(PackFiles.RUNSTATE)
+            if (path == null) { report.error("The run-state tables ${PackFiles.RUNSTATE} are missing from ${source.missingFrom}."); return null }
             val root = try { Files.newInputStream(path).use { readGzipJson(it) } } catch (e: Exception) {
-                report.error("The run-state tables ${PackFiles.RUNSTATE} are unreadable: ${e.message}"); return null
+                report.error("The run-state tables ${PackFiles.RUNSTATE} are unreadable${source.note(PackFiles.RUNSTATE)}: ${e.message}"); return null
             }
             return fromJson(root, report)
         }

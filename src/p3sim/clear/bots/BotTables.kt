@@ -118,7 +118,7 @@ class BotTables(private val pack: RunStatePack?, val floor: String = BotTuning.F
         const val DEFAULT_BLOOD_KEY = 300.0
         const val DEFAULT_DOOR_AFTER_KEY = 6.0
         // INVENTED stand-ins for the blood room's length and the wait after it: round numbers with a symmetric spread, not measured. A real
-        // run reads both from the local data pack; these only keep the planner working without one.
+        // run reads both from the run-state pack; these only keep the planner working without one.
         const val DEFAULT_CAMP_TICKS = 1000.0
         const val DEFAULT_PROVEN_TO_MAXOR = 100.0
         val CAMP_SHAPE = doubleArrayOf(0.8, 0.85, 0.9, 1.0, 1.1, 1.15, 1.2)
