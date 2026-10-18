@@ -62,7 +62,8 @@ object ConfigMigration {
      *  - Storm Phase's Crush Hitbox is Sub Splits' Show Crush Info (on only if Storm Phase was), its
      *    hitbox settings with it.
      *  - Term Info is gone: its HUD is Odin's Terminals Status (Look ADM, and switched on where ours was if
-     *    Odin's wasn't showing), Section Time a Timers HUD, the Core* settings Sub Splits'.
+     *    Odin's wasn't showing), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
+     *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -190,16 +191,18 @@ object ConfigMigration {
         }
 
         // Term Info is no module any more: its HUD is Odin's Terminals Status with the ADM look, Section Time a Timers
-        // HUD (on only if Section Times was), and Core Leap Highlight part of Sub Splits. The entry goes, so this runs once.
+        // HUD (on only if Section Times was), and Core Leap Highlight Recore's. The entry goes, so this runs once.
         module(modules, "Term Info")?.let { ti ->
             val on = ti["enabled"]?.asBoolean ?: true
             val from = settings(ti)
             fun hud(key: String) = from[key]?.takeIf { it.isJsonObject }?.asJsonObject
             fun bool(key: String, fallback: Boolean) = from[key]?.takeIf { it.isJsonPrimitive }?.asBoolean ?: fallback
 
-            val sub = settings(module(modules, "Sub Splits") ?: ensure("Sub Splits").also { it.addProperty("enabled", false) })
-            for ((k, v) in from.entrySet()) if (k.startsWith("Core ") && !sub.has(k)) sub.add(k, v)
-            if (!on) sub.addProperty("Core Leap Highlight", false)
+            if (module(modules, "Recore") == null) {
+                val recore = settings(ensure("Recore"))
+                for ((k, v) in from.entrySet()) if (k.startsWith("Core ")) recore.add(recoreKey(k), v)
+                if (!on) recore.addProperty("Core Leap Highlight", false)
+            }
 
             val timers = settings(ensure("Timers"))
             if (!timers.has("Section Time")) hud("Section Time")?.deepCopy()?.let {
@@ -225,6 +228,23 @@ object ConfigMigration {
                 write(odinFile, odin)
             }
             modules.remove(ti)
+            changed = true
+        }
+
+        // Core Leap Highlight and Paste Last In Core went from Sub Splits to Recore (on if either was in use there).
+        module(modules, "Sub Splits")?.let { ss ->
+            val sub = settings(ss)
+            val keys = sub.keySet().filter { it.startsWith("Core ") || it == "Paste Last In Core" }
+            if (keys.isEmpty()) return@let
+            fun bool(key: String, fallback: Boolean) = sub[key]?.takeIf { it.isJsonPrimitive }?.asBoolean ?: fallback
+            val subOn = ss["enabled"]?.asBoolean ?: true
+            // Made by the Term Info move just above (an install from before Sub Splits had them) or by Recore itself: kept as it is.
+            val recore = module(modules, "Recore") ?: ensure("Recore").also {
+                it.addProperty("enabled", subOn && (bool("Core Leap Highlight", true) || bool("Paste Last In Core", false)))
+                if (!subOn) settings(it).addProperty("Core Leap Highlight", false)
+            }
+            val to = settings(recore)
+            for (k in keys) sub.remove(k).let { if (!to.has(recoreKey(k))) to.add(recoreKey(k), it) }
             changed = true
         }
 
@@ -256,6 +276,9 @@ object ConfigMigration {
         }
         return changed
     }
+
+    /** A Core Leap setting's name in Recore: "Core Style" is "Style" there; Core Leap Highlight keeps its name. */
+    private fun recoreKey(key: String) = if (key == "Core Leap Highlight" || !key.startsWith("Core ")) key else key.removePrefix("Core ")
 
     private val RANDOM_STUFF_RENAMES = mapOf("Hide Scoreboard Lines" to "Clean Scoreboard", "Skip Loading Screen" to "Clean Loading Screen", "Hide Numbers in Numbers" to "Hide Numbers' Numbers")
 

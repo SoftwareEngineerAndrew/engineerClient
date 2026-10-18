@@ -5,7 +5,6 @@ import com.engineerclient.misc.Witherborn
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
@@ -149,36 +148,6 @@ object DungeonSplits : Module(
             draw(this, core.lines(serverTicks, mc.player?.name?.string, core.counted(aliveNames())))
         }
     )
-    private val pasteCore = registerSetting(
-        BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died.")
-    )
-    // Core Leap Highlight (drawn by CoreLeap).
-    internal val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.")
-    internal val coreDropdown by DropdownSetting("Core Leap Look", desc = "").withDependency { coreLeap }
-    internal val corePreview by BooleanSetting("Core Preview", false, desc = "Shows the highlight now, top right, as if someone were in the core (also over this menu), to try the looks below. Turn it off after.").withDependency { coreLeap && coreDropdown }
-    internal val coreStyle by SelectorSetting("Core Style", CoreStyle.QUADRANT, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.").withDependency { coreLeap && coreDropdown }
-    internal val coreColor by ColorSetting("Core Color", Color(255, 170, 0, 0.25f), true, desc = "The highlight's colour and opacity.").withDependency { coreLeap && coreDropdown }
-    internal val coreFill by SelectorSetting("Core Fill", CoreFill.SOLID, desc = "Solid, or fading out toward the crosshair (strongest at the screen's edge), or the other way round. Quadrant, Side and Top / Bottom.").withDependency { coreLeap && coreDropdown && coreStyle.area }
-    internal val coreGap by NumberSetting("Core Centre Gap", 0, 0..120, 2, desc = "Leaves this much room around the crosshair clear (Odin's boxes start 24 from the centre). Quadrant, Side, Top / Bottom, Corner Bracket.", unit = "px").withDependency { coreLeap && coreDropdown && coreStyle != CoreStyle.LEAP_BOX && coreStyle != CoreStyle.EDGE_GLOW }
-    internal val coreGlowDepth by NumberSetting("Core Glow Depth", 16, 4..50, 1, desc = "How far in from the edge the Edge Glow reaches, in % of the screen.", unit = "%").withDependency { coreLeap && coreDropdown && coreStyle == CoreStyle.EDGE_GLOW }
-    internal val coreBracketSize by NumberSetting("Core Bracket Size", 24, 6..120, 2, desc = "Length of the Corner Bracket's arms.", unit = "px").withDependency { coreLeap && coreDropdown && coreStyle == CoreStyle.BRACKET }
-    internal val coreBracketWidth by NumberSetting("Core Bracket Width", 3, 1..12, 1, desc = "Thickness of the Corner Bracket's arms.", unit = "px").withDependency { coreLeap && coreDropdown && coreStyle == CoreStyle.BRACKET }
-    internal val coreOutline by BooleanSetting("Core Outline", false, desc = "A line around the highlighted area. Quadrant, Side, Top / Bottom and Leap Box.").withDependency { coreLeap && coreDropdown && (coreStyle.area || coreStyle == CoreStyle.LEAP_BOX) }
-    internal val coreOutlineWidth by NumberSetting("Core Outline Width", 2, 1..8, 1, desc = "", unit = "px").withDependency { coreLeap && coreDropdown && coreOutline && (coreStyle.area || coreStyle == CoreStyle.LEAP_BOX) }
-    internal val coreOutlineColor by ColorSetting("Core Outline Color", Color(255, 170, 0, 0.8f), true, desc = "").withDependency { coreLeap && coreDropdown && coreOutline && (coreStyle.area || coreStyle == CoreStyle.LEAP_BOX) }
-    internal val coreName by BooleanSetting("Core Show Name", false, desc = "Their name on the highlight.").withDependency { coreLeap && coreDropdown }
-    internal val coreClass by BooleanSetting("Core Show Class", false, desc = "Their class under the name.").withDependency { coreLeap && coreDropdown && coreName }
-    internal val coreNameAt by SelectorSetting("Core Name Position", CoreNamePos.AREA, desc = "In the middle of the highlighted area, or just off the crosshair toward it.").withDependency { coreLeap && coreDropdown && coreName }
-    internal val coreNameScale by NumberSetting("Core Name Scale", 1.5, 0.5..4.0, 0.25, desc = "", unit = "x").withDependency { coreLeap && coreDropdown && coreName }
-    internal val coreNameColor by ColorSetting("Core Name Color", Color(255, 170, 0, 0.8f), true, desc = "").withDependency { coreLeap && coreDropdown && coreName }
-    internal val corePulse by BooleanSetting("Core Pulse", false, desc = "Breathes between the colour's opacity and a fraction of it.").withDependency { coreLeap && coreDropdown }
-    internal val corePulseSpeed by NumberSetting("Core Pulse Speed", 1.5, 0.25..6.0, 0.25, desc = "Pulses a second.", unit = "/s").withDependency { coreLeap && coreDropdown && corePulse }
-    internal val corePulseLow by NumberSetting("Core Pulse Low", 30, 0..100, 5, desc = "The faintest point of the pulse, in % of the colour's opacity.", unit = "%").withDependency { coreLeap && coreDropdown && corePulse }
-    internal val coreFadeIn by NumberSetting("Core Fade In", 0, 0..1000, 50, desc = "Fades in over this long once someone is in the core.", unit = "ms").withDependency { coreLeap && coreDropdown }
-    internal val coreOverScreens by BooleanSetting("Core Over Screens", true, desc = "Also shown while a screen is open (terminals, chat, your inventory), in the background behind it: the screen always draws over it, so it never hides or recolours a terminal. Off: only with no screen open.").withDependency { coreLeap && coreDropdown }
-    internal val coreOverLeap by BooleanSetting("Core Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, behind it.").withDependency { coreLeap && coreDropdown && coreOverScreens }
-    internal val coreHideInCore by BooleanSetting("Core Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.").withDependency { coreLeap && coreDropdown }
-    init { CoreLeap.install() }
 
     /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
     private var coreGoldor: Triple<Int, net.minecraft.world.phys.Vec3, Int>? = null
@@ -461,7 +430,7 @@ object DungeonSplits : Module(
      * singleplayer (the P3 Sim).
      */
     private fun pasteLastIn() {
-        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer() || com.engineerclient.p3sim.P3Sim.inSim) return
+        if (!com.engineerclient.practice.Recore.let { it.enabled && it.pasteLast } || core.pasted || mc.hasSingleplayerServer() || com.engineerclient.p3sim.P3Sim.inSim) return
         val me = mc.player?.name?.string ?: return
         val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
         if (mates.size != 4 || mates.any { it.isDead }) return
