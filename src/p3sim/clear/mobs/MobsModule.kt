@@ -313,8 +313,11 @@ object MobsModule : AdsModule, MobService {
         return byRoom[roomIndex]?.map { it.record }.orEmpty()
     }
 
+    /** An archetype by index: the pack's, or one of the blood camp's ([BloodLooks]). */
+    private fun archOf(pack: MobPack, index: Int): MobArchetype? = pack.archetype(index) ?: BloodLooks.archetype(index)
+
     private fun register(run: Run, pack: MobPack, pm: PlannedMob, roomIndex: Int?): MobEntry? {
-        val arch = pack.archetype(pm.arch) ?: return null
+        val arch = archOf(pack, pm.arch) ?: return null
         val rec = MobRecord(pm.id, arch.id, arch.name, roomIndex, pm.star, pm.required, arch.cls == "miniboss", arch.disguise && fakePlayersOn())
         rec.hp = pm.maxHp; rec.maxHp = pm.maxHp; rec.x = pm.x; rec.y = pm.y; rec.z = pm.z
         val e = MobEntry(rec, pm, arch, pack.modifier(pm.modifier).takeIf { pm.modifier.isNotEmpty() })
@@ -334,16 +337,18 @@ object MobsModule : AdsModule, MobService {
     override fun spawn(run: Run, spec: MobSpec): MobRecord? {
         val pack = run.packs.mobs ?: return null
         // A kind the pack does not have (a plug-in's camp mobs) stands in as the plain soldier (or the hint in extras), so a camp always has mobs to kill.
-        val arch = pack.archetypeById(spec.kind)
+        val arch = (if (spec.extras["camp"] == "blood") BloodLooks.forName(spec.extras["name"]) else null)
+            ?: pack.archetypeById(spec.kind)
             ?: spec.extras["standIn"]?.let { pack.archetypeById(it) }
             ?: pack.archetypeById(STAND_IN_KIND)?.also { if (standInSaid.add(spec.kind)) log.info("[ads] the mob pack has no '${spec.kind}'; spawning a $STAND_IN_KIND in its place") }
             ?: run { log.warn("[ads] the mob pack has no '${spec.kind}', so it cannot be spawned"); return null }
-        val base = arch.hpFor(run.config.floor) ?: return null
-        val mod = spec.extras["modifier"]?.takeIf { it.isNotEmpty() }?.let { pack.modifier(it) }
-        val hp = spec.hp ?: MobRolls.spawnHp(base, scale, mod)
+        val word = spec.extras["modifier"]?.takeIf { it.isNotEmpty() }
+        val mod = word?.let { pack.modifier(it) }
+        val hp = spec.hp ?: MobRolls.spawnHp(arch.hpFor(run.config.floor) ?: return null, scale, mod)
         val rng = run.subRandom("mobs.spec." + entries.size + spec.kind)
         val id = if (arch.disguise) MobRolls.uuidV2(rng) else MobRolls.uuidV4(rng)
-        val pm = PlannedMob(id, arch.index, spec.starred, spec.required, mod?.id.orEmpty(), hp, spec.x, spec.y, spec.z, rng.nextFloat() * 360f - 180f, arch.movement != "static", null)
+        // A camp mob keeps its word even when the pack has no row for it (Stealth, Boomer): its tag is written from the word.
+        val pm = PlannedMob(id, arch.index, spec.starred, spec.required, if (BloodLooks.isBlood(arch)) word.orEmpty() else mod?.id.orEmpty(), hp, spec.x, spec.y, spec.z, rng.nextFloat() * 360f - 180f, arch.movement != "static", null)
         return register(run, pack, pm, spec.roomIndex)?.record
     }
 
@@ -460,7 +465,7 @@ object MobsModule : AdsModule, MobService {
         data.getAsJsonArray("rolled")?.forEach { rolled += it.asInt }
         for (el in data.getAsJsonArray("mobs") ?: JsonArray()) {
             val m = el.asJsonObject
-            val arch = pack.archetype(m.get("arch").asInt) ?: continue
+            val arch = archOf(pack, m.get("arch").asInt) ?: continue
             val loop = m.getAsJsonArray("loop")?.map { p -> doubleArrayOf(p.asJsonArray[0].asDouble, p.asJsonArray[1].asDouble) }
             val pm = PlannedMob(UUID.fromString(m.get("id").asString), arch.index, m.get("star").asBoolean, m.get("req").asBoolean, m.get("mod").asString, m.get("max").asDouble,
                 m.get("px").asDouble, m.get("py").asDouble, m.get("pz").asDouble, m.get("yaw").asFloat, m.get("mover").asBoolean, loop)
