@@ -64,11 +64,12 @@ object AdsCommands {
 
     /** Commands the skeleton itself provides (usable before any module is filled in). */
     private val builtinDev = listOf(
-        AdsCommand("packs", "/ads dev packs", "Reloads the ADS data packs and says what loaded and what is missing.", requiresSim = false, client = { ctx ->
+        AdsCommand("packs", "/ads dev packs", "Reloads the ADS data packs and says what loaded, and for each file whether it came from the jar or your override folder.", requiresSim = false, client = { ctx ->
             Packs.loadAsync().thenAccept { set ->
                 net.minecraft.client.Minecraft.getInstance().execute {
                     val lines = ArrayList<String>()
-                    lines += "Data packs in ${set.dir}:"
+                    lines += "Data packs (bundled in the jar; a file in ${set.dir} overrides it):"
+                    set.originLines().forEach { lines += "  $it" }
                     lines += "  rooms: " + (set.rooms?.let { "${it.designs.size} designs, ${it.cores.size} cores" } ?: "not loaded")
                     lines += "  layouts: " + (set.layouts?.let { "${it.layouts.size} layouts, ${it.pool().size} in the default pool" } ?: "not loaded")
                     lines += "  mobs: " + (set.mobs?.let { "${it.archetypes.size} archetypes, ${it.rooms.size} rooms" } ?: "not loaded")
