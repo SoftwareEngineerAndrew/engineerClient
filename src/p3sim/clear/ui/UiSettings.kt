@@ -36,10 +36,15 @@ object UiSettings {
         // The strategies a plug-in offers are not known until it loads, so this cannot be a fixed list; the start screen's button is the picker.
         strategy = StringSetting("Run Party Strategy", StrategyChoice.AUTO, 64, desc = "Which party strategy the bots follow (auto, neutral or a plug-in preset's id). Chosen with the Party Strategy button on the start screen.", placeholder = "").also { it.hide() }
         host.registerSetting(strategy)
-        host.registerSetting(KeybindSetting("Run Start Screen Keybind", InputConstants.UNKNOWN, "Opens the full run start screen (layout, party, lag).").onPress { UiModule.openStartScreen() })
-        host.registerSetting(KeybindSetting("Run Restart Room Keybind", InputConstants.UNKNOWN, "In a full run: go back to the savepoint taken when the party entered the room you are in, as /ads run restart room does.").onPress { UiServer.send("restart", "room") })
-        host.registerSetting(KeybindSetting("Run Restart Keybind", InputConstants.UNKNOWN, "In a full run: go back to the very start (the countdown), as /ads run restart does. The same dungeon, no rebuild.").onPress { UiServer.send("restart") })
-        host.registerSetting(KeybindSetting("Run Savepoint Keybind", InputConstants.UNKNOWN, "In a full run: take a savepoint right now (/ads run restore <number> goes back to it).").onPress { UiServer.send("savepoint") })
+        // The full run is the beta's only: in ADM its settings are hidden and its keybinds not there at all (a hidden
+        // keybind would still fire).
+        if (!com.engineerclient.EngineerClient.BETA) for (s in listOf(bots, partySize, lag, noDeaths, mobHp)) s.hide()
+        else {
+            host.registerSetting(KeybindSetting("Run Start Screen Keybind", InputConstants.UNKNOWN, "Opens the full run start screen (layout, party, lag).").onPress { UiModule.openStartScreen() })
+            host.registerSetting(KeybindSetting("Run Restart Room Keybind", InputConstants.UNKNOWN, "In a full run: go back to the savepoint taken when the party entered the room you are in, as /ads run restart room does.").onPress { UiServer.send("restart", "room") })
+            host.registerSetting(KeybindSetting("Run Restart Keybind", InputConstants.UNKNOWN, "In a full run: go back to the very start (the countdown), as /ads run restart does. The same dungeon, no rebuild.").onPress { UiServer.send("restart") })
+            host.registerSetting(KeybindSetting("Run Savepoint Keybind", InputConstants.UNKNOWN, "In a full run: take a savepoint right now (/ads run restore <number> goes back to it).").onPress { UiServer.send("savepoint") })
+        }
         ready = true
     }
 

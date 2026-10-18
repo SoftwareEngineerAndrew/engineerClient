@@ -27,7 +27,8 @@ object UiModule : AdsModule {
         mc.execute { mc.gui.setScreen(RunStartScreen()) }
     }
 
-    override fun runCommands(): List<AdsCommand> = listOf(
+    /** The full run is the beta's only: ADM has none of its /ads run commands. */
+    override fun runCommands(): List<AdsCommand> = if (!com.engineerclient.EngineerClient.BETA) emptyList() else listOf(
         AdsCommand("start", "/ads run start", "Opens the run start screen: layout, party, bots, lag, no deaths.", requiresSim = false,
             client = { openStartScreen() }),
         AdsCommand("random", "/ads run random [options]", "Starts a full run on a random recorded layout. Options: ${RunArgs.OPTIONS}.", requiresSim = false,
