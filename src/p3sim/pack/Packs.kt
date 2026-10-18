@@ -4,22 +4,24 @@ import com.engineerclient.p3sim.pack.layouts.LayoutPack
 import com.engineerclient.p3sim.pack.mobs.MobPack
 import com.engineerclient.p3sim.pack.rooms.RoomPack
 import com.engineerclient.p3sim.pack.runstate.RunStatePack
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
 /**
- * The four data packs of one load (BRIEF decision 7: the jar ships no recorded data; everything is read at runtime from
- * `<gameDir>/config/engineerclient/ads/packs/`). Any pack may be null; [report] says why. A missing pack is a message to the
- * player ([userLines]), never a crash.
+ * The data packs of one load (BRIEF decision 7: the packs are public and ship inside the jar; a file of the same name in
+ * `<gameDir>/config/engineerclient/ads/packs/` overrides the bundled one, for development). Any pack may be null; [report] says why. A
+ * missing or damaged pack is a message to the player ([userLines]), never a crash.
  */
 class PackSet(
+    /** The override folder (it may not exist; the bundled packs do not need it). */
     val dir: Path,
     val rooms: RoomPack?,
     val layouts: LayoutPack?,
     val mobs: MobPack?,
     val runstate: RunStatePack?,
     val report: PackReport,
+    /** Where each file came from. A set built by hand (tests) reads every file from [dir]. */
+    val source: PackSource = PackSource.ofDir(dir),
 ) : java.io.Closeable {
     /** What a full run needs at the least: the room library and the layout pool. Mobs and run-state tables degrade gracefully. */
     val canBuildDungeon: Boolean get() = rooms != null && layouts != null
@@ -32,8 +34,17 @@ class PackSet(
         if (runstate == null) add("run-state tables (${PackFiles.RUNSTATE})")
     }
 
-    /** The plain-English chat lines for the player: what is missing and where to put it, plus any loader warning. Empty when everything loaded cleanly. */
+    /** The plain-English chat lines for the player: what is missing or damaged, plus any loader warning. Empty when everything loaded cleanly. */
     fun userLines(): List<String> = Packs.userLines(this)
+
+    /** One line per pack file saying which copy was used: the jar's, the override folder's, or none. For `/ads dev packs`. */
+    fun originLines(): List<String> = PackFiles.BUNDLED.map { name ->
+        name + ": " + when (source.origin(name)) {
+            PackOrigin.JAR -> "the copy bundled in the jar"
+            PackOrigin.OVERRIDE -> "your copy in $dir (overrides the jar)"
+            null -> "not found"
+        }
+    }
 
     private var pins = 0
     private var retired = false
@@ -57,25 +68,40 @@ class PackSet(
 /**
  * Loads and holds the packs. Loading reads a few MB, so [loadAsync] is for a run start; [load] blocks. The loaders never
  * throw; [Packs.userLines] turns what they found into chat text. Server and client threads may both read [current].
+ *
+ * Order per file: the copy in the override folder if there is one (development; logged once), else the copy bundled in the jar,
+ * unpacked once into `packs-bundled/<content hash>/` next to the override folder ([PackSource]).
  */
 object Packs {
+    private val log = org.slf4j.LoggerFactory.getLogger("engineerclient")
+    private val loggedOverrides = HashSet<String>()
+
     @Volatile var current: PackSet? = null
         private set
 
-    /** Loads all four packs from [dir] (default: the game's packs folder), makes the result [current] and retires the previous one (closed once no run uses it). */
-    @Synchronized fun load(dir: Path = PackFiles.defaultDir()): PackSet {
+    /**
+     * Loads all the packs ([dir]: the override folder, default the game's packs folder; [bundled]: the jar's files; [cacheRoot]: where
+     * they are unpacked, default beside [dir]), makes the result [current] and retires the previous one (closed once no run uses it).
+     */
+    @Synchronized fun load(dir: Path = PackFiles.defaultDir(), bundled: BundledPacks = BundledPacks.JAR, cacheRoot: Path? = null): PackSet {
         val report = PackReport()
-        val rooms: RoomPack?; val layouts: LayoutPack?; val mobs: MobPack?; val runstate: RunStatePack?
-        if (!Files.isDirectory(dir)) {
-            report.error("The ADS data pack folder $dir does not exist.")
-            rooms = null; layouts = null; mobs = null; runstate = null
-        } else {
-            rooms = RoomPack.load(dir, report)
-            layouts = LayoutPack.load(dir, rooms, report)
-            mobs = MobPack.load(dir, report)
-            runstate = RunStatePack.load(dir, report)
+        val source = try {
+            PackSource.resolve(dir, bundled, cacheRoot ?: PackFiles.cacheRootFor(dir), report)
+        } catch (t: Throwable) {
+            report.error("ADS could not look for its data packs: ${t.message ?: t.javaClass.simpleName}")
+            PackSource.ofDir(dir)
         }
-        val set = PackSet(dir, rooms, layouts, mobs, runstate, report)
+        for (name in PackFiles.BUNDLED) {
+            if (source.origin(name) == PackOrigin.OVERRIDE && loggedOverrides.add("$dir/$name")) {
+                log.info("[ads] using your copy of {} in {} instead of the one bundled in the jar", name, dir)
+                report.info("Using your copy of $name from $dir instead of the bundled one.")
+            }
+        }
+        val rooms = RoomPack.load(source, report)
+        val layouts = LayoutPack.load(source, rooms, report)
+        val mobs = MobPack.load(source, report)
+        val runstate = RunStatePack.load(source, report)
+        val set = PackSet(dir, rooms, layouts, mobs, runstate, report, source)
         val old = current
         current = set
         if (old != null && old !== set) old.retire()
@@ -83,7 +109,8 @@ object Packs {
     }
 
     /** [load] on a worker thread. */
-    fun loadAsync(dir: Path = PackFiles.defaultDir()): CompletableFuture<PackSet> = CompletableFuture.supplyAsync { load(dir) }
+    fun loadAsync(dir: Path = PackFiles.defaultDir(), bundled: BundledPacks = BundledPacks.JAR, cacheRoot: Path? = null): CompletableFuture<PackSet> =
+        CompletableFuture.supplyAsync { load(dir, bundled, cacheRoot) }
 
     /** The loaded set, or loads once if nothing has been loaded yet. */
     fun ensureLoaded(): PackSet = current ?: load()
@@ -91,16 +118,30 @@ object Packs {
     /** Forgets the current packs and frees their file handles. */
     fun unload() { val c = current; current = null; c?.retire() }
 
-    /** The message when the folder or the packs are not there at all. */
+    /**
+     * The message when no pack could be loaded at all. That is rare: the packs are bundled in the jar, so it means this copy of the mod
+     * lacks them (a failed unpack has its own, [unpackFailedMessage]), and no override copy is in [dir].
+     */
     fun missingMessage(dir: Path): String =
-        "ADS has no data packs yet. Put ${PackFiles.ROOMS_INDEX}, ${PackFiles.ROOMS_BLOCKS}, ${PackFiles.LAYOUTS}, ${PackFiles.MOBS} and ${PackFiles.RUNSTATE} in $dir to play a full run. The boss practice works without them."
+        "ADS could not load its data packs. They are built into the Engineer Client jar (${PackFiles.ROOMS_INDEX}, ${PackFiles.ROOMS_BLOCKS}, ${PackFiles.LAYOUTS}, ${PackFiles.MOBS}, ${PackFiles.RUNSTATE}), " +
+            "so this copy of the mod is damaged or incomplete; installing it again should fix that. While developing you can put your own copies in $dir instead. The boss practice works without them."
+
+    /**
+     * The message when no pack could be loaded because the bundled files could not be written out of the jar into [folder] (a folder
+     * that is read-only, a full disk). Installing the mod again would not help; the error line after it says what the file system said.
+     */
+    fun unpackFailedMessage(folder: Path, dir: Path): String =
+        "ADS could not load its data packs. They are built into the Engineer Client jar, but copying them out into $folder failed. " +
+            "While developing you can put your own copies in $dir instead. The boss practice works without them."
 
     /** See [PackSet.userLines]. */
     fun userLines(set: PackSet): List<String> {
         val lines = ArrayList<String>()
         val missing = set.missing()
-        if (missing.size == 4) return listOf(missingMessage(set.dir))
-        if (missing.isNotEmpty()) lines += "ADS could not load the " + missing.joinToString(", ") + " from ${set.dir}. " +
+        val unpackFailedIn = set.source.unpackFailedIn
+        if (missing.size == 4) return listOf(if (unpackFailedIn != null) unpackFailedMessage(unpackFailedIn, set.dir) else missingMessage(set.dir)) +
+            set.report.errors().filter { !it.contains("missing from") }
+        if (missing.isNotEmpty()) lines += "ADS could not load the " + missing.joinToString(", ") + ". " +
             (if (!set.canBuildDungeon) "A full run needs the room library and the layout pool." else "The run goes on with built-in defaults for what is missing.")
         for (e in set.report.errors()) if (lines.none { it.contains(e) }) lines += e
         for (w in set.report.warnings()) lines += w

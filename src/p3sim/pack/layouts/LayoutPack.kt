@@ -158,11 +158,14 @@ class LayoutPack internal constructor(
          * wrong format/version. [roomPack]: when given, a different `roomsPackVersion` is a warning, not a failure.
          * Never throws.
          */
-        fun load(dir: Path, roomPack: RoomPack? = null, report: PackReport = PackReport()): LayoutPack? {
-            val path = dir.resolve(PackFiles.LAYOUTS)
-            if (!Files.isRegularFile(path)) { report.error("The layout pool ${PackFiles.LAYOUTS} is missing from $dir."); return null }
+        fun load(dir: Path, roomPack: RoomPack? = null, report: PackReport = PackReport()): LayoutPack? = load(PackSource.ofDir(dir), roomPack, report)
+
+        /** [load] from a resolved [PackSource] (the jar's copy or the override folder's). */
+        fun load(source: PackSource, roomPack: RoomPack? = null, report: PackReport = PackReport()): LayoutPack? {
+            val path = source.file(PackFiles.LAYOUTS)
+            if (path == null) { report.error("The layout pool ${PackFiles.LAYOUTS} is missing from ${source.missingFrom}."); return null }
             val root = try { Files.newInputStream(path).use { readGzipJson(it) } } catch (e: Exception) {
-                report.error("The layout pool ${PackFiles.LAYOUTS} is unreadable: ${e.message}"); return null
+                report.error("The layout pool ${PackFiles.LAYOUTS} is unreadable${source.note(PackFiles.LAYOUTS)}: ${e.message}"); return null
             }
             return fromJson(root, roomPack, report)
         }
