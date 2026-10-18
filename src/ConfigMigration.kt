@@ -65,6 +65,7 @@ object ConfigMigration {
      *    Odin's wasn't showing), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
      *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
+     *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -152,6 +153,13 @@ object ConfigMigration {
         module(modules, "BR Roles")?.let(::settings)?.let { br ->
             val old = br.remove("Doorer Kills") ?: return@let
             if (!br.has("Door Kills")) br.addProperty("Door Kills", if (old.isJsonPrimitive && old.asBoolean) "ALWAYS" else "NEVER")
+            changed = true
+        }
+
+        // Timers' Necron Drop countdown became Necron DPS: the HUD keeps its place.
+        module(modules, "Timers")?.let(::settings)?.let { t ->
+            val old = t.remove("Necron Drop") ?: return@let
+            if (!t.has("Necron DPS")) t.add("Necron DPS", old)
             changed = true
         }
 

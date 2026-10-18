@@ -165,12 +165,20 @@ object SubSplitGrades {
         "goldor.kill" to ticks(118, 123, 134, 139, 147, 157),
         // The trip back to mid: 18-213.
         "necron.trip1" to ticks(18, 19, 24, 26, 32, 41),
-        // ARGH! to the TNT burst he dies in: 99-106 on time, then every 20 ticks (119-128, 139-148).
-        "necron.kill" to stepped(Clock.TICKS, 99, 106, 20),
-        // Storm 822-969, the core opening to Necron's line 134-210, Necron's fight 1007-1188.
+        // ARGH! to the TNT burst he dies in, on a 20-tick check: 99-104, then 118-127, 139-149,
+        // 159-170, 180-190 (753 M7 runs: p25 121, median 141, p75 162). A band per check.
+        "necron.kill" to Bands(Clock.TICKS, longArrayOf(106, 128, 150, 172, 192), 99),
+        // His death to the Wither King's first line (every relic placed, plus the 64-69 ticks he takes
+        // to say so), 753 M7 runs: 89 up, p5 101, p25 111, median 121, p75 150, p90 212.
+        "necron.relics" to ticks(89, 101, 111, 121, 150, 212),
+        // Storm 822-969, the core opening to Necron's line 134-210.
         "split.storm" to ticks(822, 826, 829, 832, 857, 887),
         "split.goldor" to ticks(134, 144, 153, 157, 166, 180),
-        "split.necron" to ticks(1007, 1012, 1026, 1047, 1078, 1111),
+        // Necron's first line to the Wither King's (his kill and the relics), 753 M7 runs: 457 up,
+        // p5 482, p25 510, median 533, p75 570, p90 633.
+        "split.necron" to ticks(457, 482, 510, 533, 570, 633),
+        // The Wither King's first line to the run's end: 523 up, p5 533, p25 547, median 566, p75 591, p90 623.
+        "split.dragons" to ticks(523, 533, 547, 566, 591, 623),
     )
 
     /** [id]'s bands on [floor] (F7's where M7 has none of its own); null off F7 and M7. */
@@ -184,6 +192,8 @@ object SubSplitGrades {
     val MAIN_SPLITS = mapOf(
         "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Portal Entry" to "split.portal", "Boss Entry" to "split.enter", "Maxor" to "split.maxor", "Storm" to "split.storm",
         "Terminals" to "split.terms", "Goldor" to "split.goldor", "Necron" to "split.necron",
+        // M7's Dragons (Odin's last floor 7 split; F7 never starts it).
+        "Cleared" to "split.dragons",
     )
 
     /**
@@ -209,7 +219,7 @@ object SubSplitGrades {
     fun colour(id: String, value: Long, finished: Boolean, best: Long?, floor: String?, fallback: String): String {
         if (!byTime()) return fallback
         val banded = floor == "F7" || floor == "M7"
-        val b = bands(id, floor) ?: BANDS[id] ?: return fallback
+        val b = bands(id, floor) ?: BANDS[id] ?: BANDS_M7[id] ?: return fallback
         b.lateAfter?.let { return if (finished && value > it) COLOURS[4] else FILLER }
         val limits = b.limits ?: return FILLER
         if (showBest() && finished && best != null && value <= best && value >= b.floor) return BEST
@@ -220,7 +230,7 @@ object SubSplitGrades {
 
     /** Whether a finished [value] can stand as a best on [floor]: banded (not filler) and not under the floor. */
     fun canBeBest(id: String, value: Long, floor: String? = "F7"): Boolean {
-        val b = bands(id, floor) ?: BANDS[id] ?: return false
+        val b = bands(id, floor) ?: BANDS[id] ?: BANDS_M7[id] ?: return false
         return b.limits != null && value >= b.floor
     }
 
