@@ -181,7 +181,7 @@ object MobsModule : AdsModule, MobService {
         val pack = run.packs.mobs
         if (pack == null) {
             noPackSaid = true
-            chat("§8[§6ADS§8] §7There are no mob tables (${com.engineerclient.p3sim.pack.PackFiles.MOBS} in ${run.packs.dir}), so this dungeon has no mobs.")
+            chat("§8[§6ADS§8] §7The mob tables (${com.engineerclient.p3sim.pack.PackFiles.MOBS}) could not be loaded, so this dungeon has no mobs. /ads dev packs says why.")
             return
         }
         if (!enabled()) return
