@@ -338,14 +338,14 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
                 toggle("Debug Bots", P3Sim.debugBots, 92, P3Sim.debugBotsS.description) { P3Sim.debugBotsS.value = !P3Sim.debugBots },
             )),
             stack("§eOther", 100, "Your hotbar, recording, leaving.", listOf(
-                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who on ${P3Plan.skillName()} ($part). " +
+                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who ($part), on every skill. " +
                     "Every start and restart lays it out (without one, your items stay as you left them).") {
                     SimActions.send("hotbarSave", "p3" to p3Part)
                 },
-                act("Default Hotbar", 100, "Forgets your saved $part hotbar for the $who on ${P3Plan.skillName()} and lays out the sim's default.") {
+                act("Default Hotbar", 100, "Forgets your saved $part hotbar for the $who (every skill) and lays out the sim's default.") {
                     SimActions.send("hotbarReset", "p3" to p3Part)
                 }.also { it.active = saved },
-                act("Reset Items", 100, "Your $part items, gear and pet back to your saved hotbar for the $who on ${P3Plan.skillName()} now (or the default, forgetting how you left them).") { SimActions.send("resetItems", "p3" to p3Part) },
+                act("Reset Items", 100, "Your $part items, gear and pet back to your saved hotbar for the $who now (or the default, forgetting how you left them).") { SimActions.send("resetItems", "p3" to p3Part) },
                 toggle("Record", P3Sim.record, 100, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
                 act("§7Leave", 100, "Leaves the sim world.") { SimWorld.leave() },
             )),
