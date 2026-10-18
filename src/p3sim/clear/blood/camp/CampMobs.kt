@@ -94,8 +94,9 @@ object CampMobs {
                 head = when (name) { "Bonzo", "Scarf" -> ICON_BONZO_SCARF; "Spirit Bear" -> ICON_SPIRIT_BEAR; else -> ICON_STANDARD }
             }
             else -> {
-                val base = STANDARD_HP_LOW + rng.nextDouble() * (STANDARD_HP_HIGH - STANDARD_HP_LOW)
-                hp = base * healthy * (if (name == "Ooze") OOZE else 1.0); head = ICON_STANDARD
+                // Whole thousands, as every recorded tag shows them (248k to 256k; Healthy 323k to 331k).
+                val base = 1000.0 * (STANDARD_HP_LOW / 1000 + rng.nextInt(((STANDARD_HP_HIGH - STANDARD_HP_LOW) / 1000).toInt() + 1))
+                hp = Math.round(base * healthy * (if (name == "Ooze") OOZE else 1.0) / 1000.0) * 1000.0; head = ICON_STANDARD
             }
         }
         return CampMob(

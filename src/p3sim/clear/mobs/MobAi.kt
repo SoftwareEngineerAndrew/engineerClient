@@ -141,7 +141,7 @@ object MobAi {
 
     /** The chase speed of one mob: its archetype's number (else its body's), times [AiParams.speedyFactor] for a Speedy one. */
     fun speedFor(archId: String, entity: String, speedy: Boolean, p: AiParams): Double =
-        (ARCHETYPE_SPEEDS[archId] ?: speedOf(entity, p)) * (if (speedy) p.speedyFactor else 1.0)
+        (ARCHETYPE_SPEEDS[archId] ?: (if (archId.startsWith(BloodLooks.PREFIX)) com.engineerclient.p3sim.clear.blood.camp.CampMobs.SPEED else null) ?: speedOf(entity, p)) * (if (speedy) p.speedyFactor else 1.0)
 
     /** The chase speed (blocks per tick) for a body type. */
     fun speedOf(entity: String, p: AiParams): Double = when (entity) {
