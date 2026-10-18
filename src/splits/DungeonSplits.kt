@@ -85,7 +85,7 @@ object DungeonSplits : Module(
      * The HUD is made up front because a HUD has to exist before the run that fills it.
      */
     private val bloodHud = registerSetting(
-        HUD("BR Sub Split", "What happened inside Blood Rush, room by room.", true, 780, 229, 0.9f) { example ->
+        HUD("BR Sub Split", "What happened inside Blood Rush, room by room.", false, 780, 229, 0.9f) { example ->
             if (example) return@HUD draw(this, listOf(
                 "§70.52s §8| \t§c1.73s \t§5Hallway: \t§62.31s",
                 "\t§411.73s \t§dDino: \t§622.31s",
@@ -111,7 +111,7 @@ object DungeonSplits : Module(
     private val crushView = StormCrushView()
     enum class StormLevel { COMPACT, DETAILED }
     private val stormHud = registerSetting(
-        HUD("Storm Sub Split", "Storm's phase: each step (Opening, Crush, Pin, Flight, Crush, Kill, Animation) graded, and under each what happened in it - Giga Lightning, his lightning line, leaving his spot, every pad read, each crush with the pillar and whether it came on the first check it could, breaking free, reaching Yellow. Shown until the run ends.", true, 330, 10, 0.9f) { example ->
+        HUD("Storm Sub Split", "Storm's phase: each step (Opening, Crush, Pin, Flight, Crush, Kill, Animation) graded, and under each what happened in it - Giga Lightning, his lightning line, leaving his spot, every pad read, each crush with the pillar and whether it came on the first check it could, breaking free, reaching Yellow. Shown until the run ends.", false, 330, 10, 0.9f) { example ->
             if (example) return@HUD draw(this, listOf(
                 "§bStorm §f41.30s",
                 "§aOpening §732.40s",
@@ -143,7 +143,7 @@ object DungeonSplits : Module(
     /** The Goldor sub split: each leap into the core after S4 and Goldor starting to move ([GoldorCore]). */
     private val core = GoldorCore()
     private val goldorHud = registerSetting(
-        HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Shown until the run ends.", true, 750, 10, 1f) { example ->
+        HUD("Goldor Sub Split", "Watched from S4's start: when each player got into the core, timed from the core opening (teal and negative if they were in before it opened, grey with ~ if they weren't in view just before), and when Goldor started moving. Shown until the run ends.", false, 750, 10, 1f) { example ->
             if (example) return@HUD draw(this, listOf("§eCore", "§7Teammate §3-2.40s", "§fYou §a0.05s", "§7Another §8~0.50s", "§7Last §61.35s", "§eGoldor moved §f1.40s §8(+0.05s after the last in)"))
             draw(this, core.lines(serverTicks, mc.player?.name?.string, core.counted(aliveNames())))
         }

@@ -40,18 +40,18 @@ object Recore : Module(
     description = "The core after S4: the Core Leap Highlight (where the teammates already in the core are in Odin's Leap Menu, so you flick there as it opens) and Paste Last In Core.",
     key = null,
 ) {
-    val pasteLast by BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died. Timed by Sub Splits' Goldor tracking, so Sub Splits has to be on.")
+    val pasteLast by BooleanSetting("Paste Last In Core", true, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died. Timed by Sub Splits' Goldor tracking, so Sub Splits has to be on.")
     private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.")
-    private val allInCore by BooleanSetting("Highlight All Players In Core", false, desc = "Highlights every teammate who made it to the core before you, each where they'll be in the leap menu, not just the first one. All of them go once you're in the core yourself (with Hide When In Core).").withDependency { coreLeap }
+    private val allInCore by BooleanSetting("Highlight All Players In Core", true, desc = "Highlights every teammate who made it to the core before you, each where they'll be in the leap menu, not just the first one. All of them go once you're in the core yourself (with Hide When In Core).").withDependency { coreLeap }
     private val lookDropdown by DropdownSetting("Core Leap Look", desc = "").withDependency { coreLeap }
     /** The look settings show: Core Leap Highlight on and its dropdown open. */
     private val look get() = coreLeap && lookDropdown
     private val preview by BooleanSetting("Preview", false, desc = "Shows the highlight now, top right, as if someone were in the core (also over this menu), to try the looks below; with Highlight All Players In Core, bottom left too. Turn it off after.").withDependency { look }
-    private val style by SelectorSetting("Style", Style.QUADRANT, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.").withDependency { look }
-    private val color by ColorSetting("Color", Color(255, 170, 0, 0.25f), true, desc = "The highlight's colour and opacity.").withDependency { look }
+    private val style by SelectorSetting("Style", Style.EDGE_GLOW, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.").withDependency { look }
+    private val color by ColorSetting("Color", Color(255, 170, 0, 121 / 255f), true, desc = "The highlight's colour and opacity.").withDependency { look }
     private val fill by SelectorSetting("Fill", Fill.SOLID, desc = "Solid, or fading out toward the crosshair (strongest at the screen's edge), or the other way round. Quadrant, Side and Top / Bottom.").withDependency { look && (style.area) }
     private val gap by NumberSetting("Centre Gap", 0, 0..120, 2, desc = "Leaves this much room around the crosshair clear (Odin's boxes start 24 from the centre). Quadrant, Side, Top / Bottom, Corner Bracket.", unit = "px").withDependency { look && (style != Style.LEAP_BOX && style != Style.EDGE_GLOW) }
-    private val glowDepth by NumberSetting("Glow Depth", 16, 4..50, 1, desc = "How far in from the edge the Edge Glow reaches, in % of the screen.", unit = "%").withDependency { look && (style == Style.EDGE_GLOW) }
+    private val glowDepth by NumberSetting("Glow Depth", 11, 4..50, 1, desc = "How far in from the edge the Edge Glow reaches, in % of the screen.", unit = "%").withDependency { look && (style == Style.EDGE_GLOW) }
     private val bracketSize by NumberSetting("Bracket Size", 24, 6..120, 2, desc = "Length of the Corner Bracket's arms.", unit = "px").withDependency { look && (style == Style.BRACKET) }
     private val bracketWidth by NumberSetting("Bracket Width", 3, 1..12, 1, desc = "Thickness of the Corner Bracket's arms.", unit = "px").withDependency { look && (style == Style.BRACKET) }
     private val outline by BooleanSetting("Outline", false, desc = "A line around the highlighted area. Quadrant, Side, Top / Bottom and Leap Box.").withDependency { look && (style.area || style == Style.LEAP_BOX) }
@@ -67,7 +67,7 @@ object Recore : Module(
     private val pulseLow by NumberSetting("Pulse Low", 30, 0..100, 5, desc = "The faintest point of the pulse, in % of the colour's opacity.", unit = "%").withDependency { look && pulse }
     private val fadeIn by NumberSetting("Fade In", 0, 0..1000, 50, desc = "Fades in over this long once someone is in the core.", unit = "ms").withDependency { look }
     private val overScreens by BooleanSetting("Over Screens", true, desc = "Also shown while a screen is open (terminals, chat, your inventory), in the background behind it: the screen always draws over it, so it never hides or recolours a terminal. Off: only with no screen open.").withDependency { look }
-    private val overLeap by BooleanSetting("Over Leap Menu", false, desc = "Keeps showing once the leap menu is open, behind it.").withDependency { look && overScreens }
+    private val overLeap by BooleanSetting("Over Leap Menu", true, desc = "Keeps showing once the leap menu is open, behind it.").withDependency { look && overScreens }
     private val hideInCore by BooleanSetting("Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.").withDependency { look }
 
     private enum class Style(private val label: String, val area: Boolean) {
