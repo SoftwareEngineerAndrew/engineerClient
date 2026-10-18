@@ -64,6 +64,7 @@ object ConfigMigration {
      *  - Term Info is gone: its HUD is Odin's Terminals Status (Look ADM, and switched on where ours was if
      *    Odin's wasn't showing), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
      *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
+     *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -144,6 +145,13 @@ object ConfigMigration {
             if (moved.isEmpty()) return@let
             val to = settings(module(modules, "Positional Messages") ?: ensure("Positional Messages").also { it.addProperty("enabled", false) })
             for ((old, new) in moved) br.remove(old).let { if (!to.has(new)) to.add(new, it) }
+            changed = true
+        }
+
+        // BR Roles' Doorer Kills checkbox is its Door Kills choice.
+        module(modules, "BR Roles")?.let(::settings)?.let { br ->
+            val old = br.remove("Doorer Kills") ?: return@let
+            if (!br.has("Door Kills")) br.addProperty("Door Kills", if (old.isJsonPrimitive && old.asBoolean) "ALWAYS" else "NEVER")
             changed = true
         }
 
