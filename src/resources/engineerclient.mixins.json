@@ -27,6 +27,7 @@
     "ContainerTooltipMixin",
     "FogColorMixin",
     "GameModeRecordMixin",
+    "DoorLoadClickMixin",
     "GameRendererInvoker",
     "GameRendererMixin",
     "GuiBlurMixin",
