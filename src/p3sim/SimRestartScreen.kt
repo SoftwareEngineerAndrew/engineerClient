@@ -43,9 +43,9 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         val cx = width / 2
         // Restart in the middle of the screen; the rest hangs off it.
         val restartY = height / 2 - 10
-        // The skill and role columns end level with Restart's bottom.
-        val skillY = restartY - 3 * ROW
+        // The skill and role columns (five each) start level with each other and end level with Restart's bottom.
         val roleY = restartY - 4 * ROW
+        val skillY = roleY
         val left = cx - RESTART_W / 2 - GAP - SIDE_W
         val right = cx + RESTART_W / 2 + GAP
         val roleX = right + SIDE_W + GAP
