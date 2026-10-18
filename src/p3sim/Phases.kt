@@ -240,10 +240,7 @@ fun lookingAt(at: Vec3, degrees: Double, range: Double): Boolean {
  * parties do) and one lures him from (73.6, 225, 77.2); everyone stays on his level until the kill
  * and drops to Storm 7-35 ticks after it; you can take either crystal yourself.
  */
-class P1Maxor(
-    /** Set when the boss is the end of a full run: the hotbar is then the one the player cleared with, not given again. Null in the boss practice. */
-    private val entry: com.engineerclient.p3sim.run.BossEntryOptions? = null,
-) : Fight.Phase("P1") {
+class P1Maxor : Fight.Phase("P1") {
     override val restart get() = Fight.Start.P1
     private lateinit var maxor: BossWither
 
@@ -343,15 +340,13 @@ class P1Maxor(
         if (Sim.players().isEmpty()) return
         val s = Spots.P1
         Sim.forEachPlayer { p ->
-            // A run's entry already put the party at the arrival point (look kept, 0.5 above the start so they fall onto it): a second teleport would reset the look and the fall.
-            if (entry == null) Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
-            if (entry == null || entry.giveHotbar) SimItems.giveHotbar(p, p3 = false)
+            Sim.tp(p, s.x, s.y, s.z, s.yaw, s.pitch)
+            SimItems.giveHotbar(p, p3 = false)
         }
         BossBar.show("§c§lMaxor", 1f)
-        // His arrival sound comes from where he spawns; the strip animation of a run's entry starts 10 ticks after the first line (recorded: jump + 12).
-        Sim.boss("Maxor", "WELL! WELL! WELL! LOOK WHO'S HERE!", at = if (entry != null) Vec3(73.5, 226.5, 53.5) else null)
-        if (entry == null) { stripStart(); Blocks.play("p1strip", exclude = COLUMN) }
-        else Fight.later(10, "run p1 strip") { stripStart(); Blocks.play("p1strip", exclude = COLUMN) }
+        Sim.boss("Maxor", "WELL! WELL! WELL! LOOK WHO'S HERE!")
+        stripStart()
+        Blocks.play("p1strip", exclude = COLUMN)
         Party.standAt(listOf(Vec3(71.5, 221.0, 16.5), Vec3(75.5, 221.0, 16.5), Vec3(69.5, 221.0, 18.5), Vec3(77.5, 221.0, 18.5)))
         // Roles by class: Berserk west crystal, Mage east, Tank lures under the laser; Healer and
         // Archer wait at the start, and everyone drops to Storm after the kill. Yours is left to you.
@@ -379,8 +374,7 @@ class P1Maxor(
 
     override fun tick() {
         when (t) {
-            // A run's entry has him one tick sooner than the boss practice (recorded: jump + 6).
-            (if (entry != null) 4 else 5) -> {
+            5 -> {
                 maxor = BossWither("Maxor", Vec3(73.0, 226.0, 53.0), inv = 200, tagDelay = 17)
                 // His first line's stand comes up with his name stand, gone ~48 after the line.
                 maxor.speak("WELL! WELL! WELL! LOOK WHO'S HERE!")

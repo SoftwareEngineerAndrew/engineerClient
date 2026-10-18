@@ -14,8 +14,6 @@
     "ShortbowSimMixin",
     "QuiverSimMixin",
     "PressurePlateSimMixin",
-    "AdsTrapsQuietHookMixin",
-    "AdsTrapsQuietDispenserMixin",
     "LastBreathSimMixin",
     "SimPartyLanMixin",
     "ArcherDropSimMixin",
@@ -54,9 +52,7 @@
     "SsPracticeInputMixin",
     "TerminalNumberMixin",
     "WandInputMixin",
-    "WandScrollMixin",
-    "AdsEngineChunkPaceMixin",
-    "AdsBotsBodyMixin"
+    "WandScrollMixin"
   ],
   "injectors": {
     "defaultRequire": 1

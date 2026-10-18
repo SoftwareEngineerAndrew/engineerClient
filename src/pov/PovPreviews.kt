@@ -106,7 +106,7 @@ object PovPreviews : Module(
     private val keepInvincibility by BooleanSetting("Keep Invincibility Timer", true, desc = "Redraws Odin's Invincibility Timer HUD over the previews.").withDependency { keepHuds && !keepAll }
     private val keepMelody by BooleanSetting("Keep Melody Display", true, desc = "Redraws Odin's Melody progress GUI over the previews.").withDependency { keepHuds && !keepAll }
     private val keepRoleHud by BooleanSetting("Keep Role HUD", true, desc = "Redraws EC's own role HUD over the previews.").withDependency { keepHuds && !keepAll }
-    private val keepTermInfo by BooleanSetting("Keep Term Info", true, desc = "Redraws Terminals Status' Term Info HUD and Timers' Section Time over the previews.").withDependency { keepHuds && !keepAll }
+    private val keepTermInfo by BooleanSetting("Keep Term Info", true, desc = "Redraws EC's Term Info HUD (and its Section Time) over the previews.").withDependency { keepHuds && !keepAll }
 
     private val TICK_TIMER_HUDS = listOf(
         "Necron Hud", "Goldor Hud", "Storm Pad Hud", "Storm Lightning Hud", "Storm PY Hud", "Storm Tick Hud", "Secrets Hud",

@@ -14,12 +14,9 @@ import java.util.Locale
  *     Storm      &b   -> Goldor's first line
  *     Terms      &6   -> "The Core entrance is opening!"
  *     Goldor     &e   -> Necron's first line
- *     Necron     &c   -> EXTRA STATS on F7. Since Hypixel's boss update of 5 Oct 2026 there is no
- *                        end animation to split off: he no longer says "All this, for nothing...",
- *                        and his death is straight into the run's end. On M7 -> the Wither King's
- *                        "You... again?", his first line, said once every relic is placed (his
- *                        kill and the relics).
- *     Dragons    &d   M7: -> EXTRA STATS.
+ *     Necron     &c   -> EXTRA STATS. Since Hypixel's boss update of 5 Oct 2026 there is no end
+ *                        animation to split off: he no longer says "All this, for nothing...", and
+ *                        his death is straight into the run's end.
  *
  * A split only appears once it has started. Nothing here touches Minecraft, so it tests
  * headlessly: feed it chat lines with the clock readings they arrived at, then ask for the splits.
@@ -133,14 +130,6 @@ class SplitTracker {
         const val TERMS = "&6Terms"
         const val GOLDOR = "&eGoldor"
         const val NECRON = "&cNecron"
-        const val DRAGONS = "&dDragons"
-
-        /**
-         * The Wither King's first line, M7 only: every relic is placed. It comes 64-69 ticks after
-         * the last one goes in (180 recorded M7 runs whose recorder placed it), and the rest of his
-         * opening follows on a fixed script (+62, +124, +310).
-         */
-        const val RELICS_PLACED = "[BOSS] Wither King: You... again?"
 
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
 
@@ -160,7 +149,6 @@ class SplitTracker {
             // "Finally, I heard so much about you." is never said on F7; Necron's first line there
             // is always this one.
             Phase(NECRON) { it == "[BOSS] Necron: You went further than any human before, congratulations." },
-            Phase(DRAGONS) { it == RELICS_PLACED },
         )
     }
 }
