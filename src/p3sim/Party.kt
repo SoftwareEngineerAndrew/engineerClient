@@ -1222,7 +1222,7 @@ object Party {
             if (b.to != wall) go(b, wall, phase.n, due, "the core's S2 wall (mining in to ${ee.label})")
             return true
         }
-        b.to = null
+        b.to = null; b.face = null
         b.dig = ArrayDeque(way)
         dbg("§e${b.name}§7 mines into the core from S2, through it and out of its door to its ${ee.label} spot")
         return true
@@ -1257,7 +1257,7 @@ object Party {
                     }
                 }
         if (broke) swing(b)
-        if (way.isEmpty()) b.dig = null
+        if (way.isEmpty()) { b.dig = null; b.face?.let { b.yaw = it.first; b.pitch = it.second } }
     }
 
     /** The pre-leap onto the early enterer of the next section: everyone free, one after another; the busy ones after their last job. */
@@ -1267,7 +1267,8 @@ object Party {
         if (into > 5) return
         val ee = eeOf(into) ?: return
         val eeBot = if (ee.byYou) null else botOf(ee.owner)
-        val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] &&
+        // Not onto the core early enterer while it mines back in (to the recore): once it's there.
+        val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] && eeBot.dig == null &&
             n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
         if (!open) return
         val target: () -> Target? = if (eeBot != null) ({ eeBot.asTarget() }) else ({ ee.player?.asTarget() })
@@ -1324,6 +1325,12 @@ object Party {
                 val c = Players.classOf(pl)
                 if (c !in youOn[into] && pl.position().distanceTo(b.pos) < 3.0) { youOn[into] += c; dbg("§a${pl.gameProfile.name} is on ${b.name}§7 (EE$into)") }
             }
+            // S4 (nobody early-enters it): the bots that leapt onto the core early enterer as it started are on it too, by
+            // where they landed, so it recores once all four are, not after S4.
+            if (into == 5 && s == 4) for (o in bots) {
+                if (o === b || o.ghost != null || o.legs != null || o.clazz in youOn[5] || o.pos.distanceTo(b.pos) >= 3.0) continue
+                youOn[5] += o.clazz; dbg("§a${o.name} is on ${b.name}§7 (EE5)")
+            }
         }
         for (into in s..(s + 1).coerceAtMost(5)) {
             val ee = eeOf(into)?.takeIf { !it.byYou } ?: continue
@@ -1358,9 +1365,15 @@ object Party {
             if (n - readyAt[into] < RELEASE_DELAY) continue
             released[into] = true
             dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}")
-            // The core early enterer goes into the core (recore) and waits there: everyone leaps onto it in.
+            // The core early enterer goes into the core (recore) and waits there: everyone leaps onto it in. Still shut (S4):
+            // it turns round and mines back in through the door, as it came out.
             val recore = if (into == 5) eeOf(6) else null
-            if (recore != null) go(b, recore.spot, n, -1, "the recore (in the core)", recore.yaw to recore.pitch)
+            if (recore != null && s < 5) {
+                b.to = null; b.due = -1; b.face = recore.yaw to recore.pitch
+                b.dig = ArrayDeque(listOf(Vec3(54.5, 115.0, 56.0), recore.spot))
+                dbg("§e${b.name}§7 mines back into the core to the recore (${recore.spot.short()})")
+            }
+            else if (recore != null) go(b, recore.spot, n, -1, "the recore (in the core)", recore.yaw to recore.pitch)
             else { b.hold = false; walkOn(b, n) }
         }
     }
@@ -1412,6 +1425,8 @@ object Party {
     private fun leapt(c: DungeonClass?, onto: Bot, into: Int): Boolean = when {
         c == null || c == onto.clazz -> true
         Players.isPlayerClass(c) -> c in youOn[into]
+        // A bot seen landing on it (the core early enterer in S4).
+        c in youOn[into] -> true
         // Playing its legs: it leapt onto it, or its legs have no leap onto it to come.
         botOf(c)?.legs != null -> botOf(c)!!.legs!!.let { onto.clazz.name in it.leaptOnto || !it.expectsLeap(onto.clazz.name) }
         else -> botOf(c)?.let { o ->
@@ -1466,7 +1481,7 @@ object Party {
         if (cb != null && eeArrived[5] && !released[5]) { leapOntoCoreEe(cb, n); return }
         if (cb?.ghost != null) { if (recoredN >= 0) leapIntoCore(phase); return }
         // Not on its spot yet (straight in onto it), or already in (on the recore): in now; walking in: when it gets there.
-        if (cb == null || !released[5] || cb.to == null) leapIntoCore(phase)
+        if (cb == null || !released[5] || (cb.to == null && cb.dig == null)) leapIntoCore(phase)
     }
 
     /** Everyone not on the core early enterer [cb] leaps onto it, by the core. */
@@ -1489,7 +1504,7 @@ object Party {
         if (coreIn || phase.section < 5) return
         val cb = coreBot() ?: return
         if (cb.ghost != null) { if (recoredN >= 0 || phase.n - sectionN[5] >= 400) leapIntoCore(phase); return }
-        if (released[5] && cb.to == null) {
+        if (released[5] && cb.to == null && cb.dig == null) {
             if (recoredN < 0) { recoredN = phase.n; GhostCapture.event("recore", cb.clazz.name) }
             leapIntoCore(phase)
         }
