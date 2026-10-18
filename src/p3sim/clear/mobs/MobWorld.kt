@@ -277,7 +277,17 @@ internal object RealStage : MobStage {
         val lv = level ?: return false
         return MobWorld.materialise(e, lv, MobsModule.fakePlayersOn(), MobsModule.healthDataOn())
     }
-    override fun isGone(e: MobEntry) = e.body?.isRemoved != false
+    /**
+     * The body is gone when it was removed, when its tag was (the tag is unloaded with its chunk), or when the level no longer holds it
+     * although its chunk is loaded: a body that is not saved leaves the level with its chunk without being marked removed, and
+     * checking the flag alone kept such a mob "live" with nothing in the world for good.
+     */
+    override fun isGone(e: MobEntry): Boolean {
+        val b = e.body ?: return true
+        if (b.isRemoved || e.stand?.isRemoved == true) return true
+        val lv = level ?: return false
+        return lv.getEntity(b.id) !== b && com.engineerclient.p3sim.run.RunBlocks.isLoaded(Math.floor(b.x).toInt(), Math.floor(b.z).toInt())
+    }
     override fun release(e: MobEntry) = MobWorld.dematerialise(e)
     override fun die(e: MobEntry) { val lv = level; if (lv != null) MobWorld.die(e, lv) else MobWorld.dematerialise(e) }
     override fun retract(e: MobEntry) = MobWorld.retract(e)
