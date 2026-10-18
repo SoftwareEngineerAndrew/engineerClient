@@ -166,12 +166,12 @@ class SubSplitTracker {
     }
 
     /**
-     * Necron dead on M7: the burst of TNT he dies in (3 or more within 2 server ticks), with the
-     * Wither King next. On F7 his fight runs to the run's end (EXTRA STATS) instead: there is no end
-     * animation since Hypixel's boss update.
+     * Necron dead on M7: the burst of TNT he dies in (3 or more within 2 server ticks), and the
+     * relics until the Wither King's first line. On F7 his fight runs to the run's end (EXTRA STATS)
+     * instead: there is no end animation since Hypixel's boss update.
      */
     fun onNecronDeath(at: Stamp) {
-        if (current in N_INTRO until N_END) jumpTo(N_END, at, "his death's TNT burst")
+        if (current in N_INTRO until N_RELICS) jumpTo(N_RELICS, at, "his death's TNT burst")
     }
 
     /** A terminal section's door opening (its barriers turning to air): [section] 1-3 is over. */
@@ -212,6 +212,8 @@ class SubSplitTracker {
             msg == CORE_OPENING -> if (current in T_S1..T_S4) { jumpTo(G_LEAPS, at, "\"$CORE_OPENING\""); watchingCore = true }
             msg in NECRON_START -> { watchingCore = false; jumpTo(N_INTRO, at, said(msg)) }
             SplitTracker.EXTRA_STATS.matches(msg) -> if (current in N_INTRO until N_END) jumpTo(N_END, at, "the run's end (EXTRA STATS)")
+            // M7: every relic placed - Necron's split is over and the Dragons begin.
+            msg == SplitTracker.RELICS_PLACED -> if (current in N_INTRO until N_END) jumpTo(N_END, at, said(msg))
 
             current < 0 -> return
 
@@ -332,7 +334,7 @@ class SubSplitTracker {
         const val S_CRUSH2 = 12; const val S_KILL = 13; const val S_ANIMATION = 14
         const val T_S1 = 15; const val T_S4 = 18; const val T_S3 = 17
         const val G_LEAPS = 19; const val G_KILL = 20
-        const val N_INTRO = 21; const val N_TRIP1 = 22; const val N_LOCK1 = 23; const val N_KILL = 24; const val N_END = 25
+        const val N_INTRO = 21; const val N_TRIP1 = 22; const val N_LOCK1 = 23; const val N_KILL = 24; const val N_RELICS = 25; const val N_END = 26
 
         /**
          * The steps, in order. Blood is the Watcher's dialogue, then his camp: "handle this" to
@@ -365,6 +367,7 @@ class SubSplitTracker {
 
             Step(SplitTracker.NECRON, "&dIntro", "necron.intro"), Step(SplitTracker.NECRON, "&cTrip", "necron.trip1"),
             Step(SplitTracker.NECRON, "&aLock", "necron.lock1"), Step(SplitTracker.NECRON, "&cKill", "necron.kill"),
+            Step(SplitTracker.NECRON, "&3Relics", "necron.relics"),
             Step(SplitTracker.NECRON, null),
         )
     }

@@ -4,7 +4,7 @@ import kotlin.math.hypot
 
 /**
  * The boss fights broken into sub splits, each timed on both clocks: the Watcher's camp, Maxor,
- * Storm, the four terminal sections, Goldor and Necron.
+ * Storm, the four terminal sections, Goldor and Necron (and on M7 the relics after him).
  *
  * The steps come from what recorded runs showed about each fight: every step is either the game's
  * own script, which nobody can speed up, or the party's time, never a mix. So a fixed step that runs long points at lag or a missed grid tick, and a
@@ -154,12 +154,12 @@ class SubSplitTracker {
     }
 
     /**
-     * Necron dead on M7: the burst of TNT he dies in (3 or more within 2 server ticks), with the
-     * Wither King next. On F7 his fight runs to the run's end (EXTRA STATS) instead: there is no end
-     * animation since Hypixel's boss update.
+     * Necron dead on M7: the burst of TNT he dies in (3 or more within 2 server ticks), and the
+     * relics until the Wither King's first line. On F7 his fight runs to the run's end (EXTRA STATS)
+     * instead: there is no end animation since Hypixel's boss update.
      */
     fun onNecronDeath(at: Stamp) {
-        if (current in N_INTRO until N_END) jumpTo(N_END, at)
+        if (current in N_INTRO until N_RELICS) jumpTo(N_RELICS, at)
     }
 
     /** A terminal section's door opening (its barriers turning to air): [section] 1-3 is over. */
@@ -200,6 +200,8 @@ class SubSplitTracker {
             msg == CORE_OPENING -> if (current in T_S1..T_S4) { jumpTo(G_LEAPS, at); watchingCore = true }
             msg in NECRON_START -> { watchingCore = false; jumpTo(N_INTRO, at) }
             SplitTracker.EXTRA_STATS.matches(msg) -> if (current in N_INTRO until N_END) jumpTo(N_END, at)
+            // M7: every relic placed - Necron's split is over and the Dragons begin.
+            msg == SplitTracker.RELICS_PLACED -> if (current in N_INTRO until N_END) jumpTo(N_END, at)
 
             current < 0 -> return
 
@@ -317,7 +319,7 @@ class SubSplitTracker {
         const val S_CRUSH2 = 14; const val S_KILL = 15; const val S_ANIMATION = 16
         const val T_S1 = 17; const val T_S4 = 20; const val T_S3 = 19
         const val G_LEAPS = 21; const val G_KILL = 22
-        const val N_INTRO = 23; const val N_TRIP1 = 24; const val N_LOCK1 = 25; const val N_KILL = 26; const val N_END = 27
+        const val N_INTRO = 23; const val N_TRIP1 = 24; const val N_LOCK1 = 25; const val N_KILL = 26; const val N_RELICS = 27; const val N_END = 28
 
         /**
          * The steps, in order. Fixed steps (the game's script): Dialogue, Wait, Animation, Opening,
@@ -327,7 +329,7 @@ class SubSplitTracker {
          * Necron: his intro until his sidestep off mid (81-84 ticks), the trip until he is back on it,
          * the lock until ARGH! (always 269-273 ticks in, however late he was back), then the kill, to
          * the run's end on F7 (there is no end animation since Hypixel's boss update, Oct 2026) or the
-         * TNT burst he dies in on M7.
+         * TNT burst he dies in on M7. On M7 the relics follow, until the Wither King's first line.
          */
         val SEQUENCE: List<Step> = listOf(
             Step(SplitTracker.BLOOD, "&7Dialogue", "watcher.dialogue"), Step(SplitTracker.BLOOD, "&5Wait", "watcher.wait"), Step(SplitTracker.BLOOD, "&cCamp", "watcher.camp"),
@@ -348,6 +350,7 @@ class SubSplitTracker {
 
             Step(SplitTracker.NECRON, "&dIntro", "necron.intro"), Step(SplitTracker.NECRON, "&cTrip", "necron.trip1"),
             Step(SplitTracker.NECRON, "&aLock", "necron.lock1"), Step(SplitTracker.NECRON, "&cKill", "necron.kill"),
+            Step(SplitTracker.NECRON, "&3Relics", "necron.relics"),
             Step(SplitTracker.NECRON, null),
         )
     }
