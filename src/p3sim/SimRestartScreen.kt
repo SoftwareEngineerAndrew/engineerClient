@@ -619,6 +619,8 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
                 .tooltip(tip("Back to the title screen; the host's sim goes on.")).bounds(x, y, PARTY_W, 20).build())
             return
         }
+        // Hosting and joining are the beta's only (ADM shows the party only if one is going).
+        if (!com.engineerclient.EngineerClient.BETA) return
         addRenderableWidget(Button.builder(Component.literal("Host Party")) { P3Party.host(); rebuildWidgets() }
             .tooltip(tip("Friends join your sim: you get a 4-letter code to send them.")).bounds(x, y, PARTY_W, 20).build())
         y += ROW
