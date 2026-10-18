@@ -46,13 +46,23 @@ class PackReport {
     @Synchronized fun hasErrors(): Boolean = lines.any { it.level == Level.ERROR }
 }
 
-/** Where the data packs live and what they are called. */
+/** Where the data packs live and what they are called. The jar bundles them; a copy in the packs folder overrides the bundled one, file by file. */
 object PackFiles {
     const val ROOMS_INDEX = "rooms.index.json.gz"
     const val ROOMS_BLOCKS = "rooms.blocks.bin"
     const val LAYOUTS = "layouts.json.gz"
     const val MOBS = "mobs.json.gz"
     const val RUNSTATE = "runstate.json.gz"
+    const val TRAPS = "traps.json"
+
+    /** The six files bundled in the jar (the room library is two files). A pack rebuild replaces exactly these (`tools/bundle-ads-packs.sh`). */
+    val BUNDLED: List<String> = listOf(ROOMS_INDEX, ROOMS_BLOCKS, LAYOUTS, MOBS, RUNSTATE, TRAPS)
+
+    /** Where the bundled files sit inside the jar. */
+    const val RESOURCE_ROOT = "assets/engineerclient/ads/packs"
+
+    /** The folder the bundled files are unpacked into, next to the override folder: `<gameDir>/config/engineerclient/ads/packs-bundled/`; one sub-folder per content hash. */
+    fun cacheRootFor(packsDir: Path): Path = packsDir.resolveSibling("packs-bundled")
 
     /** The packs folder under a game directory: `<gameDir>/config/engineerclient/ads/packs/`. */
     fun dirFor(gameDir: Path): Path = gameDir.resolve("config").resolve("engineerclient").resolve("ads").resolve("packs")

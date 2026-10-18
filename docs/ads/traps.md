@@ -27,7 +27,7 @@ The Ice Path is pushed by arrows (`HardPuzzlesModule.onEvent` on `ModuleEvent("d
 * Water: 1.8 `BlockDynamicLiquid` rules (`WaterSim`), 5-tick steps, a lever click moves the gates and the intake in its own tick (`GATE_DELAY_TICKS` = 0; the old 2 ticks were client latency), and pulling the water lever again plugs the intake with lapis and lets the column drain, a pit opens the tick water reaches its drain.
 * Ice Path: 0.4 blocks a tick, axis slides, stops in the middle of the cell before an obstacle.
 * Crushers: `CrusherTiming(ticksPerBlock, stillTicks)`, rest at the retracted end, period `(2 * sweep - 1) * ticksPerBlock + stillTicks`. Timings come from the optional
-  `traps.json` next to the packs (the spec is kept outside this repository), else 5 / 30. The hazard clock only runs while a human is in the room.
+  `traps.json` from the packs (bundled in the jar, or the override folder's copy; the spec is kept outside this repository), else 5 / 30. The hazard clock only runs while a human is in the room.
 
 ## The hazards of `src/p3sim/clear/traps/` (what the recordings show, and what the sim does)
 

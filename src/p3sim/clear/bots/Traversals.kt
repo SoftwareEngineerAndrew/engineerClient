@@ -24,8 +24,8 @@ fun interface RoomTraversals {
 }
 
 /**
- * Recorded single-room walks, an OPTIONAL data pack `bots.traversals.json.gz` next to the other ADS packs (format in docs/ads/bots.md). The
- * jar ships none and the repository holds none; a tool outside the repository builds the file from a corpus of recorded rooms. Missing is
+ * Recorded single-room walks, an OPTIONAL data pack `bots.traversals.json.gz` in the ADS packs folder under the config folder (format in docs/ads/bots.md). It
+ * is not one of the packs bundled in the jar, and the repository holds none; a tool outside the repository builds the file from a corpus of recorded rooms. Missing is
  * normal: the plain route of [RoomRoutes] is used.
  *
  * A walk is stored in the room's canonical frame, so one recording serves every placement of the design: [legs] puts it into the world with

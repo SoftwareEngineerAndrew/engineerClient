@@ -23,15 +23,15 @@ object RunStarter {
 
     /**
      * Runs [then] on the client thread with packs that can build a dungeon. Packs are loaded once and kept; a set that could not build
-     * one is loaded again first (the player may just have put the files in the folder). If they still cannot, [reply] gets
-     * [PackSet.userLines] (they name the folder) and [then] does not run.
+     * one is loaded again first (a developer may just have put an override in the folder). If they still cannot, [reply] gets
+     * [PackSet.userLines] and [then] does not run.
      */
     fun withPacks(reply: (String) -> Unit, then: (PackSet) -> Unit) {
         val have = Packs.current
         if (have != null && have.canBuildDungeon) { then(have); return }
         Packs.loadAsync().whenComplete { set, err ->
             mc.execute {
-                if (err != null || set == null) { reply("ADS could not read its data packs: ${err?.message ?: "unknown error"}. They go in ${runCatching { com.engineerclient.p3sim.pack.PackFiles.defaultDir() }.getOrNull()}."); return@execute }
+                if (err != null || set == null) { reply("ADS could not read its data packs: ${err?.message ?: "unknown error"}."); return@execute }
                 if (!set.canBuildDungeon) { set.userLines().forEach(reply); return@execute }
                 then(set)
             }

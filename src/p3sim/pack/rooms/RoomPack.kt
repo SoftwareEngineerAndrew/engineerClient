@@ -216,28 +216,31 @@ class RoomPack internal constructor(
          * [report], when the folder or a file is missing or unreadable, the format or version is wrong, or the
          * blocks file does not match the index. Never throws.
          */
-        fun load(dir: Path, report: PackReport = PackReport()): RoomPack? {
-            val indexPath = dir.resolve(PackFiles.ROOMS_INDEX)
-            if (!Files.isRegularFile(indexPath)) { report.error("The room library ${PackFiles.ROOMS_INDEX} is missing from $dir."); return null }
+        fun load(dir: Path, report: PackReport = PackReport()): RoomPack? = load(PackSource.ofDir(dir), report)
+
+        /** [load] from a resolved [PackSource]: each of the two files may be the jar's copy or the override folder's. */
+        fun load(source: PackSource, report: PackReport = PackReport()): RoomPack? {
+            val indexPath = source.file(PackFiles.ROOMS_INDEX)
+            if (indexPath == null) { report.error("The room library ${PackFiles.ROOMS_INDEX} is missing from ${source.missingFrom}."); return null }
             val root = try {
                 Files.newInputStream(indexPath).use { readGzipJson(it) }
-            } catch (e: Exception) { report.error("The room library ${PackFiles.ROOMS_INDEX} is unreadable: ${e.message}"); return null }
+            } catch (e: Exception) { report.error("The room library ${PackFiles.ROOMS_INDEX} is unreadable${source.note(PackFiles.ROOMS_INDEX)}: ${e.message}"); return null }
             if (!checkHeader(root, FORMAT, SUPPORTED_VERSION, PackFiles.ROOMS_INDEX, report)) return null
 
             val blocksName = root.str("blocksFile") ?: PackFiles.ROOMS_BLOCKS
-            val blocksPath = dir.resolve(blocksName)
-            if (!Files.isRegularFile(blocksPath)) { report.error("The room library's block file $blocksName is missing from $dir."); return null }
+            val blocksPath = source.file(blocksName)
+            if (blocksPath == null) { report.error("The room library's block file $blocksName is missing from ${source.missingFrom}."); return null }
             val size = Files.size(blocksPath)
             root.long("blocksFileBytes")?.let {
-                if (it != size) { report.error("$blocksName is $size bytes but the index expects $it. The room library is incomplete; copy both files again."); return null }
+                if (it != size) { report.error("$blocksName is $size bytes but the index expects $it. The room library is incomplete or its two files do not belong together; an override folder must hold both room files, from the same build."); return null }
             }
             root.str("blocksFileCrc32")?.let { want ->
-                val got = try { fileCrc32(blocksPath) } catch (e: Exception) { report.error("$blocksName is unreadable: ${e.message}"); return null }
-                if (got != want.lowercase()) { report.error("$blocksName does not match its index (checksum $got, expected $want). Copy both files again."); return null }
+                val got = try { fileCrc32(blocksPath) } catch (e: Exception) { report.error("$blocksName is unreadable${source.note(blocksName)}: ${e.message}"); return null }
+                if (got != want.lowercase()) { report.error("$blocksName does not match its index (checksum $got, expected $want). An override folder must hold both room files, from the same build."); return null }
             }
-            val source = try { FileBlobSource(blocksPath) } catch (e: Exception) { report.error("$blocksName cannot be opened: ${e.message}"); return null }
-            val pack = fromIndex(root, source, report)
-            if (pack == null) source.close()
+            val blobSource = try { FileBlobSource(blocksPath) } catch (e: Exception) { report.error("$blocksName cannot be opened${source.note(blocksName)}: ${e.message}"); return null }
+            val pack = fromIndex(root, blobSource, report)
+            if (pack == null) blobSource.close()
             return pack
         }
 

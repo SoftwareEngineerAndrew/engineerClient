@@ -95,11 +95,12 @@ class TrapTimings(
 
         val NONE = TrapTimings(DEFAULT, emptyMap())
 
-        /** Reads `traps.json` beside the packs; a missing or unreadable file gives [NONE] (the caller may mention it, nothing else changes). */
-        fun load(packsDir: Path?): TrapTimings {
-            if (packsDir == null) return NONE
-            val f = packsDir.resolve("traps.json")
-            if (!Files.isRegularFile(f)) return NONE
+        /** Reads `traps.json` from a folder; a missing or unreadable file gives [NONE] (the caller may mention it, nothing else changes). */
+        fun load(packsDir: Path?): TrapTimings = if (packsDir == null) NONE else load(com.engineerclient.p3sim.pack.PackSource.ofDir(packsDir))
+
+        /** Reads `traps.json` as the packs resolved it (the jar's copy, or the override folder's); a missing or unreadable file gives [NONE]. */
+        fun load(source: com.engineerclient.p3sim.pack.PackSource): TrapTimings {
+            val f = source.file(com.engineerclient.p3sim.pack.PackFiles.TRAPS) ?: return NONE
             return try { parse(Files.readString(f)) } catch (e: Exception) { NONE }
         }
 
