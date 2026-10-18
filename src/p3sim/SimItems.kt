@@ -878,6 +878,7 @@ object SimItems {
         val held = inv.getItem(inv.selectedSlot)
         val heldId = idOf(held)
         val want = when {
+            clearMapShown() -> magicalMap()
             heldId != null && held.item is net.minecraft.world.item.BowItem -> quiverPreview()
             heldId == "INFINITE_SPIRIT_LEAP" -> magicalMap()
             else -> if (idOf(cur) == "SKYBLOCK_MENU") return else MENU
@@ -1002,6 +1003,82 @@ object SimItems {
         p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(held))
         p.containerMenu.broadcastChanges()
         p.inventoryMenu.broadcastChanges()
+    }
+
+    // ------------------------------------------------------------------ the clear's kit
+
+    /** The Spirit Sceptre as the clear's hotbar carries it (fragged, the Heroic one): its click is [sceptre]. */
+    val SPIRIT_SCEPTRE get() = item(Items.PAPER, SCEPTRE, "§6 Heroic Spirit Sceptre §6✪✪✪✪✪", listOf(
+        "§6Ability: Guided Bat §e§lRIGHT CLICK", "§7Shoots a guided spirit bat, following", "§7your aim and exploding on what it hits.",
+        "", "§6§lLEGENDARY DUNGEON SWORD"), glint = true).also { hy(it, "island_relevant/dungeons/spirit_sceptre_fragged", "legendary") }
+    const val SCEPTRE = "STARRED_SPIRIT_SCEPTRE"
+
+    /** How far a Guided Bat flies before it bursts (blocks). Unmeasured. */
+    private const val SCEPTRE_RANGE = 24.0
+
+    /**
+     * Guided Bat, simplified: the bat bursts at the first mob along the look (within 1.5 blocks of the line) or at the first wall, up to
+     * [SCEPTRE_RANGE] blocks, and that burst is a blast ([DamageModule.blast]). Its flight is not shown.
+     */
+    private fun sceptre(p: ServerPlayer) {
+        val eye = p.eyePosition
+        val look = p.lookAngle
+        val end = eye.add(look.scale(SCEPTRE_RANGE))
+        val wall = p.level().clip(net.minecraft.world.level.ClipContext(eye, end, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, p))
+        val reach = if (wall.type == net.minecraft.world.phys.HitResult.Type.MISS) SCEPTRE_RANGE else wall.location.distanceTo(eye)
+        var at = eye.add(look.scale(reach))
+        val box = net.minecraft.world.phys.AABB(eye, at).inflate(1.5)
+        val mob = p.level().getEntities(p, box) { e -> e is net.minecraft.world.entity.LivingEntity && e.isAlive && DamageModule.mobFor(e) != null }
+            .minByOrNull { it.distanceToSqr(eye) }
+        if (mob != null) at = mob.position().add(0.0, mob.bbHeight / 2.0, 0.0)
+        Sim.level.sendParticles(ParticleTypes.EXPLOSION, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
+        Sim.sound(SoundEvents.GENERIC_EXPLODE, 0.5f, 1.2f, at, net.minecraft.sounds.SoundSource.PLAYERS)
+        DamageModule.blast(at.x, at.y, at.z, com.engineerclient.p3sim.run.DamageSource.IMPLOSION, p.uuid)
+    }
+
+    /** Young Dragon, the clear's armour (recorded: Necrotic Young Dragon helmet, legs and boots, a Loving chestplate, all ✪✪✪✪✪). */
+    private const val YOUNG_DRAGON_DYE = 0xDDE4F0
+    private const val YOUNG_DRAGON_HELM_TEX = "a0e81ed07dfb0244d56f4d5f2b37553ec026fb4796f0fb0c57a8eb264983e1e0"
+
+    private fun youngDragon(base: Item, id: String, name: String): ItemStack =
+        piece(base, id, "§6$name §6✪✪✪✪✪", listOf("§6Full Set Bonus: Young Blood", "§7Gain §a+70✦ Speed§7 while above §c50%", "§7health.", "", "§6§lLEGENDARY"), YOUNG_DRAGON_DYE, "legendary")
+
+    /** The clear's armour on [p]: Young Dragon, the helmet a textured head. */
+    fun wearClearArmor(p: ServerPlayer) {
+        val helm = head(com.engineerclient.p3sim.clear.blood.HeadTextures.valueFor(YOUNG_DRAGON_HELM_TEX), "§6Necrotic Young Dragon Helmet §6✪✪✪✪✪")
+        helm.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", "YOUNG_DRAGON_HELMET"); it.putBoolean("p3sim", true) }))
+        hy(helm, null, "legendary")
+        wear(p, net.minecraft.world.entity.EquipmentSlot.HEAD, helm)
+        wear(p, net.minecraft.world.entity.EquipmentSlot.CHEST, youngDragon(Items.LEATHER_CHESTPLATE, "YOUNG_DRAGON_CHESTPLATE", "Loving Young Dragon Chestplate"))
+        wear(p, net.minecraft.world.entity.EquipmentSlot.LEGS, youngDragon(Items.LEATHER_LEGGINGS, "YOUNG_DRAGON_LEGGINGS", "Necrotic Young Dragon Leggings"))
+        wear(p, net.minecraft.world.entity.EquipmentSlot.FEET, youngDragon(Items.LEATHER_BOOTS, "YOUNG_DRAGON_BOOTS", "Necrotic Young Dragon Boots"))
+    }
+
+    /**
+     * The clear's kit, as the recorded clears carry it: Hyperion, Aspect of the Void, Terminator, Dungeonbreaker, 16 Ender Pearls, the
+     * Infinileap, the Spirit Sceptre and Superboom TNT on the hotbar, the SkyBlock Menu in slot 9 (the Magical Map from Mort's first line,
+     * [tickSlot9]); the boss items (Bonzo's Staff, the rod, the Jerry-chine) and more Superboom wait in the inventory; Young Dragon on.
+     * The boss's own kit comes back at the jump to Maxor ([giveHotbar]).
+     */
+    fun giveClearKit(p: ServerPlayer) {
+        val inv = p.inventory
+        inv.clearContent()
+        val bar = listOf(HYPERION, AOTV, TERMINATOR, DUNGEONBREAKER, PEARLS.also { it.count = 16 }, LEAP, SPIRIT_SCEPTRE, SUPERBOOM.also { it.count = 5 }, MENU)
+        bar.forEachIndexed { i, s -> inv.setItem(i, s) }
+        listOf(27 to SUPERBOOM, 28 to BONZO, 29 to PET_ROD, 30 to JERRY).forEach { (slot, s) -> inv.setItem(slot, s) }
+        wearClearArmor(p)
+        // Not a boss layout: what the player does with this kit must not become their P1 layout.
+        HotbarLayout.forgetGiven()
+        inv.selectedSlot = 0
+        p.connection.send(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket(0))
+        p.containerMenu.broadcastChanges()
+        p.inventoryMenu.broadcastChanges()
+    }
+
+    /** Slot 9 in a run's clear: the Magical Map from Mort's first line on, whatever is held (recorded: it never changes there). */
+    private fun clearMapShown(): Boolean {
+        val r = DamageModule.activeRun() ?: return false
+        return r.stage == com.engineerclient.p3sim.run.RunStage.CLEAR || r.stage == com.engineerclient.p3sim.run.RunStage.BLOOD
     }
 
     // ------------------------------------------------------------------ hooks
@@ -1301,6 +1378,7 @@ object SimItems {
             "STARRED_BONZO_STAFF" -> asClicked(p, "bonzo") { bonzo(p) }
             "JERRY_STAFF" -> asClicked(p, "jerry", prior = !fromBlock) { jerry(p) }
             "WITHER_CLOAK" -> asClicked(p, "cloak") { cloak(p) }
+            SCEPTRE -> asClicked(p, "sceptre") { sceptre(p) }
             ClearItems.INFINILEAP, ClearItems.SPIRIT_LEAP -> openLeap(p, id)
             // The secret items whose ability is not simulated: eat the click so vanilla never throws, spawns or splashes anything.
             in ClearItems.INERT -> inertItem(p, id)

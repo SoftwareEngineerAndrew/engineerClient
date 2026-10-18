@@ -66,17 +66,18 @@ object DoorsModule : AdsModule, DoorService {
         val c = StateController(run, StateRules.fromPack(run.packs.runstate), config(), effects())
         controller = c
         c.start()
+        MortNpc.spawn(run.plan)
     }
 
-    override fun onTick(run: Run) { controller?.tick() }
+    override fun onTick(run: Run) { controller?.tick(); MortNpc.tick() }
 
     override fun onEvent(run: Run, event: RunEvent) { controller?.onEvent(event) }
 
-    override fun onRunEnd(run: Run, reason: EndReason) { controller?.end(); controller = null }
+    override fun onRunEnd(run: Run, reason: EndReason) { controller?.end(); controller = null; MortNpc.remove() }
 
     override fun snapshot(run: Run): JsonObject? = controller?.snapshot()
 
-    override fun restore(run: Run, data: JsonObject) { controller?.restore(data) }
+    override fun restore(run: Run, data: JsonObject) { controller?.restore(data); MortNpc.spawn(run.plan) }
 
     // ---- DoorService -----------------------------------------------------------------------------------------------------
 

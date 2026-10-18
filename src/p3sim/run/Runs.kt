@@ -68,9 +68,9 @@ object Runs {
 
         val spawn = entranceSpawn(level, plan, config.seed)
         for (p in humans) {
-            // Game mode, speed, health, no knockback; then the hotbar as the clear and P1 have it (Hyperion first), the Magical Map in slot 9 with the Infinileap.
+            // Game mode, speed, health, no knockback; then the clear's kit and armour (the boss kit comes back at the jump to Maxor).
             Fight.setup(p, giveHotbar = false)
-            Sim.asPlayer(p) { SimItems.giveHotbar(p, p3 = false, start = true); Sim.chat("§fYou can no longer consume or splash any potions during the remainder of this Dungeon run!"); Sim.tp(p, spawn.x, spawn.y, spawn.z, spawn.yaw, 0f) }
+            Sim.asPlayer(p) { SimItems.giveClearKit(p); Sim.chat("§fYou can no longer consume or splash any potions during the remainder of this Dungeon run!"); Sim.tp(p, spawn.x, spawn.y, spawn.z, spawn.yaw, 0f) }
             // The chunks the login put round the world's spawn are not Hypixel's window any more: let the client drop the ones the new window leaves out.
             for (after in FORGET_LOGIN_CHUNKS_AFTER) Fight.later(after, "forget login chunks") { forgetLoginChunks(p) }
         }

@@ -111,6 +111,9 @@ object HotbarLayout {
     /** [p3]'s part was just laid out, holding [held]: the player's items are its from now on. */
     fun gave(p3: Boolean, held: Int) { given[owner()] = key(p3) to held }
 
+    /** A kit that is no boss layout went on (the run's clear): the next reset must not take it as the last layout's items. */
+    fun forgetGiven() { given.remove(owner()) }
+
     /** Reset Items: [p3]'s part back to the saved layout (or the default), not as left. */
     fun dropLive(p3: Boolean) { lives().remove(key(p3)); given.remove(owner()); keepLives() }
 

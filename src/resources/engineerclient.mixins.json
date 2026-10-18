@@ -55,7 +55,10 @@
     "WandInputMixin",
     "WandScrollMixin",
     "AdsEngineChunkPaceMixin",
-    "AdsBotsBodyMixin"
+    "AdsBotsBodyMixin",
+    "AdsEngineNoSaveMixin",
+    "AdsEngineNoChunkFlushMixin",
+    "AdsEngineLeaveScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

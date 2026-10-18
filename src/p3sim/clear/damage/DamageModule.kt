@@ -231,7 +231,8 @@ object DamageModule : AdsModule, DamageService {
         if (!rec.alive || amount <= 0.0 || amount.isNaN()) return false
         // A sleeping Fels cannot be hurt, except by a teammate bot (it wakes it, as a body next to it would).
         if (asleep(rec) && by?.let { run.state.players[it]?.isBot } != true) return false
-        val left = max(0.0, rec.hp - amount)
+        // For now every hit kills (no damage maths in the clear yet): the mob takes all it has left.
+        val left = if (oneShot) 0.0 else max(0.0, rec.hp - amount)
         mobLedger.record(mob, amount, source, by)
         if (by != null) addDealt(run, by, amount)
         val after = Services.mobs.setHp(run, mob, left, by)
@@ -262,6 +263,9 @@ object DamageModule : AdsModule, DamageService {
         val seconds = maxOf(0, run.t / 20)
         for (i in shownSoFar until now) Sim.asPlayer(sp) { Sim.chat(ClassMilestones.line(cls, i, table, seconds)) }
     }
+
+    /** Every hit on a clear mob kills it (the damage numbers are not modelled yet). */
+    @Volatile var oneShot = true
 
     /** The key of a player's kill count in [PlayerRecord.extras]. */
     const val KEY_KILLS = "damage.kills"

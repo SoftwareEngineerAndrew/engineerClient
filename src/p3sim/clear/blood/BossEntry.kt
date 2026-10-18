@@ -94,6 +94,7 @@ object BossEntry {
         run.state.milestones.bossEntryT = run.t
         run.bus.post(BossEntryEvent(run.t))
         run.requestStage(RunStage.BOSS_ENTRY)
-        run.beginBoss(BossEntryOptions(giveHotbar = false, firstLineDelayTicks = 2))
+        // The boss kit and loadout replace the clear's (SimItems.giveClearKit) at the jump.
+        run.beginBoss(BossEntryOptions(giveHotbar = true, firstLineDelayTicks = 2))
     }
 }
