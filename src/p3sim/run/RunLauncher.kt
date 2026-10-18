@@ -120,7 +120,11 @@ object RunLauncher {
         dropPendingPacks()
         pending = config; pendingPlan = plan
         packs?.pin(); pendingPacks = packs
+        lastLaunch = plan.layoutId to config.seed
     }
+
+    /** The layout and seed of the last run launched (client side): ADR writes them into a recording of the run. */
+    @Volatile var lastLaunch: Pair<String, Long>? = null
 
     /**
      * Server thread, with [takePending]: the pack set the plan was made from, still pinned for the caller, who unpins it once the run holds its own pin

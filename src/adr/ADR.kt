@@ -66,6 +66,7 @@ object ADR : Module(
 ) {
     private val privateRuns by BooleanSetting("Private Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, private ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way).")
+    private val recordAds by BooleanSetting("Record ADS Runs", true, desc = "Records your ADS full runs (the clear and the boss in the ADS world) into config/engineerclient/adr/sim, on this computer only: they are never uploaded. Used to check ADS against real runs.")
     private val hidePartyChat by BooleanSetting("Hide Party Chat", false, desc = "Leaves party chat out of recordings and uploads. Off, the viewer shows what your party said during the run.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
@@ -98,6 +99,7 @@ object ADR : Module(
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
     private var session: RunRecorder? = null
+    private val simDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("sim")
     private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("runs")
 
     init {
@@ -106,7 +108,9 @@ object ADR : Module(
             EngineerClient.safely("adr start") {
                 session?.finish()
                 RoomKeys.reset()
-                session = RunRecorder(runsDir, true, ::upload)
+                // An ADS full run is recorded too, into its own folder and never uploaded: it is what the sim is checked against the real runs with.
+                val adsWorld = com.engineerclient.p3sim.SimServer.server != null && EngineerClient.mc.hasSingleplayerServer()
+                session = if (adsWorld) (if (recordAds) RunRecorder(simDir, true, sim = true) else null) else RunRecorder(runsDir, true, ::upload)
             }
         }
 
