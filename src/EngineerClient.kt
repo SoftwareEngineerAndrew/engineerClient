@@ -84,7 +84,7 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            com.engineerclient.practice.TermInfo, StormPhase, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
+            com.engineerclient.practice.TermInfo, StormPhase, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.DoorLoad,
         )
     }
 
