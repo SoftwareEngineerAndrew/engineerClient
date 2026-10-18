@@ -8,7 +8,7 @@ import kotlin.math.hypot
 /**
  * The Storm sub split's moments beyond its steps ([SubSplitTracker]'s Opening, Crush, Pin, Flight,
  * Crush, Kill, Animation), all in server ticks from his phase's start (his wither appears a tick
- * before "Pathetic Maxor, just like expected."), as Storm Phase and Timers count them:
+ * before "Pathetic Maxor, just like expected."), as Timers counts them:
  *
  *  - Giga Lightning striking: 33 ticks after "I'd be happy to show you what that's like!" (519-521
  *    into the phase in 662 F7 and 371 M7 recordings; 520 when the line wasn't seen), and his

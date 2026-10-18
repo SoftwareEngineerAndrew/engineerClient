@@ -43,9 +43,9 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         val cx = width / 2
         // Restart in the middle of the screen; the rest hangs off it.
         val restartY = height / 2 - 10
-        // The skill and role columns end level with Restart's bottom.
-        val skillY = restartY - 3 * ROW
+        // The skill and role columns (five each) start level with each other and end level with Restart's bottom.
         val roleY = restartY - 4 * ROW
+        val skillY = roleY
         val left = cx - RESTART_W / 2 - GAP - SIDE_W
         val right = cx + RESTART_W / 2 + GAP
         val roleX = right + SIDE_W + GAP
@@ -58,6 +58,19 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
             mc.gui.setScreen(null)
             SimActions.send("stop")
         }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
+
+        // The full run: its start screen, and while one is on, a restart of the room or of the whole run (savepoint restores, not a rebuilt world).
+        if (com.engineerclient.EngineerClient.BETA) addRenderableWidget(Button.builder(Component.literal("§bFull Run")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
+            .tooltip(tip("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first. Rebuilds the world."))
+            .bounds(cx - RESTART_W / 2, restartY - 2 * ROW, RESTART_W, 20).build())
+        if (com.engineerclient.p3sim.run.ClientRun.inClear) {
+            addRenderableWidget(Button.builder(Component.literal("§eRestart Room")) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart", "room") }
+                .tooltip(tip("Back to where you entered the room you stand in: the run's state, the clock and your gear as they were."))
+                .bounds(cx - RESTART_W / 2, restartY - 3 * ROW, RESTART_W, 20).build())
+            addRenderableWidget(Button.builder(Component.literal("§eRestart Run")) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart") }
+                .tooltip(tip("Back to the start of this run (the same dungeon, no rebuild)."))
+                .bounds(cx - RESTART_W / 2, restartY - 4 * ROW, RESTART_W, 20).build())
+        }
 
         party()
 
@@ -73,7 +86,8 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         val skills = listOf(
             Triple(0, "Normal PF", "The bots play at a normal party finder pace: P3 in about 34 s."),
             Triple(1, "Quality PF", "The bots play at a quality party finder pace: P3 in about 28 s."),
-            Triple(2, "Optimal PF", "The bots play at an optimal party finder pace: P3 in about 22 s."),
+            Triple(2, "Advanced PF", "The bots play at an advanced party finder pace: P3 in about 22 s."),
+            Triple(P3Plan.NEAR_OPTIMAL, "Near Optimal", "Nearly the fastest terms: the archer pre-does S3's device, the tank holds the high EE3, the mage holds by the core for S4 and recores after its 4th."),
             Triple(P3Plan.THEORETICAL, "Theoretical", "The fastest terms, in theory: a far EE2, a high EE3, an EE4 by the core."),
         )
         for ((k, s) in skills.withIndex()) {
@@ -338,14 +352,14 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
                 toggle("Debug Bots", P3Sim.debugBots, 92, P3Sim.debugBotsS.description) { P3Sim.debugBotsS.value = !P3Sim.debugBots },
             )),
             stack("§eOther", 100, "Your hotbar, recording, leaving.", listOf(
-                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who on ${P3Plan.skillName()} ($part). " +
+                act(if (saved) "§aSave $part Hotbar" else "Save $part Hotbar", 100, "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who ($part), on every skill. " +
                     "Every start and restart lays it out (without one, your items stay as you left them).") {
                     SimActions.send("hotbarSave", "p3" to p3Part)
                 },
-                act("Default Hotbar", 100, "Forgets your saved $part hotbar for the $who on ${P3Plan.skillName()} and lays out the sim's default.") {
+                act("Default Hotbar", 100, "Forgets your saved $part hotbar for the $who (every skill) and lays out the sim's default.") {
                     SimActions.send("hotbarReset", "p3" to p3Part)
                 }.also { it.active = saved },
-                act("Reset Items", 100, "Your $part items, gear and pet back to your saved hotbar for the $who on ${P3Plan.skillName()} now (or the default, forgetting how you left them).") { SimActions.send("resetItems", "p3" to p3Part) },
+                act("Reset Items", 100, "Your $part items, gear and pet back to your saved hotbar for the $who now (or the default, forgetting how you left them).") { SimActions.send("resetItems", "p3" to p3Part) },
                 toggle("Record", P3Sim.record, 100, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record },
                 act("§7Leave", 100, "Leaves the sim world.") { SimWorld.leave() },
             )),
@@ -605,6 +619,8 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
                 .tooltip(tip("Back to the title screen; the host's sim goes on.")).bounds(x, y, PARTY_W, 20).build())
             return
         }
+        // Hosting and joining are the beta's only (ADM shows the party only if one is going).
+        if (!com.engineerclient.EngineerClient.BETA) return
         addRenderableWidget(Button.builder(Component.literal("Host Party")) { P3Party.host(); rebuildWidgets() }
             .tooltip(tip("Friends join your sim: you get a 4-letter code to send them.")).bounds(x, y, PARTY_W, 20).build())
         y += ROW

@@ -149,10 +149,38 @@ object SubSplitGrades {
         "split.necron" to ticks(409, 425, 436, 447, 490, 540),
     )
 
+    /**
+     * M7's own, cut from 753 cleared M7 runs since the boss update (one per run, however many of its
+     * party recorded it). Only these are banded on M7; every other step there is gold and gray only.
+     */
+    val BANDS_M7: Map<String, Bands> = mapOf(
+        // ARGH! to the TNT burst he dies in, on a 20-tick check: 99-104, then 118-127, 139-149,
+        // 159-170, 180-190 (p25 121, median 141, p75 162). A band per check.
+        "necron.kill" to Bands(Clock.TICKS, longArrayOf(106, 128, 150, 172, 192), 99),
+        // His death to the Wither King's first line (every relic placed, plus the 64-69 ticks he takes
+        // to say so): 89 up, p5 101, p25 111, median 121, p75 150, p90 212.
+        "necron.relics" to ticks(89, 101, 111, 121, 150, 212),
+        // Necron's first line to the Wither King's: 457-1504, p5 482, p25 510, median 533, p75 570, p90 633.
+        "split.necron" to ticks(457, 482, 510, 533, 570, 633),
+        // The Wither King's first line to the run's end: 523 up, p5 533, p25 547, median 566, p75 591, p90 623.
+        "split.dragons" to ticks(523, 533, 547, 566, 591, 623),
+    )
+
+    /** [id]'s bands on [floor]: F7's, or M7's own (none where M7 has none); null anywhere else. */
+    fun bands(id: String, floor: String?): Bands? = when (floor) {
+        "F7" -> BANDS[id]
+        "M7" -> BANDS_M7[id]
+        else -> null
+    }
+
+    private fun anyBands(id: String, floor: String?) = bands(id, floor) ?: BANDS[id] ?: BANDS_M7[id]
+
     /** Odin's split names (colour codes stripped) to their ids here. */
     val MAIN_SPLITS = mapOf(
         "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Portal Entry" to "split.portal", "Boss Entry" to "split.enter", "Maxor" to "split.maxor", "Storm" to "split.storm",
         "Terminals" to "split.terms", "Goldor" to "split.goldor", "Necron" to "split.necron",
+        // M7's Dragons (Odin's last floor 7 split; F7 never starts it).
+        "Cleared" to "split.dragons",
     )
 
     /**
@@ -171,13 +199,15 @@ object SubSplitGrades {
     fun clock(id: String): Clock = BANDS[id]?.clock ?: Clock.TICKS
 
     /**
-     * The colour for [value] of step [id]. A finished step at or under [best] is gold (a best ties
-     * count: it is the run that set it). [banded] is false off F7, where the bands weren't measured:
-     * then only the gold and the filler gray apply, and [fallback] (the step's own colour) the rest.
+     * The colour for [value] of step [id] on [floor]. A finished step at or under [best] is gold (a
+     * best ties count: it is the run that set it). Where [floor] has no bands for it (off F7, and on
+     * M7 all but [BANDS_M7]), only the gold and the filler gray apply, and [fallback] (the step's own
+     * colour) the rest.
      */
-    fun colour(id: String, value: Long, finished: Boolean, best: Long?, banded: Boolean, fallback: String): String {
+    fun colour(id: String, value: Long, finished: Boolean, best: Long?, floor: String?, fallback: String): String {
         if (!byTime()) return fallback
-        val b = BANDS[id] ?: return fallback
+        val banded = bands(id, floor) != null
+        val b = anyBands(id, floor) ?: return fallback
         b.lateAfter?.let { return if (finished && value > it) COLOURS[4] else FILLER }
         val limits = b.limits ?: return FILLER
         if (showBest() && finished && best != null && value <= best && value >= b.floor) return BEST
@@ -186,9 +216,9 @@ object SubSplitGrades {
         return COLOURS[if (i < 0) COLOURS.lastIndex else i]
     }
 
-    /** Whether a finished [value] can stand as a best: banded (not filler) and not under the floor. */
-    fun canBeBest(id: String, value: Long): Boolean {
-        val b = BANDS[id] ?: return false
+    /** Whether a finished [value] can stand as a best on [floor]: banded (not filler) and not under the floor. */
+    fun canBeBest(id: String, value: Long, floor: String? = "F7"): Boolean {
+        val b = anyBands(id, floor) ?: return false
         return b.limits != null && value >= b.floor
     }
 

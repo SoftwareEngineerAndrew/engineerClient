@@ -236,51 +236,80 @@ object Masks {
         }
     }
 
-    /** [by]: the killer named in the death line, or null for the plain "You died". */
-    fun hit(p: ServerPlayer, by: String?, goldor: (() -> Unit)? = null) {
+    /** True while nothing can hurt you: a ghost, or inside the safe window a proc just opened. */
+    fun covered(): Boolean = ghost || Fight.serverTick < safeUntil
+
+    /**
+     * Spends the mask or Phoenix that saves [p] from a hit that would kill, with its particles, sounds and chat line. False when
+     * none is ready (and nothing is spent). Opens the safe window. This is the first half of [hit], also called by the dungeon run's
+     * damage ledger.
+     */
+    fun tryProc(p: ServerPlayer): Boolean {
         val now = Fight.serverTick
-        // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds.
-        if (ghost || now < safeUntil) { goldor?.invoke(); return }
-        // A named hit meets the Creeper Veil first (death ticks, by == null, go through it).
-        if (by != null && SimItems.veilAbsorbs()) return
         val ready = items.filter { it.readyAt <= now && (it.id != "PHOENIX" || P3Sim.phoenix || !P3Sim.realMasks) }
         val item = if (!P3Sim.realMasks) ready.firstOrNull()
             else ready.firstOrNull { it.id == SimItems.idOf(p.getItemBySlot(EquipmentSlot.HEAD))?.removePrefix("STARRED_") }
                 ?: ready.firstOrNull { it.id == "PHOENIX" }
-        if (item != null) {
-            item.readyAt = now + item.cooldown
-            // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
-            if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.setPhoenix(true); Fight.applySpeed(p) }
-            safeUntil = now + SAFE
-            // Proc particles as recorded: explosion x3 at your feet, Phoenix adds lava x18.
-            Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
-            if (item.id == "PHOENIX") Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA, p.x, p.y, p.z, 18, 0.1, 0.1, 0.1, 0.08)
-            // Proc order as recorded: masks eat + cure then the proc chat; Phoenix chat, then
-            // extinguish, two infects and the ghast scream; then Goldor's line. No enderman sound on Spirit.
-            if (item.id == "PHOENIX") {
-                Sim.chat(item.line)
-                Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.492f, null, net.minecraft.sounds.SoundSource.BLOCKS)
-                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f, null, net.minecraft.sounds.SoundSource.HOSTILE)
-                Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f, null, net.minecraft.sounds.SoundSource.HOSTILE)
-                // Main sends the legacy id mob.ghast.affectionate_scream (no such sound in 26.1.2's assets, so the client
-                // plays nothing): sent as the same direct, unregistered sound event.
-                Sim.sound(PHOENIX_SCREAM, 1f, 1.41f + kotlin.random.Random.nextFloat() * 0.15f)
-            } else {
-                Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f, null, net.minecraft.sounds.SoundSource.PLAYERS)
-                Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f, null, net.minecraft.sounds.SoundSource.HOSTILE)
-                Sim.chat(item.line)
-            }
-            goldor?.invoke()
-            return
+        if (item == null) return false
+        item.readyAt = now + item.cooldown
+        // Auto (Real Masks off): Phoenix saves you whatever pet is out, swapped in as it does.
+        if (item.id == "PHOENIX" && !P3Sim.phoenix) { P3Sim.setPhoenix(true); Fight.applySpeed(p) }
+        safeUntil = now + SAFE
+        // Proc particles as recorded: explosion x3 at your feet, Phoenix adds lava x18.
+        Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, p.x, p.y, p.z, 3, 1.0, 1.0, 1.0, 0.0)
+        if (item.id == "PHOENIX") Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA, p.x, p.y, p.z, 18, 0.1, 0.1, 0.1, 0.08)
+        // Proc order as recorded: masks eat + cure then the proc chat; Phoenix chat, then
+        // extinguish, two infects and the ghast scream; then Goldor's line. No enderman sound on Spirit.
+        if (item.id == "PHOENIX") {
+            Sim.chat(item.line)
+            Sim.sound(SoundEvents.LAVA_EXTINGUISH, 1f, 1.492f, null, net.minecraft.sounds.SoundSource.BLOCKS)
+            Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f, null, net.minecraft.sounds.SoundSource.HOSTILE)
+            Sim.sound(SoundEvents.ZOMBIE_INFECT, 1f, 1.19f, null, net.minecraft.sounds.SoundSource.HOSTILE)
+            // Main sends the legacy id mob.ghast.affectionate_scream (no such sound in 26.1.2's assets, so the client
+            // plays nothing): sent as the same direct, unregistered sound event.
+            Sim.sound(PHOENIX_SCREAM, 1f, 1.41f + kotlin.random.Random.nextFloat() * 0.15f)
+        } else {
+            Sim.sound(SoundEvents.GENERIC_EAT, 0.9f, 0.59f, null, net.minecraft.sounds.SoundSource.PLAYERS)
+            Sim.sound(SoundEvents.ZOMBIE_VILLAGER_CURE, 1f, 2f, null, net.minecraft.sounds.SoundSource.HOSTILE)
+            Sim.chat(item.line)
         }
-        Sim.chat(if (by == null) "§c ☠ §r§7You died and became a ghost." else "§c ☠ §r§7You were killed by $by and became a ghost.")
+        return true
+    }
+
+    /**
+     * You die: the death lines, the Revive Stone line, the ghost kit. [reviveIn] ticks on the revive comes from the caller (the
+     * dungeon run's ledger, which also revives); null leaves it to the boss sim's own timer. The sound that follows is the death's.
+     */
+    fun die(p: ServerPlayer, by: String?, reviveIn: Int? = null, crushed: Boolean = false) {
+        Sim.chat(when { crushed -> "§c ☠ §r§7You were crushed and became a ghost."; by == null -> "§c ☠ §r§7You died and became a ghost."; else -> "§c ☠ §r§7You were killed by $by and became a ghost." })
         // The rest of the party sees it with your name.
         val name = p.gameProfile.name
-        Sim.asPlayer(p) { Sim.chatOthers(if (by == null) "§c ☠ §r§7$name died and became a ghost." else "§c ☠ §r§7$name was killed by $by and became a ghost.") }
+        Sim.asPlayer(p) { Sim.chatOthers(when { crushed -> "§c ☠ §r§7$name was crushed and became a ghost."; by == null -> "§c ☠ §r§7$name died and became a ghost."; else -> "§c ☠ §r§7$name was killed by $by and became a ghost." }) }
         // The Revive Stone line shows in about 71% of deaths on Hypixel; it changes nothing.
         if (kotlin.random.Random.nextInt(100) < 71) Sim.chat("§aYour Revive Stone revived you and broke!")
-        becomeGhost(p)
+        becomeGhost(p, reviveIn)
         Sim.sound(SoundEvents.GENERIC_HURT, 1f, 0.889f, null, net.minecraft.sounds.SoundSource.NEUTRAL)
+    }
+
+    /**
+     * Brings the ghost [p] back where it floats, for the dungeon run's timer or a reviver: the chat line for everyone, then the
+     * inventory and armour back. [by] is the reviver's name (yourself when nobody was near).
+     */
+    fun reviveGhost(p: ServerPlayer, by: String?, byColour: String = "§b") {
+        if (!ghost) return
+        reviveGen++
+        endGhost(p)
+        Sim.everyone { Sim.chat("§a ❣ §r§b${p.gameProfile.name}§r§a was revived by §r$byColour${by ?: p.gameProfile.name}§r§a!") }
+    }
+
+    /** [by]: the killer named in the death line, or null for the plain "You died". */
+    fun hit(p: ServerPlayer, by: String?, goldor: (() -> Unit)? = null) {
+        // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds.
+        if (covered()) { goldor?.invoke(); return }
+        // A named hit meets the Creeper Veil first (death ticks, by == null, go through it).
+        if (by != null && SimItems.veilAbsorbs()) return
+        if (tryProc(p)) { goldor?.invoke(); return }
+        die(p, by)
         goldor?.invoke()
         // No immunity after dying or a revive (you can be killed again on the next death tick).
     }
@@ -306,7 +335,7 @@ object Masks {
     private fun ghostItem(base: net.minecraft.world.item.Item, name: String, count: Int = 1) =
         ItemStack(base, count).also { it.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { s -> s.withItalic(false) }) }
 
-    private fun becomeGhost(p: ServerPlayer) {
+    private fun becomeGhost(p: ServerPlayer, reviveIn: Int? = null) {
         ghost = true
         val inv = p.inventory
         saved = (0 until 36).map { inv.getItem(it).copy() }
@@ -334,7 +363,7 @@ object Masks {
         p.inventoryMenu.broadcastChanges()
         Sim.title("§eYou became a ghost!", "§7Hopefully your teammates will be able to revive you!", 0, 100, 5)
         // Revived 119-137 ticks on (median ~124); the countdown titles run 5..1 from 100 ticks before.
-        val delay = if (kotlin.random.Random.nextInt(10) < 6) kotlin.random.Random.nextInt(120, 126) else kotlin.random.Random.nextInt(119, 138)
+        val delay = reviveIn ?: if (kotlin.random.Random.nextInt(10) < 6) kotlin.random.Random.nextInt(120, 126) else kotlin.random.Random.nextInt(119, 138)
         val gen = ++reviveGen
         Corpse.spawn(p, delay)
         // The corpse wears what you had on; the ghost's own armour slots are empty.
@@ -343,7 +372,8 @@ object Masks {
         for (k in 0 until 5) Fight.later(delay - 100 + 20 * k, "revive title") {
             if (ghost && gen == reviveGen) Sim.title("§e§lBEING REVIVED", "§aYou will be revived in ${5 - k}s", 0, 30, 0)
         }
-        Fight.later(delay, "revive") { if (ghost && gen == reviveGen) revive(p) }
+        // The dungeon run (reviveIn given) revives from its own ledger, at the time it recorded.
+        if (reviveIn == null) Fight.later(delay, "revive") { if (ghost && gen == reviveGen) revive(p) }
     }
 
     private fun revive(p: ServerPlayer) {
