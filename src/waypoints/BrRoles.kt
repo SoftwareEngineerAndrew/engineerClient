@@ -16,9 +16,12 @@ import kotlin.math.abs
  * (undonecoffee.com/brroles) for each room, each door the rush can come in through, and each number
  * of players killing (2-4), with a separate set for M7. Each role has its boxes, in the order
  * they are killed, and its stack: boxes it helps with once its own are done. There is always a door runner besides, who only rushes
- * the doors and kills nothing - or, with Doorer Kills, kills too: the site keeps those plans apart
+ * the doors and kills nothing - or, with Door Kills, kills too: the site keeps those plans apart
  * (a set for M7 and one for the other floors), each for an entry door and the room's wither door,
- * with the door runner the last role.
+ * with the door runner the last role. Door Kills After Fairy has the door runner kill only in rooms
+ * the rush reaches after fairy ("late" rooms below), and with Drop Bottom After Fairy the highest
+ * numbered killer leaves the rush there to clear: quad with the door not killing up to fairy, then
+ * trio with the door killing.
  *
  * Each player sets how many kill (duo 2, trio 3, quad 4) and their own role in BR Roles's
  * settings, for a team that runs together. Party chat overrides that for a run, for pickup groups:
@@ -57,14 +60,28 @@ object BrRoles {
     /** From the settings: how many kill, and your role — null for All Boxes (roles off), 0 the door. */
     @Volatile var settingKilling = 2
     @Volatile var settingRole: Int? = null
-    /** From the settings: the door runner kills too, with the doorer plans. */
-    @Volatile var doorerKills = false
+    enum class DoorKills { NEVER, ALWAYS, AFTER_FAIRY }
 
-    /** How many the plans are for: those killing, and the door runner too with [doorerKills]. */
-    val planCount: Int get() = if (count == 0) 0 else count + if (doorerKills) 1 else 0
+    /** From the settings: when the door runner kills too, with the doorer plans. */
+    @Volatile var doorKills = DoorKills.NEVER
+    /** From the settings: with [DoorKills.AFTER_FAIRY], the highest numbered killer leaves the rush at fairy. */
+    @Volatile var dropBottom = false
 
-    /** The role whose boxes are yours: [mine], or on the door with [doorerKills] the last one. */
-    val playing: Int? get() = mine ?: planCount.takeIf { doorerKills && youOnDoor && it > 0 }
+    /** Whether the door runner kills in a room: always, or with After Fairy in rooms past fairy ([late]). */
+    fun doorerKills(late: Boolean) = doorKills == DoorKills.ALWAYS || (doorKills == DoorKills.AFTER_FAIRY && late)
+
+    /** Whether the highest numbered killer has dropped off the rush, in a room past fairy ([late]). */
+    fun dropped(late: Boolean) = late && doorKills == DoorKills.AFTER_FAIRY && dropBottom && count > 0
+
+    /** Whether that is you: you are not on the rush there. */
+    fun youDropped(late: Boolean) = dropped(late) && mine == count
+
+    /** How many the plans are for: those killing, and the door runner too when [doorerKills]. */
+    fun planCount(late: Boolean): Int = if (count == 0) 0 else count - (if (dropped(late)) 1 else 0) + if (doorerKills(late)) 1 else 0
+
+    /** The role whose boxes are yours: [mine], or on the door when [doorerKills] the last one. None once you dropped. */
+    fun playing(late: Boolean): Int? =
+        if (youDropped(late)) null else mine ?: planCount(late).takeIf { doorerKills(late) && youOnDoor && it > 0 }
 
     /** In master mode: the site's M7 roles, where each is a class. */
     val master: Boolean get() = DungeonUtils.floor?.isMM == true
@@ -197,12 +214,13 @@ object BrRoles {
         EngineerClient.msg("§dBR §7$count killing $from§7: $who§7, $door" + (mine?.let { " §7· you §f$it" } ?: ""))
     }
 
-    /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". */
-    fun describe(): String {
+    /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". [late]: past fairy. */
+    fun describe(late: Boolean = false): String {
         val from = (if (chatCount != null || doorClaim != null) "party chat" else if (master) "class" else "settings") + if (master) ", M7 roles" else ""
         return when {
             count == 0 -> "roles off"
-            youOnDoor -> (if (doorerKills) "door (kills, role $planCount)" else "door") + ", $count killing ($from)"
+            youOnDoor -> (if (doorerKills(late)) "door (kills, role ${planCount(late)})" else "door") + ", $count killing ($from)"
+            youDropped(late) -> "role $mine of $count, dropped to clear past fairy ($from)"
             mine != null -> "role $mine of $count ($from)"
             else -> "no role, $count killing ($from)"
         }
@@ -286,40 +304,42 @@ object BrRoles {
 
     /**
      * The plan for a room entered through a door (in the room's own coordinates), for the number
-     * killing now — the door the site has nearest, if it is within a few blocks. With Doorer Kills,
-     * the doorer plan for that door and the room's wither door ([wither], null if not known: no
-     * plan). Null without one, or before the party has synced.
+     * killing now — the door the site has nearest, if it is within a few blocks. When the door
+     * runner kills there ([late]: the room is past fairy), the doorer plan for that door and the
+     * room's wither door ([wither], null if not known: no plan). Null without one, or before the
+     * party has synced.
      */
-    fun planFor(room: String, door: Pair<Int, Int>, wither: Pair<Int, Int>?): Plan? {
+    fun planFor(room: String, door: Pair<Int, Int>, wither: Pair<Int, Int>?, late: Boolean): Plan? {
         if (count == 0) return null
-        if (doorerKills) {
+        val n = planCount(late)
+        if (doorerKills(late)) {
             if (wither == null) return null
-            if (master) doorerIn(doorerM7Plans, room, door, wither)?.let { return it }
-            return doorerIn(doorerPlans, room, door, wither)
+            if (master) doorerIn(doorerM7Plans, room, door, wither, n)?.let { return it }
+            return doorerIn(doorerPlans, room, door, wither, n)
         }
         // In master mode the M7 roles, else (none set for this room yet) the other floors'.
-        if (master) planIn(m7Plans, room, door)?.let { return it }
-        return planIn(plans, room, door)
+        if (master) planIn(m7Plans, room, door, n)?.let { return it }
+        return planIn(plans, room, door, n)
     }
 
-    private fun planIn(table: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>>, room: String, door: Pair<Int, Int>): Plan? {
+    private fun planIn(table: Map<String, Map<Pair<Int, Int>, Map<Int, Plan>>>, room: String, door: Pair<Int, Int>, n: Int): Plan? {
         val doors = table[room] ?: return null
         val near = doors.keys.minByOrNull { abs(it.first - door.first) + abs(it.second - door.second) } ?: return null
         if (abs(near.first - door.first) + abs(near.second - door.second) > 3) return null
-        return doors[near]?.get(planCount)
+        return doors[near]?.get(n)
     }
 
-    private fun doorerIn(table: Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>>, room: String, door: Pair<Int, Int>, wither: Pair<Int, Int>): Plan? {
+    private fun doorerIn(table: Map<String, Map<Pair<Pair<Int, Int>, Pair<Int, Int>>, Map<Int, Plan>>>, room: String, door: Pair<Int, Int>, wither: Pair<Int, Int>, n: Int): Plan? {
         val doors = table[room] ?: return null
         fun d(a: Pair<Int, Int>, b: Pair<Int, Int>) = abs(a.first - b.first) + abs(a.second - b.second)
         val near = doors.keys.minByOrNull { d(it.first, door) + d(it.second, wither) } ?: return null
         if (d(near.first, door) > 3 || d(near.second, wither) > 3) return null
-        return doors[near]?.get(planCount)
+        return doors[near]?.get(n)
     }
 
-    /** What box [number] is to you in [plan]; null if the plan leaves it out. */
-    fun look(plan: Plan, number: Int): Look? {
-        val role = playing
+    /** What box [number] is to you in [plan], in a room past fairy or not ([late]); null if the plan leaves it out. */
+    fun look(plan: Plan, number: Int, late: Boolean): Look? {
+        val role = playing(late)
         if (role != null) {
             plan.roles.getOrNull(role - 1)?.indexOf(number)?.takeIf { it >= 0 }?.let { return Look.Mine(it + 1) }
             if (plan.stacks.getOrNull(role - 1)?.contains(number) == true) return Look.Stack

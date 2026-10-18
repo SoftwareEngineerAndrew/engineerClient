@@ -9,7 +9,6 @@ import com.engineerclient.pov.PovPreviews
 
 import com.engineerclient.splits.DungeonSplits
 import com.engineerclient.splits.OdinSplitsLook
-import com.engineerclient.storm.StormPhase
 import com.engineerclient.waypoints.BrWaypoints2
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.config.ModuleConfig
@@ -83,8 +82,9 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            com.engineerclient.practice.TermInfo, StormPhase, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
+            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
+            com.engineerclient.clearbreakdown.ClearBreakdown,
+            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
         )
     }
 
@@ -107,6 +107,8 @@ object EngineerClient : ClientModInitializer {
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }
+        safely("terminals look") { com.engineerclient.practice.TerminalsStatusLook.install() }
+        safely("term info") { com.engineerclient.practice.TermInfo.init() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
@@ -116,7 +118,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, SimonSaysPractice, com.engineerclient.clearbreakdown.ClearBreakdown)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -170,6 +172,9 @@ object EngineerClient : ClientModInitializer {
     }
 
     /** What every line the mod says in chat starts with. */
+    /** Engineer Client, the beta: true. promote.sh makes it false for ADM, the public build, which hides the unfinished ADS buttons (full run, GUI). */
+    const val BETA = true
+
     const val PREFIX = "§8[§6EC§8] "
 
     /** A line from the mod, with its [PREFIX]. Anything the mod says goes through here. */
