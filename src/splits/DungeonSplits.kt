@@ -479,22 +479,19 @@ object DungeonSplits : Module(
 
     /**
      * Necron dead at [at]. On F7 that is all: his split runs on to the run's end, there being no
-     * end animation since Hypixel's boss update. On M7 the Wither King's fight is next, so his steps
-     * end here, and Odin's own Necron split (which ends on "All this, for nothing...") is handed
-     * that line. Once a run: his wither going ~20 ticks after the burst calls this again.
+     * end animation since Hypixel's boss update. On M7 his kill ends here and the relics begin; his
+     * split (and Odin's) runs on to the Wither King's first line, which starts the Dragons. Once a
+     * run: his wither going ~20 ticks after the burst calls this again.
      */
     private fun necronDead(at: Stamp) {
         if (necronDiedAt != null) return
         necronDiedAt = at
-        if (DungeonUtils.floor?.name?.startsWith("M") == true) {
-            subs.onNecronDeath(at)
-            OdinSplitsLook.onNecronDead()
-        }
+        if (DungeonUtils.floor?.name?.startsWith("M") == true) subs.onNecronDeath(at)
     }
 
     /** Necron's wither, as last found, for the backup when his burst is missed. */
     private var necronId: Int? = null
-    /** Necron's death this run: on M7 the end of his own time, the tracker's split running on through the Wither King. */
+    /** Necron's death this run (his kill's end; on M7 the relics' start). */
     private var necronDiedAt: Stamp? = null
 
     private val DEATH_BURST_TNT = 3
@@ -638,7 +635,7 @@ object DungeonSplits : Module(
             val id = ids.getOrElse(i) { "" }
             val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
             val own = st.label.take(2).replace('&', '§')
-            val grade = SubSplitGrades.colour(id, value, st.stop != null, validBest(id, bests[id]), floor == "F7", own)
+            val grade = SubSplitGrades.colour(id, value, st.stop != null, validBest(id, bests[id], floor), floor, own)
             val real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL
             Triple(st, grade + SplitFormat.seconds(if (real) ms else ticks * 50), SplitFormat.seconds(if (real) ticks * 50 else ms))
         }
@@ -690,18 +687,22 @@ object DungeonSplits : Module(
      * Each split as it ends, as a best for its floor (F7, M7) when it is one - every split, the
      * portal too, whatever the splits HUD shows: Pace's targets are these. Only a split that ran
      * from its own line to the next split's (none missed in between) is a time. On M7 Necron's ends
-     * at his death, not at EXTRA STATS after the Wither King: none if his death wasn't seen.
+     * at the Wither King's first line (the Dragons' start): none if that wasn't seen.
      */
     private fun recordSplitBests() {
         val floor = DungeonUtils.floor?.name?.takeIf { it == "F7" || it == "M7" } ?: return
         if (!keepsTimes) return
         val splits = tracker.splits()
         splits.forEachIndexed { i, split ->
-            val stop = (if (floor == "M7" && split.label == SplitTracker.NECRON) necronDiedAt else split.stop) ?: return@forEachIndexed
-            if (!bestsChecked.add(split.label)) return@forEachIndexed
-            val order = SplitPace.ORDER.indexOf(split.label)
+            val stop = split.stop ?: return@forEachIndexed
             val next = splits.getOrNull(i + 1)
-            val whole = if (next != null) SplitPace.ORDER.indexOf(next.label) == order + 1 else order == SplitPace.ORDER.lastIndex
+            // M7: Necron's split without the Dragons after it ran on to the run's end.
+            if (floor == "M7" && split.label == SplitTracker.NECRON && next?.label != SplitTracker.DRAGONS) return@forEachIndexed
+            if (!bestsChecked.add(split.label)) return@forEachIndexed
+            val order = SplitPace.ALL.indexOf(split.label)
+            // The last split: Necron on F7, the Dragons on M7.
+            val whole = if (next != null) SplitPace.ALL.indexOf(next.label) == order + 1
+                else split.label == SplitTracker.DRAGONS || (floor == "F7" && split.label == SplitTracker.NECRON)
             val id = SplitPace.SPLIT_IDS[split.label] ?: return@forEachIndexed
             if (!whole) return@forEachIndexed
             recordBest(floor, id, SubSplitGrades.value(id, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()), true)
@@ -733,20 +734,20 @@ object DungeonSplits : Module(
     }
 
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
-    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id])
+    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id], floor)
 
     /**
      * Records a finished [value] of [id] as the best on [floor] when it is one. Never in a P3 Sim
      * run, whose earlier rows (Odin's too, via [SimOdinSplits]) are Pace targets, not times.
      */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
-        if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value)) return
+        if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value, floor)) return
         val bests = bests(floor)
-        if (value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
+        if (value < (validBest(id, bests[id], floor) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
     }
 
     /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
-    private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
+    private fun validBest(id: String, best: Long?, floor: String?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it, floor) }
 
     private fun recentText(floor: String?) = when (floor) { "F7" -> recentF7; "M7" -> recentM7; else -> "" }
 

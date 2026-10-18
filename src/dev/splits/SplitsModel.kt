@@ -15,8 +15,10 @@ import java.util.Locale
  *     Storm      &b   -> Goldor's first line
  *     Terms      &6   -> "The Core entrance is opening!"
  *     Goldor     &e   -> Necron's first line
- *     Necron     &c   -> EXTRA STATS. Since Hypixel's boss update (Oct 2026) there is no end
- *                        animation to split off: his death goes straight into the run's end.
+ *     Necron     &c   -> EXTRA STATS on F7. Since Hypixel's boss update (Oct 2026) there is no end
+ *                        animation to split off: his death goes straight into the run's end. On M7
+ *                        -> the Wither King's "You... again?", said once every relic is placed.
+ *     Dragons    &d   M7: -> EXTRA STATS.
  *
  * A split only appears once it has started, rather than as a blank line, and Pace here is the
  * run's running total, with no PB targets behind it.
@@ -177,6 +179,13 @@ class SplitTracker {
         const val TERMS = "&6Terms"
         const val GOLDOR = "&eGoldor"
         const val NECRON = "&cNecron"
+        const val DRAGONS = "&dDragons"
+
+        /**
+         * The Wither King's first line, M7 only: every relic is placed. It comes 64-69 ticks after
+         * the last one goes in (180 recorded M7 runs whose recorder placed it).
+         */
+        const val RELICS_PLACED = "[BOSS] Wither King: You... again?"
 
         val EXTRA_STATS = Regex("^ +> EXTRA STATS <$")
 
@@ -195,6 +204,7 @@ class SplitTracker {
             // Not "Finally, I heard so much about you.", which F7 never says: on F7 Necron's first
             // line is always this one.
             Phase(NECRON) { it == "[BOSS] Necron: You went further than any human before, congratulations." },
+            Phase(DRAGONS) { it == RELICS_PLACED },
         )
     }
 }
