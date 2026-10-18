@@ -40,7 +40,7 @@ object PaceTargets {
     /** The PB for split [i]: the faster of the kept best and Odin's PB, each only if it is a real time. */
     private fun pb(i: Int, master: Boolean): SplitPace.Clocks? {
         val floor = if (master) "M7" else "F7"
-        val id = SplitPace.ALL.getOrNull(i)?.let { SplitPace.SPLIT_IDS[it] }
+        val id = SplitPace.ORDER.getOrNull(i)?.let { SplitPace.SPLIT_IDS[it] }
         val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.let { SplitPace.clocks(sid, it) } }
         val odin = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
             ?.let { secs(it.toDouble()) }

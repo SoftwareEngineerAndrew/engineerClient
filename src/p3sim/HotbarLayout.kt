@@ -10,14 +10,14 @@ import java.util.concurrent.ConcurrentHashMap
  * Where the sim's items go on every hotbar reset (a start or restart, each phase's start, Reset Items), through
  * [SimItems.giveHotbar], in this order:
  *
- * 1. **Your saved hotbar** for this part and class, on every skill (P3Plan's preset): "Save Hotbar" (sim menu) records
- *    where each sim item is right now (hotbar and inventory, by item id), the slot you hold, what you wear and your pet,
- *    in `config/engineerclient/p3sim-hotbar.json`. Every reset lays it out again. Older files' per-skill layouts are
- *    used on their skill until this class's part is saved again; their shared ones where a class has none.
+ * 1. **Your saved hotbar** for this skill (P3Plan's preset), part and class: "Save Hotbar" (sim menu) records where each
+ *    sim item is right now (hotbar and inventory, by item id), the slot you hold, what you wear and your pet, in
+ *    `config/engineerclient/p3sim-hotbar.json`. Every reset lays it out again. Older files' per-class and shared
+ *    layouts are used where a skill has none of its own.
  * 2. **As you left them**, with none saved: whatever you did with your items, armour and pet since the last reset
- *    stays (for each part and class: [keep]; in the file too, so a relaunch keeps them).
+ *    stays (for each skill, part and class: [keep]; in the file too, so a relaunch keeps them).
  *    Black Cat At Start puts Black Cat back on at every start; Terror At Terms still puts the Terror loadout on at P3.
- * 3. **The sim's default.** "Default Hotbar" forgets this part's and class's saved one.
+ * 3. **The sim's default.** "Default Hotbar" forgets this skill's, part's and class's saved one.
  *
  * P1/P2 and P3 have different items on the bar (Hyperion or Superboom), so each part has its own. Masks stay out of
  * it: the spare one always goes in [Masks.SPARE_SLOT], which no item is laid into. An item a layout doesn't place (one
@@ -28,7 +28,7 @@ object HotbarLayout {
     /** [worn]: what you wore and your pet with it (null in older files: [Saved.worn]). */
     private class Layout(val slots: Map<String, Int> = emptyMap(), val selected: Int = 3, val worn: Loadouts.Worn? = null)
     /**
-     * [roles]: "P3/ARCHER", one for every skill (older files: "Normal PF/P3/ARCHER", per skill). [p12]/[p3]/[worn]: from before layouts were per class.
+     * [roles]: "Normal PF/P3/ARCHER" (older files: "P3/ARCHER", one for every skill). [p12]/[p3]/[worn]: from before layouts were per class.
      * [live]: each key's items as you last left them ([keep]), so they stay so after the game is closed too.
      */
     private data class Saved(val p12: Layout? = null, val p3: Layout? = null, val worn: Loadouts.Worn? = null, val roles: Map<String, Layout>? = null,
@@ -37,7 +37,7 @@ object HotbarLayout {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     /** Each player's saved layouts (the host's from this computer, a joiner's from their game: [PlayerFiles]). */
     private val cache = ConcurrentHashMap<String, Saved>()
-    /** Each player's items as they last had them, by [key]: what that part's and class's next reset lays out. */
+    /** Each player's items as they last had them, by [key]: what that skill's, part's and class's next reset lays out. */
     private val live = ConcurrentHashMap<String, ConcurrentHashMap<String, Layout>>()
     /** The [key] each player's items were last laid out for (their inventory is that one, as they've moved it since), and the slot it held. */
     private val given = ConcurrentHashMap<String, Pair<String, Int>>()
@@ -61,15 +61,13 @@ object HotbarLayout {
     }
 
     private fun partKey(p3: Boolean) = if (p3) "P3" else "P12"
-    /** "P3/ARCHER": a part's layout for your class, on every skill. */
-    private fun key(p3: Boolean) = "${partKey(p3)}/${P3Sim.myClass.name}"
-    /** "Normal PF/P3/ARCHER": an older file's layout for one skill. */
-    private fun skillKey(p3: Boolean) = "${P3Plan.skillName()}/${key(p3)}"
-    /** An older file's per-skill layout of [p3]'s part for your class, on any skill. */
-    private fun isSkillKey(k: String, p3: Boolean) = k.endsWith("/" + key(p3)) && k.count { it == '/' } == 2
+    /** "Normal PF/P3/ARCHER": a skill's part's layout for your class. */
+    private fun key(p3: Boolean) = "${P3Plan.skillName()}/${partKey(p3)}/${P3Sim.myClass.name}"
+    /** From before layouts were per skill: one for every skill. */
+    private fun classKey(p3: Boolean) = "${partKey(p3)}/${P3Sim.myClass.name}"
 
-    private fun savedLayout(p3: Boolean): Layout? = saved().roles?.let { it[key(p3)] ?: it[skillKey(p3)] } ?: if (p3) saved().p3 else saved().p12
-    /** A saved hotbar for this part and class wins; as you left it only where there's none. */
+    private fun savedLayout(p3: Boolean): Layout? = saved().roles?.let { it[key(p3)] ?: it[classKey(p3)] } ?: if (p3) saved().p3 else saved().p12
+    /** A saved hotbar for this skill, part and class wins; as you left it only where there's none. */
     private fun layout(p3: Boolean): Layout? = savedLayout(p3) ?: lives()[key(p3)]
 
     /** What to wear for [p3]'s part: as saved (with the hotbar), else as you left it; null: the defaults. */
@@ -79,7 +77,7 @@ object HotbarLayout {
         return lives()[key(p3)]?.worn
     }
 
-    /** Whether [p3]'s part has a saved layout for this class (or an older one that covers it). */
+    /** Whether [p3]'s part has a saved layout for this skill and class (or an older one that covers it). */
     fun has(p3: Boolean) = savedLayout(p3) != null
 
     /** [p]'s items, where they are now, holding [selected], and [worn]; null: no sim items (nothing to go by). */
@@ -135,33 +133,34 @@ object HotbarLayout {
         return placed to l.selected.coerceIn(0, 8)
     }
 
-    /** Saves [p]'s current layout as [p3]'s part's for this class, on every skill (older per-skill ones go). Returns what to tell them. */
+    /** Saves [p]'s current layout as [p3]'s part's for this skill and class. Returns what to tell them. */
     fun save(p: ServerPlayer, p3: Boolean): String {
         val l = capture(p, Loadouts.capture(p)) ?: return "§cnothing to save: no sim items in your inventory"
         lives()[key(p3)] = l
         val s = saved()
-        write(s.copy(roles = s.roles.orEmpty().filterKeys { !isSkillKey(it, p3) } + (key(p3) to l), live = lives().toMap()))
+        write(s.copy(roles = s.roles.orEmpty() + (key(p3) to l), live = lives().toMap()))
         return "§7saved your §f${part(p3)}§7 hotbar (${l.slots.size} items, holding slot ${l.selected + 1}) with your armour, helmet and pet; Reset Items brings it back"
     }
 
-    /** Forgets [p3]'s part's saved layout for this class, on every skill (and how it was left): its resets go back to the sim's default. */
+    /** Forgets [p3]'s part's saved layout for this skill and class (and how it was left): its resets go back to the sim's default. */
     fun reset(p3: Boolean): String {
         lives().remove(key(p3)); given.remove(owner()); keepLives()
         if (!has(p3)) return "§7the ${part(p3)} hotbar is already the default"
         val s = saved().copy(live = lives().toMap())
         val roles = s.roles.orEmpty()
         when {
-            // This class's, and any older per-skill ones of it.
-            roles.keys.any { it == key(p3) || isSkillKey(it, p3) } -> write(s.copy(roles = roles.filterKeys { it != key(p3) && !isSkillKey(it, p3) }))
+            key(p3) in roles -> write(s.copy(roles = roles - key(p3)))
+            // An older one for every skill: this class's.
+            classKey(p3) in roles -> write(s.copy(roles = roles - classKey(p3)))
             else -> {
                 val otherLeft = if (p3) s.p12 != null else s.p3 != null
                 write(if (p3) s.copy(p3 = null, worn = if (otherLeft) s.worn else null) else s.copy(p12 = null, worn = if (otherLeft) s.worn else null))
             }
         }
-        return "§7${part(p3)} hotbar back to the ${if (has(p3)) "one saved for every class" else "default"}"
+        return "§7${part(p3)} hotbar back to the ${if (has(p3)) "one saved for every skill" else "default"}"
     }
 
-    private fun part(p3: Boolean) = (if (p3) "P3" else "P1/P2") + " " + Roles.label(P3Sim.myClass)
+    private fun part(p3: Boolean) = (if (p3) "P3" else "P1/P2") + " " + Roles.label(P3Sim.myClass) + " (" + P3Plan.skillName() + ")"
 
     private fun write(s: Saved) {
         cache[owner()] = s
