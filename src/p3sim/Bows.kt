@@ -7,7 +7,10 @@ import net.minecraft.sounds.SoundEvent
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.sounds.SoundSource
 import net.minecraft.util.Mth
+import com.engineerclient.p3sim.clear.damage.DamageModule
+import com.engineerclient.p3sim.run.DamageSource
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.projectile.ProjectileDeflection
 import net.minecraft.world.entity.projectile.ProjectileUtil
@@ -192,7 +195,8 @@ object Bows {
         if (from != at) {
             val block = level.clip(ClipContext(from, at, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, owner ?: Sim.player!!))
             val end = if (block.type == HitResult.Type.MISS) at else block.location
-            val boss = level.getEntitiesOfClass(WitherBoss::class.java, net.minecraft.world.phys.AABB(from, end).inflate(1.0)) { isBoss(it) }
+            // The boss withers, and in a full run the mobs of the dungeon (their bodies, by the damage hub's registry) and the secret bats.
+            val boss = level.getEntitiesOfClass(LivingEntity::class.java, net.minecraft.world.phys.AABB(from, end).inflate(1.0)) { isBoss(it) || (it.isAlive && (DamageModule.mobFor(it) != null || DamageModule.isSecretBat(it))) }
                 .filter { !immune(it) }
                 .mapNotNull { w -> w.boundingBox.inflate(0.3).clip(from, end).map { w to it }.orElse(null) }
                 .minByOrNull { it.second.distanceToSqr(from) }
@@ -232,9 +236,22 @@ object Bows {
     /** Any arrow of ours hit something: a block (the i4 target counts every arrow), or a boss (a Hydra Strike hit). */
     private fun hit(h: HitResult, onHit: ((HitResult) -> Unit)?) {
         when (h) {
-            is BlockHitResult -> (Fight.phase as? GoldorPhase)?.devices?.target?.hit(h.blockPos)
+            is BlockHitResult -> {
+                (Fight.phase as? GoldorPhase)?.devices?.target?.hit(h.blockPos)
+                // A full run: the puzzles (the Creeper Beams lanterns) hear where an arrow landed.
+                DamageModule.activeRun()?.let { r ->
+                    val b = h.blockPos
+                    r.bus.post(com.engineerclient.p3sim.run.ModuleEvent(r.t, "damage", "arrowHitBlock", mapOf("x" to b.x, "y" to b.y, "z" to b.z, "by" to Sim.acting?.uuid)))
+                }
+            }
             is EntityHitResult -> {
                 Hydra.hit(Fight.serverTick)
+                // In a full run an arrow that hits one of the dungeon's mobs takes HP off it.
+                DamageModule.arrowHit(h.entity, Sim.acting)
+                // The Ice Path fish (traps) hears which entity an arrow hit.
+                DamageModule.activeRun()?.let { r ->
+                    Sim.acting?.let { s -> r.bus.post(com.engineerclient.p3sim.run.ModuleEvent(r.t, "damage", "arrowHitEntity", mapOf("id" to h.entity.id, "by" to s.uuid))) }
+                }
                 sound(SoundEvents.ARROW_HIT_PLAYER, SoundSource.NEUTRAL, 1f, 0.8f)
             }
         }
@@ -246,6 +263,7 @@ object Bows {
         Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 0.8f + Random.nextFloat() * 0.18f, at, SoundSource.MASTER)
         Sim.level.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION, at.x, at.y, at.z, 1, 0.0, 0.0, 0.0, 0.0)
         (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
+        DamageModule.blast(at.x, at.y, at.z, DamageSource.BOW, Sim.acting?.uuid)
     }
 
     /** A sound at you (or at [at]), its pitch on Hypixel's 1/63 steps. */
@@ -296,7 +314,7 @@ object Bows {
 
 /**
  * An arrow of the sim's: vanilla flight (move, x0.99, -0.05 a tick, as Hypixel's 1.8 server), but it hits only the
- * boss withers (with 1.8's 0.3 margin, never bouncing) and goes on its first hit, block or boss, as Hypixel's do.
+ * boss withers and, in a full run, the dungeon's mobs and secret bats (with 1.8's 0.3 margin, never bouncing) and goes on its first hit, block or boss, as Hypixel's do.
  */
 class SimArrow(level: Level, x: Double, y: Double, z: Double, private val whenHit: (SimArrow, HitResult) -> Unit) :
     Arrow(level, x, y, z, ItemStack(Items.ARROW), null) {
@@ -310,7 +328,8 @@ class SimArrow(level: Level, x: Double, y: Double, z: Double, private val whenHi
         super.tick()
     }
 
-    override fun canHitEntity(entity: Entity): Boolean = removeAt < 0 && entity is WitherBoss && entity.isAlive && entity.entityTags().contains(Sim.TAG)
+    override fun canHitEntity(entity: Entity): Boolean = removeAt < 0 && entity.isAlive &&
+        ((entity is WitherBoss && entity.entityTags().contains(Sim.TAG)) || (entity is LivingEntity && (DamageModule.mobFor(entity) != null || DamageModule.isSecretBat(entity))))
 
     override fun findHitEntities(from: Vec3, to: Vec3): Collection<EntityHitResult> =
         ProjectileUtil.getManyEntityHitResult(level(), this, from, to, boundingBox.expandTowards(deltaMovement).inflate(1.0), { canHitEntity(it) }, 0.3f, ClipContext.Block.COLLIDER, false, true)

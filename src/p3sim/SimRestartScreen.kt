@@ -59,6 +59,19 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
             SimActions.send("stop")
         }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
 
+        // The full run: its start screen, and while one is on, a restart of the room or of the whole run (savepoint restores, not a rebuilt world).
+        addRenderableWidget(Button.builder(Component.literal("§bFull Run")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
+            .tooltip(tip("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first. Rebuilds the world."))
+            .bounds(cx - RESTART_W / 2, restartY - 2 * ROW, RESTART_W, 20).build())
+        if (com.engineerclient.p3sim.run.ClientRun.inClear) {
+            addRenderableWidget(Button.builder(Component.literal("§eRestart Room")) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart", "room") }
+                .tooltip(tip("Back to where you entered the room you stand in: the run's state, the clock and your gear as they were."))
+                .bounds(cx - RESTART_W / 2, restartY - 3 * ROW, RESTART_W, 20).build())
+            addRenderableWidget(Button.builder(Component.literal("§eRestart Run")) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart") }
+                .tooltip(tip("Back to the start of this run (the same dungeon, no rebuild)."))
+                .bounds(cx - RESTART_W / 2, restartY - 4 * ROW, RESTART_W, 20).build())
+        }
+
         party()
 
         // Left: the tabs, Practice level with Restart, then Plan, Teleport, Settings and Boss above it.
