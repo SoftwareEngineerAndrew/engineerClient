@@ -46,7 +46,7 @@ internal class MobChatter {
 
     private fun say(e: MobEntry, text: String, t: Int) {
         val body = e.body ?: return
-        val s = SimStand(Sim.level)
+        val s = com.engineerclient.p3sim.TransientStand(Sim.level)
         s.snapTo(body.x, body.y + HEIGHT, body.z, body.yRot, 0f)
         s.isInvisible = true
         s.isPermanentlyInvulnerable = true

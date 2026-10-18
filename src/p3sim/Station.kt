@@ -146,8 +146,13 @@ class Station(
  * A status stand as Hypixel's: gravity on (noGravity false in Hypixel's stand data) yet
  * it stays where it is put, as there. Vanilla would let it fall, so its own movement is dropped.
  */
-class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.ARMOR_STAND, level) {
+open class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.ARMOR_STAND, level) {
     override fun travel(travelVector: Vec3) {}
+}
+
+/** A stand that belongs to something the sim rebuilds itself (a mob's tag, a line of talk): never written with its chunk, so an unloaded chunk cannot bring back a stale copy. */
+class TransientStand(level: net.minecraft.world.level.Level) : SimStand(level) {
+    override fun shouldBeSaved(): Boolean = false
 }
 
 /**
