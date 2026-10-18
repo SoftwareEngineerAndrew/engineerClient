@@ -115,6 +115,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
             is StartStep.Ready -> state.players.values.toList().getOrNull(step.index)?.let { fx.chat(StateText.ready(it.name)) }
             is StartStep.Starting -> { fx.chat(StateText.startingIn(step.seconds)); fx.sound(StateText.COUNTDOWN_TICK) }
             is StartStep.Mort -> {
+                if (step.index == 0) classDoubledLines()
                 fx.chat(StateText.mort(step.index)); fx.sound(StateText.MORT_LINE)
                 if (step.index == 0) run.requestStage(RunStage.CLEAR)
             }
@@ -122,6 +123,16 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
             StartStep.FreeDoorFalls -> plan.doors.filter { it.kind == DoorKind.FAIRY }.forEach { beginFall(it.index, null) }
             StartStep.EntranceDiscovered -> plan.entrance?.let { discover(it.index) }
             StartStep.EntranceGreen -> plan.entrance?.let { mark(it.index, CheckMark.GREEN) }
+        }
+    }
+
+    /** "Your <class> stats are doubled..." to every human whose class nobody else in the party has, on the tick of Mort's first line. */
+    private fun classDoubledLines() {
+        val all = state.players.values.toList()
+        for (p in all) {
+            if (p.isBot) continue
+            if (all.count { it.dungeonClass.equals(p.dungeonClass, ignoreCase = true) } != 1) continue
+            StateText.classDoubled(p.dungeonClass)?.forEach { fx.chat(it, p.uuid) }
         }
     }
 

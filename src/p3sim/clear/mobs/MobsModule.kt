@@ -158,6 +158,9 @@ object MobsModule : AdsModule, MobService {
     // ---- state of the current run -------------------------------------------------------------------------------------
 
     private val entries = LinkedHashMap<UUID, MobEntry>()
+    /** The mobs' idle talk (real world only). */
+    private val chatter = MobChatter()
+    private var chatterRng: Random = Random(0)
     private val byRoom = HashMap<Int, MutableList<MobEntry>>()
     private val byEntityId = HashMap<Int, MobEntry>()
     private val rolled = HashSet<Int>()
@@ -187,6 +190,7 @@ object MobsModule : AdsModule, MobService {
         if (!enabled()) return
         val floor = run.config.floor
         scale = run.config.mobHpScale ?: pack.hpScaleFor(floor)?.let { MobRolls.drawHpScale(it, run.subRandom("mobs.scale")) } ?: 1.0
+        chatterRng = run.subRandom("mobs.chatter")
         deferSpawnEvents = true
         for (room in run.plan.rooms) if (room.type != RoomType.ENTRANCE && room.type != RoomType.FAIRY && room.type != RoomType.BLOOD) spawnRoom(run, room.index)
         deferSpawnEvents = false
@@ -252,6 +256,7 @@ object MobsModule : AdsModule, MobService {
             runAi(run, e, pos, pack, humans, params)
             stage.position(e)?.let { e.record.x = it[0]; e.record.y = it[1]; e.record.z = it[2] }
         }
+        if (stage === RealStage) com.engineerclient.EngineerClient.safely("ads mob chatter") { chatter.tick(t, entries.values, chatterRng) }
     }
 
     private fun near(players: List<PlayerRecord>, e: MobEntry, d: Double): Boolean {
@@ -417,6 +422,7 @@ object MobsModule : AdsModule, MobService {
     }
 
     private fun discardAll() {
+        chatter.clear()
         stage.flush()
         for (e in entries.values) { stage.release(e); stage.retract(e) }
         for (e in spikes) { stage.release(e); stage.retract(e) }

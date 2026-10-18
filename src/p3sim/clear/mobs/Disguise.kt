@@ -1,6 +1,7 @@
 package com.engineerclient.p3sim.clear.mobs
 
 import com.engineerclient.p3sim.SimServer
+import com.engineerclient.p3sim.pack.mobs.MobArchetype
 import com.engineerclient.p3sim.pack.mobs.MobSkin
 import com.google.common.collect.ImmutableMultimap
 import com.mojang.authlib.GameProfile
@@ -21,7 +22,7 @@ import java.util.UUID
 
 /**
  * Everything a client needs to treat a body as a real fake player, the way Hypixel does it (FORMAT-mobs 3.2, gap-odin-seam 4.2):
- * a player-info entry (random 10-character name, the `textures` property, not listed in the tab, survival) BEFORE the entity is
+ * a player-info entry (named after the mob, see [profileName]; the `textures` property, not listed in the tab, survival) BEFORE the entity is
  * added, and a team for that name that never shows a name tag, so only the armor-stand tag above the mob is read. The client
  * refuses a player add without its info entry, so [announce] is sent to everyone when the mob is made (not when a client starts
  * tracking it) and [retract] when it is removed; a player who joins later gets [announce] again for every live disguise.
@@ -30,6 +31,17 @@ import java.util.UUID
  */
 object Disguise {
     private val log = org.slf4j.LoggerFactory.getLogger("engineerclient")
+
+    /**
+     * The profile name Hypixel gives a mob's fake player: the mob's own name, except the Angry Archaeologist ("Diamond Guy") and the
+     * Frozen Adventurer (a "Lost Adventurer" body). ADR, 300 runs: every disguise tag's body (tag id minus one) carries one of these.
+     * Random 10-character names are only the NPCs' (Mort).
+     */
+    fun profileName(arch: MobArchetype): String = when (arch.id) {
+        "angry_archaeologist" -> "Diamond Guy"
+        "frozen_adventurer" -> "Lost Adventurer"
+        else -> arch.name
+    }
 
     /** The team name of a fake player: Hypixel's `fkt_` plus the first 11 characters of its name. */
     fun teamName(profileName: String): String = "fkt_" + profileName.take(11)

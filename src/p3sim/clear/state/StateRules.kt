@@ -142,8 +142,8 @@ class StateRules(
 
 /** The few things a player may change (settings) or a test sets, kept out of the measured [StateRules]. */
 data class StateConfig(
-    /** Ticks from the run's start to the "Starting in 4 seconds" line. The lobby wait before the start is not measured for the sim; this is a setting. */
-    val countdownDelayTicks: Int = 40,
+    /** Ticks from the run's start to the "Starting in 4 seconds" line: the potions line on arrival comes a median 57 ticks before it (ADR, 260 runs; p25 51, p75 64). A setting. */
+    val countdownDelayTicks: Int = 60,
     /** How close (blocks) a party member has to be to take a key stand. UNMEASURED (63 to 67 % are taken in the tick the stand appears, the rest after a median 8 ticks). */
     val pickupRadius: Double = 2.5,
     /** Rooms with no required mob turn white on the measured NONE to WHITE schedule (the pack's SYNTHESISE_ROOM_CLEARS). */
