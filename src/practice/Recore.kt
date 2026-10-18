@@ -28,7 +28,7 @@ import net.minecraft.world.entity.Entity
 
 /**
  * F7/M7 core leap (was Term Info's Core Leap, then Sub Splits'). Paste Last In Core is set here and sent by
- * DungeonSplits, whose Goldor tracking times everyone into the core. Core Leap Highlight: once S3 is done, the side of the screen where the first teammate
+ * DungeonSplits, whose Goldor tracking times everyone into the core (it runs for this with Sub Splits off). Core Leap Highlight: once S3 is done, the side of the screen where the first teammate
  * inside the core will be in Odin's Leap Menu, in gold, so you're already flicking there when you open the menu.
  * Highlight All Players In Core: every teammate who got to the core before you, each in their own part of the
  * screen. Behind terminals too: only ever drawn as part of the HUD, which every screen draws over, so it never
@@ -40,7 +40,7 @@ object Recore : Module(
     description = "The core after S4: the Core Leap Highlight (where the teammates already in the core are in Odin's Leap Menu, so you flick there as it opens) and Paste Last In Core.",
     key = null,
 ) {
-    val pasteLast by BooleanSetting("Paste Last In Core", true, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died. Timed by Sub Splits' Goldor tracking, so Sub Splits has to be on.")
+    val pasteLast by BooleanSetting("Paste Last In Core", true, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died.")
     private val coreLeap by BooleanSetting("Core Leap Highlight", true, desc = "Once S3 is done, the side of the screen where the first teammate inside the core will be in Odin's Leap Menu, in gold, so you flick there as the menu opens. Shown behind terminals too, never over them.")
     private val allInCore by BooleanSetting("Highlight All Players In Core", true, desc = "Highlights every teammate who made it to the core before you, each where they'll be in the leap menu, not just the first one. All of them go once you're in the core yourself (with Hide When In Core).").withDependency { coreLeap }
     private val lookDropdown by DropdownSetting("Core Leap Look", desc = "").withDependency { coreLeap }

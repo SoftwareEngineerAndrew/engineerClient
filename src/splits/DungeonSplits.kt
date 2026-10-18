@@ -13,6 +13,7 @@ import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
@@ -215,6 +216,18 @@ object DungeonSplits : Module(
         SimOdinSplits.stop()
     }
 
+    /**
+     * Recore's Paste Last In Core is timed by the Goldor tracking here, so with it on the tracking
+     * runs with Sub Splits off too: subscribed while either wants it, with nothing drawn.
+     */
+    fun install() {
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register {
+            val want = enabled || com.engineerclient.practice.Recore.let { it.enabled && it.pasteLast }
+            val on = this in EventBus.activeSubscribers
+            if (want && !on) EventBus.subscribe(this) else if (!want && on) EventBus.unsubscribe(this)
+        }
+    }
+
     private fun Stamp.minus(ticks: Int) = Stamp(realMs - ticks * 50L, tick - ticks)
 
     init {
@@ -232,7 +245,7 @@ object DungeonSplits : Module(
                     storm.onServerTick(now)
                     // Show Crush Info: each 20-tick crush check from his lightning until he dies.
                     val t = storm.phase(now)
-                    if (showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t))
+                    if (enabled && showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t))
                         crushView.check(now)?.let { (v, armed) -> storm.onCheck(now, v, armed) }
                 }
             }
@@ -352,7 +365,7 @@ object DungeonSplits : Module(
             }
         }
         on<RenderExtractEvent> {
-            if (showCrushInfo.enabled) with(crushView) { render(hitboxSeconds.value, hitboxMargins.enabled, pillarOutline.enabled, insideColor.value, outsideColor.value) }
+            if (enabled && showCrushInfo.enabled) with(crushView) { render(hitboxSeconds.value, hitboxMargins.enabled, pillarOutline.enabled, insideColor.value, outsideColor.value) }
         }
 
         on<EntityEvent.Remove> {
