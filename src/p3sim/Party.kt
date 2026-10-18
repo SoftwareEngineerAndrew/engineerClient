@@ -884,6 +884,7 @@ object Party {
         preleaps(phase)
         ontoLeapsTick(phase)
         releaseEarlyEnterers(phase)
+        recoreAfterJobs(phase)
         intoCoreWhenRecored(phase)
         for (b in bots) when { b.legs != null -> legTick(b, phase); b.ghost == null -> move(b, n); else -> place(b) }
         i4Bot(phase)
@@ -1186,8 +1187,9 @@ object Party {
             // A ghost, or a bot playing your run: gets there as you did.
             if (b.ghost != null || b.legs != null) continue
             if (into > s && (b.inSection >= into || busy(b) || b.hold)) continue
-            // Not before its jobs in the sections before (the EE3 bot does its S2 ones first, not straight from S1).
-            if (jobs.any { it.bot === b && before(it, into) }) continue
+            // Not before its jobs in the sections before (the EE3 bot does its S2 ones first, not straight from S1); the core's
+            // own S4 ones come after the leaps onto it as S4 starts.
+            if (jobs.any { it.bot === b && before(it, if (into == 5) 4 else into) }) continue
             if (b.pos.distanceTo(ee.spot) < 0.5) {
                 b.inSection = into; b.hold = true
                 b.yaw = ee.yaw; b.pitch = ee.pitch
@@ -1202,7 +1204,7 @@ object Party {
     }
 
     /** [b] is the core early enterer with nothing left before the core: on its way there (from S2, through the core), never leapt into S3/S4. */
-    private fun onWayToCore(b: Bot) = eeOf(5)?.let { !it.byYou && it.owner == b.clazz } == true && b.inSection < 5 && jobs.none { it.bot === b && before(it, 5) }
+    private fun onWayToCore(b: Bot) = eeOf(5)?.let { !it.byYou && it.owner == b.clazz } == true && b.inSection < 5 && jobs.none { it.bot === b && before(it, 4) }
 
     /**
      * The core early enterer goes in from S2, never by S3: to the core's S2-side wall, then mines straight into the core,
@@ -1267,8 +1269,8 @@ object Party {
         if (into > 5) return
         val ee = eeOf(into) ?: return
         val eeBot = if (ee.byYou) null else botOf(ee.owner)
-        // Not onto the core early enterer while it mines back in (to the recore): once it's there.
-        val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] && eeBot.dig == null &&
+        // Not onto the core early enterer while it mines back in (to the recore) or does its S4 jobs: once it's there.
+        val open = if (ee.byYou) youArrived[into] else eeBot != null && eeArrived[into] && eeBot.dig == null && (into < 5 || eeBot.hold) &&
             n >= (if (preleapAt[into] >= 0) preleapAt[into] else 0)
         if (!open) return
         val target: () -> Target? = if (eeBot != null) ({ eeBot.asTarget() }) else ({ ee.player?.asTarget() })
@@ -1365,17 +1367,34 @@ object Party {
             if (n - readyAt[into] < RELEASE_DELAY) continue
             released[into] = true
             dbg("§c${b.name} moves on from EE$into§7: ${waitStatus(b, into)}${if (into == s) ", ${(n - sectionN[s]) / 20.0}s into S$s" else ""}")
-            // The core early enterer goes into the core (recore) and waits there: everyone leaps onto it in. Still shut (S4):
-            // it turns round and mines back in through the door, as it came out.
+            // The core early enterer goes into the core (recore) and waits there: everyone leaps onto it in. With S4 jobs of
+            // its own (Near Optimal's mage) those first ([recoreAfterJobs]).
             val recore = if (into == 5) eeOf(6) else null
-            if (recore != null && s < 5) {
-                b.to = null; b.due = -1; b.face = recore.yaw to recore.pitch
-                b.dig = ArrayDeque(listOf(Vec3(54.5, 115.0, 56.0), recore.spot))
-                dbg("§e${b.name}§7 mines back into the core to the recore (${recore.spot.short()})")
-            }
-            else if (recore != null) go(b, recore.spot, n, -1, "the recore (in the core)", recore.yaw to recore.pitch)
+            if (recore != null && jobs.none { it.bot === b }) toRecore(b, recore, s, n)
             else { b.hold = false; walkOn(b, n) }
         }
+    }
+
+    /** [b] (the core early enterer) to the recore: the core still shut (S4), it turns round and mines back in through the door, as it came out. */
+    private fun toRecore(b: Bot, recore: Ee, s: Int, n: Int) {
+        b.hold = true
+        if (s >= 5) { go(b, recore.spot, n, -1, "the recore (in the core)", recore.yaw to recore.pitch); return }
+        b.to = null; b.due = -1; b.face = recore.yaw to recore.pitch
+        b.dig = ArrayDeque(listOf(Vec3(54.5, 115.0, 56.0), recore.spot))
+        dbg("§e${b.name}§7 mines back into the core to the recore (${recore.spot.short()})")
+    }
+
+    /**
+     * The core early enterer with S4 jobs of its own (Near Optimal's mage: its 4th) does them once the leaps onto it as S4
+     * starts are in (or once their time came), then recores.
+     */
+    private fun recoreAfterJobs(phase: GoldorPhase) {
+        if (coreIn || phase.section < 4) return
+        val b = coreBot()?.takeIf { it.ghost == null && it.legs == null && eeArrived[5] && !it.hold && it.to == null && it.dig == null } ?: return
+        if (jobs.any { it.bot === b } || leaps.any { it.bot === b }) return
+        val recore = eeOf(6) ?: return
+        released[5] = true
+        toRecore(b, recore, phase.section, phase.n)
     }
 
     /** When everyone an early enterer waits for was first in its section without all having leapt onto it (-1: not). */
@@ -1478,10 +1497,11 @@ object Party {
         val n = phase.n
         coreIn = false
         val cb = coreBot()
-        if (cb != null && eeArrived[5] && !released[5]) { leapOntoCoreEe(cb, n); return }
+        if (cb != null && eeArrived[5] && !released[5] && (cb.hold || cb.ghost != null)) { leapOntoCoreEe(cb, n); return }
         if (cb?.ghost != null) { if (recoredN >= 0) leapIntoCore(phase); return }
-        // Not on its spot yet (straight in onto it), or already in (on the recore): in now; walking in: when it gets there.
-        if (cb == null || !released[5] || (cb.to == null && cb.dig == null)) leapIntoCore(phase)
+        // Not on its spot yet (straight in onto it), or already in (on the recore): in now; walking in, or doing its S4 jobs
+        // first: once it's there.
+        if (cb == null || !eeArrived[5] || recored(cb)) leapIntoCore(phase)
     }
 
     /** Everyone not on the core early enterer [cb] leaps onto it, by the core. */
@@ -1504,11 +1524,14 @@ object Party {
         if (coreIn || phase.section < 5) return
         val cb = coreBot() ?: return
         if (cb.ghost != null) { if (recoredN >= 0 || phase.n - sectionN[5] >= 400) leapIntoCore(phase); return }
-        if (released[5] && cb.to == null && cb.dig == null) {
+        if (released[5] && recored(cb)) {
             if (recoredN < 0) { recoredN = phase.n; GhostCapture.event("recore", cb.clazz.name) }
             leapIntoCore(phase)
         }
     }
+
+    /** The core early enterer is on the recore (holding there, not on its way or at its S4 jobs). */
+    private fun recored(cb: Bot) = cb.hold && cb.to == null && cb.dig == null
 
     /** Everyone leaps in at once onto whoever's in the core (the core early enterer), or walks in. Ghosts go as you did. */
     private fun leapIntoCore(phase: GoldorPhase) {

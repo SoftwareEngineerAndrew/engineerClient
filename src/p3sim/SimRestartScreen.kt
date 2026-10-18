@@ -86,7 +86,8 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         val skills = listOf(
             Triple(0, "Normal PF", "The bots play at a normal party finder pace: P3 in about 34 s."),
             Triple(1, "Quality PF", "The bots play at a quality party finder pace: P3 in about 28 s."),
-            Triple(2, "Optimal PF", "The bots play at an optimal party finder pace: P3 in about 22 s."),
+            Triple(2, "Advanced PF", "The bots play at an advanced party finder pace: P3 in about 22 s."),
+            Triple(P3Plan.NEAR_OPTIMAL, "Near Optimal", "Nearly the fastest terms: the archer pre-does S3's device, the tank holds the high EE3, the mage holds by the core for S4 and recores after its 4th."),
             Triple(P3Plan.THEORETICAL, "Theoretical", "The fastest terms, in theory: a far EE2, a high EE3, an EE4 by the core."),
         )
         for ((k, s) in skills.withIndex()) {

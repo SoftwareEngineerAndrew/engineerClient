@@ -15,7 +15,8 @@ import net.minecraft.world.phys.Vec3
  * - digits: terminals, in the order done (`43` = T4 then T3)
  * - `ss`: Simon Says (S1's device); `i2` `i3` `i4`: that section's device (done in an earlier one); `dev`: the section's device
  * - `ll` `rl` `bl`: left, right, both levers (which is which: [LEFT])
- * - `ee2` `ee3` `ee4`: early enter into S2 / S3 / S4; `core`: into the core (after their other jobs)
+ * - `ee2` `ee3` `ee4`: early enter into S2 / S3 / S4; `hee3`: EE3 from the high spot (the preset's `ee3` default is
+ *   the high one); `core`: into the core (after their other jobs; S4 ones after the leaps onto it as S4 starts)
  * - `gate`: the section's gate is theirs (else it goes with the levers, below)
  * - anything else (`recore`, `(leap to 2nd term)`) is a note, ignored.
  *
@@ -87,23 +88,23 @@ object Roles {
         roles = linkedMapOf(
             MAGE to "bl ee2 / dev 2 3 / core / recore",
             ARCHER to "43 / 4 rl / 4 bl / 2",
-            HEALER to "ss / (leap to 2nd term) 1 / 2 / 4 bl",
-            // Starts on the S3 device (i3), then S1's T2 and T1.
-            TANK to "i3 21 / ll ee3 / 1 bl / 1",
-            BERSERK to "i4 / 53 / 3 / 3 bl",
+            // S3's device: the healer's and the bers' (a stack: the healer's bot, listed first, unless one of them is yours).
+            HEALER to "ss / (leap to 2nd term) 1 / 2 dev / 4 bl",
+            TANK to "21 / ll ee3 / 1 bl / 1",
+            BERSERK to "i4 / 53 / 3 dev / 3 bl",
         ),
         times = listOf(
-            // ll 0.15, i3 0.1, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
-            "ll 0.15 | i3 0.1 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
+            // ll 0.15, rl 1.75, gate 2.05 (into S2 at 2.55), i4 3.4, Lights 5.1, the four terms by 6, SS 8.2.
+            "ll 0.15 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
             "ll 0.8 | gate 1.0 | 1 4 5 2.1 | 2 3 rl 5.0",
-            // S3's device was done in S1 (i3).
-            "1 3 4 2.1 | 2 4.0 | levers gate 6.0",
+            // S3's device after the 2nd and 3rd terms.
+            "1 3 4 2.1 | 2 4.0 | levers gate 6.0 | dev 6.5",
             "1 3 4 2.1 | 2 4.0 | levers 5.2",
         ),
         moves = listOf(
-            // The i3 tank leaps back into S1 at 0.3, the i4 bot out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone
-            // but SS leapt there by 6.4, and the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
-            "i3 leaps 0.3 | i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
+            // The i4 bot leaps out to the tank at 4.0; the mage on the ee2 spot by 5.8; everyone but SS leapt there by 6.4, and
+            // the mage stays till the ee3 tank and S2's 4th and 5th have (it moves to its 2nd term about 7.2).
+            "i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 4 5",
             "ee3 spot 3.2 | ee3 waits 1 2 3 4",
             "", "",
         ),
@@ -117,8 +118,70 @@ object Roles {
         ),
     )
 
-    /** The same as Quality PF. */
-    val DYNAMIC = Preset("Dynamic", QUALITY_PF.roles, QUALITY_PF.times, QUALITY_PF.moves, QUALITY_PF.helps)
+    /**
+     * Advanced PF (2026-10-18; it was Dynamic, the same as Quality PF). The mage pre-does Lights on its EE2 spot (as in
+     * PF), then S2's 5th and 3rd; the bers S2's 4th and right lever; S3's device is the healer's and the bers' (a stack).
+     */
+    val ADVANCED_PF = Preset(
+        "Advanced PF",
+        roles = linkedMapOf(
+            MAGE to "bl ee2 / dev 53 / core / recore",
+            ARCHER to "43 / 2 / 4 bl / 2",
+            HEALER to "ss / 1 / 2 dev / 4 bl",
+            TANK to "21 / ll ee3 / 1 bl / 1",
+            BERSERK to "i4 / 4 rl / 3 dev / 3 bl",
+        ),
+        times = listOf(
+            "ll 0.15 | rl 1.75 | gate 2.05 | i4 3.4 | lights 5.1 | terms 6.0 | ss 8.2",
+            // The tank's left lever and the gate, then off to EE3; the mage's 5th then 3rd, the bers' 4th then the right lever.
+            "ll 0.8 | gate 1.0 | 1 2 4 5 2.1 | 3 3.8 | rl 4.0",
+            "1 2 3 4 2.1 | levers gate 4.2 | dev 5.0",
+            "1 2 3 4 2.1 | levers 4.0",
+        ),
+        moves = listOf(
+            // The i4 bot leaps out at 4.0; the mage on the ee2 spot by 5.8; it stays till the ee3 tank, the archer (2nd) and
+            // the bers (4th) have leapt on.
+            "i4 leaps 4.0 | ee2 spot 5.8 | leap ee2 6.3 | ee2 waits ee3 2 4",
+            "ee3 spot 3.6 | ee3 waits 1 2 3 4",
+            "", "",
+        ),
+    )
+
+    /**
+     * Near Optimal (2026-10-18), between Advanced PF and Theoretical. The mage pre-does Lights on its EE2 spot and goes from
+     * S2 through the core to hold by it in S3: everyone leaps onto it as S4 starts, it does S4's 4th, then recores. The tank
+     * holds Theoretical's high EE3 for the healer and bers and does S3's 3rd from it; the archer pre-does S3's device after
+     * S2's 2nd (as S3 starts).
+     */
+    val NEAR_OPTIMAL = Preset(
+        "Near Optimal",
+        roles = linkedMapOf(
+            MAGE to "bl ee2 / dev 53 / core / 4 recore",
+            ARCHER to "43 / 2 / i3 4 bl / 2 recore",
+            HEALER to "ss / 1 / 1 / 1 recore",
+            TANK to "21 / hee3 / 3 bl / bl",
+            BERSERK to "i4 / bl 4 / 2 / 3 recore",
+        ),
+        times = listOf(
+            "ll 0.15 | 2 1.3 | rl 1.5 | gate 1.8 | 4 2.95 | 1 3.0 | i4 3.0 | lights 4.6 | 3 5.0 | ss 7.8",
+            // The bers' levers and the gate, then its 4th (S2's last); the archer's 2nd, then S3's device as S3 starts.
+            "ll 0.25 | rl 1.05 | gate 1.25 | 2 1.25 | 5 1.6 | 1 2.9 | 3 2.95 | 4 4.0 | arrows 4.3",
+            // The tank's 3rd from the high EE3; the archer's 4th from the device; the levers (archer and tank) last.
+            "3 1.25 | 4 2.0 | 1 2.95 | 2 3.35 | ll 3.6 | gate 3.8 | rl 4.4",
+            // Off the mage by the core as S4 starts; the tank's levers last.
+            "2 1.9 | 4 1.9 | 1 2.0 | 3 2.1 | ll 2.4 | rl 3.2",
+        ),
+        moves = listOf(
+            // The i4 bot leaps out at 3.4; the mage on the ee2 spot by 5.0; it stays till the archer (2nd) and the bers (4th) have leapt on.
+            "i4 leaps 3.4 | ee2 spot 5.0 | leap ee2 5.6 | ee2 waits 2 4",
+            // The tank on the high EE3 by 2.5 s into S2; the healer (1st) and bers (2nd) leap onto it.
+            "ee3 spot 2.5 | ee3 waits 1 2",
+            "", "",
+        ),
+        defaults = mapOf("ee3" to Spots.Spot("EE3", 18.70, 121.50, 91.30, 0.82f, -8.64f)),
+        // As Theoretical's: the 2x2 quartz platform beside the high EE3, mined once the tank is on it.
+        mines = mapOf("ee3" to listOf(15, 16).flatMap { x -> listOf(93, 94).map { net.minecraft.core.BlockPos(x, 122, it) } }),
+    )
 
     /**
      * A route planner's prototype roles (a 399-tick P3), times from its simulation. The tank pre-does Lights and waits on S2's high path for the archer, mage and bers;
@@ -212,8 +275,8 @@ object Roles {
         mines = mapOf("ee3" to listOf(15, 16).flatMap { x -> listOf(93, 94).map { net.minecraft.core.BlockPos(x, 122, it) } }),
     )
 
-    /** In the skill menu as listed, with Random after the first three ([P3Plan.SKILLS]). */
-    val PRESETS = listOf(PF, QUALITY_PF, DYNAMIC, PROTOTYPE_1, THEORETICAL)
+    /** By saved index, with Random after the first three ([P3Plan.SKILLS]); new ones go last (the menu orders them itself). */
+    val PRESETS = listOf(PF, QUALITY_PF, ADVANCED_PF, PROTOTYPE_1, THEORETICAL, NEAR_OPTIMAL)
 
     /** `ll` and `rl` per section coming in along the track (S2: the high lever on the left, the low one by T4 on the right; S4, heading east: the low lever by T3 on the left, the high one by T4 on the right). */
     // Left and right as you come in along the track: in S1 that's heading for the gate (north), so the east lever's on the left.
@@ -278,6 +341,7 @@ object Roles {
                 for (t in tokens(part)) {
                     when {
                         t.startsWith("ee") && t.drop(2).toIntOrNull() != null -> ee[t.drop(2).toInt()] = c
+                        t.startsWith("hee") && t.drop(3).toIntOrNull() != null -> ee[t.drop(3).toInt()] = c
                         t == "core" -> ee[5] = c
                     }
                     if (t == "ll" || t == "bl") leverFirst.getOrPut(s) { ArrayList() } += c
