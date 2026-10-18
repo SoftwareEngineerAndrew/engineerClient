@@ -13,8 +13,9 @@ Hard rules that apply to every line (they are in the brief too):
 - This repository is PUBLIC. No player data and no strategy findings in code, comments, tests, fixtures, docs or commit messages;
   mechanisms are fine (how the server plays the blood room out is built here exactly). Fixtures are synthetic. Hypixel's own
   generic system lines may appear as format strings with `{placeholders}`.
-- The jar ships no recorded data. Layouts, rooms, mobs and tables are a local data pack read at runtime from
-  `<gameDir>/config/engineerclient/ads/packs/`. A missing pack is a clear chat message with that folder path, never a crash.
+- The data packs are public and ship inside the jar (`src/resources/assets/engineerclient/ads/packs/`, six files). A file of the same name in
+  `<gameDir>/config/engineerclient/ads/packs/` overrides the bundled one (for development). A missing or damaged pack is a plain chat
+  message, never a crash.
 - Do not change what already works. Today's boss sim (P1 to P4 practice, parties over the LAN relay, plans, PBs, the restart
   screen) keeps working exactly; starting the boss directly stays available and creates no `Run`.
 - Build only with the serialising build script kept outside this repository (it takes the worktree path). It runs `gradle build` including the tests.
@@ -337,7 +338,7 @@ bedrock floor present), the blue terracotta marker where the rooms pack puts it,
 
 ## 11. Data packs
 
-Four packs, read from `<gameDir>/config/engineerclient/ads/packs/` by `pack/Packs.kt` (`Packs.load/loadAsync/current`):
+Four packs (six files), bundled in the jar and read by `pack/Packs.kt` (`Packs.load/loadAsync/current`):
 
 | file | loader | holds |
 |---|---|---|
@@ -345,13 +346,29 @@ Four packs, read from `<gameDir>/config/engineerclient/ads/packs/` by `pack/Pack
 | `layouts.json.gz` | `LayoutPack` | recorded layouts: rooms with rotation, doors with final kinds, path, keys, recorded check-mark ticks |
 | `mobs.json.gz` | `MobPack` | archetypes, modifiers, per-run HP scale, per-room spawn cells and recorded visits, player damage tables |
 | `runstate.json.gz` | `RunStatePack` | door/key rules, room durations, check-state tables, score model, class roles, puzzle odds, SB stat presets, lag presets, named defaults |
+| `traps.json` | `TrapTimings` | crusher paces and start spreads, falling floors, arrow banks, flamethrowers (read by the traps module; a missing file means built-in defaults) |
+
+**Where each file comes from** (`pack/PackSource.kt`). Per file: the copy in `<gameDir>/config/engineerclient/ads/packs/` if there is one (a
+development override, logged once per file), else the copy bundled in the jar under `assets/engineerclient/ads/packs/`. The loaders read real
+files (`rooms.blocks.bin` is read by offset), so the bundled files are unpacked once into
+`<gameDir>/config/engineerclient/ads/packs-bundled/<hash>/`, where the hash covers every bundled file's name, size and SHA-256. A later load finds
+the files there and reuses each one that still has the jar's size and SHA-256 (a damaged copy is unpacked again); a jar with rebuilt packs gets a new hash folder and the older hash folders are deleted. Nothing is
+unpacked when every file is overridden. `Packs.load` is synchronised and runs on a worker thread (`loadAsync`); several games sharing a
+folder are safe because each file is written to a temporary name and moved into place (a single rename, so no load ever finds a file missing). Any failure (a file missing from the jar, a bundled
+file that does not parse, a cache folder that cannot be made) becomes a line of `PackSet.userLines()`, never an exception. A failed unpack names the exception
+class and the file system's words and tells the player to check that the folder is writable and the disk is not full, not to reinstall. The two rooms
+files belong together: an override of one without the other fails the checksum check with a message, so override both. Rebuilding the packs
+is `tools/bundle-ads-packs.sh <packs/out folder>` (it copies exactly the six files; the build tooling stays outside the repository).
+`/ads dev packs` lists, for each of the six files, whether it came from the jar or the override folder. The optional
+`bots.traversals.json.gz` is not bundled: it is read from the override folder only.
 
 The specs (`FORMAT-rooms.md`, `FORMAT-layouts.md`, `FORMAT-mobs.md`, `FORMAT-runstate.md`) are kept outside this repository; the loaders are
 written exactly against them and take a `PackReport` for messages (never chat, never exceptions). Every loader returns null with a plain
 reason when a file is missing, unreadable, the wrong `format`, or a `version` it does not read (a newer version names both). Loaders
 ignore unknown fields and tolerate nulls. The run-state pack's sections are independent: a malformed section is null and named in
 `problems`, and only the feature that needs it falls back to the documented default constants. `Packs.userLines(set)` is the text for the
-player: one message naming the folder and the five files when the packs are not there at all.
+player: when no pack loaded at all (the jar lacks them or they could not be unpacked, and there is no override) one message says the mod
+looks damaged, to install it again, and where an override would go.
 
 Frames: world frame as section 2; canonical room frame (Odin SOUTH, x east, z south, y ABSOLUTE) for everything inside a design;
 `Placement.of(shape, w, d, rot, worldTiles, fairy)` is the position law (4.2) and the tile law (4.3), pure; `quarterTurns` is how many
@@ -465,7 +482,7 @@ ticks or a Revive Stone -> `PlayerRevived`; the score loses `max(0, 2d-1)`.
 - Every constant that is not measured is a named, documented constant (a setting where a player would want it) and goes on your report's
   "unmeasured" list. Use the measured numbers in the packs and the reports; do not invent mechanics.
 - Fixtures are synthetic (see `test/p3sim/pack/Fixtures.kt` for an independent encoder of the room blob format). Never copy recorded data in.
-- MC 26.3 Mojang names; look signatures up in the remapped jar (`~/.gradle/caches/fabric-loom/`) and Odin in `libs/odin`; do not guess.
+- MC 26.3 Mojang names; look signatures up in the remapped Minecraft jar in the Loom cache and Odin in `libs/odin`; do not guess.
 - Mixins: a mixin class is a NEW file `src/mixin/Ads<Key><What>Mixin.java` (the name carries your key, so two items never collide) and belongs to you; its line in `engineerclient.mixins.json` is an integration request (the config is shared and an unlisted mixin is
   inert, so committing the class alone breaks nothing). Verify every target method and descriptor with `javap` on the remapped 26.3 jar, never from
   memory: a mixin that misses its target stops the game at start (`defaultRequire` is 1). To try one in your own worktree you may add the line

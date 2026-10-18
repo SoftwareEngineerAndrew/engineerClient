@@ -44,7 +44,7 @@ rules (flight rule, chat queue); `CampEngine` is the state machine (no Minecraft
 `WallPlan` is the wall and the throw order; `CampMobs` what a camp mob is made of; `CampLines` his words; `WallLook` the head textures.
 
 - **The wall.** 30 stands: one giant, the four revived bosses, the 17 standard mobs once each, the Wandering Soul and 7 heads that make
-  nothing, redrawn onto the stands every camp. The wall's textures are NOT in the mod: the local rooms pack carries them under the roles
+  nothing, redrawn onto the stands every camp. The wall's textures are not in the code: the bundled rooms pack carries them under the roles
   `blood_giant`, `blood_boss_1..4`, `blood_mob_<name>`, `blood_soul`, `blood_decor_N` (`packs/rooms/add_blood_textures.py`); a pack without them
   gives plain heads and the camp plays out the same.
 - **His opening line** comes 3 ticks after the door.
