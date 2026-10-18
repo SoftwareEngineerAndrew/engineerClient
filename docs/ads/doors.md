@@ -5,7 +5,7 @@ Code: `src/p3sim/clear/state/`. Tests: `test/p3sim/state/`. The module object is
 
 ## What it does
 
-- **Countdown (run clock `t`, T0 = Mort's first line).** `start()` sets T0 = run start + `Doors Countdown Delay` (setting, default 40) + 60 + 20.
+- **Countdown (run clock `t`, T0 = Mort's first line).** `start()` sets T0 = run start + `Doors Arrival Wait` (setting, default 60: the potions line on arrival comes a median 57 ticks before "Starting in 4") + 60 + 20.
   "Starting in 4/3/2/1" at `-80/-60/-40/-20` (measured: 20 ticks apart, 20 ticks before Mort), the ready lines just before the 4, Mort at
   `0/+40/+70`, the CLEAR stage at `0`. The lever-click and villager sounds are the recorded ones.
 - **Doors.** `entrance` falls 22 ticks after the "1 second" line (T0+2), the free Fairy door one tick earlier, no chat, no key. A wither

@@ -22,7 +22,6 @@ import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Mob
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
-import kotlin.random.Random
 
 /** The tag used for an archetype whose pack row carries none. */
 internal val DEFAULT_TAG = MobTag(idOffset = 1, dy = 2.09, head = "§6✯ §r", nameColor = "§c", bold = false)
@@ -83,7 +82,7 @@ internal object MobWorld {
         var disguised = arch.disguise && fakePlayers && !e.plainBody
         var profile: GameProfile? = null
         if (disguised) {
-            profile = e.profile ?: Disguise.profile(e.plan.id, MobRolls.profileName(Random(e.plan.id.leastSignificantBits)), arch.skin)
+            profile = e.profile ?: Disguise.profile(e.plan.id, Disguise.profileName(arch), arch.skin)
             if (!e.announced) e.announced = Disguise.announce(profile)
             if (!e.announced) { disguised = false; profile = null }
         }

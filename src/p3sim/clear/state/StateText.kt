@@ -37,6 +37,39 @@ object StateText {
         "Good luck.",
     )
 
+    /**
+     * The lines a player whose class nobody else in the party plays reads on Mort's first tick, just before his line: the doubled
+     * stats of a level 50 class with the usual tree (the commonest recorded set for each class, ADR 1,500 runs; 177 Mage, 161 Archer,
+     * 134 Healer, 55 Berserk, 38 Tank). Null for a class without one.
+     */
+    fun classDoubled(dungeonClass: String?): List<String>? {
+        val cls = CLASS_NAMES.firstOrNull { it.equals(dungeonClass, ignoreCase = true) } ?: return null
+        val stats = DOUBLED_STATS[cls] ?: return null
+        return listOf("§6Your §r§a$cls §r§6stats are doubled because you are the only player using this class!") +
+            stats.map { (stat, from, to) -> "§a[$cls] §r§f$stat §r§c$from§r§f -> §r§a$to" }
+    }
+
+    private val CLASS_NAMES = listOf("Healer", "Berserk", "Archer", "Tank", "Mage")
+
+    private val DOUBLED_STATS: Map<String, List<Triple<String, String, String>>> = mapOf(
+        "Mage" to listOf(Triple("Intelligence", "490", "740"), Triple("Ability Damage", "14", "19"), Triple("Cooldown Reduction", "49%", "74%")),
+        "Archer" to listOf(Triple("Extra Arrow Chance", "97%", "147%"), Triple("Arrow Damage", "225.2%", "275.2%")),
+        "Healer" to listOf(
+            Triple("Healing Aura Healing", "1.8%", "2.8%"), Triple("Ghost Healing Aura Healing", "20.5%", "21%"), Triple("Revive Cooldown", "59", "49"),
+            Triple("Overheal Maximum Shield", "36.4%", "56.4%"), Triple("Vitality", "18.2", "28.2"), Triple("Mending", "30.5", "40.5"), Triple("Healing Aura Range", "8", "16"),
+        ),
+        "Berserk" to listOf(
+            Triple("Melee Damage", "76%", "116%"), Triple("Walk Speed", "49.2", "79.2"), Triple("Bloodlust Damage", "56%", "76%"),
+            Triple("Lust For Blood Damage Increase Cap", "880%", "1,130%"), Triple("Lust For Blood Damage Increase Per Hit", "159%", "174%"),
+            Triple("Indomitable Strength to Defense", "9.8%", "14.8%"), Triple("Weapon Master Swing Range Increase", "4.9", "5.4"),
+            Triple("Bloodlust Heal Percent", "3%", "6%"), Triple("Bloodlust Duration", "5", "10"),
+        ),
+        "Tank" to listOf(
+            Triple("Defense", "101", "151"), Triple("Total Defense", "35%", "60%"), Triple("Absorption Health", "700", "900"), Triple("Vitality", "15.1", "25.1"),
+            Triple("Absorption Shield Health Required", "50%", "100%"), Triple("Absorption Shield Percentage", "10%", "20%"), Triple("Barrier Cooldown", "90", "45"),
+        ),
+    )
+
     fun mort(index: Int) = "§e[NPC] §bMort§f: §r${mortLines[index]}"
 
     // ---- doors and keys ----------------------------------------------------------------------------------------------
