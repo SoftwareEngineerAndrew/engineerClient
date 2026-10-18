@@ -78,7 +78,7 @@ object TrapsModule : AdsModule, TrapService {
     private var maxHp = 11351.0
 
     override fun onRunStart(run: Run) {
-        val timings = TrapTimings.load(run.packs.dir)
+        val timings = TrapTimings.load(run.packs.source)
         val plan = timings.roll(run.subRandom("traps"))
         trapPercent = run.packs.runstate?.damage?.trapPctOfMaxHp?.times(100.0)?.takeIf { it > 0.0 } ?: 15.0
         val presets = run.packs.runstate?.sbStatPresets.orEmpty()
