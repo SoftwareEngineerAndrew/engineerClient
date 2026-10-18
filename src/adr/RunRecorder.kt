@@ -59,6 +59,8 @@ class RunRecorder(
     private val dir: Path,
     private val captureGeometry: Boolean,
     private val onSaved: (Path) -> Unit = {},
+    /** A recording of an ADS run (the sim's world): kept once the run starts, never uploaded ([ADR]). */
+    private val sim: Boolean = false,
 ) {
 
     private var tick = 0
@@ -121,9 +123,13 @@ class RunRecorder(
         flushFrames()
         flushMouse()
         tick++
-        // Never the P3 Sim world: Odin is told it is in F7 there, and ADR would take it for a run.
-        if (!confirmed && com.engineerclient.p3sim.P3Sim.inSim) { abandon(); return }
-        if (!confirmed) {
+        if (!confirmed && sim) {
+            // An ADS run: kept from the moment the run tells the client its stage (the world is made for it, so the recording still starts at load).
+            if (com.engineerclient.p3sim.run.ClientRun.inRun) confirm() else if (tick > ABANDON_AFTER_TICKS) { abandon(); return }
+        } else if (!confirmed && com.engineerclient.p3sim.P3Sim.inSim) {
+            // Never the P3 Sim world as a Hypixel run: Odin is told it is in F7 there, and ADR would take it for one.
+            abandon(); return
+        } else if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
             // Area is known a second or two after load; anything that is known and not a dungeon is dropped
             // right away rather than buffered for the full timeout.
@@ -370,10 +376,17 @@ class RunRecorder(
         val version = modVersion("engineerclient")
         // The game version as running, not a literal: this file ships on more than one MC version.
         val mc = modVersion("minecraft")
-        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":${str(mc)},"self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF,"stx":1}""")
+        writeNow("""{"k":"meta","format":2,"mod":${str(version)},"mc":${str(mc)},"self":${str(self)},"startMs":${System.currentTimeMillis() - tick * 50L},"confirmedAtTick":$tick,"geometry":$captureGeometry,"farHalf":$FAR_HALF,"stx":1${simMeta()}}""")
         backlog.forEach(::writeNow)
         backlog.clear()
         flushPending()
+    }
+
+    /** An ADS run's layout and seed, for comparing it with the recording it was built from. */
+    private fun simMeta(): String {
+        if (!sim) return ""
+        val (layout, seed) = com.engineerclient.p3sim.run.RunLauncher.lastLaunch ?: return ",\"ads\":{}"
+        return ",\"ads\":{\"layout\":${str(layout)},\"seed\":$seed}"
     }
 
     private fun abandon() {
