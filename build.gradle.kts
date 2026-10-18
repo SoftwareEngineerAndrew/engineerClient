@@ -27,11 +27,13 @@ sourceSets.main {
     resources.setSrcDirs(listOf("src/resources"))
 }
 
-// Tests for the headless model classes, in test/ laid out like src/. Nothing in test/ touches Minecraft.
+// Headless tests in test/ (same flat layout as src/), fixtures in test/resources/. They cover the pure parts of the ADS full run
+// (src/p3sim/run and src/p3sim/pack, and each module's pure logic): no Minecraft world, no Odin. Fixtures are synthetic;
+// never put recorded data in them (the repo is public). `gradle build` runs them.
 sourceSets.test {
     java.setSrcDirs(listOf("test"))
     kotlin.setSrcDirs(listOf("test"))
-    resources.setSrcDirs(listOf<String>())
+    resources.setSrcDirs(listOf("test/resources"))
 }
 
 repositories {
@@ -63,8 +65,8 @@ dependencies {
     // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
     compileOnly("maven.modrinth:devonian:k8Mog4wx")
 
-    testImplementation(platform("org.junit:junit-bom:5.13.4"))
-    testImplementation(kotlin("test-junit5"))
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -86,6 +88,18 @@ tasks {
 
     test {
         useJUnitPlatform()
+        // The optional pack checks (SamplePackTest, RealPackTest) read these folders; without them as inputs a green run would be
+        // reused from the cache when only the packs or the variable changed. Both are skipped when the variable is not set.
+        for (name in listOf("ADS_SAMPLE_PACKS", "ADS_REAL_PACKS", "ADS_BLOOD_FIGHTS")) {
+            inputs.property(name, providers.environmentVariable(name).orElse(""))
+            providers.environmentVariable(name).orNull?.let { dir -> file(dir).takeIf { it.isDirectory }?.let { inputs.dir(it) } }
+        }
+        inputs.property("adsRealReport", providers.environmentVariable("ADS_REAL_REPORT").orElse(""))
+        testLogging {
+            events("failed", "skipped")
+            showStandardStreams = false
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 
     compileJava {
