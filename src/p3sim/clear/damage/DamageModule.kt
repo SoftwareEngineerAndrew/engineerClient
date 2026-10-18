@@ -123,7 +123,11 @@ object DamageModule : AdsModule, DamageService {
     /** The run to hurt things in: a dungeon-stage run that is not over (the boss stage keeps its own damage). */
     fun activeRun(): Run? = Runs.current?.takeIf { !it.isOver && it.stage.inDungeon }
 
+    /** The Grandma Wolf Kill Combo of each human. */
+    private val combo = KillCombo()
+
     override fun onRunStart(run: Run) {
+        combo.clear()
         mobLedger.clear(); regenCarry.clear(); shown.clear(); shields.clear(); dealt.clear(); milestonesShown.clear(); reviving.clear()
         rolls = run.subRandom("damage")
     }
@@ -144,6 +148,10 @@ object DamageModule : AdsModule, DamageService {
     }
 
     override fun onEvent(run: Run, event: com.engineerclient.p3sim.run.RunEvent) {
+        if (event is com.engineerclient.p3sim.run.MobKilled) event.by?.let { id ->
+            val p = human(id) ?: return@let
+            combo.kill(id, run.t)?.let { line -> EngineerClient.safely("ads kill combo") { Sim.asPlayer(p) { Sim.chat(line) } } }
+        }
         // The Dungeonbreaker gains 5 charges for each secret its finder collects.
         if (event is com.engineerclient.p3sim.run.SecretFound) event.player?.let { id ->
             human(id)?.let { p -> EngineerClient.safely("ads damage breaker charges") { Sim.asPlayer(p) { com.engineerclient.p3sim.SimItems.addBreakerCharges(BREAKER_CHARGES_PER_SECRET) } } }
@@ -158,6 +166,7 @@ object DamageModule : AdsModule, DamageService {
     override fun onTick(run: Run) {
         if (!run.stage.inDungeon) return
         val t = run.t
+        for ((id, line) in combo.expire(t)) if (line != null) human(id)?.let { p -> EngineerClient.safely("ads kill combo") { Sim.asPlayer(p) { Sim.chat(line) } } }
         for (rec in run.state.players.values.toList()) {
             if (PlayerLedger.reviveDue(rec, t)) { reviving.remove(rec.uuid); revive(run, rec.uuid, null); continue }
             val r = reviving[rec.uuid]

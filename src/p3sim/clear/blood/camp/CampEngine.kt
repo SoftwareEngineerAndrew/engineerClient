@@ -185,7 +185,9 @@ class CampEngine(
         for (m in newly) {
             m.counted = true
             kills++
-            if (config.chatCoins && rng.nextBoolean()) ask(Request(r, Line.REACT))
+            // Asked for the next tick: this tick's lines have already been printed above, and a line whose slot is in the past is never said
+            // (a request for r itself was silently dropped, so the Watcher never reacted to a kill).
+            if (config.chatCoins && rng.nextBoolean()) ask(Request(r + 1, Line.REACT))
         }
         // His health packet steps on this same tick, and the 15th step is the defeat the exit timers count from.
         if (newly.isNotEmpty()) port.killsCounted(kills)
