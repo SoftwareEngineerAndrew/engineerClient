@@ -30,6 +30,7 @@ import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.alert
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.itemUUID
 import com.odtheking.odin.utils.render.drawFilledBox
@@ -69,7 +70,11 @@ import java.io.File
  * Roles ([BrRoles]): once the party has said who kills what ("!3br 2" in party chat), a room the
  * rush comes into through a door the site has a plan for shows your boxes green, numbered in the
  * order you kill them, and your stack gold; everyone else's are not drawn. The door runner
- * ("!br d") sees no boxes while rushing.
+ * ("!br d") sees no boxes while rushing, unless Door Kills has them kill.
+ *
+ * Door Kills After Fairy: rooms the rush reaches after fairy use the doorer plans, the rooms
+ * before it the normal ones. The rush reaches fairy when a wither door into or out of fairy falls,
+ * or when you walk into fairy on the rush.
  */
 object BrWaypoints2 : Module(
     name = "BR Roles",
@@ -107,7 +112,9 @@ object BrWaypoints2 : Module(
 
     private val killers by SelectorSetting("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
 
-    private val doorerKills by BooleanSetting("Doorer Kills", false, desc = "The door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by.")
+    private val doorKills by SelectorSetting("Door Kills", BrRoles.DoorKills.NEVER, desc = "When the door runner kills too, with undonecoffee.com/brroles's Doorer kills roles: one more role than Killers (the door runner's, the last), and each room's plan goes by its wither door as well as the door the rush came in by. Never, Always, or After Fairy: only in the rooms the rush reaches after fairy.")
+
+    private val dropBottom by BooleanSetting("Drop Bottom After Fairy", false, desc = "Once the rush reaches fairy, the killer with the highest role number gets a Clear! alert and leaves the rush to clear. The rest go on with one killer fewer and the door runner killing: quad up to fairy, then trio with the door.").withDependency { doorKills == BrRoles.DoorKills.AFTER_FAIRY }
 
     private val recolorDone by BooleanSetting("Recolor Done Boxes", false, desc = "A done box stays up as a normal box in Done Color, its number greyed, instead of disappearing.")
     private val doneColor by ColorSetting("Done Color", Color(121, 255, 121, 166 / 255f), true, desc = "Colour of a done box with Recolor Done Boxes on. Its alpha fades the outline; Fill Opacity still sets the faces.").withDependency { recolorDone }
@@ -193,6 +200,7 @@ object BrWaypoints2 : Module(
             entryDoors.clear(); noPlanSaid.clear(); walkedIn.clear(); myTile = null
             boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
             rushing = false; rushRoom = null; rushed.clear(); startDoor = false; barriers.clear(); witherSides.clear(); path = emptyMap(); exits = emptyMap(); entrances = emptyMap(); lastRoom = null
+            beforeFairy = null; witherSeen = false
         }
 
         // Chat straight off the network, before any mod can hide it: the rush starts with the
@@ -212,7 +220,8 @@ object BrWaypoints2 : Module(
         on<TickEvent.End> {
             BrRoles.settingKilling = killers.ordinal + 2
             BrRoles.settingRole = when (myRole.ordinal) { 0 -> null; 1 -> 0; else -> myRole.ordinal - 1 }
-            BrRoles.doorerKills = doorerKills
+            BrRoles.doorKills = doorKills
+            BrRoles.dropBottom = dropBottom
             wandUser?.tick()
             if (!DungeonUtils.inDungeons) return@on
             wasInDungeon = true
@@ -221,6 +230,8 @@ object BrWaypoints2 : Module(
             barriers.clear()
             if (ticks % 10 == 0) mapPath()
             trackMyDoor()
+            // Walking into fairy on the rush: it has been reached, whether its doors were seen falling or not.
+            if (rushing && beforeFairy == null) DungeonUtils.currentRoom?.takeIf { it.type == RoomType.FAIRY && onRush(it.name) }?.let { reachFairy() }
             if (debug && (rushing || allRooms)) DungeonUtils.currentRoom?.name?.let { if (it != lastRoom) { lastRoom = it; debugRoom(it) } }
             if (debug) traceRoom()
             loadRooms()
@@ -363,14 +374,36 @@ object BrWaypoints2 : Module(
     /** Waiting for the start door: the first rush door, the one out of Entrance. */
     private var startDoor = false
     private val barriers = mutableListOf<Pair<Int, Int>>()
+    /** A wither door's line this run: doors falling from then on are the rush's, not the start's (fairy's own door falls at the start). */
+    private var witherSeen = false
+    /** The rooms the rush had been through when it reached fairy; null before. Every other room is past fairy ([late]). */
+    private var beforeFairy: Set<String>? = null
+
+    /** Whether a room is past fairy on the rush: Door Kills After Fairy plans go by it. */
+    private fun late(name: String?): Boolean = beforeFairy.let { it != null && name !in it }
+
+    /** The rush has reached fairy: the rooms after it are late, and with Drop Bottom After Fairy the bottom killer leaves to clear. */
+    private fun reachFairy() {
+        beforeFairy = HashSet(rushed)
+        if (debug) EngineerClient.msg("§dBR debug §7the rush reached fairy §8(after ${rushed.size} rooms)")
+        if (BrRoles.youDropped(true)) {
+            alert("Clear!")
+            EngineerClient.msg("§dBR §7past fairy: you leave the rush §8— §fClear!")
+        }
+    }
 
     private fun onChat(msg: String) {
         if (!DungeonUtils.inDungeons) return
         when {
             // The dungeon starting is the start door coming down.
-            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); startDoor = true }
+            msg == MORT -> { rushing = true; rushRoom = null; rushed.clear(); startDoor = true; beforeFairy = null; witherSeen = false }
             // A wither door means the start door has been and gone, whether its blocks were seen or not.
-            rushing && WITHER_DOOR.matches(msg) -> startDoor = false
+            // Its blocks can fall a tick before the line: a door into fairy already taken is fairy reached.
+            rushing && WITHER_DOOR.matches(msg) -> {
+                startDoor = false
+                witherSeen = true
+                if (beforeFairy == null && DungeonScan.rooms.any { it.name == rushRoom && it.type == RoomType.FAIRY }) reachFairy()
+            }
             msg == BLOOD_DOOR -> { rushing = false; rushRoom = null }
         }
     }
@@ -388,6 +421,8 @@ object BrWaypoints2 : Module(
             rushed += entrance.name ?: return
             startDoor = false
         }
+        // A wither door into or out of fairy: the rooms from here on are past it.
+        if (witherSeen && beforeFairy == null && sides.any { it.type == RoomType.FAIRY }) reachFairy()
         val next = sides.filter { it.name != null && it.name !in rushed }.minByOrNull { if (it.type == RoomType.FAIRY) 1 else 0 } ?: return
         rushRoom = next.name
         rushed += next.name!!
@@ -499,7 +534,7 @@ object BrWaypoints2 : Module(
             "[ec] br trace: room=$name checkmark=${cur?.checkmark} rushing=$rushing rushRoom=$rushRoom onRush=${onRush(name)} " +
                 "placed=${name?.let { placed(it) != null }} scanRooms=${DungeonScan.rooms.size} path=${path.size} boxes=${boxes.size} " +
                 "inRoom=${boxes.count { it.room == name }} shownRooms=${shownRooms().map { it.name }} shown=${shown().size} drawn=${drawn().size} " +
-                "roles=${BrRoles.describe()} active=${BrRoles.active}"
+                "roles=${BrRoles.describe(late(name))} active=${BrRoles.active} lateRoom=${late(name)}"
         )
     }
 
@@ -515,17 +550,19 @@ object BrWaypoints2 : Module(
         val room = placed(name)
         val rel = room?.getRelativeCoords(BlockPos(door.first, 0, door.second))
         val at = "§f$name §7by door §f${door.first}, ${door.second}" + (rel?.let { " §8(room ${it.x}, ${it.z})" } ?: " §8(room not placed yet)") + " §8· $how"
-        val role = "§7you: §f" + BrRoles.describe()
+        val late = late(name)
+        val role = "§7you: §f" + BrRoles.describe(late) + if (late) " §8(past fairy)" else ""
         val inRoom = boxes.filter { it.room == name }
         val wither = room?.let { witherOf(name, it) }
-        val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z, wither)
+        val plan = if (!BrRoles.active || rel == null) null else BrRoles.planFor(name, rel.x to rel.z, wither, late)
         val shows = when {
             inRoom.isEmpty() -> "§8no boxes in this room"
             !BrRoles.active -> "§7showing §fall ${inRoom.size}"
-            plan == null -> "§7no plan" + (if (BrRoles.doorerKills && wither == null) " §8(wither door not known)" else "") + " §8— showing §fall ${inRoom.size}"
-            BrRoles.playing == null -> "§7on the door §8— showing §fnone"
+            BrRoles.youDropped(late) -> "§7you left the rush to clear §8— showing §fall ${inRoom.size}"
+            plan == null -> "§7no plan" + (if (BrRoles.doorerKills(late) && wither == null) " §8(wither door not known)" else "") + " §8— showing §fall ${inRoom.size}"
+            BrRoles.playing(late) == null -> "§7on the door §8— showing §fnone"
             else -> {
-                val looks = inRoom.map { number(it) to BrRoles.look(plan, number(it)) }
+                val looks = inRoom.map { number(it) to BrRoles.look(plan, number(it), late) }
                 val mine = looks.mapNotNull { (n, l) -> (l as? BrRoles.Look.Mine)?.let { n to it.order } }.sortedBy { it.second }.map { it.first }
                 val stack = looks.filter { it.second is BrRoles.Look.Stack }.map { it.first }
                 val loose = looks.filter { it.second == null }.map { it.first }
@@ -591,13 +628,15 @@ object BrWaypoints2 : Module(
         val all = if (recolorDone) shownRooms().mapTo(HashSet()) { it.name }.let { names -> boxes.filter { it.room in names } } else live
         val liveSet = live.toHashSet()
         for ((room, list) in all.groupBy { it.room }) {
-            val plan = if (!BrRoles.active) null else planOf(room)
+            val late = late(room)
+            // Dropped off the rush to clear: roles are off for you there.
+            val plan = if (!BrRoles.active || BrRoles.youDropped(late)) null else planOf(room)
             if (plan == null) {
                 list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false, it !in liveSet) }
                 continue
             }
-            if (BrRoles.playing == null) continue
-            val looks = list.map { it to BrRoles.look(plan, number(it)) }
+            if (BrRoles.playing(late) == null) continue
+            val looks = list.map { it to BrRoles.look(plan, number(it), late) }
             val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
             // The next to kill: your first box still alive.
             val next = mine.firstOrNull { it.first in liveSet }?.first
@@ -615,20 +654,22 @@ object BrWaypoints2 : Module(
      */
     private fun planOf(name: String?): BrRoles.Plan? {
         name ?: return null
+        val late = late(name)
         // A miniboss room (one mob, marked on the site): everyone kills its box, from any door.
         if (BrRoles.isMini(name)) {
             val all = boxes.filter { it.room == name }.map { number(it) }
-            return BrRoles.Plan(List(maxOf(1, BrRoles.planCount)) { all }, List(maxOf(1, BrRoles.planCount)) { emptyList() })
+            val n = maxOf(1, BrRoles.planCount(late))
+            return BrRoles.Plan(List(n) { all }, List(n) { emptyList() })
         }
         val door = entryOf(name) ?: return null
         val room = placed(name) ?: return null
         val rel = room.getRelativeCoords(BlockPos(door.first, 0, door.second))
-        val plan = BrRoles.planFor(name, rel.x to rel.z, witherOf(name, room))
-        if (plan == null && debug && noPlanSaid.add("$name $door")) EngineerClient.msg("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.count} §7killing yet §8— every box shows")
+        val plan = BrRoles.planFor(name, rel.x to rel.z, witherOf(name, room), late)
+        if (plan == null && debug && noPlanSaid.add("$name $door $late")) EngineerClient.msg("§dBR §7no roles for §f$name §7from this door with §f${BrRoles.planCount(late)} §7on the plan yet §8— every box shows")
         return plan
     }
 
-    /** The room's wither door in its own coordinates (Doorer Kills plans go by it), if the rush path has it. */
+    /** The room's wither door in its own coordinates (Door Kills plans go by it), if the rush path has it. */
     private fun witherOf(name: String, room: DungeonRoom): Pair<Int, Int>? =
         exits[name]?.let { room.getRelativeCoords(BlockPos(it.first, 0, it.second)) }?.let { it.x to it.z }
 
