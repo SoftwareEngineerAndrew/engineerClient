@@ -22,11 +22,13 @@ import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.utils.handlers.schedule
 import com.odtheking.odin.utils.network.hypixelapi.RequestUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
@@ -53,8 +55,9 @@ import kotlin.math.floor
  * sync on its own connection, [OdinSync], and green checkmarks) for what nobody saw, all settled
  * against each player's run total from the Hypixel API.
  *
- * Only a run that is won posts (Hypixel's end line and the "☠ Defeated" line, [RunGate]); one that
- * ends any other way posts nothing, and a world load starts over. While this is on, Odin's Secrets
+ * Only a run that is won posts (Hypixel's end line and the "☠ Defeated" line, [RunGate]), the moment
+ * it is; one that ends any other way posts nothing, and a world load starts over. The API totals
+ * are asked for through the boss, where nobody finds secrets, so the post never waits on them. While this is on, Odin's Secrets
  * Counter stays quiet (SecretsCounterMixin): the totals are here.
  */
 object ClearBreakdown : Module(
@@ -68,6 +71,11 @@ object ClearBreakdown : Module(
     private val NOT_CLEARS = setOf(RoomType.FAIRY, RoomType.ENTRANCE)
     /** Every so often the party hears everything this client sees, not just changes: a lost frame heals. */
     private const val FULL_RESEND_TICKS = 100
+    /** The boss lookups: the first this long into the boss, then one every [POLL_MS]. */
+    private const val FIRST_POLL_MS = 15_000L
+    private const val POLL_MS = 30_000L
+    /** The longest a post waits on lookups the boss didn't get to. */
+    private const val LAST_ASK_MS = 800L
 
     // Fresh objects each run (not cleared in place): a breakdown waiting on the API keeps its run's.
     var clears = ClearCredit(); private set
@@ -78,8 +86,12 @@ object ClearBreakdown : Module(
     @Volatile private var syncOpen = false
     /** Everyone in the run, in party order: name -> class colour. */
     val roster = LinkedHashMap<String, Char>()
-    /** Lifetime secrets at the start, from the API. */
-    private val before = ConcurrentHashMap<String, Long>()
+    /** Lifetime secrets at the start, from the API (fresh each run: a late answer lands in its own run's). */
+    private var before = ConcurrentHashMap<String, Long>()
+    /** Lifetime secrets as last asked in the boss, from the API. */
+    private var latest = ConcurrentHashMap<String, Long>()
+    /** When the next boss lookup goes out (0: not in the boss yet). */
+    private var nextPollMs = 0L
     /** Where party members' clients see players (ADR Online). */
     val relayed = RelayedPresence()
     /** Where this client last told the party it sees each player (room key, "" for no room). */
@@ -181,7 +193,7 @@ object ClearBreakdown : Module(
     private fun reset() {
         clears = ClearCredit(); secrets = SecretCredit()
         active = false; gate.reset()
-        roster.clear(); before.clear(); relayed.clear(); toldSeen.clear()
+        roster.clear(); before = ConcurrentHashMap(); latest = ConcurrentHashMap(); nextPollMs = 0L; relayed.clear(); toldSeen.clear()
         Sightings.reset()
     }
 
@@ -208,14 +220,15 @@ object ClearBreakdown : Module(
         if (p.name in roster) return
         roster[p.name] = p.clazz.colorCode
         val name = p.name
-        OdinMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { before[name] = it } }
+        val into = before
+        OdinMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
     }
 
     private fun tick() {
         if (!active || !DungeonUtils.inDungeons) return
         // Teammates the tab list hadn't listed yet at Mort.
         for (p in DungeonUtils.dungeonTeammates) join(p)
-        if (DungeonUtils.inBoss) return closeSync()
+        if (DungeonUtils.inBoss) { pollTotals(); return closeSync() }
         Sightings.tick()
         val where = presence()
         clears.tick(where)
@@ -282,22 +295,40 @@ object ClearBreakdown : Module(
         return roomAt(x, z)?.let(::roomKey)
     }
 
-    /** The run is won: wait for the API to count the run (as Odin's Secrets Counter does), then post. */
+    /**
+     * In the boss: everyone's lifetime secrets, all at once, [FIRST_POLL_MS] in (the API has caught
+     * up on the clear by then) and every [POLL_MS] after, so the totals are in hand when the run ends.
+     */
+    private fun pollTotals() {
+        val now = System.currentTimeMillis()
+        if (nextPollMs == 0L) nextPollMs = now + FIRST_POLL_MS
+        if (now < nextPollMs) return
+        nextPollMs = now + POLL_MS
+        val into = latest
+        for (name in roster.keys) OdinMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
+    }
+
+    /**
+     * The run is won: posted at once with the totals the boss lookups got. Anyone they missed (a
+     * boss shorter than [FIRST_POLL_MS]) is asked for now, all together, for at most [LAST_ASK_MS]
+     * before it posts anyway ("?" for whoever still has no total).
+     */
     private fun finish() {
         active = false
         val names = roster.toMap()
-        val start = before.toMap()
-        val runClears = clears
-        val runSecrets = secrets
-        schedule(30) {
-            OdinMod.scope.launch {
-                val totals = names.keys.associateWith { n ->
-                    val after = RequestUtils.pullSecrets(n).getOrNull()
-                    val was = start[n]
-                    if (after != null && was != null) (after - was).coerceAtLeast(0L).toInt() else null
-                }
-                mc.execute { EngineerClient.safely("clear breakdown post") { post(names, runClears.clears(), runSecrets.resolve(totals)) } }
+        val start = before; val now = latest
+        val runClears = clears; val runSecrets = secrets
+        fun postNow() = post(names, runClears.clears(), runSecrets.resolve(names.keys.associateWith { n ->
+            val after = now[n]; val was = start[n]
+            if (after != null && was != null) (after - was).coerceAtLeast(0L).toInt() else null
+        }))
+        val missing = names.keys.filter { !now.containsKey(it) && start.containsKey(it) }
+        if (missing.isEmpty()) return postNow()
+        OdinMod.scope.launch {
+            withTimeoutOrNull(LAST_ASK_MS) {
+                missing.map { n -> async { RequestUtils.pullSecrets(n).onSuccess { now[n] = it } } }.awaitAll()
             }
+            mc.execute { EngineerClient.safely("clear breakdown post") { postNow() } }
         }
     }
 
