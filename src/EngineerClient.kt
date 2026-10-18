@@ -78,7 +78,7 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
+            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
         )
     }
@@ -113,7 +113,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 
