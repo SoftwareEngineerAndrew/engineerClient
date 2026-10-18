@@ -77,22 +77,11 @@ object Arena {
     /**
      * Fills a freshly generated chunk of the sim world with its part of the arena (straight into the
      * sections: no updates, nothing ticks). Called from the generator on a worker thread.
-     *
-     * In a full run the arena is the engine's clipped [com.engineerclient.p3sim.run.ArenaRegion]: [WorldRegions.fillAll] has then already
-     * written it (with the dungeon), so only the boss practice's own world takes the path below.
      */
     fun fill(chunk: ChunkAccess) {
-        // The full-run regions (the dungeon, the clipped arena...) fill their part first; a no-op while none is registered.
-        com.engineerclient.p3sim.run.WorldRegions.fillAll(chunk)
-        if (com.engineerclient.p3sim.run.ArenaRegion.active) return
-        if (fillBlocks(chunk)) Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG))
-    }
-
-    /** Writes the arena's blocks (and its player heads) into [chunk]; false when the chunk is outside the arena's box. Worker thread. */
-    internal fun fillBlocks(chunk: ChunkAccess): Boolean {
         val a = data
         val cx = chunk.pos.minBlockX; val cz = chunk.pos.minBlockZ
-        if (cx + 16 <= a.x0 || cz + 16 <= a.z0 || cx >= a.x0 + a.w || cz >= a.z0 + a.d) return false
+        if (cx + 16 <= a.x0 || cz + 16 <= a.z0 || cx >= a.x0 + a.w || cz >= a.z0 + a.d) return
         val air = Blocks.AIR.defaultBlockState()
         for (y in a.y0 until a.y0 + a.h) {
             val si = chunk.getSectionIndex(y)
@@ -104,7 +93,7 @@ object Arena {
             }
         }
         ArenaFixes.skulls(chunk)
-        return true
+        Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG))
     }
 
     /** Puts [pos] back to the arena's start state (with the client told, no neighbour updates). */

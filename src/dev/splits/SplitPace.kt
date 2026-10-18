@@ -36,11 +36,8 @@ object SplitPace {
     val SPLIT_IDS = mapOf(
         SplitTracker.OPEN to "split.open", SplitTracker.BLOOD to "split.blood", SplitTracker.PORTAL to "split.portal",
         SplitTracker.MAXOR to "split.maxor", SplitTracker.STORM to "split.storm", SplitTracker.TERMS to "split.terms",
-        SplitTracker.GOLDOR to "split.goldor", SplitTracker.NECRON to "split.necron", SplitTracker.DRAGONS to "split.dragons",
+        SplitTracker.GOLDOR to "split.goldor", SplitTracker.NECRON to "split.necron",
     )
-
-    /** Every split in order, M7's Dragons last: what the targets are for. Pace itself is [ORDER]. */
-    val ALL = ORDER + SplitTracker.DRAGONS
 
     /** Which sub splits (SubSplitTracker's ids, by prefix) make up each split. */
     private val SUB_PREFIX = mapOf(

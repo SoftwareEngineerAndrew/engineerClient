@@ -437,7 +437,9 @@ object DungeonSplits : Module(
         necronDiedAt = at
         necronCue.onDeath()
         boss.extra(SplitTracker.NECRON, at, "§cdead", how)
-        if (DungeonUtils.floor?.name?.startsWith("M") == true) subs.onNecronDeath(at)
+        if (DungeonUtils.floor?.name?.startsWith("M") == true) {
+            subs.onNecronDeath(at)
+        }
     }
 
     /** Necron's wither, as last found, for the backup when his burst is missed. */
@@ -759,7 +761,7 @@ object DungeonSplits : Module(
 
     private val SCORECARD_SPLITS = mapOf(
         SplitTracker.BLOOD to "split.blood", SplitTracker.MAXOR to "split.maxor", SplitTracker.STORM to "split.storm",
-        SplitTracker.TERMS to "split.terms", SplitTracker.GOLDOR to "split.goldor", SplitTracker.NECRON to "split.necron", SplitTracker.DRAGONS to "split.dragons",
+        SplitTracker.TERMS to "split.terms", SplitTracker.GOLDOR to "split.goldor", SplitTracker.NECRON to "split.necron",
     )
 
     /**
@@ -792,7 +794,7 @@ object DungeonSplits : Module(
      * Each split as it ends, as a best for its floor (F7, M7) when it is one - every split, the
      * portal too, whatever the splits HUD shows: Pace's targets are these. Only a split that ran
      * from its own line to the next split's (none missed in between) is a time. On M7 Necron's ends
-     * at the Wither King's first line (the Dragons' start): none if that wasn't seen.
+     * at his death, not at EXTRA STATS after the Wither King: none if his death wasn't seen.
      */
     private fun recordSplitBests() {
         val floor = DungeonUtils.floor?.name?.takeIf { it == "F7" || it == "M7" } ?: return
@@ -800,15 +802,11 @@ object DungeonSplits : Module(
         if (DevgineerClient.mc.hasSingleplayerServer()) return
         val splits = tracker.splits()
         splits.forEachIndexed { i, split ->
-            val stop = split.stop ?: return@forEachIndexed
-            val next = splits.getOrNull(i + 1)
-            // M7: Necron's split without the Dragons after it ran on to the run's end.
-            if (floor == "M7" && split.label == SplitTracker.NECRON && next?.label != SplitTracker.DRAGONS) return@forEachIndexed
+            val stop = (if (floor == "M7" && split.label == SplitTracker.NECRON) necronDiedAt else split.stop) ?: return@forEachIndexed
             if (!bestsChecked.add(split.label)) return@forEachIndexed
-            val order = SplitPace.ALL.indexOf(split.label)
-            // The last split: Necron on F7, the Dragons on M7.
-            val whole = if (next != null) SplitPace.ALL.indexOf(next.label) == order + 1
-                else split.label == SplitTracker.DRAGONS || (floor == "F7" && split.label == SplitTracker.NECRON)
+            val order = SplitPace.ORDER.indexOf(split.label)
+            val next = splits.getOrNull(i + 1)
+            val whole = if (next != null) SplitPace.ORDER.indexOf(next.label) == order + 1 else order == SplitPace.ORDER.lastIndex
             val id = SplitPace.SPLIT_IDS[split.label] ?: return@forEachIndexed
             if (!whole) return@forEachIndexed
             recordBest(floor, id, SubSplitGrades.value(id, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()), true)
@@ -850,10 +848,8 @@ object DungeonSplits : Module(
      * it at once.
      */
     private fun debugFooter(s: Section, split: Split, now: Stamp): List<String> {
-        // M7's Necron runs to the Dragons, F7's to the run's end.
-        val next = if (s.window == SplitTracker.NECRON && tracker.split(SplitTracker.DRAGONS) != null) SplitTracker.DRAGONS else NEXT_SPLIT[s.window]
         val out = mutableListOf("§8· split: from ${SPLIT_STARTS[s.window]} to " +
-            (if (split.stop == null) "now (running)" else SPLIT_STARTS[next] ?: "the next split"))
+            (if (split.stop == null) "now (running)" else SPLIT_STARTS[NEXT_SPLIT[s.window]] ?: "the next split"))
         val end = split.stop ?: now
         val lag = (end.realMs - split.start.realMs) - (end.tick - split.start.tick) * 50L
         out += if (kotlin.math.abs(lag) < 100) "§8· lag: none to speak of" else
@@ -871,7 +867,6 @@ object DungeonSplits : Module(
         SplitTracker.TERMS to "Goldor's first line",
         SplitTracker.GOLDOR to "\"The Core entrance is opening!\"",
         SplitTracker.NECRON to "Necron's first line",
-        SplitTracker.DRAGONS to "the Wither King's first line (every relic placed)",
         RUN_END to "the run's end (EXTRA STATS)",
     )
     private const val RUN_END = "end"

@@ -66,12 +66,7 @@ object ArenaFixes {
     fun patch(base: Arena.Data): Arena.Data {
         val t = table
         val ext = try { Arena.readBin("arena-ext.bin") } catch (e: Throwable) { EngineerClient.logger.warn("[p3sim] arena-ext.bin unreadable", e); null }
-        // With a dungeon in the world the extension is clipped to the arena's own rectangle (x, z >= -8): its corner at x, z -16..-10 is
-        // dungeon tile (5,5), which holds a real room (ARCHITECTURE 2).
-        val clip = com.engineerclient.p3sim.run.ArenaRegion.active
-        val region = com.engineerclient.p3sim.run.ArenaRegion
-        val x0 = minOf(base.x0, ext?.x0?.let { region.clippedMin(it, clip) } ?: base.x0); val y0 = minOf(base.y0, ext?.y0 ?: base.y0)
-        val z0 = minOf(base.z0, ext?.z0?.let { region.clippedMin(it, clip) } ?: base.z0)
+        val x0 = minOf(base.x0, ext?.x0 ?: base.x0); val y0 = minOf(base.y0, ext?.y0 ?: base.y0); val z0 = minOf(base.z0, ext?.z0 ?: base.z0)
         val x1 = maxOf(base.x0 + base.w, ext?.let { it.x0 + it.w } ?: 0); val y1 = maxOf(base.y0 + base.h, ext?.let { it.y0 + it.h } ?: 0); val z1 = maxOf(base.z0 + base.d, ext?.let { it.z0 + it.d } ?: 0)
         val w = x1 - x0; val h = y1 - y0; val d = z1 - z0
         val states = ArrayList<BlockState>(base.states.toList())
@@ -94,7 +89,6 @@ object ArenaFixes {
             for (y in 0 until ext.h) for (z in 0 until ext.d) for (x in 0 until ext.w) {
                 val s = ext.states[ext.cells[(y * ext.d + z) * ext.w + x].toInt()]
                 if (s.`is`(B.STRUCTURE_VOID)) continue
-                if (!region.keeps(ext.x0 + x, ext.z0 + z, clip)) continue
                 put(ext.x0 + x, ext.y0 + y, ext.z0 + z, s)
             }
         }
