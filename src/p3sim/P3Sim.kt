@@ -305,20 +305,24 @@ object P3Sim : Module(
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val buttons = widgets.filterIsInstance<Button>()
                 val single = buttons.firstOrNull { key(it) == "menu.singleplayer" }
-                // The ADS button keeps the boss practice; a small "Run" button beside it opens the full run's start screen.
+                // The ADS button keeps the boss practice; in the beta a small "Run" button beside it opens the full run's start screen.
                 val runW = 44
+                // Room left for Run in the beta; in ADM the ADS button is the full width.
+                val runRoom = if (EngineerClient.BETA) runW + 4 else 0
                 val ads = Button.builder(Component.literal(FULL_NAME)) { SimWorld.open() }.let {
-                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width - runW - 4, single.height) else it.bounds(w - 164, 4, 160 - runW - 4, 16)
+                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width - runRoom, single.height) else it.bounds(w - 164, 4, 160 - runRoom, 16)
                 }.build()
                 widgets.add(ads)
-                val run = Button.builder(Component.literal("§bRun")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
-                    .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first.")))
-                    .let { if (single != null) it.bounds(single.x + single.width - runW, single.y - single.height - 4, runW, single.height) else it.bounds(w - 4 - runW, 4, runW, 16) }.build()
-                widgets.add(run)
-                // GUI: ADS's own front page (AdsHubScreen), a small button right of Run; no world is opened.
-                val gx = if (single != null) run.x + run.width + 4 else ads.x - 40
-                widgets.add(Button.builder(Component.literal("GUI")) { mc.gui.setScreen(AdsHubScreen(screen)) }
-                    .bounds(gx, ads.y, 36, ads.height).build())
+                if (EngineerClient.BETA) {
+                    val run = Button.builder(Component.literal("§bRun")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
+                        .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first.")))
+                        .let { if (single != null) it.bounds(single.x + single.width - runW, single.y - single.height - 4, runW, single.height) else it.bounds(w - 4 - runW, 4, runW, 16) }.build()
+                    widgets.add(run)
+                    // GUI: ADS's own front page (AdsHubScreen), a small button right of Run; no world is opened.
+                    val gx = if (single != null) run.x + run.width + 4 else ads.x - 40
+                    widgets.add(Button.builder(Component.literal("GUI")) { mc.gui.setScreen(AdsHubScreen(screen)) }
+                        .bounds(gx, ads.y, 36, ads.height).build())
+                }
                 val realms = buttons.firstOrNull { key(it) == "menu.online" } ?: return@safely
                 widgets.remove(realms)
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
