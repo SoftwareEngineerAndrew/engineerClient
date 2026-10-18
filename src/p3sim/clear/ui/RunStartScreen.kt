@@ -124,7 +124,7 @@ class RunStartScreen : Screen(Component.literal("${P3Sim.FULL_NAME}: full run"))
         addRenderableWidget(Button.builder(Component.literal("Close")) { onClose() }.bounds(cx - 30, y, 60, 20).build())
         y += ROW + 4
 
-        // Problems: written out in full (the packs folder is in them).
+        // Problems: written out in full.
         for (p in problems) for (line in wrap(p, minOf(width - 40, 360))) {
             addRenderableWidget(StringWidget(Component.literal("§c$line"), font).also { it.setPosition(cx - font.width(line) / 2, y) })
             y += 11

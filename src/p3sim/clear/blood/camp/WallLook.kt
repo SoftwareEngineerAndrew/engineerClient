@@ -5,7 +5,7 @@ import com.engineerclient.p3sim.pack.rooms.SkullTexture
 import kotlin.random.Random
 
 /**
- * Which skull texture each kind of wall head wears. The textures are recorded data, so none is in the mod: the local rooms pack
+ * Which skull texture each kind of wall head wears. The textures are recorded data, so none is in the code: the bundled rooms pack
  * carries them in its texture table under these roles (written by the pack tooling), and a head whose role the pack lacks is a plain
  * head.
  *

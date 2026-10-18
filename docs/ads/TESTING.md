@@ -1,6 +1,6 @@
 # ADS full run: the in-game test script
 
-For Andrew. Nothing in the full run has been played yet: every stage was built and tested headless (unit tests, the real data packs,
+For the maintainer. Nothing in the full run has been played yet: every stage was built and tested headless (unit tests, the real data packs,
 real Minecraft chunks written in tests), none in the running game. So this script goes in the order the work stands on itself:
 if a gate fails, stop there and send me the log lines named under it, because everything after it depends on it.
 
@@ -16,15 +16,19 @@ packet (a reflective call into `ClientboundPlayerInfoUpdatePacket`) and the lag 
 `MinecraftServer.nextTickTimeNanos`) touch Minecraft internals that can differ between versions. Each of the three logs a plain warning and
 switches itself off instead of failing, so the first thing to read after any run is `latest.log` for lines starting `[ads]`.
 
-**The data packs.** The jar ships no recorded data. Copy these from the pack tooling's output folder (kept outside this repository) into
-`<instance>/minecraft/config/engineerclient/ads/packs/` (make the folder):
+**The data packs.** Nothing to copy: the six pack files (`layouts.json.gz`, `rooms.index.json.gz`, `rooms.blocks.bin`, `mobs.json.gz`,
+`runstate.json.gz`, `traps.json`) are inside the jar. The first run unpacks them once into
+`<instance>/minecraft/config/engineerclient/ads/packs-bundled/<hash>/` and reuses them after that.
 
-- `layouts.json.gz`, `rooms.index.json.gz`, `rooms.blocks.bin`, `mobs.json.gz`, `runstate.json.gz` (all five are needed for a run)
-- `traps.json` (optional: the trap room's crusher timings; without it the built-in 5-ticks-a-block, 30-resting pace is used)
+To try a different build of a pack without rebuilding the mod, put the file with the same name in
+`<instance>/minecraft/config/engineerclient/ads/packs/` (make the folder). That copy wins for that file; put `rooms.index.json.gz` and
+`rooms.blocks.bin` in together. Delete the file to go back to the bundled one.
 
-`/ads dev packs` reloads the folder and says what loaded. Expected with the real packs: rooms 145 designs and 257 cores, layouts with the
-default pool, mobs 22 archetypes, run-state loaded, no "missing" message. With the folder empty or missing, every way of starting a run
-must print ONE plain message that names the folder and the five files, and must not crash. Test that first (Gate A).
+`/ads dev packs` reloads and says what loaded and, for each of the six files, "the copy bundled in the jar" or "your copy in <folder>
+(overrides the jar)". Expected with a fresh instance: all six from the jar, rooms 144 designs and 257 cores, layouts with the default pool,
+mobs 22 archetypes, run-state loaded, no "could not load" message. A packs folder that is missing or empty is normal now. The only way to see the
+"could not load its data packs" message is a damaged jar, a config folder the game cannot write to (the message then says to check the folder and the disk, not to
+reinstall) or a bad override file (which names the file), and it must be ONE plain message, never a crash. Test the override first (Gate A).
 
 **Odin.** Use your normal Odin with the ADS module on (the full run turns it on itself) and the dungeon features you want to check:
 map, room names, Highlight (star ESP), Puzzle Solvers (Weirdos, Quiz, Beams, Boulder, Ice Fill, Tic Tac Toe, Blaze, Water Board,
@@ -69,9 +73,10 @@ doors note; renamed because two modules had the same name).
 2. In it: `/ads p1`, play into P2, use Restart and Stop. No `[ads]` errors in `latest.log`, Odin splits as before, a party joiner over the
    LAN relay still joins. The practice's Superboom is still infinite; the end of P4 still prints the made-up stats block (a full run prints
    its own instead).
-3. Leave the packs folder empty. `/ads run random` and the start screen's Start button print the "no data packs" message naming the folder
-   and the five files; nothing rebuilds. `/ads dev packs` says the same. `/ads dev launch random` says it too.
-4. Put the packs in. `/ads dev packs` lists them as above.
+3. Leave the packs folder missing or empty. `/ads run random` starts a run from the bundled packs, and `/ads dev packs` lists all six files
+   as "bundled in the jar".
+4. Make the packs folder and put a damaged `mobs.json.gz` in it (for example a text file with that name). `/ads dev packs` names the mob
+   tables as unreadable, in plain words, and a run still starts (without mobs). Delete the file: `/ads dev packs` is clean again.
 
 ### Gate B: the engine (stage 3), no packs needed
 
@@ -302,7 +307,7 @@ solves any of them, `puzzlereset <n>` resets, `/ads dev draft` gives the Archite
 
 1. `/ads dev blood status`: stage, blood phase CLOSED, camp "none yet". In the CLEAR stage `/ads dev blood open` (or open the real door): stage
    BLOOD, the blood room's map mark RED, a zombie named The Watcher in the middle, 30 heads on the walls in three rows (textured when the
-   local rooms pack has the wall heads, plain otherwise), and `/ads dev blood status` says "the Watcher's camp". 3 ticks after the door he
+   rooms pack has the wall heads, plain otherwise), and `/ads dev blood status` says "the Watcher's camp". 3 ticks after the door he
    says his opening line.
 2. Watch the camp play out (details in `docs/ads/blood.md`): from 4.5 s he flies to a wall head and throws it, four times (a giant, a
    revived boss and two standard mobs, one hop every 1.5 s or so), then flies home; each thrown head spins across the room for 4 s and its mob appears at
@@ -348,11 +353,11 @@ minutes. At the end note: total time, final score and letter, deaths, and anythi
 
 ### Round 2 checks (after the first sim sessions)
 
-The fixes made after Andrew's first sim sessions each came with in-game steps in their module note. Work through them in this order, one note at a time:
+The fixes made after the first sim sessions each came with in-game steps in their module note. Work through them in this order, one note at a time:
 `engine.md` ("In-game checks (round 2)"), `layout.md`, `doors.md`, `hud.md`, `bots.md` ("In-game checks"), `damage.md` ("Testing in game"),
-`secrets.md` ("In-game checks"), `puzzles.md` ("In-game test steps"), `traps.md`, `blood.md`, `ui.md`. Two things first: the new `runstate.json.gz` and
-`rooms.index.json.gz` from `packs/out` must be copied into `<gameDir>/config/engineerclient/ads/packs/` (without them trap rooms keep the old
-timer and the Watcher and his Eyes wear plain heads), and the four new mixins are listed in `engineerclient.mixins.json`, so a mixin that misses
+`secrets.md` ("In-game checks"), `puzzles.md` ("In-game test steps"), `traps.md`, `blood.md`, `ui.md`. Two things first: the packs are bundled, so a jar built after
+the pack rebuild already has the new `runstate.json.gz` and `rooms.index.json.gz` (check with `/ads dev packs`; an old override copy in
+`<gameDir>/config/engineerclient/ads/packs/` would hide them: delete it), and the four new mixins are listed in `engineerclient.mixins.json`, so a mixin that misses
 its target on 26.1.2 stops the game at start: read `latest.log` first.
 
 ## 3. The plug-in seam

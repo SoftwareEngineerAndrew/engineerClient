@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory
  * dungeon region and the clipped arena region with [WorldRegions] and opens the world; once the sim server is up and the player has joined
  * (`Fight.join`) [start] runs on the server thread: NORMAL difficulty, view and simulation distance [ViewPin.DISTANCE], the lag layer, `Fight.setup` for each
  * player (game mode, speed, health, the hotbar), the party at the entrance, the [Run] created and begun, and the "Start" savepoint.
- * A pack problem is a chat message with the packs folder path ([Packs.userLines]), never an exception.
+ * A pack problem is a plain chat message ([Packs.userLines]), never an exception.
  */
 object Runs {
     private val log = LoggerFactory.getLogger("engineerclient")

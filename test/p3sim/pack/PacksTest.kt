@@ -14,18 +14,19 @@ import kotlin.test.assertTrue
 class PacksTest {
     @Test fun aMissingFolderIsOneClearMessageWithThePath(@TempDir tmp: Path) {
         val dir = tmp.resolve("config/engineerclient/ads/packs")
-        val set = Packs.load(dir)
+        val set = Packs.load(dir, BundledPacks.NONE)
         assertNull(set.rooms); assertNull(set.layouts); assertNull(set.mobs); assertNull(set.runstate)
         assertFalse(set.canBuildDungeon)
         val lines = set.userLines()
         assertEquals(1, lines.size, lines.toString())
-        assertTrue(lines[0].contains(dir.toString()), "the message names the folder")
+        assertTrue(lines[0].contains(dir.toString()), "the message names the override folder")
         assertTrue(lines[0].contains("rooms.index.json.gz") && lines[0].contains("runstate.json.gz"))
+        assertTrue(lines[0].contains("jar"), "the message says the packs belong in the jar")
         Packs.unload()
     }
 
-    @Test fun anEmptyFolderIsTheSameMessage(@TempDir dir: Path) {
-        val set = Packs.load(dir)
+    @Test fun anEmptyFolderWithNothingBundledIsTheSameMessage(@TempDir dir: Path) {
+        val set = Packs.load(dir, BundledPacks.NONE)
         assertEquals(4, set.missing().size)
         assertEquals(1, set.userLines().size)
         assertTrue(set.userLines()[0].contains(dir.toString()))
@@ -35,7 +36,7 @@ class PacksTest {
     @Test fun someMissingPacksAreNamed(@TempDir dir: Path) {
         Files.write(dir.resolve("layouts.json.gz"), Fixtures.gzip("""{"format":"ads-layouts","version":1,"layouts":[]}"""))
         Files.write(dir.resolve("mobs.json.gz"), Fixtures.gzip("""{"format":"ads-mobs","version":1,"archetypes":[]}"""))
-        val set = Packs.load(dir)
+        val set = Packs.load(dir, BundledPacks.NONE)
         assertNotNull(set.layouts); assertNotNull(set.mobs); assertNull(set.rooms); assertNull(set.runstate)
         assertFalse(set.canBuildDungeon, "no rooms, no dungeon")
         val text = set.userLines().joinToString("\n")

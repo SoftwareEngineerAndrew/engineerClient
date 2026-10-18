@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 
 /**
  * Optional check of the loaders and of [DungeonPlan.build] against the REAL, built packs (kept outside this repo). Runs only when
- * ADS_REAL_PACKS names the folder that holds the five pack files (the extractor's `packs/out/`); otherwise it is skipped.
+ * ADS_REAL_PACKS names the folder that holds the pack files (the extractor's `packs/out/`); otherwise it is skipped.
  * It copies nothing into the repo and prints nothing from the data except counts and room/design ids: the point is to find
  * every place where a loader or the plan builder disagrees with a pack that was built to the FORMAT specs, before thirteen
  * work items build on them. ADS_REAL_REPORT (a file path) receives a plain-text summary when set.

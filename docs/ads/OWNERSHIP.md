@@ -46,7 +46,7 @@ integration request to the integrator. "Free" means the owner may reshape it.
 | `rooms/**` (`RoomPack.kt`, `RoomVolume.kt`, `Placement.kt`) and `layouts/**` (`LayoutPack.kt`) | layout | bugs found against the real packs are the layout item's to fix; signatures frozen as above |
 | `mobs/**` (`MobPack.kt`) | mobs | same |
 | `runstate/**` (`RunStatePack.kt`, `Dist.kt`) | doors | same |
-| `Json.kt`, `PackTypes.kt`, `Packs.kt`, `DungeonFrame.kt`, `DoorModel.kt` | integrator | additive requests only |
+| `Json.kt`, `PackTypes.kt`, `Packs.kt`, `PackSource.kt`, `DungeonFrame.kt`, `DoorModel.kt` | integrator | additive requests only |
 | `rooms/OdinCore.kt` | layout | frozen (it is checked against the built pack by `RealPackTest`) |
 
 ### `src/p3sim/clear/<area>/<Area>Module.kt` (the empty module objects)
@@ -66,7 +66,7 @@ Each is owned and filled by the work item that owns its folder: `layout/LayoutMo
 | `docs/ads/ARCHITECTURE.md`, `docs/ads/OWNERSHIP.md` | integrator. Corrections: integration request |
 | `docs/ads/<key>.md` (optional design notes for your own module) | the work item `<key>` |
 | `test/p3sim/run/**` | engine, except `PluginSeamTest.kt` and `TestPlans.kt` (integrator) |
-| `test/p3sim/pack/**` | `RoomPackTest`, `PlacementTest`, `LayoutPackTest`, `OdinCoreTest`, `Fixtures`: layout; `MobPackTest`: mobs; `RunStatePackTest`: doors; `PacksTest`, `DungeonFrameTest`, `DoorModelTest`, `SamplePackTest`, `RealPackTest`: integrator |
+| `test/p3sim/pack/**` | `RoomPackTest`, `PlacementTest`, `LayoutPackTest`, `OdinCoreTest`, `Fixtures`: layout; `MobPackTest`: mobs; `RunStatePackTest`: doors; `PacksTest`, `BundledPacksTest`, `DungeonFrameTest`, `DoorModelTest`, `SamplePackTest`, `RealPackTest`: integrator |
 | `test/p3sim/<area>/**` | the work item that owns `src/p3sim/clear/<area>` |
 | `src/mixin/Ads<Key><What>Mixin.java` (new files only; `<Key>` is the work item's key as in the table above) | the work item `<key>`; the line in `engineerclient.mixins.json` is an integration request |
 | the rest of `src/mixin/**`, `src/resources/**` (including `fabric.mod.json` and the mixin lists) | nobody: integration requests |

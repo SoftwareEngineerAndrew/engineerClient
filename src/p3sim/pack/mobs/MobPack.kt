@@ -175,11 +175,14 @@ class MobPack internal constructor(
         fun norm(n: String): String = n.replace("​", "").replace(" ", "_").replace("-", "_")
 
         /** Loads `mobs.json.gz` from [dir]. Null, with the reason in [report], when missing/unreadable/wrong format. Never throws. */
-        fun load(dir: Path, report: PackReport = PackReport()): MobPack? {
-            val path = dir.resolve(PackFiles.MOBS)
-            if (!Files.isRegularFile(path)) { report.error("The mob tables ${PackFiles.MOBS} are missing from $dir."); return null }
+        fun load(dir: Path, report: PackReport = PackReport()): MobPack? = load(PackSource.ofDir(dir), report)
+
+        /** [load] from a resolved [PackSource] (the jar's copy or the override folder's). */
+        fun load(source: PackSource, report: PackReport = PackReport()): MobPack? {
+            val path = source.file(PackFiles.MOBS)
+            if (path == null) { report.error("The mob tables ${PackFiles.MOBS} are missing from ${source.missingFrom}."); return null }
             val root = try { Files.newInputStream(path).use { readGzipJson(it) } } catch (e: Exception) {
-                report.error("The mob tables ${PackFiles.MOBS} are unreadable: ${e.message}"); return null
+                report.error("The mob tables ${PackFiles.MOBS} are unreadable${source.note(PackFiles.MOBS)}: ${e.message}"); return null
             }
             return fromJson(root, report)
         }

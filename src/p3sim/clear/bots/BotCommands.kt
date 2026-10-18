@@ -76,7 +76,7 @@ object BotCommands {
         }
     }
 
-    /** The headless gate on the packs in the packs folder (also what the real-pack test does). */
+    /** The headless gate on the loaded packs (also what the real-pack test does). */
     fun gate(set: PackSet, n: Int, scale: Double): List<String> {
         val layouts = set.layouts ?: return set.userLines().ifEmpty { listOf("The layout pool is not loaded.") }
         val rs = set.runstate ?: return listOf("The run-state tables are not loaded, so there is nothing recorded to compare with.")
