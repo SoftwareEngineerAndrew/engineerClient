@@ -31,7 +31,7 @@ object HealthMana : Module(
     private val hideUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
     private val threshold by NumberSetting("Threshold", 50, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideUnlessLow }
 
-    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
+    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", false, 434, 501, 1.6f) { example ->
         val (current, max) = when {
             example -> 3000 to 4000
             !LocationUtils.isInSkyblock || ActionBarListener.maxHealth == 0 -> return@HUD 0 to 0
@@ -43,7 +43,7 @@ object HealthMana : Module(
     private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
     private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
 
-    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
+    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", false, 434, 480, 1.6f) { example ->
         val (current, max) = when {
             example -> 2000 to 20000
             !LocationUtils.isInSkyblock || ActionBarListener.maxMana == 0 -> return@HUD 0 to 0

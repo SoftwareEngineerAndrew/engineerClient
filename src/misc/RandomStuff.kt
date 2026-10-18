@@ -77,7 +77,7 @@ object RandomStuff : Module(
     //
     // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
     // — six full-screen passes — and only for the frames a screen is actually open.
-    private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
+    private val blurInGui by BooleanSetting("Blur In GUI", false, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
     private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
 
     // --- Enchantment glint ---------------------------------------------------------------------
