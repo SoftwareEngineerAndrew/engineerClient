@@ -70,7 +70,8 @@ internal object MobWorld {
 
     /** The tag text for the mob's current HP. */
     fun tagText(e: MobEntry): String =
-        MobTags.nametagLegacy(e.tag, e.arch.name, e.modifier, e.record.hp, e.record.maxHp, e.plan.star)
+        if (BloodLooks.isBlood(e.arch)) BloodLooks.tag(e.arch, e.plan.modifier, e.record.hp, e.record.maxHp)
+        else MobTags.nametagLegacy(e.tag, e.arch.name, e.modifier, e.record.hp, e.record.maxHp, e.plan.star)
 
     /**
      * Makes the mob's entities at its current position and adds them to the world: the body (a vanilla type with no brain, or a
@@ -125,6 +126,7 @@ internal object MobWorld {
         arch.entity == "minecraft:wither_skeleton" -> AdsWitherSkeleton(level)
         arch.entity == "minecraft:enderman" -> AdsEnderman(level)
         arch.entity == "minecraft:silverfish" -> AdsSilverfish(level)
+        arch.entity == "minecraft:giant" -> AdsGiant(level)
         else -> AdsZombie(level)
     }
 
@@ -135,6 +137,19 @@ internal object MobWorld {
         if (body !is LivingEntity) return
         val eq = arch.equipment
         when {
+            // The Watcher's NPCs: a stone sword and chainmail; his giant: plain leather armour.
+            BloodLooks.isBlood(arch) && body !is AdsGiant -> {
+                body.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(Items.STONE_SWORD))
+                body.setItemSlot(EquipmentSlot.CHEST, ItemStack(Items.CHAINMAIL_CHESTPLATE))
+                body.setItemSlot(EquipmentSlot.LEGS, ItemStack(Items.CHAINMAIL_LEGGINGS))
+                body.setItemSlot(EquipmentSlot.FEET, ItemStack(Items.CHAINMAIL_BOOTS))
+            }
+            body is AdsGiant -> {
+                body.setItemSlot(EquipmentSlot.HEAD, ItemStack(Items.LEATHER_HELMET))
+                body.setItemSlot(EquipmentSlot.CHEST, ItemStack(Items.LEATHER_CHESTPLATE))
+                body.setItemSlot(EquipmentSlot.LEGS, ItemStack(Items.LEATHER_LEGGINGS))
+                body.setItemSlot(EquipmentSlot.FEET, ItemStack(Items.LEATHER_BOOTS))
+            }
             eq != null -> {
                 if (eq.mainhand == "minecraft:iron_sword") {
                     val sword = ItemStack(Items.IRON_SWORD)

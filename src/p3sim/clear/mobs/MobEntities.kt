@@ -62,6 +62,12 @@ class AdsEnderman(level: Level) : Enderman(EntityTypes.ENDERMAN, level), AdsMobB
     override fun shouldBeSaved(): Boolean = false
 }
 
+class AdsGiant(level: Level) : net.minecraft.world.entity.monster.Giant(EntityTypes.GIANT, level), AdsMobBody {
+    override fun registerGoals() {}
+    override fun shouldBeSaved(): Boolean = false
+    override fun fireImmune(): Boolean = true
+}
+
 class AdsSilverfish(level: Level) : Silverfish(EntityTypes.SILVERFISH, level), AdsMobBody {
     override fun registerGoals() {}
     override fun shouldBeSaved(): Boolean = false

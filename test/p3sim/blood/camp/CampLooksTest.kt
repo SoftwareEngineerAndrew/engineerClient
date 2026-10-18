@@ -26,7 +26,9 @@ class CampLooksTest {
         repeat(400) {
             val std = CampMobs.roll(WallStation(0, here, WallClass.STANDARD, "Mute"), rng)
             val base = if (std.modifier == "Healthy") 1.3 else 1.0
-            assertTrue(std.hp / base in 248_000.0..256_000.0, "hp ${std.hp} ${std.modifier}")
+            // Whole thousands, so a Healthy one can round half a thousand past 1.3 times the range.
+            assertTrue(std.hp / base in 247_500.0..256_500.0, "hp ${std.hp} ${std.modifier}")
+            assertEquals(0.0, std.hp % 1000.0, "hp ${std.hp} is a whole thousand")
             assertEquals("player", std.entity)
             val giant = CampMobs.roll(WallStation(1, here, WallClass.GIANT, "Giant"), rng)
             assertEquals("giant", giant.entity)

@@ -37,7 +37,7 @@ object Disguise {
      * Frozen Adventurer (a "Lost Adventurer" body). ADR, 300 runs: every disguise tag's body (tag id minus one) carries one of these.
      * Random 10-character names are only the NPCs' (Mort).
      */
-    fun profileName(arch: MobArchetype): String = when (arch.id) {
+    fun profileName(arch: MobArchetype): String = if (BloodLooks.isBlood(arch)) BloodLooks.profileName(arch) else when (arch.id) {
         "angry_archaeologist" -> "Diamond Guy"
         "frozen_adventurer" -> "Lost Adventurer"
         else -> arch.name
