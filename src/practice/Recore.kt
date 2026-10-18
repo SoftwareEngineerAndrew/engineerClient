@@ -24,7 +24,7 @@ import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.util.ARGB
-import net.minecraft.world.entity.player.Player
+import net.minecraft.world.entity.Entity
 
 /**
  * F7/M7 core leap (was Term Info's Core Leap, then Sub Splits'). Paste Last In Core is set here and sent by
@@ -133,7 +133,7 @@ object Recore : Module(
     private val inCoreSince = LinkedHashMap<String, Long>()
 
     /** DungeonSplits' core box (and P3 Sim's CORE_BOX): reaches down to the core's floor. */
-    private fun inCore(p: Player) = p.x >= 39 && p.x < 71 && p.y < 155.5 && p.z >= 54 && p.z < 118
+    private fun inCore(p: Entity) = p.x >= 39 && p.x < 71 && p.y < 155.5 && p.z >= 54 && p.z < 118
 
     /**
      * A Spirit Leap drags you to its target over several ticks, and a leap from S2 into S4 goes straight
@@ -141,7 +141,7 @@ object Recore : Module(
      * is 0.3 a tick, a leap drag many blocks; an etherwarp into the core is one big jump, then still.
      */
     private const val FLIGHT_PER_TICK = 2.0
-    private fun inFlight(p: Player): Boolean {
+    private fun inFlight(p: Entity): Boolean {
         val dx = p.x - p.xOld; val dy = p.y - p.yOld; val dz = p.z - p.zOld
         return dx * dx + dy * dy + dz * dz > FLIGHT_PER_TICK * FLIGHT_PER_TICK
     }
@@ -162,13 +162,19 @@ object Recore : Module(
         val now = System.currentTimeMillis()
         for (m in DungeonUtils.leapTeammates) {
             if (m.name == "Empty") continue
-            val p = m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == m.name }
+            val p = m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == m.name } ?: simBot(level, m.name)
             // Unseen (out of render distance) keeps its place; dead or out of the box loses it. Passing
             // through on a leap's drag is neither: not in, and whatever was known stays.
             if (p == null) continue
             if (com.engineerclient.DeadPlayers.isDead(m) || !inCore(p)) inCoreSince.remove(m.name)
             else if (!inFlight(p)) inCoreSince.putIfAbsent(m.name, now)
         }
+    }
+
+    /** In the P3 sim, a bot teammate: its Mannequin, by the name over it. */
+    private fun simBot(level: net.minecraft.client.multiplayer.ClientLevel, name: String): Entity? {
+        if (!com.engineerclient.p3sim.P3Sim.inSim) return null
+        return level.entitiesForRendering().firstOrNull { it is net.minecraft.world.entity.decoration.Mannequin && !it.isRemoved && it.customName?.string?.replace(CONTROL_CODES, "") == name }
     }
 
     private fun isLeapScreen(screen: net.minecraft.client.gui.screens.Screen) =
