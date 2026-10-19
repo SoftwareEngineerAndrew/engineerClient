@@ -495,7 +495,7 @@ object BotsModule : AdsModule, BotService {
             is PlayerDied -> if (s.roster.seatOf(event.player)?.isHuman == false) schedule(s, t, "a bot died")
             is PlayerRevived -> if (s.roster.seatOf(event.player)?.isHuman == false) schedule(s, t, "a bot came back")
             is KeyDropped -> keyDropped(s, event, t)
-            is KeyPicked -> { s.stands.remove(event.kind); s.excursion.values.forEach { it.release() } }
+            is KeyPicked -> { s.stands.remove(event.kind); s.excursion.values.forEach { it.release() }; s.executor.keyArrived(t) }
             is PlayerLeft -> if (s.roster.seatOf(event.player)?.isHuman == true) { s.covered = true; schedule(s, t, "a player left") }
             is SavepointRestored -> restoredNow(run, s)
             is DoorFell -> s.cracking.remove(event.door)?.let { crack(run, event.door, 255, it.breakerId) }
