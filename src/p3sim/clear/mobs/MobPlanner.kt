@@ -45,9 +45,9 @@ class PlanParams(
     /** Archetypes a room roll never spawns; another module brings them in when its trigger happens (King Midas, after its crypt is blown). */
     val deferred: Set<String> = setOf("king_midas"),
     /**
-     * UNMEASURED: the chance a miniboss-design room really holds its miniboss. ADR sees a starred mob in about a third of these rooms
-     * (against 60 to 74 percent of ordinary rooms), and a run has about one miniboss, so half is the working value. A provoked
-     * Dungeon Recorder sweep of these rooms would measure it.
+     * The chance a miniboss-design room really holds its miniboss. ADR sees a starred mob in about a third of all visits to these rooms,
+     * but most visits are passing looks that miss the room's mobs; of the 216 F7 visits that saw the room's ordinary mobs in full (half
+     * its most-seen count or more), 144 (67 percent) saw the miniboss too.
      */
     val minibossChance: Double = MobPlanner.MINIBOSS_CHANCE,
 )
@@ -58,8 +58,8 @@ class PlanParams(
  * and the world position through the room's [Placement]. Pure, so the star counts per room can be tested against the pack's data shape.
  */
 object MobPlanner {
-    /** UNMEASURED, see [PlanParams.minibossChance]. */
-    const val MINIBOSS_CHANCE = 0.5
+    /** Measured, see [PlanParams.minibossChance]. */
+    const val MINIBOSS_CHANCE = 0.67
 
     /** Which adventurer a miniboss room holds, by archetype id: the share of 637 recorded F7 room visits (Lost 54, Angry 27, Frozen 19 percent). */
     val MINIBOSS_WEIGHTS: Map<String, Double> = linkedMapOf("lost_adventurer" to 0.54, "angry_archaeologist" to 0.27, "frozen_adventurer" to 0.19)

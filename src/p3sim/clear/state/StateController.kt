@@ -9,6 +9,7 @@ import com.engineerclient.p3sim.run.api.Services
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import java.util.UUID
+import kotlin.math.roundToInt
 
 /** One step of the start of a run, on the run clock. */
 sealed interface StartStep {
@@ -224,7 +225,13 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         stands[id] = stand
         run.bus.post(KeyDropped(t, kind, room, x, y, z))
         if (killer != null && rng.nextDouble() < rules.pickupInstantFrac && canPick(killer)) pickUp(stand, killer)
+        // A bot that killed for it takes it after the measured wait: bots fight from range and never come within the pickup radius by
+        // chance, so a stand they left lay until someone happened past (a replay: 120 ticks, every door after it late).
+        else if (killer != null && state.players[killer]?.isBot == true) botPickups[id] = killer to t + rules.pickupDelayed.sample(rng.nextDouble()).roundToInt().coerceAtLeast(1)
     }
+
+    /** Key stands a bot will take: stand id to (bot, tick). */
+    private val botPickups = HashMap<Int, Pair<UUID, Int>>()
 
     private fun canPick(id: UUID): Boolean = state.players[id]?.let { !it.ghost } == true
 
@@ -241,7 +248,12 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     }
 
     private fun pollStands(t: Int) {
-        if (stands.isEmpty()) return
+        if (stands.isEmpty()) { botPickups.clear(); return }
+        for ((id, due) in botPickups.entries.toList()) if (t >= due.second) {
+            botPickups.remove(id)
+            val stand = stands[id] ?: continue
+            if (canPick(due.first)) pickUp(stand, due.first)
+        }
         for (stand in stands.values.toList()) {
             val near = state.players.values.filter { !it.ghost }.map { it to dist(it, stand) }
             val taker = near.filter { it.second <= cfg.pickupRadius }.minByOrNull { it.second }?.first
@@ -292,7 +304,17 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         synth.remove(room)
         mark(room, RoomChecks.onObjectiveDone(r.secretsMax, r.secretsFound))
         // The mobs module drops the key on the kill; a room that finished without one (no mob to kill) still has to pay its key.
-        if (ledger.pending(room) != null) keyFallback.putIfAbsent(room, run.t + cfg.keyFallbackTicks)
+        // With no required mob there is no kill to wait for: the key comes now, to whoever finished the room (still standing in it).
+        if (ledger.pending(room) != null) { if (r.mobsRequired == 0) fallbackKey(room) else keyFallback.putIfAbsent(room, run.t + cfg.keyFallbackTicks) }
+    }
+
+    /** A key room's key with no kill to give it to: dropped at the room's middle and taken by whoever is in the room, if anyone is. */
+    private fun fallbackKey(room: Int) {
+        val (x, z) = centre(room); dropKey(room, x, z)
+        // Left lying, a key in a miniboss room without its miniboss held up every door after it until someone happened past (120 ticks in a replay).
+        val stand = stands.values.firstOrNull { it.room == room }
+        val who = state.rooms.getOrNull(room)?.occupants?.firstOrNull { canPick(it) }
+        if (stand != null && who != null) pickUp(stand, who)
     }
 
     private fun scheduleSynth(room: Int) {
@@ -322,7 +344,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         bloodGreenAt?.let { at -> if (t >= at) greenBlood() }
         for ((room, at) in keyFallback.entries.toList()) if (t >= at) {
             keyFallback.remove(room)
-            if (ledger.pending(room) != null) { val (x, z) = centre(room); dropKey(room, x, z) }
+            if (ledger.pending(room) != null) fallbackKey(room)
         }
     }
 
@@ -489,7 +511,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
                 DoorPhase.CLOSED -> {}
             }
         }
-        fx.clearStands(); stands.clear()
+        fx.clearStands(); stands.clear(); botPickups.clear()
         for (j in o.getAsJsonArray("stands").orEmpty()) {
             val s = j.asJsonObject
             val kind = KeyKind.valueOf(s["kind"].asString)
@@ -501,7 +523,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     }
 
     /** Removes the world things this controller made (key stands). The doors are the layout's. */
-    fun end() { fx.clearStands(); stands.clear() }
+    fun end() { fx.clearStands(); stands.clear(); botPickups.clear() }
 
     /** The stands on the floor now (dev command, tests). */
     fun standList(): List<KeyStand> = stands.values.toList()

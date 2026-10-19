@@ -29,6 +29,8 @@ class StateRules(
     val autoCollectTicks: Int = 200,
     /** Share of key stands picked up in the tick they appear (the killer has them at once). Measured 0.669. */
     val pickupInstantFrac: Double = PICKUP_INSTANT_FRAC,
+    /** Ticks before a key that was not taken at once is (a bot that killed for it takes it then; a person walks over). */
+    val pickupDelayed: Dist = PICKUP_DELAYED,
     /**
      * How far under the floor surface (the top of the floor block) a key stand sits: 0.46875, so 68.53125 over a floor whose surface is
      * y 69 (the door bodies start at y 69, the walking level). 71 % of measured stands sit at y 68.53125 and the others step by whole blocks
@@ -96,6 +98,8 @@ class StateRules(
         /** The name stand outlives the model stand by this many ticks when a key is picked up. */
         const val NAME_STAND_LINGER = 2
         const val PICKUP_INSTANT_FRAC = 0.669
+        /** Measured (190 keys): ticks before a key not taken at once is taken, p5/25/50/75/95. */
+        val PICKUP_DELAYED = Dist(190, doubleArrayOf(5.0, 25.0, 50.0, 75.0, 95.0), doubleArrayOf(2.0, 4.0, 8.0, 13.0, 26.0), null, null)
         const val STAND_Y_BELOW_SURFACE = 0.46875
         const val STAND_Y_DEFAULT = 68.53125
         const val ENTRANCE_N_TO_G = 5
@@ -132,6 +136,7 @@ class StateRules(
                 firstBlockToRestTicks = fall?.get("firstBlockToRestTicks")?.takeIf { it.isJsonPrimitive }?.asInt ?: 0,
                 autoCollectTicks = doors?.autoCollectTicks ?: 200,
                 pickupInstantFrac = doors?.pickupInstantFrac ?: PICKUP_INSTANT_FRAC,
+                pickupDelayed = doors?.pickupDelayed?.takeIf { !it.advisory } ?: PICKUP_DELAYED,
                 checkTicks = ticks,
                 roomToWhite = { name -> pack?.room(name)?.toWhite },
                 chestClears = pack?.chestClears.orEmpty(),
