@@ -123,6 +123,8 @@ object BotsModule : AdsModule, BotService {
         val pos = HashMap<Int, Pt>()
         val y = HashMap<Int, Double>()
         val yaw = HashMap<Int, Float>()
+        /** The room each bot was last in (its height is found afresh in a new one). */
+        val roomOf = HashMap<Int, Int>()
         /** A bot sent to a key stand: it walks there, waits for the key to be taken and walks back. */
         val excursion = HashMap<Int, Excursion>()
         /** Key stands nobody has taken yet: kind to (the stand, the drop tick, whether a bot was already sent for it after a wait). */
@@ -419,7 +421,11 @@ object BotsModule : AdsModule, BotService {
             }
             val frame = s.motion.step(seat, t, speed, s.yaw[seat] ?: 0f, activity)
             s.yaw[seat] = frame.bodyYaw
-            val y = s.bodies.place(seat, b.dungeonClass, look, target.x, target.z, frame, near, s.y[seat] ?: BotTuning.DEFAULT_FLOOR_Y, s.motion.held(seat), dropY)
+            // Into another room: the height is looked for from the usual floor again, not from the last room's (which can be a cavity under this floor).
+            val room = run.plan.roomAtBlock(target.x, target.z)?.index
+            val reseat = room != null && room != s.roomOf[seat]
+            if (room != null) s.roomOf[seat] = room
+            val y = s.bodies.place(seat, b.dungeonClass, look, target.x, target.z, frame, near, if (reseat) BotTuning.DEFAULT_FLOOR_Y else s.y[seat] ?: BotTuning.DEFAULT_FLOOR_Y, s.motion.held(seat), dropY, reseat)
             s.y[seat] = y
             if (s.steps.due(seat, t, walking) && s.bodies.has(seat)) stepSound(target.x, y, target.z)
             rec.x = target.x; rec.y = y; rec.z = target.z

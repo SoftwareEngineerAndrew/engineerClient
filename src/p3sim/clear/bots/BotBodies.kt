@@ -89,7 +89,8 @@ class BotBodies(private val asPlayers: () -> Boolean = { true }) {
      * ground (a bot that has just appeared above the floor and is dropping onto it). A body that moves more than [BLINK_BLOCKS] blocks in one tick
      * (a blink or a leap) is taken out of the world and put back at the destination, as the server does with a teammate that teleports.
      */
-    fun place(seat: Int, cls: String, look: BotLook, x: Double, z: Double, frame: BodyFrame, show: Boolean, fallbackY: Double, held: String, yOverride: Double? = null): Double {
+    /** [reseat]: the bot has just come into another room; its height is looked for from [fallbackY] (the usual floor), not from where it stood. */
+    fun place(seat: Int, cls: String, look: BotLook, x: Double, z: Double, frame: BodyFrame, show: Boolean, fallbackY: Double, held: String, yOverride: Double? = null, reseat: Boolean = false): Double {
         val yaw = frame.bodyYaw
         val existing = bodies[seat]?.takeIf { !it.entity.isRemoved }
         if (!show) { if (existing != null) remove(seat); return fallbackY }
@@ -100,7 +101,7 @@ class BotBodies(private val asPlayers: () -> Boolean = { true }) {
         existing?.let { it.behind = if (held0 != null) it.behind + 1 else 0 }
         val px = held0?.x ?: x; val pz = held0?.z ?: z
         val col = (Math.floor(px).toLong() shl 32) xor (Math.floor(pz).toLong() and 0xffffffffL)
-        val y = yOverride ?: held0?.y ?: if (existing != null && existing.col == col) existing.y else groundY(px, pz, existing?.y ?: fallbackY)
+        val y = yOverride ?: held0?.y ?: if (!reseat && existing != null && existing.col == col) existing.y else groundY(px, pz, if (reseat) fallbackY else existing?.y ?: fallbackY)
         val b = existing ?: spawn(seat, cls, look, px, y, pz, yaw) ?: return fallbackY
         if (b.player) announce(b)
         val hop = existing != null && b.player && Math.hypot(px - b.x, pz - b.z) > BLINK_BLOCKS
