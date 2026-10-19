@@ -21,14 +21,16 @@ class AdsHubScreen(private val parent: Screen?) : Screen(Component.literal(P3Sim
      * drawn), or the gear ([GEAR], drawn here). Textures, not ItemStacks: on the title screen no ItemStack can be
      * made (26.3 binds the item components with a world: "Components not bound yet").
      */
-    private class Entry(val label: String, val color: Int, val tex: Identifier?, val frames: Int = 1)
+    private class Entry(val label: String, val color: Int, val tex: Identifier?, val frames: Int = 1, val open: () -> Unit = {})
 
     private val entries = listOf(
-        Entry("Terms", 0xFFF0A21C.toInt(), Identifier.withDefaultNamespace("textures/block/command_block_front.png"), 4),
-        Entry("Solo Clear", 0xFF5BBCE8.toInt(), Identifier.withDefaultNamespace("textures/item/ender_pearl.png")),
-        Entry("Scenarios", 0xFFB4B4B4.toInt(), Identifier.withDefaultNamespace("textures/item/spyglass.png")),
-        Entry("Practice", 0xFF213F9A.toInt(), Identifier.withDefaultNamespace("textures/item/paper.png")),
-        Entry("Settings", 0xFF4A4A4A.toInt(), null),
+        // Terms: the P3 sim (the boss world). Solo Clear: the full run's start screen. Scenarios: a recorded run's layout, chosen in the
+        // browser, back on the start screen. Practice: one puzzle or room alone. Settings: Odin's click GUI, where ADS's settings are.
+        Entry("Terms", 0xFFF0A21C.toInt(), Identifier.withDefaultNamespace("textures/block/command_block_front.png"), 4) { SimWorld.open() },
+        Entry("Solo Clear", 0xFF5BBCE8.toInt(), Identifier.withDefaultNamespace("textures/item/ender_pearl.png")) { mc.gui.setScreen(com.engineerclient.p3sim.clear.ui.RunStartScreen()) },
+        Entry("Scenarios", 0xFFB4B4B4.toInt(), Identifier.withDefaultNamespace("textures/item/spyglass.png")) { mc.gui.setScreen(com.engineerclient.p3sim.clear.ui.LayoutBrowserScreen(com.engineerclient.p3sim.clear.ui.RunStartScreen())) },
+        Entry("Practice", 0xFF213F9A.toInt(), Identifier.withDefaultNamespace("textures/item/paper.png")) { mc.gui.setScreen(com.engineerclient.p3sim.clear.ui.PracticeScreen(this)) },
+        Entry("Settings", 0xFF4A4A4A.toInt(), null) { mc.setScreenAndShow(com.odtheking.odin.clickgui.ClickGUI) },
     )
 
     override fun init() {
@@ -50,8 +52,7 @@ class AdsHubScreen(private val parent: Screen?) : Screen(Component.literal(P3Sim
 
     /** One of the five: its icon box, then the coloured button with its label. */
     private class BigButton(val e: Entry, x: Int, y: Int, w: Int) : AbstractButton(x, y, w, ICON, Component.literal(e.label)) {
-        // Not wired up yet.
-        override fun onPress(input: InputWithModifiers) {}
+        override fun onPress(input: InputWithModifiers) = e.open()
 
         override fun extractContents(g: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
             val hot = isHoveredOrFocused

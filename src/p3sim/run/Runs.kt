@@ -66,7 +66,7 @@ object Runs {
         LagRuntime.runPreset = config.lag; LagRuntime.devPreset = null
         startClock(server, config.seed)
 
-        val spawn = entranceSpawn(level, plan, config.seed)
+        val spawn = plan.practice?.let { practiceSpawn(it) } ?: entranceSpawn(level, plan, config.seed)
         for (p in humans) {
             // Game mode, speed, health, no knockback; then the clear's kit and armour (the boss kit comes back at the jump to Maxor).
             Fight.setup(p, giveHotbar = false)
@@ -132,6 +132,13 @@ object Runs {
         val x = (tile?.let { DungeonFrame.tileCentre(it.x) } ?: DungeonFrame.tileCentre(0)) + 0.5
         val z = (tile?.let { DungeonFrame.tileCentre(it.z) } ?: DungeonFrame.tileCentre(0)) + 0.5
         return Spawn(x, floorY(level, x.toInt(), z.toInt()).toDouble(), z, 180f)
+    }
+
+    /** A practice run's start: in its one doorway, a block in from the room's edge (the bedrock behind), on the floor, facing into the room. Pure. */
+    internal fun practiceSpawn(p: PracticeStart): Spawn {
+        val (x, z) = com.engineerclient.p3sim.clear.layout.DoorGeometry.sideCell(p.tx, p.tz, p.side, 15, 1)
+        val yaw = when (p.side) { 'N' -> 0f; 'S' -> 180f; 'W' -> 270f; else -> 90f }
+        return Spawn(x + 0.5, 69.0, z + 0.5, yaw)
     }
 
     /** The edge spawn for the tile ([tx], [tz]), or null when the tile is not on the edge of the grid. Pure. */

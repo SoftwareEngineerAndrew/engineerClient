@@ -10,6 +10,11 @@ sealed interface LayoutSource {
     data class Seed(val seed: Long) : LayoutSource
     /** A recorded run's layout by id (the run file name without extension). A layout that is not `playable` warns. */
     data class Recorded(val id: String) : LayoutSource
+    /**
+     * Practice: one room alone in the middle of the map (its in-game name, "Blue Skulls"), as a recorded run had it (its build, turn
+     * and puzzle state), entered through the doorway the party came in by, with bedrock behind you and every other side a wall.
+     */
+    data class Practice(val room: String) : LayoutSource
 }
 
 /**
@@ -52,6 +57,7 @@ data class RunConfig(
             LayoutSource.Random -> o.addProperty("layout", "random")
             is LayoutSource.Seed -> { o.addProperty("layout", "seed"); o.addProperty("layoutSeed", layout.seed) }
             is LayoutSource.Recorded -> { o.addProperty("layout", "recorded"); o.addProperty("layoutId", layout.id) }
+            is LayoutSource.Practice -> { o.addProperty("layout", "practice"); o.addProperty("practiceRoom", layout.room) }
         }
         o.addProperty("seed", seed)
         o.addProperty("bots", bots)
@@ -71,6 +77,7 @@ data class RunConfig(
             val layout = when (str("layout")) {
                 "seed" -> o.get("layoutSeed")?.takeIf { it.isJsonPrimitive }?.asLong?.let { LayoutSource.Seed(it) } ?: LayoutSource.Random
                 "recorded" -> str("layoutId")?.let { LayoutSource.Recorded(it) } ?: LayoutSource.Random
+                "practice" -> str("practiceRoom")?.let { LayoutSource.Practice(it) } ?: LayoutSource.Random
                 else -> LayoutSource.Random
             }
             val d = RunConfig()
