@@ -3,6 +3,8 @@ package com.engineerclient.p3sim.mobs
 import com.engineerclient.p3sim.clear.mobs.MobRolls
 import com.engineerclient.p3sim.clear.mobs.SpawnMode
 import com.engineerclient.p3sim.pack.mobs.MeleeTable
+import com.engineerclient.p3sim.pack.mobs.MobLayout
+import com.engineerclient.p3sim.pack.mobs.MobSpawn
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,6 +51,26 @@ class MobRollsTest {
         assertEquals(2.0, stars.toDouble() / n, 0.03)
         assertEquals(0.1, unstarred.toDouble() / n, 0.01)
         assertEquals(1.0, archA.toDouble() / archB, 0.15)   // a 5:5 split between the two kinds at one cell
+    }
+
+    @Test fun aVisitBlindToTheUnstarredMobsTakesThemFromACompleteOne() {
+        // Three visits saw only the starred mob, two saw the room's eight unstarred mobs too (one of them on the starred mob's block).
+        val star = MobSpawn(1, 70, 1, 0, true)
+        val blind = List(3) { MobLayout("adr", "F7", listOf(star.copy(x = it + 1))) }
+        val full = List(2) { k -> MobLayout("adr", "F7", listOf(star) + List(8) { MobSpawn(if (it == 0 && k == 0) 2 else 10 + it, 70, if (it == 0 && k == 0) 1 else 5 + k, 1, false) }) }
+        val boss = pack.room("Boss Room")!!
+        val r = com.engineerclient.p3sim.pack.mobs.RoomMobs("Hall", emptyList(), "mob", 5, 0, boss.starred, null, emptyList(), blind + full, emptyList(), null)
+        assertEquals(full, MobRolls.completeUnstarred(blind + full))
+        val rng = Random(7)
+        repeat(300) {
+            val m = MobRolls.rollLayout(r, "F7", rng)!!
+            assertEquals(1, m.count { it.star }, "the drawn visit's starred mob stays")
+            assertTrue(m.count { !it.star } >= 7, "the unstarred mobs of a complete visit come along")
+            val starAt = m.filter { it.star }.map { Triple(it.x, it.y, it.z) }
+            assertTrue(m.none { !it.star && Triple(it.x, it.y, it.z) in starAt }, "never two mobs on one block")
+        }
+        // A room no visit saw unstarred mobs in keeps its visits as they are.
+        assertTrue(MobRolls.completeUnstarred(blind).isEmpty())
     }
 
     @Test fun fewerThanThreeLayoutsFallBackToCells() {
