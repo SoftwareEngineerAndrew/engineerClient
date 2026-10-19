@@ -6,17 +6,17 @@ import com.engineerclient.p3sim.run.PlacedRoom
 /**
  * The floors of a dungeon's rooms, read from the rooms pack's blocks ([RoomGrids]) the first time a room is asked for and kept for the run. A room
  * with no block data (the pack is missing, or the room is a made-up one) or with next to no floor to walk on has none: the bots wander over its tiles.
- * Pure (no Minecraft); not thread safe, the planner and the module use it on the server thread.
+ * Pure (no Minecraft); safe to share between threads (the headless gate plans on several).
  */
 class PackRoomAreas(private val pack: RoomPack?) : RoomAreas {
     /** By the placed room itself (not its index): one instance serves several dungeons in the headless check. */
     private val cache = java.util.IdentityHashMap<PlacedRoom, WalkArea?>()
 
-    override fun of(room: PlacedRoom): WalkArea? {
+    override fun of(room: PlacedRoom): WalkArea? = synchronized(cache) {
         if (cache.containsKey(room)) return cache[room]
         val area = try { build(room) } catch (e: Exception) { null }
         cache[room] = area
-        return area
+        area
     }
 
     private fun build(room: PlacedRoom): WalkArea? {

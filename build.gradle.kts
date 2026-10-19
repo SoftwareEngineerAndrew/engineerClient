@@ -88,6 +88,10 @@ tasks {
 
     test {
         useJUnitPlatform()
+        // Test classes run in parallel JVMs (one class at a time in each: the pack tests share global state, so not threads in one JVM).
+        // A serial run was 30 s of test time; the box is shared, so the forks are few and their heaps capped.
+        maxParallelForks = (Runtime.getRuntime().availableProcessors() / 4).coerceIn(1, 6)
+        maxHeapSize = "1g"
         // The optional pack checks (SamplePackTest, RealPackTest) read these folders; without them as inputs a green run would be
         // reused from the cache when only the packs or the variable changed. Both are skipped when the variable is not set.
         for (name in listOf("ADS_SAMPLE_PACKS", "ADS_REAL_PACKS", "ADS_BLOOD_FIGHTS")) {
