@@ -37,6 +37,8 @@ internal interface MobStage {
     fun tick() {}
     /** Removes every body still waiting out its death delay (the run ended). */
     fun flush() {}
+    /** Whether the mob's eyes have a clear line to the point (a player's eyes). Stand-ins see everything. */
+    fun canSee(e: MobEntry, x: Double, y: Double, z: Double): Boolean = true
     /** Puts a body that fell out of the world back where it was rolled. */
     fun rescue(e: MobEntry)
 }

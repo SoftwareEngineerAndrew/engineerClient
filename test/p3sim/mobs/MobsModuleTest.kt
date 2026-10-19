@@ -279,9 +279,9 @@ class MobsModuleTest {
         val run = newRun()
         val m = spawn(run, "test_archer", x = 10.0, z = 10.0)
         val p = human(run, 18.0, 10.0)
-        // A static archer only reacts to a close player; make it a mover by asking for a patrol-less miniboss-like state: use the sleeper-free path.
+        // A standing archer shoots what it sees within range (1.8: the first shot one interval after it draws, 24 ticks at point blank).
         p.x = 11.0
-        tick(run, 10)   // adjacent: the standing mob hits (melee swing)
+        tick(run, 30)
         assertTrue(damage.melee.isNotEmpty() || damage.hurt.isNotEmpty())
         assertNotNull(m)
     }
@@ -293,7 +293,8 @@ class MobsModuleTest {
         tick(run, 10)
         assertTrue(stage.calls.none { it.startsWith("reveal") })
         run.state.players.values.single().x = 20.0
-        tick(run, 2)
+        // It looks for a target one tick in ten (1.8).
+        tick(run, 80)
         assertTrue(stage.calls.contains("reveal test_assassin"))
     }
 

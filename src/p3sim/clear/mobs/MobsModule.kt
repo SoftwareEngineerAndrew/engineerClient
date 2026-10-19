@@ -96,13 +96,13 @@ object MobsModule : AdsModule, MobService {
         sWakeRadius = host.registerSetting(NumberSetting("Mobs Wake Radius", 9.0, 1.0..16.0, 0.5, unit = " blocks", desc = "A sleeping Fels wakes when a player's body comes this close, in 3D (measured about 9, always awake at 8; only a body wakes it, not arrows or Implosion)."))
         sPartial = host.registerSetting(NumberSetting("Mobs Partial Weight", 0.25, 0.0..1.0, 0.05, desc = "How often a room replays a recording that only caught part of the room (fewer than half the usual stars), relative to a full one."))
         sMoverShare = host.registerSetting(NumberSetting("Mobs Mover Share", 40, 0..100, 5, unit = "%", desc = "Share of ordinary mobs that walk toward a player who comes close. Recordings: 33 to 45 percent of mobs seen 2 to 12 blocks away move."))
-        sAggro = host.registerSetting(NumberSetting("Mobs Aggro Radius", 12.0, 2.0..40.0, 1.0, unit = " blocks", desc = "A walking mob starts after a player closer than this (not measured)."))
-        sLose = host.registerSetting(NumberSetting("Mobs Lose Radius", 28.0, 4.0..80.0, 1.0, unit = " blocks", desc = "A chasing mob gives up when every player is farther than this (not measured)."))
-        sMeleeReach = host.registerSetting(NumberSetting("Mobs Melee Reach", 2.3, 1.0..6.0, 0.1, unit = " blocks", desc = "How close a mob must be to hit (not measured)."))
-        sMeleeCadence = host.registerSetting(NumberSetting("Mobs Melee Cadence", 20, 5..100, 1, unit = " ticks", desc = "Ticks between one mob's hits (not measured)."))
-        sRangedRange = host.registerSetting(NumberSetting("Mobs Ranged Range", 16.0, 4.0..40.0, 1.0, unit = " blocks", desc = "Skeletons, the Sniper and the Withermancer shoot from at most this far (not measured)."))
-        sRangedCadence = host.registerSetting(NumberSetting("Mobs Ranged Cadence", 40, 10..200, 1, unit = " ticks", desc = "Ticks between one shooter's shots (not measured)."))
-        sStaticReach = host.registerSetting(NumberSetting("Mobs Static Reach", 2.3, 0.0..6.0, 0.1, unit = " blocks", desc = "A mob that stands still still hits a player this close. 0: standing mobs never hit (not measured)."))
+        sAggro = host.registerSetting(NumberSetting("Mobs Follow Range", 35.0, 2.0..60.0, 1.0, unit = " blocks", desc = "A walking mob takes as its target a player it can see within this (1.8's follow range; recorded first steps reach p90 32 to 43 blocks)."))
+        sLose = host.registerSetting(NumberSetting("Mobs Give Up Range", 35.0, 4.0..80.0, 1.0, unit = " blocks", desc = "A chasing mob gives up when its target is farther than this, or out of sight for 3 seconds (1.8)."))
+        sMeleeReach = host.registerSetting(NumberSetting("Mobs Hit Reach", 1.43, 1.0..6.0, 0.05, unit = " blocks", desc = "How close a mob must be to hit (1.8's reach for a zombie-sized body; not in the recordings)."))
+        sMeleeCadence = host.registerSetting(NumberSetting("Mobs Melee Cadence", 20, 5..100, 1, unit = " ticks", desc = "Ticks between one mob's hits (1.8's attack timer)."))
+        sRangedRange = host.registerSetting(NumberSetting("Mobs Shot Range", 15.0, 4.0..40.0, 1.0, unit = " blocks", desc = "Skeletons, the Sniper and the Withermancer shoot what they see from at most this far (1.8: 15; recorded shots p90 13.5 blocks)."))
+        sRangedCadence = host.registerSetting(NumberSetting("Mobs Shot Gap", 60, 10..200, 1, unit = " ticks", desc = "Ticks between one shooter's shots at the edge of its range; 20 at point blank, in between by distance (1.8)."))
+        sStaticReach = host.registerSetting(NumberSetting("Mobs Standing Reach", 1.43, 0.0..6.0, 0.05, unit = " blocks", desc = "A mob that stands still still hits a player this close. 0: standing mobs never hit."))
         sZombieSpeed = host.registerSetting(NumberSetting("Mobs Zombie Speed", 0.28, 0.05..1.5, 0.01, unit = " b/tick", desc = "Chase speed of zombie-bodied mobs the speed table has no number for (most archetypes have their own measured one)."))
         sSkeletonSpeed = host.registerSetting(NumberSetting("Mobs Skeleton Speed", 0.137, 0.05..1.5, 0.01, unit = " b/tick", desc = "Chase speed of skeleton-bodied mobs (same source)."))
         sWitherSpeed = host.registerSetting(NumberSetting("Mobs Wither Skeleton Speed", 0.27, 0.05..1.5, 0.01, unit = " b/tick", desc = "Chase speed of the Withermancer (same source; the spread is wide)."))
@@ -120,10 +120,10 @@ object MobsModule : AdsModule, MobService {
 
     private fun params() = AiParams(
         moverShare = (sMoverShare?.value ?: 40) / 100.0,
-        aggroRadius = sAggro?.value ?: 12.0, loseRadius = sLose?.value ?: 28.0,
-        meleeReach = sMeleeReach?.value ?: 2.3, meleeCadence = sMeleeCadence?.value ?: 20,
-        rangedRange = sRangedRange?.value ?: 16.0, rangedCadence = sRangedCadence?.value ?: 40,
-        staticReach = sStaticReach?.value ?: 2.3,
+        aggroRadius = sAggro?.value ?: 35.0, loseRadius = sLose?.value ?: 35.0,
+        meleeReach = sMeleeReach?.value ?: 1.43, meleeCadence = sMeleeCadence?.value ?: 20,
+        rangedRange = sRangedRange?.value ?: 15.0, rangedCadence = sRangedCadence?.value ?: 60,
+        staticReach = sStaticReach?.value ?: 1.43,
         zombieSpeed = sZombieSpeed?.value ?: 0.28, skeletonSpeed = sSkeletonSpeed?.value ?: 0.137, witherSkeletonSpeed = sWitherSpeed?.value ?: 0.27,
         otherSpeed = sOtherSpeed?.value ?: 0.32, patrolSpeed = sPatrolSpeed?.value ?: 0.25,
         assassinTeleportEvery = sTeleportEvery?.value ?: 0,
@@ -161,6 +161,8 @@ object MobsModule : AdsModule, MobService {
     /** The mobs' idle talk (real world only). */
     private val chatter = MobChatter()
     private var chatterRng: Random = Random(0)
+    /** Rolls who looks for a target this tick (1.8: one chance in ten a tick). */
+    private var aiRng: Random = Random(0)
     private val byRoom = HashMap<Int, MutableList<MobEntry>>()
     private val byEntityId = HashMap<Int, MobEntry>()
     private val rolled = HashSet<Int>()
@@ -191,6 +193,7 @@ object MobsModule : AdsModule, MobService {
         val floor = run.config.floor
         scale = run.config.mobHpScale ?: pack.hpScaleFor(floor)?.let { MobRolls.drawHpScale(it, run.subRandom("mobs.scale")) } ?: 1.0
         chatterRng = run.subRandom("mobs.chatter")
+        aiRng = run.subRandom("mobs.ai")
         deferSpawnEvents = true
         for (room in run.plan.rooms) if (room.type != RoomType.ENTRANCE && room.type != RoomType.FAIRY && room.type != RoomType.BLOOD) spawnRoom(run, room.index)
         deferSpawnEvents = false
@@ -279,9 +282,12 @@ object MobsModule : AdsModule, MobService {
             if (Math.abs(h.y - pos[1]) > 3.0) d += 1000.0
             if (d < bestD) { bestD = d; best = h }
         }
-        val target = best?.let { AiTarget(it.x, it.z, bestD) }
+        // Sight is looked at only when it can matter: a target within the follow range (or the shooting range of a mob that never walks).
+        val reach = if (e.plan.mover) maxOf(p.aggroRadius, p.loseRadius) else maxOf(p.rangedRange, p.staticReach)
+        val seen = best != null && bestD <= reach && stage.canSee(e, best.x, best.y + 1.62, best.z)
+        val target = best?.let { AiTarget(it.x, it.z, bestD, seen) }
         val speed = MobAi.speedFor(e.arch.id, e.arch.entity, e.modifier?.id == "Speedy", p)
-        val action = MobAi.step(kind, e.plan.mover, pos[0], pos[2], speed, target, e.ai, e.plan.loop, p)
+        val action = MobAi.step(kind, e.plan.mover, pos[0], pos[2], speed, target, e.ai, e.plan.loop, p, search = aiRng.nextDouble() < p.searchChance)
         if (e.hidden && e.ai.chasing) { e.hidden = false; stage.reveal(e) }
         stage.act(e, action, best?.y ?: Double.NaN, best?.x ?: Double.NaN, best?.z ?: Double.NaN)
         if (!attacks() || best == null) return
@@ -492,12 +498,27 @@ object MobsModule : AdsModule, MobService {
 
     override fun onInit() { DisguiseSpike.register() }
 
-    override fun devCommands(): List<AdsCommand> = listOf(DisguiseSpike.command(this), mobsCommand)
+    override fun devCommands(): List<AdsCommand> = listOf(DisguiseSpike.command(this), mobsCommand, aiCommand)
 
     /** `/ads dev mobs`: what the module holds, room by room, to check a run against. */
     private val mobsCommand = AdsCommand("mobs", "/ads dev mobs", "Lists the mobs of the run room by room: required alive of total, bodies built, sleepers.", server = { ctx ->
         val run = ctx.run
         if (run == null) ctx.reply("No run is on.") else for (line in summaryLines(run)) ctx.reply(line)
+    })
+
+    /** `/ads dev mobai`: the AI state of the mobs nearest you, to see why one does or does not chase. */
+    private val aiCommand = AdsCommand("mobai", "/ads dev mobai", "The AI state of the ten mobs nearest you: kind, mover, chasing, distance, sight.", server = { ctx ->
+        val run = ctx.run
+        val me = run?.state?.alivePlayers()?.firstOrNull { !it.isBot }
+        if (run == null || me == null) ctx.reply("No run or no player.") else {
+            ctx.reply("t=${run.t} stage=${run.stage} available=${stage.available()} humans=${run.state.alivePlayers().count { !it.isBot }}")
+            val p = params()
+            for (e in entries.values.filter { it.alive }.sortedBy { Math.hypot(it.x - me.x, it.z - me.z) }.take(10)) {
+                val pos = stage.position(e)
+                val d = Math.hypot(e.x - me.x, e.z - me.z)
+                ctx.reply("${e.arch.id} kind=${MobPlanner.aiKind(e.arch, p.assassinTeleportEvery > 0)} mover=${e.plan.mover} live=${e.live} asleep=${e.asleep} chasing=${e.ai.chasing} unseen=${e.ai.unseen} d=${"%.1f".format(d)} see=${stage.canSee(e, me.x, me.y + 1.62, me.z)} nav=${(e.body as? net.minecraft.world.entity.Mob)?.let { m -> "done=" + m.navigation.isDone + " path=" + (m.navigation.path?.let { pa -> "" + pa.nodeCount + "@" + pa.target } ?: "none") + " ai=" + !m.isNoAi + " spd=" + m.speed } ?: e.body?.javaClass?.simpleName} lastNav=${"%.1f".format(e.lastNavX)},${"%.1f".format(e.lastNavZ)} pos=${pos?.joinToString(",") { "%.1f".format(it) }}")
+            }
+        }
     })
 
     internal fun summaryLines(run: Run): List<String> {

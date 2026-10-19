@@ -3,27 +3,36 @@ package com.engineerclient.p3sim.clear.mobs
 import kotlin.math.sqrt
 
 /**
- * The numbers AI v0 runs on. Only [moverShare] and the Fels wake sphere come from recordings; everything else is a documented
- * placeholder (FORMAT-mobs 9: aggro radius, chase speed, attack cadence are NOT measured), so each is a named value the player can
- * change as a setting ("Mobs ..."). Speeds are blocks per tick.
+ * The numbers the mob AI runs on (v1, 2026-10-19). Hypixel runs the 1.8 server, whose mobs pick a target with a 1 in 10 chance a tick among the
+ * players they can SEE within their follow range, keep it while it stays within that range and was seen in the last 60 ticks, hit from
+ * sqrt((2 x width)^2 + target width) away every 20 ticks, and (skeletons) shoot from at most 15 blocks every 20 + 40 x distance / 15 ticks.
+ * The recordings agree (ADR, 484 runs, clear phase, research/mobai.js): a mover's first step comes when the nearest player is a median 13
+ * blocks away and p90 32 to 43 for every kind (n=525: the room's walls hide players until they are close); mob shots (2,296 arrows and wither
+ * skulls) leave from a median 5.9 blocks, p90 13.5; a Withermancer's first shot comes a median 31 ticks after a player is within 15 blocks.
+ * Speeds are blocks per tick. Each value is a setting ("Mobs ...").
  */
 data class AiParams(
     /** Share of mobs that ever walk toward a player. Recordings: 33 to 45 percent of mobs seen 2 to 12 blocks from the player move (the ADR figure of a quarter counts bodies that died first). */
     val moverShare: Double = 0.4,
-    /** UNMEASURED: a player closer than this wakes a mover's chase. Recorded skeleton draw edges sit around 8 to 20 blocks, zombies at melee reach. */
-    val aggroRadius: Double = 12.0,
-    /** UNMEASURED: a chasing mob gives up when the nearest player is farther than this. */
-    val loseRadius: Double = 28.0,
-    /** UNMEASURED: how close a melee hit must be (blocks, centre to centre). */
-    val meleeReach: Double = 2.3,
-    /** UNMEASURED: ticks between melee swings of one mob. */
+    /** A seen player closer than this can become a mover's target (1.8's follow range; recorded first steps reach p90 32 to 43). */
+    val aggroRadius: Double = 35.0,
+    /** A chasing mob gives up when its target is farther than this (the follow range), or unseen for [unseenMemory] ticks. */
+    val loseRadius: Double = 35.0,
+    /** How close a melee hit must be, blocks centre to centre: 1.8's sqrt((2 x 0.6)^2 + 0.6) for a 0.6-wide body. Not recorded (zombies' swings are not in the recordings). */
+    val meleeReach: Double = 1.43,
+    /** Ticks between melee swings of one mob (1.8's attack timer). */
     val meleeCadence: Int = 20,
-    /** UNMEASURED: an archer or Withermancer shoots from at most this far. */
-    val rangedRange: Double = 16.0,
-    /** UNMEASURED: ticks between shots. */
-    val rangedCadence: Int = 40,
-    /** UNMEASURED: a mob that never moves still hits a player standing this close (0 turns static attacks off). */
-    val staticReach: Double = 2.3,
+    /** An archer or Withermancer shoots from at most this far (1.8: 15; recorded shots p90 13.5). */
+    val rangedRange: Double = 15.0,
+    /** Ticks between shots at the edge of [rangedRange]; at point blank [rangedMinCadence] (1.8: 20 + 40 x distance / range, the distance share at least 0.1). */
+    val rangedCadence: Int = 60,
+    val rangedMinCadence: Int = 20,
+    /** A mob that never moves still hits a player standing this close (0 turns static attacks off). */
+    val staticReach: Double = 1.43,
+    /** Chance a tick that a mob without a target looks for one (1.8: 1 in 10). */
+    val searchChance: Double = 0.1,
+    /** Ticks a chasing mob keeps a target it cannot see (1.8: 60). */
+    val unseenMemory: Int = 60,
     /** Chase speeds of a body type, for archetypes [MobAi.ARCHETYPE_SPEEDS] has no number for (MEASURED: q75 of 6-tick windows approaching the player in the traversal corpus). */
     val zombieSpeed: Double = 0.28,
     val skeletonSpeed: Double = 0.137,
@@ -59,6 +68,10 @@ sealed interface AiAction {
 /** What one mob remembers between ticks. */
 class AiState {
     var chasing = false
+    /** Ticks the target has been out of sight while chasing. */
+    var unseen = 0
+    /** A shooter has drawn: its first shot comes when [cooldown] runs out (1.8 waits one interval before the first). */
+    var drawn = false
     /** Server ticks until the next swing or shot. */
     var cooldown = 0
     var sinceTeleport = 0
@@ -66,8 +79,8 @@ class AiState {
     var loopIndex = 0
 }
 
-/** Where the nearest target stands, and how far (horizontal), or null when nobody is near. */
-class AiTarget(val x: Double, val z: Double, val dist: Double)
+/** Where the nearest target stands, how far (horizontal), and whether the mob can see it (a clear line from eye to eye). */
+class AiTarget(val x: Double, val z: Double, val dist: Double, val seen: Boolean = true)
 
 /**
  * AI v0, pure: from the mob's position, state and the nearest target, the action for this tick. A mob that is not a mover
@@ -77,18 +90,24 @@ class AiTarget(val x: Double, val z: Double, val dist: Double)
  * that is not chasing walks it. Sleepers are handled by the caller (an asleep Fels never reaches this).
  */
 object MobAi {
-    fun step(kind: AiKind, mover: Boolean, x: Double, z: Double, speed: Double, target: AiTarget?, state: AiState, loop: List<DoubleArray>?, p: AiParams): AiAction {
+    /** [search]: this tick the mob looks for a target (the caller rolls [AiParams.searchChance]). */
+    fun step(kind: AiKind, mover: Boolean, x: Double, z: Double, speed: Double, target: AiTarget?, state: AiState, loop: List<DoubleArray>?, p: AiParams, search: Boolean = true): AiAction {
         if (state.cooldown > 0) state.cooldown--
         state.sinceTeleport++
         if (target == null) {
-            state.chasing = false
+            state.chasing = false; state.drawn = false
             return patrol(x, z, state, loop, p, mover)
         }
         if (!mover && kind != AiKind.TELEPORT) {
+            // A shooter that never walks still shoots what it sees in range.
+            if (kind == AiKind.RANGED) return if (target.seen && target.dist <= p.rangedRange) shoot(target, state, p) else { state.drawn = false; AiAction.Idle }
             if (p.staticReach > 0.0 && target.dist <= p.staticReach) return attack(kind, target, state, p)
             return AiAction.Idle
         }
-        if (state.chasing) { if (target.dist > p.loseRadius) state.chasing = false } else if (target.dist <= p.aggroRadius) state.chasing = true
+        if (state.chasing) {
+            state.unseen = if (target.seen) 0 else state.unseen + 1
+            if (target.dist > p.loseRadius || state.unseen > p.unseenMemory) { state.chasing = false; state.unseen = 0; state.drawn = false }
+        } else if (search && target.seen && target.dist <= p.aggroRadius) state.chasing = true
         if (!state.chasing) return patrol(x, z, state, loop, p, mover)
         return when (kind) {
             AiKind.TELEPORT -> {
@@ -100,11 +119,22 @@ object MobAi {
                     AiAction.Teleport(target.x + dx / len * 1.5, target.z + dz / len * 1.5)
                 } else if (target.dist <= p.meleeReach) attack(kind, target, state, p) else AiAction.MoveTo(target.x, target.z, speed)
             }
-            AiKind.RANGED -> if (target.dist <= p.rangedRange) {
-                if (state.cooldown == 0) { state.cooldown = p.rangedCadence; AiAction.Shoot } else AiAction.Idle
-            } else AiAction.MoveTo(target.x, target.z, speed)
+            AiKind.RANGED -> if (target.dist <= p.rangedRange && target.seen) shoot(target, state, p) else { state.drawn = false; AiAction.MoveTo(target.x, target.z, speed) }
             AiKind.MELEE -> if (target.dist <= p.meleeReach) attack(kind, target, state, p) else AiAction.MoveTo(target.x, target.z, speed)
         }
+    }
+
+    /** Ticks between a shooter's shots at [dist] (1.8's skeleton). */
+    fun shotInterval(dist: Double, p: AiParams): Int {
+        val f = (dist / p.rangedRange).coerceIn(0.1, 1.0)
+        return (p.rangedMinCadence + (p.rangedCadence - p.rangedMinCadence) * f).toInt()
+    }
+
+    private fun shoot(target: AiTarget, state: AiState, p: AiParams): AiAction {
+        if (!state.drawn) { state.drawn = true; state.cooldown = shotInterval(target.dist, p); return AiAction.Idle }
+        if (state.cooldown > 0) return AiAction.Idle
+        state.cooldown = shotInterval(target.dist, p)
+        return AiAction.Shoot
     }
 
     private fun attack(kind: AiKind, target: AiTarget, state: AiState, p: AiParams): AiAction {
