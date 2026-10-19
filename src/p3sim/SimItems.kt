@@ -1500,6 +1500,8 @@ object SimItems {
                 return InteractionResult.SUCCESS
             }
         }
+        // Mort (or his name stands): his Ready Up window before the run starts.
+        if (com.engineerclient.p3sim.clear.state.MortNpc.owns(e)) { if (!left) com.engineerclient.p3sim.clear.state.ReadyUpMenu.open(p); return InteractionResult.SUCCESS }
         if (e is ItemFrame || e is ArmorStand) return InteractionResult.SUCCESS
         if (e.entityTags().contains(Sim.TAG)) return InteractionResult.SUCCESS
         return InteractionResult.PASS

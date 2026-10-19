@@ -163,6 +163,17 @@ object BotsModule : AdsModule, BotService {
     /** A test driver's switch: the human only watches and bots fill every seat (a five-bot clear to measure against real runs). Off in play. */
     @Volatile var devObserve = false
 
+    /**
+     * The party changed classes before the start (Mort's Ready Up window): the bots are planned again from the start, each taking a class
+     * no human plays. Their records go first so they are made again with their new class. Server thread.
+     */
+    fun reclass(run: Run) {
+        session?.let { it.bodies.removeAll() }
+        session = null
+        run.state.players.values.removeIf { it.isBot }
+        onRunStart(run)
+    }
+
     private fun live(run: Run): Session? = session?.takeIf { it.run === run && it.active }
 
     override fun onRunStart(run: Run) {
