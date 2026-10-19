@@ -160,7 +160,9 @@ class ClearPlanner(private val inp: PlannerInput) {
         // ---- teammates leap to the door opener (after everything else, so the draws above stay as they were) -----------------
         val bloodDoor = plan.doors.firstOrNull { it.kind == DoorKind.BLOOD }?.index
         val (tracks, leaps) = Leaps.add(walked, doorPlans.values.filter { it.openT >= now }, bloodDoor, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), leapWorld, Random(rnd.nextLong()), inp.people)
-        return ClearPlan(inp.seats, tracks, rooms, doorPlans, milestones.copy(bloodSeat = bloodSeat), now, inp.assignment, leaps)
+        // ---- and, once their rooms are done, into the blood camp ------------------------------------------------------------
+        val (camped, campLeaps) = CampLeaps.add(tracks, bloodSeat, maxOf(now, milestones.bloodOpenT), milestones.watcherDoneT, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), Random(rnd.nextLong()))
+        return ClearPlan(inp.seats, camped, rooms, doorPlans, milestones.copy(bloodSeat = bloodSeat), now, inp.assignment, (leaps + campLeaps).sortedBy { it.t })
     }
 
     /** The plan's geometry for the leap pass: which doors a walk goes through, and the walk itself at the planning pace. */
