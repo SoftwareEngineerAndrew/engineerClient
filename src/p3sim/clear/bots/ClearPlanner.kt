@@ -154,8 +154,29 @@ class ClearPlanner(private val inp: PlannerInput) {
             b.room = gatherRoom
         }
 
-        val tracks = builders.values.filter { !it.seat.isHuman }.map { SeatTrack(it.seat.index, it.legs, it.acts.sortedBy { a -> a.t }) }
-        return ClearPlan(inp.seats, tracks, rooms, doorPlans, milestones.copy(bloodSeat = bloodSeat), now, inp.assignment)
+        val walked = builders.values.filter { !it.seat.isHuman }.map { SeatTrack(it.seat.index, it.legs, it.acts.sortedBy { a -> a.t }) }
+        // ---- teammates leap to the door opener (after everything else, so the draws above stay as they were) -----------------
+        val bloodDoor = plan.doors.firstOrNull { it.kind == DoorKind.BLOOD }?.index
+        val (tracks, leaps) = Leaps.add(walked, doorPlans.values.filter { it.openT >= now }, bloodDoor, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), leapWorld, Random(rnd.nextLong()))
+        return ClearPlan(inp.seats, tracks, rooms, doorPlans, milestones.copy(bloodSeat = bloodSeat), now, inp.assignment, leaps)
+    }
+
+    /** The plan's geometry for the leap pass: which doors a walk goes through, and the walk itself at the planning pace. */
+    private val leapWorld = object : LeapWorld {
+        override fun through(from: Pt, to: Pt, door: Int): Boolean {
+            val a = geo.roomAt(from)?.index ?: return false
+            val b = geo.roomAt(to)?.index ?: return false
+            return a != b && door in geo.doorsOnRoute(a, b)
+        }
+
+        override fun walk(from: Pt, to: Pt, t0: Int): List<Leg> {
+            // An opener stands in the door's gap, between rooms: the walk starts in the room a step towards where it goes.
+            val a = (0..8).firstNotNullOfOrNull { i -> geo.roomAt(from.lerp(to, minOf(1.0, i / maxOf(1.0, from.dist(to)))))?.index } ?: return emptyList()
+            val b = geo.roomAt(to)?.index ?: a
+            val legs = ArrayList<Leg>()
+            walkEnd(expand(geo.route(from, a, b, to)), t0, BotTuning.DEFAULT_PLAN_BPT * inp.speedScale, legs)
+            return legs
+        }
     }
 
     // ===================================================================================================================

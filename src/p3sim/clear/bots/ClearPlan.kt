@@ -106,6 +106,8 @@ class ClearPlan(
     /** The run tick the plan was built at (0 for the first plan). */
     val builtAt: Int,
     val assignment: BloodAssignment,
+    /** Teammates leaping to a door opener ([Leaps]); their tracks already have them in. */
+    val leaps: List<Leap> = emptyList(),
 ) {
     fun track(seat: Int): SeatTrack? = tracks.firstOrNull { it.seat == seat }
 
