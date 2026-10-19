@@ -223,7 +223,6 @@ object MobsModule : AdsModule, MobService {
         if (entries.isEmpty() || !stage.available() || run.stage == RunStage.BOSS_ENTRY || run.stage == RunStage.BOSS || run.stage == RunStage.END) return
         val pack = run.packs.mobs ?: return
         val players = run.state.alivePlayers()
-        val humans = players.filter { !it.isBot }
         val t = run.serverTick
         val params = params()
         val maxDist = spawnDistance()
@@ -258,7 +257,7 @@ object MobsModule : AdsModule, MobService {
                 val r = wakeRadius(e.arch)
                 if (players.any { dist3(it, pos) <= r }) { e.asleep = false; stage.wake(e) } else continue
             }
-            runAi(run, e, pos, pack, humans, params)
+            runAi(run, e, pos, pack, players, params)
             stage.position(e)?.let { e.record.x = it[0]; e.record.y = it[1]; e.record.z = it[2] }
         }
         if (stage === RealStage) com.engineerclient.EngineerClient.safely("ads mob chatter") { chatter.tick(t, entries.values, chatterRng) }
@@ -273,12 +272,17 @@ object MobsModule : AdsModule, MobService {
 
     // ---- AI v0 -------------------------------------------------------------------------------------------------------
 
-    private fun runAi(run: Run, e: MobEntry, pos: DoubleArray, pack: MobPack, humans: List<PlayerRecord>, p: AiParams) {
+    /**
+     * One mob's AI tick. Its target is the nearest living player on its level, a bot as much as a person: real mobs go for whichever teammate is
+     * near (ADR: zombies move 48% of the ticks they are seen, skeletons 67%), and a mob that ignored the bots would stand still in every room they
+     * clear. A bot it reaches is swung at but not hurt here: the bots module hurts bots on the measured schedule of a fighting teammate.
+     */
+    private fun runAi(run: Run, e: MobEntry, pos: DoubleArray, pack: MobPack, targets: List<PlayerRecord>, p: AiParams) {
         val kind = MobPlanner.aiKind(e.arch, p.assassinTeleportEvery > 0)
-        // The nearest living human that is on the mob's level (a mob cannot reach a player several blocks above or below it).
+        // The nearest living player that is on the mob's level (a mob cannot reach a player several blocks above or below it).
         var best: PlayerRecord? = null
         var bestD = Double.MAX_VALUE
-        for (h in humans) {
+        for (h in targets) {
             val dx = h.x - pos[0]; val dz = h.z - pos[2]
             var d = Math.sqrt(dx * dx + dz * dz)
             if (Math.abs(h.y - pos[1]) > 3.0) d += 1000.0
@@ -292,7 +296,7 @@ object MobsModule : AdsModule, MobService {
         val action = MobAi.step(kind, e.plan.mover, pos[0], pos[2], speed, target, e.ai, e.plan.loop, p, search = aiRng.nextDouble() < p.searchChance)
         if (e.hidden && e.ai.chasing) { e.hidden = false; stage.reveal(e) }
         stage.act(e, action, best?.y ?: Double.NaN, best?.x ?: Double.NaN, best?.z ?: Double.NaN)
-        if (!attacks() || best == null) return
+        if (!attacks() || best == null || best.isBot) return
         when (action) {
             AiAction.Melee -> damage().meleeHit(run, e.record.id, best.uuid)
             AiAction.Shoot -> {
