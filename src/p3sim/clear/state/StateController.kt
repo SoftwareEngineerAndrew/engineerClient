@@ -113,7 +113,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
 
     private fun runStep(step: StartStep) {
         when (step) {
-            is StartStep.Ready -> state.players.values.toList().getOrNull(step.index)?.let { fx.chat(StateText.ready(it.name)) }
+            is StartStep.Ready -> state.players.values.toList().getOrNull(step.index)?.let { fx.chat(StateText.ready(it.name, nameColourOf(it.uuid))) }
             is StartStep.Starting -> { fx.chat(StateText.startingIn(step.seconds)); fx.sound(StateText.COUNTDOWN_TICK) }
             is StartStep.Mort -> {
                 if (step.index == 0) classDoubledLines()
