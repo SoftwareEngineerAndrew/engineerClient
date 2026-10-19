@@ -72,6 +72,14 @@ class PlanExecutor(plan: ClearPlan, private val world: BotWorld, private val gra
     fun workOf(seat: Int, t: Int): Act? =
         states.firstOrNull { !it.done && it.act.seat == seat && it.act !is OpenDoor && it.act.t <= t && t <= it.act.until }?.act
 
+    /**
+     * A key was picked up at [t]: a door already waiting for one is tried again [reaction] ticks later, not at its next 5-tick retry (ADR: a
+     * teammate at the door opens it a median 3 ticks after another player takes the key).
+     */
+    fun keyArrived(t: Int, reaction: Int = KEY_REACTION_TICKS) {
+        for (s in states) if (!s.done && s.act is OpenDoor && s.act.t <= t && s.nextTry > t + reaction) s.nextTry = t + reaction
+    }
+
     /** The acts not done yet. */
     fun pending(): List<Act> = states.filter { !it.done }.map { it.act }
 
@@ -118,6 +126,8 @@ class PlanExecutor(plan: ClearPlan, private val world: BotWorld, private val gra
 
     companion object {
         const val RETRY_TICKS = 5
+        /** Ticks from a key being taken to a waiting opener's next try (see [keyArrived]). */
+        const val KEY_REACTION_TICKS = 2
 
         /** Ticks past its time that a door waits for its opener to come within reach before it opens anyway (a plan that lost the opener must not lock the dungeon). */
         const val OPEN_GATE_MAX = 600
