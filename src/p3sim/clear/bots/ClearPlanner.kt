@@ -218,7 +218,8 @@ class ClearPlanner(private val inp: PlannerInput) {
             val u = pace.u()
             var keyUse = tables.keyToUse().sample(roomPace.u()).roundToInt().coerceAtLeast(1)
             // One bot that kills the key room's last mob and then opens the door needs the walk between the two before the door can fall.
-            if (!splitWanted && keyRoom != null) keyUse = maxOf(keyUse, walkTicks(geo.centre(keyRoom), keyRoom, door.index) + BotTuning.OPEN_SETTLE)
+            val keyUseMin = if (!splitWanted && keyRoom != null) walkTicks(geo.centre(keyRoom), keyRoom, door.index) + BotTuning.OPEN_SETTLE else 1
+            keyUse = maxOf(keyUse, keyUseMin)
             val reach = reachNow()
             val keyReach = keyRoom?.let { reach[it].takeIf { r -> r < FAR } ?: now } ?: now
             // From the entrance room's exit door, where the countdown leaves the party (Countdown), not from the room's middle.
@@ -228,7 +229,7 @@ class ClearPlanner(private val inp: PlannerInput) {
             val doorSpot = geo.doorPt(door.index)
             val openerWalk = prevDoor?.let { pdoor -> prevOpen + BotTuning.DOOR_PASSABLE_AFTER + ticksAtMax(geo.length(expand(geo.route(geo.doorPt(pdoor), nearRoom(pdoor), nearRoom(door.index), doorSpot)))) }
                 ?: ((reach[nearRoom(door.index)].takeIf { it < FAR } ?: now) + ticksAtMax(geo.length(expand(geo.route(exit, entrance, nearRoom(door.index), doorSpot)))))
-            val lo = maxOf(now + 1, prevOpen + BotTuning.MIN_DOOR_GAP, keyReach + BotTuning.MIN_CLEAR_TICKS + keyUse + (if (j == 0) travel else 0), openerWalk + BotTuning.OPEN_SETTLE)
+            val lo = maxOf(now + 1, prevOpen + BotTuning.MIN_DOOR_GAP, keyReach + BotTuning.MIN_CLEAR_TICKS + keyUseMin + (if (j == 0) travel else 0), openerWalk + BotTuning.OPEN_SETTLE)
             var openT: Int
             var keyT: Int
             if (keysLeft > 0) {
