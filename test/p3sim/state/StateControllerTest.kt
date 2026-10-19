@@ -403,8 +403,9 @@ class StateControllerTest {
     }
 
     @Test fun aKeyRoomThatFinishesWithoutAKeyDropsOneAtItsCentre() {
+        // A room with mobs to kill: the mobs module gets its chance first.
         val r = Rig()
-        r.until(5); r.c.discover(4)
+        r.until(5); r.c.discover(4); r.room(4).mobsRequired = 1
         r.c.objectiveDone(4)
         assertTrue(r.c.standList().isEmpty(), "the mobs module gets its chance first")
         r.until(r.run.t + 5)
@@ -414,9 +415,46 @@ class StateControllerTest {
         assertEquals(1, r.all<KeyDropped>().size)
         // ... and when the mobs module did drop it, there is no second one
         val r2 = Rig()
-        r2.until(5); r2.c.discover(4); r2.c.objectiveDone(4); r2.c.dropKey(4, -60.0, -185.0)
+        r2.until(5); r2.c.discover(4); r2.room(4).mobsRequired = 1; r2.c.objectiveDone(4); r2.c.dropKey(4, -60.0, -185.0)
         r2.until(r2.run.t + 10)
         assertEquals(1, r2.all<KeyDropped>().size)
+    }
+
+    @Test fun aKeyRoomWithNoMobToKillGivesItsKeyAtOnceToWhoeverIsInIt() {
+        val r = Rig()
+        val (x, z) = r.c.centre(4)
+        val bo = StatePlans.addPlayer(r.run, "Bo", bot = true, x = x, z = z)
+        r.until(5)
+        r.c.objectiveDone(4)
+        assertTrue(r.c.standList().isEmpty(), "taken in the same tick")
+        assertEquals(bo.uuid, r.all<KeyPicked>().single().player)
+        // Nobody in the room: it lies at the centre for whoever comes.
+        val r2 = Rig()
+        r2.until(5); r2.c.discover(4); r2.c.objectiveDone(4)
+        assertEquals(4, r2.c.standList().single().room)
+    }
+
+    @Test fun aKeyABotKilledForAndLeftIsTakenAfterTheMeasuredWait() {
+        // pickupInstantFrac 0.0: never at once; the bot, far from the stand, has it within the measured wait (p95 26 ticks).
+        val r = Rig(rules = StateRules(pickupInstantFrac = 0.0))
+        r.until(5)
+        val bo = StatePlans.addPlayer(r.run, "Bo", bot = true, x = -100.0, z = -100.0)
+        r.run.state.rooms[1].mobsRequired = 1; r.run.state.rooms[1].mobsRequiredAlive = 0
+        r.run.bus.post(MobKilled(r.run.t, MobRef(UUID.randomUUID(), "x", 1, starred = true, required = true), bo.uuid))
+        r.c.dropKey(1, -150.0, -185.0)
+        assertEquals(1, r.c.standList().size, "not at once")
+        r.until(r.run.t + 27)
+        assertTrue(r.c.standList().isEmpty())
+        assertEquals(bo.uuid, r.all<KeyPicked>().single().player)
+        // A person who killed for it walks over: nothing is given to them.
+        val r2 = Rig(rules = StateRules(pickupInstantFrac = 0.0))
+        r2.until(5)
+        val ann = StatePlans.addPlayer(r2.run, "Ann", x = -100.0, z = -100.0)
+        r2.run.state.rooms[1].mobsRequired = 1; r2.run.state.rooms[1].mobsRequiredAlive = 0
+        r2.run.bus.post(MobKilled(r2.run.t, MobRef(UUID.randomUUID(), "x", 1, starred = true, required = true), ann.uuid))
+        r2.c.dropKey(1, -150.0, -185.0)
+        r2.until(r2.run.t + 40)
+        assertEquals(1, r2.c.standList().size)
     }
 
     // ---- the trap room's end chest -------------------------------------------------------------------------------------
