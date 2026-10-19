@@ -144,11 +144,16 @@ object Mage {
         if (now < sheepReady) return
         sheepReady = now + SHEEP_COOLDOWN
         readyNoted = false
+        spawnSheep(p)
+    }
+
+    /** The sheep itself, with no cooldown of its own: the clear's class abilities ([com.engineerclient.p3sim.clear.damage.ClassAbilities]) keep theirs. */
+    internal fun spawnSheep(p: ServerPlayer) {
         val e = GhostSheep(Sim.level)
         e.setNoAi(true); e.setNoGravity(true); e.isPermanentlyInvulnerable = true; e.isSilent = true
         e.snapTo(p.x, p.y + 0.781, p.z, p.yRot, 0f)
         e.yHeadRot = p.yRot - 10f
-        sheep += Flying(Sim.spawn(e), now)
+        sheep += Flying(Sim.spawn(e), Fight.serverTick)
         Sim.sound(SoundEvents.GHAST_SHOOT, 0.3f, 1f, p.position(), SoundSource.HOSTILE)
     }
 

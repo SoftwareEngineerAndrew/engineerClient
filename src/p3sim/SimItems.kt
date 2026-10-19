@@ -1295,12 +1295,13 @@ object SimItems {
         val player = mc.player ?: return false
         val level = mc.level ?: return false
         if (!simClient(level)) return false
-        if (fullStack) SimNet.send("drop", "1")
+        SimNet.send("drop", if (fullStack) "1" else "0")
         return true
     }
 
-    /** The drop key from a player's game ([clientDrop]), as theirs: Ctrl+Q is the class ability. */
+    /** The drop key from a player's game ([clientDrop]), as theirs: in a run's dungeon, the class's Ability (Ctrl+Q) or Ultimate (Q); in P3, Ctrl+Q is the class ability. */
     fun serverDrop(p: ServerPlayer, fullStack: Boolean) {
+        if (com.engineerclient.p3sim.clear.damage.ClassAbilities.press(p, ultimate = !fullStack)) return
         if (!fullStack) return
         if (P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER) asClicked(p, "archer ability") { volley(p) }
         // The Mage's: Guided Sheep.
@@ -2310,6 +2311,13 @@ object SimItems {
         val now = Fight.serverTick
         if (now < volleyReady) { Sim.chat("§cYour Regular Ability is currently on cooldown for ${(volleyReady - now + 19) / 20} more seconds."); return }
         volleyReady = now + 440
+        volleyArrows(p)
+        Sim.chat("§aUsed §6Explosive Shot§a!")
+        Fight.later(1, "explosive shot summary") { Sim.chat("§7Your Explosive Shot hit §c0 §7enemies for §c0 §7damage.") }
+    }
+
+    /** Explosive Shot's three arrows and their sound, with no cooldown or line (the clear's class abilities keep their own). */
+    internal fun volleyArrows(p: ServerPlayer) {
         val mid = Vec3(p.x, p.y + p.bbHeight / 2, p.z)
         for (dy in listOf(-5.5f, 0f, 5.5f)) {
             val yaw = Math.toRadians((p.yRot + dy).toDouble()); val pitch = Math.toRadians(p.xRot.toDouble())
@@ -2322,8 +2330,6 @@ object SimItems {
                 }
             }?.isCritArrow = true
         }
-        Sim.chat("§aUsed §6Explosive Shot§a!")
-        Fight.later(1, "explosive shot summary") { Sim.chat("§7Your Explosive Shot hit §c0 §7enemies for §c0 §7damage.") }
         Sim.sound(SoundEvents.ARROW_SHOOT, 1f, 0.8f, p.position())
     }
 
