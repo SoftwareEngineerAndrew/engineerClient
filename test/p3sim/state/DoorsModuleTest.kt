@@ -33,7 +33,7 @@ class DoorsModuleTest {
         assertEquals(RunStage.CLEAR, r.stage)
         assertEquals(DoorPhase.OPEN, r.state.doors[0].phase)
         assertEquals(BodyBlocks.BARRIER, fx.bodies.first { it.second == 0 }.third)
-        assertEquals(CheckMark.GREEN, r.state.rooms[3].check)
+        assertEquals(CheckMark.UNDISCOVERED, r.state.rooms[3].check, "the Fairy room shows when someone walks in")
         r.end(EndReason.STOPPED)
         assertNull(DoorsModule.controller, "the controller goes with the run")
     }

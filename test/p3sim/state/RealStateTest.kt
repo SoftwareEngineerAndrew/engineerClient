@@ -91,8 +91,8 @@ class RealStateTest {
             val entranceDoor = plan.doors.single { it.kind == DoorKind.ENTRANCE }
             assertEquals(DoorPhase.OPEN, run.state.doors[entranceDoor.index].phase, l.id)
             assertEquals(DoorPhase.OPEN, run.state.doors[plan.doors.single { it.kind == DoorKind.FAIRY }.index].phase, l.id)
-            assertEquals(CheckMark.GREEN, run.state.rooms[plan.fairy!!.index].check, l.id)
-            assertTrue(run.state.counters.opened >= 2, l.id)
+            assertEquals(CheckMark.UNDISCOVERED, run.state.rooms[plan.fairy!!.index].check, "${l.id}: the Fairy room shows when someone walks in")
+            assertTrue(run.state.counters.opened >= 1, "${l.id}: the room past the entrance door")
             n++
         }
         println("countdown: $n layouts")

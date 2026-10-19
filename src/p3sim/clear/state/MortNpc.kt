@@ -25,6 +25,9 @@ import kotlin.math.atan2
  * from the entrance tile's centre towards the back of the room (12 in the entrance whose Odin core is [FAR_CORE]), the side the room's
  * rotation puts behind it, with a "§bMort" name stand on him and a "§e§lCLICK" one a quarter block lower. He turns his head to the nearest
  * player. Spawned at the run's start and again after a savepoint restore (which clears every sim entity). Server thread.
+ *
+ * Both name stands go blank just after his second line (ADR, 226 runs: a median 42 ticks after his first, p10 40, his second comes at 40) and stay
+ * blank; he is still there and still answers a click.
  */
 object MortNpc {
     /** Mort's skin (texture id; slim). */
@@ -36,7 +39,13 @@ object MortNpc {
     /** How far he looks for someone to face (blocks). Unmeasured. */
     private const val LOOK_RANGE = 12.0
 
+    /** Ticks after Mort's second line that his name stands go blank. */
+    const val BLANK_AFTER_SECOND_LINE = 2
+
     private val made = ArrayList<Entity>()
+    private val names = ArrayList<Entity>()
+    private var blankIn = -1
+    private var blanked = false
     private var body: Mannequin? = null
     private var home: DoubleArray? = null
 
@@ -60,6 +69,7 @@ object MortNpc {
     fun owns(e: Entity): Boolean = made.any { it === e }
 
     fun spawn(plan: DungeonPlan) {
+        val wasBlank = blanked
         remove()
         ReadyUpMenu.reset()
         val at = spot(plan) ?: return
@@ -78,9 +88,12 @@ object MortNpc {
             m.yHeadRot = at[3].toFloat(); m.yBodyRot = at[3].toFloat()
             body = Sim.spawn(m)
             made += m
-            made += stand(at[0], at[1], at[2], "§bMort")
-            made += stand(at[0], at[1] - 0.25, at[2], "§e§lCLICK")
+            names += stand(at[0], at[1], at[2], "§bMort")
+            names += stand(at[0], at[1] - 0.25, at[2], "§e§lCLICK")
+            made += names
         }
+        // A savepoint restore after the start brings him back as he was then.
+        if (wasBlank) blankNow()
     }
 
     /** Hypixel's name stands: full-size, invisible, flags 2. */
@@ -97,8 +110,17 @@ object MortNpc {
         return Sim.spawn(s)
     }
 
+    /** His name stands go blank [ticks] from now. */
+    fun blankNames(ticks: Int) { if (ticks <= 0) blankNow() else blankIn = ticks }
+
+    private fun blankNow() {
+        blankIn = -1; blanked = true
+        for (s in names) if (!s.isRemoved) s.setCustomName(Sim.legacy(""))
+    }
+
     /** Turns his head to the nearest player in range, else back to facing the room. */
     fun tick() {
+        if (blankIn > 0 && --blankIn == 0) blankNow()
         val m = body ?: return
         if (m.isRemoved) { body = null; return }
         val h = home ?: return
@@ -109,7 +131,7 @@ object MortNpc {
 
     fun remove() {
         for (e in made) if (!e.isRemoved) e.discard()
-        made.clear(); body = null
+        made.clear(); names.clear(); body = null; blankIn = -1; blanked = false
     }
 
     private val hideMethod by lazy { Mannequin::class.java.getDeclaredMethod("setHideDescription", Boolean::class.javaPrimitiveType).apply { isAccessible = true } }
