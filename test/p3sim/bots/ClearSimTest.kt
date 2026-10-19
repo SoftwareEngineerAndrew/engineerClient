@@ -90,7 +90,7 @@ class ClearSimTest {
             dists.sort()
             println("openers: $doors doors, distance p5/p50/p95 = ${dists[doors / 20]}, ${dists[doors / 2]}, ${dists[doors * 19 / 20]}; key taken by another bot: ${split.toDouble() / doors}")
             assertEquals(0, far, "no door falls with its opener out of reach")
-            assertTrue(split.toDouble() / doors in 0.5..0.9, "recorded: another player takes the key in 77% of doors")
+            assertTrue(split.toDouble() / doors in 0.5..0.9, "recorded: another player takes the key in 84% of doors")
         } finally { Packs.unload() }
     }
 }
