@@ -233,7 +233,8 @@ class ClearPlanner(private val inp: PlannerInput) {
                 // The first door from its own table (with the party's pace); each later one a recorded gap after the door before it.
                 val drawn = prevOpenT?.let { it + tables.doorGap(j + 1).sample(gaps.nextDouble()) } ?: (if (j == 0) tables.firstDoor() else tables.doorOpen(j + 1)).sample(u)
                 openT = maxOf(drawn.roundToInt(), lo)
-                keyT = (openT - keyUse).coerceAtLeast(keyReach + BotTuning.MIN_CLEAR_TICKS)
+                // The first key room is a walk from the exit door away: its last mob cannot die before somebody gets there.
+                keyT = (openT - keyUse).coerceAtLeast(keyReach + BotTuning.MIN_CLEAR_TICKS + (if (j == 0) travel else 0))
             }
             pass[door.index] = openT + BotTuning.DOOR_PASSABLE_AFTER
             prevOpen = openT
@@ -334,8 +335,11 @@ class ClearPlanner(private val inp: PlannerInput) {
                     val from = roomAt[k.index]?.let { geo.centre(it) } ?: b.pos
                     val fromRoom = roomAt[k.index] ?: b.room
                     val bpt = tables.moveBpt(k.dungeonClass) * inp.speedScale
-                    val ticks = Math.ceil(geo.length(geo.route(from, fromRoom, keyRoom, geo.centre(keyRoom))) / bpt.coerceAtLeast(0.1)).toInt()
-                    Triple(k, maxOf(b.t, busyUntil[k.index] ?: 0) + ticks, pick.nextDouble())
+                    // The walk as it will be planned: round the rooms' contents and held at doors not yet open.
+                    val route = geo.route(from, fromRoom, keyRoom, geo.centre(keyRoom))
+                    val t0 = maxOf(b.t, busyUntil[k.index] ?: 0)
+                    // At the speed a walk with a deadline squeezes up to (see [walk]).
+                    Triple(k, if (route.size < 2) t0 else walkEnd(expand(route), t0, maxOf(bpt, BotTuning.MAX_TRAVEL_BPT)), pick.nextDouble())
                 }
                 val best = tries.minWithOrNull(compareBy({ it.second }, { it.third })) ?: continue
                 if (best.second > keyT - KEY_CLEAR_WINDOW + SPLIT_SLACK) continue
@@ -561,7 +565,9 @@ class ClearPlanner(private val inp: PlannerInput) {
         }
         // The arrival: the walk through the door graph, held at closed doors until they can be passed.
         val target = pin?.let { it - whiteOff }
-        if (!soft) walk(b, geo.route(b.pos, b.room, room.index, centre), bpt, target)
+        // A pinned visit already short of its full clear time still hurries to make the shortest clear before the key is due.
+        val walkBy = if (pin != null && target != null && target <= b.t) pin - BotTuning.MIN_CLEAR_TICKS else target
+        if (!soft) walk(b, geo.route(b.pos, b.room, room.index, centre), bpt, walkBy)
         else {
             val len = geo.length(geo.route(b.pos, b.room, room.index, centre))
             b.t += Math.ceil(len / bpt.coerceAtLeast(0.1)).toInt(); b.pos = centre
@@ -574,7 +580,9 @@ class ClearPlanner(private val inp: PlannerInput) {
         var work = task.work
         var greenOff2 = greenOff
         val freshWaiting = rest.any { it.work != RoomWork.GREEN_ONLY && it.avail <= arrive + whiteOff + PROMPT_SLACK }
-        if (work == RoomWork.FULL && hasSecrets && whiteOff < greenOff && (arrive + greenOff > deadline || freshWaiting)) {
+        // So too when the seat has a duty (a key, a door) due before the secrets would be done.
+        val dutySoon = !soft && b.duty?.let { arrive + greenOff > it.startBy - 10 } == true
+        if (work == RoomWork.FULL && hasSecrets && whiteOff < greenOff && (arrive + greenOff > deadline || freshWaiting || dutySoon)) {
             work = RoomWork.WHITE_ONLY
             greenOff2 = whiteOff
             keyWhite[room.index] = arrive + whiteOff
@@ -608,36 +616,40 @@ class ClearPlanner(private val inp: PlannerInput) {
      * Appends the legs of a walk along [route] to [b], at [bpt], standing at each closed door until it can be passed. With a [deadline]
      * that the natural walk misses, the legs speed up to make it (up to [BotTuning.MAX_TRAVEL_BPT]); beyond that speed they hop.
      */
+    /** Inside a room the walk goes round what is in the room (the floor is read from the room's blocks), not through it. */
+    private fun expand(route0: List<RoutePoint>): List<RoutePoint> =
+        inp.areas?.let { areas -> RouteExpander.expand(route0) { p -> geo.roomAt(p)?.let { areas.of(it) } } } ?: route0
+
+    /** The tick a walk of [route] started at [t0] ends: legs at [speed], held at each closed door until it is passed. Legs go to [legs] when given. */
+    private fun walkEnd(route: List<RoutePoint>, t0: Int, speed: Double, legs: MutableList<Leg>? = null): Int {
+        var t = t0
+        for (i in 1 until route.size) {
+            val a = route[i - 1].pt; val c = route[i].pt
+            val len = a.dist(c)
+            val ticks = if (len <= 0.0) 0 else Math.ceil(len / speed).toInt()
+            if (legs != null && (len > 0.0 || ticks > 0)) legs += Leg(t, t + ticks, a, c, hop = ticks > 0 && len / ticks > BotTuning.HOP_ABOVE_BPT)
+            t += ticks
+            val gate = route[i].gate
+            if (gate != null) {
+                val p = pass[gate] ?: FAR
+                if (p in (t + 1) until FAR) { legs?.add(Leg(t, p, c, c)); t = p }
+            }
+        }
+        return t
+    }
+
     private fun walk(b: Builder, route0: List<RoutePoint>, bpt: Double, deadline: Int?) {
         if (route0.size < 2) return
-        // Inside a room the walk goes round what is in the room (the floor is read from the room's blocks), not through it.
-        val route = inp.areas?.let { areas -> RouteExpander.expand(route0) { p -> geo.roomAt(p)?.let { areas.of(it) } } } ?: route0
-        fun simulate(speed: Double, commit: Boolean): Int {
-            var t = b.t
-            for (i in 1 until route.size) {
-                val a = route[i - 1].pt; val c = route[i].pt
-                val len = a.dist(c)
-                val ticks = if (len <= 0.0) 0 else Math.ceil(len / speed).toInt()
-                if (commit && (len > 0.0 || ticks > 0)) b.legs += Leg(t, t + ticks, a, c, hop = ticks > 0 && len / ticks > BotTuning.HOP_ABOVE_BPT)
-                t += ticks
-                val gate = route[i].gate
-                if (gate != null) {
-                    val p = pass[gate] ?: FAR
-                    if (p in (t + 1) until FAR) { if (commit) b.legs += Leg(t, p, c, c); t = p }
-                }
-            }
-            return t
-        }
+        val route = expand(route0)
+        fun simulate(speed: Double, commit: Boolean): Int = walkEnd(route, b.t, speed, if (commit) b.legs else null)
         var speed = bpt.coerceAtLeast(0.1)
         if (deadline != null && deadline > b.t) {
             val natural = simulate(speed, false)
             if (natural > deadline) {
-                // Squeeze the walk: scale the speed by how far over it is, once or twice, up to the planning maximum.
-                for (k in 0 until 3) {
-                    val over = simulate(speed, false)
-                    if (over <= deadline || speed >= BotTuning.MAX_TRAVEL_BPT) break
-                    speed = (speed * (over - b.t).toDouble() / (deadline - b.t).coerceAtLeast(1)).coerceAtMost(BotTuning.MAX_TRAVEL_BPT)
-                }
+                // Squeeze the walk to the slowest speed that makes the deadline, up to the planning maximum (a hold at a closed door does not squeeze).
+                var lo = speed; var hi = maxOf(speed, BotTuning.MAX_TRAVEL_BPT)
+                if (simulate(hi, false) > deadline) speed = hi
+                else { repeat(12) { val mid = (lo + hi) / 2; if (simulate(mid, false) <= deadline) hi = mid else lo = mid }; speed = hi }
             }
         }
         b.t = simulate(speed, true)
