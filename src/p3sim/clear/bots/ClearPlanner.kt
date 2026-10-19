@@ -203,6 +203,8 @@ class ClearPlanner(private val inp: PlannerInput) {
         var prevOpen = now
         // The tick the door before fell (planned or done), which the next door's gap is drawn from.
         var prevOpenT: Int? = null
+        // The last paid door still to open (its opener walks on from there).
+        var prevDoor: Int? = null
         var keysLeft = st.witherKeys
         for ((j, door) in paidDoors.withIndex()) {
             val keyRoom = keyRooms.getOrNull(j)
@@ -222,7 +224,11 @@ class ClearPlanner(private val inp: PlannerInput) {
             // From the entrance room's exit door, where the countdown leaves the party (Countdown), not from the room's middle.
             val exit = plan.doors.firstOrNull { it.kind == DoorKind.ENTRANCE }?.let { geo.doorPt(it.index) } ?: geo.centre(entrance)
             val travel = keyRoom?.let { ticksAtMax(geo.length(geo.route(exit, entrance, it))) } ?: 0
-            val lo = maxOf(now + 1, prevOpen + BotTuning.MIN_DOOR_GAP, keyReach + BotTuning.MIN_CLEAR_TICKS + keyUse + (if (j == 0) travel else 0))
+            // The opener has to get to the door too: from the exit door for the first, from the door before (once it can be passed) for the rest.
+            val doorSpot = geo.doorPt(door.index)
+            val openerWalk = prevDoor?.let { pdoor -> prevOpen + BotTuning.DOOR_PASSABLE_AFTER + ticksAtMax(geo.length(expand(geo.route(geo.doorPt(pdoor), nearRoom(pdoor), nearRoom(door.index), doorSpot)))) }
+                ?: ((reach[nearRoom(door.index)].takeIf { it < FAR } ?: now) + ticksAtMax(geo.length(expand(geo.route(exit, entrance, nearRoom(door.index), doorSpot)))))
+            val lo = maxOf(now + 1, prevOpen + BotTuning.MIN_DOOR_GAP, keyReach + BotTuning.MIN_CLEAR_TICKS + keyUse + (if (j == 0) travel else 0), openerWalk + BotTuning.OPEN_SETTLE)
             var openT: Int
             var keyT: Int
             if (keysLeft > 0) {
@@ -238,6 +244,7 @@ class ClearPlanner(private val inp: PlannerInput) {
             }
             pass[door.index] = openT + BotTuning.DOOR_PASSABLE_AFTER
             prevOpen = openT
+            prevDoor = door.index
             prevOpenT = openT
             paid += PaidDoor(door.index, keyRoom, keyT, openT, false, splitWanted)
         }
@@ -277,7 +284,7 @@ class ClearPlanner(private val inp: PlannerInput) {
     }
 
     /** Ticks to run from [from] (in [fromRoom]) to a door's gap at the planning maximum speed: the least a key-room-to-door walk can take. */
-    private fun walkTicks(from: Pt, fromRoom: Int, door: Int): Int = ticksAtMax(geo.length(geo.route(from, fromRoom, nearRoom(door), geo.doorPt(door))))
+    private fun walkTicks(from: Pt, fromRoom: Int, door: Int): Int = ticksAtMax(geo.length(expand(geo.route(from, fromRoom, nearRoom(door), geo.doorPt(door)))))
 
     /** Where an opener stands when the door falls: [BotTuning.OPENER_STAND_BLOCKS] from the gap, into the room on its near side. */
     private fun standPoint(door: Int, near: Int): Pt {
@@ -373,10 +380,11 @@ class ClearPlanner(private val inp: PlannerInput) {
         }
     }
 
-    /** Time for a seat at its position to walk to [to] (planning speed), or 0. */
+    /** Time for a seat at its position to walk to [to] at its own speed, round the rooms' contents and held at closed doors, or 0. */
     private fun geoTicks(b: Builder, to: Pt, toRoom: Int): Int {
-        val len = geo.length(geo.route(b.pos, b.room, toRoom, to))
-        return Math.ceil(len / (tables.moveBpt(b.seat.dungeonClass) * inp.speedScale).coerceAtLeast(0.1)).toInt()
+        val route = geo.route(b.pos, b.room, toRoom, to)
+        if (route.size < 2) return 0
+        return walkEnd(expand(route), b.t, (tables.moveBpt(b.seat.dungeonClass) * inp.speedScale).coerceAtLeast(0.1)) - b.t
     }
 
     /** A bot's visit to a key room: a normal room visit, timed so the last mob dies when the key is due. */
@@ -643,7 +651,9 @@ class ClearPlanner(private val inp: PlannerInput) {
         val route = expand(route0)
         fun simulate(speed: Double, commit: Boolean): Int = walkEnd(route, b.t, speed, if (commit) b.legs else null)
         var speed = bpt.coerceAtLeast(0.1)
-        if (deadline != null && deadline > b.t) {
+        // Already late: it hurries all the way.
+        if (deadline != null && deadline <= b.t) speed = maxOf(speed, BotTuning.MAX_TRAVEL_BPT)
+        else if (deadline != null) {
             val natural = simulate(speed, false)
             if (natural > deadline) {
                 // Squeeze the walk to the slowest speed that makes the deadline, up to the planning maximum (a hold at a closed door does not squeeze).

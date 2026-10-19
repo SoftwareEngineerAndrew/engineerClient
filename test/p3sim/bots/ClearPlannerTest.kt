@@ -82,7 +82,7 @@ class ClearPlannerTest {
             }
         }
         val share = split.toDouble() / total
-        assertTrue(share in 0.5..0.95, "the key is taken by another bot than the opener in $share of doors (recorded 0.77)")
+        assertTrue(share in 0.5..0.95, "the key is taken by another bot than the opener in $share of doors (recorded 0.84)")
     }
 
     @Test fun aLoneBotDoesBothAndStillGetsThereBeforeTheDoorFalls() {
