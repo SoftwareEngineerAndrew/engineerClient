@@ -116,3 +116,55 @@ object Leaps {
         return SeatTrack(s.seat, legs, s.acts)
     }
 }
+
+/**
+ * Teammates leaping into the blood camp: after the blood door, a teammate done with its rooms leaps to the one camping blood rather than
+ * walking there, posts its leap line and stands beside it till the camp ends.
+ *
+ * Measured (ADR, 245 F7 clears, teammates other than the recorder, "Leap(ed|ing) to X" between the blood door and the boss): 1.69 a run;
+ * p10/p50/p90 1000/287 ticks before the Watcher's "proven" line to 55 after (83% before it); to the blood door's opener 24%, to the recorder
+ * 14%, to someone else 62%. UNMEASURED: which teammate (here any bot far from the camper by [CAMP_TRY], at the drawn moment or as its last room ends); those
+ * after the "proven" line (not done: here every leap is before it).
+ */
+object CampLeaps {
+    /** Chance a bot that could leap into the camp does: all (with three bots out of the camp that gives about 0.8 a run on the real layouts, short of the recorded 1.69, where people also leap twice and to others than the camper). */
+    const val CAMP_TRY = 1.0
+    /** Leaps this soon after the blood door are left out (the camper has only just walked in). */
+    const val AFTER_DOOR = 20
+    /** The door id a camp leap carries ([Leap.door]): no door. */
+    const val NO_DOOR = -1
+
+    /** Ticks before the "proven" line a camp leap comes: the measured spread before it (p10 1000, p50 287), drawn piecewise. */
+    fun beforeProven(u: Double): Int = Math.round(PlanMath.curve(listOf(0.0 to 1300.0, 0.12 to 1000.0, 0.6 to 287.0, 1.0 to 0.0), u)).toInt()
+
+    /**
+     * The camp leaps of a plan and the tracks with them in: to [camper] (a bot seat camping the blood room), between [bloodOpenT] and
+     * [provenT]. [humans] are never moved.
+     */
+    fun add(tracks: List<SeatTrack>, camper: Int?, bloodOpenT: Int, provenT: Int, humans: Set<Int>, rnd: Random): Pair<List<SeatTrack>, List<Leap>> {
+        val camp = tracks.firstOrNull { it.seat == camper } ?: return tracks to emptyList()
+        val leaps = ArrayList<Leap>()
+        val out = tracks.map { s ->
+            if (s.seat == camper || s.seat in humans) return@map s
+            if (rnd.nextDouble() >= CAMP_TRY) return@map s
+            // At the drawn moment, or as its work ends if it is still busy then: a teammate still clearing does not leave it.
+            val workDone = (s.acts.maxOfOrNull { it.until } ?: Int.MIN_VALUE) + 1
+            val at = maxOf(provenT - beforeProven(rnd.nextDouble()), workDone, bloodOpenT + AFTER_DOOR)
+            if (at >= provenT) return@map s
+            val to = camp.positionAt(at)
+            if (s.positionAt(at).dist(to) < Leaps.MIN_BLOCKS) return@map s
+            val here = s.positionAt(at)
+            val gap = here.dist(to)
+            val land = to.lerp(here, minOf(1.0, Leaps.LAND_BESIDE / gap))
+            val legs = ArrayList<Leg>()
+            for (l in s.legs) {
+                if (l.t1 <= at) legs += l
+                else if (l.t0 < at) legs += Leg(l.t0, at, l.a, l.at(at), l.hop)
+            }
+            legs += Leg(at, maxOf(at, s.endT, camp.endT), land, land)
+            leaps += Leap(at, s.seat, camper!!, NO_DOOR)
+            SeatTrack(s.seat, legs, s.acts)
+        }
+        return out to leaps
+    }
+}
