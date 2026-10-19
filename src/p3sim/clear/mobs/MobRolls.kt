@@ -4,6 +4,7 @@ import com.engineerclient.p3sim.pack.mobs.HitQuantiles
 import com.engineerclient.p3sim.pack.mobs.HpScaleTable
 import com.engineerclient.p3sim.pack.mobs.MeleeTable
 import com.engineerclient.p3sim.pack.mobs.MobCell
+import com.engineerclient.p3sim.pack.mobs.MobLayout
 import com.engineerclient.p3sim.pack.mobs.MobModifier
 import com.engineerclient.p3sim.pack.mobs.RoomMobs
 import java.util.UUID
@@ -50,7 +51,27 @@ object MobRolls {
         var pick = rng.nextDouble() * total
         var chosen = pool.last()
         for ((i, w) in weights.withIndex()) { pick -= w; if (pick < 0.0) { chosen = pool[i]; break } }
-        return chosen.mobs.map { RolledMob(it.arch, it.star, it.x, it.y, it.z) }
+        val mobs = chosen.mobs.map { RolledMob(it.arch, it.star, it.x, it.y, it.z) }
+        // The unstarred mobs: most visits saw none of them (no tag over an unstarred mob, so most recorders never noticed them), a few saw
+        // the whole room (ADR: Flags 73 to 82 in 11 of 37 visits, 0 to 2 in the rest; Stairs 55 to 65; Hallway 76 to 89). A visit
+        // short of them takes the unstarred mobs of a complete one, minus any on a starred mob's block.
+        val full = completeUnstarred(pool)
+        if (full.isEmpty() || chosen in full) return mobs
+        val donor = full[rng.nextInt(full.size)]
+        val starred = mobs.filter { it.star }
+        val taken = starred.mapTo(HashSet()) { Triple(it.x, it.y, it.z) }
+        return starred + donor.mobs.filter { !it.star && Triple(it.x, it.y, it.z) !in taken }.map { RolledMob(it.arch, false, it.x, it.y, it.z) }
+    }
+
+    /** A recorded visit counts as a complete view of the unstarred mobs with at least half the most any visit of the room saw (and this many). */
+    const val MIN_FULL_UNSTARRED = 5
+
+    /** The visits of [pool] that saw the room's unstarred mobs whole (see [MIN_FULL_UNSTARRED]); empty for a room no visit saw many in. */
+    fun completeUnstarred(pool: List<MobLayout>): List<MobLayout> {
+        val counts = pool.map { l -> l.mobs.count { !it.star } }
+        val most = counts.maxOrNull() ?: 0
+        if (most < MIN_FULL_UNSTARRED) return emptyList()
+        return pool.filterIndexed { i, _ -> counts[i] * 2 >= most }
     }
 
     /**

@@ -2,6 +2,7 @@ package com.engineerclient.p3sim.mobs
 
 import com.engineerclient.p3sim.clear.mobs.MobPlanner
 import com.engineerclient.p3sim.clear.mobs.PlanParams
+import com.engineerclient.p3sim.clear.mobs.PlannedMob
 import com.engineerclient.p3sim.clear.mobs.SpawnMode
 import com.engineerclient.p3sim.pack.Rot
 import com.engineerclient.p3sim.pack.Tile
@@ -93,11 +94,17 @@ class MobPlannerTest {
     }
 
     @Test fun onlySomeMinibossRoomsHoldAMiniboss() {
+        val isBoss = { p: PlannedMob -> pack.archetype(p.arch)!!.cls == "miniboss" }
         var with = 0
-        repeat(400) { i -> if (MobPlanner.planRoom(pack, "Boss Room", null, south, params, Random(3000L + i)).isNotEmpty()) with++ }
+        repeat(400) { i -> if (MobPlanner.planRoom(pack, "Boss Room", null, south, params, Random(3000L + i)).any(isBoss)) with++ }
         assertEquals(MobPlanner.MINIBOSS_CHANCE, with / 400.0, 0.08)
-        // Chance zero: always empty, so nothing is required.
-        assertTrue(MobPlanner.planRoom(pack, "Boss Room", null, south, PlanParams(minibossChance = 0.0), Random(1)).isEmpty())
+        // Chance zero: never a miniboss, but the room's ordinary mobs still stand (an empty draw used to clear the whole room).
+        repeat(20) { i ->
+            val plans = MobPlanner.planRoom(pack, "Boss Room", null, south, PlanParams(minibossChance = 0.0), Random(1L + i))
+            assertTrue(plans.none(isBoss))
+        }
+        val rest = (0 until 20).sumOf { i -> MobPlanner.planRoom(pack, "Boss Room", null, south, PlanParams(minibossChance = 0.0), Random(1L + i)).size }
+        assertTrue(rest > 0, "the ordinary mobs of a miniboss room spawn without their miniboss")
     }
 
     @Test fun minibossesTakeTheRunHpScaleAndTheClearAssassinHasFourPointTwoMillion() {
