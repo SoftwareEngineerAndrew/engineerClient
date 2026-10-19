@@ -160,6 +160,9 @@ object BotsModule : AdsModule, BotService {
     @Volatile var session: Session? = null
         private set
 
+    /** A test driver's switch: the human only watches and bots fill every seat (a five-bot clear to measure against real runs). Off in play. */
+    @Volatile var devObserve = false
+
     private fun live(run: Run): Session? = session?.takeIf { it.run === run && it.active }
 
     override fun onRunStart(run: Run) {
@@ -220,6 +223,7 @@ object BotsModule : AdsModule, BotService {
 
     /** The human seats: the run's non-bot records (the engine adds them), else the players in the world. */
     private fun humansOf(run: Run): List<Triple<UUID, String, String?>> {
+        if (devObserve) return emptyList()
         val fromState = run.state.players.values.filter { !it.isBot }.map { Triple(it.uuid, it.name, it.dungeonClass) }
         if (fromState.isNotEmpty()) return fromState
         return try { Sim.players().map { Triple(it.uuid, it.gameProfile.name, Players.classOf(it).name) } } catch (t: Throwable) { emptyList() }
