@@ -130,9 +130,11 @@ object DamageModule : AdsModule, DamageService {
         combo.clear()
         mobLedger.clear(); regenCarry.clear(); shown.clear(); shields.clear(); dealt.clear(); milestonesShown.clear(); reviving.clear()
         rolls = run.subRandom("damage")
+        ClassAbilities.reset()
     }
 
     override fun onRunEnd(run: Run, reason: EndReason) {
+        ClassAbilities.reset()
         mobLedger.clear(); regenCarry.clear(); shields.clear(); dealt.clear(); milestonesShown.clear(); reviving.clear()
         EngineerClient.safely("ads damage end") {
             Masks.stopped()
@@ -142,6 +144,7 @@ object DamageModule : AdsModule, DamageService {
     }
 
     override fun restore(run: Run, data: JsonObject) {
+        ClassAbilities.reset()
         mobLedger.clear(); regenCarry.clear(); shown.clear(); shields.clear(); dealt.clear(); milestonesShown.clear(); reviving.clear()
         // A ghost the savepoint says is alive comes back with the rest of the party.
         for (rec in run.state.players.values) if (!rec.ghost) human(rec.uuid)?.let { p -> Sim.asPlayer(p) { if (Masks.ghost) Masks.reviveGhost(p, null) } }
@@ -166,6 +169,7 @@ object DamageModule : AdsModule, DamageService {
     override fun onTick(run: Run) {
         if (!run.stage.inDungeon) return
         val t = run.t
+        EngineerClient.safely("ads class abilities") { ClassAbilities.tick(run) }
         for ((id, line) in combo.expire(t)) if (line != null) human(id)?.let { p -> EngineerClient.safely("ads kill combo") { Sim.asPlayer(p) { Sim.chat(line) } } }
         for (rec in run.state.players.values.toList()) {
             if (PlayerLedger.reviveDue(rec, t)) { reviving.remove(rec.uuid); revive(run, rec.uuid, null); continue }
