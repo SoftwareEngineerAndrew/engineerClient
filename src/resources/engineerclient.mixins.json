@@ -45,6 +45,7 @@
     "P3SimWorldMixin",
     "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
+    "SimMoveGuardMixin",
     "SimActorMixin",
     "NumbersHandlerMixin",
     "ScoreboardSidebarMixin",

@@ -25,7 +25,14 @@ object StateText {
     val NO_KEY = Cue("entity.enderman.teleport", 8.0f, 0.0f, CueSource.HOSTILE)
 
     // ---- the start ---------------------------------------------------------------------------------------------------
-    fun ready(name: String) = "§a$name §7is now ready!"
+    /** "<name> is now ready!": the name in its rank colour, the rest green (ADR, as recorded: `§bSoloF7§r§a is now ready!`). */
+    fun ready(name: String, colour: String = "§b") = "$colour$name§r§a is now ready!"
+
+    /** "<name> is no longer ready!" (ADR: `§aJoeher47§r§c is no longer ready!`). */
+    fun notReady(name: String, colour: String = "§b") = "$colour$name§r§c is no longer ready!"
+
+    /** Mort's Ready Up window, a class picked (ADR: `§bp3wr§r§a selected the Mage Class!`). [cls] is the class word ("Mage"). */
+    fun selectedClass(name: String, colour: String, cls: String) = "$colour$name§r§a selected the $cls Class!"
 
     /** "Starting in 4 seconds." ... "Starting in 1 second." */
     fun startingIn(seconds: Int) = "§e§lStarting in $seconds ${if (seconds == 1) "second" else "seconds"}."

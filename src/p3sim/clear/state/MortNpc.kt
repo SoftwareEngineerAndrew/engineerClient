@@ -56,8 +56,12 @@ object MortNpc {
         return doubleArrayOf(bx + 0.5, 69.0, bz + 0.5, yaw.toDouble())
     }
 
+    /** Whether [e] is Mort or one of his name stands (a click on any of them is a click on him). */
+    fun owns(e: Entity): Boolean = made.any { it === e }
+
     fun spawn(plan: DungeonPlan) {
         remove()
+        ReadyUpMenu.reset()
         val at = spot(plan) ?: return
         home = at
         EngineerClient.safely("ads mort") {
