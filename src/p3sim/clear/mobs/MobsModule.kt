@@ -181,7 +181,7 @@ object MobsModule : AdsModule, MobService {
     // ---- the run lifecycle ---------------------------------------------------------------------------------------------
 
     override fun onRunStart(run: Run) {
-        FairyRoom.clear()
+        FairyRoom.clear(); RoomDecor.clear()
         discardAll()
         reset()
         val pack = run.packs.mobs
@@ -219,7 +219,7 @@ object MobsModule : AdsModule, MobService {
         // Nothing stands in the world before the run starts: the first bodies reach a real client at the start tick or up to 30 ticks after it.
         if (run.t < 0) return
         stage.tick()
-        if (stage === RealStage && run.stage.inDungeon && run.stage != RunStage.BOSS_ENTRY && run.stage != RunStage.BOSS) com.engineerclient.EngineerClient.safely("ads fairies") { FairyRoom.tick(run) }
+        if (stage === RealStage && run.stage.inDungeon && run.stage != RunStage.BOSS_ENTRY && run.stage != RunStage.BOSS) com.engineerclient.EngineerClient.safely("ads fairies") { FairyRoom.tick(run); RoomDecor.tick(run) }
         if (entries.isEmpty() || !stage.available() || run.stage == RunStage.BOSS_ENTRY || run.stage == RunStage.BOSS || run.stage == RunStage.END) return
         val pack = run.packs.mobs ?: return
         val players = run.state.alivePlayers()
@@ -430,7 +430,7 @@ object MobsModule : AdsModule, MobService {
     }
 
     override fun clearAll(run: Run) {
-        FairyRoom.clear()
+        FairyRoom.clear(); RoomDecor.clear()
         discardAll()
         reset()
     }
