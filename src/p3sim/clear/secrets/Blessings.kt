@@ -60,6 +60,16 @@ object Blessings {
     /** The type of a secret chest's blessing. */
     fun pickChest(random: Random): Blessing = draw(CHEST_WEIGHTS, random, Blessing.LIFE)
 
+    /**
+     * A blessing a dying mob drops (ADR, 1,178 pickups in 250 runs, 4.7 a run, every one level V with the run clock): Power 34 percent,
+     * Life 31, Wisdom 21, Stone 13. 61 percent print `A Blessing of X was picked up!` and `A Blessing of X V was found! (Ns)` with no name;
+     * the rest `<rank> <name> has obtained Blessing of X!` and the finder's `You found` / `<name> found a Blessing of X V! (Ns)`.
+     */
+    private val KILL_WEIGHTS = listOf(Blessing.POWER to 402, Blessing.LIFE to 370, Blessing.WISDOM to 252, Blessing.STONE to 154)
+    const val KILL_PICKED_UP_SHARE = 0.61
+
+    fun pickKill(random: Random): Blessing = draw(KILL_WEIGHTS, random, Blessing.POWER)
+
     /** The level a secret chest's blessing shows (I, II or V); Time is always V. */
     fun chestLevel(b: Blessing, random: Random): Int {
         var n = random.nextInt(CHEST_LEVEL_WEIGHTS.sumOf { it.second })
