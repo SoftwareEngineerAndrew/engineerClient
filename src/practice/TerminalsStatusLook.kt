@@ -30,12 +30,19 @@ object TerminalsStatusLook {
         desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
         .withDependency { adm }
 
+    private val forceCursorReset = BooleanSetting("Force Cursor Reset", false,
+        desc = "Opening a terminal always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again. Terminals only, no other menu. Added by engineerClient.")
+
+    /** Force Cursor Reset: read by Coffee Client's CursorReset. */
+    fun forcesCursorReset(): Boolean = TerminalsStatus.enabled && forceCursorReset.value
+
     private const val HUD_NAME = "Term Info"
 
-    /** Adds Look (first) and Simple Mode to Terminals Status, Odin's Show hidden with the ADM look, and reads the config again for them. */
+    /** Adds Look (first), Simple Mode and Force Cursor Reset (last) to Terminals Status, Odin's Show hidden with the ADM look, and reads the config again for them. */
     fun install() {
         TerminalsStatus.registerSetting(look)
         TerminalsStatus.registerSetting(simple)
+        TerminalsStatus.registerSetting(forceCursorReset)
         val all = LinkedHashMap(TerminalsStatus.settings)
         TerminalsStatus.settings.clear()
         all.remove(look.name)?.let { TerminalsStatus.settings[look.name] = it }
