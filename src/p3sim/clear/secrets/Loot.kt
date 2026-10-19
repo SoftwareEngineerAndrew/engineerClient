@@ -94,6 +94,27 @@ object LootTables {
     /** Chance that a cleared room drops a Revive Stone for the clearer. */
     const val ROOM_CLEAR_REVIVE = 0.01
 
+    // ---- mob kills ----------------------------------------------------------------------------------------------------------------
+    // The rest of the party-wide "has obtained" lines come when mobs die (a recorded own Blessing pickup arrives in the same tick as the
+    // Wither Key and the Beating Heart of the key mob): per run 4.14 Superboom TNT, 1.05 Revive Stones and 4.7 blessings (ADR, 5-player
+    // F7), against about 0.9 and 0.2 from room clears. A run kills about 170 starred mobs (the mob pack's starred p50 over a layout's
+    // rooms), so each starred kill drops at these rates. UNMEASURED: that only starred kills drop, and that kills drop evenly.
+    /** Chance that a starred mob's death drops Superboom TNT for its killer. */
+    const val KILL_SUPERBOOM = 0.019
+    /** Chance that it drops a Revive Stone. */
+    const val KILL_REVIVE = 0.005
+    /** Chance that it drops a blessing (level V, see [Blessings.pickKill]). */
+    const val KILL_BLESSING = 0.028
+
+    /** What a starred mob's death drops, or null for nothing. */
+    fun mobKill(random: Random): Drop? {
+        val u = random.nextDouble()
+        if (u < KILL_BLESSING) return Drop.Blessing(Blessings.pickKill(random))
+        if (u < KILL_BLESSING + KILL_SUPERBOOM) return superboom(random)
+        if (u < KILL_BLESSING + KILL_SUPERBOOM + KILL_REVIVE) return Drop.Item(LootItem.REVIVE_STONE)
+        return null
+    }
+
     /** A room clear's drop, or null for none (most rooms drop nothing). */
     fun roomClear(random: Random): Drop? {
         val u = random.nextDouble()

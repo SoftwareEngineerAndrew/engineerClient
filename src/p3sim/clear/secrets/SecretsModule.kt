@@ -812,6 +812,33 @@ object SecretsModule : AdsModule, SecretService {
         giveItem(rd, who(rd, clearer(rd, room)), drop.item, drop.count)
     }
 
+    /** A starred mob died to [killer]: maybe an item for them, or a blessing for the party (see [LootTables.mobKill]). */
+    private fun mobKillDrop(rd: RunData, killer: UUID) {
+        when (val drop = LootTables.mobKill(rd.dropRandom)) {
+            is Drop.Item -> giveItem(rd, who(rd, killer), drop.item, drop.count)
+            is Drop.Blessing -> grantKillBlessing(rd, who(rd, killer), drop.blessing)
+            else -> {}
+        }
+    }
+
+    /** A dropped blessing: always V with the run clock; nameless `was picked up` or the finder's `has obtained`; everyone gets the buff. */
+    private fun grantKillBlessing(rd: RunData, finder: Who, b: Blessing) {
+        val t = rd.run.t
+        val level = Blessings.OWN_LEVEL
+        val boost = SecretsSettings.blessingBoost
+        val nameless = rd.miscRandom.nextDouble() < Blessings.KILL_PICKED_UP_SHARE
+        if (!nameless) Services.channels.chat(Blessings.obtained(finder.label, b))
+        for (p in humans(rd)) {
+            val lines = ArrayList<String>()
+            if (nameless) { lines += Blessings.pickedUp(b); lines += Blessings.announceOwn(b, level, t) }
+            else lines += if (p.uuid == finder.uuid) Blessings.announceYouFound(b, level, t) else Blessings.announceOther(finder.name, b, level, finder.colour, t)
+            lines += Blessings.grantLines(b, level, boost)
+            for (l in lines) Services.channels.chat(l, Audience.Only(p.uuid))
+            rd.run.state.secrets.blessings.merge(b.name, level, Int::plus)
+            rd.run.bus.post(BlessingGranted(t, b.name, level, p.uuid))
+        }
+    }
+
     // ---- skulls and keys ----------------------------------------------------------------------------------------------------------
 
     private fun skullClick(rd: RunData, p: ServerPlayer, s: SecretSite): InteractionResult {
@@ -1043,6 +1070,7 @@ object SecretsModule : AdsModule, SecretService {
         if (event is MobKilled) {
             val room = event.mob.room
             if (room != null && event.mob.required) rd.lastKiller[room] = event.by
+            if (room != null && event.mob.starred && event.by != null && run.plan.rooms.getOrNull(room)?.type != RoomType.BLOOD) mobKillDrop(rd, event.by)
             return
         }
         if (event is RoomCleared) {
