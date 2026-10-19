@@ -54,9 +54,10 @@ object BotTuning {
 
     /**
      * Chance that the bot that kills a key room's last mob and takes the key is not the bot that opens the door (MEASURED: pairing the
-     * i-th "has obtained Wither Key!" with the i-th "opened a WITHER door!" of a game, 279 of 364 pairs name two different players).
+     * i-th "has obtained Wither Key!" with the i-th "opened a WITHER door!" of a game, 1132 of 1354 pairs in five-player F7 runs name two
+     * different players).
      */
-    const val KEY_SPLIT_CHANCE = 0.77
+    const val KEY_SPLIT_CHANCE = 0.84
 
     /**
      * How far from the door's gap the opener stands when the door falls, blocks, as quantiles of a uniform draw (MEASURED: the opener's

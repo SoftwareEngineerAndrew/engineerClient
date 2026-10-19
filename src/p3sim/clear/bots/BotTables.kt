@@ -30,8 +30,11 @@ class BotTables(private val pack: RunStatePack?, val floor: String = BotTuning.F
             DOOR_SHAPE)
     }
 
-    /** Ticks from a wither key being held to the door it opens falling (the opener's wait). */
-    fun keyToUse(): Dist = pack?.doors?.keyObtainToUse?.takeIf { !it.advisory } ?: PlanMath.around(DEFAULT_KEY_TO_USE, DOOR_SHAPE)
+    /**
+     * Ticks from a wither key being taken to another player opening its door, five-player parties ([KEY_TO_USE]). When the key's taker opens
+     * the door itself the planner adds its walk there, and that comes out at the recorded same-player gaps (p25/50/75 11, 19, 31).
+     */
+    fun keyToUse(): Dist = splits?.dists?.get("keyToUse")?.takeIf { !it.advisory } ?: KEY_TO_USE
 
     /**
      * Ticks from the last paid wither door falling to the blood key. It is the same at every door count (ADR, 321 five-player F7 runs: p50 48,
@@ -50,8 +53,7 @@ class BotTables(private val pack: RunStatePack?, val floor: String = BotTuning.F
     fun bloodKey(): Dist = splits?.bloodKey?.takeIf { !it.advisory } ?: pack?.doors?.bloodKeyAfterStart?.takeIf { !it.advisory } ?: PlanMath.around(DEFAULT_BLOOD_KEY, DOOR_SHAPE)
 
     /** Ticks from the blood key to the blood door falling. */
-    fun bloodDoorAfterKey(): Dist =
-        pack?.doors?.bloodDoorAfterKey?.takeIf { !it.advisory } ?: splits?.dists?.get("doorAfterKey")?.takeIf { !it.advisory } ?: PlanMath.around(DEFAULT_DOOR_AFTER_KEY, DOOR_SHAPE)
+    fun bloodDoorAfterKey(): Dist = splits?.dists?.get("bloodDoorAfterKey")?.takeIf { !it.advisory } ?: KEY_TO_USE
 
     // ---- the milestones the gate compares ---------------------------------------------------------------------------
 
@@ -134,6 +136,8 @@ class BotTables(private val pack: RunStatePack?, val floor: String = BotTuning.F
         val BLOOD_KEY_AFTER_LAST_DOOR = Dist(321, doubleArrayOf(0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 90.0, 95.0, 100.0),
             doubleArrayOf(18.0, 23.0, 26.0, 35.0, 51.0, 72.0, 90.0, 102.0, 178.0), 18.0, 178.0)
         private val GAP_PCT = doubleArrayOf(0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 90.0, 95.0, 100.0)
+        /** Measured (ADR, 1132 wither doors of five-player F7 runs, 2026-10): a key taken to another player opening its door, p0..p100 (the max capped at 120). */
+        val KEY_TO_USE = Dist(1132, GAP_PCT, doubleArrayOf(0.0, 1.0, 1.0, 2.0, 4.0, 15.0, 29.0, 37.0, 120.0), 0.0, 120.0)
         /** Measured (ADR, 321 five-player F7 runs, 2026-10): the first wither door, ticks after T0, p0..p100. */
         val FIRST_DOOR = Dist(321, GAP_PCT, doubleArrayOf(24.0, 34.0, 36.0, 45.0, 58.0, 78.0, 107.0, 127.0, 240.0), 24.0, 240.0)
         /**
