@@ -92,7 +92,7 @@ object MobsModule : AdsModule, MobService {
         sHealthData = host.registerSetting(BooleanSetting("Mobs Health Data", true, desc = "Writes a mob's HP into its body's health data too (Hypixel does), so recorders that read the entity data agree with the name tag."))
         sAttacks = host.registerSetting(BooleanSetting("Mobs Attack", true, desc = "Mobs that reach you hit you (through the damage ledger). Off: they walk and shoot at nothing."))
         sSpawnDistance = host.registerSetting(NumberSetting("Mobs Spawn Distance", 48, 16..160, 4, unit = " blocks", desc = "A room's mobs appear once a player is this close (recorded Hypixel bodies first appear at a median of 41 blocks, 85 percent within 3 chunks)."))
-        sMinibossChance = host.registerSetting(NumberSetting("Mobs Miniboss Chance", 50, 0..100, 5, unit = "%", desc = "How often a miniboss room really holds its miniboss (not measured: recordings show about half; a run has about one)."))
+        sMinibossChance = host.registerSetting(NumberSetting("Mobs Miniboss Chance", 65, 0..100, 5, unit = "%", desc = "How often a miniboss room really holds its miniboss (recordings: 67 percent of the visits that saw the room in full)."))
         sWakeRadius = host.registerSetting(NumberSetting("Mobs Wake Radius", 9.0, 1.0..16.0, 0.5, unit = " blocks", desc = "A sleeping Fels wakes when a player's body comes this close, in 3D (measured about 9, always awake at 8; only a body wakes it, not arrows or Implosion)."))
         sPartial = host.registerSetting(NumberSetting("Mobs Partial Weight", 0.25, 0.0..1.0, 0.05, desc = "How often a room replays a recording that only caught part of the room (fewer than half the usual stars), relative to a full one."))
         sMoverShare = host.registerSetting(NumberSetting("Mobs Mover Share", 40, 0..100, 5, unit = "%", desc = "Share of ordinary mobs that walk toward a player who comes close. Recordings: 33 to 45 percent of mobs seen 2 to 12 blocks away move."))
@@ -305,7 +305,7 @@ object MobsModule : AdsModule, MobService {
             val placement = room?.placement
             if (pack != null && room != null && placement != null && enabled()) {
                 val alias = run.packs.rooms?.let { r -> { n: String -> r.familyOf(n) } }
-                val params = PlanParams(run.config.floor, scale, if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 40) / 100.0, minibossChance = (sMinibossChance?.value ?: 50) / 100.0)
+                val params = PlanParams(run.config.floor, scale, if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 40) / 100.0, minibossChance = (sMinibossChance?.value ?: 65) / 100.0)
                 val plans = MobPlanner.planRoom(pack, room.name, alias, placement, params, run.subRandom("mobs.room.$roomIndex"))
                 for (pm in plans) register(run, pack, pm, roomIndex)
             }
