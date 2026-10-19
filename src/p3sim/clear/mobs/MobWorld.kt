@@ -334,8 +334,14 @@ internal object RealStage : MobStage {
     }
     override fun rescue(e: MobEntry) { e.body?.let { if (it.y < -8.0) it.snapTo(e.plan.x, e.plan.y, e.plan.z, e.plan.yaw, 0f) } }
 
-    /** Blocks per tick a unit of movement-speed attribute walks (a player's 0.1 is 4.317 blocks a second). */
+    /** Blocks per tick a unit of movement-speed attribute walks at full input (a player's 0.1 is 4.317 blocks a second). */
     private const val BPT_PER_ATTRIBUTE = 2.159
+
+    /**
+     * The speed a pathfinding mob needs to walk [bpt] blocks a tick. Its move control sets the speed and the forward input both to it, so it walks
+     * BPT_PER_ATTRIBUTE times its square (a zombie's 0.23 is 0.114, the 2.3 blocks a second it is known for), not times the speed as a player does.
+     */
+    internal fun mobSpeedFor(bpt: Double) = Math.sqrt(bpt.coerceAtLeast(0.0) / BPT_PER_ATTRIBUTE)
 
     override fun act(e: MobEntry, action: AiAction, targetY: Double, targetX: Double, targetZ: Double) {
         val body = e.body ?: return
@@ -375,7 +381,7 @@ internal object RealStage : MobStage {
                 val moved = e.lastNavX.isNaN() || Math.abs(e.lastNavX - x) + Math.abs(e.lastNavZ - z) > 1.0
                 if (e.navCooldown == 0 && (moved || body.navigation.isDone)) {
                     val attr = body.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED).coerceAtLeast(0.01)
-                    val mod = (speed / (attr * BPT_PER_ATTRIBUTE)).coerceIn(0.1, 6.0)
+                    val mod = (mobSpeedFor(speed) / attr).coerceIn(0.1, 6.0)
                     body.navigation.moveTo(x, y, z, mod)
                     e.navCooldown = 8; e.lastNavX = x; e.lastNavZ = z
                 }
