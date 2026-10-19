@@ -34,6 +34,9 @@ object ClearSim {
     /** The percents every comparison reports (the pack's QDist percents). */
     val PCT = doubleArrayOf(5.0, 25.0, 50.0, 75.0, 95.0)
 
+    /** Threads the gate plans on (a shared machine: a few, not every core). */
+    val GATE_THREADS = (Runtime.getRuntime().availableProcessors() / 4).coerceIn(1, 4)
+
     /** One simulated plan, reduced to the numbers that are compared. */
     class Sample(val bloodOpen: Double, val watcherDone: Double, val maxor: Double, val tilesDone: Double, val greenFrac: Double)
 
@@ -108,19 +111,23 @@ object ClearSim {
      */
     fun gate(dungeons: List<DungeonPlan>, tables: BotTables, runs: Int = 500, seed: Long = 7L, strategy: PartyStrategy = GateParking, workScale: Double = BotTuning.ROOM_WORK_SCALE, areas: RoomAreas? = null): Report {
         require(dungeons.isNotEmpty()) { "the gate needs at least one dungeon" }
-        val samples = ArrayList<Sample>(runs)
-        val problems = ArrayList<String>()
+        // Every run's seed is drawn first, in order, so the plans can be built on several threads and come out as they would one by one.
         val r = Random(seed)
-        for (i in 0 until runs) {
-            val d = dungeons[i % dungeons.size]
-            val rawSeed = r.nextLong()
-            try {
-                val plan = planFor(d, tables, rawSeed, strategy, null, FIVE, workScale, areas)
-                samples += sample(d, plan, tables, Random(rawSeed xor 0x5DEECE66DL))
-            } catch (e: Exception) {
-                if (problems.size < 3) problems += "A plan failed for ${d.layoutId}: ${e.message}"
-            }
-        }
+        val seeds = LongArray(runs) { r.nextLong() }
+        val pool = java.util.concurrent.ForkJoinPool(GATE_THREADS)
+        val outcomes: List<Any> = try {
+            pool.submit(java.util.concurrent.Callable {
+                (0 until runs).toList().parallelStream().map { i ->
+                    val d = dungeons[i % dungeons.size]
+                    try {
+                        val plan = planFor(d, tables, seeds[i], strategy, null, FIVE, workScale, areas)
+                        sample(d, plan, tables, Random(seeds[i] xor 0x5DEECE66DL)) as Any
+                    } catch (e: Exception) { "A plan failed for ${d.layoutId}: ${e.message}" }
+                }.collect(java.util.stream.Collectors.toList())
+            }).get()
+        } finally { pool.shutdown() }
+        val samples = outcomes.filterIsInstance<Sample>()
+        val problems = outcomes.filterIsInstance<String>().take(3)
         val rows = ArrayList<Row>()
         fun row(name: String, rec: Dist?, get: (Sample) -> Double, tol: Tolerance, note: String = "") {
             val sim = pctOf(samples.map(get).toDoubleArray())
