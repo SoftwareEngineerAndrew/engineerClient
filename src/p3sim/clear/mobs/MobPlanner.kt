@@ -83,8 +83,9 @@ object MobPlanner {
             val isBoss = { r: RolledMob -> pack.archetype(r.arch)?.cls == "miniboss" }
             val firstBoss = rolled.firstOrNull(isBoss)
             if (rng.nextDouble() >= p.minibossChance) {
-                // An empty miniboss room: nothing to kill, nothing required.
-                rolled = emptyList()
+                // No miniboss this run; the room's other mobs stand all the same (ADR: Spider, Hallway, Flags, Stairs... hold 20 to 80
+                // ordinary mobs with or without their miniboss).
+                rolled = rolled.filterNot(isBoss)
             } else {
                 val rest = rolled.filterNot(isBoss)
                 val bossArch = drawMinibossArch(pack, rng, p.deferred) ?: row?.arch ?: firstBoss?.arch
