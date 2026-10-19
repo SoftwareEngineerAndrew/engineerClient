@@ -71,7 +71,10 @@ class BotWorldImpl(private val run: Run, private val roster: Roster, private val
         val by = uuid(seat)
         val required = Services.mobs.inRoom(room).filter { it.required }
         val total = maxOf(rr.mobsRequired, required.size)
-        val alive = required.filter { it.alive }
+        // The mobs nearest a bot go first: those are the ones that came at the party (a real teammate kills what is on them), so a chaser does not
+        // trail a bot round the room while the kill count the plan times is taken from mobs still standing at the far wall.
+        val bots = roster.seats.filter { !it.isHuman }.mapNotNull { s -> uuid(s.index)?.let { state.players[it] } }.filter { !it.ghost }
+        val alive = required.filter { it.alive }.sortedBy { m -> bots.minOfOrNull { (it.x - m.x) * (it.x - m.x) + (it.z - m.z) * (it.z - m.z) } ?: 0.0 }
         val want = Math.ceil(fraction.coerceIn(0.0, 1.0) * total).toInt()
         var killed = total - alive.size
         for (m in alive) {
