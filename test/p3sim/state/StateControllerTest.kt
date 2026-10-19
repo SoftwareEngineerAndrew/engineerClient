@@ -83,14 +83,20 @@ class StateControllerTest {
         val r = Rig()
         r.until(4)
         assertEquals(CheckMark.NONE, r.room(0).check); assertEquals(CheckMark.NONE, r.room(1).check)
-        assertEquals(CheckMark.NONE, r.room(2).check, "the free door shows the room before the Fairy room")
-        assertEquals(CheckMark.GREEN, r.room(3).check, "the Fairy room goes straight from undiscovered to green")
+        assertEquals(CheckMark.UNDISCOVERED, r.room(2).check, "the free Fairy door shows neither side")
+        assertEquals(CheckMark.UNDISCOVERED, r.room(3).check)
         assertEquals(CheckMark.UNDISCOVERED, r.room(4).check)
-        assertEquals(3, r.run.state.counters.opened, "A, B and the Fairy room; the entrance never counts")
+        assertEquals(1, r.run.state.counters.opened, "A; the entrance never counts")
         r.until(10)
         assertEquals(CheckMark.GREEN, r.room(0).check, "the entrance turns green 5 ticks after it appears")
-        // opened = tiles of discovered rooms but the entrance (A, B, Fairy); completed = the Fairy room
-        assertEquals(3, r.run.state.counters.opened); assertEquals(1, r.run.state.counters.completed)
+        assertEquals(1, r.run.state.counters.opened); assertEquals(0, r.run.state.counters.completed)
+        assertEquals(0, r.run.state.counters.clearedPct)
+        // the Fairy room shows when someone walks in, straight to green
+        StatePlans.addPlayer(r.run, "Ann", x = DungeonFrame.tileCentre(3) + 0.5, z = DungeonFrame.tileCentre(0) + 0.5)
+        r.until(11)
+        assertEquals(CheckMark.GREEN, r.room(3).check, "the Fairy room goes straight from undiscovered to green")
+        // opened = tiles of discovered rooms but the entrance (A, Fairy); completed = the Fairy room
+        assertEquals(2, r.run.state.counters.opened); assertEquals(1, r.run.state.counters.completed)
         assertEquals(3, r.run.state.counters.clearedPct, "round(100 * 1 / 36)")
         assertEquals(listOf(RoomDiscovered(0, 0).javaClass), r.all<RoomDiscovered>().map { it.javaClass }.distinct())
     }
@@ -340,7 +346,7 @@ class StateControllerTest {
         a.mobsRequiredAlive = 0
         r.run.bus.post(MobKilled(r.run.t, MobRef(UUID.randomUUID(), "x", 1, true, true), ann.uuid))
         assertEquals(CheckMark.WHITE, a.check)
-        assertEquals(1 + 1 /* the Fairy room */, r.run.state.counters.completed)
+        assertEquals(1, r.run.state.counters.completed)
         a.secretsFound = 1; r.run.bus.post(SecretFound(r.run.t, 1, SecretKind.CHEST, ann.uuid, 0, 0, 0))
         assertEquals(CheckMark.WHITE, a.check)
         a.secretsFound = 2; r.run.bus.post(SecretFound(r.run.t, 1, SecretKind.ITEM, ann.uuid, 0, 0, 0))
@@ -557,8 +563,8 @@ class StateControllerTest {
 
     @Test fun aTrapRoomWithoutAPackRuleStillFinishesOnTheTimer() {
         val r = Rig(plan = StatePlans.trapPlan(Rot.SOUTH))       // default rules: no chestClears
-        r.until(5)
-        val at = r.room(2).tDiscovered!!                         // the free door showed the room at t=1
+        r.until(5); r.c.discover(2)
+        val at = r.room(2).tDiscovered!!
         r.until(at + 49); assertEquals(CheckMark.NONE, r.room(2).check)
         r.until(at + 51); assertEquals(CheckMark.WHITE, r.room(2).check, "the old pooled timer, so an older pack still plays")
     }
@@ -580,7 +586,7 @@ class StateControllerTest {
         r.until(5); r.c.discover(2)
         r.run.bus.post(PuzzleFailed(r.run.t, 0, 2, null, "wrong"))
         assertEquals(CheckMark.RED, r.room(2).check)
-        assertEquals(1, r.run.state.counters.completed, "red does not count as completed (only the Fairy room does)")
+        assertEquals(0, r.run.state.counters.completed, "red does not count as completed")
         r.run.bus.post(PuzzleSolved(r.run.t, 0, 2, null))
         assertEquals(CheckMark.GREEN, r.room(2).check)
     }
@@ -589,7 +595,7 @@ class StateControllerTest {
         val r = Rig()
         r.until(30)
         val (opened, completed) = RoomChecks.counters(r.run.state.rooms)
-        assertEquals(3, opened); assertEquals(1, completed)
+        assertEquals(1, opened); assertEquals(0, completed)
         assertEquals(36, r.run.state.counters.total)
     }
 
@@ -624,6 +630,6 @@ class StateControllerTest {
         val r = Rig()
         r.until(30)
         assertEquals(CheckMark.GREEN, r.room(0).check)
-        assertEquals(1, r.run.state.counters.completed)
+        assertEquals(0, r.run.state.counters.completed)
     }
 }

@@ -132,6 +132,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
                 if (step.index == 0) classDoubledLines()
                 fx.chat(StateText.mort(step.index)); fx.sound(StateText.MORT_LINE)
                 if (step.index == 0) run.requestStage(RunStage.CLEAR)
+                if (step.index == 1) MortNpc.blankNames(MortNpc.BLANK_AFTER_SECOND_LINE)
             }
             StartStep.EntranceDoorFalls -> plan.doors.filter { it.kind == DoorKind.ENTRANCE }.forEach { beginFall(it.index, null) }
             StartStep.FreeDoorFalls -> plan.doors.filter { it.kind == DoorKind.FAIRY }.forEach { beginFall(it.index, null) }
@@ -203,8 +204,10 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         val delay = if (d.kind == DoorKind.WITHER || d.kind == DoorKind.BLOOD) rules.keyDoorBarrierDelay else 0
         for (s in falls.begin(door, t, rules.barrierFor(d.kind), rules.firstBlockToRestTicks, delay)) applyStep(s)
         fx.spawnDoorDebris(d)
-        // A door that fell shows the rooms on both sides on the map.
-        discover(d.roomA); discover(d.roomB)
+        // A door that fell shows the rooms on both sides on the map. Not the Fairy door that falls at the start: the Fairy room shows when someone walks in
+        // (ADR, 180 runs: a median 15 ticks before the first map marker inside, 189 after the start) and the room across it when its own turn comes
+        // (416 layouts: a median 137 ticks after the start, 9% by 60).
+        if (d.kind != DoorKind.FAIRY) { discover(d.roomA); discover(d.roomB) }
         run.bus.post(DoorOpened(t, door, d.kind, by))
     }
 
