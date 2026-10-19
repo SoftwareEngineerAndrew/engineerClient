@@ -150,7 +150,9 @@ class ClearPlannerTest {
             for (tr in p.tracks) {
                 for ((a, b) in tr.legs.zipWithNext()) {
                     assertEquals(a.t1, b.t0, "seed $seed seat ${tr.seat}: a leg starts where the last ended")
-                    assertTrue(a.b.dist(b.a) < 1e-6, "seed $seed seat ${tr.seat}: a leg starts where the last ended in space (${a.b} vs ${b.a})")
+                    // A leap to the door opener is the one jump.
+                    val leap = p.leaps.any { it.seat == tr.seat && it.t == b.t0 }
+                    assertTrue(leap || a.b.dist(b.a) < 1e-6, "seed $seed seat ${tr.seat}: a leg starts where the last ended in space (${a.b} vs ${b.a})")
                 }
                 assertTrue(tr.legs.first().t0 <= 1)
             }
@@ -171,6 +173,7 @@ class ClearPlannerTest {
                 else -> {}
             }
             for (tr in p.tracks) for (t in 1..p.milestones.maxorT) {
+                if (p.leaps.any { it.seat == tr.seat && it.t == t }) continue   // a leap goes to the opener, wherever that is
                 val a = tr.positionAt(t - 1); val b = tr.positionAt(t)
                 for ((door, passable) in limits) {
                     if (t >= passable) continue

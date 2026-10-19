@@ -129,6 +129,10 @@ object BotsModule : AdsModule, BotService {
         val stands = HashMap<KeyKind, StandWatch>()
         val kept = ArrayList<String>()
         val steps = StepClock(run.subRandom("bots.steps"))
+        /** Leaps already posted ("seat:door"), and each bot's spelling of the line (its mod's, one for the run). */
+        val leapsSaid = HashSet<String>()
+        val leapSpelling = HashMap<Int, Double>()
+        val leapRandom = run.subRandom("bots.leaps")
         /** The teammate deaths still to come (none in most clears). */
         val deaths = ArrayList<TeamDeath>()
         /** When a mob lands a hit on a fighting teammate. */
@@ -284,7 +288,19 @@ object BotsModule : AdsModule, BotService {
             s.executor.tick(t)
         }
         move(run, s, t)
-        if (t >= 0) { health(run, s, t); doorCracks(run, s, t); standFallback(run, s, t) }
+        if (t >= 0) { health(run, s, t); doorCracks(run, s, t); standFallback(run, s, t); leapLines(run, s, t) }
+    }
+
+    /** A bot that has just leapt to the door opener posts it in party chat, as its mod would ([Leaps]). */
+    private fun leapLines(run: Run, s: Session, t: Int) {
+        for (l in s.plan.leaps) {
+            if (l.t !in t - 2..t || !s.leapsSaid.add("${l.seat}:${l.door}")) continue
+            val me = s.roster.uuids[l.seat]?.let { run.state.players[it] } ?: continue
+            if (me.ghost) continue
+            val to = s.roster.uuids[l.to]?.let { run.state.players[it] } ?: continue
+            val u = s.leapSpelling.getOrPut(l.seat) { s.leapRandom.nextDouble() }
+            Services.channels.chat("§9Party §8> ${PartyStyle.bracket(me)} ${me.name}§f: ${Leaps.line(to.name, u)}")
+        }
     }
 
     /** From the first tick of the countdown (run tick [t], negative): every bot's walk from the spawn block to its gate, and the drop from the spawn height. */
