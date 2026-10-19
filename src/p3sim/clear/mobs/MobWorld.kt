@@ -325,6 +325,13 @@ internal object RealStage : MobStage {
         MobWorld.follow(e)
         return doubleArrayOf(b.x, b.y, b.z)
     }
+    override fun canSee(e: MobEntry, x: Double, y: Double, z: Double): Boolean {
+        val b = e.body ?: return false
+        val lv = level ?: return false
+        val from = net.minecraft.world.phys.Vec3(b.x, b.y + b.eyeHeight, b.z)
+        val hit = lv.clip(net.minecraft.world.level.ClipContext(from, net.minecraft.world.phys.Vec3(x, y, z), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, net.minecraft.world.phys.shapes.CollisionContext.empty()))
+        return hit.type == net.minecraft.world.phys.HitResult.Type.MISS
+    }
     override fun rescue(e: MobEntry) { e.body?.let { if (it.y < -8.0) it.snapTo(e.plan.x, e.plan.y, e.plan.z, e.plan.yaw, 0f) } }
 
     /** Blocks per tick a unit of movement-speed attribute walks (a player's 0.1 is 4.317 blocks a second). */

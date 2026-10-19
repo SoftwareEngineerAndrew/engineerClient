@@ -19,38 +19,59 @@ class MobAiTest {
         val s = AiState()
         assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, tgt(5.0), s, null, p))
         assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, null, s, null, p))
-        assertEquals(AiAction.Melee, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, tgt(2.0), s, null, p))
-        // The swing starts a cooldown.
         assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, tgt(2.0), s, null, p))
+        assertEquals(AiAction.Melee, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, tgt(1.2), s, null, p))
+        // The swing starts a cooldown.
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, tgt(1.2), s, null, p))
     }
 
     @Test fun staticReachZeroTurnsStaticAttacksOff() {
         assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.3, tgt(1.0), AiState(), null, p.copy(staticReach = 0.0)))
     }
 
-    @Test fun aMoverChasesInsideTheAggroRadiusAndGivesUpPastTheLoseRadius() {
+    @Test fun aMoverChasesWhatItSeesInsideTheFollowRangeAndGivesUpPastIt() {
         val s = AiState()
-        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(20.0), s, null, p))
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(40.0), s, null, p))
+        // Unseen, or not looking this tick: no chase.
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(8.0, 0.0, 8.0, seen = false), s, null, p))
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(8.0, 0.0, 8.0), s, null, p, search = false))
         val a = MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(8.0, 0.0, 8.0), s, null, p)
         assertIs<AiAction.MoveTo>(a); assertEquals(8.0, a.x); assertEquals(0.3, a.speed)
-        // Still chasing at 20 (inside the lose radius), done at 30.
-        assertIs<AiAction.MoveTo>(MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(20.0, 0.0, 20.0), s, null, p))
-        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(30.0), s, null, p))
+        // Still chasing at 30 (inside the follow range), done at 40.
+        assertIs<AiAction.MoveTo>(MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(30.0, 0.0, 30.0), s, null, p))
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(40.0), s, null, p))
+    }
+
+    @Test fun aChaserForgetsATargetUnseenForThreeSeconds() {
+        val s = AiState()
+        assertIs<AiAction.MoveTo>(MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(10.0), s, null, p))
+        repeat(60) { assertIs<AiAction.MoveTo>(MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(10.0, 0.0, 10.0, seen = false), s, null, p, search = false)) }
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(10.0, 0.0, 10.0, seen = false), s, null, p, search = false))
     }
 
     @Test fun meleeSwingsOnACadence() {
         val s = AiState()
         var swings = 0
-        repeat(100) { if (MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(1.5), s, null, p) == AiAction.Melee) swings++ }
+        repeat(100) { if (MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, tgt(1.2), s, null, p) == AiAction.Melee) swings++ }
         assertEquals(5, swings)   // 100 ticks / 20
     }
 
     @Test fun archersStopAtRangeAndShoot() {
         val s = AiState()
         assertIs<AiAction.MoveTo>(MobAi.step(AiKind.RANGED, true, 0.0, 0.0, 0.27, tgt(11.9).let { AiTarget(11.9, 0.0, 11.9) }, s, null, p.copy(rangedRange = 8.0)))
+        // In range: it draws, and the first shot comes one interval later (1.8: 20 + 40 x 10 / 15 = 46 ticks), then every interval.
         val s2 = AiState()
-        assertEquals(AiAction.Shoot, MobAi.step(AiKind.RANGED, true, 0.0, 0.0, 0.27, tgt(10.0), s2, null, p))
-        assertEquals(AiAction.Idle, MobAi.step(AiKind.RANGED, true, 0.0, 0.0, 0.27, tgt(10.0), s2, null, p))
+        val shots = ArrayList<Int>()
+        for (t in 0 until 200) if (MobAi.step(AiKind.RANGED, true, 0.0, 0.0, 0.27, tgt(10.0), s2, null, p) == AiAction.Shoot) shots += t
+        assertEquals(46, MobAi.shotInterval(10.0, p))
+        assertEquals(listOf(46, 92, 138, 184), shots)
+        // A shooter that never walks still shoots what it sees, and nothing it does not.
+        val s3 = AiState()
+        var n = 0
+        repeat(100) { if (MobAi.step(AiKind.RANGED, false, 0.0, 0.0, 0.0, AiTarget(5.0, 0.0, 5.0, seen = it % 2 == 0 && false), s3, null, p) == AiAction.Shoot) n++ }
+        assertEquals(0, n)
+        repeat(100) { if (MobAi.step(AiKind.RANGED, false, 0.0, 0.0, 0.0, tgt(5.0), s3, null, p) == AiAction.Shoot) n++ }
+        assertTrue(n >= 2)
     }
 
     @Test fun theAssassinAppearsBehindItsTarget() {
