@@ -93,6 +93,12 @@ class PlacedDoor(
     val needsKey: Boolean get() = kind == DoorKind.WITHER || kind == DoorKind.BLOOD
 }
 
+/**
+ * Where a practice run starts: the one doorway of the practice room, on [side] (N E S W, world) of world tile ([tx], [tz]). The doorway
+ * is the room's only one; the gap behind it is bedrock.
+ */
+class PracticeStart(val tx: Int, val tz: Int, val side: Char)
+
 /** Why a layout could not be turned into a plan. [message] is plain English for the player. */
 class PlanFailure(val message: String)
 
@@ -112,6 +118,8 @@ class DungeonPlan(
     /** The Wither/Blood key stands seen in the recorded run (informational; the key plan is computed from the doors). */
     val recordedKeys: List<LayoutKey>,
     val puzzleNames: List<String>,
+    /** Set for a practice run (one room, no doors between rooms): where it is entered. */
+    val practice: PracticeStart? = null,
 ) {
     private val tileRoom: Map<Tile, PlacedRoom> = buildMap { for (r in rooms) for (t in r.tiles) put(t, r) }
     private val doorBySlot: Map<Triple<Char, Int, Int>, PlacedDoor> = doors.associateBy { Triple(it.axis, it.a.x, it.a.z) }

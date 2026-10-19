@@ -52,7 +52,7 @@ object RunStarter {
                 LayoutBrowserModel.Resolved.Nothing -> { reply("There is no recorded layout called ${src.id}. The start screen's layout browser lists them."); return }
             }
         }
-        when (val picked = LayoutPick.pick(config, layouts)) {
+        if (src !is LayoutSource.Practice) when (val picked = LayoutPick.pick(config, layouts)) {
             is LayoutPick.Result.Failed -> { reply(picked.message); return }
             is LayoutPick.Result.Ok -> picked.picked.warning?.let(reply)
         }

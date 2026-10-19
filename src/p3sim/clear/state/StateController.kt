@@ -24,6 +24,8 @@ sealed interface StartStep {
     /** The entrance room is discovered. */
     data object EntranceDiscovered : StartStep
     data object EntranceGreen : StartStep
+    /** A practice run's start: straight into the clear. */
+    data object PracticeGo : StartStep
 }
 
 /** A key stand on the floor, waiting for someone to pick it up. */
@@ -77,6 +79,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
 
     /** Plans the countdown: sets T0, schedules every line and door of the start. Call once, in `onRunStart`. */
     fun start() {
+        if (plan.practice != null) { startPractice(); return }
         val lead = rules.startLeadTicks
         val delay = cfg.countdownDelayTicks.coerceAtLeast(0)
         // "Starting in 4" -> "1 second" is 60 ticks (3 gaps of 20), "1 second" -> Mort is `lead`.
@@ -92,6 +95,16 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         schedule.add(0, StartStep.Mort(0)); schedule.add(0, StartStep.EntranceDiscovered)
         schedule.add(40, StartStep.Mort(1)); schedule.add(70, StartStep.Mort(2))
         schedule.add(rules.entranceNtoG, StartStep.EntranceGreen)
+        state.milestones.countdownStartTick = state.milestones.countdownStartTick ?: run.serverTick
+        refreshCounters()
+    }
+
+    /** Practice has no countdown, no Mort and no entrance: the clock starts now and the clear with it. */
+    private fun startPractice() {
+        run.setT0(run.serverTick)
+        lastT = run.t - 1
+        schedule.clear()
+        schedule.add(0, StartStep.PracticeGo)
         state.milestones.countdownStartTick = state.milestones.countdownStartTick ?: run.serverTick
         refreshCounters()
     }
@@ -124,6 +137,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
             StartStep.FreeDoorFalls -> plan.doors.filter { it.kind == DoorKind.FAIRY }.forEach { beginFall(it.index, null) }
             StartStep.EntranceDiscovered -> plan.entrance?.let { discover(it.index) }
             StartStep.EntranceGreen -> plan.entrance?.let { mark(it.index, CheckMark.GREEN) }
+            StartStep.PracticeGo -> run.requestStage(RunStage.CLEAR)
         }
     }
 

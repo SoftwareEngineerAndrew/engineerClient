@@ -119,6 +119,7 @@ object RunArgs {
             LayoutSource.Random -> "a random layout (seed ${c.seed})"
             is LayoutSource.Seed -> "the layout for seed ${l.seed}"
             is LayoutSource.Recorded -> "the recorded layout ${l.id}"
+            is LayoutSource.Practice -> "${l.room} (practice)"
         }
         val party = if (!c.bots || c.partySize <= 1) "you alone" else "${c.partySize} players with bots"
         val extras = buildList {

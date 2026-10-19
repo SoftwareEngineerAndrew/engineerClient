@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim.clear.ui
 
+import com.engineerclient.p3sim.run.RunConfig
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.p3sim.run.AdsClientContext
 import com.engineerclient.p3sim.run.AdsCommand
@@ -40,6 +41,12 @@ object UiModule : AdsModule {
             client = { start("seed", it) }),
         AdsCommand("layout", "/ads run layout <id> [options]", "Starts a full run on a recorded layout by its id (a start of the id is enough).", requiresSim = false,
             client = { start("layout", it) }),
+        AdsCommand("practice", "/ads run practice <room>", "Practises one puzzle or room alone (its name, as Odin shows it). Without a name: the practice screen.", requiresSim = false,
+            client = { ctx ->
+                val name = ctx.args.joinToString(" ").trim()
+                if (name.isEmpty()) mc.execute { mc.gui.setScreen(PracticeScreen(null)) }
+                else mc.execute { RunStarter.start(RunConfig(layout = com.engineerclient.p3sim.run.LayoutSource.Practice(name), seed = drawSeed(), bots = false, partySize = 1), ctx.reply) }
+            }),
         AdsCommand("restart", "/ads run restart [room]", "Goes back to the run's start, or with \"room\" to when you entered the room you are in. Same dungeon, no rebuild.",
             server = { restart(it) }),
         AdsCommand("savepoint", "/ads run savepoint", "Takes a savepoint now.", server = { savepoint(it) }),

@@ -38,6 +38,8 @@ object LayoutPick {
                 }
                 Result.Ok(Picked(l, null, warning))
             }
+            // A practice room is planned by PracticePlan from every layout that has it, not picked as one layout.
+            is LayoutSource.Practice -> Result.Failed("Practice builds one room, not a layout.")
         }
     }
 

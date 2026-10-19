@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 class UiModuleTest {
     @Test fun theRunCommandsAreTheDocumentedOnes() {
         val cmds = UiModule.fullRunCommands()
-        assertEquals(listOf("start", "random", "seed", "layout", "restart", "savepoint", "savepoints", "restore"), cmds.map { it.name })
+        assertEquals(listOf("start", "random", "seed", "layout", "practice", "restart", "savepoint", "savepoints", "restore"), cmds.map { it.name })
         assertEquals(cmds.size, cmds.map { it.name }.toSet().size)
         for (c in cmds) assertTrue(c.usage.startsWith("/ads run ${c.name}"), c.usage)
     }
