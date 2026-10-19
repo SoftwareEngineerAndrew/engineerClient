@@ -72,6 +72,8 @@ class AiState {
     var unseen = 0
     /** A shooter has drawn: its first shot comes when [cooldown] runs out (1.8 waits one interval before the first). */
     var drawn = false
+    /** Ticks in a row a chasing shooter has seen its target (1.8 EntityAIArrowAttack: it keeps walking at it until 20, even in range). */
+    var seeTime = 0
     /** Server ticks until the next swing or shot. */
     var cooldown = 0
     var sinceTeleport = 0
@@ -90,12 +92,15 @@ class AiTarget(val x: Double, val z: Double, val dist: Double, val seen: Boolean
  * that is not chasing walks it. Sleepers are handled by the caller (an asleep Fels never reaches this).
  */
 object MobAi {
+    /** Ticks a chasing shooter must have seen its target before it stops to shoot (1.8 EntityAIArrowAttack). */
+    const val SEE_BEFORE_STOP = 20
+
     /** [search]: this tick the mob looks for a target (the caller rolls [AiParams.searchChance]). */
     fun step(kind: AiKind, mover: Boolean, x: Double, z: Double, speed: Double, target: AiTarget?, state: AiState, loop: List<DoubleArray>?, p: AiParams, search: Boolean = true): AiAction {
         if (state.cooldown > 0) state.cooldown--
         state.sinceTeleport++
         if (target == null) {
-            state.chasing = false; state.drawn = false
+            state.chasing = false; state.drawn = false; state.seeTime = 0
             return patrol(x, z, state, loop, p, mover)
         }
         if (!mover && kind != AiKind.TELEPORT) {
@@ -106,7 +111,7 @@ object MobAi {
         }
         if (state.chasing) {
             state.unseen = if (target.seen) 0 else state.unseen + 1
-            if (target.dist > p.loseRadius || state.unseen > p.unseenMemory) { state.chasing = false; state.unseen = 0; state.drawn = false }
+            if (target.dist > p.loseRadius || state.unseen > p.unseenMemory) { state.chasing = false; state.unseen = 0; state.drawn = false; state.seeTime = 0 }
         } else if (search && target.seen && target.dist <= p.aggroRadius) state.chasing = true
         if (!state.chasing) return patrol(x, z, state, loop, p, mover)
         return when (kind) {
@@ -119,7 +124,14 @@ object MobAi {
                     AiAction.Teleport(target.x + dx / len * 1.5, target.z + dz / len * 1.5)
                 } else if (target.dist <= p.meleeReach) attack(kind, target, state, p) else AiAction.MoveTo(target.x, target.z, speed)
             }
-            AiKind.RANGED -> if (target.dist <= p.rangedRange && target.seen) shoot(target, state, p) else { state.drawn = false; AiAction.MoveTo(target.x, target.z, speed) }
+            AiKind.RANGED -> {
+                state.seeTime = if (target.seen) state.seeTime + 1 else 0
+                if (target.dist <= p.rangedRange && target.seen) {
+                    // 1.8 draws as it comes in range but walks on until it has seen the target for [SEE_BEFORE_STOP] ticks (the first shot is later anyway).
+                    val act = shoot(target, state, p)
+                    if (state.seeTime < SEE_BEFORE_STOP && act != AiAction.Shoot) AiAction.MoveTo(target.x, target.z, speed) else act
+                } else { state.drawn = false; AiAction.MoveTo(target.x, target.z, speed) }
+            }
             AiKind.MELEE -> if (target.dist <= p.meleeReach) attack(kind, target, state, p) else AiAction.MoveTo(target.x, target.z, speed)
         }
     }
