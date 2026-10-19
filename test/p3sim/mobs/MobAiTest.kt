@@ -74,6 +74,13 @@ class MobAiTest {
         assertTrue(n >= 2)
     }
 
+    @Test fun anArcherWalksOnUntilItHasSeenItsTargetForASecond() {
+        val s = AiState()
+        val acts = (0 until 30).map { MobAi.step(AiKind.RANGED, true, 0.0, 0.0, 0.27, tgt(10.0), s, null, p) }
+        assertTrue(acts.take(MobAi.SEE_BEFORE_STOP - 1).all { it is AiAction.MoveTo }, "walks while it has seen the target less than a second")
+        assertTrue(acts.drop(MobAi.SEE_BEFORE_STOP).none { it is AiAction.MoveTo }, "then stands")
+    }
+
     @Test fun theAssassinAppearsBehindItsTarget() {
         val s = AiState()
         var teleport: AiAction.Teleport? = null
