@@ -61,6 +61,8 @@ class PlannerInput(
     val startAt: Map<Int, Pt> = emptyMap(),
     /** The floor of a room as a bot can walk it (from the room's blocks); null: the bots wander over the room's tiles. */
     val areas: RoomAreas? = null,
+    /** Wither doors people opened since the last plan: the bots may leap to them. */
+    val people: List<PersonDoor> = emptyList(),
 )
 
 /**
@@ -157,7 +159,7 @@ class ClearPlanner(private val inp: PlannerInput) {
         val walked = builders.values.filter { !it.seat.isHuman }.map { SeatTrack(it.seat.index, it.legs, it.acts.sortedBy { a -> a.t }) }
         // ---- teammates leap to the door opener (after everything else, so the draws above stay as they were) -----------------
         val bloodDoor = plan.doors.firstOrNull { it.kind == DoorKind.BLOOD }?.index
-        val (tracks, leaps) = Leaps.add(walked, doorPlans.values.filter { it.openT >= now }, bloodDoor, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), leapWorld, Random(rnd.nextLong()))
+        val (tracks, leaps) = Leaps.add(walked, doorPlans.values.filter { it.openT >= now }, bloodDoor, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), leapWorld, Random(rnd.nextLong()), inp.people)
         return ClearPlan(inp.seats, tracks, rooms, doorPlans, milestones.copy(bloodSeat = bloodSeat), now, inp.assignment, leaps)
     }
 
