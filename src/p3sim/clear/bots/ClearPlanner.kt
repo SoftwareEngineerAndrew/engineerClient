@@ -161,7 +161,7 @@ class ClearPlanner(private val inp: PlannerInput) {
         val bloodDoor = plan.doors.firstOrNull { it.kind == DoorKind.BLOOD }?.index
         val (tracks, leaps) = Leaps.add(walked, doorPlans.values.filter { it.openT >= now }, bloodDoor, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), leapWorld, Random(rnd.nextLong()), inp.people)
         // ---- and, once their rooms are done, into the blood camp ------------------------------------------------------------
-        val (camped, campLeaps) = CampLeaps.add(tracks, bloodSeat, maxOf(now, milestones.bloodOpenT), milestones.watcherDoneT, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), Random(rnd.nextLong()))
+        val (camped, campLeaps) = CampLeaps.add(tracks, bloodSeat, milestones.bloodOpenT, milestones.watcherDoneT, now, inp.seats.filter { it.isHuman }.map { it.index }.toSet(), plan.seed)
         return ClearPlan(inp.seats, camped, rooms, doorPlans, milestones.copy(bloodSeat = bloodSeat), now, inp.assignment, (leaps + campLeaps).sortedBy { it.t })
     }
 
