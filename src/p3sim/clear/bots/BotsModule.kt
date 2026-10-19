@@ -135,6 +135,9 @@ object BotsModule : AdsModule, BotService {
         val leapsSaid = HashSet<String>()
         val leapSpelling = HashMap<Int, Double>()
         val leapRandom = run.subRandom("bots.leaps")
+        /** Blood camp mobs to the tick the bot camping blood kills them ([CampKills]). */
+        val campDeath = HashMap<java.util.UUID, Int>()
+        val campRandom = run.subRandom("bots.camp")
         /** Wither doors the player opened that the next plan has not seen yet (the bots may leap to them). */
         val personDoors = ArrayList<PersonDoor>()
         /** The teammate deaths still to come (none in most clears). */
@@ -294,7 +297,26 @@ object BotsModule : AdsModule, BotService {
             s.executor.tick(t)
         }
         move(run, s, t)
-        if (t >= 0) { health(run, s, t); doorCracks(run, s, t); standFallback(run, s, t); leapLines(run, s, t) }
+        if (t >= 0) { health(run, s, t); doorCracks(run, s, t); standFallback(run, s, t); leapLines(run, s, t); campKills(run, s, t) }
+    }
+
+    /**
+     * The bot camping blood kills the camp's mobs as they come down, when no person is in the room to do it: each dies a drawn time after it
+     * first stands in the room ([CampKills.life]). Without this a camp a bot holds never ends but by the blood module's safety timeout.
+     */
+    private fun campKills(run: Run, s: Session, t: Int) {
+        val seat = s.plan.milestones.bloodSeat ?: return
+        val blood = run.plan.blood?.index ?: return
+        val uuid = s.roster.uuids[seat] ?: return
+        val me = run.state.players[uuid] ?: return
+        if (me.ghost || run.plan.roomAtBlock(me.x, me.z)?.index != blood || s.world.humanInside(blood)) return
+        for (m in Services.mobs.inRoom(blood)) {
+            if (!m.alive || m.kind == CampKills.WATCHER) continue
+            val due = s.campDeath.getOrPut(m.id) { t + CampKills.life(s.campRandom.nextDouble()) }
+            if (t < due) continue
+            Services.damage.hurtMob(run, m.id, maxOf(m.hp, m.maxHp, 1.0) * 2.0, DamageSource.MELEE, uuid)
+            killFx(seat, m.x, m.y, m.z)
+        }
     }
 
     /** A bot that has just leapt to the door opener posts it in party chat, as its mod would ([Leaps]). */
