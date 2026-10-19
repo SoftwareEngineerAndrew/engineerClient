@@ -23,6 +23,9 @@ object SimServer {
     @Volatile var server: MinecraftServer? = null
         private set
 
+    /** A test driver's per-tick hook (end of every server tick), so it acts on exact ticks even while the server sprints. Null in play. */
+    @Volatile var devTick: ((MinecraftServer) -> Unit)? = null
+
     /** The sim's world: named p3sim and opened by the mod (or built by it before), never just any world of that name. */
     fun isSim(server: MinecraftServer?): Boolean =
         server is IntegratedServer && server.worldData.levelName == SimWorld.NAME &&
@@ -86,6 +89,7 @@ object SimServer {
         ServerTickEvents.END_SERVER_TICK.register { s ->
             if (s === server) {
                 EngineerClient.safely("p3sim tick") { Fight.tick(s) }
+                devTick?.let { t -> EngineerClient.safely("ads dev tick") { t(s) } }
                 // The lag layer last: it stalls this thread (a freeze) once the tick's work is done.
                 EngineerClient.safely("ads lag") { com.engineerclient.p3sim.run.EngineModule.lagTick(s) }
             }
