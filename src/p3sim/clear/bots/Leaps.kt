@@ -5,6 +5,9 @@ import kotlin.random.Random
 /** A teammate's leap: at [t] seat [seat] teleports to seat [to], who opened wither door [door] a moment before. */
 class Leap(val t: Int, val seat: Int, val to: Int, val door: Int)
 
+/** A wither door a person opened at [t], standing at [at]: the bots may leap to them as to a bot opener. */
+class PersonDoor(val door: Int, val seat: Int, val t: Int, val at: Pt)
+
 /** What the leap pass needs from the plan's geometry. */
 interface LeapWorld {
     /** Whether the walk from [from] to [to] goes through door [door]. */
@@ -53,19 +56,20 @@ object Leaps {
 
     /**
      * The leaps of a plan and the tracks with them in. [doors] are the plan's door schedule (wither doors only are leapt after; [blood] names the
-     * blood door to leave out), [humans] the seats that are people (never moved, never leapt to here).
+     * blood door to leave out), [humans] the seats that are people (never moved), [people] the doors people have just opened (leapt to where they
+     * stood, since what they do next is not known).
      */
-    fun add(tracks: List<SeatTrack>, doors: Collection<DoorPlan>, blood: Int?, humans: Set<Int>, world: LeapWorld, rnd: Random): Pair<List<SeatTrack>, List<Leap>> {
+    fun add(tracks: List<SeatTrack>, doors: Collection<DoorPlan>, blood: Int?, humans: Set<Int>, world: LeapWorld, rnd: Random, people: List<PersonDoor> = emptyList()): Pair<List<SeatTrack>, List<Leap>> {
         val byseat = tracks.associateBy { it.seat }.toMutableMap()
         val leaps = ArrayList<Leap>()
-        val wither = doors.filter { it.door != blood }.sortedBy { it.openT }
+        class Opened(val door: Int, val seat: Int, val openT: Int, val where: (Int) -> Pt?)
+        val wither = (doors.filter { it.door != blood && it.seat !in humans }.map { d -> Opened(d.door, d.seat, d.openT) { t -> byseat[d.seat]?.positionAt(t) } } +
+            people.filter { it.door != blood }.map { p -> Opened(p.door, p.seat, p.t) { p.at } }).sortedBy { it.openT }
         for ((i, d) in wither.withIndex()) {
             // Leaps of one door are over before the next opens (the opener may leap after it, which would move the spot).
             val nextOpen = wither.getOrNull(i + 1)?.openT ?: Int.MAX_VALUE
-            if (d.seat in humans) continue
-            val opener = byseat[d.seat] ?: continue
             val at = d.openT + gap(rnd.nextDouble())
-            val to = opener.positionAt(at)
+            val to = d.where(at) ?: continue
             for (s in byseat.values.sortedBy { it.seat }.toList()) {
                 if (s.seat == d.seat || s.seat in humans) continue
                 if (rnd.nextDouble() >= TRY) continue
@@ -73,7 +77,7 @@ object Leaps {
                 var from = at
                 while (true) { val busy = s.acts.firstOrNull { it.t <= from && from <= it.until } ?: break; from = busy.until + 1 }
                 if (from - d.openT > LATEST || from >= nextOpen) continue
-                val tr = leapOf(s, from, if (from == at) to else opener.positionAt(from), d.door, world) ?: continue
+                val tr = leapOf(s, from, if (from == at) to else d.where(from) ?: continue, d.door, world) ?: continue
                 byseat[s.seat] = tr
                 leaps += Leap(from, s.seat, d.seat, d.door)
             }

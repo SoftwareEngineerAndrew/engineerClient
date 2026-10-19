@@ -133,6 +133,8 @@ object BotsModule : AdsModule, BotService {
         val leapsSaid = HashSet<String>()
         val leapSpelling = HashMap<Int, Double>()
         val leapRandom = run.subRandom("bots.leaps")
+        /** Wither doors the player opened that the next plan has not seen yet (the bots may leap to them). */
+        val personDoors = ArrayList<PersonDoor>()
         /** The teammate deaths still to come (none in most clears). */
         val deaths = ArrayList<TeamDeath>()
         /** When a mob lands a hit on a fighting teammate. */
@@ -253,7 +255,9 @@ object BotsModule : AdsModule, BotService {
         val assignment = BotStrategies.assignment(strategy, ctx)
         // A bot that is a ghost does no work until it is back: its rooms and doors go to the others.
         val seats = s.roster.seats.filter { seat -> seat.isHuman || s.roster.uuids[seat.index]?.let { run.state.players[it]?.ghost } != true }
-        return ClearPlanner(PlannerInput(run.plan, s.tables, seats, rnd, assignment, state, speedScale(), BotTuning.ROOM_WORK_SCALE, s.traversals, s.gates, s.areas)).build()
+        val people = s.personDoors.map { PersonDoor(it.door, it.seat, maxOf(it.t, state.now), it.at) }
+        s.personDoors.clear()
+        return ClearPlanner(PlannerInput(run.plan, s.tables, seats, rnd, assignment, state, speedScale(), BotTuning.ROOM_WORK_SCALE, s.traversals, s.gates, s.areas, people)).build()
     }
 
     override fun onStage(run: Run, from: RunStage?, to: RunStage) {
@@ -512,6 +516,12 @@ object BotsModule : AdsModule, BotService {
                 val byHuman = event.by != null && s.roster.seatOf(event.by)?.isHuman == true
                 val planned = s.plan.doors[event.door]
                 if (byHuman && planned != null && planned.openT > t + 10) schedule(s, t, "the player opened door ${event.door}")
+                // The bots may leap to the player as to a bot opener (the next plan works it in).
+                if (byHuman && run.plan.doors.getOrNull(event.door)?.kind == DoorKind.WITHER) {
+                    val seat = s.roster.seatOf(event.by!!)!!
+                    val rec = run.state.players[event.by]
+                    if (rec != null) { s.personDoors += PersonDoor(event.door, seat.index, t, Pt(rec.x, rec.z)); schedule(s, t, "the player opened door ${event.door} (leaps)") }
+                }
             }
             is RoomCleared, is RoomGreen -> {
                 val room = if (event is RoomCleared) event.room else (event as RoomGreen).room

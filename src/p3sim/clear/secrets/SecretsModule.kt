@@ -213,7 +213,7 @@ object SecretsModule : AdsModule, SecretService {
     }
 
     override fun onRunEnd(run: Run, reason: com.engineerclient.p3sim.run.EndReason) {
-        FloorDrops.clear()
+        FloorDrops.clear(); WallDebris.clear()
         data?.takeIf { it.run === run }?.let { discardEntities(it) }
     }
 
@@ -226,7 +226,7 @@ object SecretsModule : AdsModule, SecretService {
         if (now % 20 == 0) { applyFixes(rd); sendOwedLids(rd) }
         if (now - rd.lastSpawnPass >= SPAWN_PERIOD) { rd.lastSpawnPass = now; spawnPass(rd) }
         tickBonusMobs(rd)
-        FloorDrops.tick(run)
+        FloorDrops.tick(run); WallDebris.tick()
         tickItems(rd)
         tickBats(rd)
         tickWalls(rd, now)
@@ -347,6 +347,11 @@ object SecretsModule : AdsModule, SecretService {
     /** Odin's bat secret detection listens for the bat's death sound at exactly this volume (a kill plays only the death sound, as recorded). */
     private const val BAT_VOLUME = 0.1f
 
+    /** The block leaving a wall cell flies off as debris ([WallDebris]). */
+    private fun debris(x: Int, y: Int, z: Int) {
+        RunBlocks.get(x, y, z)?.let { WallDebris.spawn(x, y, z, it) }
+    }
+
     private fun tickWalls(rd: RunData, now: Int) {
         if (rd.walls.isEmpty()) return
         val it = rd.walls.iterator()
@@ -354,7 +359,7 @@ object SecretsModule : AdsModule, SecretService {
             val (due, cells) = it.next()
             if (now < due) continue
             it.remove()
-            for (c in cells) setOrFix(rd, c.x, c.y, c.z, Blocks.AIR.defaultBlockState())
+            for (c in cells) { debris(c.x, c.y, c.z); setOrFix(rd, c.x, c.y, c.z, Blocks.AIR.defaultBlockState()) }
         }
     }
 
@@ -570,7 +575,7 @@ object SecretsModule : AdsModule, SecretService {
         if (!rd.groups.destroy(g)) return 0
         val air = Blocks.AIR.defaultBlockState()
         val first = (if (aim == null) g.cells.firstOrNull() else g.cells.minByOrNull { sq(it.x - aim.x) + sq(it.y - aim.y) + sq(it.z - aim.z) })
-        if (first != null) setOrFix(rd, first.x, first.y, first.z, air)
+        if (first != null) { debris(first.x, first.y, first.z); setOrFix(rd, first.x, first.y, first.z, air) }
         val rest = g.cells.filter { it !== first }
         if (rest.isNotEmpty()) rd.walls += (rd.run.serverTick + 1) to rest
         if (g.kind == GroupKind.CRYPT) rd.book.crypt(g.room, by)

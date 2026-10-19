@@ -47,6 +47,25 @@ class LeapsTest {
         assertTrue(seen > 0, "the fixture has leaps")
     }
 
+    @Test fun botsLeapToAPersonWhoOpenedADoor() {
+        val dungeon = BotFixtures.dungeon()
+        val geo = PlanGeometry(dungeon)
+        val door = dungeon.pathDoors.first { it.kind == DoorKind.WITHER }
+        var toPerson = 0
+        for (seed in 1L..60L) {
+            val first = ClearPlanner(PlannerInput(dungeon, tables, humanParty, Random(seed))).build()
+            val t = first.doors.getValue(door.index).openT - 5
+            val person = PersonDoor(door.index, 0, t, geo.doorPt(door.index))
+            val plan = ClearPlanner(PlannerInput(dungeon, tables, humanParty, Random(seed), people = listOf(person))).build()
+            for (l in plan.leaps.filter { it.to == 0 }) {
+                toPerson++
+                assertTrue(l.t > t && l.door == door.index)
+                assertTrue(assertNotNull(plan.track(l.seat)).positionAt(l.t).dist(person.at) < 2.0, "seed $seed: lands beside the person")
+            }
+        }
+        assertTrue(toPerson > 0, "somebody leaps to the person")
+    }
+
     @Test fun realPackLeapersPerDoorAreAsRecorded() {
         val dir = System.getenv("ADS_REAL_PACKS")?.let { Path.of(it) }?.takeIf { Files.isDirectory(it) }
         assumeTrue(dir != null, "ADS_REAL_PACKS not set")
