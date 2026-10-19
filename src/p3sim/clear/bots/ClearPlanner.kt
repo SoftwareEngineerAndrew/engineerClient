@@ -81,6 +81,8 @@ class ClearPlanner(private val inp: PlannerInput) {
     private val pace = PlanMath.Pace(Random(rnd.nextLong()), BotTuning.PACE_CORRELATION)
     private val roomPace = PlanMath.Pace(Random(rnd.nextLong()), BotTuning.ROOM_PACE_CORRELATION)
     private val pick = Random(rnd.nextLong())
+    /** The door-to-door and last-door-to-blood-key gaps: independent of the party's pace (ADR: rank correlation with the door before 0.0 to 0.17). */
+    private val gaps = Random(rnd.nextLong())
 
     private val entrance: Int = plan.entrance?.index ?: plan.rooms.firstOrNull()?.index ?: 0
     private val fairy: Int? = plan.fairy?.index
@@ -199,11 +201,17 @@ class ClearPlanner(private val inp: PlannerInput) {
         val botCount = inp.seats.count { !it.isHuman }
         val paid = ArrayList<PaidDoor>()
         var prevOpen = now
+        // The tick the door before fell (planned or done), which the next door's gap is drawn from.
+        var prevOpenT: Int? = null
         var keysLeft = st.witherKeys
         for ((j, door) in paidDoors.withIndex()) {
             val keyRoom = keyRooms.getOrNull(j)
             val already = pass[door.index]
-            if (already != null) { paid += PaidDoor(door.index, keyRoom, now, (already - BotTuning.DOOR_PASSABLE_AFTER).coerceAtLeast(0), true); prevOpen = maxOf(prevOpen, already); continue }
+            if (already != null) {
+                val openedAt = (already - BotTuning.DOOR_PASSABLE_AFTER).coerceAtLeast(0)
+                paid += PaidDoor(door.index, keyRoom, now, openedAt, true); prevOpen = maxOf(prevOpen, already); prevOpenT = openedAt
+                continue
+            }
             val splitWanted = botCount >= 2 && pick.nextDouble() < BotTuning.KEY_SPLIT_CHANCE
             val u = pace.u()
             var keyUse = tables.keyToUse().sample(roomPace.u()).roundToInt().coerceAtLeast(1)
@@ -211,7 +219,9 @@ class ClearPlanner(private val inp: PlannerInput) {
             if (!splitWanted && keyRoom != null) keyUse = maxOf(keyUse, walkTicks(geo.centre(keyRoom), keyRoom, door.index) + BotTuning.OPEN_SETTLE)
             val reach = reachNow()
             val keyReach = keyRoom?.let { reach[it].takeIf { r -> r < FAR } ?: now } ?: now
-            val travel = keyRoom?.let { ticksAtMax(geo.length(geo.route(geo.centre(entrance), entrance, it))) } ?: 0
+            // From the entrance room's exit door, where the countdown leaves the party (Countdown), not from the room's middle.
+            val exit = plan.doors.firstOrNull { it.kind == DoorKind.ENTRANCE }?.let { geo.doorPt(it.index) } ?: geo.centre(entrance)
+            val travel = keyRoom?.let { ticksAtMax(geo.length(geo.route(exit, entrance, it))) } ?: 0
             val lo = maxOf(now + 1, prevOpen + BotTuning.MIN_DOOR_GAP, keyReach + BotTuning.MIN_CLEAR_TICKS + keyUse + (if (j == 0) travel else 0))
             var openT: Int
             var keyT: Int
@@ -220,11 +230,14 @@ class ClearPlanner(private val inp: PlannerInput) {
                 keysLeft--
                 openT = lo.coerceAtLeast(now + keyUse); keyT = now
             } else {
-                openT = maxOf(tables.doorOpen(j + 1).sample(u).roundToInt(), lo)
+                // The first door from its own table (with the party's pace); each later one a recorded gap after the door before it.
+                val drawn = prevOpenT?.let { it + tables.doorGap(j + 1).sample(gaps.nextDouble()) } ?: (if (j == 0) tables.firstDoor() else tables.doorOpen(j + 1)).sample(u)
+                openT = maxOf(drawn.roundToInt(), lo)
                 keyT = (openT - keyUse).coerceAtLeast(keyReach + BotTuning.MIN_CLEAR_TICKS)
             }
             pass[door.index] = openT + BotTuning.DOOR_PASSABLE_AFTER
             prevOpen = openT
+            prevOpenT = openT
             paid += PaidDoor(door.index, keyRoom, keyT, openT, false, splitWanted)
         }
 
@@ -234,7 +247,9 @@ class ClearPlanner(private val inp: PlannerInput) {
         val reach = reachNow()
         val lastPaid = paid.maxOfOrNull { it.openT } ?: now
         val keyFloor = maxOf(now + 1, lastPaid + BotTuning.OPENER_LEAD + 4, (bloodKeyRoom?.let { reach[it].takeIf { r -> r < FAR } } ?: 0) + BotTuning.MIN_CLEAR_TICKS)
-        val bloodKeyT = maxOf(tables.bloodKey().sample(pace.u()).roundToInt(), keyFloor)
+        // After the last paid door by the recorded gap (it does not depend on how many doors there were); with no paid door, from T0.
+        val keyDraw = if (paid.isNotEmpty()) lastPaid + tables.bloodKeyAfterLastDoor().sample(gaps.nextDouble()) else tables.bloodKey().sample(pace.u())
+        val bloodKeyT = maxOf(keyDraw.roundToInt(), keyFloor)
         val bloodAlready = bloodDoor?.let { pass[it.index] }
         val bloodSplit = botCount >= 2 && pick.nextDouble() < BotTuning.KEY_SPLIT_CHANCE
         var doorAfterKey = tables.bloodDoorAfterKey().sample(roomPace.u()).roundToInt().coerceAtLeast(1)
@@ -306,12 +321,12 @@ class ClearPlanner(private val inp: PlannerInput) {
         val crewSeats = setOfNotNull(first.index, second?.index)
         val killers = bots.filter { it.index !in crewSeats && builders[it.index] != null }
         if (killers.isNotEmpty()) {
-            val busyUntil = HashMap<Int, Int>(); val roomAt = HashMap<Int, Int>()
+            val busyUntil = HashMap<Int, Int>(); val roomAt = HashMap<Int, Int>(); val lastStart = HashMap<Int, Int>()
             val wanted = crewDoors.filter { it.splitWanted && it.keyRoom != null }.map { Triple(it.door, it.keyRoom!!, it.keyT) } +
                 (if (bloodPending && ms.bloodSplit && ms.bloodDoor != null && ms.bloodKeyRoom != null) listOf(Triple(ms.bloodDoor, ms.bloodKeyRoom, ms.milestones.bloodKeyT)) else emptyList())
             // A room that is already done, that the human has taken, or whose "mobs" are a puzzle stays with the opener's own key kill.
             val keyRoomOk = { room: Int -> room !in st.white && room !in st.green && room !in st.humanRooms && plan.rooms.firstOrNull { it.index == room }?.type != RoomType.PUZZLE }
-            for ((door, keyRoom, keyT) in wanted) {
+            for ((door, keyRoom, keyT) in wanted.sortedBy { it.third }) {
                 if (!keyRoomOk(keyRoom)) continue
                 // The free bot that reaches the room soonest, if it gets there in time to kill the last mob when the key is due.
                 val tries = killers.map { k ->
@@ -329,7 +344,9 @@ class ClearPlanner(private val inp: PlannerInput) {
                 val b = builders.getValue(best.first.index)
                 val pr = plan.rooms.first { it.index == keyRoom }
                 val whiteEst = ((tables.roomToWhite(pr)?.median ?: (tables.roomDur(pr, best.first.dungeonClass).median / 5.0)) * inp.workScale).toInt()
-                val startBy = maxOf(b.t, keyT - whiteEst - (best.second - b.t) - 20)
+                // Keys come in key order; a killer's later key never starts before its earlier one (a slow room's early start ran it first).
+                val startBy = maxOf(b.t, keyT - whiteEst - (best.second - b.t) - 20, (lastStart[best.first.index] ?: Int.MIN_VALUE) + 1)
+                lastStart[best.first.index] = startBy
                 killerRooms += keyRoom
                 b.duties += Duty(startBy) { bb -> keyVisit(bb, pr, keyT, rooms) }
             }

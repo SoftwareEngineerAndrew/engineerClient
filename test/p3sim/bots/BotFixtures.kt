@@ -59,7 +59,7 @@ object BotFixtures {
      "rooms":{"Room A":{"type":"normal","shape":"1x1","tiles":1,"secretsMax":3,"dur":${q7(60, 100, 200, 400, 600, 900, 1200)},"toWhite":${q7(10, 15, 30, 50, 90, 140, 200)}},
               "Side 2":{"type":"normal","shape":"1x1","tiles":1,"secretsMax":5,"dur":${q7(150, 200, 350, 600, 900, 1300, 1600)}}},
      "doors":{"keyObtainToUseTicks":${q(1, 2, 5, 18, 40)},"blood":{"keyAfterStartTicks":${q(180, 240, 300, 380, 520)},"doorAfterKeyTicks":${q(1, 2, 5, 15, 40)}}},
-     "splits":{"F7":{"bloodKey":${q(180, 240, 300, 380, 520)},"bloodOpen":${q(190, 250, 310, 390, 540)},"watcherDone":${q(1000, 1200, 1400, 1600, 1800)},
+     "splits":{"F7":{"bloodKey":${q(180, 240, 300, 380, 520)},"bloodKeyAfterLastDoor":${q(40, 70, 100, 140, 220)},"bloodOpen":${q(190, 250, 310, 390, 540)},"watcherDone":${q(1000, 1200, 1400, 1600, 1800)},
                  "maxorEntry":${q(1200, 1400, 1600, 1800, 2200)},"campTicks":${q(800, 900, 1000, 1100, 1200)},"provenToMaxor":${q(60, 80, 100, 120, 140)},
                  "tilesDoneAtMaxor":${q(10, 11, 12, 13, 14)},"roomsGreenFracAtMaxor":${q(0.5, 0.6, 0.7, 0.8, 0.9)},"perType":{"BLOOD":{"greenFrac":0.47}}}},
      "timing":{"roomTypeDur":{"NORMAL":${q(60, 280, 490, 880, 1500)},"PUZZLE":${q(40, 140, 280, 370, 700)},"TRAP":${q(160, 190, 220, 270, 440)},"CHAMPION":${q(2, 17, 30, 50, 120)}},

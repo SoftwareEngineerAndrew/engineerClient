@@ -65,9 +65,10 @@ class PlanExecutorTest {
         val w = FakeWorld(); w.keys = false
         val ex = PlanExecutor(p, w)
         val door = p.doors.values.minBy { it.openT }
+        val theDoor = door.door
         var calls = 0
         val counting = object : BotWorld by w {
-            override fun openDoor(seat: Int, door: Int): Boolean { calls++; return w.openDoor(seat, door) }
+            override fun openDoor(seat: Int, door: Int): Boolean { if (door == theDoor) calls++; return w.openDoor(seat, door) }
         }
         val ex2 = PlanExecutor(p, counting)
         for (t in 0..door.openT + 100) ex2.tick(t)

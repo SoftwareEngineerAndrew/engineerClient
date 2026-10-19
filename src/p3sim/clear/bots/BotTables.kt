@@ -33,7 +33,20 @@ class BotTables(private val pack: RunStatePack?, val floor: String = BotTuning.F
     /** Ticks from a wither key being held to the door it opens falling (the opener's wait). */
     fun keyToUse(): Dist = pack?.doors?.keyObtainToUse?.takeIf { !it.advisory } ?: PlanMath.around(DEFAULT_KEY_TO_USE, DOOR_SHAPE)
 
-    /** Ticks after T0 that the blood key is picked up. */
+    /**
+     * Ticks from the last paid wither door falling to the blood key. It is the same at every door count (ADR, 321 five-player F7 runs: p50 48,
+     * 58, 50, 41, 32 with 2 to 6 doors), so the key is drawn after the doors: a short layout's blood comes early and a long one's late.
+     * The measured tables here and below are built in; a run-state pack's `splits.<floor>` entry of the same name (`doorGap2`..) takes over.
+     */
+    fun bloodKeyAfterLastDoor(): Dist = splits?.dists?.get("bloodKeyAfterLastDoor")?.takeIf { !it.advisory } ?: BLOOD_KEY_AFTER_LAST_DOOR
+
+    /** Ticks from the paid wither door before to the [k]-th (k ≥ 2) falling: the recorded gap, not a time from T0 (see [DOOR_GAPS]). */
+    fun doorGap(k: Int): Dist = splits?.dists?.get("doorGap$k")?.takeIf { !it.advisory } ?: DOOR_GAPS[(k - 2).coerceIn(0, DOOR_GAPS.size - 1)]
+
+    /** Ticks after T0 that the first paid wither door falls in a five-player party (the pack's table mixes in smaller parties, 4 ticks slower). */
+    fun firstDoor(): Dist = splits?.dists?.get("firstDoor")?.takeIf { !it.advisory } ?: FIRST_DOOR
+
+    /** Ticks after T0 that the blood key is picked up (a layout with no paid door). */
     fun bloodKey(): Dist = splits?.bloodKey?.takeIf { !it.advisory } ?: pack?.doors?.bloodKeyAfterStart?.takeIf { !it.advisory } ?: PlanMath.around(DEFAULT_BLOOD_KEY, DOOR_SHAPE)
 
     /** Ticks from the blood key to the blood door falling. */
@@ -117,6 +130,23 @@ class BotTables(private val pack: RunStatePack?, val floor: String = BotTuning.F
         const val DEFAULT_KEY_TO_USE = 6.0
         const val DEFAULT_BLOOD_KEY = 300.0
         const val DEFAULT_DOOR_AFTER_KEY = 6.0
+        /** Measured (ADR, 321 five-player F7 runs, 2026-10): the blood key after the last wither door, p0/5/10/25/50/75/90/95/100. */
+        val BLOOD_KEY_AFTER_LAST_DOOR = Dist(321, doubleArrayOf(0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 90.0, 95.0, 100.0),
+            doubleArrayOf(18.0, 23.0, 26.0, 35.0, 51.0, 72.0, 90.0, 102.0, 178.0), 18.0, 178.0)
+        private val GAP_PCT = doubleArrayOf(0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 90.0, 95.0, 100.0)
+        /** Measured (ADR, 321 five-player F7 runs, 2026-10): the first wither door, ticks after T0, p0..p100. */
+        val FIRST_DOOR = Dist(321, GAP_PCT, doubleArrayOf(24.0, 34.0, 36.0, 45.0, 58.0, 78.0, 107.0, 127.0, 240.0), 24.0, 240.0)
+        /**
+         * Measured (ADR, five-player F7, 2026-10): the gap from the paid door before to the 2nd, 3rd, 4th and 5th-or-later door, p0..p100.
+         * A door's time is the one before it plus a gap that hardly depends on it (rank correlation 0.01 to 0.17), so drawing door k from
+         * its own T0 table and clamping it behind door k-1 ran a four-door clear 36 ticks late at its last door.
+         */
+        val DOOR_GAPS = listOf(
+            Dist(319, GAP_PCT, doubleArrayOf(26.0, 35.0, 42.0, 54.0, 71.0, 96.0, 117.0, 137.0, 246.0), 26.0, 246.0),
+            Dist(273, GAP_PCT, doubleArrayOf(28.0, 34.0, 38.0, 48.0, 62.0, 86.0, 120.0, 137.0, 184.0), 28.0, 184.0),
+            Dist(149, GAP_PCT, doubleArrayOf(26.0, 29.0, 34.0, 46.0, 58.0, 68.0, 96.0, 118.0, 231.0), 26.0, 231.0),
+            Dist(72, GAP_PCT, doubleArrayOf(26.0, 29.0, 33.0, 39.0, 52.0, 62.0, 75.0, 82.0, 124.0), 26.0, 124.0),
+        )
         // INVENTED stand-ins for the blood room's length and the wait after it: round numbers with a symmetric spread, not measured. A real
         // run reads both from the run-state pack; these only keep the planner working without one.
         const val DEFAULT_CAMP_TICKS = 1000.0
