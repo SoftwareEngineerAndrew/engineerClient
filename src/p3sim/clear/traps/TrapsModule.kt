@@ -34,7 +34,7 @@ import java.util.UUID
  * rooms that disable abilities.
  *
  * Every room whose design lists crushers or tripwires (the two trap rooms and a few dozen ordinary rooms with one of the two) gets a
- * [RoomHazards] clock that runs while a human is inside. The crushers are written as blocks through the room's placement and grow as arms of
+ * [RoomHazards] clock that runs while a player (a bot too) is inside. The crushers are written as blocks through the room's placement and grow as arms of
  * layers; a player inside an arm takes 30 percent of max HP, and a player who touches a tripwire in one of the rooms where real strings were
  * seen to hit ([TrapTimings.tripwireHurtRooms]) takes 15 percent as true damage (`DamageSource.TRAP`) at once, with Hypixel's
  * "The Tripwire Trap hit you for N damage!" line. Strings in every other room only flip their hooks.
@@ -66,7 +66,7 @@ object TrapsModule : AdsModule, TrapService {
 
     /** One room with hazards, in a run. */
     private class Entry(val room: PlacedRoom, val placement: Placement, val hazards: RoomHazards, val banks: List<ArrowBank> = emptyList(), val wake: DoubleArray? = null) {
-        /** The arrow banks' own clock: it runs while a human is inside [wake] (the world box x0, z0, x1, z1 around the dispensers, grown by the arrow range), not only inside the room. */
+        /** The arrow banks' own clock: it runs while a player (a bot too) is inside [wake] (the world box x0, z0, x1, z1 around the dispensers, grown by the arrow range), not only inside the room. */
         var bankClock = 0
     }
 
@@ -178,7 +178,9 @@ object TrapsModule : AdsModule, TrapService {
     override fun onTick(run: Run) {
         if (run.stage != RunStage.CLEAR && run.stage != RunStage.BLOOD) return
         if (entries.isEmpty()) return
-        val humans = run.state.players.values.filter { !it.isBot && !it.ghost }
+        // Teammates run a room's hazards as much as you do (ADR: a crusher kept moving while only a teammate was in its room, 1,100 ticks after the
+        // recorder had left it), so bots count for the clocks; only people are hurt (the bots' damage is on their own schedule).
+        val present = run.state.players.values.filter { !it.ghost }
         humanIds = run.state.players.values.filter { !it.isBot }.mapTo(HashSet()) { it.uuid }
         // Arrows that hit a human since the last tick.
         if (arrowHits.isNotEmpty()) {
@@ -186,22 +188,22 @@ object TrapsModule : AdsModule, TrapService {
             for (id in ids) strike(run, HazardHit(id, HazardKind.ARROW))
         }
         for (e in entries) {
-            val inside = humans.mapNotNull { p ->
+            val inside = present.mapNotNull { p ->
                 if (run.state.roomAt(p.x, p.z)?.index != e.room.index) return@mapNotNull null
                 val c = Frames.toCanonical(e.placement, p.x, p.z) ?: return@mapNotNull null
                 PlayerPos(p.uuid, c.first, p.y, c.second)
             }
             if (inside.isNotEmpty()) {
                 val r = e.hazards.tick(inside)
-                handle(run, e, r.edits, r.hits, r.cues, r.debris, r.volleys, r.flames)
+                handle(run, e, r.edits, r.hits.filter { it.player in humanIds }, r.cues, r.debris, r.volleys, r.flames)
             }
-            // The arrow banks beat on their own clock while a human is near enough to see them, in the room or beside it.
+            // The arrow banks beat on their own clock while a player is near enough to see them, in the room or beside it.
             val w = e.wake
-            if (w != null && humans.any { it.x >= w[0] && it.x <= w[2] && it.z >= w[1] && it.z <= w[3] }) {
+            if (w != null && present.any { it.x >= w[0] && it.x <= w[2] && it.z >= w[1] && it.z <= w[3] }) {
                 e.bankClock++
                 val out = HazardOut()
                 for (b in e.banks) b.tick(e.bankClock, emptyList(), out)
-                handle(run, e, out.edits, out.hits, out.cues, out.debris, out.volleys, out.flames)
+                handle(run, e, out.edits, out.hits.filter { it.player in humanIds }, out.cues, out.debris, out.volleys, out.flames)
             }
         }
     }
