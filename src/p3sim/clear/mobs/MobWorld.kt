@@ -342,7 +342,8 @@ internal object RealStage : MobStage {
         when (action) {
             AiAction.Idle -> stop(body)
             is AiAction.MoveTo -> move(e, body, action.x, if (e.ai.chasing && !targetY.isNaN()) targetY else body.y, action.z, action.speed)
-            AiAction.Melee, AiAction.Shoot -> faceAndSwing(body, targetX, targetZ)
+            // A swing or a shot is made standing: a fake player would otherwise keep the walk it had and push into its target.
+            AiAction.Melee, AiAction.Shoot -> { stop(body); faceAndSwing(body, targetX, targetZ) }
             is AiAction.Teleport -> body.snapTo(action.x, if (targetY.isNaN()) body.y else targetY, action.z, body.yRot, 0f)
         }
     }
