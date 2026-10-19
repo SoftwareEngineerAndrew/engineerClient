@@ -27,7 +27,7 @@ object LayoutBuilder {
     /** The door kind of every slot between two rooms; the keys are the layout's slots. */
     fun doorKinds(plan: DungeonPlan): Map<Slot, DoorKind> = plan.doors.associate { Slot(it.axis, it.a.x, it.a.z) to it.kind }
 
-    fun build(plan: DungeonPlan, rooms: RoomPack): Result {
+    fun build(plan: DungeonPlan, rooms: RoomPack, doors: Map<Slot, DoorKind> = doorKinds(plan)): Result {
         val instances = ArrayList<RoomInstance>(plan.rooms.size)
         for (r in plan.rooms) {
             val design = r.design ?: return Result.Failed("${r.name} has no design in the room library, so ${plan.layoutId} cannot be built.")
@@ -35,7 +35,7 @@ object LayoutBuilder {
             val volume = rooms.volumeFor(design, r.variantId) ?: return Result.Failed("The blocks of ${r.name} (${design.id}) could not be read from the room library, so ${plan.layoutId} cannot be built.")
             instances += RoomInstance(design, volume, placement)
         }
-        return Result.Ok(assemble(instances, doorKinds(plan), rooms, plan.seed))
+        return Result.Ok(assemble(instances, doors, rooms, plan.seed))
     }
 
     /** Assembles instances you already have (the spike builds its rooms by hand). [rooms] is only used to check what Odin will make of each tile. */

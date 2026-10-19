@@ -33,6 +33,7 @@ object LayoutModule : AdsModule, LayoutService {
     override fun plan(config: RunConfig, packs: PackSet): DungeonPlan.Result {
         val layouts = packs.layouts ?: return DungeonPlan.Result.Failed(PlanFailure("The layout pool is not loaded, so there is no dungeon to build."))
         val rooms = packs.rooms ?: return DungeonPlan.Result.Failed(PlanFailure("The room library is not loaded, so there is no dungeon to build."))
+        (config.layout as? LayoutSource.Practice)?.let { return com.engineerclient.p3sim.run.PracticePlan.build(it.room, layouts, config.seed, rooms, packs.runstate, config.floor) }
         return when (val picked = LayoutPick.pick(config, layouts)) {
             is LayoutPick.Result.Failed -> DungeonPlan.Result.Failed(PlanFailure(picked.message))
             is LayoutPick.Result.Ok -> DungeonPlan.build(picked.picked.layout, config.seed, rooms, packs.runstate)
@@ -42,9 +43,20 @@ object LayoutModule : AdsModule, LayoutService {
     /** The dungeon's blocks as a world region (name `dungeon`), or null when a room's blocks cannot be read. Decodes the layout's volumes. */
     override fun region(plan: DungeonPlan, packs: PackSet): WorldRegion? {
         val rooms = packs.rooms ?: return null
-        return when (val b = LayoutBuilder.build(plan, rooms)) {
+        val practice = plan.practice
+        val start = practice?.let { DoorGeometry.slotOf(it.tx, it.tz, it.side) }
+        val doors = if (start != null) mapOf(start to com.engineerclient.p3sim.pack.layouts.DoorKind.NORMAL) else LayoutBuilder.doorKinds(plan)
+        return when (val b = LayoutBuilder.build(plan, rooms, doors)) {
             is LayoutBuilder.Result.Failed -> { org.slf4j.LoggerFactory.getLogger("engineerclient").warn("[ads] layout: {}", b.message); null }
-            is LayoutBuilder.Result.Ok -> LayoutRegion("dungeon", b.built.instances, b.built.edits, rooms.textures)
+            is LayoutBuilder.Result.Ok -> LayoutRegion("dungeon", b.built.instances, b.built.edits + (start?.let { practiceBackstop(it) } ?: emptyList()), rooms.textures)
+        }
+    }
+
+    /** A practice room's way in is a doorway with nothing behind it: its gap is bedrock, the frame's opening filled (y 68 to 73 across the frame). */
+    internal fun practiceBackstop(slot: Slot): List<Edit> = buildList {
+        for (a in DoorGeometry.FRAME_MIN..DoorGeometry.FRAME_MAX) {
+            val (x, z) = DoorGeometry.gapCell(slot, a)
+            for (y in com.engineerclient.p3sim.pack.DoorModel.THRESHOLD_Y..(com.engineerclient.p3sim.pack.DoorModel.BODY_Y_MAX + 1)) add(Edit(x, y, z, "minecraft:bedrock"))
         }
     }
 
