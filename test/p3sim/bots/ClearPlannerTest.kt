@@ -214,8 +214,9 @@ class ClearPlannerTest {
         val mid = (p.milestones.bloodOpenT + p.milestones.watcherDoneT) / 2
         assertTrue(tr.positionAt(mid).dist(c) < 4.0, "the assigned seat stands in the blood room mid-camp")
         assertTrue(tr.positionAt(p.milestones.watcherDoneT).dist(c) < 4.0)
-        // Nobody else goes there.
-        for (o in p.tracks.filter { it.seat != 1 }) assertTrue(o.positionAt(mid).dist(c) > 4.0, "seat ${o.seat} stays out")
+        // Nobody else walks there; a seat that is in by then leapt to the camper (CampLeaps).
+        val leapt = p.leaps.filter { it.door == CampLeaps.NO_DOOR && it.t <= mid }.map { it.seat }.toSet()
+        for (o in p.tracks.filter { it.seat != 1 && it.seat !in leapt }) assertTrue(o.positionAt(mid).dist(c) > 4.0, "seat ${o.seat} stays out")
     }
 
     @Test fun theNeutralStrategySendsNobodyAndAPluginCannotPickTheHuman() {
