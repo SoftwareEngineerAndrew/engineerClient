@@ -399,7 +399,10 @@ object SecretsModule : AdsModule, SecretService {
         val c = rd.book.claim(room, kind, by, x, y, z)
         if (c is Claim.Credited) {
             c.site?.let { afterFound(rd, it, by) }
-            if ((c.site?.kind ?: kind) == SecretKind.BAT) batCounted(rd, by)
+            if ((c.site?.kind ?: kind) == SecretKind.BAT) {
+                batCounted(rd, by)
+                if (rd.miscRandom.nextDouble() < BAT_ANNOUNCE) botSays(rd, by, "Bat Killed!")
+            }
             if (c.autoCredited > 0 && rd.book.autoCreditedRooms.contains(room)) {
                 org.slf4j.LoggerFactory.getLogger("engineerclient").info("[ads] secrets: room {} counted {} secret(s) the room data does not place", room, c.autoCredited)
             }
@@ -471,8 +474,37 @@ object SecretsModule : AdsModule, SecretService {
         bonus(rd, kind, by)
     }
 
+    // ---- teammates' mods in party chat ----------------------------------------------------------------------------------------------
+    // ADR, 147 five-player runs, T0 to Maxor: teammates (not the recorder) post "Bat Killed!" 1.29 times a run, "Mimic Killed!" from 0 to 3
+    // different teammates (55 / 57 / 29 / 6 runs, about 0.3 of each teammate when it dies), "Prince Killed!" by one teammate in 39 percent
+    // of runs (about 0.6 of the killings). UNMEASURED: the delay after the kill (a mod posts at once; here 1 to 15 ticks).
+    /** Chance a bot's bat kill is posted. */
+    const val BAT_ANNOUNCE = 0.55
+    /** Chance each bot posts the Mimic's death. */
+    const val MIMIC_ANNOUNCE = 0.3
+    /** Chance the Prince's killer posts it. */
+    const val PRINCE_ANNOUNCE = 0.6
+
+    /** A bot's mod posting [text] in party chat a moment later; nothing for a human (their own mods post for them) or nobody. */
+    private fun botSays(rd: RunData, id: UUID?, text: String) {
+        val w = who(rd, id)
+        if (id == null || !w.bot) return
+        val line = "§9Party §8> ${w.bracket} ${w.name}§f: $text"
+        rd.later.add(rd.run.serverTick + 1 + rd.miscRandom.nextInt(15), { Services.channels.chat(line) })
+    }
+
+    private fun bots(rd: RunData): List<UUID> = rd.run.state.players.filterValues { it.isBot && !it.ghost }.keys.toList()
+
     private fun bonus(rd: RunData, kind: BonusKind, by: UUID?, loud: Boolean = true) {
         if (!rd.book.bonus(kind, by)) return
+        when (kind) {
+            BonusKind.MIMIC -> for (b in bots(rd)) if (rd.miscRandom.nextDouble() < MIMIC_ANNOUNCE) botSays(rd, b, "Mimic Killed!")
+            BonusKind.PRINCE -> {
+                val killer = by ?: bots(rd).takeIf { it.isNotEmpty() }?.let { it[rd.miscRandom.nextInt(it.size)] }
+                if (rd.miscRandom.nextDouble() < PRINCE_ANNOUNCE) botSays(rd, killer, "Prince Killed!")
+            }
+            else -> {}
+        }
         when (kind) {
             BonusKind.PRINCE -> if (loud) Services.channels.chat("§r§eA Prince falls. §r§a+1 Bonus Score")
             BonusKind.BAT -> {
