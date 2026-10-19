@@ -92,10 +92,14 @@ object DamageModule : AdsModule, DamageService {
         blastS = host.registerSetting(NumberSetting("Clear Blast Damage", 3000, 50..20000, 50, unit = "k", desc = "In a full run: the HP an Explosive Shot blast or a Guided Sheep takes off each mob within 3 blocks (thousands). Not measured on Hypixel."))
         implosionS = host.registerSetting(NumberSetting("Implosion Damage", 100, 10..400, 5, unit = "%", desc = "In a full run: scales the floor's measured Implosion damage per mob (F7 25.4M, M7 56.6M). 100 is your recorded gear; on M7 lower values need more casts per mob."))
         regenS = host.registerSetting(NumberSetting("Clear Health Regen", 23, 0..100, 1, unit = " per 10 s", desc = "In a full run: percent of max health that comes back every 10 seconds, in a step every second (23 means 2.3 percent a second, the middle of what Hypixel shows: 1.3 to 3.5)."))
+        numbersS = host.registerSetting(NumberSetting("Damage Numbers", DamageNumbers.DEFAULT_CHANCE, 0..100, 1, unit = "%", desc = "In a full run: the share of hits on a mob that float a damage number over it for a second (grey, or a coloured ✧crit✧). Hypixel's numbers come at about 27 per 100 mob deaths; which hits get one is not known."))
         shieldS = host.registerSetting(NumberSetting("Wither Shield Size", 93, 0..200, 1, unit = "%", desc = "In a full run: how much damage a Hyperion cast's Wither Shield soaks, in percent of your max health. Not measured on Hypixel."))
     }
 
     // ---- state ----------------------------------------------------------------------------------------------------
+
+    private lateinit var numbersS: NumberSetting<Int>
+    private var numberRolls: Random = Random(0)
 
     private val mobLedger = MobDamageLedger()
     private var rolls: Random = Random(0)
@@ -130,6 +134,7 @@ object DamageModule : AdsModule, DamageService {
         combo.clear()
         mobLedger.clear(); regenCarry.clear(); shown.clear(); shields.clear(); dealt.clear(); milestonesShown.clear(); reviving.clear()
         rolls = run.subRandom("damage")
+        numberRolls = run.subRandom("damage.numbers")
         ClassAbilities.reset()
     }
 
@@ -248,6 +253,11 @@ object DamageModule : AdsModule, DamageService {
         val left = if (oneShot) 0.0 else max(0.0, rec.hp - amount)
         mobLedger.record(mob, amount, source, by)
         if (by != null) addDealt(run, by, amount)
+        val numbers = if (::numbersS.isInitialized) numbersS.value else DamageNumbers.DEFAULT_CHANCE
+        if (numbers > 0 && numberRolls.nextInt(100) < numbers) EngineerClient.safely("ads damage number") {
+            val e = rec.entityId?.let { Sim.level.getEntity(it) }
+            if (e != null) DamageNumbers.show(e.x, e.y, e.z, amount, numberRolls)
+        }
         val after = Services.mobs.setHp(run, mob, left, by)
         // The kill counts only when the mob really died (the mobs module may have refused or lost it), so the count matches the MobKilled events.
         if (left <= 0.0 && after?.alive == false) {

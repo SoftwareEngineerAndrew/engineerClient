@@ -213,6 +213,7 @@ object SecretsModule : AdsModule, SecretService {
     }
 
     override fun onRunEnd(run: Run, reason: com.engineerclient.p3sim.run.EndReason) {
+        FloorDrops.clear()
         data?.takeIf { it.run === run }?.let { discardEntities(it) }
     }
 
@@ -225,6 +226,7 @@ object SecretsModule : AdsModule, SecretService {
         if (now % 20 == 0) { applyFixes(rd); sendOwedLids(rd) }
         if (now - rd.lastSpawnPass >= SPAWN_PERIOD) { rd.lastSpawnPass = now; spawnPass(rd) }
         tickBonusMobs(rd)
+        FloorDrops.tick(run)
         tickItems(rd)
         tickBats(rd)
         tickWalls(rd, now)
@@ -844,11 +846,27 @@ object SecretsModule : AdsModule, SecretService {
         giveItem(rd, who(rd, clearer(rd, room)), drop.item, drop.count)
     }
 
-    /** A starred mob died to [killer]: maybe an item for them, or a blessing for the party (see [LootTables.mobKill]). */
-    private fun mobKillDrop(rd: RunData, killer: UUID) {
-        when (val drop = LootTables.mobKill(rd.dropRandom)) {
-            is Drop.Item -> giveItem(rd, who(rd, killer), drop.item, drop.count)
-            is Drop.Blessing -> grantKillBlessing(rd, who(rd, killer), drop.blessing)
+    /**
+     * A starred mob died to [killer]: maybe an item for them, or a blessing for the party (see [LootTables.mobKill]). It lies where the mob fell
+     * ([FloorDrops]) until it is picked up; the line and the item come then. Without the mob's position it is given at once.
+     */
+    private fun mobKillDrop(rd: RunData, killer: UUID, mob: UUID) {
+        val drop = LootTables.mobKill(rd.dropRandom) ?: return
+        val rec = Services.mobs.mob(mob)
+        val at = rec?.let { doubleArrayOf(it.x, it.y, it.z) }?.takeIf { !it[0].isNaN() && !(it[0] == 0.0 && it[2] == 0.0) }
+        val run = rd.run
+        when (drop) {
+            is Drop.Item -> {
+                if (at == null) { giveItem(rd, who(rd, killer), drop.item, drop.count); return }
+                val superboom = drop.item == LootItem.SUPERBOOM
+                val name = drop.item.colour + drop.item.displayName + (if (drop.count > 1) " §r§8x${drop.count}" else "")
+                val model = if (superboom) com.engineerclient.p3sim.SimItems.SUPERBOOM.copy() else FloorDrops.head("revive_stone", run)
+                FloorDrops.drop(run, name, model, superboom, at[0], at[1], at[2], 0, killer, rd.dropRandom) { by -> giveItem(rd, who(rd, by ?: killer), drop.item, drop.count) }
+            }
+            is Drop.Blessing -> {
+                if (at == null) { grantKillBlessing(rd, who(rd, killer), drop.blessing); return }
+                FloorDrops.drop(run, "§dBlessing of " + drop.blessing.displayName, FloorDrops.head(FloorDrops.BLESSING_TEXTURE, run), false, at[0], at[1], at[2], 1, killer, rd.dropRandom) { by -> grantKillBlessing(rd, who(rd, by ?: killer), drop.blessing) }
+            }
             else -> {}
         }
     }
@@ -1102,7 +1120,7 @@ object SecretsModule : AdsModule, SecretService {
         if (event is MobKilled) {
             val room = event.mob.room
             if (room != null && event.mob.required) rd.lastKiller[room] = event.by
-            if (room != null && event.mob.starred && event.by != null && run.plan.rooms.getOrNull(room)?.type != RoomType.BLOOD) mobKillDrop(rd, event.by)
+            if (room != null && event.mob.starred && event.by != null && run.plan.rooms.getOrNull(room)?.type != RoomType.BLOOD) mobKillDrop(rd, event.by, event.mob.id)
             return
         }
         if (event is RoomCleared) {
