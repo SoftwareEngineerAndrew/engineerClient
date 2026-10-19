@@ -71,14 +71,18 @@ class BotWorldImpl(private val run: Run, private val roster: Roster, private val
         val by = uuid(seat)
         val required = Services.mobs.inRoom(room).filter { it.required }
         val total = maxOf(rr.mobsRequired, required.size)
-        // The mobs nearest a bot go first: those are the ones that came at the party (a real teammate kills what is on them), so a chaser does not
-        // trail a bot round the room while the kill count the plan times is taken from mobs still standing at the far wall.
-        val bots = roster.seats.filter { !it.isHuman }.mapNotNull { s -> uuid(s.index)?.let { state.players[it] } }.filter { !it.ghost }
-        val alive = required.filter { it.alive }.sortedBy { m -> bots.minOfOrNull { (it.x - m.x) * (it.x - m.x) + (it.z - m.z) * (it.z - m.z) } ?: 0.0 }
+        // The mobs nearest the bot go first, and while the room has time left only those within its reach: a real teammate kills what is on it or
+        // beside it (recorded: the nearest player is a median 6 blocks from a mob as it dies, 60 runs), so the chasers die as they arrive and the
+        // rest as the bot's walk round the room comes by them. The count is let fall behind the plan's pace by at most [KILL_LAG] mobs, and at the
+        // room's time whatever is left dies wherever it is (timing first).
+        val me = uuid(seat)?.let { state.players[it] }
+        fun d2(m: com.engineerclient.p3sim.run.api.MobRecord) = me?.let { (it.x - m.x) * (it.x - m.x) + (it.z - m.z) * (it.z - m.z) } ?: 0.0
+        val alive = required.filter { it.alive }.sortedBy { d2(it) }
         val want = Math.ceil(fraction.coerceIn(0.0, 1.0) * total).toInt()
         var killed = total - alive.size
         for (m in alive) {
             if (killed >= want) break
+            if (fraction < 1.0 && d2(m) > KILL_REACH * KILL_REACH && killed >= want - KILL_LAG) break
             // Enough damage to take any mob's HP: the kill goes through the damage service like any other.
             Services.damage.hurtMob(run, m.id, maxOf(m.hp, m.maxHp, 1.0) * 2.0, DamageSource.MELEE, by)
             fx?.killed(seat, m.x, m.y, m.z)
@@ -152,6 +156,10 @@ class BotWorldImpl(private val run: Run, private val roster: Roster, private val
     companion object {
         /** Ticks the secrets service gets to finish a room by itself before the bot asks for the rest. */
         const val STUCK_TICKS = 100
+        /** Blocks from the bot within which its kills fall while the room still has time. */
+        const val KILL_REACH = 6.0
+        /** Kills the count may run behind the plan's pace waiting for mobs to come within [KILL_REACH]. */
+        const val KILL_LAG = 3
     }
 }
 
