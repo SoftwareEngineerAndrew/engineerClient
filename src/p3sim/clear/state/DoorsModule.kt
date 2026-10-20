@@ -96,9 +96,9 @@ object DoorsModule : AdsModule, DoorService {
      * A swing at the block ([x],[y],[z]) by [by]: the no-key line when it is a closed key door and the party has no key. Called from the
      * client's block-hit message (the adventure-mode player never reaches Fabric's attack callback); see the integration request.
      */
-    override fun touchBlock(run: Run, x: Int, y: Int, z: Int, by: UUID?) {
-        val c = controller ?: return
-        c.doorAtBlock(x, y, z)?.let { c.touch(it, by) }
+    override fun touchBlock(run: Run, x: Int, y: Int, z: Int, by: UUID?): Boolean {
+        val c = controller ?: return false
+        return c.doorAtBlock(x, y, z)?.let { c.touch(it, by) } ?: false
     }
 
     /**

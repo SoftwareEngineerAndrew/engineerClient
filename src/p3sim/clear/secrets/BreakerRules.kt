@@ -20,11 +20,12 @@ object BreakerRules {
     const val ROOM_LOCKED = "§cA mystical force prevents you digging in this room!"
 
     /**
-     * Rooms where the Dungeonbreaker refuses every interior block: seen in the recordings in Quartz Knight, Blood, Fairy, Tic Tac Toe, Boulder,
-     * Water Board, Creeper Beams and Teleport Maze (the last four from one scan of a few lines each). Whether the lock holds for the whole
-     * room or only while its puzzle is live is UNMEASURED; the sim locks the whole room.
+     * Rooms where the Dungeonbreaker refuses every interior block: seen in the recordings in Blood, Fairy, Tic Tac Toe, Boulder, Water Board,
+     * Creeper Beams and Teleport Maze (the last four from one scan of a few lines each). Quartz Knight is not one (DR, 139 runs: 68 of its
+     * blocks broke, no line). Whether the lock holds for the whole room or only while its puzzle is live is UNMEASURED; the sim locks the
+     * whole room.
      */
-    val LOCKED_ROOMS: Set<String> = setOf("Quartz Knight", "Blood", "Fairy", "Tic Tac Toe", "Boulder", "Water Board", "Creeper Beams", "Teleport Maze")
+    val LOCKED_ROOMS: Set<String> = setOf("Blood", "Fairy", "Tic Tac Toe", "Boulder", "Water Board", "Creeper Beams", "Teleport Maze")
 
     /**
      * The room whose inside this column is, or null: the column of a tile of a room, or a gap column/row strictly inside a room
@@ -50,6 +51,9 @@ object BreakerRules {
         val local = v - DungeonFrame.tileMin(t)
         return if (local <= DungeonFrame.TILE_SIZE - 1) t to false else if (t < DungeonFrame.TILES - 1) t to true else null
     }
+
+    /** Whether the column is in the dungeon's box of tiles (the clear, not the boss). */
+    fun inGrid(x: Int, z: Int): Boolean = x in DungeonFrame.ORIGIN..DungeonFrame.DUNGEON_MAX && z in DungeonFrame.ORIGIN..DungeonFrame.DUNGEON_MAX
 
     /** True when the column is not inside any room, or is on the outer ring of the room it is in (a neighbouring column is not inside the same room). */
     fun isBorderOrOutside(plan: DungeonPlan, x: Int, z: Int): Boolean {
