@@ -61,7 +61,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         }
         for (st in wall) host.setHead(slots[st.slot], look.keyFor(st, host.random))
         if (rp != null) { config = CampConfig(chatCoins = false, recordedLines = rp.lines); replayTexts = ArrayDeque(rp.texts) }
-        engine = CampEngine(home, wall, host.random, this, config, order)
+        engine = CampEngine(home, wall, host.random, this, config, order, rp?.throwTicks?.takeIf { order != null && it.size == order.size })
         opening = rp?.opening ?: CampLines.opening(host.random)
         log.info("[ads] the Watcher's camp started: ${wall.count { it.cls == WallClass.STANDARD }} standard, ${wall.count { it.cls == WallClass.BOSS }} boss heads on ${wall.size} stands")
     }
@@ -179,7 +179,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
      * A replayed camp: [order] the recording's heads as this wall's stations in the order thrown (null: drawn), [lines] the Watcher's lines as
      * his queue was asked for them (see [CampMech.requestsOf]), [opening] his first line and [texts] the others, in the order he said them.
      */
-    class Replayed(val order: List<WallStation>?, val lines: List<CampMech.Request>, val opening: String?, val texts: List<String>)
+    class Replayed(val order: List<WallStation>?, val lines: List<CampMech.Request>, val opening: String?, val texts: List<String>, val throwTicks: List<Int>? = null)
 
     companion object {
         /** A replay's camp from its wall's stations: the recording's throw order and lines, or null for a camp of its own. */
