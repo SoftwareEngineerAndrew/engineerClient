@@ -775,7 +775,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val rx = r.x; val ry = r.y; val rz = r.z
         // The recorder writes "???" (or "MINIBOSS") when it had not read the tag: the tag stand's own name (body id + 1, a Withermancer's + 3) is the mob's.
         val tag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it !in UNREAD_TAGS }?.let { mobName(it) }
-            ?: (1..3).firstNotNullOfOrNull { d -> ents[id + d]?.name?.takeIf { it.contains("❤") } }?.let { mobName(it) }
+            ?: standTag(id)?.let { mobName(it) }
             ?: brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString
         // The Watcher's camp names its mobs by itself, so a recorded camp death takes ADS's nearest live camp mob whatever its name;
         // with none alive yet (ADS's camp behind Hypixel's), the next one ADS throws.
@@ -821,6 +821,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             try { Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, who) } finally { forcing = false }
             if (mob.alive) "hurtMob left it alive" else "killed by ${who?.let { run.state.players[it]?.name } ?: "?"}"
         }
+    }
+
+    /** The name over body [id]: its tag stand's at id + 1, or a Withermancer's at id + 3 behind its two nameless stands. */
+    private fun standTag(id: Int): String? {
+        ents[id + 1]?.name?.takeIf { it.contains("❤") }?.let { return it }
+        val fillers = (1..2).all { d -> ents[id + d]?.let { it.type == "minecraft:armor_stand" && it.name.isNullOrEmpty() } == true }
+        return if (fillers) ents[id + 3]?.name?.takeIf { it.contains("❤") } else null
     }
 
     /**
