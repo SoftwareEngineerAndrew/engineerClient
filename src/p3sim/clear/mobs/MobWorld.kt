@@ -83,7 +83,7 @@ internal object MobWorld {
         var disguised = arch.disguise && fakePlayers && !e.plainBody
         var profile: GameProfile? = null
         if (disguised) {
-            profile = e.profile ?: Disguise.profile(e.plan.id, Disguise.profileName(arch), arch.skin)
+            profile = e.profile ?: Disguise.profile(e.plan.id, Disguise.profileName(arch), arch.skin ?: Disguise.missingSkin(arch))
             if (!e.announced) e.announced = Disguise.announce(profile)
             if (!e.announced) { disguised = false; profile = null }
         }
@@ -150,6 +150,7 @@ internal object MobWorld {
                 body.setItemSlot(EquipmentSlot.LEGS, ItemStack(Items.LEATHER_LEGGINGS))
                 body.setItemSlot(EquipmentSlot.FEET, ItemStack(Items.LEATHER_BOOTS))
             }
+            MobGear.has(arch.id) -> MobGear.dress(body, arch.id, e.plan.id)
             eq != null -> {
                 if (eq.mainhand == "minecraft:iron_sword") {
                     val sword = ItemStack(Items.IRON_SWORD)
