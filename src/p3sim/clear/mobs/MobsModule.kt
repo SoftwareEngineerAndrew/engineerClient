@@ -383,8 +383,8 @@ object MobsModule : AdsModule, MobService {
         return byRoom[roomIndex]?.map { it.record }.orEmpty()
     }
 
-    /** An archetype by index: the pack's, or one of the blood camp's ([BloodLooks]). */
-    private fun archOf(pack: MobPack, index: Int): MobArchetype? = pack.archetype(index) ?: BloodLooks.archetype(index)
+    /** An archetype by index: the pack's, one of the blood camp's ([BloodLooks]) or a levelled room mob ([LevelLooks]). */
+    private fun archOf(pack: MobPack, index: Int): MobArchetype? = pack.archetype(index) ?: BloodLooks.archetype(index) ?: LevelLooks.archetype(index)
 
     private fun register(run: Run, pack: MobPack, pm: PlannedMob, roomIndex: Int?): MobEntry? {
         val arch = archOf(pack, pm.arch) ?: return null

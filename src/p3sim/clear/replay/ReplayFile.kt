@@ -64,7 +64,44 @@ class ReplayFile(val id: String, val floor: String?, val self: Person, val party
                 Mob(j.get("id").asInt, j.get("type")?.takeIf { it.isJsonPrimitive }?.asString, d("k")?.toInt() ?: 0, d("x") ?: return@mapNotNull null, d("y") ?: 0.0, d("z") ?: 0.0,
                     d("yaw")?.toFloat() ?: 0f, j.get("tag")?.asString?.trim() ?: return@mapNotNull null, d("hp") ?: 0.0)
             }.orEmpty()
-            return ReplayFile(o.get("id").asString, o.get("floor")?.takeIf { it.isJsonPrimitive }?.asString, self, party, ids, ev, mobs)
+            return ReplayFile(o.get("id").asString, o.get("floor")?.takeIf { it.isJsonPrimitive }?.asString, self, party, ids, ev, mobs + levelled(ev, mobs))
+        }
+
+        /** A levelled room mob's tag: `[Lv173]  Undead Skeleton 360k/360k❤` (icons between). */
+        private val LEVEL_TAG = Regex("""^\[Lv\d+]\s+\S*\s*(Undead Skeleton|Skeletor Prime) [\d.,]+[kMB]?/([\d.,]+[kMB]?)❤$""")
+
+        /**
+         * The levelled room mobs (Undead Skeleton, Skeletor Prime) the recording's mob list leaves out, from its events: the body at
+         * the tag's id minus one where it was first seen, and the most HP its tag showed.
+         */
+        fun levelled(ev: List<JsonArray>, known: List<Mob>): List<Mob> {
+            val have = known.mapTo(HashSet()) { it.id }
+            val first = HashMap<Int, JsonArray>()
+            val found = LinkedHashMap<Int, Pair<String, Double>>()
+            for (e in ev) {
+                when (e.s(1)) {
+                    "spawn" -> e.i(2)?.let { first.putIfAbsent(it, e) }
+                    "name" -> {
+                        val id = e.i(2) ?: continue
+                        val m = e.s(3)?.let { LEVEL_TAG.find(it) } ?: continue
+                        val body = id - 1
+                        if (body in have) continue
+                        val hp = amount(m.groupValues[2])
+                        val prev = found[body]
+                        if (prev == null || hp > prev.second) found[body] = m.groupValues[1] to hp
+                    }
+                }
+            }
+            return found.mapNotNull { (body, v) ->
+                val s = first[body]?.takeIf { it.s(3) != "minecraft:armor_stand" } ?: return@mapNotNull null
+                Mob(body, s.s(3), s.i(0) ?: 0, s.d(5) ?: return@mapNotNull null, s.d(6) ?: 0.0, s.d(7) ?: 0.0, s.d(9)?.toFloat() ?: 0f, v.first, v.second)
+            }
+        }
+
+        /** `360k`, `3.1M`, `90,000` as a number. */
+        private fun amount(t: String): Double {
+            val n = t.trimEnd('k', 'M', 'B').replace(",", "").toDoubleOrNull() ?: return 0.0
+            return n * when (t.lastOrNull()) { 'k' -> 1e3; 'M' -> 1e6; 'B' -> 1e9; else -> 1.0 }
         }
     }
 }
