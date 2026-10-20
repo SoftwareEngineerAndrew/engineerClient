@@ -993,7 +993,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         else cands.minByOrNull { m -> Math.hypot(m.x - rx, m.z - rz) + (if (sameMob(m.name, label)) 0.0 else 12.0) + (if (m.alive) 0.0 else 1.0) }
             ?.takeIf { sameMob(it.name, label) || Math.hypot(it.x - rx, it.z - rz) < 4 }
         val you = Math.hypot(host.x - rx, host.z - rz)
-        if (mob == null) { diff.mobNotFound(k, label, rx, ry, rz, you); return }
+        if (mob == null) {
+            // Why: ADS's nearest mob of that name anywhere (how far, and whether it is dead or matched already).
+            val near = Services.mobs.all().filter { unread || sameMob(it.name, label) }.minByOrNull { Math.hypot(it.x - rx, it.z - rz) }
+            val why = near?.let { "ADS's nearest %s %.0f blocks off (dy %.0f)%s%s".format(it.name, Math.hypot(it.x - rx, it.z - rz), it.y - ry, if (it.alive) "" else ", dead", if (it.id in claimed) ", matched already" else "") }
+                ?: "ADS has none"
+            diff.mobNotFound(k, label, rx, ry, rz, you, why); return
+        }
         claimed += mob.id
         if (!unread && !sameMob(mob.name, label)) diff.note(k, "mob", "recorded $label at ${fmt(rx, ry, rz)} matched to ADS's ${mob.name} (no $label within 14)")
         if (!mob.alive) { diff.mobOk(); return }
