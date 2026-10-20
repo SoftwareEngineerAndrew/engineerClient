@@ -197,6 +197,30 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
     private val pearlsUsed = HashSet<Int>()
 
+    /**
+     * Your Teleport Maze steps: each teleport onto a slab's middle (y on a half, x and z on halves) from standing on a pad's frame (the top of an
+     * end-portal frame, 0.8125 up its block), as the frame block and the landing block (world x, z, x, z).
+     */
+    private val recordedMazeSteps: List<IntArray> by lazy {
+        val out = ArrayList<IntArray>()
+        var at: DoubleArray? = null
+        for (e in file.events) {
+            when (e[1].asString) {
+                "o.m" -> if (e.size() > 4 && !e[2].isJsonNull) at = doubleArrayOf(e[2].asDouble, e[3].asDouble, e[4].asDouble)
+                "tpme" -> {
+                    val p = e[2].takeIf { it.isJsonArray }?.asJsonArray ?: continue
+                    val from = at ?: continue
+                    val x = p[0].asDouble; val y = p[1].asDouble; val z = p[2].asDouble
+                    fun half(v: Double) = kotlin.math.abs(v - Math.floor(v) - 0.5) < 0.01
+                    if (half(x) && half(y) && half(z) && kotlin.math.abs(from[1] - Math.floor(from[1]) - 0.8125) < 0.01)
+                        out += intArrayOf(Math.floor(from[0]).toInt(), Math.floor(from[2]).toInt(), Math.floor(x).toInt(), Math.floor(z).toInt())
+                    at = doubleArrayOf(x, y, z)
+                }
+            }
+        }
+        out
+    }
+
     /** Every block the recording showed as a trapped chest (the Mimic's chest). */
     private val recordedTrapped: Set<BlockPos> by lazy {
         file.events.filter { it.size() > 5 && it[1].asString == "blk" && it.s(5)?.startsWith("minecraft:trapped_chest") == true }
@@ -454,6 +478,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = { by -> recordedImplosion(by) }
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = { p -> !ended && p === host }
         SimItems.replayPearl = { p -> if (!ended && p === host) recordedPearl() else null }
+        com.engineerclient.p3sim.clear.puzzles.hard.TpMazePuzzle.replay = { r -> if (r === run && !ended) recordedMazeSteps else null }
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayUltFirst = { p -> if (!ended && p === host) recordedUltFirst else null }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
@@ -522,6 +547,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = null
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = null
         SimItems.replayPearl = null
+        com.engineerclient.p3sim.clear.puzzles.hard.TpMazePuzzle.replay = null
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayUltFirst = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
