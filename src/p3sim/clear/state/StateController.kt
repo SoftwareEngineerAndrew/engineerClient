@@ -366,7 +366,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     }
 
     private fun scheduleSynth(room: Int) {
-        if (!cfg.synthesiseClears) return
+        if (!cfg.synthesiseClears || clearsFromRecording) return
         val r = state.rooms[room]
         if (r.plan.type !in MOB_TYPES) return
         // A room with a chest rule (the trap rooms) is finished by the player opening that chest, never by a timer.
@@ -581,6 +581,12 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     companion object {
         /** A replay: keys drop and are taken on the recorded ticks only (no drop on a kill, no pickup by coming close). */
         @Volatile @JvmStatic var keysFromRecording = false
+
+        /**
+         * A replay: no room turns white on the synthesised schedule. A room the recording saw no mobs in has none in ADS, so the timer
+         * would clear rooms whose mobs Hypixel's party never killed; the recorded marks are the replay's to bring.
+         */
+        @Volatile @JvmStatic var clearsFromRecording = false
 
         /** Room types whose objective is a mob kill. Puzzles have their own solver; the entrance, Fairy and blood rooms their own rules. */
         private val MOB_TYPES = setOf(RoomType.NORMAL, RoomType.TRAP, RoomType.YELLOW, RoomType.RARE)
