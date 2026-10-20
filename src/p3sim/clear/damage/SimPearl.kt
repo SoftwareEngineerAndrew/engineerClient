@@ -23,6 +23,8 @@ import net.minecraft.world.phys.Vec3
  * thrower no health and spawns no endermite, and a mob or a mate it hits is only a place to land: nothing takes damage.
  */
 class SimPearl(level: Level, owner: LivingEntity, stack: ItemStack) : ThrownEnderpearl(level, owner, stack) {
+    /** A replay's pearl: it only flies; the recording's landing moves the thrower ([land]). */
+    var scripted = false
 
     override fun onHitEntity(hit: EntityHitResult) {
         // Vanilla would hurt the target for 0; here the pearl just lands on it.
@@ -35,15 +37,25 @@ class SimPearl(level: Level, owner: LivingEntity, stack: ItemStack) : ThrownEnde
             level.sendParticles(ParticleTypes.PORTAL, false, true, x, y + random.nextDouble() * 2.0, z, 1, random.nextGaussian(), 0.0, random.nextGaussian(), 0.0)
         }
         // getOwner(): `owner` here is Projectile's own field (an EntityReference), never the player.
+        if (scripted) { discard(); return }
         val thrower = getOwner() as? ServerPlayer
         if (thrower != null && thrower.isAlive && !thrower.isSleeping && thrower.level() === level) {
             val top = (hit as? net.minecraft.world.phys.BlockHitResult)?.takeIf { it.type == HitResult.Type.BLOCK && it.direction == net.minecraft.core.Direction.UP }
-            val to = top?.let { Vec3(it.blockPos.x + 0.5, it.location.y, it.blockPos.z + 0.5) } ?: oldPosition()
-            thrower.teleportTo(level, to.x, to.y, to.z, Relative.ROTATION, 0f, 0f, false)
-            thrower.deltaMovement = Vec3.ZERO
-            thrower.fallDistance = 0.0
+            land(thrower, top?.let { Vec3(it.blockPos.x + 0.5, it.location.y, it.blockPos.z + 0.5) } ?: oldPosition(), sound = false)
         }
         Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, position(), SoundSource.HOSTILE)
         discard()
+    }
+
+    companion object {
+        /** Puts [thrower] where a pearl landed: their look kept, their fall reset (and the teleport sound there, unless the pearl makes it). */
+        fun land(thrower: ServerPlayer, to: Vec3, sound: Boolean = true) {
+            if (!thrower.isAlive || thrower.isSleeping) return
+            val level = thrower.level() as? ServerLevel ?: return
+            thrower.teleportTo(level, to.x, to.y, to.z, Relative.ROTATION, 0f, 0f, false)
+            thrower.deltaMovement = Vec3.ZERO
+            thrower.fallDistance = 0.0
+            if (sound) Sim.sound(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f, to, SoundSource.HOSTILE)
+        }
     }
 }
