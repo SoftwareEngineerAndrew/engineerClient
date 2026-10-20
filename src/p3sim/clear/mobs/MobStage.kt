@@ -5,6 +5,8 @@ package com.engineerclient.p3sim.clear.mobs
  * which mobs are built when) run headless in tests with a stand-in. [RealStage] is the Minecraft side. Server thread only.
  */
 internal interface MobStage {
+    /** A replay: puts the body where the recording has the mob this tick (no AI), facing the way it moved. */
+    fun place(e: MobEntry, x: Double, y: Double, z: Double) {}
     /** Whether a sim world is running at all. */
     fun available(): Boolean
     /** Whether the chunk of column ([x], [z]) is loaded. */

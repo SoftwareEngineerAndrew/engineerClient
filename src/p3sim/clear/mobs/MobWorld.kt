@@ -372,6 +372,15 @@ internal object RealStage : MobStage {
         val hit = lv.clip(net.minecraft.world.level.ClipContext(from, net.minecraft.world.phys.Vec3(x, y, z), net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, net.minecraft.world.phys.shapes.CollisionContext.empty()))
         return hit.type == net.minecraft.world.phys.HitResult.Type.MISS
     }
+    override fun place(e: MobEntry, x: Double, y: Double, z: Double) {
+        val body = e.body ?: return
+        val dx = x - body.x; val dz = z - body.z
+        if (dx * dx + (y - body.y) * (y - body.y) + dz * dz < 1e-6) return
+        stop(body)
+        val yaw = if (dx * dx + dz * dz > 1e-4) Math.toDegrees(Math.atan2(-dx, dz)).toFloat() else body.yRot
+        body.snapTo(x, y, z, yaw, body.xRot)
+        (body as? LivingEntity)?.let { it.yHeadRot = yaw; it.yBodyRot = yaw }
+    }
     override fun rescue(e: MobEntry) { e.body?.let { if (it.y < -8.0) it.snapTo(e.plan.x, e.plan.y, e.plan.z, e.plan.yaw, 0f) } }
 
     /** Blocks per tick a unit of movement-speed attribute walks at full input (a player's 0.1 is 4.317 blocks a second). */
