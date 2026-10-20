@@ -1028,6 +1028,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (t == "[BOSS] The Watcher: " + com.engineerclient.p3sim.clear.blood.WatcherLines.PASS && com.engineerclient.p3sim.clear.blood.BloodModule.passNow()) diff.forced(run.t, "the Watcher let the party pass (recorded k $k)", "ADS's camp had not ended")
         if (t.startsWith("Party >")) return
         KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; keyTaken(m.groupValues[1], m.groupValues[2]); return }
+        SOLVED.find(t)?.let { m -> puzzleSolved(k, m.groupValues[1], m.groupValues[2]) }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }
         REVIVED.find(t)?.let { m -> revive(k, m.groupValues[1], m.groupValues[2]); return }
         drop(k, t)
@@ -1192,6 +1193,20 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
     }
 
+    /**
+     * The recording's `PUZZLE SOLVED!` line (the puzzles that print one: Tic Tac Toe, Three Weirdos): ADS's puzzle is solved by the one it
+     * names, on its tick (a teammate's) or after [GRACE] ticks to do it yourself (yours), not when the room's mark turns and not by whoever
+     * stood nearest.
+     */
+    private fun puzzleSolved(k: Int, name: String, what: String) {
+        val kind = when { what.startsWith("tied Tic Tac Toe") -> "TTT"; what.startsWith("wasn't fooled by") -> "WEIRDOS"; else -> return }
+        val pz = run.plan.rooms.firstNotNullOfOrNull { r -> PuzzlesModule.puzzleOf(run, r.index)?.takeIf { it.kind == kind } } ?: return diff.note(k, "puzzle", "no $kind in ADS for \"$name $what\"")
+        val by = uuidOf(name)
+        pending += Pending(if (by != null && by != host.uuid) k else k + GRACE, "$kind solved by $name", { pz.status == com.engineerclient.p3sim.run.PuzzleStatus.SOLVED }) {
+            Services.puzzles.reportSolved(pz, by); "ADS reported it solved"
+        }
+    }
+
     private fun CheckMark.odin(): String = when (this) { CheckMark.UNDISCOVERED -> "UNDISCOVERED"; CheckMark.NONE -> "NONE"; CheckMark.WHITE -> "WHITE"; CheckMark.GREEN -> "GREEN"; else -> "FAILED" }
 
     companion object {
@@ -1251,6 +1266,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val ROMAN = listOf("I", "II", "III", "IV", "V")
         private val ITEM = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Superboom TNT|Revive Stone)(?: x(\\d+))?!$")
         private val WITHER_ESSENCE = Regex("^(\\S+) found a Wither Essence! Everyone gains an extra essence!$")
+        private val SOLVED = Regex("""^PUZZLE SOLVED! (\w{1,16}) (.+) Good job!$""")
         private val IMPLOSION = Regex("""^Your Implosion hit (\d+) enem(?:y|ies) for ([\d,.]+) damage\.$""")
         private const val IMPLOSION_NEAR = 4
         private val ESSENCE = Regex("^ESSENCE! (\\w{1,16}) found x(\\d+) (\\w+) Essence!$")
