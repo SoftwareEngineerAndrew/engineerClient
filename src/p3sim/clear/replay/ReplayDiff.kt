@@ -105,7 +105,21 @@ class ReplayDiff(private val s: ReplaySession) {
     /** A block Hypixel changed; [you] and [mate]: how far you and the nearest teammate were from it. */
     fun recordedBlock(k: Int, x: Int, y: Int, z: Int, state: String?, you: Double, mate: Double) {
         if (state == null) return
-        blockChecks.addLast(BlockCheck(k + BLOCK_LAG, k, BlockPos(x, y, z), state, you, mate))
+        val pos = BlockPos(x, y, z)
+        blockHistory.getOrPut(pos) { ArrayList() } += k to state
+        blockChecks.addLast(BlockCheck(k + BLOCK_LAG, k, pos, state, you, mate))
+    }
+
+    /** Every recorded state of each changed cell, in order. */
+    private val blockHistory = HashMap<BlockPos, MutableList<Pair<Int, String>>>()
+
+    /** The states Hypixel had at [pos] from [from] to [to]: the one standing at [from] and every later change up to [to]. */
+    private fun hypStates(pos: BlockPos, from: Int, to: Int): List<String> {
+        val h = blockHistory[pos] ?: return emptyList()
+        val out = ArrayList<String>()
+        h.lastOrNull { it.first <= from }?.let { out += it.second }
+        for ((k, st) in h) if (k in (from + 1)..to) out += st
+        return out
     }
 
     // ---- chat
@@ -140,15 +154,24 @@ class ReplayDiff(private val s: ReplaySession) {
             blocksChecked++
             val haveState = Sim.level.getBlockState(c.pos)
             val have = str(haveState)
-            if (have == c.want) continue
-            val wantId = c.want.substringBefore('['); val haveId = have.substringBefore('[')
+            // Hypixel's cell as it stood at the check, give or take [BLOCK_TOLERANCE] ticks (a crusher steps on: the newest state is what ADS should show).
+            val states = hypStates(c.pos, now - BLOCK_TOLERANCE, now)
+            if (have in states) continue
+            val want = states.lastOrNull() ?: c.want
+            val wantId = want.substringBefore('['); val haveId = have.substringBefore('[')
             val key = if (wantId == haveId) "$wantId: state differs" else "Hypixel $wantId, ADS $haveId"
             val cat = if (c.k <= 1) "start" else if (c.you <= NEAR) "you" else "away"
             val l = blockMiss.getValue(cat).getOrPut(key) { ArrayList() }
-            l += "k ${c.k} at ${c.pos.x} ${c.pos.y} ${c.pos.z}: Hypixel ${c.want}, ADS $have (you %.0f, teammate %.0f)".format(c.you, c.mate)
+            l += "k ${c.k} at ${c.pos.x} ${c.pos.y} ${c.pos.z}: Hypixel $want, ADS $have (you %.0f, teammate %.0f)".format(c.you, c.mate)
             // The world is put as Hypixel had it, so what comes after is played on the same blocks.
-            parse(c.want)?.let { Sim.level.setBlock(c.pos, it, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE); blocksForced++ }
+            parse(want)?.let { Sim.level.setBlock(c.pos, it, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE); blocksForced++ }
         }
+    }
+
+    /** Puts a recorded block in as it is, now. */
+    fun setNow(x: Int, y: Int, z: Int, state: String?) {
+        val st = state?.let { parse(it) } ?: return
+        Sim.level.setBlock(BlockPos(x, y, z), st, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE)
     }
 
     private fun parse(s: String): BlockState? = try {
@@ -215,7 +238,7 @@ class ReplayDiff(private val s: ReplaySession) {
         }
         for (r in run.state.rooms) if (r.check == CheckMark.GREEN || r.check == CheckMark.WHITE) if (r.index !in recRooms.keys) out += "  ${r.plan.name}: ADS ${r.check}, never marked in the recording"
         out += ""
-        out += "== Blocks: $blocksChecked of Hypixel's block changes checked $BLOCK_LAG ticks later ($blocksUnloaded not loaded in ADS); $blocksForced differed and were set as Hypixel had them"
+        out += "== Blocks: $blocksChecked of Hypixel's block changes checked $BLOCK_LAG ticks later against Hypixel's cell then (±$BLOCK_TOLERANCE) ($blocksUnloaded not loaded in ADS); $blocksForced differed and were set as Hypixel had them"
         for ((cat, m) in blockMiss) {
             out += "  -- ${mapOf("start" to "Hypixel's start-of-run updates (k 0-1)", "you" to "within $NEAR blocks of you", "away" to "away from you (teammates, or the room by itself)")[cat]}: ${m.values.sumOf { it.size }}"
             for ((key, l) in m.entries.sortedByDescending { it.value.size }) { out += "  ${l.size}x $key"; l.take(3).forEach { out += "      $it" } }
@@ -270,6 +293,7 @@ class ReplayDiff(private val s: ReplaySession) {
         try {
             Files.createDirectories(ReplayFile.dir)
             Files.writeString(ReplayFile.dir.resolve("${s.file.id}.report.json"), j.toString())
+            Files.writeString(ReplayFile.dir.resolve("${s.file.id}.blocks.txt"), blockMiss.flatMap { (cat, m) -> m.flatMap { (key, l) -> l.map { "$cat | $key | $it" } } }.joinToString("\n"))
             Files.write(ReplayFile.dir.resolve("${s.file.id}.report.txt"), out)
             Sim.note("Replay report: config/engineerclient/ads/replays/${s.file.id}.report.txt")
         } catch (t: Throwable) { Sim.note("Replay report could not be written: $t") }
@@ -278,6 +302,7 @@ class ReplayDiff(private val s: ReplaySession) {
     companion object {
         const val BLOCK_LAG = 10
         const val NEAR = 12.0
+        const val BLOCK_TOLERANCE = 3
         const val CHAT_WINDOW = 40
         private val NUM = Regex("[0-9][0-9,.]*")
         /** Lines that are about the recording's account, Hypixel's server or chat, not the run. */

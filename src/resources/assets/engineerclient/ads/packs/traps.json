@@ -5,15 +5,15 @@
   "ticksPerBlock": 5,
   "stillTicks": 30
  },
- "note": "Crusher paces outside the two trap rooms were observed by players (screenshots, hand timings); not measured by the mod. The trap rooms' numbers, the tripwire rooms and the hazard sites are measured from recordings (see measured.json).",
+ "note": "Every crusher pace, sweep and shape is measured from recorded runs (block updates of each arm: ticks between steps, the rest when retracted); the Buttons gate is a pincer of two 3-block arms.",
  "crushers": {
   "balcony/crusher-1": {
    "ticksPerBlock": 5,
    "stillTicks": 30
   },
   "bridges/crusher-1": {
-   "ticksPerBlock": 5,
-   "stillTicks": 30
+   "ticksPerBlock": 6,
+   "stillTicks": 36
   },
   "bridges/crusher-2": {
    "ticksPerBlock": 2,
@@ -33,15 +33,17 @@
   },
   "buttons/crusher-1": {
    "ticksPerBlock": 7,
-   "stillTicks": 7
+   "stillTicks": 7,
+   "pincer": true
   },
   "diagonal/crusher-1": {
    "ticksPerBlock": 5,
    "stillTicks": 30
   },
   "dino-dig-site/crusher-1": {
-   "ticksPerBlock": 5,
-   "stillTicks": 5
+   "ticksPerBlock": 7,
+   "stillTicks": 7,
+   "sweep": 3
   },
   "dip/crusher-1": {
    "ticksPerBlock": 5,
@@ -52,16 +54,16 @@
    "stillTicks": 30
   },
   "flags/crusher-2": {
-   "ticksPerBlock": 5,
-   "stillTicks": 30
+   "ticksPerBlock": 6,
+   "stillTicks": 36
   },
   "grass-ruin/crusher-1": {
-   "ticksPerBlock": 2,
-   "stillTicks": 20
+   "ticksPerBlock": 3,
+   "stillTicks": 18
   },
   "lava-ravine/crusher-1": {
    "ticksPerBlock": 2,
-   "stillTicks": 10
+   "stillTicks": 12
   },
   "museum/crusher-1": {
    "ticksPerBlock": 10,
@@ -193,16 +195,16 @@
  ],
  "flameStream": {
   "period": 8,
-  "reach": 6.0,
-  "halfWidth": 1.0,
+  "reach": 6,
+  "halfWidth": 1,
   "height": 1.4,
   "liveTicks": 5,
-  "range": 16.0
+  "range": 16
  },
  "arrowFlight": {
   "speed": 1.5,
-  "inaccuracy": 6.0,
-  "range": 48.0,
+  "inaccuracy": 6,
+  "range": 48,
   "maxTicks": 60
  },
  "arrows": [
@@ -1240,7 +1242,7 @@
     1,
     3
    ],
-   "pickRange": 9.0,
+   "pickRange": 9,
    "measured": {
     "shots": 86
    }

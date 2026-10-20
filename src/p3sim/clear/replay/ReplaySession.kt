@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim.clear.replay
 
+import com.engineerclient.p3sim.clear.traps.TrapsModule
 import com.engineerclient.EngineerClient
 import com.engineerclient.p3sim.Sim
 import com.engineerclient.p3sim.SimItems
@@ -119,6 +120,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
 
     fun start() {
+        TrapsModule.recordingMovesCrushers = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
         for (m in bodies.all()) {
@@ -133,6 +135,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     fun stop(why: String) {
         if (ended) return
         ended = true
+        TrapsModule.recordingMovesCrushers = false
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
@@ -229,7 +232,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 val x = e.i(2) ?: return; val y = e.i(3) ?: return; val z = e.i(4) ?: return
                 val you = host.position().distanceTo(Vec3(x + 0.5, y + 0.5, z + 0.5))
                 val mate = bodies.all().filter { !it.x.isNaN() && it.present }.minOfOrNull { Math.sqrt((it.x - x - 0.5).let { d -> d * d } + (it.y - y).let { d -> d * d } + (it.z - z - 0.5).let { d -> d * d }) } ?: 999.0
-                diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
+                // A crusher's blocks are the recording's, on their own tick (its pace is checked against the recordings outside the game).
+                if (TrapsModule.isCrusherCell(x, y, z)) diff.setNow(x, y, z, e.s(5)) else diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
             }
             "screen" -> if (!catchUp && e.s(3) == "inventory") SimNet.send(host, NET, "inv 1")
             "screenClose" -> if (!catchUp && host.containerMenu === host.inventoryMenu) SimNet.send(host, NET, "inv 0")
