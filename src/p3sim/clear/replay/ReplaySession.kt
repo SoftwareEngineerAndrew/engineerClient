@@ -782,9 +782,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (!sameMob(mob.name, label)) diff.note(k, "mob", "recorded $label at ${fmt(rx, ry, rz)} matched to ADS's ${mob.name} (no $label within 14)")
         if (!mob.alive) { diff.mobOk(); return }
         val who = nearestMate(rx, rz)
-        diff.mobPending(k, label, you, "ADS %s %,.0f/%,.0f hp%s, %.1f blocks from where it died".format(mob.name, mob.hp, mob.maxHp, if (Services.mobs.isAsleep(mob.id)) " asleep" else "", Math.hypot(mob.x - rx, mob.z - rz)))
+        // Yours only when you hit or used something just before (an arrow flies a few ticks); else a teammate's, done on its tick.
+        val yours = you <= FAR && youActed(k)
+        if (yours) diff.mobPending(k, label, you, "ADS %s %,.0f/%,.0f hp%s, %.1f blocks from where it died".format(mob.name, mob.hp, mob.maxHp, if (Services.mobs.isAsleep(mob.id)) " asleep" else "", Math.hypot(mob.x - rx, mob.z - rz)))
         // Far from you it was a teammate's kill: ADS cannot make it, so it is done on the tick.
-        pending += Pending(if (you > FAR) k else k + KILL_GRACE, "$label killed (you ${"%.0f".format(you)} blocks away)", { !mob.alive }) {
+        pending += Pending(if (!yours) k else k + KILL_GRACE, "$label killed (you ${"%.0f".format(you)} blocks away)", { !mob.alive }) {
             forcing = true
             try { Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, who) } finally { forcing = false }
             if (mob.alive) "hurtMob left it alive" else "killed by ${who?.let { run.state.players[it]?.name } ?: "?"}"
@@ -911,6 +913,18 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         WITHER_ESSENCE.find(t)?.let { m -> uuidOf(m.groupValues[1])?.takeIf { it != host.uuid }?.let { mateEssence(it) }; return }
         ESSENCE.find(t)?.let { m -> sec.recordedEssence(run, uuidOf(m.groupValues[1]) ?: return, m.groupValues[3], m.groupValues[2].toIntOrNull() ?: return) }
+    }
+
+    /** The ticks you attacked or used an item (main hand) in the recording. */
+    private val yourActs: IntArray by lazy {
+        file.events.filter { it.size() > 2 && (it[1].asString == "o.atk" || ((it[1].asString == "o.use" || it[1].asString == "o.useOn") && it.s(2) == "MAIN_HAND")) }.map { it[0].asInt }.toIntArray().also { it.sort() }
+    }
+
+    /** Whether you attacked or used an item in the [YOURS_WITHIN] ticks up to [k]. */
+    private fun youActed(k: Int): Boolean {
+        var i = java.util.Arrays.binarySearch(yourActs, k).let { if (it < 0) -it - 2 else it }
+        while (i + 1 < yourActs.size && yourActs[i + 1] <= k) i++
+        return i >= 0 && k - yourActs[i] <= YOURS_WITHIN
     }
 
     /** Each block you right-click in the recording, with the last tick you do. */
@@ -1075,6 +1089,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         const val KILL_GRACE = HIT_AFTER + 1
         /** Farther than this from you, a recorded kill was not yours. */
         const val FAR = 12.0
+        /** A death within this many ticks of your hit or use may be yours (an arrow's flight included). */
+        const val YOURS_WITHIN = 10
 
         /** The health part of Hypixel's action bar: current/max, red or gold. */
         private val HEALTH = Regex("^\u00a7[c6]([\\d,]+)/([\\d,]+)")
