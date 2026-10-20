@@ -421,6 +421,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = { id -> if (ended) null else plannedBack[id]?.let { ents[it] }?.takeIf { !it.gone && !(it.x == 0.0 && it.z == 0.0) }?.let { doubleArrayOf(it.x, it.y, it.z) } }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = { by -> recordedImplosion(by) }
+        com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = { p -> !ended && p === host }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = true
@@ -479,6 +480,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = null
+        com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
@@ -555,6 +557,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 val id = e.i(2) ?: return
                 val r = RecEnt(id, e.s(3), e.d(5) ?: 0.0, e.d(6) ?: 0.0, e.d(7) ?: 0.0, e.s(8))
                 ents[id] = r
+                // Your Guided Sheep appears by you: of the 317 sheep followed 138 to 140 or 298 to 300 ticks on by "now available", 306 within
+                // 4.5 blocks across and 0.5 down to 2.1 up of where you were (most 0.78 up); a teammate's mostly elsewhere. Its cooldown and
+                // your class rule out the rest.
+                if (!catchUp && r.type == "minecraft:sheep") recPos?.let { at ->
+                    if (kotlin.math.hypot(r.x - at.x, r.z - at.z) < 4.5 && r.y - at.y in -0.5..2.1)
+                        com.engineerclient.p3sim.clear.damage.ClassAbilities.recordedBurst(host)
+                }
                 mate(id)?.let { m -> m.x = r.x; m.y = r.y; m.z = r.z; m.yaw = e.d(9)?.toFloat() ?: m.yaw; m.present = true }
             }
             "hp" -> e.d(3)?.takeIf { it > 100.0 }?.let { v ->
