@@ -451,8 +451,10 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
             }
             is StageChanged -> when (e.to) {
                 RunStage.BLOOD -> plan.blood?.let { b -> bloodGreenAt = null; discover(b.index); mark(b.index, CheckMark.RED) }
-                // Nobody walks into the boss with the blood room still red: whatever was waiting happens now.
-                RunStage.BOSS_ENTRY, RunStage.BOSS -> if (bloodGreenAt != null) greenBlood()
+                // A party in the boss before the blood room's check is due leaves it red for good (139 DR and ADR runs: the 71 that reached
+                // Maxor 62 to 92 ticks after the pass line never turned it green; the 60 that turned it green did so 64 to 95 ticks after the pass,
+                // before Maxor).
+                RunStage.BOSS_ENTRY, RunStage.BOSS -> bloodGreenAt = null
                 else -> {}
             }
             // The room stays red through the Watcher's pass line; the check comes with the portal, about 90 ticks after his last kill.
