@@ -139,9 +139,12 @@ object SecretWorld {
     // ---- entities --------------------------------------------------------------------------------------------------------------
 
     /**
-     * A bat for a bat secret, as Hypixel's: a scripted target that hangs in the air where it spawned (no AI, no gravity), has 100 health
-     * and a permanent fire resistance (the orange swirl on it), so lava or fire never takes it; the sim kills it on any hit it is told of.
-     * Silent (the sim plays Odin's quiet bat sounds itself) and persistent, at the centre of its block.
+     * A bat for a bat secret, as Hypixel's: a vanilla bat put at the centre of its block, with 100 health and a permanent fire resistance
+     * (the orange swirl on it), so lava or fire never takes it; the sim kills it on any hit it is told of. Silent (the sim plays Odin's quiet
+     * bat sounds itself) and persistent. Its own AI runs, as on Hypixel (Dungeon Recorder, 297 secret bats: 87 percent hang still at the
+     * block's y + 0.1, where a resting bat clings under a solid block, and fly off once a player is near, the first move a p25 of 4 blocks
+     * from the recorder, vanilla's 4-block wake; flights are vanilla's darting legs at about 0.1 to 0.16 blocks a tick): it hangs when
+     * the block above is solid and flies about when woken or when it has nothing to cling to.
      */
     fun spawnBat(site: SecretSite): UUID? {
         val level = RunBlocks.level ?: return null
@@ -149,9 +152,7 @@ object SecretWorld {
         bat.setPos(site.x + 0.5, site.y + 0.5, site.z + 0.5)
         bat.isSilent = true
         bat.setPersistenceRequired()
-        bat.isResting = false
-        bat.isNoAi = true
-        bat.setNoGravity(true)
+        bat.isResting = level.getBlockState(net.minecraft.core.BlockPos(site.x, site.y + 1, site.z)).isRedstoneConductor(level, net.minecraft.core.BlockPos(site.x, site.y + 1, site.z))
         bat.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH)?.baseValue = BAT_HEALTH.toDouble()
         bat.health = BAT_HEALTH
         bat.addEffect(MobEffectInstance(MobEffects.FIRE_RESISTANCE, MobEffectInstance.INFINITE_DURATION, 0, false, true))
@@ -162,11 +163,9 @@ object SecretWorld {
     /** A secret bat's health: any hit that reaches the sim kills it, so this only has to match what the client is told. */
     const val BAT_HEALTH = 100f
 
-    /** A bat's death: it falls and the body stays 20 ticks (vanilla's death), so it needs its AI and gravity back for the fall. */
+    /** A bat's death: it falls and the body stays 20 ticks (vanilla's death). */
     fun killBat(bat: Bat) {
         val level = RunBlocks.level ?: return
-        bat.isNoAi = false
-        bat.setNoGravity(false)
         if (bat.isAlive) bat.kill(level)
     }
 
