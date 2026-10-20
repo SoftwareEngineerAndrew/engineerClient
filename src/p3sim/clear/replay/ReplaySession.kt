@@ -142,6 +142,24 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         out
     }
 
+    /** The Higher Or Lower blazes of the recording: each body where it was first seen, with the HP its tag gave (x, y, z, HP). */
+    private val recordedBlazes: List<DoubleArray> by lazy {
+        val first = HashMap<Int, JsonArray>()
+        val out = LinkedHashMap<String, DoubleArray>()
+        for (e in file.events) {
+            when (e.s(1)) {
+                "spawn" -> e.i(2)?.let { first.putIfAbsent(it, e) }
+                "name" -> {
+                    val hp = e.s(3)?.let { BLAZE_TAG.find(it) }?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: continue
+                    val b = first[(e.i(2) ?: continue) - 1]?.takeIf { it.s(3) == "minecraft:blaze" } ?: continue
+                    val x = b.d(5) ?: continue; val y = b.d(6) ?: continue; val z = b.d(7) ?: continue
+                    out.putIfAbsent("$x $y $z", doubleArrayOf(x, y, z, hp))
+                }
+            }
+        }
+        out.values.toList()
+    }
+
     /** The ADS mob planned for each recorded mob. */
     private val planned = HashMap<Int, java.util.UUID>()
     private val plannedBack = HashMap<java.util.UUID, Int>()
@@ -371,6 +389,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             if (it.contains(com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO_OTHER)) com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO_OTHER else com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO }
         TrapsModule.recordingMovesCrushers = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
+        com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = { r -> if (r === run && !ended) recordedBlazes else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
         for (m in bodies.all()) {
             val rec = run.state.players.getOrPut(m.uuid) { PlayerRecord(m.uuid, m.name, cls(m.cls), true) }
@@ -394,6 +413,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.blood.camp.CampLines.forcedOpening = null
         com.engineerclient.p3sim.clear.blood.camp.CampLines.script = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
+        com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
@@ -763,6 +783,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             BloodDeath(k, tag ?: "camp mob", rx, rz, blood.index, landing).also { lastBlood = it; bloodOwed += it }
             payBlood(); return
         }
+        if (r.type == "minecraft:blaze") {
+            val hp = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.let { BLAZE_TAG.find(clean(it)) }?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
+            if (hp != null) { blazeDied(k, hp, rx, ry, rz); return }
+        }
         // Only Hypixel's mobs have a tag (a bare body is a part of one: a Giant's, a disguise's).
         if (tag.isNullOrEmpty()) { if (r.type != "minecraft:bat") return }
         val label = tag ?: "Bat"
@@ -790,6 +814,24 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             forcing = true
             try { Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, who) } finally { forcing = false }
             if (mob.alive) "hurtMob left it alive" else "killed by ${who?.let { run.state.players[it]?.name } ?: "?"}"
+        }
+    }
+
+    /**
+     * A recorded Higher Or Lower blaze died: ADS's blaze of the same HP in that room ([BlazePuzzle] takes the recorded HPs). Yours (you hit
+     * or used something just before, near it) gets [KILL_GRACE] ticks; a teammate's is done on its tick.
+     */
+    private fun blazeDied(k: Int, hp: Int, rx: Double, ry: Double, rz: Double) {
+        val label = "Blaze %,d".format(hp)
+        val you = Math.hypot(host.x - rx, host.z - rz)
+        val pz = run.plan.roomAtBlock(rx, rz)?.let { PuzzlesModule.puzzleOf(run, it.index) } as? com.engineerclient.p3sim.clear.puzzles.BlazePuzzle
+        if (pz == null) { diff.mobNotFound(k, label, rx, ry, rz, you); return }
+        val yours = you <= FAR && youActed(k)
+        if (!yours && pz.awake && !pz.standing(hp)) { diff.mobOk(); return }
+        if (yours) diff.mobPending(k, label, you, "ADS blaze %,d %s".format(hp, if (pz.standing(hp)) "standing" else "not standing"))
+        val who = nearestMate(rx, rz)
+        pending += Pending(if (!yours) k else k + KILL_GRACE, "$label killed (you ${"%.0f".format(you)} blocks away)", { pz.awake && !pz.standing(hp) }) {
+            if (pz.killRecorded(hp, who)) "killed by ${who?.let { run.state.players[it]?.name } ?: "?"}" else "no ADS blaze of $hp standing"
         }
     }
 
@@ -1116,6 +1158,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         fun sameMob(ads: String, rec: String): Boolean { val a = clean(ads).replace("✯", "").trim(); return a.equals(rec, true) || rec.endsWith(" $a") || a.endsWith(" $rec") }
         private val REVIVED = Regex("❣ (\\w{1,16}) was revived by (\\w{1,16})")
         fun clean(s: String) = s.replace(Regex("§."), "").trim()
+        /** A Higher Or Lower blaze's tag, `[Lv11] <icon> Blaze 3,916/3,916❤`: its full HP. */
+        private val BLAZE_TAG = Regex("""\bBlaze [\d,]+/([\d,]+)❤""")
         fun fmt(x: Double, y: Double, z: Double) = "%.1f %.1f %.1f".format(x, y, z)
         val hostPlayer: ServerPlayer? get() = SimServer.player
     }

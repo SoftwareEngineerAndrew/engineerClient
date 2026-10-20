@@ -54,6 +54,15 @@ class BlazeLogic(val hps: List<Int>, val ascending: Boolean) {
         }
 
         /**
+         * A replay's set: the HP of the recorded blaze (x, y, z, HP of each body) standing on each of [cells] (world x, y, z), or null unless
+         * every cell has one and they all differ.
+         */
+        fun recordedHps(cells: List<IntArray>, rec: List<DoubleArray>): List<Int>? {
+            val out = cells.map { c -> rec.firstOrNull { Math.abs(it[0] - c[0]) < 0.5 && Math.abs(it[1] - c[1]) < 0.5 && Math.abs(it[2] - c[2]) < 0.5 }?.get(3)?.toInt() ?: return null }
+            return out.takeIf { it.toSet().size == it.size }
+        }
+
+        /**
          * The text of the name tag Odin reads from a blaze's armor stand: `[Lv11]` + the blaze icon glyph + ` Blaze 3,261/3,261❤` (one space each side
          * of the glyph, commas in thousands), with Hypixel's colours. The glyph U+E07C is a private-use character that Hypixel's resource pack draws
          * as the blaze icon; Odin's regex needs it.
