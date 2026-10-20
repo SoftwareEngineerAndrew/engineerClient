@@ -10,10 +10,24 @@ import kotlin.math.sqrt
  * blocks away and p90 32 to 43 for every kind (n=525: the room's walls hide players until they are close); mob shots (2,296 arrows and wither
  * skulls) leave from a median 5.9 blocks, p90 13.5; a Withermancer's first shot comes a median 31 ticks after a player is within 15 blocks.
  * Speeds are blocks per tick. Each value is a setting ("Mobs ...").
+ *
+ * v2 (Dungeon Recorder, 223 F7 runs, 9,746 clear mobs, research dr/walks*.js): Hypixel's clear mobs do not chase. Three in four never take a
+ * walk of 3 blocks while a player is near; a walk is short (median 6 blocks, p90 12 to 25) and stops, at about 0.85 of the mob's measured
+ * pace, and walks come more often the nearer a player is (per mob-minute: 7.0 within 6 blocks, 5.9 at 6 to 12, 3.9 at 12 to 20, 2.1 at 20 to
+ * 32, 1.35 beyond). About a third of the walks within 20 blocks head at the nearest player (51 to 56 percent point within 45 degrees of it,
+ * against 25 for a random heading), the rest anywhere. So by default no mob is a chaser ([moverShare] 0) and every mob strolls ([strolls]).
  */
 data class AiParams(
-    /** Share of mobs that ever walk toward a player. Recordings: 33 to 45 percent of mobs seen 2 to 12 blocks from the player move (the ADR figure of a quarter counts bodies that died first). */
-    val moverShare: Double = 0.4,
+    /** Share of mobs that chase a player they see until they reach it (the sim's v1 AI). 0 by default: the Dungeon Recorder shows no chases, only short walks ([strolls]). */
+    val moverShare: Double = 0.0,
+    /** Whether mobs that do not chase take the recorded short walks (see the class doc). */
+    val strolls: Boolean = true,
+    /** Walks per mob-minute by the nearest player's distance: within 6, 12, 20 and 32 blocks, and beyond (Dungeon Recorder). */
+    val strollRates: DoubleArray = doubleArrayOf(7.0, 5.9, 3.9, 2.1, 1.35),
+    /** Share of the walks in each of those bands that head at the nearest player it can see (the rest go anywhere). */
+    val strollAimed: DoubleArray = doubleArrayOf(0.31, 0.41, 0.35, 0.2, 0.11),
+    /** A walk's pace against the mob's chase speed (recorded walks: median 0.85 of the q75 pace). */
+    val strollPace: Double = 0.85,
     /** A seen player closer than this can become a mover's target (1.8's follow range; recorded first steps reach p90 32 to 43). */
     val aggroRadius: Double = 35.0,
     /** A chasing mob gives up when its target is farther than this (the follow range), or unseen for [unseenMemory] ticks. */
@@ -79,6 +93,10 @@ class AiState {
     var sinceTeleport = 0
     /** Next point of a patrol loop. */
     var loopIndex = 0
+    /** The point a stroll walks to, and the ticks it has left (0: not strolling). */
+    var strollX = 0.0
+    var strollZ = 0.0
+    var strollLeft = 0
 }
 
 /** Where the nearest target stands, how far (horizontal), and whether the mob can see it (a clear line from eye to eye). */
@@ -95,19 +113,23 @@ object MobAi {
     /** Ticks a chasing shooter must have seen its target before it stops to shoot (1.8 EntityAIArrowAttack). */
     const val SEE_BEFORE_STOP = 20
 
-    /** [search]: this tick the mob looks for a target (the caller rolls [AiParams.searchChance]). */
-    fun step(kind: AiKind, mover: Boolean, x: Double, z: Double, speed: Double, target: AiTarget?, state: AiState, loop: List<DoubleArray>?, p: AiParams, search: Boolean = true): AiAction {
+    /** [search]: this tick the mob looks for a target (the caller rolls [AiParams.searchChance]). [rng] draws the strolls (none without it). */
+    fun step(kind: AiKind, mover: Boolean, x: Double, z: Double, speed: Double, target: AiTarget?, state: AiState, loop: List<DoubleArray>?, p: AiParams, search: Boolean = true, rng: kotlin.random.Random? = null): AiAction {
         if (state.cooldown > 0) state.cooldown--
         state.sinceTeleport++
         if (target == null) {
             state.chasing = false; state.drawn = false; state.seeTime = 0
-            return patrol(x, z, state, loop, p, mover)
+            return patrol(x, z, state, loop, p, mover).let { if (it == AiAction.Idle && loop.isNullOrEmpty()) stroll(x, z, speed, null, state, p, rng) else it }
         }
         if (!mover && kind != AiKind.TELEPORT) {
-            // A shooter that never walks still shoots what it sees in range.
-            if (kind == AiKind.RANGED) return if (target.seen && target.dist <= p.rangedRange) shoot(target, state, p) else { state.drawn = false; AiAction.Idle }
-            if (p.staticReach > 0.0 && target.dist <= p.staticReach) return attack(kind, target, state, p)
-            return AiAction.Idle
+            // A shooter that never chases still shoots what it sees in range; a swing or a shot comes before a walk.
+            if (kind == AiKind.RANGED && target.seen && target.dist <= p.rangedRange) {
+                val act = shoot(target, state, p)
+                if (act != AiAction.Idle) { state.strollLeft = 0; return act }
+            } else if (kind == AiKind.RANGED) state.drawn = false
+            if (kind != AiKind.RANGED && p.staticReach > 0.0 && target.dist <= p.staticReach) return attack(kind, target, state, p)
+            if (!loop.isNullOrEmpty()) return patrol(x, z, state, loop, p, mover)
+            return stroll(x, z, speed, target, state, p, rng)
         }
         if (state.chasing) {
             state.unseen = if (target.seen) 0 else state.unseen + 1
@@ -134,6 +156,41 @@ object MobAi {
             }
             AiKind.MELEE -> if (target.dist <= p.meleeReach) attack(kind, target, state, p) else AiAction.MoveTo(target.x, target.z, speed)
         }
+    }
+
+    /** The band of [AiParams.strollRates] a player [dist] blocks away falls in. */
+    fun strollBand(dist: Double): Int = when { dist < 6 -> 0; dist < 12 -> 1; dist < 20 -> 2; dist < 32 -> 3; else -> 4 }
+
+    /**
+     * A short walk now and then (the Dungeon Recorder's walks): a walk under way goes on until the mob is within half a block of its end
+     * or its time is up; otherwise one starts with the chance its band's rate gives a tick. It heads at the nearest seen player (stopping
+     * a block short) with its band's aimed share, else anywhere; its length is 3 blocks plus an exponential of mean 4 (median 5.8, p90 12),
+     * at [AiParams.strollPace] of the chase [speed].
+     */
+    private fun stroll(x: Double, z: Double, speed: Double, target: AiTarget?, state: AiState, p: AiParams, rng: kotlin.random.Random?): AiAction {
+        val pace = speed * p.strollPace
+        if (state.strollLeft > 0) {
+            state.strollLeft--
+            val dx = state.strollX - x; val dz = state.strollZ - z
+            if (dx * dx + dz * dz > 0.25 && state.strollLeft > 0) return AiAction.MoveTo(state.strollX, state.strollZ, pace)
+            state.strollLeft = 0
+            return AiAction.Idle
+        }
+        if (!p.strolls || rng == null || pace <= 0.0) return AiAction.Idle
+        val band = strollBand(target?.dist ?: Double.MAX_VALUE)
+        if (rng.nextDouble() >= p.strollRates[band] / 1200.0) return AiAction.Idle
+        var len = minOf(25.0, 3.0 - 4.0 * Math.log(1.0 - rng.nextDouble()))
+        val heading: Double
+        if (target != null && target.seen && rng.nextDouble() < p.strollAimed[band]) {
+            heading = Math.atan2(target.z - z, target.x - x)
+            len = minOf(len, target.dist - 1.0)
+            if (len < 1.0) return AiAction.Idle
+        } else heading = rng.nextDouble() * 2 * Math.PI
+        state.strollX = x + Math.cos(heading) * len
+        state.strollZ = z + Math.sin(heading) * len
+        // Time for the walk and a little more (a body that cannot get there gives up).
+        state.strollLeft = (len / pace).toInt() + 40
+        return AiAction.MoveTo(state.strollX, state.strollZ, pace)
     }
 
     /** Ticks between a shooter's shots at [dist] (1.8's skeleton). */
