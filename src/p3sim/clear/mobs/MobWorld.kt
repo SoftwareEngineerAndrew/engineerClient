@@ -104,6 +104,7 @@ internal object MobWorld {
             if (healthData && body is LivingEntity) MobBodies.setHealthData(body, e.record.hp)
             val text = tagText(e)
             MobBodies.dressTag(built.stand, Sim.legacy(text))
+            (built.stand as? com.engineerclient.p3sim.TransientStand)?.let { it.trackSquare = TAG_RANGE; tags += it }
             built.stand.snapTo(e.x, e.y + e.tag.dy, e.z, 0f, 0f)
             for (f in built.fillers) f.snapTo(e.x, e.y, e.z, 0f, 0f)
             Sim.spawn(body)
@@ -250,8 +251,38 @@ internal object MobWorld {
         dematerialise(e)
     }
 
-    /** Removes the bodies whose death delay is over, each with its fillers and tag in the same tick. */
+    /**
+     * How near a player must be, on x and on z, for a mob's name tag to be sent: Hypixel sends the tag stand only within about 24 blocks
+     * (Dungeon Recorder, 223 F7 runs: tag stands added and removed at a sharp edge of 24 to 26 blocks, square on x/z, while the bodies
+     * reach 48), so a tag is never seen across the map or through several rooms. Vanilla would track a stand out to the view distance.
+     */
+    const val TAG_RANGE = 24
+
+    /** The live tag stands, their tracking re-checked every tick (vanilla re-checks only when someone crosses a 16-block section). */
+    private val tags = ArrayList<com.engineerclient.p3sim.TransientStand>()
+
+    private val entityMapField by lazy { net.minecraft.server.level.ChunkMap::class.java.getDeclaredField("entityMap").also { it.isAccessible = true } }
+    private var updatePlayer: java.lang.reflect.Method? = null
+
+    /** Adds or removes each live tag on every player's client as the 24-block square says. */
+    private fun trackTags(level: ServerLevel) {
+        tags.removeIf { it.isRemoved }
+        if (tags.isEmpty()) return
+        try {
+            val map = entityMapField.get(level.chunkSource.chunkMap) as it.unimi.dsi.fastutil.ints.Int2ObjectMap<*>
+            val players = level.players()
+            for (t in tags) {
+                val tracked = map.get(t.id) ?: continue
+                val m = updatePlayer ?: tracked.javaClass.getMethod("updatePlayer", net.minecraft.server.level.ServerPlayer::class.java).also { it.isAccessible = true; updatePlayer = it }
+                for (p in players) m.invoke(tracked, p)
+            }
+        } catch (t: Throwable) { if (!trackWarned) { trackWarned = true; log.warn("[ads] tag tracking: ${t.message}") } }
+    }
+    private var trackWarned = false
+
+    /** Removes the bodies whose death delay is over, each with its fillers and tag in the same tick; re-checks who sees each tag. */
     fun tick(level: ServerLevel) {
+        trackTags(level)
         if (dying.isEmpty()) return
         val now = level.gameTime
         val it = dying.iterator()
