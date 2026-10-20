@@ -23,35 +23,20 @@ import java.nio.file.Files
 import java.util.Properties
 
 /**
- * The guide: where to go in this dungeon so the recording catches what ADS still lacks. It reads Odin's map for the rooms this run
- * has that are still wanted (puzzles, the trap, the miniboss room, rare rooms), points at the best one (a HUD line and a pillar in the
- * world), says what to do there (always just "stay until it is done" or "stand still"), and counts each one caught across runs, so
- * it stops asking once there is enough. Everything else is recorded whatever you do. Game thread only.
+ * The guide: where to go in this dungeon for what neither the Dungeon Recorder (286 F7 clears, with every chunk, block change and
+ * mob it was sent) nor this recorder catches by just playing. That is now only the rare rooms (8 seen in all the DR runs): when this
+ * run has one, a HUD line and a pillar point at it and say to walk through it. Each catch is counted across runs and it stops asking
+ * once there are enough. Puzzles, the trap and the miniboss rooms are not asked for: the DR has 12 to 62 runs of each watched
+ * (the room loaded while it was done). Game thread only.
  */
 object BrGuide {
     /** A kind of thing wanted: rooms whose Odin name or type match, how many runs of it are wanted, what to do there. */
     private class Want(val id: String, val goal: Int, val doThere: String, val match: (DungeonRoom) -> Boolean)
 
-    private fun named(n: String): (DungeonRoom) -> Boolean = { it.data?.name == n }
 
-    private val WANTS = buildList {
-        // Puzzles: the ones least seen and with the most layouts want the most visits.
-        val puzzleGoals = linkedMapOf("Water Board" to 20, "Tic Tac Toe" to 10, "Boulder" to 12, "Ice Fill" to 10, "Teleport Maze" to 6,
-            "Three Weirdos" to 6, "Quiz" to 6, "Creeper Beams" to 6, "Ice Path" to 6, "Higher Blaze" to 6, "Lower Blaze" to 6)
-        for ((n, g) in puzzleGoals) add(Want("puzzle:$n", g, "stay in it until it is solved", named(n)))
-        add(Want("trap:New Trap", 8, "go through it to the end chest", named("New Trap")))
-        add(Want("trap:Old Trap", 8, "go through it to the end chest", named("Old Trap")))
-        for (n in listOf("Shadow Assassin", "King Midas", "Dragon")) add(Want("mini:$n", 6, "stay until the miniboss is dead", named(n)))
-        add(Want("rare", 10, "walk all through it", { it.type == RoomType.RARE || it.data?.type == RoomType.RARE }))
-    }
-
-    /** Hits taken from mobs wanted in all (melee reach and swing rate), and per run at most. */
-    private const val HITS_GOAL = 300
-    private const val HITS_PER_RUN = 15
-    /** Rooms walked into and stood still in for [STILL_TICKS] (when and how mobs notice you), in all and per run. */
-    private const val STILL_GOAL = 60
-    private const val STILL_PER_RUN = 3
-    private const val STILL_TICKS = 80
+    private val WANTS = listOf(
+        Want("rare", 10, "walk all through it", { it.type == RoomType.RARE || it.data?.type == RoomType.RARE }),
+    )
 
     // ------------------------------------------------------------------ counts across runs
 
@@ -76,17 +61,12 @@ object BrGuide {
 
     private val tasks = LinkedHashMap<String, Task>()
     private var target: Task? = null
-    private var hitsThisRun = 0
-    private var stillThisRun = 0
-    private var stillRoom: DungeonRoom? = null
-    private var stillLeft = 0
-    private var stillAt: Vec3? = null
     private val roomsEntered = HashSet<Int>()
     private var lastHurt = 0
     private var lastHp = 0f
 
     fun newRun() {
-        tasks.clear(); target = null; hitsThisRun = 0; stillThisRun = 0; stillRoom = null; stillLeft = 0; roomsEntered.clear()
+        tasks.clear(); target = null
     }
 
     /** `/brec guidetest`: the guide in ADS runs too (nothing it catches there is counted). */
@@ -127,36 +107,7 @@ object BrGuide {
             }
         }
 
-        // Standing still on entering a room with mobs (aggro), a few times a run.
-        if (here != null && System.identityHashCode(here) !in roomsEntered) {
-            roomsEntered += System.identityHashCode(here)
-            val normal = here.type == RoomType.NORMAL || here.data?.type == RoomType.NORMAL
-            if (normal && !isDone(here) && stillThisRun < STILL_PER_RUN && count("still") < STILL_GOAL) {
-                stillRoom = here; stillLeft = STILL_TICKS; stillAt = me.position()
-                s.line("guide") { j -> j.s("still", here.data?.name) }
-            }
-        }
-        if (stillRoom != null) {
-            if (here !== stillRoom) { stillRoom = null; stillLeft = 0 }
-            else {
-                // Moving restarts the count (a step is fine).
-                if ((stillAt?.distanceTo(me.position()) ?: 0.0) > 1.5) { stillLeft = STILL_TICKS; stillAt = me.position() }
-                stillLeft -= 5
-                if (stillLeft <= 0) {
-                    stillThisRun++; stillRoom = null
-                    val n = bump("still")
-                    s.line("guide") { j -> j.s("got", "still").i("n", n).i("goal", STILL_GOAL) }
-                }
-            }
-        }
-
         target = next()
-    }
-
-    /** Each tick: hits taken from mobs (the melee capture writes the line; this counts it). */
-    fun hit() {
-        hitsThisRun++
-        if (hitsThisRun <= HITS_PER_RUN) bump("hits")
     }
 
     /** The open task to go to: the most wanted, then the nearest. */
@@ -181,33 +132,23 @@ object BrGuide {
         return arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")[((a + 22.5) / 45).toInt() % 8]
     }
 
-    private fun mobsNear(me: Player) = DevgineerClient.mc.level?.entitiesForRendering()?.count {
-        it is LivingEntity && it !is ArmorStand && it !is Player && it.isAlive && it.distanceTo(me) < 10f
-    } ?: 0
-
     // ------------------------------------------------------------------ drawing
 
     fun lines(example: Boolean): List<String> {
-        if (example) return listOf("§b§lBetter Recorder", "§fGo to §eWater Board §7(42 blocks NE)", "§7Then: stay in it until it is solved")
+        if (example) return listOf("§b§lBetter Recorder", "§fGo to §eSand Dragon §7(42 blocks NE)", "§7Then: walk all through it")
         val s = BetterRecorder.session ?: return emptyList()
         if (!on(s)) return emptyList()
         val me = DevgineerClient.mc.player ?: return emptyList()
         val out = mutableListOf("§b§lBetter Recorder")
-        val sl = stillRoom
-        if (sl != null) out += "§6Stand still here §f${(stillLeft + 19) / 20}s§7 (watching the mobs notice you)"
-        val t = target
+        val t = target ?: return emptyList()
         val here = BrRooms.current()
-        if (t != null) {
-            if (here === t.room) out += "§aYou're there: §f${t.want.doThere}"
-            else {
-                val c = center(t.room)
-                val far = if (c == null) "" else " §7(${Math.hypot(c.x - me.x, c.z - me.z).toInt()} blocks ${direction(c.x - me.x, c.z - me.z)})"
-                out += "§fGo to §e${label(t)}$far"
-                out += "§7Then: ${t.want.doThere}"
-            }
-        } else if (sl == null) out += "§7Nothing to go to: play normally"
-        if (hitsThisRun < HITS_PER_RUN && count("hits") < HITS_GOAL && here != null && !isDone(here) && mobsNear(me) > 0 && me.health > me.maxHealth / 2)
-            out += "§7While here: let a mob hit you §f($hitsThisRun/$HITS_PER_RUN)"
+        if (here === t.room) out += "§aYou're there: §f${t.want.doThere}"
+        else {
+            val c = center(t.room)
+            val far = if (c == null) "" else " §7(${Math.hypot(c.x - me.x, c.z - me.z).toInt()} blocks ${direction(c.x - me.x, c.z - me.z)})"
+            out += "§fGo to §e${label(t)}$far"
+            out += "§7Then: ${t.want.doThere}"
+        }
         return out
     }
 
@@ -231,6 +172,5 @@ object BrGuide {
 
     /** For `/brec guide`: each wanted thing with its count. */
     fun summary(): List<String> =
-        WANTS.map { "§7- ${it.id.substringAfter(':')}${if (it.id.startsWith("mini:")) " room" else ""}: §f${count(it.id)}/${it.goal}" } +
-            listOf("§7- mob hits: §f${count("hits")}/$HITS_GOAL", "§7- standing still in a new room: §f${count("still")}/$STILL_GOAL")
+        WANTS.map { "§7- ${it.id} rooms: §f${count(it.id)}/${it.goal}" }
 }

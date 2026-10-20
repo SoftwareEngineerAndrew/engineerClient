@@ -56,7 +56,7 @@ object BetterRecorder : Module(
     private val snaps by SelectorSetting("Room Snapshots", Snaps.ALL, desc = "Every block of a room the first time it is seen with its rotation known (and puzzle and trap rooms again when done). About 20 KB a room.")
     private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat out (a line says one was there).")
     private val announce by BooleanSetting("Announce Sightings", true, desc = "Says in chat when a wanted sighting is caught for the first time (Wandering Soul, Crypt Undead...).")
-    private val guideHud by HUD("Guide", "Where to go in this run for what ADS still lacks, and what to do there.", true, 8, 300, 1.2f) { example -> BrGuide.draw(this, example) }
+    private val guideHud by HUD("Guide", "Points at a rare room when the run has one (the only thing the recordings still lack that a run can give); hidden otherwise.", true, 8, 300, 1.2f) { example -> BrGuide.draw(this, example) }
     private val guidePillar by BooleanSetting("Guide Pillar", true, desc = "A pillar over the room the guide sends you to, seen through walls.")
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         DevgineerClient.safely("better recorder folder") { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
