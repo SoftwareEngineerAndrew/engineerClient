@@ -45,9 +45,9 @@ class PlanParams(
     /** Archetypes a room roll never spawns; another module brings them in when its trigger happens (King Midas, after its crypt is blown). */
     val deferred: Set<String> = setOf("king_midas"),
     /**
-     * The chance a miniboss-design room really holds its miniboss. ADR sees a starred mob in about a third of all visits to these rooms,
-     * but most visits are passing looks that miss the room's mobs; of the 216 F7 visits that saw the room's ordinary mobs in full (half
-     * its most-seen count or more), 144 (67 percent) saw the miniboss too.
+     * The chance an ordinary room that can hold a miniboss really does. The Dungeon Recorder (223 F7 runs, every entity): of 434 times the
+     * recorder walked into one of the 30 such rooms before it was cleared, 283 (65 percent) held a miniboss; every other room never did.
+     * A yellow (miniboss) room always holds its own ([YELLOW_CHANCE]).
      */
     val minibossChance: Double = MobPlanner.MINIBOSS_CHANCE,
 )
@@ -59,10 +59,27 @@ class PlanParams(
  */
 object MobPlanner {
     /** Measured, see [PlanParams.minibossChance]. */
-    const val MINIBOSS_CHANCE = 0.67
+    const val MINIBOSS_CHANCE = 0.65
 
-    /** Which adventurer a miniboss room holds, by archetype id: the share of 637 recorded F7 room visits (Lost 54, Angry 27, Frozen 19 percent). */
-    val MINIBOSS_WEIGHTS: Map<String, Double> = linkedMapOf("lost_adventurer" to 0.54, "angry_archaeologist" to 0.27, "frozen_adventurer" to 0.19)
+    /** A yellow room's miniboss is always there (Dungeon Recorder: Default 10 of 10 fresh entries; ADR: Dragon 33 of 33 sightings a Lost Adventurer). */
+    const val YELLOW_CHANCE = 1.0
+
+    /**
+     * Which miniboss an ordinary room (and the yellow Default) holds, by archetype id: ADR, 716 sightings in F7 miniboss rooms (Lost 55, Angry 23,
+     * Frozen 16, Shadow Assassin 5 percent). The other yellow rooms always hold their own: Dragon a Lost Adventurer, King Midas and Shadow Assassin theirs.
+     */
+    val MINIBOSS_WEIGHTS: Map<String, Double> = linkedMapOf("lost_adventurer" to 0.55, "angry_archaeologist" to 0.23, "frozen_adventurer" to 0.16, "shadow_assassin" to 0.05)
+
+    /**
+     * Rooms that hold a miniboss on Hypixel but have no miniboss row in the mob pack (its recordings rarely caught one there): where it first
+     * stands, as a canonical cell. Dungeon Recorder, the most common first spot over the runs that saw one (Waterfall 8 of 14, Pit 10 of 15,
+     * Wizard 10 of 19, Atlas 6 of 9, Perch 9 of 12, Duncan 10 of 13; Chambers, Layers and Balcony from fewer).
+     */
+    val EXTRA_MINIBOSS_CELLS: Map<String, IntArray> = mapOf(
+        "Waterfall" to intArrayOf(106, 39, 20), "Pit" to intArrayOf(14, 90, 9), "Wizard" to intArrayOf(46, 52, 16), "Atlas" to intArrayOf(31, 66, 31),
+        "Perch" to intArrayOf(13, 60, 13), "Duncan" to intArrayOf(23, 84, 20), "Chambers" to intArrayOf(19, 90, 8), "Layers" to intArrayOf(23, 79, 39),
+        "Balcony" to intArrayOf(42, 51, 15),
+    )
 
     /** The Shadow Assassin a clear room holds starts at 4.2M HP (164 of 215 recorded first values); the 20M the pack carries is the boss-phase one. M7 is not measured, so it keeps the pack's number. */
     const val CLEAR_ASSASSIN_HP_F7 = 4_200_000L
@@ -78,20 +95,26 @@ object MobPlanner {
         // miniboss row only says where it stands and which loop it walks.
         val rows = pack.minibossesOf(rm.name)
         var bossLoop: List<DoubleArray>? = null
-        if (rows.isNotEmpty() || rm.clear == "miniboss") {
+        val isBoss = { r: RolledMob -> pack.archetype(r.arch)?.cls == "miniboss" }
+        val extra = EXTRA_MINIBOSS_CELLS[rm.name]
+        if (rows.isNotEmpty() || rm.clear == "miniboss" || extra != null || rolled.any(isBoss)) {
             val row = rows.firstOrNull()
-            val isBoss = { r: RolledMob -> pack.archetype(r.arch)?.cls == "miniboss" }
             val firstBoss = rolled.firstOrNull(isBoss)
-            if (rng.nextDouble() >= p.minibossChance) {
+            val yellow = rm.type == "yellow"
+            if (rng.nextDouble() >= (if (yellow) YELLOW_CHANCE else p.minibossChance)) {
                 // No miniboss this run; the room's other mobs stand all the same (ADR: Spider, Hallway, Flags, Stairs... hold 20 to 80
                 // ordinary mobs with or without their miniboss).
                 rolled = rolled.filterNot(isBoss)
             } else {
                 val rest = rolled.filterNot(isBoss)
-                val bossArch = drawMinibossArch(pack, rng, p.deferred) ?: row?.arch ?: firstBoss?.arch
+                // A yellow room other than Default keeps its own miniboss (Dragon's Lost Adventurer, King Midas, the Shadow Assassin).
+                val own = if (yellow && rm.name != "Default") row?.arch ?: firstBoss?.arch else null
+                val bossArch = own ?: drawMinibossArch(pack, rng, p.deferred) ?: row?.arch ?: firstBoss?.arch
                 if (bossArch != null && pack.archetype(bossArch)?.id !in p.deferred) {
                     val cell = row?.cell
-                    val boss = if (cell != null) RolledMob(bossArch, true, cell.x, cell.y, cell.z) else firstBoss?.copy(arch = bossArch)
+                    val boss = if (cell != null) RolledMob(bossArch, true, cell.x, cell.y, cell.z)
+                        else if (extra != null) RolledMob(bossArch, true, extra[0], extra[1], extra[2])
+                        else firstBoss?.copy(arch = bossArch)
                     if (boss != null) rolled = rest + boss
                     bossLoop = row?.loop?.takeIf { it.size >= 2 }?.map { l -> placement.toWorld(l.x, l.y, l.z).let { doubleArrayOf(it.x + 0.5, it.z + 0.5) } }
                 }

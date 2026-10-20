@@ -46,12 +46,33 @@ object Disguise {
     /** The team name of a fake player: Hypixel's `fkt_` plus the first 11 characters of its name. */
     fun teamName(profileName: String): String = "fkt_" + profileName.take(11)
 
-    /** The profile of a fake player: [uuid] (version 2), [name], and the skin as an UNSIGNED `textures` property when the pack has one (an unsigned skin may not render on the 26.3 client; then it is a default skin). */
+    /**
+     * The profile of a fake player: [uuid] (version 2), [name], and its skin. The client shows another player's skin only when its
+     * `textures` property is signed (PlayerInfo asks the SkinManager for a secure skin and falls back to Steve or Alex), so the skin goes
+     * out with Hypixel's own signed value when [SignedSkins] has it, and unsigned (a default skin on screen) only when it does not.
+     * A skin with variants (the Lost Adventurer's three) takes the one that goes with the dragon set [MobGear.lostSet] gives [uuid].
+     */
     fun profile(uuid: UUID, name: String, skin: MobSkin?): GameProfile {
-        val value = skin?.value
-        val props = if (value != null) PropertyMap(ImmutableMultimap.of("textures", Property("textures", value))) else PropertyMap.EMPTY
+        val chosen = skin?.let { pickVariant(it, uuid) }
+        val signed = chosen?.let { SignedSkins.of(it.id) }
+        val props = when {
+            signed != null -> PropertyMap(ImmutableMultimap.of("textures", Property("textures", signed.first, signed.second)))
+            chosen?.value != null -> PropertyMap(ImmutableMultimap.of("textures", Property("textures", chosen.value)))
+            else -> PropertyMap.EMPTY
+        }
         return GameProfile(uuid, name, props)
     }
+
+    /** [skin] itself, or the variant whose id is the skin of [uuid]'s Lost Adventurer set (a body's skin goes with its armour, Dungeon Recorder 595 of 596). */
+    private fun pickVariant(skin: MobSkin, uuid: UUID): MobSkin {
+        if (skin.variants.size < 2) return skin
+        val want = MobGear.lostSet(uuid).skin
+        return skin.variants.firstOrNull { it.id.trimStart('0') == want.trimStart('0') } ?: skin
+    }
+
+    /** A skin the pack lacks for [arch]: the Shadow Assassin's (recorded, signed in [SignedSkins]). */
+    fun missingSkin(arch: MobArchetype): MobSkin? = if (arch.id == "shadow_assassin") MobSkin("3399e00f404411e465d74388df132d51fe868ecf86f1c073faffa1d9172ec0f3", null, null) else null
+
 
     /** The packets that put the fake player's info and name-hiding team on a client. */
     fun announcePackets(profile: GameProfile, base: ServerPlayer): List<Packet<ClientGamePacketListener>> {
