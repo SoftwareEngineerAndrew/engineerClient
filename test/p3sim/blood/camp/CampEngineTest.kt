@@ -412,4 +412,21 @@ class CampEngineTest {
         assertEquals(30, CampMech.loopTickAfter(29))
         assertEquals(40, CampMech.loopTickAfter(30))
     }
+
+    @Test fun aReplayThrowsTheLaterHeadsOnTheirRecordedTicks() {
+        // A recorded camp whose mobs died as they landed (fast legs); replayed where nobody dies (the rule would go slow).
+        val rec = run(7)
+        val ticks = rec.engine.landings.map { it.throwTick }
+        val order = rec.engine.landings.map { it.station }
+        val never = Policy({ _, _ -> 100_000 }, { _, _ -> 100_000 })
+        val sim = Sim(never)
+        val e = CampEngine(home, rec.wall, Random(7), sim, CampConfig(chatCoins = false, wsChance = 0.0), order, ticks)
+        for (r in 0..3000) { sim.now = r; e.step(r) }
+        assertEquals(ticks, e.landings.map { it.throwTick }, "every head thrown on its recorded tick")
+        // Without the recorded ticks the same camp throws its later heads otherwise.
+        val sim2 = Sim(never)
+        val e2 = CampEngine(home, rec.wall, Random(7), sim2, CampConfig(chatCoins = false, wsChance = 0.0), order)
+        for (r in 0..3000) { sim2.now = r; e2.step(r) }
+        assertTrue(e2.landings.map { it.throwTick } != ticks)
+    }
 }
