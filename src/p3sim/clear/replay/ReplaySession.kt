@@ -190,12 +190,15 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
     private val implosionUsed = HashSet<Int>()
 
-    /** The recorded line of the cast ADS runs now: the nearest unused one within [IMPLOSION_NEAR] ticks. */
+    /**
+     * The recorded line of the cast ADS runs now: the nearest unused one within [IMPLOSION_NEAR] ticks; none (0 enemies): Hypixel's cast
+     * hit nothing, as it says nothing then.
+     */
     private fun recordedImplosion(by: java.util.UUID): Pair<Int, Double>? {
         if (forcing || ended || by != host.uuid) return null
         val now = run.t
         val i = implosions.indices.filter { it !in implosionUsed && kotlin.math.abs(implosions[it].first - now) <= IMPLOSION_NEAR }
-            .minByOrNull { kotlin.math.abs(implosions[it].first - now) } ?: return null
+            .minByOrNull { kotlin.math.abs(implosions[it].first - now) } ?: return 0 to 0.0
         implosionUsed += i
         return implosions[i].second to implosions[i].third
     }
