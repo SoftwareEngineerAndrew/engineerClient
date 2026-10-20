@@ -974,11 +974,16 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private fun mateIn(room: Int): UUID? = bodies.all().firstOrNull { !it.x.isNaN() && it.present && run.state.roomAt(it.x, it.z)?.index == room }?.uuid
         ?: bodies.all().firstOrNull()?.uuid
 
+    /**
+     * Credits the team's secrets up to [want]. A room's last secret is held back while the recording has not marked that room green
+     * (by [TEAM_GRACE] from now): a room Hypixel left white keeps one unfound. Only when no other room has one left does a second pass take it.
+     */
     private fun creditSecrets(want: Int): Int {
         var n = 0
-        for (room in teamRooms()) {
+        for (strict in listOf(true, false)) for (room in teamRooms()) {
             for (site in com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room)) {
                 if (run.state.secrets.teamFound >= want) return n
+                if (strict && com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room).size <= 1 && (greenAt[room] ?: Int.MAX_VALUE) > run.t + TEAM_GRACE) continue
                 // A Wither Essence a teammate takes later in the recording is theirs, on its tick ([mateEssence]).
                 if (site.kind == com.engineerclient.p3sim.run.SecretKind.ESSENCE && mateEssences.any { it > run.t }) continue
                 // A bat the recording kills later is found on its tick ([batDied]).
