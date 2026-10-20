@@ -53,7 +53,7 @@ object ClassAbilities {
         // and Tank runs unless the Ability had been used; a Mage's every one follows a sheep, the three-click burst's too). The Mage's sheep
         // is ready from T0 (first sheep at T0 + 0, 4, 12 ... in 71 Mage runs; no "on cooldown" line before T0 + 420).
         val mage = kitOf(run, p)?.cls == "Mage"
-        return timers.getOrPut(p.uuid) { Timers(if (mage) 0 else ClassKit.ABILITY_FIRST_READY, ClassKit.ULT_FIRST_READY, abilityNoted = true) }
+        return timers.getOrPut(p.uuid) { Timers(if (mage) 0 else ClassKit.ABILITY_FIRST_READY, replayUltFirst?.invoke(p) ?: ClassKit.ULT_FIRST_READY, abilityNoted = true) }
     }
 
     private fun kitOf(run: Run, p: ServerPlayer): ClassKit.Kit? = ClassKit.of(run.state.players[p.uuid]?.dungeonClass)
@@ -95,6 +95,9 @@ object ClassAbilities {
         if (replayBursts?.invoke(p) == true) return true
         return sheep(run, p)
     }
+
+    /** Set by a replay: the tick the recording's Ultimate was first ready for a player (its first "is ready to use!"), or null. */
+    @Volatile var replayUltFirst: ((ServerPlayer) -> Int?)? = null
 
     /** Set by a replay: true for a player whose sheep come from the recording ([recordedBurst]), not from their clicks. */
     @Volatile var replayBursts: ((ServerPlayer) -> Boolean)? = null
