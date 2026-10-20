@@ -71,6 +71,7 @@ object MobsModule : AdsModule, MobService {
     private var sPartial: NumberSetting<Double>? = null
     private var sMinibossChance: NumberSetting<Int>? = null
     private var sMoverShare: NumberSetting<Int>? = null
+    private var sStroll: BooleanSetting? = null
     private var sAggro: NumberSetting<Double>? = null
     private var sLose: NumberSetting<Double>? = null
     private var sMeleeReach: NumberSetting<Double>? = null
@@ -95,7 +96,8 @@ object MobsModule : AdsModule, MobService {
         sMinibossChance = host.registerSetting(NumberSetting("Mobs Miniboss Chance", 65, 0..100, 5, unit = "%", desc = "How often an ordinary room that can hold a miniboss really does (Dungeon Recorder: 65 percent). Yellow miniboss rooms always hold theirs."))
         sWakeRadius = host.registerSetting(NumberSetting("Mobs Wake Radius", 9.0, 1.0..16.0, 0.5, unit = " blocks", desc = "A sleeping Fels wakes when a player's body comes this close, in 3D (measured about 9, always awake at 8; only a body wakes it, not arrows or Implosion)."))
         sPartial = host.registerSetting(NumberSetting("Mobs Partial Weight", 0.25, 0.0..1.0, 0.05, desc = "How often a room replays a recording that only caught part of the room (fewer than half the usual stars), relative to a full one."))
-        sMoverShare = host.registerSetting(NumberSetting("Mobs Mover Share", 40, 0..100, 5, unit = "%", desc = "Share of ordinary mobs that walk toward a player who comes close. Recordings: 33 to 45 percent of mobs seen 2 to 12 blocks away move."))
+        sMoverShare = host.registerSetting(NumberSetting("Mobs Chaser Share", 0, 0..100, 5, unit = "%", desc = "Share of ordinary mobs that chase a player they see until they reach it. 0 is Hypixel: the Dungeon Recorder shows no chases, only short walks (Mobs Stroll)."))
+        sStroll = host.registerSetting(BooleanSetting("Mobs Stroll", true, desc = "Mobs that do not chase take short walks now and then, more often the nearer you are, a third of them at you (Dungeon Recorder: median 6 blocks; 7 walks a minute within 6 blocks, 1.4 beyond 32). Off: they stand still."))
         sAggro = host.registerSetting(NumberSetting("Mobs Follow Range", 35.0, 2.0..60.0, 1.0, unit = " blocks", desc = "A walking mob takes as its target a player it can see within this (1.8's follow range; recorded first steps reach p90 32 to 43 blocks)."))
         sLose = host.registerSetting(NumberSetting("Mobs Give Up Range", 35.0, 4.0..80.0, 1.0, unit = " blocks", desc = "A chasing mob gives up when its target is farther than this, or out of sight for 3 seconds (1.8)."))
         sMeleeReach = host.registerSetting(NumberSetting("Mobs Hit Reach", 1.43, 1.0..6.0, 0.05, unit = " blocks", desc = "How close a mob must be to hit (1.8's reach for a zombie-sized body; not in the recordings)."))
@@ -119,7 +121,7 @@ object MobsModule : AdsModule, MobService {
     private fun wakeRadius(arch: MobArchetype) = sWakeRadius?.value ?: 9.0
 
     private fun params() = AiParams(
-        moverShare = (sMoverShare?.value ?: 40) / 100.0,
+        moverShare = (sMoverShare?.value ?: 0) / 100.0, strolls = sStroll?.value ?: true,
         aggroRadius = sAggro?.value ?: 35.0, loseRadius = sLose?.value ?: 35.0,
         meleeReach = sMeleeReach?.value ?: 1.43, meleeCadence = sMeleeCadence?.value ?: 20,
         rangedRange = sRangedRange?.value ?: 15.0, rangedCadence = sRangedCadence?.value ?: 60,
@@ -289,11 +291,11 @@ object MobsModule : AdsModule, MobService {
             if (d < bestD) { bestD = d; best = h }
         }
         // Sight is looked at only when it can matter: a target within the follow range (or the shooting range of a mob that never walks).
-        val reach = if (e.plan.mover) maxOf(p.aggroRadius, p.loseRadius) else maxOf(p.rangedRange, p.staticReach)
+        val reach = if (e.plan.mover) maxOf(p.aggroRadius, p.loseRadius) else maxOf(p.rangedRange, p.staticReach, if (p.strolls) 20.0 else 0.0)
         val seen = best != null && bestD <= reach && stage.canSee(e, best.x, best.y + 1.62, best.z)
         val target = best?.let { AiTarget(it.x, it.z, bestD, seen) }
         val speed = MobAi.speedFor(e.arch.id, e.arch.entity, e.modifier?.id == "Speedy", p)
-        val action = MobAi.step(kind, e.plan.mover, pos[0], pos[2], speed, target, e.ai, e.plan.loop, p, search = aiRng.nextDouble() < p.searchChance)
+        val action = MobAi.step(kind, e.plan.mover, pos[0], pos[2], speed, target, e.ai, e.plan.loop, p, search = aiRng.nextDouble() < p.searchChance, rng = aiRng)
         if (e.hidden && e.ai.chasing) { e.hidden = false; stage.reveal(e) }
         stage.act(e, action, best?.y ?: Double.NaN, best?.x ?: Double.NaN, best?.z ?: Double.NaN)
         if (!attacks() || best == null || best.isBot) return
@@ -317,7 +319,7 @@ object MobsModule : AdsModule, MobService {
             val placement = room?.placement
             if (pack != null && room != null && placement != null && enabled()) {
                 val alias = run.packs.rooms?.let { r -> { n: String -> r.familyOf(n) } }
-                val params = PlanParams(run.config.floor, scale, if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 40) / 100.0, minibossChance = (sMinibossChance?.value ?: 65) / 100.0)
+                val params = PlanParams(run.config.floor, scale, if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 0) / 100.0, minibossChance = (sMinibossChance?.value ?: 65) / 100.0)
                 val plans = MobPlanner.planRoom(pack, room.name, alias, placement, params, run.subRandom("mobs.room.$roomIndex"))
                 for (pm in plans) register(run, pack, pm, roomIndex)
             }

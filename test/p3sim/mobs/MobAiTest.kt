@@ -118,4 +118,38 @@ class MobAiTest {
         repeat(300) { assertTrue(MobAi.step(AiKind.MELEE, true, 0.0, 0.0, 0.3, AiTarget(10.0, 0.0, 10.0), s, null, p) !is AiAction.Teleport) }
         assertEquals(0, p.assassinTeleportEvery)
     }
+
+    @Test fun strollsComeAtTheRecordedRateAndAreShort() {
+        val rng = kotlin.random.Random(7)
+        // A player 4 blocks away, seen: about 7 walks a minute, each ending within 25 blocks.
+        var walks = 0; var aimed = 0
+        repeat(200) {
+            val s = AiState()
+            repeat(1200) {
+                val wasWalking = s.strollLeft > 0
+                val a = MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.25, AiTarget(4.0, 0.0, 4.0), s, null, p, rng = rng)
+                if (!wasWalking && a is AiAction.MoveTo) {
+                    walks++
+                    if (a.x > 0.0 && Math.abs(a.z) < 1e-9) aimed++
+                    assertTrue(Math.hypot(a.x, a.z) <= 25.0); assertEquals(0.25 * p.strollPace, a.speed, 1e-9)
+                    s.strollLeft = 0   // the walk is not followed here: the next can start
+                }
+            }
+        }
+        val perMinute = walks / 200.0
+        assertTrue(perMinute in 6.0..8.0, "walks a minute $perMinute")
+        assertTrue(aimed.toDouble() / walks in 0.25..0.4, "aimed ${aimed.toDouble() / walks}")
+    }
+
+    @Test fun aStrollWalksToItsPointAndStops() {
+        val s = AiState().apply { strollX = 5.0; strollZ = 0.0; strollLeft = 60 }
+        assertIs<AiAction.MoveTo>(MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.25, null, s, null, p, rng = kotlin.random.Random(1)))
+        assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 4.8, 0.0, 0.25, null, s, null, p, rng = kotlin.random.Random(1)))
+        assertEquals(0, s.strollLeft)
+    }
+
+    @Test fun noStrollsWhenTurnedOff() {
+        val rng = kotlin.random.Random(3); val s = AiState()
+        repeat(5000) { assertEquals(AiAction.Idle, MobAi.step(AiKind.MELEE, false, 0.0, 0.0, 0.25, AiTarget(4.0, 0.0, 4.0), s, null, p.copy(strolls = false), rng = rng)) }
+    }
 }
