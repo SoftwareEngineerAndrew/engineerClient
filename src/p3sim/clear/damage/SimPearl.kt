@@ -33,7 +33,8 @@ class SimPearl(level: Level, owner: LivingEntity, stack: ItemStack) : ThrownEnde
         repeat(ClearItems.PEARL_PUFFS) {
             level.sendParticles(ParticleTypes.PORTAL, false, true, x, y + random.nextDouble() * 2.0, z, 1, random.nextGaussian(), 0.0, random.nextGaussian(), 0.0)
         }
-        val thrower = owner as? ServerPlayer
+        // getOwner(): `owner` here is Projectile's own field (an EntityReference), never the player.
+        val thrower = getOwner() as? ServerPlayer
         if (thrower != null && thrower.isAlive && !thrower.isSleeping && thrower.level() === level) {
             val to = oldPosition()
             thrower.teleportTo(level, to.x, to.y, to.z, Relative.ROTATION, 0f, 0f, false)
