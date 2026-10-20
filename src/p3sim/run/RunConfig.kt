@@ -50,6 +50,8 @@ data class RunConfig(
     val statsPreset: String? = null,
     /** A party strategy id (see the plug-in seam); null or "neutral" = the built-in neutral default. */
     val strategy: String? = null,
+    /** A replay's id (`clear/replay`): the recorded run is played again, your player and the teammates driven by the recording. */
+    val replay: String? = null,
 ) {
     fun toJson(): JsonObject = JsonObject().also { o ->
         o.addProperty("floor", floor)
@@ -68,6 +70,7 @@ data class RunConfig(
         if (mobHpScale != null) o.addProperty("mobHpScale", mobHpScale) else o.add("mobHpScale", com.google.gson.JsonNull.INSTANCE)
         statsPreset?.let { o.addProperty("statsPreset", it) }
         strategy?.let { o.addProperty("strategy", it) }
+        replay?.let { o.addProperty("replay", it) }
     }
 
     companion object {
@@ -92,6 +95,7 @@ data class RunConfig(
                 mobHpScale = if (o.has("mobHpScale")) o.get("mobHpScale").takeIf { it.isJsonPrimitive }?.asDouble else d.mobHpScale,
                 statsPreset = str("statsPreset"),
                 strategy = str("strategy"),
+                replay = str("replay"),
             )
         }
     }

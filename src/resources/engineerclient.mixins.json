@@ -59,7 +59,11 @@
     "AdsBotsBodyMixin",
     "AdsEngineNoSaveMixin",
     "AdsEngineNoChunkFlushMixin",
-    "AdsEngineLeaveScreenMixin"
+    "AdsEngineLeaveScreenMixin",
+    "AdsReplayClientMixin",
+    "AdsReplayMouseMixin",
+    "AdsReplayKeysMixin",
+    "AdsReplaySendMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -35,7 +35,8 @@ object BrExtras {
         val name = e.customName?.let { BrJson.legacy(it) } ?: (e as? Player)?.gameProfile?.name ?: return
         for (w in WANTED) if (w.match(name) && caughtThisRun.add(w.id)) {
             s.line("wanted") { j -> j.s("id", w.id).i("e", e.id).s("name", name) }
-            BetterRecorder.caught(w.id, w.title)
+            // Counted (and said) only on Hypixel: ADS runs are not real sightings.
+            if (s.where == "HYP") BetterRecorder.caught(w.id, w.title)
         }
     }
 
