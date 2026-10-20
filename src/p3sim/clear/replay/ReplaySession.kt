@@ -84,6 +84,20 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private var invDirty = false
     private var lastHost: Vec3? = null
 
+    /** The server's teleport count for you when [teleported] last looked. */
+    private var tpSeen = -1
+
+    /**
+     * Whether ADS teleported you since [teleported] last looked, from [from]: the server sent a teleport (its id moved on) and you are more
+     * than half a block away, as Hypixel's count leaves out its resyncs to where you stood. A blink into a wall can move you under 2 blocks.
+     */
+    private fun teleported(from: Vec3): Boolean {
+        val id = (host.connection as com.engineerclient.mixin.ServerTeleportAccessor).ec_getAwaitingTeleport()
+        val sent = tpSeen != -1 && id != tpSeen
+        tpSeen = id
+        return sent && from.distanceTo(host.position()) > 0.5
+    }
+
     init {
         val mates = file.party.map { p ->
             val u = p.uuid?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: UUID.nameUUIDFromBytes("replay:${p.name}".toByteArray())
@@ -376,7 +390,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             lastK = now - 1
         }
         // ADS moving you between ticks (a teleport of its own: a Hyperion, a leap, a pad), against Hypixel's.
-        lastHost?.let { l -> if (l.distanceTo(host.position()) > 2.0) diff.adsTeleport(now, host.position()) }
+        lastHost?.let { l -> if (teleported(l)) diff.adsTeleport(now, host.position()) }
         while (lastK < now) {
             lastK++
             var pose: JsonArray? = null
@@ -498,7 +512,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (kind == "o.use" || kind == "o.useOn" || kind == "o.slot") diff.action(e[0].asInt, "%-8s %s held %s (slot %d) at %s".format(kind, e.s(2) ?: "", SimItems.idOf(host.mainHandItem) ?: host.mainHandItem.item.toString(), host.inventory.selectedSlot, fmt(host.x, host.y, host.z)))
         injecting = this
         try { selfPacket(e, same, at, c) } finally { injecting = null }
-        if (e[1].asString != "o.m" && host.position().distanceTo(before) > 2.0) diff.adsTeleport(e[0].asInt, host.position())
+        if (e[1].asString != "o.m" && teleported(before)) diff.adsTeleport(e[0].asInt, host.position())
     }
 
     private fun selfPacket(e: JsonArray, same: List<JsonArray>, at: Int, c: net.minecraft.server.network.ServerGamePacketListenerImpl) {
