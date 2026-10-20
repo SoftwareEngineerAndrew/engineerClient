@@ -18,6 +18,7 @@ import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.decoration.Mannequin
 import net.minecraft.world.entity.monster.Enderman
 import net.minecraft.world.entity.monster.Silverfish
+import net.minecraft.world.entity.monster.spider.Spider
 import net.minecraft.world.entity.monster.skeleton.Skeleton
 import net.minecraft.world.entity.monster.skeleton.WitherSkeleton
 import net.minecraft.world.entity.monster.zombie.Zombie
@@ -69,6 +70,11 @@ class AdsGiant(level: Level) : net.minecraft.world.entity.monster.Giant(EntityTy
 }
 
 class AdsSilverfish(level: Level) : Silverfish(EntityTypes.SILVERFISH, level), AdsMobBody {
+    override fun registerGoals() {}
+    override fun shouldBeSaved(): Boolean = false
+}
+
+class AdsSpider(level: Level) : Spider(EntityTypes.SPIDER, level), AdsMobBody {
     override fun registerGoals() {}
     override fun shouldBeSaved(): Boolean = false
 }

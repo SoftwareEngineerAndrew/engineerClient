@@ -20,6 +20,21 @@ class LevelLooksTest {
         assertEquals("§8[§r§7Lv277§r§8] §r§f §r§cSkeletor Prime§r §a1.6M§r§f/§r§a3.1M§r§c❤", LevelLooks.tag(prime, 1_600_000.0, 3_100_000.0))
         assertEquals("§8[§r§7Lv277§r§8] §r§f §r§cSkeletor Prime§r §e1.5M§r§f/§r§a3.1M§r§c❤", LevelLooks.tag(prime, 1_500_000.0, 3_100_000.0))
         assertEquals("[Lv173]  Undead Skeleton 360k/360k❤", MobTags.plain(LevelLooks.tag(arch("Undead Skeleton"), 360_000.0, 360_000.0)))
+        // ADR's Parasite (Lv30 then; Lv79 since).
+        assertEquals("§8[§r§7Lv79§r§8] §r§4 §r§cParasite§r §a33,333§r§f/§r§a33,333§r§c❤", LevelLooks.tag(arch("Parasite"), 33_333.0, 33_333.0))
+        assertTrue(LevelLooks.levelled(arch("Parasite")))
+    }
+
+    @Test
+    fun aLonelySpiderIsTaggedLikeAPackMob() {
+        val spider = arch("Lonely Spider")
+        assertTrue(!LevelLooks.levelled(spider))
+        // The Dungeon Recorder's text: icon, name, HP.
+        assertEquals(" Lonely Spider 120k❤", MobTags.plain(MobTags.nametagLegacy(assertNotNull(spider.tag), spider.name, null, 120_000.0, 120_000.0, false)))
+        assertEquals("minecraft:spider", spider.entity)
+        assertEquals(1.1875, spider.tag?.dy)
+        assertNull(LevelLooks.hand(spider))
+        assertEquals(spider, LevelLooks.byId("lv:lonely_spider"))
     }
 
     @Test

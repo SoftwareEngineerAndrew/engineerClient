@@ -409,6 +409,7 @@ object MobsModule : AdsModule, MobService {
         // A kind the pack does not have (a plug-in's camp mobs) stands in as the plain soldier (or the hint in extras), so a camp always has mobs to kill.
         val arch = (if (spec.extras["camp"] == "blood") BloodLooks.forName(spec.extras["name"]) else null)
             ?: pack.archetypeById(spec.kind)
+            ?: LevelLooks.byId(spec.kind)
             ?: spec.extras["standIn"]?.let { pack.archetypeById(it) }
             ?: pack.archetypeById(STAND_IN_KIND)?.also { if (standInSaid.add(spec.kind)) log.info("[ads] the mob pack has no '${spec.kind}'; spawning a $STAND_IN_KIND in its place") }
             ?: run { log.warn("[ads] the mob pack has no '${spec.kind}', so it cannot be spawned"); return null }
