@@ -1034,6 +1034,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (t.startsWith("Party >")) return
         KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; keyTaken(m.groupValues[1], m.groupValues[2]); return }
         SOLVED.find(t)?.let { m -> puzzleSolved(k, m.groupValues[1], m.groupValues[2]) }
+        FAILED.find(t)?.let { m -> puzzleFailed(k, m.groupValues[1], m.groupValues[2] + if (m.groupValues[3] == "Yikes!") "" else " " + m.groupValues[3]) }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }
         REVIVED.find(t)?.let { m -> revive(k, m.groupValues[1], m.groupValues[2]); return }
         drop(k, t)
@@ -1212,6 +1213,21 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
     }
 
+    /**
+     * The recording's `PUZZLE FAIL!` line: ADS's puzzle in the room the recording marks red next (within [GRACE] ticks) fails by the one it
+     * names, on its tick (a teammate's, often out of the recording's sight: a blaze killed in the wrong order) or after [GRACE] (yours).
+     */
+    private fun puzzleFailed(k: Int, name: String, reason: String) {
+        val red = file.events.firstOrNull { it.size() > 5 && it[1].asString == "room" && it.s(3) == "RED" && it[0].asInt in k..k + GRACE } ?: return
+        val t0 = red.get(5).takeIf { it.isJsonArray }?.asJsonArray?.firstOrNull()?.asJsonArray ?: return
+        val room = run.plan.roomAt(t0[0].asInt, t0[1].asInt) ?: return
+        val pz = PuzzlesModule.puzzleOf(run, room.index) ?: return diff.note(k, "puzzle", "no puzzle in ADS's ${room.name} for \"$name $reason\"")
+        val by = uuidOf(name)
+        pending += Pending(if (by != null && by != host.uuid) k else k + GRACE, "${room.name} failed by $name", { pz.status != com.engineerclient.p3sim.run.PuzzleStatus.UNSOLVED }) {
+            Services.puzzles.reportFailed(pz, by, reason); "ADS reported it failed"
+        }
+    }
+
     private fun CheckMark.odin(): String = when (this) { CheckMark.UNDISCOVERED -> "UNDISCOVERED"; CheckMark.NONE -> "NONE"; CheckMark.WHITE -> "WHITE"; CheckMark.GREEN -> "GREEN"; else -> "FAILED" }
 
     companion object {
@@ -1271,6 +1287,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val ROMAN = listOf("I", "II", "III", "IV", "V")
         private val ITEM = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Superboom TNT|Revive Stone)(?: x(\\d+))?!$")
         private val WITHER_ESSENCE = Regex("^(\\S+) found a Wither Essence! Everyone gains an extra essence!$")
+        private val FAILED = Regex("""^PUZZLE FAIL! (\w{1,16}) (.+) (Yikes!|That's a whoopsie!)$""")
         private val SOLVED = Regex("""^PUZZLE SOLVED! (\w{1,16}) (.+) Good job!$""")
         private val IMPLOSION = Regex("""^Your Implosion hit (\d+) enem(?:y|ies) for ([\d,.]+) damage\.$""")
         private const val IMPLOSION_NEAR = 4
