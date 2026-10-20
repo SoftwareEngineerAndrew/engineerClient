@@ -66,7 +66,6 @@ class BrSession(val path: Path, val where: String) {
             j.s("floor", runCatching { DungeonUtils.floor?.name }.getOrNull())
             j.s("server", runCatching { mc.connection?.serverBrand() }.getOrNull())
             j.s("mod", runCatching { net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient").get().metadata.version.friendlyString }.getOrNull())
-            j.raw("probes", BrProbes.active().joinToString(",", "[", "]") { BrJson.q(it) })
         }
     }
 
@@ -88,8 +87,10 @@ class BrSession(val path: Path, val where: String) {
         inventory(me)
         entities(level, me)
         if (t % 5 == 0) { sidebar(); tab() }
-        if (t % 10 == 0) { odin(); snapshots(level) }
-        BrProbes.tick(this)
+        if (t % 10 == 0) odin()
+        if (t % 4 == 0) snapshots(level)
+        BrExtras.tick(this)
+        if (t % 5 == 0) BrGuide.tick(this)
     }
 
     /** Every queued packet event, in order. */
@@ -104,6 +105,7 @@ class BrSession(val path: Path, val where: String) {
 
     private var lastMe = ""
     private var lastRoom: String? = null
+    private var lastRoomRef: com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom? = null
 
     private fun self(p: net.minecraft.client.player.LocalPlayer) {
         var flags = 0
@@ -124,6 +126,8 @@ class BrSession(val path: Path, val where: String) {
         val name = room?.data?.name
         if (name != lastRoom) {
             val from = lastRoom
+            lastRoomRef?.let { snapshotWanted(it, "leave") }
+            lastRoomRef = room
             lastRoom = name
             line("enter") { j -> j.s("from", from).s("to", name); if (room != null) j.raw("room", BrRooms.describe(room)); BrRooms.tag(j, p.x, p.y, p.z) }
             if (room != null) snapshotWanted(room, "enter")
@@ -199,7 +203,6 @@ class BrSession(val path: Path, val where: String) {
                 if (e is LivingEntity) j.f("hp", e.health).b("dead", e.isDeadOrDying)
                 j.s("name", e.customName?.let { BrJson.legacy(it) })
             }
-            BrProbes.gone(this, e)
         }
     }
 
@@ -249,7 +252,7 @@ class BrSession(val path: Path, val where: String) {
             j.f("dist", e.distanceTo(me))
             BrRooms.tag(j, b.x, b.y, b.z)
         }
-        BrProbes.spawned(this, e)
+        BrExtras.spawned(this, e)
     }
 
     /** `[id, type, name, distance]` of an entity, for attack and interact lines. */
@@ -404,8 +407,8 @@ class BrSession(val path: Path, val where: String) {
     private val snapQueue = ArrayDeque<Pair<com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom, String>>()
 
     /**
-     * Queues a block snapshot of [r] the first time it is seen with its rotation known (its untouched state: a puzzle's layout, the
-     * chests and levers as built), and again for puzzle and trap rooms when they are done, if the setting asks for it.
+     * Queues a block snapshot of [r]: the first time it is seen with its rotation known, again each time its map mark changes, and when
+     * you leave it. Mode 1 keeps to puzzles, traps, blood and fairy.
      */
     fun snapshotWanted(r: com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom, why: String) {
         val name = r.data?.name ?: return
@@ -415,13 +418,11 @@ class BrSession(val path: Path, val where: String) {
         if (mode == 0) return
         val special = type == "PUZZLE" || type == "TRAP" || name == "Blood" || name == "Fairy"
         if (mode == 1 && !special) return
-        val done = runCatching { r.checkmark.name }.getOrNull()
-        val key = when {
-            special && (done == "WHITE" || done == "GREEN") -> "$name|done"
-            else -> "$name|first"
-        }
+        // Once per room for each map state it is seen in (first, cleared, every secret...), and once as you leave it.
+        val check = runCatching { r.checkmark.name }.getOrNull()
+        val key = if (why == "leave") "leave" else "check:$check"
         if (!snapped.add(key + "@" + System.identityHashCode(r))) return
-        snapQueue.addLast(r to key.substringAfter('|'))
+        snapQueue.addLast(r to key)
     }
 
     /** At most one room a call: all of its blocks from y [Y0] to [Y1], run-length coded in world order, with Odin's frame to turn them. */
@@ -450,7 +451,7 @@ class BrSession(val path: Path, val where: String) {
     }
 
     companion object {
-        const val FORMAT = 1
+        const val FORMAT = 2
         /** The heights a room snapshot covers: the Water Board reaches down to 56, no room's roof is above 140. */
         const val Y0 = 40
         const val Y1 = 160
