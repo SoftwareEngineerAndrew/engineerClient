@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Turns down (or pauses) whatever else is playing on the computer through the parts of a run that need your ears:
- * from "Starting in 3 seconds." (or Mort, if that was missed) until the run reaches 300 score or the boss, whichever
+ * from "Starting in 1 second." (or Mort, if that was missed) until the run reaches 300 score or the boss, whichever
  * is first, and from 30 s into Storm until S4 starts. Everything comes back as it was then, on a world change, when this is turned off and when
  * the game closes.
  *
@@ -32,12 +32,12 @@ object QuietMedia : Module(
     name = "Quiet Media",
     key = null,
     category = Category.custom("Coffee Client", 860, 10),
-    description = "Turns down other apps' audio (music, videos) from 3 s before the run until 300 score, and from 30 s into Storm until S4."
+    description = "Turns down other apps' audio (music, videos) from 1 s before the run until 300 score, and from 30 s into Storm until S4."
 ) {
     private val amount by NumberSetting("Quiet Amount", 70, 0..100, 5, desc = "How much quieter other apps get: 70% leaves them at 30% of their volume.", unit = "%")
     private val pause by BooleanSetting("Pause", false, desc = "Pauses what's playing (music, videos) instead of turning it down, and plays it again after.")
 
-    private const val COUNTDOWN = "Starting in 3 seconds."
+    private const val COUNTDOWN = "Starting in 1 second."
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
     private const val STORM_QUIET_TICKS = 30 * 20
