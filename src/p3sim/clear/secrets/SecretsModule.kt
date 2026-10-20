@@ -568,9 +568,11 @@ object SecretsModule : AdsModule, SecretService {
         when (kind) {
             BonusKind.PRINCE -> if (loud) Services.channels.chat("§r§eA Prince falls. §r§a+1 Bonus Score")
             BonusKind.BAT -> {
-                Services.channels.chat("§r§eA Bat has been slain. §r§a+1 Bonus Score")
-                // Two orb pings at every human's own position: a spread one at volume 0.5 and the usual one.
-                for (h in humans(rd)) {
+                // Only the bat's killer gets the line and the pings (139 DR runs: 52 lines, each on the recorded player's own kill, all with
+                // the pings; of 30 runs whose bonus bat a teammate killed, no line, and a ping in one).
+                for (h in humans(rd)) if (h.uuid == by) {
+                    Services.channels.chat("§r§eA Bat has been slain. §r§a+1 Bonus Score", Audience.Only(h.uuid))
+                    // Two orb pings at the killer's position: a spread one at volume 0.5 and the usual one.
                     orbPing(h, 0.5f, SecretSounds.bonusPing(rd.sounds))
                     orbPing(h)
                 }

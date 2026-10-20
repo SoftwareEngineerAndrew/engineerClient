@@ -26,6 +26,14 @@ class ClassMilestonesTest {
         assertEquals("02m 05s", ClassMilestones.clock(125))
     }
 
+    @Test fun blessingsShareTheRunClock() {
+        // Hypixel prints `(03s)` on a buff line, as on a milestone, and its clock starts a couple of ticks before tick 0.
+        assertEquals("00s", com.engineerclient.p3sim.clear.secrets.Blessings.clock(0))
+        assertEquals("03s", com.engineerclient.p3sim.clear.secrets.Blessings.clock(58))
+        assertEquals("02s", com.engineerclient.p3sim.clear.secrets.Blessings.clock(57))
+        assertEquals("01m 07s", com.engineerclient.p3sim.clear.secrets.Blessings.clock(1338))
+    }
+
     @Test fun linesMatchHypixelsFormat() {
         val mage = ClassMilestones.thresholds("Mage", false)!!
         assertEquals("§e§lMage Milestone §r§e❶§r§7: You have dealt §r§c750,000§r§7 Total Damage so far! §r§a02s", ClassMilestones.line("Mage", 0, mage, 2))
