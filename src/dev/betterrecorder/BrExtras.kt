@@ -51,7 +51,6 @@ object BrExtras {
                     "[${e.id},${BrJson.n3(e.distanceTo(me).toDouble())},${if (me.hasLineOfSight(e)) 1 else 0},${BrJson.n3((e as LivingEntity).getSwingAnimation(1f).toDouble())}]"
                 })
             }
-            if (near.any { it !is Player && it !is ArmorStand }) BrGuide.hit()
         }
         // Who can see you (mobs within 32 blocks), when that set changes.
         val seeing = all.filter { it !== me && it is LivingEntity && it !is ArmorStand && it.isAlive && it.distanceTo(me) < 32f && me.hasLineOfSight(it) }

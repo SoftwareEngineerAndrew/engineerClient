@@ -5,11 +5,9 @@ named `<date>_<time>_<HYP|ADS>_<floor>.brec.jsonl.gz` (`.part` while it is writt
 `.part` reads fine up to its last second). On by default; `Where` also records ADS runs, in the same format, so a sim run can be compared
 line for line with a Hypixel one. Every capture is always on; there is nothing to set up or turn on.
 
-**The guide** (a HUD, `Guide`, and a pillar over the room): in a Hypixel run it reads Odin's map for the rooms still wanted (puzzles,
-the trap, the Shadow Assassin / King Midas / Dragon room, rare rooms), points at the most wanted and nearest, and says what to do
-there: stay until it is done. On walking into a fresh room with mobs it may ask you to stand still 4 s (a few times a run), and near
-mobs it asks you to let one hit you (15 a run). Each catch is counted in `better/guide.properties`; a thing stops being asked for once
-its count reaches its goal. `/brec guide` lists the counts.
+**The guide** (a HUD, `Guide`, and a pillar over the room): shown only when a Hypixel run has a rare room, the one thing neither the
+Dungeon Recorder's 286 F7 clears (puzzles, traps and miniboss rooms watched in 12 to 62 runs each) nor plain play covers; it says to
+walk through it, counts each catch in `better/guide.properties`, and stops at 10. `/brec guide` lists the count.
 
 What it is for: the Dungeon Recorder keeps every packet's bytes (gigabytes a day, read back with a decoder). Better Recorder keeps what the
 clear is made of, decoded, placed in rooms and small (a few MB a run), so it can stay on in every run, and every party member can run it.
@@ -51,7 +49,7 @@ not known yet. Text keeps its colours as § codes (§#rrggbb for other colours).
 | `room` | an Odin room record changed (every 10 ticks) | id, room: name, type, shape, rot, rotKnown, clay, tiles, check, found, max, crypts, trapped, walked, highest |
 | `doors`, `puzzles`, `dungeon` | Odin's doors ([x, z, type, rotation, from tile, to tile]), puzzle states, the run's numbers (secrets, crypts, deaths, score, mimic, prince) | |
 | `snap` | a room the first time it is seen with its rotation known, again each time its map mark changes, and as you leave it (`why`: `check:<MARK>` or `leave`) | why, room, box [x0, y0, z0, x1, y1, z1], top, pal (block states), order "y,z,x", rle ("i" or "ixN", comma separated, palette indices) |
-| `mark`, `wanted`, `guide` | `/brec mark`, a wanted sighting, the guide (`still`: a stand-still started; `got`: a catch, with n and goal) | |
+| `mark`, `wanted`, `guide` | `/brec mark`, a wanted sighting, the guide (`got`: a catch, with n and goal) | |
 | `hit` | each hit you take: hp, near = every living thing within 8 blocks [id, distance, line of sight 0/1, swing 0..1] | |
 | `sees` | the living things within 32 blocks you have line of sight to, when that set changes | ids |
 | `tagsee` | every 2 ticks: name stands within 48 blocks [id, shown 0/1, distance, line of sight 0/1] | |
