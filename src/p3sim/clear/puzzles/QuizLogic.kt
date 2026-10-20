@@ -148,6 +148,15 @@ class QuizLogic(val questions: List<Question>) {
 
         const val YEAR = "What SkyBlock year is it?"
 
+        /**
+         * A question as a recording asked it: the right option is the one ending with an answer of the table's question that [text] starts
+         * with (Odin's rule), else the first (the year question: which year the recording's moment was is not known).
+         */
+        fun recorded(text: String, options: List<String>, table: Map<String, List<String>> = OdinTables.quiz): Question {
+            val answers = table.entries.filter { text.startsWith(it.key) }.maxByOrNull { it.key.length }?.value.orEmpty()
+            return Question(text, options, options.indexOfFirst { o -> answers.any { o.endsWith(it) } }.coerceAtLeast(0))
+        }
+
         private fun build(rnd: Random, text: String, answers: List<String>, table: Map<String, List<String>>, nowMillis: Long): Question {
             val right = answers[rnd.nextInt(answers.size)]
             // Odin marks an option right when it ENDS WITH an accepted answer, so no wrong option may end with one.

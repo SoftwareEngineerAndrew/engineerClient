@@ -447,6 +447,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = { r -> if (r === run && !ended) recordedBlazes else null }
         com.engineerclient.p3sim.clear.puzzles.WeirdosPuzzle.replayRoom = { r, spots -> if (r === run && !ended) recordedWeirdos(spots) else null }
+        com.engineerclient.p3sim.clear.puzzles.QuizPuzzle.replay = object : com.engineerclient.p3sim.clear.puzzles.QuizPuzzle.Replay {
+            override fun drives(run: Run) = run === this@ReplaySession.run && !ended
+            override fun questions(run: Run, start: Int) = if (drives(run)) recordedQuizzes.getOrNull(start) else null
+        }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) bonusBat else null }
         val rewardChests = ReplayFile.rewardChests(file.events)
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = { r, x, y, z -> if (r === run && !ended) "$x,$y,$z" in rewardChests else null }
@@ -475,6 +479,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = null
         com.engineerclient.p3sim.clear.puzzles.WeirdosPuzzle.replayRoom = null
+        com.engineerclient.p3sim.clear.puzzles.QuizPuzzle.replay = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
@@ -1080,6 +1085,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (t.startsWith("Party >")) return
         KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; keyTaken(m.groupValues[1], m.groupValues[2]); return }
         SOLVED.find(t)?.let { m -> puzzleSolved(k, m.groupValues[1], m.groupValues[2]) }
+        QUIZ_ANSWER.find(t)?.let { m -> quizAnswer(m.groupValues[1], m.groupValues[2] == "answered") }
         FAILED.find(t)?.let { m -> puzzleFailed(k, m.groupValues[1], m.groupValues[2] + if (m.groupValues[3] == "Yikes!") "" else " " + m.groupValues[3]) }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }
         REVIVED.find(t)?.let { m -> revive(k, m.groupValues[1], m.groupValues[2]); return }
@@ -1276,6 +1282,32 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
 
     /**
+     * The recording's quizzes, one per start (a wrong answer starts it over): each question as the statue asked it, one burst of lines on a
+     * tick: `Question #n`, the question's line or two, a blank line, the three options (`ⓐ ...`).
+     */
+    private val recordedQuizzes: List<List<com.engineerclient.p3sim.clear.puzzles.QuizLogic.Question>> by lazy {
+        val chat = file.events.filter { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive }
+        val out = ArrayList<MutableList<com.engineerclient.p3sim.clear.puzzles.QuizLogic.Question>>()
+        for ((i, e) in chat.withIndex()) {
+            val n = QUIZ_HEADING.find(clean(e[2].asString))?.groupValues?.get(1)?.toInt() ?: continue
+            val k = e[0].asInt
+            val same = chat.drop(i + 1).takeWhile { it[0].asInt == k }.map { clean(it[2].asString) }
+            val text = same.takeWhile { it.isNotEmpty() }.joinToString(" ")
+            val options = same.filter { it.length > 2 && it[0] in "ⓐⓑⓒ" && it[1] == ' ' }.map { it.substring(2) }
+            if (text.isEmpty() || options.size != 3) continue
+            if (n == 1 || out.isEmpty()) out.add(ArrayList())
+            out.last().add(com.engineerclient.p3sim.clear.puzzles.QuizLogic.recorded(text, options))
+        }
+        out
+    }
+
+    /** The statue's line for an answer: ADS's quiz takes it, right or wrong, by the one it names. */
+    private fun quizAnswer(name: String, right: Boolean) {
+        val pz = run.plan.rooms.firstNotNullOfOrNull { r -> PuzzlesModule.puzzleOf(run, r.index) as? com.engineerclient.p3sim.clear.puzzles.QuizPuzzle } ?: return
+        pz.recordedAnswer(uuidOf(name) ?: host.uuid, right)
+    }
+
+    /**
      * Three Weirdos as the recording had it: the NPC whose named stand was within 1.5 blocks of each of ADS's stand [spots], what each
      * said to you, and who the solve and fail lines name.
      */
@@ -1363,6 +1395,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val WITHER_ESSENCE = Regex("^(\\S+) found a Wither Essence! Everyone gains an extra essence!$")
         /** What a Weirdos NPC says that is not its clue. */
         private val NOT_CLUES = setOf("Talk to all of us first!", "You fool!")
+        private val QUIZ_HEADING = Regex("""^Question #(\d)$""")
+        private val QUIZ_ANSWER = Regex("""^\[STATUE] Oruo the Omniscient: (\w{1,16}) (answered|chose the wrong answer)""")
         private val NPC_LINE = Regex("""^\[NPC] (\w+): (.+)$""")
         private val FAILED = Regex("""^PUZZLE FAIL! (\w{1,16}) (.+) (Yikes!|That's a whoopsie!)$""")
         private val SOLVED = Regex("""^PUZZLE SOLVED! (\w{1,16}) (.+) Good job!$""")

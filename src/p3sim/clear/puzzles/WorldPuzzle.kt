@@ -78,6 +78,9 @@ abstract class WorldPuzzle(final override val kind: String, final override val c
     /** Whether the module counts the room's one secret (its reward chest) when the room turns green. Higher Or Lower leaves it to the player, who opens the room's real chest. */
     open val countsRewardAsSecret: Boolean get() = true
 
+    /** Whether a teammate alone in the room runs it, as a player there would (the Quiz: its statue speaks to the whole party). */
+    open val startsForParty: Boolean get() = false
+
     /** Ticks after a player first steps into the room until [wake] runs (measured: Ice Fill 0, Higher Or Lower 7, Tic Tac Toe 24). */
     open val wakeDelayTicks: Int get() = 0
 

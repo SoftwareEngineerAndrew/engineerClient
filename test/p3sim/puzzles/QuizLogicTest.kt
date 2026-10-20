@@ -120,4 +120,12 @@ class QuizLogicTest {
         assertEquals(3, options.size)
         for (i in 0..2) assertTrue(options[i].endsWith(quiz.questions[0].options[i]))
     }
+
+    @Test
+    fun aRecordedQuestionKnowsItsRightOptionFromTheTable() {
+        // As DR recordings asked them: a question cut over two lines (the table keys on the first), and one with its answer last.
+        assertEquals(0, QuizLogic.recorded("What is the name of the vendor in the Hub who sells stained glass?", listOf("Wool Weaver", "Builder", "Adventurer")).correct)
+        assertEquals(1, QuizLogic.recorded("How many Fairy Souls are there in Jerry's Workshop?", listOf("1 Fairy Soul", "5 Fairy Souls", "9 Fairy Souls")).correct)
+        assertEquals(2, QuizLogic.recorded("Which of these is not a dragon in The End?", listOf("Wise Dragon", "Strong Dragon", "Elder Dragon")).correct)
+    }
 }
