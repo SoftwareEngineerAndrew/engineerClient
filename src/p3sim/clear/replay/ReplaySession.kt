@@ -317,6 +317,20 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         r
     }
 
+    /**
+     * Who killed the Prince: you when Hypixel gave you its line (only the killer gets it), else a teammate (the one whose mod posted
+     * "Prince Killed!", or any).
+     */
+    private val princeKiller: UUID? by lazy {
+        var poster: String? = null
+        for (e in file.events) if (e.size() > 2 && e[1].asString == "chat" && e[2].isJsonPrimitive) {
+            val t = clean(e[2].asString)
+            if (t.startsWith("A Prince falls")) return@lazy host.uuid
+            if (poster == null && t.endsWith(": Prince Killed!")) poster = t.substringBefore(":").substringAfterLast(' ')
+        }
+        uuidOf(poster) ?: run.state.players.keys.firstOrNull { it != host.uuid }
+    }
+
     /** Each name's rank in the recording's chat. */
     private val ranks: Map<String, String> by lazy {
         val out = HashMap<String, String>()
@@ -807,7 +821,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (o.get("mimic")?.asBoolean == true && !recMimic) { recMimic = true
             pending += Pending(k + TEAM_GRACE, "mimic killed", { led.mimicKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.MIMIC, null); "ADS mimic ${led.mimicKilled}" } }
         if (o.get("prince")?.asBoolean == true && !recPrince) { recPrince = true
-            pending += Pending(k + TEAM_GRACE, "prince killed", { led.princeKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.PRINCE, null); "ADS prince ${led.princeKilled}" } }
+            pending += Pending(k + TEAM_GRACE, "prince killed", { led.princeKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.PRINCE, princeKiller); "ADS prince ${led.princeKilled}" } }
     }
 
     /** The rooms to credit a teammate's find in, best first: where teammates stand (nearest first), then by the recording's next green mark. */
