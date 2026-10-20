@@ -956,9 +956,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (r.type == null || r.type == "minecraft:armor_stand") return
         val rx = r.x; val ry = r.y; val rz = r.z
         // The recorder writes "???" (or "MINIBOSS") when it had not read the tag: the tag stand's own name (body id + 1, a Withermancer's + 3) is the mob's.
-        val tag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it !in UNREAD_TAGS }?.let { mobName(it) }
+        // A tag with no HP is another stand's it read instead (a damage number, a Blessing, the Wither Key, a Watcher line): not read either.
+        val briefTag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString
+        val tag = briefTag?.takeIf { it !in UNREAD_TAGS && it.contains("❤") }?.let { mobName(it) }
             ?: standTag(id)?.let { mobName(it) }
-            ?: brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString
+            ?: briefTag?.let { if (it.contains("❤")) it else "???" }
         // The Watcher's camp names its mobs by itself, so a recorded camp death takes ADS's nearest live camp mob whatever its name;
         // with none alive yet (ADS's camp behind Hypixel's), the next one ADS throws.
         val blood = run.plan.roomAtBlock(rx, rz)?.takeIf { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD }
