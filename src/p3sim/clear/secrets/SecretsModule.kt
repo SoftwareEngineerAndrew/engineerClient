@@ -698,6 +698,9 @@ object SecretsModule : AdsModule, SecretService {
     /** Set by a replay: which counted bat kill of [Run] carries the bonus point (0: none), as the recording had it; null for a drawn one. */
     @Volatile var replayBonusBat: ((Run) -> Int?)? = null
 
+    /** Set by a replay: whether the recording's chest at a spot has opened by now (its lid sound), so it is not locked whatever ADS's lever. */
+    @Volatile var replayOpened: ((Run, BlockPos) -> Boolean?)? = null
+
     /** Set by a replay: where the recording had trapped chests (the Mimic's is the one at a chest site), or null for a drawn one. */
     @Volatile var replayTrapped: ((Run) -> Set<BlockPos>?)? = null
 
@@ -755,7 +758,7 @@ object SecretsModule : AdsModule, SecretService {
 
     private fun chestClick(rd: RunData, p: ServerPlayer, s: SecretSite): InteractionResult {
         val now = rd.run.serverTick
-        if (s.kind == SecretKind.LOCKED_CHEST && s.key !in rd.unlocked) {
+        if (s.kind == SecretKind.LOCKED_CHEST && s.key !in rd.unlocked && replayOpened?.invoke(rd.run, BlockPos(s.x, s.y, s.z)) != true) {
             // The refusal answers once; the right-click repeats and gets nothing.
             if (LockedChest.answers(rd.lockedSaid[p.uuid], now)) {
                 rd.lockedSaid[p.uuid] = now
