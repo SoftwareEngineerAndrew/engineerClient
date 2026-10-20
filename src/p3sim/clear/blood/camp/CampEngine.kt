@@ -85,6 +85,12 @@ class CampEngine(
     private val config: CampConfig = CampConfig(),
     /** The throw order, when it is already known (a restored camp); null draws it from [stations]. */
     order: List<WallStation>? = null,
+    /**
+     * A replay of a camp the recording saw whole: each head's recorded throw tick, in throw order. The later heads leave on those ticks
+     * (the Watcher sets off so his flight and wait end there), whatever ADS's alive mobs would have decided: a kill the recording did not
+     * see leaves ADS's mob alive and turns a fast leg into a slow one.
+     */
+    private val recordedThrows: List<Int>? = null,
 ) {
     private enum class State { OPENING, AT_HOME, LATER, DONE }
 
@@ -179,6 +185,7 @@ class CampEngine(
         flyWatcher(r)
         sayLines(r)
         if (pendingFinish >= 0) { if (r >= pendingFinish) finished = true; return }
+        recordedLeg(r)
         if (!CampMech.isLoop(r)) return
         // ---- the kill counter
         val newly = mobs.filter { !it.counted && !it.ws && it.death < r }
@@ -205,7 +212,7 @@ class CampEngine(
             state == State.OPENING && m10 % 3 == 0 && m10 >= CampMech.OPEN_FIRST / CampMech.LOOP -> {
                 if (throws < 4) throwAt(r, CampMech.V_OPEN, initial = true) else goHome(r)
             }
-            (state == State.AT_HOME || state == State.LATER) && throws < throwOrder.size && m10 >= 42 -> {
+            (state == State.AT_HOME || state == State.LATER) && throws < throwOrder.size && m10 >= 42 && recordedThrows?.getOrNull(throws) == null -> {
                 val speed = when {
                     alive == 0 && m10 % 4 == 0 -> CampMech.Speed.FAST
                     alive > 0 && m10 % 6 == 0 -> CampMech.Speed.SLOW
@@ -237,6 +244,18 @@ class CampEngine(
         /** Straight flight length: 0.2 blocks a tick for 80 ticks, then 0.3 for 40. */
         const val HEAD_LENGTH_INITIAL = 16.0
         const val HEAD_LENGTH_LATER = 12.0
+    }
+
+    /** A replay's later leg: leaves now if a slow or fast flight from here throws the next head on its recorded tick (fast, late, once past it). */
+    private fun recordedLeg(r: Int) {
+        val want = recordedThrows?.getOrNull(throws) ?: return
+        if (throws < 4 || (state != State.AT_HOME && state != State.LATER) || movingUntil >= r) return
+        val target = CampMech.target(throwOrder[throws].stand)
+        fun thrown(s: CampMech.Speed) = r + CampMech.flyTo(pos, target, s.v).n + 1 + CampMech.THROW_DELAY
+        val speed = listOf(CampMech.Speed.SLOW, CampMech.Speed.FAST).firstOrNull { thrown(it) == want }
+            ?: CampMech.Speed.FAST.takeIf { thrown(it) > want } ?: return
+        if (state == State.AT_HOME) { state = State.LATER; firstLaterDecision = r }
+        throwAt(r, speed.v, initial = false)
     }
 
     /** Flies to the next head, throws it 10 ticks after arriving and schedules the mob's landing. */

@@ -320,8 +320,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             said += com.engineerclient.p3sim.clear.blood.camp.CampMech.Request(e[0].asInt - door, cls) to text
         }
         val opening = said.firstOrNull { it.first.line == com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }?.second
-        return com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Replayed(recordedOrder(wall), camp.requestsOf(said.map { it.first }), opening,
-            said.filter { it.first.line != com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }.map { it.second })
+        val order = recordedOrder(wall)
+        return com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Replayed(order, camp.requestsOf(said.map { it.first }), opening,
+            said.filter { it.first.line != com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }.map { it.second },
+            throwTicks = order?.let { recordedThrows.map { it.thr } })
     }
     private val campSeen = HashSet<UUID>()
     private var campSeeded = false
