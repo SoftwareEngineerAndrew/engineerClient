@@ -15,14 +15,14 @@ import kotlin.random.Random
  * blocks across and -0.32/+1.16/+2.03 up; 27 percent are crits; up to 7 in one tick. They are few: about 0.27 per mob death, more for a Mage
  * recording (6.4 a run) than an Archer's (1.4).
  *
- * UNMEASURED: which hits get a number. Both killing and surviving hits do (608 against 679), from the recording player and from teammates (870 and
- * 621 of 1,902 follow an action of one or the other), so the sim gives a hit a number with the measured chance ([DEFAULT_CHANCE]).
+ * Every hit by every player gets one (the user's word, 2026-10-19: the recordings' low count is their mods and settings hiding some). Both killing
+ * and surviving hits did (608 against 679), from the recording player and from teammates (870 and 621 of 1,902).
  */
 object DamageNumbers {
     const val LIFE_TICKS = 20
     const val CRIT_SHARE = 0.27
-    /** Percent of hits that get a number (about the measured numbers per mob death). */
-    const val DEFAULT_CHANCE = 27
+    /** Percent of hits that get a number: all of them. */
+    const val DEFAULT_CHANCE = 100
     private val CRIT_CYCLE = charArrayOf('f', 'f', 'e', '6', 'c', 'c')
 
     /** "26,707,180" for 26707180.4. */

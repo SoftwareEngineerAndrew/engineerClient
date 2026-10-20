@@ -112,6 +112,8 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     // ---- tick ----------------------------------------------------------------------------------------------------------
 
     fun tick() {
+        // "Not Ready" in Mort's window holds the countdown: T0 moves on with the server, so the clock stays on this tick.
+        if (run.stage == RunStage.COUNTDOWN && plan.practice == null && run.t < 0 && ReadyUpMenu.holding()) run.t0Tick?.let { run.setT0(it + 1) }
         val t = run.t
         fx.tick()
         for (step in schedule.due(lastT, t)) runStep(step)

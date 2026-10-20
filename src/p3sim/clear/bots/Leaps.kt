@@ -127,6 +127,8 @@ object Leaps {
  * after the "proven" line (not done: here every leap is before it).
  */
 object CampLeaps {
+    /** Off: bots do not leap into the blood camp (the user's word, 2026-10-19); a test turns it on to check the leaps. */
+    @Volatile internal var enabled = false
     /** Chance a bot that could leap into the camp does: all (with three bots out of the camp that gives about 0.8 a run on the real layouts, short of the recorded 1.69, where people also leap twice and to others than the camper). */
     const val CAMP_TRY = 1.0
     /** Leaps this soon after the blood door are left out (the camper has only just walked in). */
@@ -143,6 +145,7 @@ object CampLeaps {
      * re-plan keeps the moment: the plans are redrawn often and a leap redrawn each time would never come.
      */
     fun add(tracks: List<SeatTrack>, camper: Int?, bloodOpenT: Int, provenT: Int, now: Int, humans: Set<Int>, seed: Long): Pair<List<SeatTrack>, List<Leap>> {
+        if (!enabled) return tracks to emptyList()
         val camp = tracks.firstOrNull { it.seat == camper } ?: return tracks to emptyList()
         val leaps = ArrayList<Leap>()
         val out = tracks.map { s ->

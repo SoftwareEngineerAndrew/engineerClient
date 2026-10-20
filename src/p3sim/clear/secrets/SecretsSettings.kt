@@ -16,8 +16,12 @@ object SecretsSettings {
     const val ITEM_SPAWN_RANGE = 32.0
     const val BAT_SPAWN_RANGE = 14.0
     const val SKULL_SPAWN_RANGE = 16.0
-    /** How far past a player's body (sideways) an item is picked up: the game's own pickup box, the player's box widened by one block (and half a block up and down). */
-    const val PICKUP_RANGE = 1.0
+    /**
+     * How far past a player's body (sideways) an item is picked up. Hypixel's reach is longer than the game's own 1 block: in 215 recorded pickups
+     * by a player standing still (ADR), the item was a median 2.4 blocks from them (centres), 87% of the cluster within 2.7. 2.25 past the body is
+     * 2.7 from the centre.
+     */
+    const val PICKUP_RANGE = 2.25
     /** The Superboom TNT's blast radius around the block it hits. UNMEASURED. */
     const val SUPERBOOM_RADIUS = 3.0
     /** Ticks a lever's wall stays an invisible barrier before it is air (four recorded samples read about 25). */
@@ -42,7 +46,7 @@ object SecretsSettings {
         itemRangeS = host.registerSetting(NumberSetting("Secrets Item Range", ITEM_SPAWN_RANGE, 8.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before an item secret lies on the floor."))
         batRangeS = host.registerSetting(NumberSetting("Secrets Bat Range", BAT_SPAWN_RANGE, 4.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before a secret bat appears."))
         skullRangeS = host.registerSetting(NumberSetting("Secrets Skull Range", SKULL_SPAWN_RANGE, 4.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before a wither essence or key skull appears."))
-        pickupRangeS = host.registerSetting(NumberSetting("Secrets Pickup Range", PICKUP_RANGE, 0.0..5.0, 0.5, unit = " blocks", desc = "How far past your body (sideways) you reach to pick up an item secret; the game's own is 1."))
+        pickupRangeS = host.registerSetting(NumberSetting("Secrets Pickup Range", PICKUP_RANGE, 0.0..5.0, 0.5, unit = " blocks", desc = "How far past your body (sideways) you reach to pick up an item secret. Hypixel's is about 2.25 (recorded); the game's own is 1."))
         boomRadiusS = host.registerSetting(NumberSetting("Secrets Superboom Radius", SUPERBOOM_RADIUS, 1.0..8.0, 0.5, unit = " blocks", desc = "How far a Superboom TNT reaches: a crypt or secret wall with any block this close to the blast is destroyed whole."))
         leverTicksS = host.registerSetting(NumberSetting("Secrets Lever Wall Time", LEVER_WALL_TICKS, 0..100, 1, unit = " ticks", desc = "How long a lever's wall stays an invisible barrier before it opens for good."))
         autoCreditS = host.registerSetting(BooleanSetting("Secrets Auto Credit", true, desc = "A room whose secrets the room data cannot all place counts the missing ones when you find the last one it does place, so the room can still turn green."))

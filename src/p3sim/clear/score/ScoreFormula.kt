@@ -45,11 +45,11 @@ object ScoreFormula {
     fun secretsPct(found: Int, total: Int): Double = if (total <= 0) 0.0 else Math.round(1000.0 * found / total) / 10.0
 
     /**
-     * The death penalty: `max(0, 3d - 2)`: 1, 4, 7, 10. Fitted on the score shifts of 118, 64 and 11 steps with one, two and three deaths
-     * (mean -1.4, -4.3, -7.8 against the rooms table; the pack notes -0.9, -3.8, -7.0, -10.0). The earlier `2d - 1` was one short at
-     * the second death and three short at the fourth.
+     * The death penalty: `max(0, 2d - 1)`: 1, 3, 5, 7. The first death costs 1 and every later one 2 (the user's word, 2026-10-19). The fit
+     * on the recorded score shifts (118, 64 and 11 steps with one, two and three deaths: -1.4, -4.3, -7.8) read `3d - 2`, but those shifts
+     * carry other losses with them (time spent dead, secrets missed).
      */
-    fun deathPenalty(deaths: Int): Int = maxOf(0, 3 * deaths - 2)
+    fun deathPenalty(deaths: Int): Int = maxOf(0, 2 * deaths - 1)
 
     /** `table(c)`, linear between the entries, clamped to the table. */
     fun interp(table: DoubleArray, c: Double): Double {
