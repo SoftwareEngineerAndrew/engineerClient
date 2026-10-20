@@ -100,6 +100,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
      * starred as tagged, with the HP its tag showed. Rooms the recording saw no mob in are rolled as usual. Blood's are the blood module's.
      */
     private val roomPlans: Map<Int, List<com.engineerclient.p3sim.clear.mobs.PlannedMob>> by lazy {
+        recordedScale.size
         val pack = run.packs.mobs ?: return@lazy emptyMap()
         val byName = pack.archetypes.sortedByDescending { it.name.length }
         val out = HashMap<Int, MutableList<com.engineerclient.p3sim.clear.mobs.PlannedMob>>()
@@ -116,7 +117,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             if (word.isNotEmpty() && mod == null) unknown.merge(name, 1, Int::plus)
             val rng = run.subRandom("replay.mob.${m.id}")
             val id = if (arch.disguise) com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV2(rng) else com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV4(rng)
-            val hp = m.hp.takeIf { it > 0 } ?: (arch.hpFor(run.config.floor)?.toDouble() ?: 1.0)
+            // Its base HP: a mob first seen after the WITHER door into its room had scaled already.
+            val hp = (firstHp[m.id] ?: m.hp).takeIf { it > 0 }?.let { h -> recordedScale[room.index]?.takeIf { (k, _) -> (firstHpK[m.id] ?: m.k) > k }?.let { Math.round(h / it.second).toDouble() } ?: h }
+                ?: (arch.hpFor(run.config.floor)?.toDouble() ?: 1.0)
+            planned[m.id] = id; plannedBack[id] = m.id
             out.getOrPut(room.index) { ArrayList() } += com.engineerclient.p3sim.clear.mobs.PlannedMob(id, arch.index, star, star || arch.cls == "miniboss", mod?.id.orEmpty(), hp,
                 m.x, m.y, m.z, m.yaw, arch.movement != "static", null)
         }
@@ -124,10 +128,92 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         out
     }
 
+    /** The ADS mob planned for each recorded mob. */
+    private val planned = HashMap<Int, java.util.UUID>()
+    private val plannedBack = HashMap<java.util.UUID, Int>()
+    /** Each recorded mob's HP over the run (k, HP; 0 is its death), and how far your hits have used it. */
+    private val recHp: Map<Int, List<Pair<Int, Double>>> by lazy {
+        val out = HashMap<Int, MutableList<Pair<Int, Double>>>()
+        for (e in file.events) if (e.size() > 3 && e[1].asString == "hp") {
+            val v = e[3].asDouble; val l = out.getOrPut(e[2].asInt) { ArrayList() }
+            if (v > 100.0 || (v <= 0.0 && l.isNotEmpty())) l += e[0].asInt to v
+        }
+        out
+    }
+    private val hpUsedK = HashMap<Int, Int>()
+    /** Set while the session itself kills a mob (a recorded death), so the hit is not read as yours. */
+    private var forcing = false
+
+    /**
+     * Your hit on [mob] does what the recording shows: the HP its recorded mob lost from [HIT_BEFORE] ticks before now to [HIT_AFTER] after
+     * (each loss counted once), all it has when the recording's died then, nothing when it lost none. Null for anyone else's hit.
+     */
+    private fun hitAmount(mob: java.util.UUID, by: java.util.UUID?): Double? {
+        if (forcing || ended || by != host.uuid) return null
+        val id = plannedBack[mob] ?: return null
+        val l = recHp[id] ?: return 0.0
+        val now = run.t
+        val from = maxOf(hpUsedK[id] ?: Int.MIN_VALUE, now - HIT_BEFORE - 1)
+        val before = l.lastOrNull { it.first <= from }?.second ?: return 0.0
+        val low = l.filter { it.first > from && it.first <= now + HIT_AFTER }.minByOrNull { it.second } ?: return 0.0
+        hpUsedK[id] = low.first
+        if (low.second <= 0.0) return 1e15
+        return maxOf(0.0, before - low.second)
+    }
+    /** Recorded HP as the replay goes, and the WITHER-door jumps to check two ticks on. */
+    private val liveHp = HashMap<Int, Double>()
+    private val hpChecks = ArrayList<Triple<Int, Int, Double>>()
+
+    /** Each recorded mob's first real HP (over 100: a body's vanilla health comes first) and the k it was seen. */
+    private val firstHp = HashMap<Int, Double>()
+    private val firstHpK = HashMap<Int, Int>()
+
+    /**
+     * Each room's WITHER-door HP factor as the recording shows it: its mobs' HP jumps (the commonest ratio, to 0.05) and the first k one
+     * jumped. Hypixel's factor is known only from here (see MobsModule.scale).
+     */
+    private val recordedScale: Map<Int, Pair<Int, Double>> by lazy {
+        val mobs = file.mobs.associateBy { it.id }
+        val last = HashMap<Int, Double>(); val jumped = HashSet<Int>()
+        val byRoom = HashMap<Int, MutableList<Pair<Int, Double>>>()
+        for (e in file.events) {
+            if (e.size() < 4 || e[1].asString != "hp") continue
+            val id = e[2].asInt; val v = e[3].asDouble; val k = e[0].asInt
+            val m = mobs[id] ?: continue
+            if (v <= 100.0) continue
+            if (id !in firstHp) { firstHp[id] = v; firstHpK[id] = k }
+            val l = last.put(id, v) ?: continue
+            if (k <= 0 || v / l <= 1.04 || !jumped.add(id)) continue
+            val room = run.plan.roomAtBlock(m.x, m.z)?.index ?: continue
+            byRoom.getOrPut(room) { ArrayList() } += k to Math.round(v / l * 20) / 20.0
+        }
+        byRoom.mapValues { (_, l) -> l.minOf { it.first } to l.groupingBy { it.second }.eachCount().maxBy { it.value }.key }
+    }
+
+    /** Your rank bracket and name colour before the replay. */
+    private var ownLooks: Pair<Any?, Any?>? = null
+
+    /** Each name's rank in the recording's chat. */
+    private val ranks: Map<String, String> by lazy {
+        val out = HashMap<String, String>()
+        for (e in file.events) if (e.size() > 2 && e[1].asString == "chat" && e[2].isJsonPrimitive) RANKED.find(clean(e[2].asString))?.let { m -> out.putIfAbsent(m.groupValues[2], m.groupValues[1]) }
+        out
+    }
+
     fun start() {
+        recordedScale.size
+        com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
+        com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
+        // The recorded player's pet: Kill Combo lines only if the recording has them.
+        com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = true
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.dropsFromRecording = true
         // You go by the recording's name in the party's lines ("is now ready!", "opened a WITHER door!", "has obtained").
-        run.state.players[host.uuid]?.let { r -> ownName = r.name; r.name = file.self.name }
+        run.state.players[host.uuid]?.let { r ->
+            ownName = r.name; r.name = file.self.name
+            ownLooks = r.extras["rankBracket"] to r.extras["nameColour"]
+            ranks[file.self.name]?.let { rank -> RANK_LOOKS[rank]?.let { (bracket, colour) -> r.extras["rankBracket"] = bracket; r.extras["nameColour"] = colour } }
+        }
         // The Watcher opens his camp the way he did in the recording (what picks one opening or the other on Hypixel is not known).
         val intro = file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("The Watcher: ") &&
             (it[2].asString.contains(com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO) || it[2].asString.contains(com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO_OTHER)) }
@@ -146,6 +232,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             val rec = run.state.players.getOrPut(m.uuid) { PlayerRecord(m.uuid, m.name, cls(m.cls), true) }
             rec.dungeonClass = cls(m.cls)
             rec.extras[MATE] = true
+            // Their rank as the recording's lines show it ("[MVP++] _Cynapse_ has obtained ..."), for ADS's lines about them.
+            ranks[m.name]?.let { rank -> RANK_LOOKS[rank]?.let { (bracket, colour) -> rec.extras["rankBracket"] = bracket; rec.extras["nameColour"] = colour } }
         }
         SimNet.send(host, NET, "start ${file.id}")
         diff.note(run.t, "start", "replay ${file.id} (${file.floor}) as ${file.self.cls}; ${file.party.size} teammates; recorded k ${file.firstK}..${file.lastK}, boss at ${file.bossK}")
@@ -156,10 +244,15 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         ended = true
         TrapsModule.recordingMovesCrushers = false
         com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = false
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.dropsFromRecording = false
         ownName?.let { n -> run.state.players[host.uuid]?.name = n }
+        ownLooks?.let { (b, c) -> run.state.players[host.uuid]?.extras?.let { x -> if (b == null) x.remove("rankBracket") else x["rankBracket"] = b; if (c == null) x.remove("nameColour") else x["nameColour"] = c } }
         com.engineerclient.p3sim.clear.blood.camp.CampLines.forcedOpening = null
         com.engineerclient.p3sim.clear.blood.camp.CampLines.script = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
+        com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
+        com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
+        com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = true
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
         SimNet.send(host, NET, "stop")
@@ -196,6 +289,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         for (m in bodies.all()) run.state.players[m.uuid]?.let { r -> if (!m.x.isNaN()) { r.x = m.x; r.y = m.y; r.z = m.z; r.extras["yaw"] = m.yaw } }
         bodies.place()
         if (invDirty) syncInv()
+        if (hpChecks.isNotEmpty()) {
+            val dueHp = hpChecks.filter { it.first <= now }
+            hpChecks.removeAll(dueHp)
+            for ((due, id, v) in dueHp) diff.hpScale(due - HP_CHECK_AFTER, file.mobs.firstOrNull { it.id == id }?.tag?.let { mobName(it) } ?: "mob $id", v, planned[id]?.let { Services.mobs.mob(it) }?.maxHp)
+        }
+        if (bloodOwed.isNotEmpty()) EngineerClient.safely("ads replay camp") { payBlood() }
+        if (witherDebt > 0 || bloodDebt) repayKeys()
         val due = pending.filter { it.due <= now }
         pending.removeAll(due)
         for (p in due) EngineerClient.safely("ads replay force") {
@@ -223,6 +323,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 val r = RecEnt(id, e.s(3), e.d(5) ?: 0.0, e.d(6) ?: 0.0, e.d(7) ?: 0.0, e.s(8))
                 ents[id] = r
                 mate(id)?.let { m -> m.x = r.x; m.y = r.y; m.z = r.z; m.yaw = e.d(9)?.toFloat() ?: m.yaw; m.present = true }
+            }
+            "hp" -> e.d(3)?.takeIf { it > 100.0 }?.let { v ->
+                val id = e.i(2) ?: return
+                val l = liveHp.put(id, v)
+                if (!catchUp && k > 0 && l != null && v / l > 1.04 && id in planned) hpChecks += Triple(k + HP_CHECK_AFTER, id, v)
             }
             "emv" -> ents[e.i(2)]?.let { r -> r.x = e.d(3) ?: r.x; r.y = e.d(4) ?: r.y; r.z = e.d(5) ?: r.z }
             "name" -> ents[e.i(2)]?.let { r ->
@@ -296,6 +401,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                     x != null -> ServerboundMovePlayerPacket.Pos(x, y!!, z!!, ground, hcol)
                     yaw != null -> ServerboundMovePlayerPacket.Rot(yaw, pitch!!, ground, hcol)
                     else -> ServerboundMovePlayerPacket.StatusOnly(ground, hcol)
+                }
+                // A teleport of ADS's is accepted first, as the recorded client did within the tick.
+                (c as com.engineerclient.mixin.ServerTeleportAccessor).let { acc ->
+                    acc.ec_getAwaitingPosition()?.let { w -> c.handleAcceptTeleportPacket(net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket(acc.ec_getAwaitingTeleport(), w.x, w.y, w.z, host.yRot, host.xRot)) }
                 }
                 c.handleMovePlayer(pk)
                 if (x != null) diff.moved(e[0].asInt, x, y!!, z!!, host)
@@ -442,9 +551,29 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private val claimed = HashSet<UUID>()
     private var bloodKeyBy: String? = null
 
+    private class BloodDeath(val k: Int, val label: String, val x: Double, val z: Double, val room: Int)
+    /** Recorded camp deaths ADS has no live camp mob for yet. */
+    private val bloodOwed = ArrayDeque<BloodDeath>()
+    private var lastBlood: BloodDeath? = null
+
+    /** Kills ADS's camp mobs for the recorded camp deaths owed, oldest first, each the live one nearest where the recorded one died. */
+    private fun payBlood() {
+        while (bloodOwed.isNotEmpty()) {
+            val d = bloodOwed.first()
+            val mob = Services.mobs.inRoom(d.room).filter { it.alive && it.id !in claimed }
+                .minByOrNull { Math.hypot(it.x - d.x, it.z - d.z) + (if (sameMob(it.name, d.label)) 0.0 else 12.0) } ?: return
+            bloodOwed.removeFirst()
+            claimed += mob.id
+            val now = run.t
+            forcing = true
+            try { Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, nearestMate(d.x, d.z)) } finally { forcing = false }
+            diff.forced(now, "camp: recorded ${d.label} death (k ${d.k}) on ADS's ${mob.name}${if (now > d.k) ", ${now - d.k} ticks late" else ""}", if (mob.alive) "hurtMob left it alive" else "killed")
+        }
+    }
+
     /**
      * A recorded mob died: ADS's mob for it is the one of the same name (the nametag over the recorded body) nearest where it died,
-     * not matched before. Dead already in ADS: fine (you or ADS killed it). Alive: it gets [GRACE] ticks, then it is killed for the
+     * not matched before. Dead already in ADS: fine (you or ADS killed it). Alive: it gets [KILL_GRACE] ticks near you (none far from you), then it is killed for the
      * teammate nearest it (a death near you that ADS did not do is ADS's: [ReplayDiff] tells them apart).
      */
     private fun mobDied(k: Int, id: Int, brief: JsonObject?) {
@@ -456,6 +585,15 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // Only Hypixel's mobs have a tag (a bare body is a part of one: a Giant's, a disguise's).
         if (tag.isNullOrEmpty()) { if (r.type != "minecraft:bat") return }
         val label = tag ?: "Bat"
+        // The Watcher's camp names its mobs by itself, so a recorded camp death takes ADS's nearest live camp mob whatever its name;
+        // with none alive yet (ADS's camp behind Hypixel's), the next one ADS throws.
+        val blood = run.plan.roomAtBlock(rx, rz)?.takeIf { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD }
+        if (blood != null && tag != null) {
+            // One mob can die as two tagged bodies (a rider): the same name within a tick and two blocks is one death.
+            if (lastBlood?.let { it.label == label && k - it.k <= 1 && Math.hypot(it.x - rx, it.z - rz) < 2 } == true) return
+            BloodDeath(k, label, rx, rz, blood.index).also { lastBlood = it; bloodOwed += it }
+            payBlood(); return
+        }
         val cands = Services.mobs.all().filter { it.id !in claimed && Math.abs(it.y - ry) < 8 && Math.hypot(it.x - rx, it.z - rz) < 14 }
         val mob = cands.minByOrNull { m -> Math.hypot(m.x - rx, m.z - rz) + (if (sameMob(m.name, label)) 0.0 else 12.0) + (if (m.alive) 0.0 else 1.0) }
             ?.takeIf { sameMob(it.name, label) || Math.hypot(it.x - rx, it.z - rz) < 4 }
@@ -467,8 +605,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val who = nearestMate(rx, rz)
         diff.mobPending(k, label, you, "ADS %s %,.0f/%,.0f hp%s, %.1f blocks from where it died".format(mob.name, mob.hp, mob.maxHp, if (Services.mobs.isAsleep(mob.id)) " asleep" else "", Math.hypot(mob.x - rx, mob.z - rz)))
         // Far from you it was a teammate's kill: ADS cannot make it, so it is done on the tick.
-        pending += Pending(if (you > FAR) k else k + GRACE, "$label killed (you ${"%.0f".format(you)} blocks away)", { !mob.alive }) {
-            Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, who)
+        pending += Pending(if (you > FAR) k else k + KILL_GRACE, "$label killed (you ${"%.0f".format(you)} blocks away)", { !mob.alive }) {
+            forcing = true
+            try { Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, who) } finally { forcing = false }
             if (mob.alive) "hurtMob left it alive" else "killed by ${who?.let { run.state.players[it]?.name } ?: "?"}"
         }
     }
@@ -552,6 +691,26 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; return }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }
         REVIVED.find(t)?.let { m -> revive(k, m.groupValues[1], m.groupValues[2]); return }
+        drop(k, t)
+    }
+
+    /** The recording's drops (blessings, Superboom TNT, Revive Stones, chest essence), done by the secrets module on their tick. */
+    private fun drop(k: Int, t: String) {
+        val sec = com.engineerclient.p3sim.clear.secrets.SecretsModule
+        BUFF.find(t)?.let { m ->
+            val b = com.engineerclient.p3sim.clear.secrets.Blessing.entries.firstOrNull { it.displayName == m.groupValues[3] } ?: return
+            val level = ROMAN.indexOf(m.groupValues[4]) + 1
+            val finder = if (m.groupValues[1] == "A") null else uuidOf(m.groupValues[2]) ?: return
+            val obtained = file.at(k).any { it.size() > 2 && it[1].asString == "chat" && it.s(2)?.let { l -> clean(l).endsWith("has obtained Blessing of ${b.displayName}!") } == true }
+            sec.recordedBlessing(run, finder, b, level, m.groupValues[5].isNotEmpty(), obtained)
+            return
+        }
+        ITEM.find(t)?.let { m ->
+            val item = com.engineerclient.p3sim.clear.secrets.LootItem.entries.firstOrNull { it.displayName == m.groupValues[2] } ?: return
+            sec.recordedItem(run, uuidOf(m.groupValues[1]) ?: return, item, m.groupValues[3].toIntOrNull() ?: 1)
+            return
+        }
+        ESSENCE.find(t)?.let { m -> sec.recordedEssence(run, uuidOf(m.groupValues[1]) ?: return, m.groupValues[3], m.groupValues[2].toIntOrNull() ?: return) }
     }
 
     private fun uuidOf(name: String?): UUID? = when (name) {
@@ -566,6 +725,16 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         else -> bodies.all().firstOrNull { it.uuid == u }?.takeIf { !it.x.isNaN() }?.let { Vec3(it.x, it.y, it.z) }
     }
 
+    /** Keys lent to open a recorded door before ADS had one, owed back from ADS's next key. */
+    private var witherDebt = 0
+    private var bloodDebt = false
+
+    private fun repayKeys() {
+        val keys = run.state.keys
+        while (witherDebt > 0 && keys.witherHeld > 0) { keys.witherHeld--; witherDebt--; diff.note(run.t, "keys", "ADS's Wither Key paid back the one lent") }
+        if (bloodDebt && keys.bloodHeld) { keys.bloodHeld = false; bloodDebt = false; diff.note(run.t, "keys", "ADS's Blood Key paid back the one lent") }
+    }
+
     private fun door(k: Int, kind: DoorKind, who: String?) {
         val by = uuidOf(who ?: if (kind == DoorKind.BLOOD) bloodKeyBy else null)
         val at = posOf(by) ?: host.position()
@@ -573,13 +742,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val rec = run.state.doors[door.index]
         // A teammate's door opens on the tick of its line (Hypixel's body is barrier the next tick, air 14 after); yours had better be ADS's own.
         pending += Pending(if (by != null && by != host.uuid) k else k + DOOR_GRACE, "${kind.name.lowercase()} door ${door.index} opened by ${who ?: "?"}", { rec.phase != DoorPhase.CLOSED }) {
-            var r = Services.doors.tryOpen(run, door.index, by)
-            if (r == DoorOpenResult.NO_KEY) {
-                // ADS had no key for it (the teammate took one ADS did not drop, or not yet): given, then opened.
-                if (kind == DoorKind.WITHER) run.state.keys.witherHeld++ else run.state.keys.bloodHeld = true
-                r = Services.doors.tryOpen(run, door.index, by)
-                "no key in ADS (given one): $r"
-            } else r.toString()
+            val keys = run.state.keys
+            if (if (kind == DoorKind.WITHER) keys.witherHeld <= 0 else !keys.bloodHeld) {
+                // ADS had no key for it (the teammate took one ADS did not drop, or not yet): lent, then opened. The next key ADS
+                // gives of that kind pays it back, so ADS never holds one Hypixel's party did not.
+                if (kind == DoorKind.WITHER) { keys.witherHeld++; witherDebt++ } else { keys.bloodHeld = true; bloodDebt = true }
+                "no key in ADS (lent one): ${Services.doors.tryOpen(run, door.index, by)}"
+            } else Services.doors.tryOpen(run, door.index, by).toString()
         }
     }
 
@@ -670,9 +839,25 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         /** Ticks ADS gets to do by itself what the recording did (a kill, a puzzle) before it is done for it. */
         const val GRACE = 20
         const val DOOR_GRACE = 6
+        /** Ticks after a recorded WITHER-door HP jump that ADS's mob is checked (ADS's door may open up to DOOR_GRACE later). */
+        const val HP_CHECK_AFTER = DOOR_GRACE + 2
+        /** The window around your hit in which the recording's HP loss of that mob is yours. */
+        const val HIT_BEFORE = 2
+        const val HIT_AFTER = 3
+        /** A recorded death near you waits this long for your own kill: your hits do the recording's HP loss up to [HIT_AFTER] ticks ahead. */
+        const val KILL_GRACE = HIT_AFTER + 1
         /** Farther than this from you, a recorded kill was not yours. */
         const val FAR = 12.0
         private val RIGHT_CLICKS = setOf("o.use", "o.useOn", "o.int")
+        /** "DUNGEON BUFF! X found a / You found a / A Blessing of Life V(! / was found!) (03s)". */
+        private val BUFF = Regex("^DUNGEON BUFF! (A|(?:(\\w{1,16}|You) found a)) Blessing of (\\w+) (I|II|III|IV|V)(?: was found)?!( \\(.+\\))?$")
+        private val RANKED = Regex("^(?:Party > )?\\[(VIP|VIP\\+|MVP|MVP\\+|MVP\\+\\+)] (\\w{1,16})[ :]")
+        /** A rank's bracket and name colour as Hypixel writes them. */
+        private val RANK_LOOKS = mapOf("VIP" to ("§a[VIP]" to "§a"), "VIP+" to ("§a[VIP§6+§a]" to "§a"), "MVP" to ("§b[MVP]" to "§b"),
+            "MVP+" to ("§b[MVP§c+§b]" to "§b"), "MVP++" to ("§6[MVP§c++§6]" to "§6"))
+        private val ROMAN = listOf("I", "II", "III", "IV", "V")
+        private val ITEM = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Superboom TNT|Revive Stone)(?: x(\\d+))?!$")
+        private val ESSENCE = Regex("^ESSENCE! (\\w{1,16}) found x(\\d+) (\\w+) Essence!$")
         private val WITHER_OPENED = Regex("^(\\w{1,16}) opened a WITHER door!")
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")
         private val KEY = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Wither|Blood) Key!")

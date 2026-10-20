@@ -171,7 +171,18 @@ object MobsModule : AdsModule, MobService {
 
     /** A replay's own mobs for a room (the recording's, as they were), in place of the rolled ones; null for a room it has none for. */
     @Volatile var roomMobs: ((Run, Int) -> List<PlannedMob>?)? = null
+    /** A replay's HP factor for a room behind a WITHER door (the recording's), in place of the run's drawn one; null for a room it has none for. */
+    @Volatile var doorScale: ((Run, Int) -> Double?)? = null
+    /**
+     * The run's drawn HP factor. A room's mobs spawn at their base HP and take a factor the tick after the WITHER door into their room
+     * opens (DR, 139 runs: every scaled mob's HP jumped then and only then; a room reached without a WITHER door never scales, the Blood
+     * door scales nothing). Hypixel's factor is a multiple of 0.05 that grows through the run, near 1 + 0.05 per opened room but not
+     * exactly that (UNKNOWN), so outside a replay the drawn one stands in.
+     */
     private var scale = 1.0
+    /** Rooms a WITHER door has scaled, and those to scale on the next tick. */
+    private val scaledRooms = HashSet<Int>()
+    private val pendingScale = ArrayList<Int>()
     private var noPackSaid = false
     /** MobSpawned events of the start-up roll wait for the first tick: the other modules have not all begun yet while the run starts. */
     private var deferSpawnEvents = false
@@ -180,7 +191,7 @@ object MobsModule : AdsModule, MobService {
     private val spikes = ArrayList<MobEntry>()
 
     private fun reset() {
-        combatTotals.clear(); entries.clear(); byRoom.clear(); byEntityId.clear(); rolled.clear(); scale = 1.0; noPackSaid = false; pendingSpawned.clear(); deferSpawnEvents = false
+        combatTotals.clear(); entries.clear(); byRoom.clear(); byEntityId.clear(); rolled.clear(); scale = 1.0; scaledRooms.clear(); pendingScale.clear(); noPackSaid = false; pendingSpawned.clear(); deferSpawnEvents = false
     }
 
     // ---- the run lifecycle ---------------------------------------------------------------------------------------------
@@ -217,9 +228,40 @@ object MobsModule : AdsModule, MobService {
     override fun onEvent(run: Run, event: com.engineerclient.p3sim.run.RunEvent) {
         // A game that joins later needs the fake players' info entries before it tracks their bodies.
         if (event is PlayerJoined) stage.announceTo(event.player, entries.values)
+        if (event is com.engineerclient.p3sim.run.DoorOpened && event.kind == com.engineerclient.p3sim.pack.layouts.DoorKind.WITHER)
+            run.plan.doors.getOrNull(event.door)?.let { pendingScale += behind(run, it.roomA, it.roomB) }
+    }
+
+    /** Of the two rooms a door joins, the one farther from the Entrance (counted in doorways). */
+    private fun behind(run: Run, a: Int, b: Int): Int {
+        val start = run.plan.entrance?.index ?: return b
+        val dist = HashMap<Int, Int>()
+        val q = ArrayDeque<Int>(); q += start; dist[start] = 0
+        while (q.isNotEmpty()) {
+            val r = q.removeFirst()
+            for (d in run.plan.doors) if (d.kind.connected) {
+                val o = if (d.roomA == r) d.roomB else if (d.roomB == r) d.roomA else continue
+                if (o !in dist) { dist[o] = dist.getValue(r) + 1; q += o }
+            }
+        }
+        return if ((dist[a] ?: Int.MAX_VALUE) > (dist[b] ?: Int.MAX_VALUE)) a else b
+    }
+
+    /** Puts a room's mobs (HP and max HP) on the WITHER door's factor. */
+    private fun scaleRoom(run: Run, room: Int) {
+        if (!scaledRooms.add(room)) return
+        val f = doorScale?.invoke(run, room) ?: scale
+        if (f == 1.0) return
+        for (e in byRoom[room].orEmpty()) {
+            val r = e.record
+            if (!r.alive) continue
+            r.maxHp = Math.round(r.maxHp * f).toDouble(); r.hp = Math.round(r.hp * f).toDouble()
+            if (e.live) stage.refresh(e)
+        }
     }
 
     override fun onTick(run: Run) {
+        if (pendingScale.isNotEmpty()) { val q = pendingScale.toList(); pendingScale.clear(); for (r in q) scaleRoom(run, r) }
         if (pendingSpawned.isNotEmpty()) { val q = pendingSpawned.toList(); pendingSpawned.clear(); for (m in q) run.bus.post(MobSpawned(run.t, m)) }
         // Nothing stands in the world before the run starts: the first bodies reach a real client at the start tick or up to 30 ticks after it.
         if (run.t < 0) return
@@ -322,7 +364,7 @@ object MobsModule : AdsModule, MobService {
             val placement = room?.placement
             if (pack != null && room != null && placement != null && enabled()) {
                 val alias = run.packs.rooms?.let { r -> { n: String -> r.familyOf(n) } }
-                val params = PlanParams(run.config.floor, scale, if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 0) / 100.0, minibossChance = (sMinibossChance?.value ?: 65) / 100.0)
+                val params = PlanParams(run.config.floor, 1.0,if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 0) / 100.0, minibossChance = (sMinibossChance?.value ?: 65) / 100.0)
                 val plans = roomMobs?.invoke(run, roomIndex) ?: MobPlanner.planRoom(pack, room.name, alias, placement, params, run.subRandom("mobs.room.$roomIndex"))
                 for (pm in plans) register(run, pack, pm, roomIndex)
             }
@@ -361,7 +403,9 @@ object MobsModule : AdsModule, MobService {
             ?: run { log.warn("[ads] the mob pack has no '${spec.kind}', so it cannot be spawned"); return null }
         val word = spec.extras["modifier"]?.takeIf { it.isNotEmpty() }
         val mod = word?.let { pack.modifier(it) }
-        val hp = spec.hp ?: MobRolls.spawnHp(arch.hpFor(run.config.floor) ?: return null, scale, mod)
+        // A room's mob has its room's factor: the run's once a WITHER door scaled the room, none before (the Blood camp's keep the run's).
+        val roomScale = spec.roomIndex?.let { r -> run.plan.rooms.getOrNull(r)?.takeIf { it.type != RoomType.BLOOD } }?.let { if (it.index in scaledRooms) doorScale?.invoke(run, it.index) ?: scale else 1.0 } ?: scale
+        val hp = spec.hp ?: MobRolls.spawnHp(arch.hpFor(run.config.floor) ?: return null, roomScale, mod)
         val rng = run.subRandom("mobs.spec." + entries.size + spec.kind)
         val id = if (arch.disguise) MobRolls.uuidV2(rng) else MobRolls.uuidV4(rng)
         // A camp mob keeps its word even when the pack has no row for it (Stealth, Boomer): its tag is written from the word.
@@ -462,7 +506,7 @@ object MobsModule : AdsModule, MobService {
             val p = e.plan
             val m = JsonObject()
             m.addProperty("id", p.id.toString()); m.addProperty("arch", p.arch); m.addProperty("star", p.star); m.addProperty("req", p.required)
-            m.addProperty("mod", p.modifier); m.addProperty("max", p.maxHp); m.addProperty("hp", e.record.hp); m.addProperty("alive", e.record.alive)
+            m.addProperty("mod", p.modifier); m.addProperty("max", p.maxHp); m.addProperty("rmax", e.record.maxHp); m.addProperty("hp", e.record.hp); m.addProperty("alive", e.record.alive)
             m.addProperty("room", e.record.roomIndex ?: -1)
             m.addProperty("px", p.x); m.addProperty("py", p.y); m.addProperty("pz", p.z); m.addProperty("yaw", p.yaw)
             m.addProperty("x", e.x); m.addProperty("y", e.y); m.addProperty("z", e.z)
@@ -472,6 +516,7 @@ object MobsModule : AdsModule, MobService {
         }
         o.add("mobs", a)
         o.add("rolled", JsonArray().also { arr -> rolled.sorted().forEach(arr::add) })
+        o.add("scaled", JsonArray().also { arr -> scaledRooms.sorted().forEach(arr::add) })
         return o
     }
 
@@ -481,6 +526,7 @@ object MobsModule : AdsModule, MobService {
         val pack = run.packs.mobs ?: return
         scale = data.get("scale")?.asDouble ?: 1.0
         data.getAsJsonArray("rolled")?.forEach { rolled += it.asInt }
+        data.getAsJsonArray("scaled")?.forEach { scaledRooms += it.asInt }
         for (el in data.getAsJsonArray("mobs") ?: JsonArray()) {
             val m = el.asJsonObject
             val arch = archOf(pack, m.get("arch").asInt) ?: continue
@@ -489,7 +535,7 @@ object MobsModule : AdsModule, MobService {
                 m.get("px").asDouble, m.get("py").asDouble, m.get("pz").asDouble, m.get("yaw").asFloat, m.get("mover").asBoolean, loop)
             val room = m.get("room").asInt.takeIf { it >= 0 }
             val rec = MobRecord(pm.id, arch.id, arch.name, room, pm.star, pm.required, arch.cls == "miniboss", arch.disguise && fakePlayersOn())
-            rec.maxHp = pm.maxHp; rec.hp = m.get("hp").asDouble; rec.alive = m.get("alive").asBoolean
+            rec.maxHp = m.get("rmax")?.asDouble ?: pm.maxHp; rec.hp = m.get("hp").asDouble; rec.alive = m.get("alive").asBoolean
             rec.x = m.get("x").asDouble; rec.y = m.get("y").asDouble; rec.z = m.get("z").asDouble
             val e = MobEntry(rec, pm, arch, pack.modifier(pm.modifier).takeIf { pm.modifier.isNotEmpty() })
             e.x = rec.x; e.y = rec.y; e.z = rec.z
