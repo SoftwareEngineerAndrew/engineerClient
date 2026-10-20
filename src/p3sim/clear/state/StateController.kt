@@ -189,10 +189,18 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         if (state.doors[door].phase == DoorPhase.CLOSED && !ledger.has(needs)) noKey(door, by)
     }
 
+    /** How many times Hypixel says the no-key line (and plays its sound) for one hit. */
+    private val NO_KEY_REPEAT = 2
+
+    /** The tick each player was last told there is no key. */
+    private val noKeyTold = HashMap<UUID?, Int>()
+
     private fun noKey(door: Int, by: UUID?) {
         val t = run.t
-        // Hypixel answers a use-click and a swing each, so a click can say it twice in one tick: no de-duplication here.
-        fx.chat(StateText.NO_KEY_LINE, by); fx.sound(StateText.NO_KEY, by)
+        // Hypixel says it as a pair, line and sound twice, once a tick however many clicks and swings hit the door that tick
+        // (DR, 139 runs: 2,025 ticks of 2 lines and 2 sounds, never one; a click, a swing, or both with a dig start all give one pair).
+        if (noKeyTold.put(by, t) == t) return
+        repeat(NO_KEY_REPEAT) { fx.chat(StateText.NO_KEY_LINE, by); fx.sound(StateText.NO_KEY, by) }
         if (by != null) run.bus.post(DoorLocked(t, door, by))
     }
 

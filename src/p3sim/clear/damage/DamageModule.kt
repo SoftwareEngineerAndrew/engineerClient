@@ -130,6 +130,8 @@ object DamageModule : AdsModule, DamageService {
 
     /** The Grandma Wolf Kill Combo of each human. */
     private val combo = KillCombo()
+    /** Whether the humans have the pet (a replay of someone without it has no Kill Combo lines). */
+    @Volatile var killCombo = true
 
     override fun onRunStart(run: Run) {
         combo.clear()
@@ -157,7 +159,7 @@ object DamageModule : AdsModule, DamageService {
     }
 
     override fun onEvent(run: Run, event: com.engineerclient.p3sim.run.RunEvent) {
-        if (event is com.engineerclient.p3sim.run.MobKilled) event.by?.let { id ->
+        if (event is com.engineerclient.p3sim.run.MobKilled && killCombo) event.by?.let { id ->
             val p = human(id) ?: return@let
             combo.kill(id, run.t)?.let { line -> EngineerClient.safely("ads kill combo") { Sim.asPlayer(p) { Sim.chat(line) } } }
         }
@@ -244,14 +246,16 @@ object DamageModule : AdsModule, DamageService {
         return e.entityTags().contains(ASLEEP_TAG)
     }
 
-    override fun hurtMob(run: Run, mob: UUID, amount: Double, source: DamageSource, by: UUID?): Boolean {
+    override fun hurtMob(run: Run, mob: UUID, asked: Double, source: DamageSource, by: UUID?): Boolean {
         if (!run.stage.inDungeon) return false
         val rec = Services.mobs.mob(mob) ?: return false
+        val replayed = replayHit?.invoke(mob, by)
+        val amount = replayed ?: asked
         if (!rec.alive || amount <= 0.0 || amount.isNaN()) return false
         // A sleeping Fels cannot be hurt, except by a teammate bot (it wakes it, as a body next to it would).
         if (asleep(rec) && by?.let { run.state.players[it]?.isBot } != true) return false
         // For now every hit kills (no damage maths in the clear yet): the mob takes all it has left.
-        val left = if (oneShot) 0.0 else max(0.0, rec.hp - amount)
+        val left = if (oneShot && replayed == null) 0.0 else max(0.0, rec.hp - amount)
         mobLedger.record(mob, amount, source, by)
         // The milestones count the health a hit took, not the hit: a 69 million Implosion on three mobs of about a million each is
         // Hypixel's first milestone (750,000), not its fifth (DR, a Mage's run: ❶ on that cast, ❷ 18 ticks later, ❸ at 11 s).
@@ -289,6 +293,9 @@ object DamageModule : AdsModule, DamageService {
         val seconds = maxOf(0, run.t / 20)
         for (i in shownSoFar until now) Sim.asPlayer(sp) { Sim.chat(ClassMilestones.line(cls, i, table, seconds)) }
     }
+
+    /** A replay's damage for a hit: the HP the recording's mob lost then (null: not the replay's hit to say, 0: Hypixel shows no loss then). */
+    @Volatile var replayHit: ((UUID, UUID?) -> Double?)? = null
 
     /** Every hit on a clear mob kills it (the damage numbers are not modelled yet). */
     @Volatile var oneShot = true

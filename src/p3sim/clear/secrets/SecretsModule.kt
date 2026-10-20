@@ -211,6 +211,45 @@ object SecretsModule : AdsModule, SecretService {
      */
     @Volatile var teamFromRecording = false
 
+    /**
+     * A replay's drops are the recording's: what a chest, a kill or a cleared room gives is a draw on Hypixel whose mechanism is
+     * UNMEASURED, so a replay draws none ([recordedBlessing], [recordedItem] and [recordedEssence] do the recorded ones on their tick).
+     */
+    @Volatile var dropsFromRecording = false
+
+    /** A blessing the recording shows: [finder] null for a nameless pickup, [obtained] when the "has obtained" line came with it, [timed] with the run clock. */
+    fun recordedBlessing(run: Run, finder: UUID?, b: Blessing, level: Int, timed: Boolean, obtained: Boolean) {
+        val rd = data?.takeIf { it.run === run } ?: return
+        val t = run.t
+        val f = who(rd, finder)
+        if (obtained && finder != null) Services.channels.chat(Blessings.obtained(f.label, b))
+        for (p in humans(rd)) {
+            val lines = ArrayList<String>()
+            if (finder == null) { lines += Blessings.pickedUp(b); lines += Blessings.announceOwn(b, level, t) }
+            else lines += if (p.uuid == finder) Blessings.announceYouFound(b, level, if (timed) t else null) else Blessings.announceOther(f.name, b, level, f.colour, if (timed) t else null)
+            lines += Blessings.grantLines(b, level, SecretsSettings.blessingBoost)
+            for (l in lines) Services.channels.chat(l, Audience.Only(p.uuid))
+            run.state.secrets.blessings.merge(b.name, level, Int::plus)
+            run.bus.post(BlessingGranted(t, b.name, level, p.uuid))
+        }
+    }
+
+    /** An item the recording shows someone obtained (Superboom TNT, a Revive Stone). */
+    fun recordedItem(run: Run, finder: UUID?, item: LootItem, count: Int) {
+        val rd = data?.takeIf { it.run === run } ?: return
+        giveItem(rd, who(rd, finder), item, count)
+    }
+
+    /** A chest's essence the recording shows. */
+    fun recordedEssence(run: Run, finder: UUID?, type: String, amount: Int) {
+        val rd = data?.takeIf { it.run === run } ?: return
+        val f = who(rd, finder)
+        val drop = Drop.Essence(type, amount)
+        tellEach(rd, f.uuid, SecretLines.chestEssenceSelf(drop), SecretLines.chestEssenceOther(f.colour, f.name, drop))
+        Services.channels.actionBarSegment("essence", "§d+${drop.amount} ${drop.type} Essence", ActionBarModel.REPLACES_DEFENSE, ESSENCE_SEGMENT_TICKS, Audience.Everyone)
+        for (h in humans(rd)) orbPing(h)
+    }
+
     /** One standing cell of each tomb group of [room] not yet blown (world coordinates), for crediting a teammate's crypt. */
     fun standingCrypts(run: Run, room: Int): List<com.engineerclient.p3sim.pack.Pos> {
         val rd = d(run) ?: return emptyList()
@@ -508,7 +547,8 @@ object SecretsModule : AdsModule, SecretService {
     /** A bot's mod posting [text] in party chat a moment later; nothing for a human (their own mods post for them) or nobody. */
     private fun botSays(rd: RunData, id: UUID?, text: String) {
         val w = who(rd, id)
-        if (id == null || !w.bot) return
+        // A replay's teammates said what the recording says they did.
+        if (id == null || !w.bot || teamFromRecording) return
         val line = "§9Party §8> ${w.bracket} ${w.name}§f: $text"
         rd.later.add(rd.run.serverTick + 1 + rd.miscRandom.nextInt(15), { Services.channels.chat(line) })
     }
@@ -732,7 +772,7 @@ object SecretsModule : AdsModule, SecretService {
             openTrapped(rd, s, by, start)
             return
         }
-        rd.chests[s.key] = ChestRec(s, LootTables.chest(chestRandom(rd, s)), by, start)
+        rd.chests[s.key] = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, start)
     }
 
     /** The Mimic: a plain zombie stands at the chest a tick after the click, and is dead a few ticks later; the Mimic's point counts then. */
@@ -860,6 +900,7 @@ object SecretsModule : AdsModule, SecretService {
 
     /** A cleared room may drop Superboom TNT or a Revive Stone for whoever cleared it (UNMEASURED mechanism, measured rate; see [LootTables.roomClear]). */
     private fun roomClearDrop(rd: RunData, room: Int) {
+        if (dropsFromRecording) return
         val drop = LootTables.roomClear(rd.dropRandom) as? Drop.Item ?: return
         giveItem(rd, who(rd, clearer(rd, room)), drop.item, drop.count)
     }
@@ -869,6 +910,7 @@ object SecretsModule : AdsModule, SecretService {
      * ([FloorDrops]) until it is picked up; the line and the item come then. Without the mob's position it is given at once.
      */
     private fun mobKillDrop(rd: RunData, killer: UUID, mob: UUID) {
+        if (dropsFromRecording) return
         val drop = LootTables.mobKill(rd.dropRandom) ?: return
         val rec = Services.mobs.mob(mob)
         val at = rec?.let { doubleArrayOf(it.x, it.y, it.z) }?.takeIf { !it[0].isNaN() && !(it[0] == 0.0 && it[2] == 0.0) }
@@ -1112,7 +1154,7 @@ object SecretsModule : AdsModule, SecretService {
             val s = rd.plan.site(j.get("key").asString) ?: return@forEach
             val elapsed = j.get("elapsed")?.asInt ?: 0
             val by = j.get("by")?.takeIf { !it.isJsonNull }?.asString?.let { runCatching { UUID.fromString(it) }.getOrNull() }
-            val rec = ChestRec(s, LootTables.chest(chestRandom(rd, s)), by, now - elapsed)
+            val rec = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, now - elapsed)
             rec.done += Beats.playedBy(SecretChestFinale.schedule(rec.reward).map { it.at }, elapsed)
             rd.chests[s.key] = rec
             if (elapsed >= 1 && s.key != rd.trapped) rd.lidsOwed += s.key
