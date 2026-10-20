@@ -73,6 +73,7 @@ internal object MobWorld {
     /** The tag text for the mob's current HP. */
     fun tagText(e: MobEntry): String =
         if (BloodLooks.isBlood(e.arch)) BloodLooks.tag(e.arch, e.plan.modifier, e.record.hp, e.record.maxHp)
+        else if (LevelLooks.isLevel(e.arch)) LevelLooks.tag(e.arch, e.record.hp, e.record.maxHp)
         else MobTags.nametagLegacy(e.tag, e.arch.name, e.modifier, e.record.hp, e.record.maxHp, e.plan.star)
 
     /**
@@ -155,6 +156,8 @@ internal object MobWorld {
                 body.setItemSlot(EquipmentSlot.FEET, ItemStack(Items.LEATHER_BOOTS))
             }
             MobGear.has(arch.id) -> MobGear.dress(body, arch.id, e.plan.id)
+            // Skeletor Prime holds a bone, the Undead Skeleton a bow.
+            LevelLooks.isLevel(arch) -> body.setItemSlot(EquipmentSlot.MAINHAND, ItemStack(if (LevelLooks.hand(arch) == "minecraft:bone") Items.BONE else Items.BOW))
             eq != null -> {
                 if (eq.mainhand == "minecraft:iron_sword") {
                     val sword = ItemStack(Items.IRON_SWORD)

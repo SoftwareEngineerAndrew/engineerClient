@@ -116,7 +116,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private val roomPlans: Map<Int, List<com.engineerclient.p3sim.clear.mobs.PlannedMob>> by lazy {
         recordedScale.size
         val pack = run.packs.mobs ?: return@lazy emptyMap()
-        val byName = pack.archetypes.sortedByDescending { it.name.length }
+        val byName = (pack.archetypes + com.engineerclient.p3sim.clear.mobs.LevelLooks.all).sortedByDescending { it.name.length }
         val out = HashMap<Int, MutableList<com.engineerclient.p3sim.clear.mobs.PlannedMob>>()
         val unknown = HashMap<String, Int>()
         for (m in file.mobs) {
@@ -1112,7 +1112,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")
         private val KEY = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Wither|Blood) Key!")
         /** A Hypixel nametag as ADS names the mob: no star, no HP, no colour. */
-        fun mobName(tag: String): String = clean(tag).replace("✯", "").replace(Regex("\\s*[0-9][0-9.,]*[kMB]?❤.*$"), "").trim()
+        fun mobName(tag: String): String = clean(tag).replace("✯", "").replace(Regex("^\\[Lv\\d+]"), "").replace(Regex("\\s*[0-9][0-9.,]*[kMB]?(/[0-9][0-9.,]*[kMB]?)?❤.*$"), "").trim()
         fun sameMob(ads: String, rec: String): Boolean { val a = clean(ads).replace("✯", "").trim(); return a.equals(rec, true) || rec.endsWith(" $a") || a.endsWith(" $rec") }
         private val REVIVED = Regex("❣ (\\w{1,16}) was revived by (\\w{1,16})")
         fun clean(s: String) = s.replace(Regex("§."), "").trim()
