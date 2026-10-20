@@ -71,6 +71,20 @@ object TrapsModule : AdsModule, TrapService {
     }
 
     private var entries: List<Entry> = emptyList()
+
+    /**
+     * While a replay runs the recording moves the crushers (a teammate ADS cannot see kept a room going on Hypixel): the arms keep their clocks,
+     * their hits and their sounds, but the blocks are the recording's.
+     */
+    @Volatile var recordingMovesCrushers = false
+
+    /** Whether the canonical cell is in the reach of one of [e]'s crushers. */
+    private fun inArm(e: Entry, x: Int, y: Int, z: Int): Boolean = e.hazards.crushers.any { c ->
+        val b = c.armBox(c.sweep); x in b[0]..b[3] && y in b[1]..b[4] && z in b[2]..b[5]
+    }
+
+    /** Whether the world cell is in the reach of a crusher of this run. */
+    fun isCrusherCell(x: Int, y: Int, z: Int): Boolean = entries.any { e -> e.placement.toCanonical(x, z)?.let { (cx, cz) -> inArm(e, cx, y, cz) } == true }
     private var sites: TrapSites = TrapSites.NONE
     private var humanIds: Set<UUID> = emptySet()
     private val arrowHits = ArrayList<UUID>()
@@ -91,9 +105,19 @@ object TrapsModule : AdsModule, TrapService {
             val arrowRules = sites.arrows.filter { it.design == design.id }
             val flameRules = sites.flames.filter { it.design == design.id }
             if (design.crushers.isEmpty() && design.tripwires.isEmpty() && arrowRules.isEmpty() && flameRules.isEmpty()) return@mapNotNull null
-            val crushers = design.crushers.map {
+            val crushers = design.crushers.flatMap {
                 val t = plan.timing(it.id)
-                Crusher(it.id, it.slab, it.axis?.firstOrNull() ?: 'x', it.sign, t.sweep ?: it.sweep, it.material ?: "minecraft:polished_granite", t, plan.startAt(it.id))
+                val axis = it.axis?.firstOrNull() ?: 'x'
+                val sweep = t.sweep ?: it.sweep
+                val mat = it.material ?: "minecraft:polished_granite"
+                if (!t.pincer) listOf(Crusher(it.id, it.slab, axis, it.sign, sweep, mat, t, plan.startAt(it.id)))
+                else {
+                    // The far arm's home is the cell past the sweep, and it grows back towards this one.
+                    val d = it.sign * (sweep + 1)
+                    val far = it.slab.copyOf().also { b -> if (axis == 'x') { b[0] += d; b[3] += d } else { b[2] += d; b[5] += d } }
+                    listOf(Crusher(it.id, it.slab, axis, it.sign, sweep / 2, mat, t, plan.startAt(it.id)),
+                        Crusher(it.id + "/far", far, axis, -it.sign, sweep - sweep / 2, mat, t, plan.startAt(it.id)))
+                }
             }
             val lines = TripLine.pair(design.tripwires.map { Hook(it.pos.x, it.pos.y, it.pos.z, it.facing ?: "") })
             val hurts = timings.tripwiresHurtIn(room.name)
@@ -143,7 +167,13 @@ object TrapsModule : AdsModule, TrapService {
         if (entries.isEmpty()) return ctx.reply("This layout has no room with crushers, tripwires, arrow banks or flamethrowers.")
         when (ctx.arg(0)) {
             "list", null -> for (e in entries) ctx.reply("room ${e.room.index}: ${e.room.name} (${e.room.type}) ${e.hazards.crushers.size} crushers, ${e.hazards.lines.size} tripwires, " +
-                "${e.banks.size} arrow banks, ${e.hazards.extras.count { it is FlameBank }} flamethrower groups")
+                "${e.banks.size} arrow banks, ${e.hazards.extras.count { it is FlameBank }} flamethrower groups").also {
+                for (c in e.hazards.crushers) {
+                    val b = c.armBox(c.sweep); val p = e.placement.toWorld(b[0], b[1], b[2]); val q = e.placement.toWorld(b[3], b[4], b[5])
+                    val h = e.placement.toWorld(c.slab[0], c.slab[1], c.slab[2])
+                    ctx.reply("  ${c.id}: arm ${minOf(p.x, q.x)}..${maxOf(p.x, q.x)} ${p.y}..${q.y} ${minOf(p.z, q.z)}..${maxOf(p.z, q.z)}, home at ${h.x} ${h.y} ${h.z}, sweep ${c.sweep}, ${c.timing.ticksPerBlock}/${c.timing.stillTicks}")
+                }
+            }
             "status" -> for (e in entries) ctx.reply("room ${e.room.index}: clock ${e.hazards.clock}, crushers out " + e.hazards.crushers.joinToString { "${it.id.substringAfter('/')}=${it.extensionAt(e.hazards.clock)}/${it.sweep}" } +
                 e.hazards.extras.filterIsInstance<FallingFloor>().joinToString("") { ", floor of ${it.cells.size} blocks ${if (it.fired) "gone" else "standing"}" } +
                 (if (e.banks.isEmpty()) "" else ", bank clock ${e.bankClock}, banks " + e.banks.joinToString { "${it.rule.dispensers.size}x${it.rule.perDispenser} every ${it.rule.period} (phase ${it.phase})" }))
@@ -211,7 +241,8 @@ object TrapsModule : AdsModule, TrapService {
     /** Does what a room's hazards asked for this tick: writes the blocks, turns floor cells to debris, plays the sounds, shoots the arrows, draws the flames and hurts. */
     private fun handle(run: Run, e: Entry, edits: List<BlockEdit>, hits: List<HazardHit>, cues: List<SoundCue>, debris: List<IntArray>, volleys: List<ArrowRule>, flames: List<FlameFx>) {
         if (debris.isNotEmpty()) spawnDebris(e, debris)
-        if (edits.isNotEmpty()) HardBlocks.apply(e.placement, edits)
+        val mine = if (recordingMovesCrushers) edits.filter { !inArm(e, it.x, it.y, it.z) } else edits
+        if (mine.isNotEmpty()) HardBlocks.apply(e.placement, mine)
         for (cue in cues) play(e, cue)
         for (rule in volleys) fire(e, rule)
         for (fx in flames) draw(e, fx)

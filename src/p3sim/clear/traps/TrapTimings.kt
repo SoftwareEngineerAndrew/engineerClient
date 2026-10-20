@@ -10,9 +10,10 @@ import kotlin.random.Random
  * How fast a crusher moves: it advances one block every [ticksPerBlock] ticks and, once back at its resting end, waits [stillTicks]
  * ticks between its last move and its next one (so a crusher that never lingers has the same number for both). The single rest is at the
  * fully retracted end. [sweep], when set, replaces the rooms pack's sweep for this crusher (the Old Trap's two arms are one pincer of 13
- * blocks each, while the pack splits the same cells into a 10 and a 16 block sweep).
+ * blocks each, while the pack splits the same cells into a 10 and a 16 block sweep). [pincer] splits the sweep into two arms that close on each
+ * other: the first half grows from the home slab, the rest from the far end back towards it, on the same clock (the Buttons gate).
  */
-class CrusherTiming(val ticksPerBlock: Int, val stillTicks: Int, val sweep: Int? = null) {
+class CrusherTiming(val ticksPerBlock: Int, val stillTicks: Int, val sweep: Int? = null, val pincer: Boolean = false) {
     init { require(ticksPerBlock >= 1 && stillTicks >= 1) { "a crusher moves at least every tick and rests at least a tick" } }
 
     /** Ticks in one out-and-back cycle of a crusher that extends [sweep] blocks: `(2 * sweep - 1)` move intervals and the rest. */
@@ -110,7 +111,7 @@ class TrapTimings(
                 val tpb = o?.get("ticksPerBlock")?.asInt ?: return fallback
                 val still = o.get("stillTicks")?.asInt ?: tpb
                 val sweep = o.get("sweep")?.asInt?.takeIf { it >= 1 }
-                return if (tpb >= 1 && still >= 1) CrusherTiming(tpb, still, sweep) else fallback
+                return if (tpb >= 1 && still >= 1) CrusherTiming(tpb, still, sweep, o.get("pincer")?.asBoolean ?: false) else fallback
             }
             val def = timing(root.getAsJsonObject("default"), DEFAULT)
             val map = HashMap<String, CrusherTiming>()
