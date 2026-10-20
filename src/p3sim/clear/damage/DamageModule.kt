@@ -295,7 +295,7 @@ object DamageModule : AdsModule, DamageService {
         for (i in shownSoFar until now) Sim.asPlayer(sp) { Sim.chat(ClassMilestones.line(cls, i, table, seconds)) }
     }
 
-    /** A replay's Implosion line for [caster]'s cast now (enemies, damage), each used once; null for none or not the replay's caster. */
+    /** A replay's Implosion line for [caster]'s cast now (enemies, damage), each used once; (0, 0.0) when the recording has none (the cast hit nothing); null for anyone else. */
     @Volatile var replayImplosion: ((UUID) -> Pair<Int, Double>?)? = null
 
     /** A replay's damage for a hit: the HP the recording's mob lost then (null: not the replay's hit to say, 0: Hypixel shows no loss then). */
@@ -329,14 +329,15 @@ object DamageModule : AdsModule, DamageService {
     /** Runs a cast in [box]: one damage roll for the cast (the same for every mob), every mob it reaches takes it. A secret bat in the box dies and counts as an enemy. */
     fun cast(run: Run, caster: UUID?, box: DoubleArray, damage: Double?): Cast {
         if (!run.stage.inDungeon) return Cast(0, 0.0, 0)
+        // A replay's own cast: the recording's line for it says how hard Hypixel's hit each enemy (the total over the count); no line, nothing hit.
+        val recorded = if (damage == null && caster != null) replayImplosion?.invoke(caster) else null
+        if (recorded != null && recorded.first <= 0) return Cast(0, 0.0, 0)
         val all = Services.mobs.all().toList()
         // A secret bat is a plain bat, not a registered mob: the secrets module kills the ones in the box. The cast's line counts each one as an enemy.
         val bats = if (box.size >= 6) killBats(run, net.minecraft.world.phys.AABB(box[0], box[1], box[2], box[3], box[4], box[5]), caster) else 0
         val ids = ImplosionRules.select(box, all.map { ImplosionRules.Candidate(it.id, hitboxOf(it), it.alive, asleep(it)) })
         if (ids.isEmpty() && bats == 0) return Cast(0, 0.0, 0)
         val profile = ImplosionRules.profile(run.config.floor)
-        // A replay's own cast: the recording's line for it says how hard Hypixel's hit each enemy (the total over the count).
-        val recorded = if (damage == null && caster != null) replayImplosion?.invoke(caster) else null
         val base = damage ?: recorded?.let { it.second / it.first } ?: profile.castBase(rolls, implosionMultiplier)
         val scale = run.config.mobHpScale ?: 1.0
         // A bat takes the cast's base roll: it has 100 HP, so any hit kills it, but the line's total still adds the roll.
