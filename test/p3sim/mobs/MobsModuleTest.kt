@@ -55,6 +55,8 @@ class MobsModuleTest {
         override fun position(e: MobEntry): DoubleArray? = if (e.live) doubleArrayOf(e.x, e.y, e.z) else null
         override fun act(e: MobEntry, action: AiAction, targetY: Double, targetX: Double, targetZ: Double) { acts += action }
         override fun rescue(e: MobEntry) {}
+        val placed = ArrayList<DoubleArray>()
+        override fun place(e: MobEntry, x: Double, y: Double, z: Double) { placed += doubleArrayOf(x, y, z); e.x = x; e.y = y; e.z = z }
     }
 
     private class FakeDoors(val key: KeyKind?) : DoorService {
@@ -250,6 +252,24 @@ class MobsModuleTest {
         human(run, 12.0, 10.0, bot = true)
         tick(run, 10)
         assertFalse(MobsModule.isAsleep(f.id))
+    }
+
+    @Test fun aReplayedMobGoesWhereTheRecordingHasItAndDoesNothingOfItsOwn() {
+        val run = newRun()
+        val m = spawn(run, "test_boss", x = 10.0, z = 10.0)
+        val p = human(run, 11.0, 10.0)
+        MobsModule.replayPose = { id -> if (id == m.id) doubleArrayOf(12.0, 70.0, 14.0) else null }
+        try {
+            tick(run, 30)
+            assertTrue(stage.acts.isEmpty(), "no AI step")
+            assertTrue(damage.melee.isEmpty(), "no swing at the human beside it")
+            assertEquals(listOf(12.0, 70.0, 14.0), stage.placed.last().toList())
+            assertEquals(14.0, m.z)
+        } finally { MobsModule.replayPose = null }
+        // Out of the recording's sight: ADS moves it again.
+        p.x = 13.0
+        tick(run, 30)
+        assertTrue(stage.acts.isNotEmpty())
     }
 
     @Test fun aMoverChasesAndHitsAHuman() {

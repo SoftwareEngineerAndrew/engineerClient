@@ -172,6 +172,9 @@ object MobsModule : AdsModule, MobService {
     /** A replay's own mobs for a room (the recording's, as they were), in place of the rolled ones; null for a room it has none for. */
     @Volatile var roomMobs: ((Run, Int) -> List<PlannedMob>?)? = null
     /** A replay's HP factor for a room behind a WITHER door (the recording's), in place of the run's drawn one; null for a room it has none for. */
+    /** A replay: where the recording has the mob with this ADS id this tick (x, y, z), or null to let ADS move it. */
+    @Volatile var replayPose: ((java.util.UUID) -> DoubleArray?)? = null
+
     @Volatile var doorScale: ((Run, Int) -> Double?)? = null
     /**
      * The run's drawn HP factor. A room's mobs spawn at their base HP and take a factor the tick after the WITHER door into their room
@@ -300,6 +303,14 @@ object MobsModule : AdsModule, MobService {
             }
             stage.rescue(e)
             val pos = stage.position(e) ?: continue
+            // A replay: a mob the recording sees is where the recording has it, and does nothing of its own.
+            val rec = replayPose?.invoke(e.record.id)
+            if (rec != null) {
+                if (e.asleep) { e.asleep = false; stage.wake(e) }
+                stage.place(e, rec[0], rec[1], rec[2])
+                stage.position(e)?.let { e.record.x = it[0]; e.record.y = it[1]; e.record.z = it[2] }
+                continue
+            }
             if (e.asleep) {
                 val r = wakeRadius(e.arch)
                 if (players.any { dist3(it, pos) <= r }) { e.asleep = false; stage.wake(e) } else continue
