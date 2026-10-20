@@ -609,6 +609,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             if (p.done()) diff.note(now, "ok", p.what)
             else { val r = p.force(); diff.forced(now, p.what, r) }
         }
+        if (essenceRetries.isNotEmpty()) { val l = essenceRetries.toList(); essenceRetries.clear(); for ((by, n) in l) mateEssence(by, n) }
         selfDeaths(now)
         diff.tick(now)
         if (now > file.lastK || file.bossK?.let { now >= it } == true) stop("the recording reached ${if (now > file.lastK) "its end" else "the boss"}")
@@ -1102,8 +1103,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             for (site in com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room)) {
                 if (run.state.secrets.teamFound >= want) return n
                 if (strict && com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room).size <= 1 && (greenAt[room] ?: Int.MAX_VALUE) > run.t + TEAM_GRACE) continue
-                // A Wither Essence a teammate takes later in the recording is theirs, on its tick ([mateEssence]).
-                if (site.kind == com.engineerclient.p3sim.run.SecretKind.ESSENCE && mateEssences.any { it > run.t }) continue
+                // A teammate's Wither Essence is always announced: theirs come from the recording's lines, on their tick ([mateEssence]).
+                if (site.kind == com.engineerclient.p3sim.run.SecretKind.ESSENCE) continue
                 // A bat the recording kills later is found on its tick ([batDied]).
                 if (site.kind == com.engineerclient.p3sim.run.SecretKind.BAT && batLater(room)) continue
                 // A chest or skull you click later in the recording is yours to find then, not a teammate's now.
@@ -1198,15 +1199,17 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         out
     }
 
-    /** The ticks of the recording's "<teammate> found a Wither Essence!" lines (yours are your own clicks in ADS). */
-    private val mateEssences: List<Int> by lazy {
-        file.events.filter { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive }
-            .mapNotNull { e -> WITHER_ESSENCE.find(clean(e[2].asString))?.takeIf { uuidOf(it.groupValues[1]).let { u -> u != null && u != host.uuid } }?.let { e[0].asInt } }
+    /**
+     * A teammate took a Wither Essence: ADS's nearest one still lying is theirs now. Its room may not be ADS's yet on the line's tick (its
+     * discovery comes later in the tick): it is tried again each tick, up to [ESSENCE_RETRY].
+     */
+    private fun mateEssence(by: UUID, tries: Int = ESSENCE_RETRY) {
+        if (!essenceOnce(by, last = tries <= 1) && tries > 1) essenceRetries += by to tries - 1
     }
+    private val essenceRetries = ArrayList<Pair<UUID, Int>>()
 
-    /** A teammate took a Wither Essence: ADS's nearest one still lying is theirs now. */
-    private fun mateEssence(by: UUID) {
-        val at = posOf(by) ?: return
+    private fun essenceOnce(by: UUID, last: Boolean): Boolean {
+        val at = posOf(by) ?: return false
         var best: Pair<Int, com.engineerclient.p3sim.clear.secrets.SecretSite>? = null
         var bestD = Double.MAX_VALUE
         for (room in run.state.rooms.indices) for (site in com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room)) {
@@ -1214,8 +1217,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             val d = Math.hypot(site.x + 0.5 - at.x, site.z + 0.5 - at.z)
             if (d < bestD) { bestD = d; best = room to site }
         }
-        val (room, site) = best ?: return diff.note(run.t, "secrets", "a teammate's Wither Essence: ADS has none lying")
-        Services.secrets.found(run, room, site.kind, by, site.x, site.y, site.z)
+        val (room, site) = best ?: return false.also { if (last) diff.note(run.t, "secrets", "a teammate's Wither Essence: ADS has none lying") }
+        return Services.secrets.found(run, room, site.kind, by, site.x, site.y, site.z)
     }
 
     private fun uuidOf(name: String?): UUID? = when (name) {
@@ -1470,6 +1473,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val IMPLOSION = Regex("""^Your Implosion hit (\d+) enem(?:y|ies) for ([\d,.]+) damage\.$""")
         private const val IMPLOSION_NEAR = 4
         private const val PEARL_NEAR = 3
+        private const val ESSENCE_RETRY = 10
         private val ESSENCE = Regex("^ESSENCE! (\\w{1,16}) found x(\\d+) (\\w+) Essence!$")
         private val WITHER_OPENED = Regex("^(\\w{1,16}) opened a WITHER door!")
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")
