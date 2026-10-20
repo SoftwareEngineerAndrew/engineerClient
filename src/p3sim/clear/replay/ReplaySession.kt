@@ -381,6 +381,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         diff.campHypixel = recordedThrows.map { it.land }
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = { wall -> if (!ended) recordedCampOf(wall) else null }
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = true
+        com.engineerclient.p3sim.clear.state.StateController.clearsFromRecording = true
         com.engineerclient.p3sim.clear.secrets.SecretsSettings.replayBoost = recordedBoost
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
         // Mobs go where the recording has them while it sees them (out of its sight, ADS moves them).
@@ -446,6 +447,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
+        com.engineerclient.p3sim.clear.state.StateController.clearsFromRecording = false
         com.engineerclient.p3sim.clear.secrets.SecretsSettings.replayBoost = null
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = true
         bodies.removeAll()
@@ -1183,7 +1185,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val inIt = run.state.roomAt(host.x, host.z)?.index == placed.index
         val c = placed.tiles.first().let { com.engineerclient.p3sim.pack.DungeonFrame.tileCentre(it.x).toDouble() to com.engineerclient.p3sim.pack.DungeonFrame.tileCentre(it.z).toDouble() }
         val by = if (inIt) host.uuid else nearestMate(c.first, c.second)
-        val grace = if (want == 1) 10 else GRACE
+        // A room with no mob for ADS to kill (the recording saw none there) cannot clear by itself: its white comes on the recorded tick.
+        val grace = if (want == 1) 10 else if (want == 2 && rr.mobsRequired == 0) 0 else GRACE
         pending += Pending(k + grace, "${placed.name} ${mark.lowercase()}${if (inIt) " (you were in it)" else ""}", { (RANK[rr.check.odin()] ?: 0) >= want }) {
             when (want) {
                 1 -> com.engineerclient.p3sim.clear.state.DoorsModule.controller?.discover(placed.index)
