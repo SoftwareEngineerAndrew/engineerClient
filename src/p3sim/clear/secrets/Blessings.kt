@@ -88,11 +88,15 @@ object Blessings {
 
     fun roman(level: Int): String = when (level) { 1 -> "I"; 2 -> "II"; 3 -> "III"; 4 -> "IV"; 5 -> "V"; else -> level.toString() }
 
-    /** `24s` below a minute, `01m 16s` after (the run clock, as the line prints it). */
-    fun clock(ticks: Int): String {
-        val s = (ticks / 20).coerceAtLeast(0)
-        return if (s < 60) "${s}s" else "%02dm %02ds".format(s / 60, s % 60)
-    }
+    /** The run clock as the line prints it (`03s`, `01m 16s`). */
+    fun clock(ticks: Int): String = com.engineerclient.p3sim.clear.damage.ClassMilestones.clock(seconds(ticks))
+
+    /**
+     * Seconds on Hypixel's run clock at run tick [ticks]. Measured over 131 DR runs: the clock runs on real time (about 1% ahead of
+     * the ticks), and its start sits 14 ticks before to 18 after tick 0, most often [CLOCK_LEAD] ticks before.
+     */
+    fun seconds(ticks: Int): Int = ((ticks + CLOCK_LEAD) / 20).coerceAtLeast(0)
+    const val CLOCK_LEAD = 2
 
     /** A teammate's find shows at level I, II or V by [OBSERVER_LEVEL_WEIGHTS]. */
     fun observerLevel(random: Random): Int {

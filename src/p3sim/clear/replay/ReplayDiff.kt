@@ -57,6 +57,9 @@ class ReplayDiff(private val s: ReplaySession) {
         if (ads != null && Math.abs(ads - rec) <= rec * 0.01) hpScaleOk++
         else hpScaleOff += "%6d  %s: Hypixel %,.0f, ADS %s".format(k, label, rec, ads?.let { "%,.0f".format(it) } ?: "no mob")
     }
+    /** Camp mob spawns, in ticks after each side's own BLOOD door: Hypixel's (from the recording) and ADS's. */
+    var campHypixel: List<Int> = emptyList()
+    val campAds = ArrayList<Int>()
     fun mobNotFound(k: Int, label: String, x: Double, y: Double, z: Double, you: Double) {
         mobsMissing += "%6d  %s at %s (you %.0f blocks away)".format(k, label, ReplaySession.fmt(x, y, z), you)
     }
@@ -271,6 +274,9 @@ class ReplayDiff(private val s: ReplaySession) {
         out += ""
         out += "== Mob HP after a WITHER door: $hpScaleOk as recorded, ${hpScaleOff.size} not"
         out += hpScaleOff.map { "  $it" }
+        out += "== Watcher camp spawns, ticks after the BLOOD door: Hypixel ${campHypixel.size}, ADS ${campAds.size}"
+        out += "  Hypixel ${campHypixel.joinToString(" ")}"
+        out += "  ADS     ${campAds.joinToString(" ")}"
         out += "== Mobs: $mobsOk recorded deaths ADS had done itself"
         out += "  Near you, not dead in ADS when the recording's died (${mobsNearYou.size}; the kill was likely yours):"
         out += mobsNearYou.map { "  $it" }
@@ -358,6 +364,7 @@ class ReplayDiff(private val s: ReplaySession) {
         j.addProperty("hpScaleOk", hpScaleOk); j.addProperty("hpScaleOff", hpScaleOff.size); j.addProperty("mobsOk", mobsOk); j.addProperty("mobsNearYou", mobsNearYou.size); j.addProperty("mobsMissing", mobsMissing.size)
         j.addProperty("tpHypixel", hypTps.size); j.addProperty("tpAds", adsTps.size); j.addProperty("tpMatched", delays.size); j.addProperty("tpDelay", if (delays.isEmpty()) 0.0 else delays.average())
         j.addProperty("forced", forced.size)
+        j.add("campHypixel", JsonArray().apply { campHypixel.forEach { add(it) } }); j.add("campAds", JsonArray().apply { campAds.forEach { add(it) } })
         j.add("blocks", JsonObject().apply { for ((cat, m) in blockMiss) add(cat, JsonObject().apply { for ((key, l) in m) addProperty(key, l.size) }) })
         j.add("chatMissing", com.google.gson.JsonArray().apply { chatMissing.forEach { add(it) } })
         j.add("chatExtra", com.google.gson.JsonArray().apply { chatExtra.forEach { add(it) } })

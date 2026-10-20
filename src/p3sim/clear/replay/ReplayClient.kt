@@ -103,5 +103,12 @@ object ReplayClient {
     fun blocks(pk: Packet<*>): Boolean = active && (pk is ServerboundMovePlayerPacket || pk is ServerboundPlayerInputPacket || pk is ServerboundPlayerCommandPacket ||
         pk is ServerboundUseItemPacket || pk is ServerboundUseItemOnPacket || pk is ServerboundAttackPacket || pk is ServerboundInteractPacket ||
         pk is ServerboundPlayerActionPacket || pk is ServerboundPunchPacket || pk is ServerboundSetCarriedItemPacket ||
-        pk is ServerboundContainerClickPacket || pk is ServerboundContainerClosePacket || pk is ServerboundContainerButtonClickPacket)
+        pk is ServerboundContainerClickPacket || pk is ServerboundContainerClosePacket || pk is ServerboundContainerButtonClickPacket ||
+        // Your own mods' chat (an auto "Bat Killed!" in party chat): the recorded player's lines are the recording's.
+        pk is net.minecraft.network.protocol.game.ServerboundChatPacket ||
+        (pk is net.minecraft.network.protocol.game.ServerboundChatCommandPacket && !ownCommand(pk.command())) ||
+        (pk is net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket && !ownCommand(pk.command())))
+
+    /** The commands that drive ADS itself (the replay, the tick rate) still go through. */
+    private fun ownCommand(c: String): Boolean = c.startsWith("ads") || c.startsWith("tick")
 }

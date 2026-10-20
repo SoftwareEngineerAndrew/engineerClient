@@ -259,7 +259,7 @@ object DamageModule : AdsModule, DamageService {
         mobLedger.record(mob, amount, source, by)
         // The milestones count the health a hit took, not the hit: a 69 million Implosion on three mobs of about a million each is
         // Hypixel's first milestone (750,000), not its fifth (DR, a Mage's run: ❶ on that cast, ❷ 18 ticks later, ❸ at 11 s).
-        if (by != null) addDealt(run, by, min(amount, rec.hp))
+        if (by != null) addDealt(run, by, min(amount, rec.hp), source)
         val numbers = if (::numbersS.isInitialized) numbersS.value else DamageNumbers.DEFAULT_CHANCE
         if (numbers > 0 && numberRolls.nextInt(100) < numbers) EngineerClient.safely("ads damage number") {
             val e = rec.entityId?.let { Sim.level.getEntity(it) }
@@ -278,8 +278,10 @@ object DamageModule : AdsModule, DamageService {
     }
 
     /** Adds to [by]'s damage total and prints the class milestone lines it crosses (several can fire in one tick). */
-    private fun addDealt(run: Run, by: UUID, amount: Double) {
+    private fun addDealt(run: Run, by: UUID, amount: Double, source: DamageSource) {
         val rec = run.state.players[by] ?: return
+        // An Archer's milestones count "Ranged Damage" (their line says so): a Hyperion's Implosion or a sword hit is not.
+        if (rec.dungeonClass.equals("archer", true) && source != DamageSource.BOW && source != DamageSource.PROJECTILE) return
         val total = (dealt[by] ?: 0.0) + amount
         dealt[by] = total
         val cls = rec.dungeonClass ?: return
@@ -290,7 +292,7 @@ object DamageModule : AdsModule, DamageService {
         if (now <= shownSoFar) return
         milestonesShown[by] = now
         val sp = human(by) ?: return
-        val seconds = maxOf(0, run.t / 20)
+        val seconds = com.engineerclient.p3sim.clear.secrets.Blessings.seconds(run.t)
         for (i in shownSoFar until now) Sim.asPlayer(sp) { Sim.chat(ClassMilestones.line(cls, i, table, seconds)) }
     }
 

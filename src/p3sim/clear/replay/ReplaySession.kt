@@ -101,6 +101,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
      */
     private val roomPlans: Map<Int, List<com.engineerclient.p3sim.clear.mobs.PlannedMob>> by lazy {
         recordedScale.size
+        diff.campHypixel = recordedCamp
         val pack = run.packs.mobs ?: return@lazy emptyMap()
         val byName = pack.archetypes.sortedByDescending { it.name.length }
         val out = HashMap<Int, MutableList<com.engineerclient.p3sim.clear.mobs.PlannedMob>>()
@@ -134,9 +135,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     /** Each recorded mob's HP over the run (k, HP; 0 is its death), and how far your hits have used it. */
     private val recHp: Map<Int, List<Pair<Int, Double>>> by lazy {
         val out = HashMap<Int, MutableList<Pair<Int, Double>>>()
-        for (e in file.events) if (e.size() > 3 && e[1].asString == "hp") {
-            val v = e[3].asDouble; val l = out.getOrPut(e[2].asInt) { ArrayList() }
-            if (v > 100.0 || (v <= 0.0 && l.isNotEmpty())) l += e[0].asInt to v
+        for (e in file.events) {
+            if (e.size() > 3 && e[1].asString == "hp") {
+                val v = e[3].asDouble; val l = out.getOrPut(e[2].asInt) { ArrayList() }
+                if (v > 100.0 || (v <= 0.0 && l.isNotEmpty())) l += e[0].asInt to v
+            }
+            // A mob killed outright gets no last HP update, only its death.
+            if (e.size() > 3 && e[1].asString == "eev" && e[3].asInt == 3) out[e[2].asInt]?.takeIf { it.isNotEmpty() }?.add(e[0].asInt to 0.0)
         }
         out
     }
@@ -188,6 +193,37 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             byRoom.getOrPut(room) { ArrayList() } += k to Math.round(v / l * 20) / 20.0
         }
         byRoom.mapValues { (_, l) -> l.minOf { it.first } to l.groupingBy { it.second }.eachCount().maxBy { it.value }.key }
+    }
+
+    /**
+     * The recording's camp mob spawns, in ticks after its BLOOD door: each body (not a teammate, a projectile or a tag) first seen in the
+     * Blood room after the door; a rider (two bodies within a tick and two blocks) is one mob.
+     */
+    private val recordedCamp: List<Int> by lazy {
+        val door = file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.startsWith("The BLOOD DOOR has been opened!") }?.get(0)?.asInt
+            ?: return@lazy emptyList()
+        val seen = HashSet<Int>(); val out = ArrayList<Triple<Int, Double, Double>>()
+        for (e in file.events) {
+            if (e.size() < 8 || e[1].asString != "spawn" || e[0].asInt <= door) continue
+            val id = e[2].asInt; val type = e[3].asString; val x = e[5].asDouble; val z = e[7].asDouble
+            if (id in file.idToMate || !seen.add(id) || (x == 0.0 && z == 0.0) || CAMP_NOT_A_MOB.containsMatchIn(type)) continue
+            if (run.plan.roomAtBlock(x, z)?.type != com.engineerclient.p3sim.run.RoomType.BLOOD) continue
+            val k = e[0].asInt - door
+            if (out.lastOrNull()?.let { k - it.first <= 1 && Math.hypot(it.second - x, it.third - z) < 2 } == true) continue
+            out += Triple(k, x, z)
+        }
+        out.map { it.first }
+    }
+    private val campSeen = HashSet<UUID>()
+    private var campSeeded = false
+
+    /** ADS's camp spawns for [ReplayDiff.campAds]: each mob first seen in the Blood room after ADS's BLOOD door. */
+    private fun watchCamp(now: Int) {
+        val open = run.state.milestones.bloodOpenT ?: return
+        val blood = run.plan.rooms.firstOrNull { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD } ?: return
+        // What is there on the first look (the Watcher, if he is a mob) is not a spawn.
+        for (m in Services.mobs.inRoom(blood.index)) if (campSeen.add(m.id) && campSeeded) diff.campAds += now - open
+        campSeeded = true
     }
 
     /** Your rank bracket and name colour before the replay. */
@@ -295,6 +331,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             for ((due, id, v) in dueHp) diff.hpScale(due - HP_CHECK_AFTER, file.mobs.firstOrNull { it.id == id }?.tag?.let { mobName(it) } ?: "mob $id", v, planned[id]?.let { Services.mobs.mob(it) }?.maxHp)
         }
         if (bloodOwed.isNotEmpty()) EngineerClient.safely("ads replay camp") { payBlood() }
+        watchCamp(now)
         if (witherDebt > 0 || bloodDebt) repayKeys()
         val due = pending.filter { it.due <= now }
         pending.removeAll(due)
@@ -848,6 +885,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         const val KILL_GRACE = HIT_AFTER + 1
         /** Farther than this from you, a recorded kill was not yours. */
         const val FAR = 12.0
+
+        /** Entity types in the Blood room that are not camp mobs. */
+        private val CAMP_NOT_A_MOB = Regex("arrow|tnt|item|experience|fireball|snowball|potion|firework|bobber|lightning|armor_stand")
         private val RIGHT_CLICKS = setOf("o.use", "o.useOn", "o.int")
         /** "DUNGEON BUFF! X found a / You found a / A Blessing of Life V(! / was found!) (03s)". */
         private val BUFF = Regex("^DUNGEON BUFF! (A|(?:(\\w{1,16}|You) found a)) Blessing of (\\w+) (I|II|III|IV|V)(?: was found)?!( \\(.+\\))?$")
