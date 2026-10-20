@@ -843,6 +843,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 if (run.state.secrets.teamFound >= want) return n
                 // A Wither Essence a teammate takes later in the recording is theirs, on its tick ([mateEssence]).
                 if (site.kind == com.engineerclient.p3sim.run.SecretKind.ESSENCE && mateEssences.any { it > run.t }) continue
+                // A chest or skull you click later in the recording is yours to find then, not a teammate's now.
+                if ((yourClicks[BlockPos.asLong(site.x, site.y, site.z)] ?: Int.MIN_VALUE) > run.t) continue
                 if (Services.secrets.found(run, room, site.kind, mateIn(room), site.x, site.y, site.z)) n++
             }
             if (run.state.secrets.teamFound >= want) return n
@@ -909,6 +911,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         WITHER_ESSENCE.find(t)?.let { m -> uuidOf(m.groupValues[1])?.takeIf { it != host.uuid }?.let { mateEssence(it) }; return }
         ESSENCE.find(t)?.let { m -> sec.recordedEssence(run, uuidOf(m.groupValues[1]) ?: return, m.groupValues[3], m.groupValues[2].toIntOrNull() ?: return) }
+    }
+
+    /** Each block you right-click in the recording, with the last tick you do. */
+    private val yourClicks: Map<Long, Int> by lazy {
+        val out = HashMap<Long, Int>()
+        for (e in file.events) if (e.size() > 3 && e[1].asString == "o.useOn" && e[3].isJsonArray) e[3].asJsonArray.let { p -> out[BlockPos.asLong(p[0].asInt, p[1].asInt, p[2].asInt)] = e[0].asInt }
+        out
     }
 
     /** The ticks of the recording's "<teammate> found a Wither Essence!" lines (yours are your own clicks in ADS). */
