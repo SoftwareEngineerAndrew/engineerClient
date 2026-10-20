@@ -67,8 +67,9 @@ object SecretsModule : AdsModule, SecretService {
     override val owner = "secrets"
 
     /** A chest that has been opened (by the player, or by a teammate's find): what it holds and how far its ceremony has got. */
-    private class ChestRec(val site: SecretSite, val drop: Drop, val by: UUID?, val start: Int, val trapped: Boolean = false) {
-        val reward: Boolean get() = drop !is Drop.Nothing
+    private class ChestRec(val site: SecretSite, val drop: Drop, val by: UUID?, val start: Int, val trapped: Boolean = false, val recorded: Boolean? = null) {
+        /** A reward chest plays the harp and is silent to repeat clicks until its reveal; a replay says which ones were ([recorded]). */
+        val reward: Boolean get() = recorded ?: (drop !is Drop.Nothing)
         val done = HashSet<Int>()
         var finished = trapped
     }
@@ -692,10 +693,13 @@ object SecretsModule : AdsModule, SecretService {
         return n
     }
 
-    /** The secrets of [room] not yet found, for a bot or a tool that wants to go and find them (world coordinates). */
     /** Set by a replay: which counted bat kill of [Run] carries the bonus point (0: none), as the recording had it; null for a drawn one. */
     @Volatile var replayBonusBat: ((Run) -> Int?)? = null
 
+    /** Set by a replay: whether the chest at x, y, z of [Run] was a reward chest in the recording (its harp); null for ADS's own loot. */
+    @Volatile var replayChestReward: ((Run, Int, Int, Int) -> Boolean?)? = null
+
+    /** The secrets of [room] not yet found, for a bot or a tool that wants to go and find them (world coordinates). */
     fun pendingSecrets(run: Run, room: Int): List<SecretSite> = d(run)?.book?.pending(room).orEmpty()
 
     /** Whether [room] has a bat secret at all (found or not). */
@@ -787,7 +791,7 @@ object SecretsModule : AdsModule, SecretService {
             openTrapped(rd, s, by, start)
             return
         }
-        rd.chests[s.key] = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, start)
+        rd.chests[s.key] = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, start, recorded = replayChestReward?.invoke(rd.run, s.x, s.y, s.z))
     }
 
     /** The Mimic: a plain zombie stands at the chest a tick after the click, and is dead a few ticks later; the Mimic's point counts then. */
@@ -1169,7 +1173,7 @@ object SecretsModule : AdsModule, SecretService {
             val s = rd.plan.site(j.get("key").asString) ?: return@forEach
             val elapsed = j.get("elapsed")?.asInt ?: 0
             val by = j.get("by")?.takeIf { !it.isJsonNull }?.asString?.let { runCatching { UUID.fromString(it) }.getOrNull() }
-            val rec = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, now - elapsed)
+            val rec = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, now - elapsed, recorded = replayChestReward?.invoke(rd.run, s.x, s.y, s.z))
             rec.done += Beats.playedBy(SecretChestFinale.schedule(rec.reward).map { it.at }, elapsed)
             rd.chests[s.key] = rec
             if (elapsed >= 1 && s.key != rd.trapped) rd.lidsOwed += s.key

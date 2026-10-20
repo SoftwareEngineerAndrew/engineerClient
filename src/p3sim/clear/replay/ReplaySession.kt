@@ -391,6 +391,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = { r -> if (r === run && !ended) recordedBlazes else null }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) bonusBat else null }
+        val rewardChests = ReplayFile.rewardChests(file.events)
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = { r, x, y, z -> if (r === run && !ended) "$x,$y,$z" in rewardChests else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
         for (m in bodies.all()) {
             val rec = run.state.players.getOrPut(m.uuid) { PlayerRecord(m.uuid, m.name, cls(m.cls), true) }
@@ -416,6 +418,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
