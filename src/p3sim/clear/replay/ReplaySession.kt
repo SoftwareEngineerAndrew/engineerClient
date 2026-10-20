@@ -296,6 +296,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         recordedScale.size
         diff.campHypixel = recordedThrows.map { it.land }
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = { wall -> if (!ended) recordedCampOf(wall) else null }
+        com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
@@ -347,6 +348,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
+        com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = true
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
@@ -429,7 +431,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             "name" -> ents[e.i(2)]?.let { r ->
                 r.name = e.s(3)
                 val n = clean(r.name ?: "")
-                if (!catchUp && (n == "Wither Key" || n == "Blood Key")) diff.recordedKeyStand(k, n, r.x, r.y, r.z)
+                if (!catchUp && (n == "Wither Key" || n == "Blood Key")) { diff.recordedKeyStand(k, n, r.x, r.y, r.z); keyStand(r.x, r.z) }
             }
             "gone", "rm" -> {
                 val id = e.i(2) ?: return
@@ -802,13 +804,27 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         (bodies.all().filter { !it.x.isNaN() && it.present }.map { it.uuid to Math.hypot(it.x - x, it.z - z) } + (host.uuid to Math.hypot(host.x - x, host.z - z)))
             .minByOrNull { it.second }?.first
 
+    /** The recording's key stand showed up: ADS drops the room's key there (keys never drop on ADS's own kills in a replay). */
+    private fun keyStand(x: Double, z: Double) {
+        val room = run.plan.roomAtBlock(x, z)?.index ?: return
+        if (Services.doors.keyForRoom(run, room) != null) Services.doors.dropKey(run, room, x, z)
+    }
+
+    /** The recording says [name] took a [kind] key ("Wither" or "Blood"): they take ADS's, on this tick. */
+    private fun keyTaken(name: String, kind: String) {
+        val by = run.state.players.entries.firstOrNull { it.value.name == name }?.key ?: return
+        val p = run.state.players[by] ?: return
+        val k = if (kind == "Blood") com.engineerclient.p3sim.run.KeyKind.BLOOD else com.engineerclient.p3sim.run.KeyKind.WITHER
+        if (!Services.doors.pickUpKey(run, by, k, run.plan.roomAtBlock(p.x, p.z)?.index, p.x, p.z)) diff.note(run.t, "keys", "$name took a $kind Key, ADS had none to give")
+    }
+
     private fun chat(k: Int, raw: String) {
         val t = clean(raw)
         diff.recordedChat(k, t)
         WITHER_OPENED.find(t)?.let { m -> door(k, DoorKind.WITHER, m.groupValues[1]); return }
         if (t.startsWith("The BLOOD DOOR has been opened!")) { door(k, DoorKind.BLOOD, null); return }
         if (t.startsWith("Party >")) return
-        KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; return }
+        KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; keyTaken(m.groupValues[1], m.groupValues[2]); return }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }
         REVIVED.find(t)?.let { m -> revive(k, m.groupValues[1], m.groupValues[2]); return }
         drop(k, t)

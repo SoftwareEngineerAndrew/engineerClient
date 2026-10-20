@@ -588,6 +588,8 @@ object SecretsModule : AdsModule, SecretService {
 
     override fun breakerRefusal(run: Run, x: Int, y: Int, z: Int): String? {
         val rd = d(run) ?: return null
+        // Before T0 the server puts every block back and says nothing (139 DR runs: 5,596 digs before T0, none broke, no line).
+        if (run.t0Tick == null || run.t < 0) return ""
         val state = RunBlocks.get(x, y, z)
         // Any chest is a secret block, found or not: the Dungeonbreaker never digs one.
         if (SecretWorld.isChestBlock(state)) return BreakerRules.REFUSAL

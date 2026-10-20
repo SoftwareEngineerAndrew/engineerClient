@@ -145,11 +145,15 @@ class StateControllerTest {
         assertEquals("You do not have the key for this door!", r.fx.plainChat().last().second)
         assertEquals(StateText.NO_KEY, r.fx.sounds.last())
         assertEquals(1, r.all<DoorLocked>().size)
-        r.c.touch(1, ann.uuid)           // a swing in the same tick is answered too, as on Hypixel
-        assertEquals(2, r.all<DoorLocked>().size)
+        // One pair a tick (the line and the sound, twice), however many clicks and swings land in it (DR, 139 runs: never one line, never four).
+        assertEquals(2, r.fx.plainChat().count { it.second == "You do not have the key for this door!" })
+        assertEquals(2, r.fx.sounds.count { it == StateText.NO_KEY })
+        r.c.touch(1, ann.uuid)           // a swing in the same tick: nothing more
+        assertEquals(1, r.all<DoorLocked>().size)
         assertEquals(2, r.fx.sounds.count { it == StateText.NO_KEY })
         r.until(6); r.c.touch(1, ann.uuid)
-        assertEquals(3, r.all<DoorLocked>().size)
+        assertEquals(2, r.all<DoorLocked>().size)
+        assertEquals(4, r.fx.sounds.count { it == StateText.NO_KEY })
         assertEquals(DoorOpenResult.NOT_A_DOOR, r.c.tryOpen(99, ann.uuid))
         assertEquals(DoorOpenResult.ALREADY_OPEN, r.c.tryOpen(0, ann.uuid), "the entrance door falls by itself")
     }
@@ -268,6 +272,27 @@ class StateControllerTest {
         far.x = -151.0
         r.until(16)
         assertTrue(r.c.standList().isEmpty()); assertEquals(1, r.run.state.keys.witherHeld)
+    }
+
+    @Test fun aReplayTakesItsKeysOnTheRecordedTicksOnly() {
+        StateController.keysFromRecording = true
+        try {
+            val r = Rig(cfg = StateConfig(pickupRadius = 2.0), rules = StateRules(autoCollectTicks = 30, pickupInstantFrac = 1.0))
+            r.until(5)
+            val ann = StatePlans.addPlayer(r.run, "Ann", x = -150.0, z = -185.0)
+            val ben = StatePlans.addPlayer(r.run, "Ben", x = -100.0, z = -100.0)
+            r.c.dropKey(1, -150.0, -185.0)
+            r.until(60)
+            assertEquals(1, r.c.standList().size, "standing on it, after the safety time: still lying")
+            // The recording says Ben took it: Ben has it, wherever he is.
+            assertTrue(r.c.pickUpKey(ben.uuid, KeyKind.WITHER, null, ben.x, ben.z))
+            assertTrue(r.c.standList().isEmpty()); assertEquals(1, r.run.state.keys.witherHeld)
+            assertEquals(ben.uuid, r.all<KeyPicked>().single().player)
+            // None lying: one is dropped where the taker stands, in a room still owing one, and taken at once; none owed: nothing.
+            assertTrue(r.c.pickUpKey(ann.uuid, KeyKind.BLOOD, null, ann.x, ann.z))
+            assertEquals(ann.uuid, r.all<KeyPicked>().last().player)
+            assertFalse(r.c.pickUpKey(ann.uuid, KeyKind.BLOOD, null, ann.x, ann.z))
+        } finally { StateController.keysFromRecording = false }
     }
 
     @Test fun aGhostCannotTakeAKey() {

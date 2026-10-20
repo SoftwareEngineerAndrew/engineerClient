@@ -49,7 +49,10 @@ object ClassAbilities {
     private fun timersOf(run: Run, p: ServerPlayer): Timers? {
         val start = run.t0Tick ?: return null
         if (t0 != start) { timers.clear(); t0 = start }
-        return timers.getOrPut(p.uuid) { Timers(ClassKit.ABILITY_FIRST_READY, ClassKit.ULT_FIRST_READY) }
+        // The Ability's first readiness is not announced: "is now available!" follows a use (139 DR runs: no such line in 66 Archer, Berserk
+        // and Tank runs unless the Ability had been used). A Mage hears "Guided Sheep is now available!" 164 to 254 ticks after T0 in 69 of
+        // 71 runs without a press seen; what sets it off is UNMEASURED, so the Mage keeps the line at the first readiness.
+        return timers.getOrPut(p.uuid) { Timers(ClassKit.ABILITY_FIRST_READY, ClassKit.ULT_FIRST_READY, abilityNoted = kitOf(run, p)?.cls != "Mage") }
     }
 
     private fun kitOf(run: Run, p: ServerPlayer): ClassKit.Kit? = ClassKit.of(run.state.players[p.uuid]?.dungeonClass)

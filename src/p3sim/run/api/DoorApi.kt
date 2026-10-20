@@ -39,6 +39,9 @@ interface DoorService {
     /** Drops the key stand at (x, z) in [roomIndex] (y from the pack: 68.531 wither, 67.531 blood). Posts `KeyDropped`. */
     fun dropKey(run: Run, roomIndex: Int, x: Double, z: Double) {}
 
+    /** A replay: [by] takes a key of [kind] on the recorded tick: the oldest such stand, or one dropped at ([x], [z]) in [roomIndex] when none lies. False when there is no key to give. */
+    fun pickUpKey(run: Run, by: java.util.UUID, kind: KeyKind, roomIndex: Int?, x: Double, z: Double): Boolean = false
+
     /** A player used a door (right click on its blocks with a key in the party count): opens it, or says there is no key. */
     fun tryOpen(run: Run, door: Int, by: UUID?): DoorOpenResult = DoorOpenResult.NOT_A_DOOR
 
