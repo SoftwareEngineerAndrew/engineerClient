@@ -1279,7 +1279,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private fun door(k: Int, kind: DoorKind, who: String?) {
         val by = uuidOf(who ?: if (kind == DoorKind.BLOOD) bloodKeyBy else null)
         val at = posOf(by) ?: host.position()
-        val door = run.plan.doors.filter { it.kind == kind }.minByOrNull { d -> val c = d.spot; Math.hypot(c.first + 0.5 - at.x, c.second + 0.5 - at.z) } ?: return
+        // The nearest door of the kind still shut (one opened already would count as this one and leave the real one to you).
+        val door = run.plan.doors.filter { it.kind == kind && run.state.doors[it.index].phase == DoorPhase.CLOSED }
+            .minByOrNull { d -> val c = d.spot; Math.hypot(c.first + 0.5 - at.x, c.second + 0.5 - at.z) } ?: return
         val rec = run.state.doors[door.index]
         // A teammate's door opens on the tick of its line (Hypixel's body is barrier the next tick, air 14 after); yours had better be ADS's own.
         pending += Pending(if (by != null && by != host.uuid) k else k + DOOR_GRACE, "${kind.name.lowercase()} door ${door.index} opened by ${who ?: "?"}", { rec.phase != DoorPhase.CLOSED }) {
