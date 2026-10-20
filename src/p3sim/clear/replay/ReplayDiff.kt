@@ -105,11 +105,26 @@ class ReplayDiff(private val s: ReplaySession) {
         // Before the start Hypixel holds the party in the entrance by putting them back: where to, and from where, in the room's own frame.
         if (k < 0) { if (was != null && to.y < 200 && to.y > 0) canonPoint(to)?.let { a -> canonPoint(was)?.let { b -> setbacks.add(JsonArray().apply { add(k); a.forEach { add(it) }; b.forEach { add(it) } }) } }; return }
         hypTps += k to to
-        if (was != null) tpWay[hypTps.size - 1] = blockedWay(was, to)
+        if (was != null) tpWay[hypTps.size - 1] = listOfNotNull(
+            blockedWay(was, to).takeIf { it.isNotEmpty() }?.let { "ADS has in the way: $it" },
+            canonPoint(to)?.let { "room frame $it" },
+            pastStop(was, to).let { "past it ADS has $it" },
+        ).joinToString("; ")
     }
 
     /** For each of Hypixel's teleports (by index): ADS's blocks with a collision on the straight way it moved you (feet and head), at the time. */
     private val tpWay = HashMap<Int, String>()
+
+    /**
+     * What ADS has a step past where Hypixel stopped you ([b], going from [a]): the cells half a block and one block on, at the feet, the
+     * body and the eyes. When Hypixel's blink ends short of ADS's, the block that stopped it is one of these on Hypixel.
+     */
+    private fun pastStop(a: Vec3, b: Vec3): String {
+        val d = Vec3(b.x - a.x, 0.0, b.z - a.z).takeIf { it.length() > 1e-3 }?.normalize() ?: return "-"
+        val seen = LinkedHashSet<BlockPos>()
+        for (f in listOf(0.5, 1.0)) for (dy in listOf(0.1, 1.2, 1.62)) seen += BlockPos.containing(b.x + d.x * f, b.y + dy, b.z + d.z * f)
+        return seen.joinToString(", ") { "${it.x} ${it.y} ${it.z} ${Sim.level.getBlockState(it).block.descriptionId.substringAfterLast('.')}" }
+    }
 
     /** The cells on the line from [a] to [b] (each quarter block, feet and head height) that have a collision in ADS, as "x y z block". */
     private fun blockedWay(a: Vec3, b: Vec3): String {
@@ -309,7 +324,8 @@ class ReplayDiff(private val s: ReplaySession) {
         val delays = ArrayList<Int>()
         for ((k, at) in hypTps) {
             val i = adsTps.indices.firstOrNull { it !in used && Math.abs(adsTps[it].first - k) <= 12 && adsTps[it].second.distanceTo(at) < 1.5 }
-            if (i != null) { used += i; delays += k - adsTps[i].first } else out += "%6d  Hypixel put you at %s; ADS did not".format(k, ReplaySession.fmt(at.x, at.y, at.z))
+            if (i != null) { used += i; delays += k - adsTps[i].first } else out += "%6d  Hypixel put you at %s; ADS did not".format(k, ReplaySession.fmt(at.x, at.y, at.z)) +
+                (tpWay[hypTps.indexOfFirst { it.first == k && it.second == at }]?.let { "  ($it)" } ?: "")
         }
         for (i in adsTps.indices) if (i !in used) adsTps[i].let { (k, at) -> out += "%6d  ADS put you at %s; Hypixel did not".format(k, ReplaySession.fmt(at.x, at.y, at.z)) }
         if (delays.isNotEmpty()) out += "  ${delays.size} matched; Hypixel's came ${delays.average().let { "%.1f".format(it) }} ticks after ADS's on average (min ${delays.min()}, max ${delays.max()})"
