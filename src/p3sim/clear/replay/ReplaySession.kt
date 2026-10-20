@@ -333,7 +333,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val open = run.state.milestones.bloodOpenT ?: return
         val blood = run.plan.rooms.firstOrNull { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD } ?: return
         // What is there on the first look (the Watcher, if he is a mob) is not a spawn.
-        for (m in Services.mobs.inRoom(blood.index)) if (campSeen.add(m.id) && campSeeded) { diff.campAds += now - open; adsCamp += m.id }
+        // A dead Parasite's split is not a head the Watcher threw.
+        for (m in Services.mobs.inRoom(blood.index)) if (campSeen.add(m.id) && campSeeded && m.kind != com.engineerclient.p3sim.clear.mobs.LevelLooks.PARASITE_ID) { diff.campAds += now - open; adsCamp += m.id }
         campSeeded = true
     }
 
