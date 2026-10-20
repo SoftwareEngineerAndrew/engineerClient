@@ -1226,7 +1226,9 @@ object SimItems {
         fun sendBack() { if (!p.isRemoved) p.connection.send(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(Sim.level, at)) }
         if (p.position().distanceTo(Vec3.atCenterOf(at)) > 12.0) { if (held == "DUNGEONBREAKER") sendBack(); return }
         // A full run: a swing at a closed key door says the no-key line (the adventure-mode player never reaches Fabric's attack callback).
-        DamageModule.activeRun()?.let { Services.doors.touchBlock(it, at.x, at.y, at.z, p.uuid) }
+        // A closed key door that stays shut answers the hit itself: the no-key pair and nothing from the Dungeonbreaker (DR: 955 digs).
+        val shut = DamageModule.activeRun()?.let { Services.doors.touchBlock(it, at.x, at.y, at.z, p.uuid) } == true
+        if (shut) { Fight.afterPing("hit ignored") { sendBack() }; return }
         // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
         // refusal ("digging there" in S4's device).
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) ph.devices.leftClick(at); if (held != "DUNGEONBREAKER") return } }
@@ -2199,6 +2201,12 @@ object SimItems {
         val c = Vec3.atCenterOf(pos)
         // No mining rule for "leaving the inner chamber": it is a walking boundary on Hypixel (GoldorPhase.innerChamber).
         // S4's device area (x55-64, y132-136, z142-147) says "digging there" for its lamps, levers and bedrock; the same levers elsewhere say "that block".
+        // The dungeon: a block on a room's outer ring or between rooms says "digging there" whatever it is (DR, 139 runs: 182 of 184 ring
+        // refusals), the barrier of an opening door too; inside a room the block's own rules below decide.
+        DamageModule.activeRun()?.let { run ->
+            if (run.t0Tick == null || run.t < 0) return ""
+            if (com.engineerclient.p3sim.clear.secrets.BreakerRules.inGrid(pos.x, pos.z) && com.engineerclient.p3sim.clear.secrets.BreakerRules.isBorderOrOutside(run.plan, pos.x, pos.z)) return if (p.eyePosition.distanceTo(c) > 5.2) "" else THERE
+        }
         if (SS_DEVICE.contains(c) && (b is ButtonBlock || b == net.minecraft.world.level.block.Blocks.EMERALD_BLOCK || b == net.minecraft.world.level.block.Blocks.REDSTONE_LAMP || b == net.minecraft.world.level.block.Blocks.SEA_LANTERN)) return THERE
         if (S4_DEVICE.contains(c) && (b is LeverBlock || b is ButtonBlock || b == net.minecraft.world.level.block.Blocks.REDSTONE_LAMP || b == net.minecraft.world.level.block.Blocks.BEDROCK)) return THERE
         if (s.getDestroySpeed(Sim.level, pos) < 0) return THAT_BLOCK

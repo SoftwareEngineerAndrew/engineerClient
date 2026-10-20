@@ -182,11 +182,16 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         return DoorOpenResult.OPENED
     }
 
-    /** A player touched a closed key door (a swing at it). Says the no-key line when the party has no key; does nothing otherwise. */
-    fun touch(door: Int, by: UUID?) {
-        val d = plan.doors.getOrNull(door) ?: return
-        val needs = when (d.kind) { DoorKind.WITHER -> KeyKind.WITHER; DoorKind.BLOOD -> KeyKind.BLOOD; else -> return }
-        if (state.doors[door].phase == DoorPhase.CLOSED && !ledger.has(needs)) noKey(door, by)
+    /**
+     * A player hit a closed key door (a left click or a dig): Hypixel takes it as a use of the door, so it opens with a key in the party
+     * (DR, 139 runs: 168 of your 229 WITHER door openings came from a dig with no right click) or says the no-key line. True when the door
+     * is a closed key door that stays shut.
+     */
+    fun touch(door: Int, by: UUID?): Boolean {
+        val d = plan.doors.getOrNull(door) ?: return false
+        if (d.kind != DoorKind.WITHER && d.kind != DoorKind.BLOOD) return false
+        if (state.doors[door].phase != DoorPhase.CLOSED) return false
+        return tryOpen(door, by) != DoorOpenResult.OPENED
     }
 
     /** How many times Hypixel says the no-key line (and plays its sound) for one hit. */

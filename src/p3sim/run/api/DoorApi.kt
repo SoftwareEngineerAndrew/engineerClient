@@ -45,8 +45,12 @@ interface DoorService {
     /** A player used a door (right click on its blocks with a key in the party count): opens it, or says there is no key. */
     fun tryOpen(run: Run, door: Int, by: UUID?): DoorOpenResult = DoorOpenResult.NOT_A_DOOR
 
-    /** A swing at the block (a left click, which never reaches Fabric's attack callback in adventure mode): the no-key line when it is a closed key door and the party has no key. */
-    fun touchBlock(run: Run, x: Int, y: Int, z: Int, by: UUID?) {}
+    /**
+     * A swing at the block (a left click, which never reaches Fabric's attack callback in adventure mode). On a closed key door it is a use
+     * of the door, as on Hypixel: it opens with a key in the party, or says the no-key line. True when the door stays shut (the hit ends
+     * there: no Dungeonbreaker line).
+     */
+    fun touchBlock(run: Run, x: Int, y: Int, z: Int, by: UUID?): Boolean = false
     /** The door whose 3x4x3 volume contains the block, or null. */
     fun doorAtBlock(run: Run, x: Int, y: Int, z: Int): Int? = null
 }

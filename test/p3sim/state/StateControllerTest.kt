@@ -156,6 +156,21 @@ class StateControllerTest {
         assertEquals(4, r.fx.sounds.count { it == StateText.NO_KEY })
         assertEquals(DoorOpenResult.NOT_A_DOOR, r.c.tryOpen(99, ann.uuid))
         assertEquals(DoorOpenResult.ALREADY_OPEN, r.c.tryOpen(0, ann.uuid), "the entrance door falls by itself")
+        assertTrue(r.c.touch(1, ann.uuid), "a shut door ends the hit")
+    }
+
+    @Test fun aHitOnAKeyDoorWithTheKeyOpensIt() {
+        // Hypixel takes a left click or a dig on a key door as a use of it (most recorded WITHER doors were opened that way).
+        val r = Rig(cfg = StateConfig(pickupRadius = 2.0), rules = StateRules(autoCollectTicks = 30, pickupInstantFrac = 1.0))
+        r.until(5)
+        val ann = StatePlans.addPlayer(r.run, "Ann", x = -150.0, z = -185.0)
+        StateController.keysFromRecording = true
+        try { assertTrue(r.c.pickUpKey(ann.uuid, KeyKind.WITHER, null, ann.x, ann.z)) } finally { StateController.keysFromRecording = false }
+        assertFalse(r.c.touch(1, ann.uuid), "it opened")
+        assertEquals(DoorPhase.FALLING, r.door(1).phase)
+        assertEquals(0, r.run.state.keys.witherHeld)
+        assertEquals(0, r.fx.plainChat().count { it.second == "You do not have the key for this door!" })
+        assertFalse(r.c.touch(1, ann.uuid), "an open door is not a door to hit")
     }
 
     @Test fun theBloodDoorNeedsTheBloodKeyAndStartsTheWatcherStage() {
