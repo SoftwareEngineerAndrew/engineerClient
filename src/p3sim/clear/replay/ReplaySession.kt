@@ -180,6 +180,12 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
     private val hpUsedK = HashMap<Int, Int>()
 
+    /** Every block the recording showed as a trapped chest (the Mimic's chest). */
+    private val recordedTrapped: Set<BlockPos> by lazy {
+        file.events.filter { it.size() > 5 && it[1].asString == "blk" && it.s(5)?.startsWith("minecraft:trapped_chest") == true }
+            .mapTo(HashSet()) { BlockPos(it[2].asInt, it[3].asInt, it[4].asInt) }
+    }
+
     /** When your Ultimate was first ready in the recording (its first "is ready to use!" line), or null. */
     private val recordedUltFirst: Int? by lazy {
         file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && clean(it[2].asString).endsWith(" is ready to use! Press DROP to activate it!") }?.get(0)?.asInt
@@ -461,6 +467,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             override fun questions(run: Run, start: Int) = if (drives(run)) recordedQuizzes.getOrNull(start) else null
         }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) bonusBat else null }
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = { r -> if (r === run && !ended) recordedTrapped else null }
         val rewardChests = ReplayFile.rewardChests(file.events)
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = { r, x, y, z -> if (r === run && !ended) "$x,$y,$z" in rewardChests else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
@@ -490,6 +497,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.puzzles.WeirdosPuzzle.replayRoom = null
         com.engineerclient.p3sim.clear.puzzles.QuizPuzzle.replay = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null

@@ -189,7 +189,9 @@ object SecretsModule : AdsModule, SecretService {
      */
     private fun pickTrappedChest(rd: RunData) {
         val candidates = rd.plan.all.filter { it.kind == SecretKind.CHEST && !it.baked && !it.hidden && rd.run.plan.rooms.getOrNull(it.room)?.type.let { t -> t == RoomType.NORMAL || t == RoomType.RARE || t == RoomType.YELLOW } }
-        rd.trapped = TrappedChest.pick(candidates, TrappedChest.DEFAULT_CHANCE, rd.run.subRandom("secrets-trapped"))?.key
+        val recorded = replayTrapped?.invoke(rd.run)
+        rd.trapped = if (recorded != null) candidates.firstOrNull { BlockPos(it.x, it.y, it.z) in recorded }?.key
+            else TrappedChest.pick(candidates, TrappedChest.DEFAULT_CHANCE, rd.run.subRandom("secrets-trapped"))?.key
         if (rd.trapped != null) rd.mimicAt = null
     }
 
@@ -695,6 +697,9 @@ object SecretsModule : AdsModule, SecretService {
 
     /** Set by a replay: which counted bat kill of [Run] carries the bonus point (0: none), as the recording had it; null for a drawn one. */
     @Volatile var replayBonusBat: ((Run) -> Int?)? = null
+
+    /** Set by a replay: where the recording had trapped chests (the Mimic's is the one at a chest site), or null for a drawn one. */
+    @Volatile var replayTrapped: ((Run) -> Set<BlockPos>?)? = null
 
     /** Set by a replay: whether the chest at x, y, z of [Run] was a reward chest in the recording (its harp); null for ADS's own loot. */
     @Volatile var replayChestReward: ((Run, Int, Int, Int) -> Boolean?)? = null
