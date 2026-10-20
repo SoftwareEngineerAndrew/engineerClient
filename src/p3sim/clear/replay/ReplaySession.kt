@@ -472,6 +472,12 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 else diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
             }
             "screen" -> if (!catchUp && e.s(3) == "inventory") SimNet.send(host, NET, "inv 1")
+            // Your health as Hypixel's action bar showed it ("§c8,909/8,909"; gold when over the top), every half second or so.
+            "bar" -> if (!catchUp) HEALTH.find(e.s(2) ?: "")?.let { m ->
+                val cur = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@let
+                val max = m.groupValues[2].replace(",", "").toDoubleOrNull()?.takeIf { it > 0.0 } ?: return@let
+                run.state.players[host.uuid]?.takeIf { !it.ghost }?.let { it.hpPercent = (cur / max * 100.0).coerceIn(1.0, 100.0) }
+            }
             "screenClose" -> if (!catchUp && host.containerMenu === host.inventoryMenu) SimNet.send(host, NET, "inv 0")
             "tpme" -> if (!catchUp) diff.recordedTeleport(k, e, recPos)
             "dung" -> { diff.recordedDung(e.o(2)); if (!catchUp) team(k, e.o(2)) }
@@ -992,6 +998,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         const val KILL_GRACE = HIT_AFTER + 1
         /** Farther than this from you, a recorded kill was not yours. */
         const val FAR = 12.0
+
+        /** The health part of Hypixel's action bar: current/max, red or gold. */
+        private val HEALTH = Regex("^\u00a7[c6]([\\d,]+)/([\\d,]+)")
         private val RIGHT_CLICKS = setOf("o.use", "o.useOn", "o.int")
         /** "DUNGEON BUFF! X found a / You found a / A Blessing of Life V(! / was found!) (03s)". */
         private val BUFF = Regex("^DUNGEON BUFF! (A|(?:(\\w{1,16}|You) found a)) Blessing of (\\w+) (I|II|III|IV|V)(?: was found)?!( \\(.+\\))?$")
