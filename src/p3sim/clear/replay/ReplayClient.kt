@@ -3,7 +3,6 @@ package com.engineerclient.p3sim.clear.replay
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.p3sim.SimNet
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
-import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.minecraft.client.gui.screens.inventory.InventoryScreen
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ServerboundAttackPacket
@@ -41,7 +40,7 @@ object ReplayClient {
     fun init() {
         SimNet.onClient(ReplaySession.NET) { data -> handle(data) }
         ClientTickEvents.END_CLIENT_TICK.register { if (active) tick() }
-        ClientReceiveMessageEvents.GAME.register { msg, overlay -> if (active && !overlay) ReplayModule.session?.diff?.adsChat(msg.string) }
+
     }
 
     private fun handle(data: String) {
@@ -63,6 +62,9 @@ object ReplayClient {
     }
 
     fun stop() { active = false }
+
+    /** A system chat line as it arrived (see AdsReplayChatMixin), for the report. */
+    @JvmStatic fun chat(text: String) { ReplayModule.session?.diff?.adsChat(text) }
 
     /** End of the client tick: the recorded pose of this tick. */
     private fun tick() {

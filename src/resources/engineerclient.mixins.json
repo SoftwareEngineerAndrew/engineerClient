@@ -64,7 +64,9 @@
     "AdsReplayMouseMixin",
     "AdsReplayKeysMixin",
     "AdsReplaySendMixin",
-    "AdsReplayKickMixin"
+    "AdsReplayKickMixin",
+    "AdsReplayChatMixin",
+    "ServerTeleportAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
