@@ -566,7 +566,12 @@ object SecretsModule : AdsModule, SecretService {
             else -> {}
         }
         when (kind) {
-            BonusKind.PRINCE -> if (loud) Services.channels.chat("§r§eA Prince falls. §r§a+1 Bonus Score")
+            BonusKind.PRINCE -> if (loud) {
+                // Only the killer gets the line (139 DR runs: 16 lines, none in a run where a teammate posted "Prince Killed!"; the 54
+                // runs where a teammate killed it have none). A timed roll has no killer: it shows as yours.
+                val line = "§r§eA Prince falls. §r§a+1 Bonus Score"
+                if (by == null) Services.channels.chat(line) else for (h in humans(rd)) if (h.uuid == by) Services.channels.chat(line, Audience.Only(h.uuid))
+            }
             BonusKind.BAT -> {
                 // Only the bat's killer gets the line and the pings (139 DR runs: 52 lines, each on the recorded player's own kill, all with
                 // the pings; of 30 runs whose bonus bat a teammate killed, no line, and a ping in one).
