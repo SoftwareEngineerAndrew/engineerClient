@@ -98,6 +98,21 @@ class ReplayFile(val id: String, val floor: String?, val self: Person, val party
             }
         }
 
+        /**
+         * The chests the recording opened as reward chests, as `x,y,z`: a reward chest's first opening sound is at the block's corner
+         * (block coordinates) and its harp follows; a plain chest's only one is at the centre (205 of 206 corner sounds had the harp,
+         * 191 of 191 centre-only openings none).
+         */
+        fun rewardChests(ev: List<JsonArray>): Set<String> {
+            val out = HashSet<String>()
+            for (e in ev) {
+                if (e.s(1) != "snd" || e.s(2) != "minecraft:block.chest.open") continue
+                val x = e.d(4) ?: continue; val y = e.d(5) ?: continue; val z = e.d(6) ?: continue
+                if (x % 1.0 == 0.0 && z % 1.0 == 0.0) out += "${x.toInt()},${y.toInt()},${z.toInt()}"
+            }
+            return out
+        }
+
         /** `360k`, `3.1M`, `90,000` as a number. */
         private fun amount(t: String): Double {
             val n = t.trimEnd('k', 'M', 'B').replace(",", "").toDoubleOrNull() ?: return 0.0
