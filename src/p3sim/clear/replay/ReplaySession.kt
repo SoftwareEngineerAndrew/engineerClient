@@ -975,12 +975,16 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             payBlood(); return
         }
         val cands = Services.mobs.all().filter { it.id !in claimed && Math.abs(it.y - ry) < 8 && Math.hypot(it.x - rx, it.z - rz) < 14 }
-        val mob = cands.minByOrNull { m -> Math.hypot(m.x - rx, m.z - rz) + (if (sameMob(m.name, label)) 0.0 else 12.0) + (if (m.alive) 0.0 else 1.0) }
+        // A tag the recorder never read ("???", or a damage number over it): no name to go by, so ADS's nearest mob with the same kind of
+        // body (a fake player or not) within the 14 blocks.
+        val unread = label in UNREAD_TAGS || label.none { it.isLetter() }
+        val mob = if (unread) cands.filter { it.alive && it.disguised == (r.type == "minecraft:player") }.minByOrNull { m -> Math.hypot(m.x - rx, m.z - rz) }
+        else cands.minByOrNull { m -> Math.hypot(m.x - rx, m.z - rz) + (if (sameMob(m.name, label)) 0.0 else 12.0) + (if (m.alive) 0.0 else 1.0) }
             ?.takeIf { sameMob(it.name, label) || Math.hypot(it.x - rx, it.z - rz) < 4 }
         val you = Math.hypot(host.x - rx, host.z - rz)
         if (mob == null) { diff.mobNotFound(k, label, rx, ry, rz, you); return }
         claimed += mob.id
-        if (!sameMob(mob.name, label)) diff.note(k, "mob", "recorded $label at ${fmt(rx, ry, rz)} matched to ADS's ${mob.name} (no $label within 14)")
+        if (!unread && !sameMob(mob.name, label)) diff.note(k, "mob", "recorded $label at ${fmt(rx, ry, rz)} matched to ADS's ${mob.name} (no $label within 14)")
         if (!mob.alive) { diff.mobOk(); return }
         val who = nearestMate(rx, rz)
         // Yours only when you hit or used something just before (an arrow flies a few ticks); else a teammate's, done on its tick.
