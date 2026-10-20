@@ -151,7 +151,7 @@ class PuzzleRecord(
  * `onRunStart`; hp, ghost, deaths and revive time are the damage module's; secretsFound the secrets module's; roomIndex the
  * doors/state module's; position as noted on the fields.
  */
-class PlayerRecord(val uuid: UUID, val name: String, var dungeonClass: String?, val isBot: Boolean) {
+class PlayerRecord(val uuid: UUID, var name: String, var dungeonClass: String?, val isBot: Boolean) {
     /** Percent of max HP (the ledger, FORMAT-mobs 7): vanilla health is `40 * hpPercent / 100`. */
     var hpPercent: Double = 100.0
     var ghost: Boolean = false

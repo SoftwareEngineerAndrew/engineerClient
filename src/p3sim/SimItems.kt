@@ -1657,12 +1657,16 @@ object SimItems {
     /** The line a disabled ability answers with. UNMEASURED: borrowed from the boss room's refusal (the pearl). */
     private const val ABILITY_LOCKED = "§cYou cannot use abilities in this room!"
 
-    /** Wither Impact's server cooldown: a second cast within 2 server ticks is discarded, blink and Implosion both. */
+    /**
+     * Wither Impact casts once per server tick: a second click handled in the same tick is discarded, blink and Implosion both. In the
+     * DR clears (5,486 casts) a lone click cast 93% of the time, one 1 client tick after a cast 60%, 2 ticks 75%, 3 or more 80-87%: no
+     * cooldown stops the next tick's click, the losses are clicks that Hypixel's lagging ticks handled together.
+     */
     private var lastHype by perPlayer { -100 }
 
     private fun hypeReady(): Boolean {
         val now = Fight.serverTick
-        if (now - lastHype < 2) return false
+        if (now == lastHype) return false
         lastHype = now
         return true
     }

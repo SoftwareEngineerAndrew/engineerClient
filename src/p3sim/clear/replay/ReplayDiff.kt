@@ -74,9 +74,26 @@ class ReplayDiff(private val s: ReplaySession) {
     private val hypTps = ArrayList<Pair<Int, Vec3>>()
     private val adsTps = ArrayList<Pair<Int, Vec3>>()
 
-    fun recordedTeleport(k: Int, e: JsonArray) {
+    /** Hypixel putting you where you already were (after some block clicks): a resync, nothing moves, so not a teleport to match. */
+    private var resyncs = 0
+    private val setbacks = JsonArray()
+
+    /** [design, x, y, z] of a world point in its room's frame (x and z with their fractions). */
+    private fun canonPoint(v: Vec3): JsonArray? {
+        val bx = Math.floor(v.x).toInt(); val bz = Math.floor(v.z).toInt()
+        val room = s.run.plan.rooms.firstOrNull { it.placement?.ownsColumn(bx, bz) == true } ?: return null
+        val pl = room.placement ?: return null
+        val (cx, cz) = com.engineerclient.p3sim.clear.puzzles.hard.Frames.toCanonical(pl, v.x, v.z) ?: return null
+        return JsonArray().apply { add(room.design?.id ?: room.name); add(Math.round(cx * 100) / 100.0); add(Math.round(v.y * 100) / 100.0); add(Math.round(cz * 100) / 100.0) }
+    }
+
+    fun recordedTeleport(k: Int, e: JsonArray, was: Vec3?) {
         val a = e.get(2).takeIf { it.isJsonArray }?.asJsonArray ?: return
-        hypTps += k to Vec3(a[0].asDouble, a[1].asDouble, a[2].asDouble)
+        val to = Vec3(a[0].asDouble, a[1].asDouble, a[2].asDouble)
+        if (was != null && was.distanceTo(to) < 0.5) { resyncs++; return }
+        // Before the start Hypixel holds the party in the entrance by putting them back: where to, and from where, in the room's own frame.
+        if (k < 0) { if (was != null && to.y < 200 && to.y > 0) canonPoint(to)?.let { a -> canonPoint(was)?.let { b -> setbacks.add(JsonArray().apply { add(k); a.forEach { add(it) }; b.forEach { add(it) } }) } }; return }
+        hypTps += k to to
     }
 
     fun adsTeleport(k: Int, to: Vec3) { adsTps += k to to }
@@ -170,15 +187,46 @@ class ReplayDiff(private val s: ReplaySession) {
             val cat = if (c.k <= 1) "start" else if (c.you <= NEAR) "you" else "away"
             val l = blockMiss.getValue(cat).getOrPut(key) { ArrayList() }
             l += "k ${c.k} at ${c.pos.x} ${c.pos.y} ${c.pos.z}: Hypixel $want, ADS $have (you %.0f, teammate %.0f)".format(c.you, c.mate)
+            canonCell(cat, c.k, c.pos, parse(want), haveState, c.you)?.let { cells.add(it) }
             // The world is put as Hypixel had it, so what comes after is played on the same blocks.
             parse(want)?.let { Sim.level.setBlock(c.pos, it, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE); blocksForced++ }
         }
+    }
+
+    /** A block a teammate or the room changed away from you: counted when ADS did not have it already, then put in as it is, now. */
+    fun awayBlock(k: Int, x: Int, y: Int, z: Int, state: String?, you: Double, mate: Double) {
+        val st = state?.let { parse(it) } ?: return
+        val pos = BlockPos(x, y, z)
+        blockHistory.getOrPut(pos) { ArrayList() } += k to state
+        if (!RunBlocks.isLoaded(x, z)) { blocksUnloaded++; return }
+        blocksChecked++
+        val have = Sim.level.getBlockState(pos)
+        if (str(have) == state) return
+        val wantId = state.substringBefore('['); val haveId = str(have).substringBefore('[')
+        val key = if (wantId == haveId) "$wantId: state differs" else "Hypixel $wantId, ADS $haveId"
+        blockMiss.getValue("away").getOrPut(key) { ArrayList() } += "k $k at $x $y $z: Hypixel $state, ADS ${str(have)} (you %.0f, teammate %.0f)".format(you, mate)
+        canonCell("away", k, pos, st, have, you)?.let { cells.add(it) }
+        Sim.level.setBlock(pos, st, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE); blocksForced++
     }
 
     /** Puts a recorded block in as it is, now. */
     fun setNow(x: Int, y: Int, z: Int, state: String?) {
         val st = state?.let { parse(it) } ?: return
         Sim.level.setBlock(BlockPos(x, y, z), st, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE)
+    }
+
+    /** Every block difference in its room's own frame: [cat, k, design, x, y, z, Hypixel state, ADS state, you], states turned back to the design's rotation. */
+    private val cells = JsonArray()
+
+    private fun canonCell(cat: String, k: Int, pos: BlockPos, hyp: BlockState?, ads: BlockState, you: Double): JsonArray? {
+        val room = s.run.plan.rooms.firstOrNull { it.placement?.ownsColumn(pos.x, pos.z) == true } ?: return null
+        val pl = room.placement ?: return null
+        val (cx, cz) = pl.toCanonical(pos.x, pos.z) ?: return null
+        val back = net.minecraft.world.level.block.Rotation.entries[(4 - pl.quarterTurns % 4) % 4]
+        return JsonArray().apply {
+            add(cat); add(k); add(room.design?.id ?: room.name); add(cx); add(pos.y); add(cz)
+            add(hyp?.rotate(back)?.let { str(it) } ?: "?"); add(str(ads.rotate(back))); add(Math.round(you).toInt())
+        }
     }
 
     private fun parse(s: String): BlockState? = try {
@@ -222,7 +270,7 @@ class ReplayDiff(private val s: ReplaySession) {
         out += "== Keys"
         out += keyLines.sortedBy { it.trim().substringBefore(' ').toIntOrNull() ?: 0 }
         out += ""
-        out += "== Teleports of you: Hypixel ${hypTps.size}, ADS ${adsTps.size}"
+        out += "== Teleports of you: Hypixel ${hypTps.size}, ADS ${adsTps.size} (and $resyncs of Hypixel's resyncs, to where you stood)"
         val used = HashSet<Int>()
         val delays = ArrayList<Int>()
         for ((k, at) in hypTps) {
@@ -287,6 +335,9 @@ class ReplayDiff(private val s: ReplaySession) {
         out += actions
         val j = JsonObject()
         j.addProperty("end", endWhy); j.addProperty("endK", endK); bossK?.let { j.addProperty("bossK", it) }; j.addProperty("lastK", lastK); j.addProperty("complete", complete)
+        j.add("cells", cells)
+        j.add("setbacks", setbacks); j.addProperty("resyncs", resyncs)
+        j.add("designs", JsonArray().apply { s.run.plan.rooms.mapNotNull { it.design?.id }.distinct().forEach { add(it) } })
         j.add("kicks", JsonArray().apply { kicks.forEach { add(it) } })
         j.addProperty("id", s.file.id); j.addProperty("cls", s.file.self.cls); j.addProperty("t", run.t)
         lastDung?.let { j.add("hypixel", it) }
