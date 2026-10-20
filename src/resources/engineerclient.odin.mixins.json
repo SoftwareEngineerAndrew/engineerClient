@@ -18,7 +18,9 @@
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
     "HighlightRenderMixin",
-    "TermGuiButtonMixin"
+    "TermGuiButtonMixin",
+    "LcmStyleMixin",
+    "MapPathHintsMixin"
   ],
   "injectors": {
     "defaultRequire": 0
