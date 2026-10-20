@@ -285,8 +285,7 @@ object DamageModule : AdsModule, DamageService {
         val total = (dealt[by] ?: 0.0) + amount
         dealt[by] = total
         val cls = rec.dungeonClass ?: return
-        val doubled = cls.equals("mage", true) && run.state.players.values.count { it.dungeonClass.equals("mage", true) } > 1
-        val table = ClassMilestones.thresholds(cls, doubled) ?: return
+        val table = ClassMilestones.thresholds(cls) ?: return
         val shownSoFar = milestonesShown[by] ?: 0
         val now = ClassMilestones.reached(table, total)
         if (now <= shownSoFar) return
