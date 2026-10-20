@@ -28,6 +28,7 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import java.util.UUID
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
@@ -252,7 +253,9 @@ object DamageModule : AdsModule, DamageService {
         // For now every hit kills (no damage maths in the clear yet): the mob takes all it has left.
         val left = if (oneShot) 0.0 else max(0.0, rec.hp - amount)
         mobLedger.record(mob, amount, source, by)
-        if (by != null) addDealt(run, by, amount)
+        // The milestones count the health a hit took, not the hit: a 69 million Implosion on three mobs of about a million each is
+        // Hypixel's first milestone (750,000), not its fifth (DR, a Mage's run: ❶ on that cast, ❷ 18 ticks later, ❸ at 11 s).
+        if (by != null) addDealt(run, by, min(amount, rec.hp))
         val numbers = if (::numbersS.isInitialized) numbersS.value else DamageNumbers.DEFAULT_CHANCE
         if (numbers > 0 && numberRolls.nextInt(100) < numbers) EngineerClient.safely("ads damage number") {
             val e = rec.entityId?.let { Sim.level.getEntity(it) }
