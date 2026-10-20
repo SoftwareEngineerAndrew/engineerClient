@@ -228,15 +228,26 @@ object OdinMapPrediction {
         val known = knownTiles()
         val blood = bloodTiles(known)
         if (blood.isEmpty()) return false
-        for (tile in DungeonScan.pathHints) {
-            val t = tile.position.z * W + tile.position.x
-            if (t !in 0 until W * W || known[t] || t in blood) continue
-            val x = (t % W) * TILE; val y = (t / W) * TILE
-            g.fill(x, y, x + ROOM, y + ROOM, if (lcm) LcmStyle.UNOPENED else DungeonMap.unknownRoomColor.rgba)
-            if (!lcm) icon(g, x, y)
-        }
+        for (t in hintTiles(known)) if (t !in blood) plainTile(g, t)
         for (t in blood) bloodRoom(g, t)
         return true
+    }
+
+    /** Unknown tiles behind a door the map shows (Odin's "?" tiles), the instant the door is on the map. */
+    private fun hintTiles(known: BooleanArray): Set<Int> {
+        val out = HashSet<Int>()
+        for (tile in DungeonScan.pathHints) {
+            val t = tile.position.z * W + tile.position.x
+            if (t in 0 until W * W && !known[t]) out += t
+        }
+        return out
+    }
+
+    /** Odin's plain "?" tile (LCM Style's plain unopened tile, no "?"). */
+    private fun plainTile(g: GuiGraphicsExtractor, t: Int) {
+        val x = (t % W) * TILE; val y = (t / W) * TILE
+        g.fill(x, y, x + ROOM, y + ROOM, if (lcm) LcmStyle.UNOPENED else DungeonMap.unknownRoomColor.rgba)
+        if (!lcm) icon(g, x, y)
     }
 
     private fun colorOf(c: Int): Color = when (c) {
@@ -288,6 +299,9 @@ object OdinMapPrediction {
         val deadEndAt = minOf(deadEndChance.value, ALWAYS_DEAD_END) / 100f
         val oneAt = oneChance.value / 100f
         val bloodFairyAt = bloodFairyChance.value / 100f
+        // while a new prediction is still being worked out, the one shown is for the map before the last door:
+        // every tile behind a door the map shows is drawn anyway, never left blank
+        val hints = hintTiles(known)
         val splits = p.splits.associateBy { it.tile }
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
         val exact = BooleanArray(W * W)
@@ -306,12 +320,17 @@ object OdinMapPrediction {
             greyRoom(g, room.tiles)
         }
         for (t in 0 until W * W) {
-            val probs = p.probs[t] ?: continue
-            if (known[t] || v.roomAt[t] >= 0 || exact[t] || t in blood) continue
+            if (known[t] || exact[t] || t in blood) continue
+            val probs = p.probs[t]
+            if (probs == null || v.roomAt[t] >= 0) {
+                if (t in hints) plainTile(g, t)
+                continue
+            }
             val x = (t % W) * TILE; val y = (t / W) * TILE
             inBig[t]?.let { room ->
                 // its door's tile keeps the split's label (or the "?") on the grey
-                splits[t]?.let { split -> overlay(g, x, y, split, room.chance, true) }
+                val split = splits[t]
+                if (split != null || t in hints) overlay(g, x, y, split, room.chance, true)
                 continue
             }
             val shownCls = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3)
@@ -336,8 +355,9 @@ object OdinMapPrediction {
                 // a normal 1x1, greyed out like the big rooms; a door's tile keeps the split label
                 greyRoom(g, intArrayOf(t))
                 overlay(g, x, y, split, one, split != null)
-            } else if (split != null) {
-                // the "?" tile: its chances as bands across it, the rest grey
+            } else if (split != null || t in hints) {
+                // the "?" tile: its chances as bands across it, the rest grey (a door the prediction doesn't know
+                // yet: the chances it gave the tile so far, no split label)
                 g.fill(x, y, x + ROOM, y + ROOM, if (lcm) LcmStyle.UNOPENED else DungeonMap.unknownRoomColor.rgba)
                 var at = x.toFloat()
                 for (c in shownCls) {
