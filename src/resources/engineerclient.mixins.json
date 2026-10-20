@@ -63,7 +63,8 @@
     "AdsReplayClientMixin",
     "AdsReplayMouseMixin",
     "AdsReplayKeysMixin",
-    "AdsReplaySendMixin"
+    "AdsReplaySendMixin",
+    "AdsReplayKickMixin"
   ],
   "injectors": {
     "defaultRequire": 1

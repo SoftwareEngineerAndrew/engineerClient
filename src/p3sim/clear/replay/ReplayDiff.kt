@@ -31,6 +31,13 @@ class ReplayDiff(private val s: ReplaySession) {
     private val actions = ArrayList<String>()
     fun action(k: Int, text: String) { actions += "%6d  %s".format(k, text) }
 
+    private val kicks = ArrayList<String>()
+    fun kick(k: Int, reason: String) { kicks += "%6d  %s".format(k, reason); note(k, "kick", "the server would have dropped you: $reason") }
+
+    private var endWhy = "still running"; private var endK = 0; private var complete = false
+    private var bossK: Int? = null; private var lastK = 0
+    fun ended(why: String, k: Int, boss: Int?, last: Int, whole: Boolean) { endWhy = why; endK = k; bossK = boss; lastK = last; complete = whole }
+
     fun note(k: Int, kind: String, text: String) { lines += "%6d  %-7s %s".format(k, kind, text) }
 
     fun forced(k: Int, what: String, result: String?) { forced += "%6d  %s -> %s".format(k, what, result ?: "?") }
@@ -195,6 +202,8 @@ class ReplayDiff(private val s: ReplaySession) {
         val out = ArrayList<String>()
         val run = s.run
         out += "ADS replay report: ${s.file.id}  (written at run tick ${run.t})"
+        out += "Ended: $endWhy at k $endK (${if (complete) "the whole recording" else "CUT SHORT: the recording goes to k $lastK, boss at ${bossK ?: "-"}"})"
+        if (kicks.isNotEmpty()) { out += "Kicks ADS's server would have made (the replay went on):"; out += kicks }
         out += ""
         out += "== Score parts at the end: Hypixel (Odin) vs ADS"
         lastDung?.let { d ->
@@ -277,6 +286,8 @@ class ReplayDiff(private val s: ReplaySession) {
         out += "== Your clicks as ADS took them"
         out += actions
         val j = JsonObject()
+        j.addProperty("end", endWhy); j.addProperty("endK", endK); bossK?.let { j.addProperty("bossK", it) }; j.addProperty("lastK", lastK); j.addProperty("complete", complete)
+        j.add("kicks", JsonArray().apply { kicks.forEach { add(it) } })
         j.addProperty("id", s.file.id); j.addProperty("cls", s.file.self.cls); j.addProperty("t", run.t)
         lastDung?.let { j.add("hypixel", it) }
         j.add("ads", JsonObject().apply {
