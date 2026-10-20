@@ -96,4 +96,17 @@ object WeirdosLogic {
 
     /** Three distinct names. */
     fun drawNames(rnd: Random): List<String> = NAMES.shuffled(rnd).take(3)
+
+    /**
+     * What a recording shows of a room: the NPC names by slot (null: not all three seen), what each named NPC said (no colour codes), the
+     * NPC the solve line names (the reward's) and the ones a fail line names (not the reward's).
+     */
+    class Recorded(val names: List<String>?, val said: Map<String, String>, val reward: String?, val wrong: Set<String>)
+
+    /** The first setting that agrees with [rec] for NPCs named [names] by slot (every line said, the reward, the wrong picks), or null. */
+    fun fit(names: List<String>, rec: Recorded): Scenario? = scenarios.firstOrNull { sc ->
+        val lines = sc.lines(names).map { it.replace(Regex("§."), "") }
+        names.indices.all { i -> rec.said[names[i]]?.let { it == lines[i] } ?: true } &&
+            (rec.reward == null || names.getOrNull(sc.reward) == rec.reward) && names.getOrNull(sc.reward) !in rec.wrong
+    }
 }
