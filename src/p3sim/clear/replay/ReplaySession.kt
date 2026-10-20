@@ -101,7 +101,6 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
      */
     private val roomPlans: Map<Int, List<com.engineerclient.p3sim.clear.mobs.PlannedMob>> by lazy {
         recordedScale.size
-        diff.campHypixel = recordedCamp
         val pack = run.packs.mobs ?: return@lazy emptyMap()
         val byName = pack.archetypes.sortedByDescending { it.name.length }
         val out = HashMap<Int, MutableList<com.engineerclient.p3sim.clear.mobs.PlannedMob>>()
@@ -195,34 +194,91 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         byRoom.mapValues { (_, l) -> l.minOf { it.first } to l.groupingBy { it.second }.eachCount().maxBy { it.value }.key }
     }
 
+    private class Throw(val thr: Int, val land: Int, val x: Double, val y: Double, val z: Double)
+
     /**
-     * The recording's camp mob spawns, in ticks after its BLOOD door: each body (not a teammate, a projectile or a tag) first seen in the
-     * Blood room after the door; a rider (two bodies within a tick and two blocks) is one mob.
+     * The recording's Watcher throws, in ticks after its BLOOD door, in throw order: each head is a nameless armor stand on the Blood
+     * room's wall before the door; it is thrown on its first move after the door and lands (the mob is added) when it is removed.
+     * Measured over 139 DR runs: 78 to 80 ticks of flight for the first four, 38 to 40 for the later ones, as [CampMech] has it.
      */
-    private val recordedCamp: List<Int> by lazy {
+    private val recordedThrows: List<Throw> by lazy {
         val door = file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.startsWith("The BLOOD DOOR has been opened!") }?.get(0)?.asInt
             ?: return@lazy emptyList()
-        val seen = HashSet<Int>(); val out = ArrayList<Triple<Int, Double, Double>>()
+        val named = file.events.filter { it.size() > 2 && it[1].asString == "name" }.mapTo(HashSet()) { it[2].asInt }
+        class Stand(val x: Double, val y: Double, val z: Double) { var thr = -1; var land = -1 }
+        val stands = HashMap<Int, Stand>()
         for (e in file.events) {
-            if (e.size() < 8 || e[1].asString != "spawn" || e[0].asInt <= door) continue
-            val id = e[2].asInt; val type = e[3].asString; val x = e[5].asDouble; val z = e[7].asDouble
-            if (id in file.idToMate || !seen.add(id) || (x == 0.0 && z == 0.0) || CAMP_NOT_A_MOB.containsMatchIn(type)) continue
-            if (run.plan.roomAtBlock(x, z)?.type != com.engineerclient.p3sim.run.RoomType.BLOOD) continue
-            val k = e[0].asInt - door
-            if (out.lastOrNull()?.let { k - it.first <= 1 && Math.hypot(it.second - x, it.third - z) < 2 } == true) continue
-            out += Triple(k, x, z)
+            val k = e[0].asInt; val kind = e[1].asString
+            if (kind == "spawn" && k <= door && e.size() > 7 && e[3].asString == "minecraft:armor_stand" && e[2].asInt !in named) {
+                val x = e[5].asDouble; val z = e[7].asDouble
+                if (run.plan.roomAtBlock(x, z)?.type == com.engineerclient.p3sim.run.RoomType.BLOOD) stands[e[2].asInt] = Stand(x, e[6].asDouble, z)
+                continue
+            }
+            if (k <= door || e.size() < 3 || (kind != "emv" && kind != "gone")) continue
+            val st = stands[e[2].asInt] ?: continue
+            if (kind == "emv" && st.thr < 0 && e.size() > 5 && Math.hypot(e[3].asDouble - st.x, e[5].asDouble - st.z) > 0.05) st.thr = k - door
+            if (kind == "gone" && st.land < 0) st.land = k - door
         }
-        out.map { it.first }
+        // A real throw flies 38 to 80 ticks; the wall's other heads go when the room is left.
+        stands.values.filter { it.thr >= 0 && it.land - it.thr in 30..90 }.sortedBy { it.thr }.map { Throw(it.thr, it.land, it.x, it.y, it.z) }
+    }
+
+    /** The recording's throw order as ADS's wall stations (the same stand within a block), or null when any head has no station or the camp is not whole. */
+    private fun recordedOrder(wall: List<com.engineerclient.p3sim.clear.blood.camp.WallStation>): List<com.engineerclient.p3sim.clear.blood.camp.WallStation>? {
+        val t = recordedThrows
+        if (t.size < 4 + com.engineerclient.p3sim.clear.blood.camp.CampMech.LATER_THROWS) { diff.note(run.t, "camp", "the recording has ${t.size} throws, not a whole camp: ADS draws its own order"); return null }
+        val out = t.map { r -> wall.firstOrNull { Math.abs(it.stand.x - r.x) < 0.6 && Math.abs(it.stand.z - r.z) < 0.6 && Math.abs(it.stand.y - r.y) < 2.0 } }
+        if (out.any { it == null } || out.distinct().size != out.size) { diff.note(run.t, "camp", "the recording's heads do not all match ADS's wall: ADS draws its own order"); return null }
+        return out.filterNotNull()
+    }
+    /** The recording's camp mobs, each with the index of the head it came down with: bodies that first showed up on a head's landing (a tick before to three after it). */
+    private val campMobs: Map<Int, Int> by lazy {
+        val door = file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.startsWith("The BLOOD DOOR has been opened!") }?.get(0)?.asInt
+            ?: return@lazy emptyMap()
+        val lands = recordedThrows.map { door + it.land }
+        val seen = HashSet<Int>(); val out = HashMap<Int, Int>()
+        for (e in file.events) {
+            if (e.size() < 4 || e[1].asString != "spawn" || !seen.add(e[2].asInt) || e[3].asString == "minecraft:armor_stand") continue
+            val k = e[0].asInt
+            val i = lands.indexOfFirst { k - it in -1..3 }
+            if (i >= 0) out[e[2].asInt] = i
+        }
+        out
+    }
+
+    /**
+     * The recording's camp for the Watcher: its throw order and his lines, in ticks after the BLOOD door. The pass line is the camp's
+     * own; the two lines after "Things feel a little more roomy now, eh?" are said by the camp on their own clock.
+     */
+    private fun recordedCampOf(wall: List<com.engineerclient.p3sim.clear.blood.camp.WallStation>): com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Replayed? {
+        val camp = com.engineerclient.p3sim.clear.blood.camp.CampMech
+        val lines = com.engineerclient.p3sim.clear.blood.camp.CampLines
+        val door = file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.startsWith("The BLOOD DOOR has been opened!") }?.get(0)?.asInt
+            ?: return null
+        val said = ArrayList<Pair<com.engineerclient.p3sim.clear.blood.camp.CampMech.Request, String>>()
+        for (e in file.events) {
+            if (e.size() < 3 || e[1].asString != "chat" || !e[2].isJsonPrimitive || e[0].asInt < door) continue
+            val t = e[2].asString
+            val cls = camp.lineOf(t) ?: continue
+            val text = t.removePrefix("[BOSS] The Watcher: ")
+            if (text in lines.INTRO_OTHER_MORE) continue
+            said += com.engineerclient.p3sim.clear.blood.camp.CampMech.Request(e[0].asInt - door, cls) to text
+        }
+        val opening = said.firstOrNull { it.first.line == com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }?.second
+        return com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Replayed(recordedOrder(wall), camp.requestsOf(said.map { it.first }), opening,
+            said.filter { it.first.line != com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }.map { it.second })
     }
     private val campSeen = HashSet<UUID>()
     private var campSeeded = false
+    /** ADS's camp mobs in the order they came down. */
+    private val adsCamp = ArrayList<UUID>()
 
     /** ADS's camp spawns for [ReplayDiff.campAds]: each mob first seen in the Blood room after ADS's BLOOD door. */
     private fun watchCamp(now: Int) {
         val open = run.state.milestones.bloodOpenT ?: return
         val blood = run.plan.rooms.firstOrNull { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD } ?: return
         // What is there on the first look (the Watcher, if he is a mob) is not a spawn.
-        for (m in Services.mobs.inRoom(blood.index)) if (campSeen.add(m.id) && campSeeded) diff.campAds += now - open
+        for (m in Services.mobs.inRoom(blood.index)) if (campSeen.add(m.id) && campSeeded) { diff.campAds += now - open; adsCamp += m.id }
         campSeeded = true
     }
 
@@ -238,6 +294,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
     fun start() {
         recordedScale.size
+        diff.campHypixel = recordedThrows.map { it.land }
+        com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = { wall -> if (!ended) recordedCampOf(wall) else null }
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
@@ -288,6 +346,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
+        com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = true
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
@@ -588,18 +647,33 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private val claimed = HashSet<UUID>()
     private var bloodKeyBy: String? = null
 
-    private class BloodDeath(val k: Int, val label: String, val x: Double, val z: Double, val room: Int)
-    /** Recorded camp deaths ADS has no live camp mob for yet. */
+    /** A recorded camp death: [head] is the index of the recorded head the mob came down with (-1: not known). */
+    private class BloodDeath(val k: Int, val label: String, val x: Double, val z: Double, val room: Int, val head: Int = -1)
+    /** Recorded camp deaths ADS has no camp mob for yet. */
     private val bloodOwed = ArrayDeque<BloodDeath>()
     private var lastBlood: BloodDeath? = null
+    /** The recorded heads whose mob has died. */
+    private val campDied = HashSet<Int>()
 
-    /** Kills ADS's camp mobs for the recorded camp deaths owed, oldest first, each the live one nearest where the recorded one died. */
+    /**
+     * Kills ADS's camp mobs for the recorded camp deaths owed. ADS throws the recorded heads in the recorded order, so a death of head n
+     * is ADS's n-th camp mob's (already dead in ADS: nothing to do; not down yet: owed until it is). Without the recording's heads, the
+     * live camp mob nearest where the recorded one died, oldest death first.
+     */
     private fun payBlood() {
-        while (bloodOwed.isNotEmpty()) {
-            val d = bloodOwed.first()
-            val mob = Services.mobs.inRoom(d.room).filter { it.alive && it.id !in claimed }
-                .minByOrNull { Math.hypot(it.x - d.x, it.z - d.z) + (if (sameMob(it.name, d.label)) 0.0 else 12.0) } ?: return
-            bloodOwed.removeFirst()
+        watchCamp(run.t)
+        val it = bloodOwed.iterator()
+        while (it.hasNext()) {
+            val d = it.next()
+            val mob = if (d.head >= 0) {
+                val id = adsCamp.getOrNull(d.head) ?: continue
+                it.remove()
+                Services.mobs.mob(id)?.takeIf { m -> m.alive } ?: continue
+            } else {
+                val m = Services.mobs.inRoom(d.room).filter { m -> m.alive && m.id !in claimed }
+                    .minByOrNull { m -> Math.hypot(m.x - d.x, m.z - d.z) + (if (sameMob(m.name, d.label)) 0.0 else 12.0) } ?: return
+                it.remove(); m
+            }
             claimed += mob.id
             val now = run.t
             forcing = true
@@ -619,13 +693,22 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (r.type == null || r.type == "minecraft:armor_stand") return
         val rx = r.x; val ry = r.y; val rz = r.z
         val tag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.let { mobName(it) }
-        // Only Hypixel's mobs have a tag (a bare body is a part of one: a Giant's, a disguise's).
-        if (tag.isNullOrEmpty()) { if (r.type != "minecraft:bat") return }
-        val label = tag ?: "Bat"
         // The Watcher's camp names its mobs by itself, so a recorded camp death takes ADS's nearest live camp mob whatever its name;
         // with none alive yet (ADS's camp behind Hypixel's), the next one ADS throws.
         val blood = run.plan.roomAtBlock(rx, rz)?.takeIf { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD }
-        if (blood != null && tag != null) {
+        val landing = campMobs[id]
+        if (blood != null && landing != null) {
+            // A camp mob is whatever came down with its head, tagged or not (the Giant's body has no tag); one death per head (a rider's
+            // two bodies are one mob).
+            if (!campDied.add(landing)) return
+            BloodDeath(k, tag ?: "camp mob", rx, rz, blood.index, landing).also { lastBlood = it; bloodOwed += it }
+            payBlood(); return
+        }
+        // Only Hypixel's mobs have a tag (a bare body is a part of one: a Giant's, a disguise's).
+        if (tag.isNullOrEmpty()) { if (r.type != "minecraft:bat") return }
+        val label = tag ?: "Bat"
+        // Without the recording's throws, any tagged death in the Blood room is a camp death.
+        if (blood != null && tag != null && recordedThrows.isEmpty()) {
             // One mob can die as two tagged bodies (a rider): the same name within a tick and two blocks is one death.
             if (lastBlood?.let { it.label == label && k - it.k <= 1 && Math.hypot(it.x - rx, it.z - rz) < 2 } == true) return
             BloodDeath(k, label, rx, rz, blood.index).also { lastBlood = it; bloodOwed += it }
@@ -885,9 +968,6 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         const val KILL_GRACE = HIT_AFTER + 1
         /** Farther than this from you, a recorded kill was not yours. */
         const val FAR = 12.0
-
-        /** Entity types in the Blood room that are not camp mobs. */
-        private val CAMP_NOT_A_MOB = Regex("arrow|tnt|item|experience|fireball|snowball|potion|firework|bobber|lightning|armor_stand")
         private val RIGHT_CLICKS = setOf("o.use", "o.useOn", "o.int")
         /** "DUNGEON BUFF! X found a / You found a / A Blessing of Life V(! / was found!) (03s)". */
         private val BUFF = Regex("^DUNGEON BUFF! (A|(?:(\\w{1,16}|You) found a)) Blessing of (\\w+) (I|II|III|IV|V)(?: was found)?!( \\(.+\\))?$")
