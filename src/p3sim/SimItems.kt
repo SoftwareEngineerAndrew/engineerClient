@@ -1011,7 +1011,8 @@ object SimItems {
     val SPIRIT_SCEPTRE get() = item(Items.PAPER, SCEPTRE, "§6 Heroic Spirit Sceptre §6✪✪✪✪✪", listOf(
         "§6Ability: Guided Bat §e§lRIGHT CLICK", "§7Shoots a guided spirit bat, following", "§7your aim and exploding on what it hits.",
         "", "§6§lLEGENDARY DUNGEON SWORD"), glint = true).also { hy(it, "island_relevant/dungeons/spirit_sceptre_fragged", "legendary") }
-    const val SCEPTRE = "STARRED_SPIRIT_SCEPTRE"
+    /** Its SkyBlock id: the Spirit Sceptre is BAT_WAND inside (packdisabler draws it by that id, an allium). */
+    const val SCEPTRE = "STARRED_BAT_WAND"
 
     /** How far a Guided Bat flies before it bursts (blocks). Unmeasured. */
     private const val SCEPTRE_RANGE = 24.0
@@ -1549,8 +1550,10 @@ object SimItems {
     }
 
     fun etherwarp(p: ServerPlayer, range: Double = 61.0) {
-        // Cast from where the server saw you (about one one-way latency ago).
-        val seen = Fight.seenPos(p)
+        // Cast from where you clicked: Hypixel reads the use packet after the move packets sent before it, never after the ones that
+        // follow. A client that moves you at once (Odin's zero-ping etherwarp) has already sent the landing spot when the delayed cast
+        // runs, so a position taken then was a second warp from there.
+        val seen = clickPos ?: p.position()
         val eye = Vec3(seen.x, seen.y + 1.27, seen.z)
         val dir = look(p)
         val hit = dda(eye, dir, range)
@@ -1608,7 +1611,7 @@ object SimItems {
 
     /** AOTV (12) / Hyperion (10): whole-block steps, every quarter checked; "There are blocks in the way!" when cut short. */
     fun blink(p: ServerPlayer, range: Int) {
-        val eye = p.eyePosition
+        val eye = (clickPos ?: p.position()).add(0.0, p.eyeHeight.toDouble(), 0.0)
         val dir = look(p)
         var last = 0
         var px = floor(eye.x).toInt(); var pz = floor(eye.z).toInt()

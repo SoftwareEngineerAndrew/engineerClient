@@ -118,6 +118,49 @@ object SimServer {
                 1
             })
         )
+        // `/gfs <item> <amount>` (get from sacks): Ender Pearls and Superboom TNT, the two the clear takes from sacks.
+        s.commands.dispatcher.register(
+            Commands.literal("gfs").then(Commands.argument("what", StringArgumentType.greedyString()).executes { c ->
+                val p = c.source.player ?: return@executes 0
+                Sim.asPlayer(p) { getFromSacks(p, StringArgumentType.getString(c, "what")) }
+                1
+            })
+        )
+    }
+
+    /** The sack items `/gfs` hands out: the name it is asked by (lower case, words joined by _, a plural s dropped), its stack and its stack size. */
+    private val SACK_ITEMS = mapOf(
+        "ender_pearl" to Triple("Ender Pearl", { SimItems.PEARLS }, 16),
+        "superboom_tnt" to Triple("Superboom TNT", { SimItems.SUPERBOOM }, 64),
+        "superboom" to Triple("Superboom TNT", { SimItems.SUPERBOOM }, 64),
+    )
+
+    /**
+     * `/gfs ender_pearl 16`: tops up the stacks you have and fills empty slots with up to [what]'s amount (64 when none is given), as Hypixel's
+     * "Moved N Ender Pearl from your Sacks to your inventory." says (recorded). The sacks never run out.
+     */
+    private fun getFromSacks(p: net.minecraft.server.level.ServerPlayer, what: String) {
+        val words = what.trim().split(Regex("\\s+"))
+        val amount = words.last().toIntOrNull()
+        val key = (if (amount != null) words.dropLast(1) else words).joinToString("_").lowercase().removeSuffix("s")
+        val (name, make, max) = SACK_ITEMS[key] ?: run { Sim.chat("§cCouldn't find an item in your Sacks with that name!"); return }
+        val want = (amount ?: 64).coerceAtLeast(1)
+        val id = SimItems.idOf(make())
+        val inv = p.inventory
+        var left = want
+        for (i in 0 until 36) {
+            if (left == 0) break
+            val s = inv.getItem(i)
+            if (!s.isEmpty && SimItems.idOf(s) == id && s.count < max) { val n = minOf(left, max - s.count); s.grow(n); left -= n }
+        }
+        for (i in 0 until 36) {
+            if (left == 0) break
+            if (inv.getItem(i).isEmpty) { val n = minOf(left, max); inv.setItem(i, make().also { it.count = n }); left -= n }
+        }
+        val moved = want - left
+        if (moved == 0) { Sim.chat("§cYou don't have enough space in your inventory!"); return }
+        p.inventoryMenu.broadcastChanges()
+        Sim.chat("§aMoved §f$moved $name§a from your Sacks to your inventory.")
     }
 
     /** The world's rules: no time, weather, mobs, decay, fire, fall damage; things stay as built. */

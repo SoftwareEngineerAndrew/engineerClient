@@ -269,7 +269,7 @@ class BotBodies(private val asPlayers: () -> Boolean = { true }) {
             "aotv" -> SimItems.AOTV
             "leap" -> SimItems.LEAP
             "superboom" -> SimItems.SUPERBOOM
-            "batwand" -> ItemStack(Items.BONE).also { it.set(DataComponents.CUSTOM_NAME, Sim.legacy("§6Bat Wand")) }
+            "batwand" -> SimItems.SPIRIT_SCEPTRE
             else -> SimItems.HYPERION
         }
     }.copy()
