@@ -466,7 +466,8 @@ object MobsModule : AdsModule, MobService {
             bar(by, combatBarText(gain, total))
         }
         // The last required mob of a room drops the room's key, if the key plan gives it one.
-        if (lastRequired && room != null && doors().keyForRoom(run, room) != null) doors().dropKey(run, room, x, z)
+        // A replay drops its keys where and when the recording shows them.
+        if (lastRequired && room != null && !com.engineerclient.p3sim.clear.state.StateController.keysFromRecording && doors().keyForRoom(run, room) != null) doors().dropKey(run, room, x, z)
     }
 
     override fun remove(run: Run, id: UUID) {

@@ -247,7 +247,7 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
         val t = run.t
         val id = nextStandId++
         val y = fx.spawnStand(id, kind, x, z, rules.standYDefault)
-        val killer = lastKill[room]?.takeIf { t - it.second <= 2 }?.first
+        val killer = if (keysFromRecording) null else lastKill[room]?.takeIf { t - it.second <= 2 }?.first
         val stand = KeyStand(id, kind, room, x, y, z, t, killer)
         stands[id] = stand
         run.bus.post(KeyDropped(t, kind, room, x, y, z))
@@ -261,6 +261,18 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     private val botPickups = HashMap<Int, Pair<UUID, Int>>()
 
     private fun canPick(id: UUID): Boolean = state.players[id]?.let { !it.ghost } == true
+
+    /**
+     * A replay's pickup: [by] takes the oldest stand of [kind]; with none lying (the recording's key fell out of its player's sight, or
+     * ADS's plan had no key due there), one is dropped where [by] stands, in [room] (or the first room still owing one) and taken at once.
+     */
+    fun pickUpKey(by: UUID, kind: KeyKind, room: Int?, x: Double, z: Double): Boolean {
+        stands.values.filter { it.kind == kind }.minByOrNull { it.spawnT }?.let { pickUp(it, by); return true }
+        val r = room?.takeIf { ledger.pending(it) == kind } ?: run.plan.rooms.map { it.index }.firstOrNull { ledger.pending(it) == kind } ?: return false
+        dropKey(r, x, z)
+        stands.values.filter { it.kind == kind }.minByOrNull { it.spawnT }?.let { pickUp(it, by); return true }
+        return false
+    }
 
     private fun pickUp(stand: KeyStand, by: UUID) {
         if (stands.remove(stand.id) == null) return
@@ -276,6 +288,8 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
 
     private fun pollStands(t: Int) {
         if (stands.isEmpty()) { botPickups.clear(); return }
+        // A replay takes its keys on the recorded ticks only ([pickUpKey]).
+        if (keysFromRecording) return
         for ((id, due) in botPickups.entries.toList()) if (t >= due.second) {
             botPickups.remove(id)
             val stand = stands[id] ?: continue
@@ -556,6 +570,9 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     fun standList(): List<KeyStand> = stands.values.toList()
 
     companion object {
+        /** A replay: keys drop and are taken on the recorded ticks only (no drop on a kill, no pickup by coming close). */
+        @Volatile @JvmStatic var keysFromRecording = false
+
         /** Room types whose objective is a mob kill. Puzzles have their own solver; the entrance, Fairy and blood rooms their own rules. */
         private val MOB_TYPES = setOf(RoomType.NORMAL, RoomType.TRAP, RoomType.YELLOW, RoomType.RARE)
 

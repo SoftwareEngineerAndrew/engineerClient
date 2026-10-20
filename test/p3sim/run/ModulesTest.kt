@@ -15,12 +15,12 @@ class ModulesTest {
 
     @Test fun moduleOrderIsTheDocumentedOne() {
         assertEquals(
-            listOf("engine", "layout", "doors", "mobs", "damage", "secrets", "score", "puzzles", "hardpuzzles", "traps", "bots", "blood", "hud", "ui"),
+            listOf("engine", "replay", "layout", "doors", "mobs", "damage", "secrets", "score", "puzzles", "hardpuzzles", "traps", "bots", "blood", "hud", "ui"),
             AdsModules.all.map { it.id },
         )
         assertEquals(AdsModules.all.size, AdsModules.all.map { it.id }.toSet().size, "ids are unique")
         assertTrue(AdsModules.all.all { it.owner.isNotBlank() })
-        assertEquals(setOf("engine", "layout", "doors", "mobs", "damage", "secrets", "puzzles", "traps", "bots", "blood", "hud", "savepoints"), AdsModules.all.map { it.owner }.toSet())
+        assertEquals(setOf("engine", "replay", "layout", "doors", "mobs", "damage", "secrets", "puzzles", "traps", "bots", "blood", "hud", "savepoints"), AdsModules.all.map { it.owner }.toSet())
     }
 
     @Test fun servicesPointAtTheirModules() {
