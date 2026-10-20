@@ -143,9 +143,20 @@ class LootBlessingTest {
         assertTrue(Blessings.grantLines(Blessing.POWER, 1)[0].contains("+5.8§r§7 & §r§a+1.03x"))
     }
 
-    @Test fun theBoostIsTwentyFivePercent() {
-        assertTrue(Blessings.grantLines(Blessing.POWER, 5, Blessings.BOOST)[0].contains("+36.3§r§7 & §r§a+1.19x"), Blessings.grantLines(Blessing.POWER, 5, Blessings.BOOST).toString())
-        assertTrue(Blessings.grantLines(Blessing.LIFE, 5, Blessings.BOOST)[0].contains("+1.27x HP"))
+    @Test fun aBoostedDayReadsAsRecorded() {
+        // Every boosted line the recordings have (Oct 12-13), § codes off.
+        fun b(x: Blessing, l: Int) = Blessings.grantLines(x, l, Blessings.BOOST).map { it.replace(Regex("§."), "").replace(Regex("[\ue000-\uf8ff]"), "").trim() }
+        assertEquals(listOf("Granted you +36.3 & +1.18x  Strength.", "Also granted you +36.3 & +1.18x  Crit Damage."), b(Blessing.POWER, 5))
+        assertEquals(listOf("Granted you +7.3 & +1.04x  Strength.", "Also granted you +7.3 & +1.04x  Crit Damage."), b(Blessing.POWER, 1))
+        assertEquals(listOf("Granted you +14.5 & +1.07x  Strength.", "Also granted you +14.5 & +1.07x  Crit Damage."), b(Blessing.POWER, 2))
+        assertEquals(listOf("Granted you +36.3 & +1.18x  Intelligence and +24  Speed."), b(Blessing.WISDOM, 5))
+        assertEquals(listOf("Granted you +14.5 & +1.07x  Intelligence and +9.6  Speed."), b(Blessing.WISDOM, 2))
+        assertEquals(listOf("Granted you +7.3 & +1.04x  Defense and +7.2  Damage."), b(Blessing.STONE, 1))
+        assertEquals(listOf("Granted you +36.3 & +1.18x  Defense and +36  Damage."), b(Blessing.STONE, 5))
+        assertEquals(listOf("Granted you +1.27x HP and +1.27x  Health Regen."), b(Blessing.LIFE, 5))
+        assertEquals(listOf("Granted you +1.11x HP and +1.11x  Health Regen."), b(Blessing.LIFE, 2))
+        assertEquals(listOf("Granted you +1.05x HP and +1.05x  Health Regen."), b(Blessing.LIFE, 1))
+        assertEquals(listOf("Granted you +36.3 & +1.18x HP, +36.3 & +1.18x  Defense, +36.3 & +1.18x  Intelligence, and +36.3 & +1.18x  Strength."), b(Blessing.TIME, 5))
     }
 
     @Test fun theAnnouncementLinesMatchTheRecordedForms() {

@@ -302,6 +302,21 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     /** Your rank bracket and name colour before the replay. */
     private var ownLooks: Pair<Any?, Any?>? = null
 
+    /**
+     * Whether the recording's day had Hypixel's blessing boost, from its grant lines (`Granted you +36.3 & +1.18x` boosted, `+29 & +1.15x`
+     * plain; Life by its HP multiplier); null when it has none.
+     */
+    private val recordedBoost: Boolean? by lazy {
+        var r: Boolean? = null
+        for (e in file.events) if (e.size() > 2 && e[1].asString == "chat" && e[2].isJsonPrimitive) {
+            val t = clean(e[2].asString).trim()
+            if (!t.startsWith("Granted you")) continue
+            if (BOOSTED_GRANT.containsMatchIn(t)) return@lazy true
+            if (PLAIN_GRANT.containsMatchIn(t)) r = false
+        }
+        r
+    }
+
     /** Each name's rank in the recording's chat. */
     private val ranks: Map<String, String> by lazy {
         val out = HashMap<String, String>()
@@ -314,6 +329,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         diff.campHypixel = recordedThrows.map { it.land }
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = { wall -> if (!ended) recordedCampOf(wall) else null }
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = true
+        com.engineerclient.p3sim.clear.secrets.SecretsSettings.replayBoost = recordedBoost
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
         // Mobs go where the recording has them while it sees them (out of its sight, ADS moves them).
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = { id -> if (ended) null else plannedBack[id]?.let { ents[it] }?.takeIf { !it.gone && !(it.x == 0.0 && it.z == 0.0) }?.let { doubleArrayOf(it.x, it.y, it.z) } }
@@ -369,6 +385,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
+        com.engineerclient.p3sim.clear.secrets.SecretsSettings.replayBoost = null
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = true
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
@@ -1015,6 +1032,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
         /** The health part of Hypixel's action bar: current/max, red or gold. */
         private val HEALTH = Regex("^\u00a7[c6]([\\d,]+)/([\\d,]+)")
+        /** A grant line's first term at levels I, II and V: boosted (x1.25) or plain. */
+        private val BOOSTED_GRANT = Regex("^Granted you \\+(?:7\\.3|14\\.5|36\\.3) &|^Granted you \\+1\\.(?:05|11|27)x HP")
+        private val PLAIN_GRANT = Regex("^Granted you \\+(?:5\\.8|11\\.6|29) &|^Granted you \\+1\\.(?:04|09|22)x HP")
         private val RIGHT_CLICKS = setOf("o.use", "o.useOn", "o.int")
         /** "DUNGEON BUFF! X found a / You found a / A Blessing of Life V(! / was found!) (03s)". */
         private val BUFF = Regex("^DUNGEON BUFF! (A|(?:(\\w{1,16}|You) found a)) Blessing of (\\w+) (I|II|III|IV|V)(?: was found)?!( \\(.+\\))?$")
