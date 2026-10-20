@@ -1230,7 +1230,11 @@ object SimItems {
         // A left click on a lever credits it, toggling nothing. With the Dungeonbreaker the click also reaches the mining
         // refusal ("digging there" in S4's device).
         (Fight.phase as? GoldorPhase)?.let { ph -> if (ph.leverAt(at) != null || ph.devices.lights.isLever(at)) { if (!again) ph.devices.leftClick(at); if (held != "DUNGEONBREAKER") return } }
-        if (held == "SUPERBOOM_TNT") { if (!again) Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, at, face) } }; return }
+        // As its right click: in a run the blast is the secrets module's (crypts, walls), in the boss the gate's.
+        if (held == "SUPERBOOM_TNT") {
+            if (!again) { val run = DamageModule.activeRun(); Fight.afterPing("superboom") { Fight.later(1, "superboom") { if (run != null) superboomRun(run, p, at, face) else superboom(p, at, face) } } }
+            return
+        }
         // Broken as the hit arrives, before the moves your game sends after it: never a block you already walked into.
         if (held == "DUNGEONBREAKER") mine(p, at)
         else Fight.afterPing("hit ignored") { sendBack() }
@@ -1626,10 +1630,19 @@ object SimItems {
             if (cx != px && cz != pz && blinkBlocks(px, cy, cz) && blinkBlocks(cx, cy, pz)) { cut = true; break }
             last = i; px = cx; pz = cz
         }
+        // A landing needs room for the whole body: under a 1-high roof (a hole one block tall) the server stops at the sample before it
+        // (PrecisionSnipes' blink lab, "roof1": both casts short of the roofed cell).
+        fun feetAt(i: Int): Int { val c = eye.add(dir.scale(i.toDouble())); val cx = floor(c.x).toInt(); val cy = floor(c.y).toInt(); val cz = floor(c.z).toInt(); return if (feetPass(cx, cy - 1, cz)) cy - 1 else cy }
+        fun roomy(i: Int): Boolean {
+            val c = eye.add(dir.scale(i.toDouble())); val cx = floor(c.x).toInt(); val cz = floor(c.z).toInt(); val f = feetAt(i)
+            // The head's part of the body (feet + 1 to + 1.8, 0.6 wide) clear of every collision.
+            return Sim.level.noCollision(p, AABB(cx + 0.2, f + 1.0, cz + 0.2, cx + 0.8, f + 1.8, cz + 0.8).deflate(1e-3))
+        }
+        while (last > 0 && !roomy(last)) { last--; cut = true }
         if (last == 0) { Sim.chat("§cThere are blocks in the way!"); return }
         val c = eye.add(dir.scale(last.toDouble()))
-        val cx = floor(c.x).toInt(); val cy = floor(c.y).toInt(); val cz = floor(c.z).toInt()
-        val feetY = if (feetPass(cx, cy - 1, cz)) cy - 1 else cy
+        val cx = floor(c.x).toInt(); val cz = floor(c.z).toInt()
+        val feetY = feetAt(last)
         if (cx == floor(p.x).toInt() && cz == floor(p.z).toInt() && (feetY == floor(p.y + 0.05).toInt() || Vec3(cx + 0.5, feetY.toDouble(), cz + 0.5).distanceTo(p.position()) < 1.5)) {
             Sim.chat("§cThere are blocks in the way!"); return
         }

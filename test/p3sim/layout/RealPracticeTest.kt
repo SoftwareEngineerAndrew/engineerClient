@@ -47,6 +47,7 @@ class RealPracticeTest {
             assertTrue(choices.size >= 50, "only ${choices.size} rooms to practise")
             assertTrue(choices.none { it.type == RoomType.ENTRANCE || it.type == RoomType.BLOOD })
             val problems = ArrayList<String>()
+            var southward = 0
             for (c in choices) for (seed in 1L..2L) {
                 val plan = when (val r = PracticePlan.build(c.name, layouts, seed, rooms, set.runstate)) {
                     is DungeonPlan.Result.Failed -> { problems += "${c.name}: ${r.failure.message}"; continue }
@@ -58,9 +59,13 @@ class RealPracticeTest {
                 assertTrue(room.tiles.all { it.x in 0 until DungeonFrame.TILES && it.z in 0 until DungeonFrame.TILES })
                 assertTrue(room.tiles.any { it.x == p.tx && it.z == p.tz }, "${c.name}: the start tile is not the room's")
                 val slot = DoorGeometry.slotOf(p.tx, p.tz, p.side) ?: run { problems += "${c.name}: the way in is off the grid"; continue }
-                // Centred: the room's box is in the middle two (or three) tiles.
-                val minX = room.tiles.minOf { it.x }; val maxX = room.tiles.maxOf { it.x }
-                assertTrue(minX + maxX in 4..6, "${c.name}: not centred ($minX..$maxX)")
+                // Walked into facing north, the door in the middle two columns; a room no turn can face south is centred instead.
+                if (p.side == 'S') { assertTrue(p.tx in 2..3, "${c.name}: the door is in column ${p.tx}"); southward++ }
+                else {
+                    val minX = room.tiles.minOf { it.x }; val maxX = room.tiles.maxOf { it.x }
+                    assertTrue(minX + maxX in 4..6, "${c.name}: not centred ($minX..$maxX)")
+                    if (c.type == RoomType.PUZZLE) problems += "${c.name}: a puzzle not walked into facing north (${p.side})"
+                }
                 val b = when (val r = LayoutBuilder.build(plan, rooms, mapOf(slot to DoorKind.NORMAL))) {
                     is LayoutBuilder.Result.Failed -> { problems += "${c.name}: ${r.message}"; continue }
                     is LayoutBuilder.Result.Ok -> r.built
@@ -86,6 +91,8 @@ class RealPracticeTest {
                     if (open > 2) problems += "${c.name}: side $side of tile ${wt.x},${wt.z} has $open open cells"
                 }
             }
+            println("practice rooms walked into facing north: $southward of ${choices.size * 2}")
+            assertTrue(southward >= choices.size * 2 * 9 / 10, "only $southward of ${choices.size * 2} practices face north")
             if (problems.isNotEmpty()) fail("${problems.size} practice problems:\n" + problems.distinct().take(40).joinToString("\n"))
         } finally { set.close() }
     }
