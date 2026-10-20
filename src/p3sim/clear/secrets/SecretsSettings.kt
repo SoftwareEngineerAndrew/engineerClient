@@ -51,7 +51,7 @@ object SecretsSettings {
         leverTicksS = host.registerSetting(NumberSetting("Secrets Lever Wall Time", LEVER_WALL_TICKS, 0..100, 1, unit = " ticks", desc = "How long a lever's wall stays an invisible barrier before it opens for good."))
         autoCreditS = host.registerSetting(BooleanSetting("Secrets Auto Credit", true, desc = "A room whose secrets the room data cannot all place counts the missing ones when you find the last one it does place, so the room can still turn green."))
         bonusBatS = host.registerSetting(NumberSetting("Secrets Bonus Bat Chance", BONUS_BAT_PERCENT, 0..100, 1, unit = "%", desc = "How often a run has a bonus bat at all: one of the first few secret bats killed then also counts a point of bonus score."))
-        blessingBoostS = host.registerSetting(BooleanSetting("Blessing Boost x1.25", false, desc = "Hypixel has days when every blessing is 25 percent stronger (Power V reads +36.3 & 1.19x instead of +29 & 1.15x). Turn this on to practise a boosted day."))
+        blessingBoostS = host.registerSetting(BooleanSetting("Blessing Boost x1.25", false, desc = "Hypixel has days when every blessing is 25 percent stronger (Power V reads +36.3 & 1.18x instead of +29 & 1.15x). Turn this on to practise a boosted day."))
     }
 
     val itemRange: Double get() = itemRangeS?.value ?: ITEM_SPAWN_RANGE
@@ -61,6 +61,9 @@ object SecretsSettings {
     val superboomRadius: Double get() = boomRadiusS?.value ?: SUPERBOOM_RADIUS
     val leverWallTicks: Int get() = leverTicksS?.value ?: LEVER_WALL_TICKS
     val autoCredit: Boolean get() = autoCreditS?.value ?: true
-    val blessingBoost: Double get() = if (blessingBoostS?.value == true) Blessings.BOOST else 1.0
+    val blessingBoost: Double get() = if (replayBoost ?: (blessingBoostS?.value == true)) Blessings.BOOST else 1.0
+
+    /** A replay's boost, as its recording shows it (its grant lines), over the setting; null outside a replay. */
+    @Volatile var replayBoost: Boolean? = null
     val bonusBatPercent: Int get() = bonusBatS?.value ?: BONUS_BAT_PERCENT
 }

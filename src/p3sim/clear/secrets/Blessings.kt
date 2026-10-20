@@ -31,13 +31,18 @@ object Blessings {
     /** Share of the V lines a teammate sees that carry the `(Ns)` clock (18.6 percent of all lines were timed V, 35.4 percent were V). */
     const val OBSERVER_TIMED_SHARE_OF_V = 0.525
     /**
-     * Hypixel runs a date-wide state where every grant is 25 percent stronger (all of the grants on two recorded days, none on most
-     * others), so it is not random per grant: [BOOST] applies to flat, multiplier and the speed and damage terms when the setting is on
-     * (`Blessing boost x1.25`, default off). Whether Speed and Damage scale too is UNMEASURED.
+     * Hypixel runs a date-wide state where every grant is 25 percent stronger (all 42 recorded runs of two days, none of the 97 of the
+     * others, never mixed in a run), so it is not random per grant: [BOOST] applies to the flat and multiplier terms when the setting is
+     * on (`Blessing boost x1.25`, default off). Wisdom's Speed and Stone's Damage stay as they are (+24 Speed, +36 Damage at V boosted).
      */
     const val BOOST = 1.25
     const val FLAT_PER_LEVEL = 5.8
     const val MULT_PER_LEVEL = 0.03
+    /**
+     * A boosted day's multiplier step per level (not 0.03 x 1.25): the recorded boosted lines read +1.04x at I, +1.07x at II and +1.18x
+     * at V (Power, Stone, Wisdom and Time alike), which puts the step in [0.035, 0.037); 0.036 prints all three. Life's does scale by 1.25.
+     */
+    const val BOOSTED_MULT_PER_LEVEL = 0.036
     const val LIFE_MULT_PER_LEVEL = 0.0436
     const val WISDOM_SPEED_PER_LEVEL = 4.8
     const val STONE_DAMAGE_PER_LEVEL = 7.2
@@ -133,7 +138,7 @@ object Blessings {
 
     /** One `+flat & +multx <tail>` term. */
     private fun term(level: Int, tail: String, boost: Double): String =
-        "§r§a+${fmt(FLAT_PER_LEVEL * level * boost)}§r§7 & §r§a+${mult(1.0 + MULT_PER_LEVEL * level * boost)}x $tail"
+        "§r§a+${fmt(FLAT_PER_LEVEL * level * boost)}§r§7 & §r§a+${mult(1.0 + (if (boost != 1.0) BOOSTED_MULT_PER_LEVEL else MULT_PER_LEVEL) * level)}x $tail"
 
     /**
      * The "Granted you ..." lines that follow the headline, indented five spaces as Hypixel prints them. Power is two lines, the others one.
@@ -150,8 +155,8 @@ object Blessings {
                 val m = mult(1.0 + LIFE_MULT_PER_LEVEL * level * boost)
                 listOf(pre + "§r§a+${m}x HP §r§7and §r§a+${m}x §r§c$G_REGEN Health Regen§r§7.")
             }
-            Blessing.WISDOM -> listOf(pre + term(level, "§r§b$G_INTELLIGENCE Intelligence", boost) + " §r§7and §r§a+${fmt(WISDOM_SPEED_PER_LEVEL * level * boost)} §r§f$G_SPEED Speed§r§7.")
-            Blessing.STONE -> listOf(pre + term(level, "$G_DEFENSE Defense", boost) + " §r§7and §r§a+${fmt(STONE_DAMAGE_PER_LEVEL * level * boost)} §r§c$G_DAMAGE Damage§r§7.")
+            Blessing.WISDOM -> listOf(pre + term(level, "§r§b$G_INTELLIGENCE Intelligence", boost) + " §r§7and §r§a+${fmt(WISDOM_SPEED_PER_LEVEL * level)} §r§f$G_SPEED Speed§r§7.")
+            Blessing.STONE -> listOf(pre + term(level, "$G_DEFENSE Defense", boost) + " §r§7and §r§a+${fmt(STONE_DAMAGE_PER_LEVEL * level)} §r§c$G_DAMAGE Damage§r§7.")
             Blessing.TIME -> listOf(
                 pre + term(level, "HP", boost) + "§r§7, " + term(level, "$G_DEFENSE Defense", boost) + "§r§7, " +
                     term(level, "§r§b$G_INTELLIGENCE Intelligence", boost) + "§r§7, and " + term(level, "§r§c$G_STRENGTH Strength", boost) + "§r§7.",
