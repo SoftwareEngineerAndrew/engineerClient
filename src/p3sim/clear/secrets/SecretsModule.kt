@@ -147,7 +147,7 @@ object SecretsModule : AdsModule, SecretService {
         val groups = CellGroups.build(run.plan)
         val book = SecretBook(plan, run.state, run.bus, { run.t }, { SecretsSettings.autoCredit })
         val rd = RunData(run, plan, groups, book, run.subRandom("secrets-loot"))
-        rd.bat.index = if (run.subRandom("secrets-bat").nextInt(100) < SecretsSettings.bonusBatPercent) BonusBat.draw(run.subRandom("secrets-bat-index")) else 0
+        rd.bat.index = replayBonusBat?.invoke(run) ?: if (run.subRandom("secrets-bat").nextInt(100) < SecretsSettings.bonusBatPercent) BonusBat.draw(run.subRandom("secrets-bat-index")) else 0
         rollBonusMobs(rd)
         val textures = run.packs.rooms?.textures.orEmpty()
         rd.skullTextures[SecretKind.ESSENCE] = SecretWorld.essenceTexture(SecretWorld.textureFor(textures, "essence"), SecretWorld.textureFor(textures, SecretWorld.ESSENCE_SKIN_ROLE))
@@ -693,7 +693,13 @@ object SecretsModule : AdsModule, SecretService {
     }
 
     /** The secrets of [room] not yet found, for a bot or a tool that wants to go and find them (world coordinates). */
+    /** Set by a replay: which counted bat kill of [Run] carries the bonus point (0: none), as the recording had it; null for a drawn one. */
+    @Volatile var replayBonusBat: ((Run) -> Int?)? = null
+
     fun pendingSecrets(run: Run, room: Int): List<SecretSite> = d(run)?.book?.pending(room).orEmpty()
+
+    /** Whether [room] has a bat secret at all (found or not). */
+    fun hasBat(run: Run, room: Int): Boolean = d(run)?.book?.hasKind(room, SecretKind.BAT) == true
 
     /**
      * Kills every secret bat inside [box] (an Implosion, a Mage beam): the damage module calls this next to its mob hits, since a secret
