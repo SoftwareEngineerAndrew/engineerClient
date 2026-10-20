@@ -81,7 +81,7 @@ object Mage {
         while (clicks.size > 3) clicks.removeFirst()
         if (clicks.size == 3 && clicks.zipWithNext().all { (a, b) -> b - a in 2..5 } && now >= sheepReady) {
             clicks.clear()
-            Fight.later(1, "guided sheep") { if (!p.isRemoved) launchSheep(p) }
+            Fight.later(1, "guided sheep") { if (!p.isRemoved && !com.engineerclient.p3sim.clear.damage.ClassAbilities.burst(p)) launchSheep(p) }
         }
     }
 
