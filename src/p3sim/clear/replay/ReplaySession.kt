@@ -773,7 +773,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val r = ents[id] ?: return
         if (r.type == null || r.type == "minecraft:armor_stand") return
         val rx = r.x; val ry = r.y; val rz = r.z
-        val tag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.let { mobName(it) }
+        // The recorder writes "???" (or "MINIBOSS") when it had not read the tag: the tag stand's own name (body id + 1, a Withermancer's + 3) is the mob's.
+        val tag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it !in UNREAD_TAGS }?.let { mobName(it) }
+            ?: (1..3).firstNotNullOfOrNull { d -> ents[id + d]?.name?.takeIf { it.contains("❤") } }?.let { mobName(it) }
+            ?: brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString
         // The Watcher's camp names its mobs by itself, so a recorded camp death takes ADS's nearest live camp mob whatever its name;
         // with none alive yet (ADS's camp behind Hypixel's), the next one ADS throws.
         val blood = run.plan.roomAtBlock(rx, rz)?.takeIf { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD }
@@ -1182,6 +1185,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         const val MATE = "replayMate"
         /** The dungeon state says the bonus bat is dead this many ticks after its death at most (50 of 50 DR runs: 0 to 3). */
         const val BONUS_BAT_LAG = 3
+
+        /** The recorder's brief tag for a mob whose tag it had not read. */
+        private val UNREAD_TAGS = setOf("???", "MINIBOSS")
 
         /** Ticks ADS gets to do by itself what the recording did (a kill, a puzzle) before it is done for it. */
         const val GRACE = 20
