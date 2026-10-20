@@ -61,8 +61,8 @@ object ConfigMigration {
      *    looked after where it is installed);
      *  - Storm Phase's Crush Hitbox is Sub Splits' Show Crush Info (on only if Storm Phase was), its
      *    hitbox settings with it.
-     *  - Term Info is gone: its HUD is Odin's Terminals Status (Look ADM, and switched on where ours was if
-     *    Odin's wasn't showing), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
+     *  - Term Info is gone: its HUD is Odin's Terminals Status (switched on where ours was if Odin's
+     *    wasn't showing; Look ADM is left for Coffee Client's Term Info to take over), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
      *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
      *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
@@ -206,7 +206,7 @@ object ConfigMigration {
             if (!pov.has(key)) pov.addProperty(key, true)
         }
 
-        // Term Info is no module any more: its HUD is Odin's Terminals Status with the ADM look, Section Time a Timers
+        // Term Info is no module any more: its HUD is Odin's Terminals Status (Look ADM marks it for Coffee Client's Term Info), Section Time a Timers
         // HUD (on only if Section Times was), and Core Leap Highlight Recore's. The entry goes, so this runs once.
         module(modules, "Term Info")?.let { ti ->
             val on = ti["enabled"]?.asBoolean ?: true

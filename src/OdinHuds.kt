@@ -14,8 +14,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  * without touching them:
  *  - Random Stuff's Hide Health/Mana Above %: Odin's Health HUD and Mana HUD draw nothing while the
  *    stat is above the threshold. The HUD editor (example = true) always draws them.
- *  - The ADM looks: for Odin's two Splits HUDs [OdinSplitsLook.render] draws instead, for Terminals Status'
- *    Term Info [com.engineerclient.practice.TerminalsStatusLook.render].
+ *  - The ADM look: for Odin's two Splits HUDs [OdinSplitsLook.render] draws instead.
  *  - P3 Sim practice: the P3 tick timers and Terminals Status' Term Info draw nothing ([PRACTICE_HIDDEN]).
  * It is also what POV Previews calls to draw a kept HUD a second time, above the previews.
  */
@@ -29,11 +28,11 @@ object OdinHuds {
             val h = hud ?: return block(g, example)
             if (!example && HealthMana.hidesOdinHud(h)) return 0 to 0
             if (!example && name in PRACTICE_HIDDEN && com.engineerclient.p3sim.Practice.active && com.engineerclient.p3sim.P3Sim.inSim) return 0 to 0
-            return OdinSplitsLook.render(h, g, example) ?: com.engineerclient.practice.TerminalsStatusLook.render(h, g, example) ?: block(g, example)
+            return OdinSplitsLook.render(h, g, example) ?: block(g, example)
         }
     }
 
-    /** Hidden in P3 Sim practice: Terminals Status' Term Info (Timers' Section Time stays: the sim feeds it) and Odin's Goldor Hud. */
+    /** Hidden in P3 Sim practice: Term Info, Odin's (Terminals Status) and Coffee Client's (Timers' Section Time stays: the sim feeds it), and Odin's Goldor Hud. */
     private val PRACTICE_HIDDEN = setOf("Term Info", "Goldor Hud")
 
     private val draws = HashMap<HUDSetting, Draw>()

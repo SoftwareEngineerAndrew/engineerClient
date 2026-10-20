@@ -104,7 +104,6 @@ object EngineerClient : ClientModInitializer {
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
-        safely("terminals look") { com.engineerclient.practice.TerminalsStatusLook.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }

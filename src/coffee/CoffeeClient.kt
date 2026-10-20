@@ -6,6 +6,7 @@ import com.coffeeclient.misc.OldBlocking
 import com.coffeeclient.misc.EntityDistance
 import com.coffeeclient.misc.HighlightLevers
 import com.coffeeclient.misc.Termsim
+import com.coffeeclient.misc.TermInfoHud
 import com.coffeeclient.misc.PreRequeue
 import com.coffeeclient.misc.RandomStuff
 import com.coffeeclient.misc.SoundEditor
@@ -37,7 +38,7 @@ object CoffeeClient : ClientModInitializer {
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
@@ -51,6 +52,7 @@ object CoffeeClient : ClientModInitializer {
         // On by default, existing installs included (once: turning it off sticks).
         safely("speed hud default") { SpeedHud.enableByDefault() }
         safely("termsim default") { Termsim.enableByDefault() }
+        safely("term info look") { TermInfoHud.adoptOdinLook() }
         safely("witherborn") { com.coffeeclient.misc.Witherborn.register() }
         safely("cursor reset") { com.coffeeclient.misc.CursorReset.register() }
 
