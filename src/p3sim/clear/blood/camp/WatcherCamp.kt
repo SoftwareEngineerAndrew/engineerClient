@@ -43,10 +43,23 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         buildRoom()
         val look = WallLook.of(host.run.packs.rooms?.textures.orEmpty())
         wall = WallPlan.assign(stands(), host.random)
-        for (st in wall) host.setHead(slots[st.slot], look.keyFor(st, host.random))
         val rp = replay?.invoke(wall)
+        // A replay: every head the recording threw came down as a counted mob, so a Wandering Soul drawn onto one of them trades its
+        // class with a head that was not thrown (else ADS counts one kill short and the Watcher is never beaten).
+        val order = rp?.order?.let { o ->
+            val thrown = o.mapTo(HashSet()) { it.slot }
+            val spares = ArrayDeque(wall.filter { it.slot !in thrown && it.cls != WallClass.WANDERING_SOUL })
+            val swap = HashMap<Int, WallStation>()
+            for (st in o) if (st.cls == WallClass.WANDERING_SOUL) spares.removeFirstOrNull()?.let { sp ->
+                swap[st.slot] = WallStation(st.slot, st.stand, sp.cls, sp.mobName)
+                swap[sp.slot] = WallStation(sp.slot, sp.stand, st.cls, st.mobName)
+            }
+            wall = wall.map { swap[it.slot] ?: it }
+            o.map { st -> wall.first { it.slot == st.slot } }
+        }
+        for (st in wall) host.setHead(slots[st.slot], look.keyFor(st, host.random))
         if (rp != null) { config = CampConfig(chatCoins = false, recordedLines = rp.lines); replayTexts = ArrayDeque(rp.texts) }
-        engine = CampEngine(home, wall, host.random, this, config, rp?.order)
+        engine = CampEngine(home, wall, host.random, this, config, order)
         opening = rp?.opening ?: CampLines.opening(host.random)
         log.info("[ads] the Watcher's camp started: ${wall.count { it.cls == WallClass.STANDARD }} standard, ${wall.count { it.cls == WallClass.BOSS }} boss heads on ${wall.size} stands")
     }
