@@ -728,7 +728,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 run.state.players[host.uuid]?.takeIf { !it.ghost }?.let { it.hpPercent = (cur / max * 100.0).coerceIn(1.0, 100.0) }
             }
             "screenClose" -> if (!catchUp && host.containerMenu === host.inventoryMenu) SimNet.send(host, NET, "inv 0")
-            "tpme" -> if (!catchUp) diff.recordedTeleport(k, e, recPos)
+            "tpme" -> { tpSeenAt = k; if (!catchUp) diff.recordedTeleport(k, e, recPos) }
             "dung" -> { diff.recordedDung(e.o(2)); if (!catchUp) team(k, e.o(2)) }
             // ---- what you sent
             else -> if (!catchUp && e[1].asString.startsWith("o.")) self(e, same, at)
@@ -738,6 +738,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private fun mate(id: Int?): ReplayBodies.Mate? = id?.let { mateIdName[it] }?.let { mateByName[it] }
 
     // ------------------------------------------------------------------ you
+
+    /** The tick of the recording's last tpme, of your last click, and of the click ADS's unaccepted teleport is waiting from (null: none). */
+    private var tpSeenAt = Int.MIN_VALUE
+    private var lastClickK = Int.MIN_VALUE
+    private var tpWaitFrom: Int? = null
 
     private fun self(e: JsonArray, same: List<JsonArray>, at: Int) {
         if (!run.stage.inDungeon) return
@@ -761,16 +766,29 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                     yaw != null -> ServerboundMovePlayerPacket.Rot(yaw, pitch!!, ground, hcol)
                     else -> ServerboundMovePlayerPacket.StatusOnly(ground, hcol)
                 }
-                // A teleport of ADS's is accepted first, as the recorded client did within the tick.
+                // A teleport of ADS's is accepted once the recorded client had one (its tpme, on or after your last click: a tick after
+                // the click for most, DR), or stands where it lands, or after [TP_ACCEPT_MAX] ticks. Before that its moves are from where it
+                // stood (the server ignores them) and a second click starts from the landing, as Hypixel's did.
                 (c as com.engineerclient.mixin.ServerTeleportAccessor).let { acc ->
-                    acc.ec_getAwaitingPosition()?.let { w -> c.handleAcceptTeleportPacket(net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket(acc.ec_getAwaitingTeleport(), w.x, w.y, w.z, host.yRot, host.xRot)) }
+                    val w = acc.ec_getAwaitingPosition()
+                    if (w == null) tpWaitFrom = null
+                    else {
+                        val k = e[0].asInt
+                        val from = tpWaitFrom ?: lastClickK.also { tpWaitFrom = it }
+                        val there = x != null && Math.hypot(x - w.x, z!! - w.z) < 1.0 && Math.abs(y!! - w.y) < 1.5
+                        if (tpSeenAt >= from || there || k - from >= TP_ACCEPT_MAX) {
+                            c.handleAcceptTeleportPacket(net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket(acc.ec_getAwaitingTeleport(), w.x, w.y, w.z, host.yRot, host.xRot))
+                            tpWaitFrom = null
+                        }
+                    }
                 }
                 c.handleMovePlayer(pk)
                 if (x != null) diff.moved(e[0].asInt, x, y!!, z!!, host)
             }
             "o.slot" -> c.handleSetCarriedItem(ServerboundSetCarriedItemPacket(e.i(2) ?: return))
-            "o.use" -> c.handleUseItem(ServerboundUseItemPacket(hand(e.s(2)), seq++, e.d(3)?.toFloat() ?: host.yRot, e.d(4)?.toFloat() ?: host.xRot))
+            "o.use" -> { lastClickK = e[0].asInt; c.handleUseItem(ServerboundUseItemPacket(hand(e.s(2)), seq++, e.d(3)?.toFloat() ?: host.yRot, e.d(4)?.toFloat() ?: host.xRot)) }
             "o.useOn" -> {
+                lastClickK = e[0].asInt
                 val pos = e.get(3).asJsonArray.let { BlockPos(it[0].asInt, it[1].asInt, it[2].asInt) }
                 val dir = Direction.byName(e.s(4)?.lowercase() ?: "up") ?: Direction.UP
                 val loc = e.get(5).asJsonArray.let { Vec3(it[0].asDouble, it[1].asDouble, it[2].asDouble) }
@@ -1485,6 +1503,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
         /** The recorder's brief tag for a mob whose tag it had not read. */
         private val UNREAD_TAGS = setOf("???", "MINIBOSS")
+        /** The longest ADS's teleport waits for the recorded client's (DR click to tpme: 1,096 the same tick, 5,802 one, 442 two, 136 three). */
+        private const val TP_ACCEPT_MAX = 4
         /** A click this many ticks before a recorded chest's lid sound opened it (854 to 856 measured). */
         private const val CHEST_OPEN_LEAD = 5
 
