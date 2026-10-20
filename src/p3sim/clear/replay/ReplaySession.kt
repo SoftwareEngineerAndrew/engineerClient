@@ -511,7 +511,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             override fun drives(run: Run) = run === this@ReplaySession.run && !ended
             override fun questions(run: Run, start: Int) = if (drives(run)) recordedQuizzes.getOrNull(start) else null
         }
-        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) bonusBat else null }
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) 0 else null }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = { r -> if (r === run && !ended) recordedTrapped else null }
         val rewardChests = ReplayFile.rewardChests(file.events)
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = { r, x, y, z -> if (r === run && !ended) "$x,$y,$z" in rewardChests else null }
@@ -1009,16 +1009,14 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
      * 0 to 3 ticks after that bat's death (50 of 50 DR runs where it died in view); in the 65 runs where it died out of sight there is no
      * such death, and the bonus is given when the state says it instead ([team]). The first state is the run before's: only those after T0 count.
      */
-    private val bonusBat: Int by lazy {
-        val flip = batFlip ?: return@lazy 0
-        val i = batDeaths.indexOfLast { it.first <= flip }
-        if (i >= 0 && flip - batDeaths[i].first <= BONUS_BAT_LAG) i + 1 else 0
+    /**
+     * Your recorded "A Bat has been slain." (only the bat's killer gets it): the bonus is yours on its tick. Without it the bonus bat was a
+     * teammate's, given silently when the recorded state says so. ADS's count of bats never decides it in a replay.
+     */
+    private val yourBatLine: Int? by lazy {
+        file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && clean(it[2].asString).startsWith("A Bat has been slain.") }?.get(0)?.asInt
     }
 
-    /** The tick the recorded dungeon state first says the bonus bat is dead, or null. */
-    private val batFlip: Int? by lazy {
-        file.events.firstOrNull { e -> e.s(1) == "dung" && e[0].asInt > 0 && e.o(2)?.get("bat")?.takeIf { it.isJsonPrimitive }?.asBoolean == true }?.get(0)?.asInt
-    }
 
     /** Whether the recording has a bat die in [room] after now. */
     private fun batLater(room: Int): Boolean = batDeaths.any { (k, x, z) -> k > run.t && run.plan.roomAtBlock(x, z)?.index == room }
@@ -1074,9 +1072,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             pending += Pending(k + TEAM_GRACE, "crypts to $c", { led.crypts >= c }) { val n = creditCrypts(c); "blew $n, ADS now ${led.crypts}" } } }
         if (o.get("mimic")?.asBoolean == true && !recMimic) { recMimic = true
             pending += Pending(k + TEAM_GRACE, "mimic killed", { led.mimicKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.MIMIC, null); "ADS mimic ${led.mimicKilled}" } }
-        // A bonus bat that died out of the recording's sight: a teammate's, given now (one in sight comes with its kill: [bonusBat]).
+        // A teammate's bonus bat, given now and silently (yours comes with your line: [yourBatLine]).
         if (o.get("bat")?.asBoolean == true && !recBat) { recBat = true
-            if (bonusBat == 0) pending += Pending(k, "bonus bat", { led.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, null); "ADS bat ${led.batKilled}" } }
+            if (yourBatLine == null) pending += Pending(k, "bonus bat", { led.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, null); "ADS bat ${led.batKilled}" } }
         if (o.get("prince")?.asBoolean == true && !recPrince) { recPrince = true
             pending += Pending(k + TEAM_GRACE, "prince killed", { led.princeKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.PRINCE, princeKiller); "ADS prince ${led.princeKilled}" } }
     }
@@ -1151,6 +1149,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // His camp out of the recorded player's sight has no throws or kills to replay: the pass line says when it ended.
         if (t == "[BOSS] The Watcher: " + com.engineerclient.p3sim.clear.blood.WatcherLines.PASS && com.engineerclient.p3sim.clear.blood.BloodModule.passNow()) diff.forced(run.t, "the Watcher let the party pass (recorded k $k)", "ADS's camp had not ended")
         if (t.startsWith("Party >")) return
+        if (t.startsWith("A Bat has been slain.") && k == yourBatLine) {
+            pending += Pending(k, "your bonus bat", { run.state.secrets.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, host.uuid); "ADS bat ${run.state.secrets.batKilled}" }
+            return
+        }
         KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; keyTaken(m.groupValues[1], m.groupValues[2]); return }
         SOLVED.find(t)?.let { m -> puzzleSolved(k, m.groupValues[1], m.groupValues[2]) }
         QUIZ_ANSWER.find(t)?.let { m -> quizAnswer(m.groupValues[1], m.groupValues[2] == "answered") }
@@ -1428,7 +1430,6 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val RANK = mapOf("UNDISCOVERED" to 0, "NONE" to 1, "WHITE" to 2, "GREEN" to 3)
         const val MATE = "replayMate"
         /** The dungeon state says the bonus bat is dead this many ticks after its death at most (50 of 50 DR runs: 0 to 3). */
-        const val BONUS_BAT_LAG = 3
 
         /** The recorder's brief tag for a mob whose tag it had not read. */
         private val UNREAD_TAGS = setOf("???", "MINIBOSS")
