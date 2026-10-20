@@ -16,8 +16,8 @@ import java.util.Locale
  * F7/M7 terminals (P3), ported from Devonian's Terminal Display, Terminal Hide Completion and its terminal section
  * tracking (Stages.TerminalSection). Not a module of its own any more; what it tracks shows in:
  *
- *  - Odin's Terminals Status, Look: ADM ([TerminalsStatusLook], [drawInfo]): the current section's progress, 3/7
- *    (green once the gate is down), or in detail its terms, levers, device and gate.
+ *  - Coffee Client's Term Info ([drawInfo]): the current section's progress, 3/7 (green once the gate is down), or
+ *    in detail its terms, levers, device and gate.
  *  - Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
  *    (server ticks). S1 runs from Goldor's first line, each next one from the last one's end.
  *  - Recore: told when S3 is done by this count ([Recore.s3Done]) and when the sim starts ([Recore.simStart]).
@@ -27,7 +27,7 @@ import java.util.Locale
  * opening!". Chat and titles are read straight off the network.
  */
 object TermInfo {
-    /** The Term Info lines, ADM's look for Odin's Terminals Status HUD: [simple] just the total. */
+    /** The Term Info lines (Coffee Client's Term Info HUD): [simple] just the total. */
     fun drawInfo(g: GuiGraphicsExtractor, example: Boolean, simple: Boolean): Pair<Int, Int> {
         if (example) return lines(g, if (simple) listOf("§c2/7") else listOf("§eTerms: 3/4", "§aLevers: 2/2", "§aDevice: §l✔", "§cGate: §l✘"))
         val s = current() ?: return 0 to 0
