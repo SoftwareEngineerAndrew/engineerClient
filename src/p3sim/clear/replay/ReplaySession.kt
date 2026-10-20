@@ -119,16 +119,17 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val byName = (pack.archetypes + com.engineerclient.p3sim.clear.mobs.LevelLooks.all).sortedByDescending { it.name.length }
         val out = HashMap<Int, MutableList<com.engineerclient.p3sim.clear.mobs.PlannedMob>>()
         val unknown = HashMap<String, Int>()
+        val unknownWord = HashMap<String, Int>()
         for (m in file.mobs) {
             val room = run.plan.roomAtBlock(m.x, m.z) ?: continue
             if (room.type == com.engineerclient.p3sim.run.RoomType.BLOOD || room.type == com.engineerclient.p3sim.run.RoomType.ENTRANCE || room.type == com.engineerclient.p3sim.run.RoomType.FAIRY) continue
             val star = m.tag.contains("✯")
-            val name = m.tag.replace("✯", "").trim()
+            val name = bareTag(m.tag)
             val arch = byName.firstOrNull { name == it.name || name.endsWith(" " + it.name) }
             if (arch == null) { unknown.merge(name, 1, Int::plus); continue }
             val word = name.removeSuffix(arch.name).trim()
             val mod = word.takeIf { it.isNotEmpty() }?.let { pack.modifier(it) }
-            if (word.isNotEmpty() && mod == null) unknown.merge(name, 1, Int::plus)
+            if (word.isNotEmpty() && mod == null) unknownWord.merge(word, 1, Int::plus)
             val rng = run.subRandom("replay.mob.${m.id}")
             val id = if (arch.disguise) com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV2(rng) else com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV4(rng)
             // Its base HP: a mob first seen after the WITHER door into its room had scaled already.
@@ -141,6 +142,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 m.x, m.y, m.z, m.yaw, arch.movement != "static", null)
         }
         for ((n, c) in unknown) diff.note(0, "mobs", "the mob pack has no kind for \"$n\" (${c}x): not spawned")
+        for ((w, c) in unknownWord) diff.note(0, "mobs", "the mob pack has no word \"$w\" (${c}x): spawned without it")
         out
     }
 
@@ -322,7 +324,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         for (m in file.mobs) {
             val room = run.plan.roomAtBlock(m.x, m.z)?.index ?: continue
             if (room in recordedScale) continue
-            val name = m.tag.replace("✯", "").trim()
+            val name = bareTag(m.tag)
             val arch = byName.firstOrNull { name == it.name || name.endsWith(" " + it.name) } ?: continue
             val mod = name.removeSuffix(arch.name).trim().takeIf { it.isNotEmpty() }?.let { pack.modifier(it) }
             val r = ratio(m, arch, mod) ?: continue
@@ -1473,8 +1475,12 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")
         private val KEY = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Wither|Blood) Key!")
         /** A Hypixel nametag as ADS names the mob: no star, no HP, no colour. */
-        fun mobName(tag: String): String = clean(tag).replace("✯", "").replace(Regex("^\\[Lv\\d+]"), "").replace(Regex("\\s*[0-9][0-9.,]*[kMB]?(/[0-9][0-9.,]*[kMB]?)?❤.*$"), "").trim()
-        fun sameMob(ads: String, rec: String): Boolean { val a = clean(ads).replace("✯", "").trim(); return a.equals(rec, true) || rec.endsWith(" $a") || a.endsWith(" $rec") }
+        /** A recorded tag's words: no star, no class icons (the Dungeon Recorder keeps their glyphs, U+E000 on), single spaces. */
+        fun bareTag(tag: String): String = tag.replace(ICONS, "").trim().replace(Regex("\\s+"), " ")
+        private val ICONS = Regex("[✯\uE000-\uF8FF]")
+
+        fun mobName(tag: String): String = bareTag(clean(tag)).replace(Regex("^\\[Lv\\d+]"), "").replace(Regex("\\s*[0-9][0-9.,]*[kMB]?(/[0-9][0-9.,]*[kMB]?)?❤.*$"), "").trim()
+        fun sameMob(ads: String, rec: String): Boolean { val a = bareTag(clean(ads)); return a.equals(rec, true) || rec.endsWith(" $a") || a.endsWith(" $rec") }
         private val REVIVED = Regex("❣ (\\w{1,16}) was revived by (\\w{1,16})")
         fun clean(s: String) = s.replace(Regex("§."), "").trim()
         /** A Higher Or Lower blaze's tag, `[Lv11] <icon> Blaze 3,916/3,916❤`: its full HP. */
