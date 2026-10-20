@@ -73,8 +73,15 @@ class BlazePuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.BLAZE, conte
         rail = BlazeRail(higher)
         rewardChest = design.secrets.firstOrNull { it.type == "chest" }?.let { world(it.pos.x, it.pos.y, it.pos.z) }
         val rnd = run.subRandom("blaze:${context.room.index}")
-        hps = BlazeLogic.drawHps(rnd, BlazeLogic.COUNT)
+        hps = recordedHps() ?: BlazeLogic.drawHps(rnd, BlazeLogic.COUNT)
         logic = BlazeLogic(hps, ascending = higher)
+    }
+
+    /** A replay's blazes: the HP of the recorded blaze on each cell, or null when the recording does not have one on every cell. */
+    private fun recordedHps(): List<Int>? {
+        val rec = replayBlazes?.invoke(run) ?: return null
+        val cells = (0 until BlazeLogic.COUNT).map { k -> BlazeLayout.cell(k, higher).let { c -> world(c.x, c.y, c.z) ?: return null } }
+        return BlazeLogic.recordedHps(cells.map { intArrayOf(it.x, it.y, it.z) }, rec)
     }
 
     /** The room is entered: the blazes and the chest appear. A failed room (restored from a savepoint) waits for the draft. */
@@ -128,11 +135,26 @@ class BlazePuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.BLAZE, conte
     override fun onAttack(player: UUID, entity: Entity): Boolean {
         val f = foes.firstOrNull { it.body === entity || it.tag === entity } ?: return false
         if (f.dead) return true
-        lastKiller = player
+        kill(f, player)
+        return true
+    }
+
+    private fun kill(f: Foe, by: UUID?) {
+        lastKiller = by
         // Let the blaze take the hit so it plays its hurt and death; whatever happens, the kill counts.
         runCatching { f.body.hurtServer(Sim.level, Sim.level.damageSources().generic(), 1000f) }
         if (f.body.isAlive) runCatching { f.body.kill(Sim.level) }
-        process(f, player)
+        process(f, by)
+    }
+
+    /** Whether the blaze of [hp] is standing (false before the room woke, and once it died). */
+    fun standing(hp: Int): Boolean = foes.any { !it.dead && it.hp == hp }
+
+    /** A replay: a teammate killed the blaze of [hp] (the room wakes first if nobody in ADS has stepped in yet). False when it is not standing. */
+    fun killRecorded(hp: Int, by: UUID?): Boolean {
+        if (!awake) wakeNow()
+        val f = foes.firstOrNull { !it.dead && it.hp == hp } ?: return false
+        kill(f, by)
         return true
     }
 
@@ -207,6 +229,9 @@ class BlazePuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.BLAZE, conte
     }
 
     companion object {
+        /** Set by a replay: the recorded blazes of the run as (x, y, z, HP) of each body, matched to the cells by position. */
+        @Volatile var replayBlazes: ((com.engineerclient.p3sim.run.Run) -> List<DoubleArray>?)? = null
+
         /** Measured: the blazes and the chest appear 7 ticks (median) after the first step into the room. */
         const val WAKE_DELAY_TICKS = 7
 

@@ -22,6 +22,15 @@ class BlazeLogicTest {
         assertEquals(3000, down.next)
     }
 
+    @Test fun aReplayTakesTheRecordedHealthOfEachCell() {
+        val cells = listOf(intArrayOf(-155, 59, -89), intArrayOf(-157, 63, -91))
+        val rec = listOf(doubleArrayOf(-157.0, 63.0, -91.0, 2410.0), doubleArrayOf(-155.0, 59.0, -89.0, 1733.0), doubleArrayOf(0.0, 0.0, 0.0, 999.0))
+        assertEquals(listOf(1733, 2410), BlazeLogic.recordedHps(cells, rec))
+        // A cell no recorded blaze stood on, or two cells with one health, is not a recorded set.
+        assertEquals(null, BlazeLogic.recordedHps(cells + listOf(intArrayOf(-153, 67, -89)), rec))
+        assertEquals(null, BlazeLogic.recordedHps(cells, rec.take(1) + listOf(doubleArrayOf(-155.0, 59.0, -89.0, 2410.0))))
+    }
+
     @Test fun aWrongKillFails() {
         val l = BlazeLogic(listOf(1000, 2000), ascending = true)
         assertFalse(l.kill(2000))
