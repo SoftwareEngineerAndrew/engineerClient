@@ -656,6 +656,10 @@ object BotsModule : AdsModule, BotService {
                 val y = s.bodies.groundY(p.x, p.z, s.y[bot.index] ?: rec.y.takeIf { it != 0.0 } ?: BotTuning.DEFAULT_FLOOR_Y)
                 s.y[bot.index] = y
                 out += LeapTarget(rec.uuid, rec.name, cls, p.x, y, p.z, s.yaw[bot.index] ?: 0f, 0f, !rec.ghost)
+            } else if (rec.extras["replayMate"] == true) {
+                // A replay's recorded teammate: where their recorded body is.
+                RunBlocks.get(Math.floor(rec.x).toInt(), 69, Math.floor(rec.z).toInt())
+                out += LeapTarget(rec.uuid, rec.name, cls, rec.x, rec.y, rec.z, rec.extras["yaw"] as? Float ?: 0f, 0f, !rec.ghost)
             } else {
                 val pl = try { Sim.players().firstOrNull { it.uuid == rec.uuid } } catch (t: Throwable) { null }
                 out += LeapTarget(rec.uuid, rec.name, cls, pl?.x ?: rec.x, pl?.y ?: rec.y, pl?.z ?: rec.z, pl?.yRot ?: 0f, pl?.xRot ?: 0f, !rec.ghost && pl != null)

@@ -115,6 +115,7 @@ object AdsModules {
     val all: List<AdsModule> by lazy {
         listOf(
             EngineModule,
+            com.engineerclient.p3sim.clear.replay.ReplayModule,
             LayoutModule,
             DoorsModule,
             MobsModule,
