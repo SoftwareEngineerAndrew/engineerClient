@@ -32,7 +32,7 @@ data class Vec3(val x: Double, val y: Double, val z: Double) {
  *    door+60k ticks.
  *  - Every flight: face the target (the wall station plus one block up), from the next tick move v a tick in a straight line, stop
  *    when the squared distance to the target is below 1.5. He throws the head 10 ticks after the first tick at rest; a later head
- *    flies 40 ticks (the mob is added at throw+39), an initial one 80.
+ *    flies 40 ticks (the mob is added at throw+39), an initial one 80 (the mob at throw+79).
  *  - After the last later throw he flies home (0.50) on the next idle door+40k tick, whatever is alive.
  *  - The first later departure: with an initial mob alive on door+420 he leaves on door+420 SLOW; with all four dead he waits for
  *    door+440 (door+480 when a line of his is being said around it).
@@ -63,8 +63,12 @@ object CampMech {
     const val FLIGHT_INITIAL = 80
     const val FLIGHT_LATER = 40
 
-    /** A later mob is added this many ticks after the throw (initial mobs are added when their 80-tick flight ends). */
+    /**
+     * A mob is added this many ticks after its throw, a tick before its head lands: 39 for a later head, 79 for an initial one (139 DR runs:
+     * spawn minus first move 37-40 later, 77-80 initial, means 38.8 and 78.9; the head goes 0 or 1 tick after the spawn, both kinds).
+     */
     const val LATER_SPAWN = 39
+    const val INITIAL_SPAWN = 79
 
     /** Ticks he must have been at home before a SLOW first later departure. */
     const val HOME_MIN = 40

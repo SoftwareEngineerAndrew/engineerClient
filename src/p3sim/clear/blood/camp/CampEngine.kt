@@ -245,8 +245,8 @@ class CampEngine(
         val fly = CampMech.flyTo(pos, CampMech.target(st.stand), v)
         val arrive = r + fly.n + 1
         val thr = arrive + CampMech.THROW_DELAY
-        val spawn = if (initial) thr + CampMech.FLIGHT_INITIAL else thr + CampMech.LATER_SPAWN
-        val land = if (initial) spawn else thr + CampMech.FLIGHT_LATER
+        val spawn = thr + if (initial) CampMech.INITIAL_SPAWN else CampMech.LATER_SPAWN
+        val land = thr + if (initial) CampMech.FLIGHT_INITIAL else CampMech.FLIGHT_LATER
         val l = Landing(st, initial, thr, spawn, land)
         beginMove(r, pos, fly, CampMech.target(st.stand), v)
         arrivals += (thr + if (initial) CampMech.FLIGHT_INITIAL else CampMech.FLIGHT_LATER) to st
