@@ -180,6 +180,23 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
     private val hpUsedK = HashMap<Int, Int>()
 
+    /**
+     * Your pearl thrown now as the recording had it: its pearl (spawned within [PEARL_NEAR] ticks, 1.5 blocks across from where you were),
+     * the teleport of you when it went (within 2 ticks): the ticks from now and where. Null when there is none.
+     */
+    private fun recordedPearl(): Pair<Int, Vec3>? {
+        val now = run.t; val at = recPos ?: return null
+        val sp = file.events.firstOrNull { it.size() > 7 && it[1].asString == "spawn" && it.s(3) == "minecraft:ender_pearl" && it[0].asInt in now - PEARL_NEAR..now + PEARL_NEAR
+            && kotlin.math.hypot((it.d(5) ?: return@firstOrNull false) - at.x, (it.d(7) ?: return@firstOrNull false) - at.z) < 1.5 && it[2].asInt !in pearlsUsed } ?: return null
+        val id = sp[2].asInt
+        pearlsUsed += id
+        val gone = file.events.firstOrNull { it.size() > 2 && it[1].asString == "rm" && it[2].asInt == id && it[0].asInt >= sp[0].asInt }?.get(0)?.asInt ?: return null
+        val tp = file.events.firstOrNull { it.size() > 2 && it[1].asString == "tpme" && it[0].asInt in gone - 2..gone + 2 && it[2].isJsonArray } ?: return null
+        val p = tp[2].asJsonArray
+        return (tp[0].asInt - now) to Vec3(p[0].asDouble, p[1].asDouble, p[2].asDouble)
+    }
+    private val pearlsUsed = HashSet<Int>()
+
     /** Every block the recording showed as a trapped chest (the Mimic's chest). */
     private val recordedTrapped: Set<BlockPos> by lazy {
         file.events.filter { it.size() > 5 && it[1].asString == "blk" && it.s(5)?.startsWith("minecraft:trapped_chest") == true }
@@ -436,6 +453,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = { by -> recordedImplosion(by) }
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = { p -> !ended && p === host }
+        SimItems.replayPearl = { p -> if (!ended && p === host) recordedPearl() else null }
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayUltFirst = { p -> if (!ended && p === host) recordedUltFirst else null }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
@@ -503,6 +521,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = null
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = null
+        SimItems.replayPearl = null
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayUltFirst = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
@@ -1420,6 +1439,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val SOLVED = Regex("""^PUZZLE SOLVED! (\w{1,16}) (.+) Good job!$""")
         private val IMPLOSION = Regex("""^Your Implosion hit (\d+) enem(?:y|ies) for ([\d,.]+) damage\.$""")
         private const val IMPLOSION_NEAR = 4
+        private const val PEARL_NEAR = 3
         private val ESSENCE = Regex("^ESSENCE! (\\w{1,16}) found x(\\d+) (\\w+) Essence!$")
         private val WITHER_OPENED = Regex("^(\\w{1,16}) opened a WITHER door!")
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")
