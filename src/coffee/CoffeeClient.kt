@@ -7,7 +7,7 @@ import com.coffeeclient.misc.EntityDistance
 import com.coffeeclient.misc.HighlightLevers
 import com.coffeeclient.misc.Termsim
 import com.coffeeclient.misc.TermInfoHud
-import com.coffeeclient.misc.CoffeeTimers
+import com.coffeeclient.misc.Timers2
 import com.coffeeclient.misc.RoleTimes
 import com.coffeeclient.misc.PreRequeue
 import com.coffeeclient.misc.RandomStuff
@@ -37,11 +37,12 @@ object CoffeeClient : ClientModInitializer {
         safely("coffee random stuff name") { renameModule("Random Stuff", "Coffee Random Stuff") }
         safely("completion titles setting") { adoptSetting("Term Info", "Coffee Random Stuff", "Hide Completion Titles") }
         safely("highlight levers settings") { adoptHighlightLevers() }
-        safely("coffee timers settings") { adoptStormTimers() }
+        safely("timers2 name") { renameModule("Coffee Timers", "Timers2") }
+        safely("timers2 settings") { adoptStormTimers() }
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud, CoffeeTimers, RoleTimes)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, RoleTimes)
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
@@ -49,7 +50,7 @@ object CoffeeClient : ClientModInitializer {
             if (!RandomStuff.enabled) RandomStuff.toggle()
             if (!LeapExtras.enabled) LeapExtras.toggle()
             if (!HighlightLevers.enabled) HighlightLevers.toggle()
-            if (!CoffeeTimers.enabled) CoffeeTimers.toggle()
+            if (!Timers2.enabled) Timers2.toggle()
             ModuleManager.saveConfigurations()
         }
 
@@ -121,7 +122,7 @@ object CoffeeClient : ClientModInitializer {
     }
 
     /**
-     * Storm Crush Check and Storm Lightning were Engineer Client's Timers' HUDs: the first time Coffee Timers loads it
+     * Storm Crush Check and Storm Lightning were Engineer Client's Timers' HUDs: the first time Timers2 loads it
      * takes them (place, scale, on/off), on if Timers was.
      */
     private fun adoptStormTimers() {
@@ -131,12 +132,12 @@ object CoffeeClient : ClientModInitializer {
         if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
         fun module(list: com.google.gson.JsonArray, name: String) = list.firstOrNull { it.asJsonObject.get("name")?.asString == name }?.asJsonObject
         val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
-        if (module(target, "Coffee Timers") != null) return
+        if (module(target, "Timers2") != null) return
         val timers = module(com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray, "Timers")
         val from = timers?.getAsJsonObject("settings") ?: com.google.gson.JsonObject()
         val settings = com.google.gson.JsonObject()
         for (key in listOf("Storm Crush Check", "Storm Lightning")) from.get(key)?.let { settings.add(key, it) }
-        target.add(com.google.gson.JsonObject().apply { addProperty("name", "Coffee Timers"); addProperty("enabled", timers?.get("enabled")?.asBoolean ?: true); add("settings", settings) })
+        target.add(com.google.gson.JsonObject().apply { addProperty("name", "Timers2"); addProperty("enabled", timers?.get("enabled")?.asBoolean ?: true); add("settings", settings) })
         java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
     }
 
