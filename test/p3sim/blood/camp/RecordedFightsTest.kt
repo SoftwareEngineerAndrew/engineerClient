@@ -55,51 +55,15 @@ class RecordedFightsTest {
                 // A second giant is a duplicate body of the first, not a head the Watcher threw.
                 "add" -> if (row[4].asString != "Giant" || adds.none { it.name == "Giant" }) adds += Add(t, row[2].asInt, row[4].asString, row[5].asDouble, row[7].asDouble)
                 "die", "gone" -> deaths.putIfAbsent(row[2].asInt, t)
-                "chat" -> lineOf(row[2].asString)?.let { lines += CampMech.Request(t, it) }
+                "chat" -> CampMech.lineOf(row[2].asString)?.let { lines += CampMech.Request(t, it) }
             }
         }
         val truth = o.getAsJsonObject("truth")
-        val requests = requestsOf(lines)
+        val requests = CampMech.requestsOf(lines)
         val throws = truth.getAsJsonArray("throws").map { it.asInt - door }
         // A recording that starts mid-camp (the first mob already in, or fewer than 15 mobs) cannot be replayed from the door.
         if (home == null || stands.size < 15 || adds.size < 15 || adds.any { it.id !in deaths } || adds.first().tick > FIRST_MOB_LATEST) return null
         return Fight(f.nameWithoutExtension, home, stands.values.toList(), adds.sortedBy { it.tick }, deaths, throws, truth["proven"].asInt - door, requests)
-    }
-
-    /**
-     * When each recorded line was asked for. A line that printed while the queue was free was asked for on that tick. A line that
-     * printed the moment the line before it ended (back to back) was asked for some time while that line was being said; the tick after
-     * it started is taken. The two lines a player's action sets off (a hit on him, a player out of reach) are taken as asked for when
-     * they printed.
-     */
-    private fun requestsOf(printed: List<CampMech.Request>): List<CampMech.Request> {
-        val out = ArrayList<CampMech.Request>()
-        var prev: CampMech.Request? = null
-        for (p in printed.sortedBy { it.t }) {
-            val before = prev
-            val free = before == null || p.t > before.t + before.line.busy || p.line == CampMech.Line.ATTACK || p.line == CampMech.Line.LEDGE
-            out += CampMech.Request(if (free) p.t else minOf(p.t, before!!.t + 1), p.line)
-            prev = p
-        }
-        return out
-    }
-
-    /** The class of the Watcher's chat line, or null for a line that is not his (or is the pass line). A line of his that no class knows keeps the queue as busy as a reaction. */
-    private fun lineOf(chat: String): CampMech.Line? {
-        val prefix = "[BOSS] The Watcher: "
-        if (!chat.startsWith(prefix)) return null
-        val text = chat.removePrefix(prefix)
-        return when {
-            text.startsWith("You have proven yourself") -> null
-            text == CampLines.INTRO || text == CampLines.INTRO_OTHER -> CampMech.Line.INTRO
-            text in CampLines.SPAWN -> CampMech.Line.SPAWN
-            text in CampLines.REACT -> CampMech.Line.REACT
-            text in CampLines.HANDLE -> CampMech.Line.HANDLE
-            text in CampLines.ENOUGH -> CampMech.Line.ENOUGH
-            text in CampLines.ATTACK -> CampMech.Line.ATTACK
-            text in CampLines.LEDGE -> CampMech.Line.LEDGE
-            else -> CampMech.Line.REACT
-        }
     }
 
     private class Outcome(val name: String, val throwsExact: Int, val throwsTotal: Int, val initialExact: Int, val passDiff: Int, val spawnDiffMax: Int)
