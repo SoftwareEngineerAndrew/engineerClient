@@ -39,6 +39,12 @@ class TpMazeModel(val pads: List<Pad>, val frameY: Int, private val dest: IntArr
     /** The pad a frame cell belongs to, or null. */
     fun padAtFrame(x: Int, z: Int): Pad? = pads.firstOrNull { it.frameX == x && it.frameZ == z }
 
+    /** Sends [pad] to [to] from now on (a replay's recorded step). */
+    fun send(pad: Int, to: Int) { if (pad in dest.indices && to in pads.indices) dest[pad] = to }
+
+    /** The pad whose landing cell is (x, z), or null. */
+    fun padLandingAt(x: Int, z: Int): Pad? = pads.firstOrNull { it.landX == x && it.landZ == z }
+
     /** The pad a stepped-on pad sends you to, or null when this pad (28) sends you nowhere. */
     fun destinationOf(pad: Int): Int? = dest[pad].takeIf { it >= 0 }
 

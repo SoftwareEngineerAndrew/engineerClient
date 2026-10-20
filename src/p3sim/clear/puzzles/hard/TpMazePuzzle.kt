@@ -27,7 +27,10 @@ class TpMazePuzzle(override val context: PuzzleContext) : Puzzle {
 
     private val placement get() = context.room.placement
 
+    private var replayed = false
+
     override fun onRunStart() {
+        replayed = false
         chest.reset()
         cooldown.clear()
         val design = context.room.design
@@ -43,6 +46,15 @@ class TpMazePuzzle(override val context: PuzzleContext) : Puzzle {
     override fun onTick() {
         val m = model ?: return
         val pl = placement ?: return
+        if (!replayed) {
+            replayed = true
+            // A replay's maze sends each pad the recording saw stepped on where Hypixel's did.
+            for (s in replay?.invoke(context.run).orEmpty()) {
+                val from = pl.toCanonical(s[0], s[1])?.let { (x, z) -> m.padAtFrame(x, z) } ?: continue
+                val to = pl.toCanonical(s[2], s[3])?.let { (x, z) -> m.padLandingAt(x, z) } ?: continue
+                m.send(from.index, to.index)
+            }
+        }
         val now = context.run.t
         for (rec in context.run.state.players.values) {
             if (rec.isBot || rec.ghost) continue
@@ -79,5 +91,8 @@ class TpMazePuzzle(override val context: PuzzleContext) : Puzzle {
 
         /** Ticks before the same player can be sent again. Unmeasured; long enough to walk off the landing. */
         const val COOLDOWN_TICKS = 20
+
+        /** Set by a replay: the recording's steps in [Run]'s maze, each the frame block stepped on and the block landed on (world x, z, x, z). */
+        @Volatile var replay: ((com.engineerclient.p3sim.run.Run) -> List<IntArray>?)? = null
     }
 }
