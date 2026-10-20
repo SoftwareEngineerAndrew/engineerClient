@@ -5,6 +5,8 @@ import com.engineerclient.p3sim.clear.blood.WatcherStats
 import com.engineerclient.p3sim.run.MobKilled
 import com.engineerclient.p3sim.run.RunEvent
 import com.engineerclient.p3sim.run.api.MobSpec
+import com.engineerclient.p3sim.run.api.Services
+import com.engineerclient.p3sim.clear.mobs.LevelLooks
 import com.engineerclient.p3sim.run.plugin.BloodCamp
 import com.engineerclient.p3sim.run.plugin.BloodCampHost
 import com.engineerclient.p3sim.run.plugin.BloodRoomSpec
@@ -65,6 +67,8 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
     }
 
     override fun tick() {
+        val now = host.ticksSinceOpen
+        while (splits.isNotEmpty() && splits.first().at <= now) splitParasite(splits.removeFirst())
         val e = engine ?: return
         val alive = host.mobsAlive().mapTo(HashSet()) { it.toString() }
         e.step(host.ticksSinceOpen, alive)
@@ -75,7 +79,22 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
     }
 
     override fun onEvent(event: RunEvent) {
-        if (event is MobKilled) engine?.noteDeath(event.mob.id.toString(), host.ticksSinceOpen)
+        if (event !is MobKilled) return
+        engine?.noteDeath(event.mob.id.toString(), host.ticksSinceOpen)
+        if (event.mob.kind == PARASITE_KIND) Services.mobs.mob(event.mob.id)?.let { m -> splits += Split(host.ticksSinceOpen + LevelLooks.PARASITE_SPLIT_TICKS, m.x, m.z) }
+    }
+
+    // ---- the Parasite's split ----------------------------------------------------------------------------------------------------
+
+    /** A dead camp Parasite's split, due at camp tick [at] where it died. */
+    private class Split(val at: Int, val x: Double, val z: Double)
+    private val splits = ArrayDeque<Split>()
+
+    /** The split ([LevelLooks]): three silverfish Parasites on the floor where the camp Parasite died. Not camp mobs: the Watcher does not count them. */
+    private fun splitParasite(s: Split) {
+        repeat(LevelLooks.PARASITE_SPLIT) {
+            Services.mobs.spawn(host.run, MobSpec(LevelLooks.PARASITE_ID, s.x, host.room.watcherY, s.z, roomIndex = host.room.roomIndex, hp = LevelLooks.byId(LevelLooks.PARASITE_ID)?.hpFor("F7")?.toDouble()))
+        }
     }
 
     // ---- the room ------------------------------------------------------------------------------------------------------------
@@ -170,6 +189,9 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         const val KIND_GIANT = "blood_giant"
         const val KIND_BOSS = "blood_boss"
         const val KIND_MOB = "blood_mob"
+
+        /** The mob service's kind for the camp's Parasite ([com.engineerclient.p3sim.clear.mobs.BloodLooks]). */
+        const val PARASITE_KIND = "blood:Parasite"
 
         /** A real wall has 30 heads; the camp needs at least the 4 + 11 it throws. */
         const val MIN_HEADS = 4 + CampMech.LATER_THROWS
