@@ -197,8 +197,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private class Throw(val thr: Int, val land: Int, val x: Double, val y: Double, val z: Double)
 
     /**
-     * The recording's Watcher throws, in ticks after its BLOOD door, in throw order: each head is a nameless armor stand on the Blood
-     * room's wall before the door; it is thrown on its first move after the door and lands (the mob is added) when it is removed.
+     * The recording's Watcher throws, in ticks after its BLOOD door, in throw order: each head is a nameless armor stand at rest on the
+     * Blood room's wall; it is thrown on its first move after the door and lands (the mob is added) when it is removed.
      * Measured over 139 DR runs: 78 to 80 ticks of flight for the first four, 38 to 40 for the later ones, as [CampMech] has it.
      */
     private val recordedThrows: List<Throw> by lazy {
@@ -209,9 +209,12 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val stands = HashMap<Int, Stand>()
         for (e in file.events) {
             val k = e[0].asInt; val kind = e[1].asString
-            if (kind == "spawn" && k <= door && e.size() > 7 && e[3].asString == "minecraft:armor_stand" && e[2].asInt !in named) {
-                val x = e[5].asDouble; val z = e[7].asDouble
-                if (run.plan.roomAtBlock(x, z)?.type == com.engineerclient.p3sim.run.RoomType.BLOOD) stands[e[2].asInt] = Stand(x, e[6].asDouble, z)
+            if (kind == "spawn" && e.size() > 7 && e[3].asString == "minecraft:armor_stand" && e[2].asInt !in named && e[2].asInt !in stands) {
+                val x = e[5].asDouble; val y = e[6].asDouble; val z = e[7].asDouble
+                // A head at rest on the wall (block centre, 0.8 over a block), seen before the door or later, once the recorded player came near.
+                fun frac(v: Double) = ((v % 1.0) + 1.0) % 1.0
+                val atRest = Math.abs(frac(x) - 0.5) < 0.01 && Math.abs(frac(z) - 0.5) < 0.01 && Math.abs(frac(y) - 0.8) < 0.1
+                if (atRest && run.plan.roomAtBlock(x, z)?.type == com.engineerclient.p3sim.run.RoomType.BLOOD) stands[e[2].asInt] = Stand(x, y, z)
                 continue
             }
             if (k <= door || e.size() < 3 || (kind != "emv" && kind != "gone")) continue
@@ -823,6 +826,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         diff.recordedChat(k, t)
         WITHER_OPENED.find(t)?.let { m -> door(k, DoorKind.WITHER, m.groupValues[1]); return }
         if (t.startsWith("The BLOOD DOOR has been opened!")) { door(k, DoorKind.BLOOD, null); return }
+        // His camp out of the recorded player's sight has no throws or kills to replay: the pass line says when it ended.
+        if (t == "[BOSS] The Watcher: " + com.engineerclient.p3sim.clear.blood.WatcherLines.PASS && com.engineerclient.p3sim.clear.blood.BloodModule.passNow()) diff.forced(run.t, "the Watcher let the party pass (recorded k $k)", "ADS's camp had not ended")
         if (t.startsWith("Party >")) return
         KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; keyTaken(m.groupValues[1], m.groupValues[2]); return }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }

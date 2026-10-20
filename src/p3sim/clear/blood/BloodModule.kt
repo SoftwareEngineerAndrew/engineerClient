@@ -92,6 +92,9 @@ object BloodModule : AdsModule {
     private var camp: BloodCamp? = null
     private var campBroken = false
     private var forcePass = false
+
+    /** A replay: the recording's Watcher let the party pass now, so ADS's does on this tick. False when no camp is running. Server thread. */
+    fun passNow(): Boolean { if (flow.phase != BloodFlow.Phase.CAMP) return false; forcePass = true; return true }
     private var watcher: WatcherEntity? = null
     private var heads: WallHeads? = null
 
