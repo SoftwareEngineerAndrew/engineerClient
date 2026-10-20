@@ -17,13 +17,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * Turns down (or mutes) whatever else is playing on the computer through the parts of a run that need your ears:
- * from "Starting in 3 seconds." (or Mort, if that was missed) until the run reaches 300 score, and from 30 s into
- * Storm until S4 starts. Everything comes back as it was then, on a world change, when this is turned off and when
+ * Turns down (or pauses) whatever else is playing on the computer through the parts of a run that need your ears:
+ * from "Starting in 3 seconds." (or Mort, if that was missed) until the run reaches 300 score or the boss, whichever
+ * is first, and from 30 s into Storm until S4 starts. Everything comes back as it was then, on a world change, when this is turned off and when
  * the game closes.
  *
  * Other programs' own volume is what changes, never the system's: on Linux each PulseAudio / PipeWire stream
- * (`pactl`), on Windows each app's mixer volume (a PowerShell helper). The game itself and voice chat (Discord and
+ * (`pactl`), on Windows each app's mixer volume (a PowerShell helper). Pause pauses what is playing instead (Linux:
+ * MPRIS players over D-Bus; Windows: the media sessions the system's media controls show) and plays them again after. The game itself and voice chat (Discord and
  * other call apps, PipeWire's phone/communication streams) are left alone. Streams that start while it's quiet are
  * caught within a few seconds.
  */
@@ -34,7 +35,7 @@ object QuietMedia : Module(
     description = "Turns down other apps' audio (music, videos) from 3 s before the run until 300 score, and from 30 s into Storm until S4."
 ) {
     private val amount by NumberSetting("Quiet Amount", 70, 0..100, 5, desc = "How much quieter other apps get: 70% leaves them at 30% of their volume.", unit = "%")
-    private val mute by BooleanSetting("Mute", false, desc = "Mutes other apps instead of turning them down.")
+    private val pause by BooleanSetting("Pause", false, desc = "Pauses what's playing (music, videos) instead of turning it down, and plays it again after.")
 
     private const val COUNTDOWN = "Starting in 3 seconds."
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
@@ -59,8 +60,8 @@ object QuietMedia : Module(
 
     private fun quiet() {
         val factor = (100 - amount) / 100.0
-        val muted = mute
-        worker.execute { CoffeeClient.safely("quiet media") { backend?.quiet(factor, muted) } }
+        val pausing = pause
+        worker.execute { CoffeeClient.safely("quiet media") { if (pausing) backend?.pause() else backend?.quiet(factor) } }
     }
 
     private fun restore() {
@@ -94,21 +95,22 @@ object QuietMedia : Module(
         on<TickEvent.Server> { serverTicks++ }
         on<TickEvent.End> {
             when (phase) {
-                Phase.CLEAR -> if (DungeonUtils.score >= SCORE) enter(Phase.AFTER_CLEAR)
+                Phase.CLEAR -> if (DungeonUtils.score >= SCORE || DungeonUtils.inBoss) enter(Phase.AFTER_CLEAR)
                 Phase.STORM_WAIT -> if (serverTicks >= stormQuietAt) enter(Phase.STORM)
                 Phase.STORM -> if (TermInfo.sectionNumber() == 4) enter(Phase.DONE)
                 else -> {}
             }
             // Streams that started while it's quiet (the next song, a new video).
-            if ((phase == Phase.CLEAR || phase == Phase.STORM) && ++refreshTick % (backend?.refreshTicks ?: Int.MAX_VALUE) == 0) quiet()
+            if (!pause && (phase == Phase.CLEAR || phase == Phase.STORM) && ++refreshTick % (backend?.refreshTicks ?: Int.MAX_VALUE) == 0) quiet()
         }
         on<LevelEvent.Load> { enter(Phase.NONE) }
     }
 
-    /** Turns other programs down and back up. [quiet] again only takes in what started since. */
+    /** Turns other programs down (or pauses them) and back. [quiet] again only takes in what started since; [restore] undoes both. */
     private interface Backend {
         val refreshTicks: Int
-        fun quiet(factor: Double, mute: Boolean)
+        fun quiet(factor: Double)
+        fun pause()
         fun restore()
     }
 
@@ -130,7 +132,7 @@ object QuietMedia : Module(
         private val saved = LinkedHashMap<Int, Pair<List<Long>, Boolean>>()
 
         @Synchronized
-        override fun quiet(factor: Double, mute: Boolean) {
+        override fun quiet(factor: Double) {
             val ours = JsonParser.parseString(run("pactl", "-f", "json", "list", "clients")).asJsonArray
                 .filter { it.asJsonObject.getAsJsonObject("properties")?.get("application.process.id")?.asString == ownPid }
                 .map { it.asJsonObject.get("index").asInt.toString() }.toSet()
@@ -145,8 +147,7 @@ object QuietMedia : Module(
                 val volumes = o.getAsJsonObject("volume")?.entrySet()?.map { it.value.asJsonObject.get("value").asLong } ?: continue
                 if (volumes.isEmpty()) continue
                 saved[index] = volumes to o.get("mute").asBoolean
-                if (mute) run("pactl", "set-sink-input-mute", "$index", "1")
-                else run("pactl", "set-sink-input-volume", "$index", *volumes.map { Math.round(it * factor).toString() }.toTypedArray())
+                run("pactl", "set-sink-input-volume", "$index", *volumes.map { Math.round(it * factor).toString() }.toTypedArray())
             }
         }
 
@@ -157,6 +158,21 @@ object QuietMedia : Module(
                 run("pactl", "set-sink-input-mute", "$index", if (was.second) "1" else "0")
             }
             saved.clear()
+            for (name in paused) if (status(name) == "Paused") player(name, "Play")
+            paused.clear()
+        }
+
+        /** MPRIS players this paused. */
+        private val paused = ArrayList<String>()
+        private val STATUS = Regex("^s \"(\\w+)\"")
+
+        private fun player(name: String, method: String) = run("busctl", "--user", "call", name, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", method)
+        private fun status(name: String) = STATUS.find(run("busctl", "--user", "get-property", name, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlaybackStatus").trim())?.groupValues?.get(1)
+
+        @Synchronized
+        override fun pause() {
+            val names = Regex("\"(org\\.mpris\\.MediaPlayer2\\.[^\"]+)\"").findAll(run("busctl", "--user", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListNames")).map { it.groupValues[1] }
+            for (name in names) if (name !in paused && status(name) == "Playing") { player(name, "Pause"); paused += name }
         }
     }
 
@@ -177,24 +193,47 @@ object QuietMedia : Module(
             run("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, *args, input = input)
 
         @Synchronized
-        override fun quiet(factor: Double, mute: Boolean) {
-            val out = ps("quiet", String.format(Locale.ROOT, "%.3f", factor), if (mute) "1" else "0", ownPid, input = saved.keys.joinToString("\n"))
+        override fun quiet(factor: Double) {
+            val out = ps("quiet", String.format(Locale.ROOT, "%.3f", factor), "0", ownPid, input = saved.keys.joinToString("\n"))
             for (line in out.lines()) {
                 val parts = line.trim().split('\t')
                 if (parts.size == 3) saved[parts[0]] = parts[1] + "\t" + parts[2]
             }
         }
 
+        /** Media sessions (their app ids) this paused. */
+        private val paused = ArrayList<String>()
+
+        @Synchronized
+        override fun pause() {
+            for (line in ps("pause", input = "").lines()) line.trim().takeIf { it.isNotEmpty() && it !in paused }?.let { paused += it }
+        }
+
         @Synchronized
         override fun restore() {
-            if (saved.isEmpty()) return
-            ps("restore", input = saved.entries.joinToString("\n") { it.key + "\t" + it.value })
+            if (saved.isNotEmpty()) ps("restore", input = saved.entries.joinToString("\n") { it.key + "\t" + it.value })
             saved.clear()
+            if (paused.isNotEmpty()) ps("resume", input = paused.joinToString("\n"))
+            paused.clear()
         }
 
         private val SCRIPT = """
 param([string]${'$'}mode, [double]${'$'}factor = 1, [int]${'$'}mute = 0, [int]${'$'}self = 0)
 ${'$'}ErrorActionPreference = 'Stop'
+if (${'$'}mode -eq 'pause' -or ${'$'}mode -eq 'resume') {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  ${'$'}asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { ${'$'}_.Name -eq 'AsTask' -and ${'$'}_.GetParameters().Count -eq 1 -and ${'$'}_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+  function Await(${'$'}op, [Type]${'$'}type) { ${'$'}task = ${'$'}asTask.MakeGenericMethod(${'$'}type).Invoke(${'$'}null, @(${'$'}op)); ${'$'}task.Wait(-1) | Out-Null; ${'$'}task.Result }
+  ${'$'}null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
+  ${'$'}mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+  ${'$'}ids = @{}; foreach (${'$'}l in ([Console]::In.ReadToEnd() -split "`n")) { if (${'$'}l.Trim()) { ${'$'}ids[${'$'}l.Trim()] = 1 } }
+  foreach (${'$'}s in ${'$'}mgr.GetSessions()) {
+    ${'$'}status = ${'$'}s.GetPlaybackInfo().PlaybackStatus.ToString()
+    if (${'$'}mode -eq 'pause' -and ${'$'}status -eq 'Playing') { ${'$'}null = Await (${'$'}s.TryPauseAsync()) ([bool]); [Console]::Out.WriteLine(${'$'}s.SourceAppUserModelId) }
+    elseif (${'$'}mode -eq 'resume' -and ${'$'}status -eq 'Paused' -and ${'$'}ids.ContainsKey(${'$'}s.SourceAppUserModelId)) { ${'$'}null = Await (${'$'}s.TryPlayAsync()) ([bool]) }
+  }
+  exit 0
+}
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
