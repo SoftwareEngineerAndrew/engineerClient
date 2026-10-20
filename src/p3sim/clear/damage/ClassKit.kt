@@ -7,8 +7,9 @@ package com.engineerclient.p3sim.clear.damage
  * Measured: Ultimate cooldowns from "Used X!" plus the seconds "Your Ultimate is currently on cooldown for N more seconds." still gave (Castle
  * of Stone 150 s n=239, Ragnarok 60 s n=199, Rapid Fire 100 s n=387, Thunderstorm 255 s or 130 s n=1724, two clusters); ability cooldowns the same
  * way or from "Used X!" to "X is now available!" (Explosive Shot 22.3 s n=129, Guided Sheep 7 s or 15 s, see [abilityCd], Throwing Axe 10.7 s n=2, Healing Circle 2 s n=10).
- * An Ultimate is first ready a median 430 ticks after Mort's first line (n=425), an Ability 411 (n=243); while an Ultimate waits unused its
- * reminder comes every 607 ticks (n=2,119).
+ * An Ability is first ready 411 ticks after Mort's first line (ADR, n=243). An Ultimate is first ready 420 ticks after it (DR, 139 runs: 88 of
+ * 136 at 419 to 421, 30 at 439 to 441, the rest earlier, on whole seconds), and while it waits unused its reminder comes every 600 ticks (DR:
+ * 596 of 610 gaps 599 to 601, the rest whole multiples). ADR had 430 and 607: its ticks run about 1% slow against the server's, which the Dungeon Recorder keeps.
  *
  * UNMEASURED (no recording has it): Wish's cooldown (120 s here), Seismic Wave's (15 s here), and which of Thunderstorm's two clusters is the
  * doubled Mage (130 s is taken as the Mage who is the only one, whose stats are doubled).
@@ -17,11 +18,11 @@ object ClassKit {
     class Kit(val cls: String, val ability: String, val abilityCd: Int, val ultimate: String, val ultimateCd: Int)
 
     /** Ticks after T0 (Mort's first line) at which the Ultimate is first ready. */
-    const val ULT_FIRST_READY = 430
+    const val ULT_FIRST_READY = 420
     /** Ticks after T0 at which the Ability is first ready. */
     const val ABILITY_FIRST_READY = 411
     /** Ticks between "is ready to use!" reminders while the Ultimate waits unused. */
-    const val ULT_REMINDER = 607
+    const val ULT_REMINDER = 600
 
     private val KITS = listOf(
         Kit("Healer", "Healing Circle", 40, "Wish", 2400),

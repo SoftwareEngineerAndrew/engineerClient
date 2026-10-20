@@ -180,6 +180,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
     private val hpUsedK = HashMap<Int, Int>()
 
+    /** When your Ultimate was first ready in the recording (its first "is ready to use!" line), or null. */
+    private val recordedUltFirst: Int? by lazy {
+        file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && clean(it[2].asString).endsWith(" is ready to use! Press DROP to activate it!") }?.get(0)?.asInt
+    }
+
     /** Your recorded Implosion lines: k, enemies, damage. */
     private val implosions: List<Triple<Int, Int, Double>> by lazy {
         file.events.mapNotNull { e ->
@@ -425,6 +430,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = { by -> recordedImplosion(by) }
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = { p -> !ended && p === host }
+        com.engineerclient.p3sim.clear.damage.ClassAbilities.replayUltFirst = { p -> if (!ended && p === host) recordedUltFirst else null }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = true
@@ -489,6 +495,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = null
         com.engineerclient.p3sim.clear.damage.ClassAbilities.replayBursts = null
+        com.engineerclient.p3sim.clear.damage.ClassAbilities.replayUltFirst = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
