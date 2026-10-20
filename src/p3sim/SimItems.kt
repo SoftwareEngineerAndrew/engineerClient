@@ -1326,11 +1326,14 @@ object SimItems {
         val xRot = if (prior) Fight.lastRot.first else p.xRot
         val yRot = if (prior) Fight.lastRot.second else p.yRot
         val pos = p.position()
+        val at = Fight.serverTick
         Fight.afterPing(what) {
             if (p.isRemoved) return@afterPing
             val nowX = p.xRot; val nowY = p.yRot
             p.xRot = xRot; p.yRot = yRot
-            clickPos = pos
+            // A teleport of an item since the click moved the server's player: the click starts from there, as Hypixel's server does with a
+            // click sent before the client heard of it (DR: AOTV clicks a tick apart, the second teleports on from the first's landing).
+            clickPos = if ((itemTpAt[p.uuid] ?: Int.MIN_VALUE) >= at) p.position() else pos
             try { run() } finally { p.xRot = nowX; p.yRot = nowY; clickPos = null }
         }
     }
@@ -1338,18 +1341,22 @@ object SimItems {
     /** While an [asClicked] action runs: the player's position at the click (the last move packet's). */
     private var clickPos: Vec3? = null
 
+    /** The server tick of each player's last item teleport ([tpKeepLook]). */
+    private val itemTpAt = HashMap<java.util.UUID, Int>()
+
     /**
      * A teleport that keeps the look: [Sim.tp] sends an absolute rotation, which with any latency snaps the camera
      * back to an old look. Hypixel's teleport marks the rotation relative, so a 0 delta leaves each client's own.
      */
     private fun tpKeepLook(p: ServerPlayer, x: Double, y: Double, z: Double) {
+        itemTpAt[p.uuid] = Fight.serverTick
         p.teleportTo(Sim.level, x, y, z, Relative.ROTATION, 0f, 0f, false)
         p.deltaMovement = Vec3.ZERO
         p.fallDistance = 0.0
     }
 
     /** The cloak and the arrows: nothing carries over from an earlier sim server. */
-    fun reset() { Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; pearlLeapReady = 0; volleyReady = 0; blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset() }
+    fun reset() { itemTpAt.clear(); Mage.reset(); rapidLast = -1000; resetBreaker(); cloakUntil = 0; cloakReady = 0; vitality = 0; discardVeil(); lastHype = -100; lastCure = -1000; bonzoLast = -100; jerryTick = -1; leapReady = 0; pearlLeapReady = 0; volleyReady = 0; blockFired = null; quiverArrows = QUIVER_START; breakerHeld = null; Bows.reset() }
 
     /** What isn't any one player's: the arrows being traced, the pushes, the rockets (gone from every game). */
     fun resetShared() {
