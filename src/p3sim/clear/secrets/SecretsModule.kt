@@ -301,7 +301,7 @@ object SecretsModule : AdsModule, SecretService {
             if (s.kind != SecretKind.ITEM) continue
             val e = SecretWorld.entity(id) as? ItemEntity
             if (e == null || e.isRemoved) { rd.entities.remove(key); continue }
-            // The game's own pickup box: the player's, widened by a block sideways and half a block up and down.
+            // The pickup box: the player's, widened by [SecretsSettings.pickupRange] sideways and half a block up and down.
             val p = players.firstOrNull { it.boundingBox.inflate(pad, 0.5, pad).intersects(e.boundingBox) } ?: continue
             val at = e.position()
             if (SecretWorld.pickUp(e, p)) {

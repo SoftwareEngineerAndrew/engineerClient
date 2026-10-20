@@ -92,7 +92,7 @@ object DamageModule : AdsModule, DamageService {
         blastS = host.registerSetting(NumberSetting("Clear Blast Damage", 3000, 50..20000, 50, unit = "k", desc = "In a full run: the HP an Explosive Shot blast or a Guided Sheep takes off each mob within 3 blocks (thousands). Not measured on Hypixel."))
         implosionS = host.registerSetting(NumberSetting("Implosion Damage", 100, 10..400, 5, unit = "%", desc = "In a full run: scales the floor's measured Implosion damage per mob (F7 25.4M, M7 56.6M). 100 is your recorded gear; on M7 lower values need more casts per mob."))
         regenS = host.registerSetting(NumberSetting("Clear Health Regen", 23, 0..100, 1, unit = " per 10 s", desc = "In a full run: percent of max health that comes back every 10 seconds, in a step every second (23 means 2.3 percent a second, the middle of what Hypixel shows: 1.3 to 3.5)."))
-        numbersS = host.registerSetting(NumberSetting("Damage Numbers", DamageNumbers.DEFAULT_CHANCE, 0..100, 1, unit = "%", desc = "In a full run: the share of hits on a mob that float a damage number over it for a second (grey, or a coloured ✧crit✧). Hypixel's numbers come at about 27 per 100 mob deaths; which hits get one is not known."))
+        numbersS = host.registerSetting(NumberSetting("Damage Numbers", DamageNumbers.DEFAULT_CHANCE, 0..100, 1, unit = "%", desc = "In a full run: the share of hits on a mob that float a damage number over it for a second (grey, or a coloured ✧crit✧). On Hypixel every hit by every player gets one."))
         shieldS = host.registerSetting(NumberSetting("Wither Shield Size", 93, 0..200, 1, unit = "%", desc = "In a full run: how much damage a Hyperion cast's Wither Shield soaks, in percent of your max health. Not measured on Hypixel."))
     }
 

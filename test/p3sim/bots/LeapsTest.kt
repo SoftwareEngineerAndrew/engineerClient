@@ -51,7 +51,8 @@ class LeapsTest {
     @Test fun campLeapsLandBesideTheCamperBeforeTheProvenLine() {
         val dungeon = BotFixtures.dungeon()
         var seen = 0
-        for (seed in 1L..80L) {
+        CampLeaps.enabled = true
+        try { for (seed in 1L..80L) {
             val plan = ClearPlanner(PlannerInput(dungeon, tables, humanParty, Random(seed), assignment = BloodAssignment(4))).build()
             for (l in plan.leaps.filter { it.door == CampLeaps.NO_DOOR }) {
                 seen++
@@ -63,7 +64,7 @@ class LeapsTest {
                 assertTrue(me.positionAt(l.t - 1).dist(camper.positionAt(l.t)) >= Leaps.MIN_BLOCKS - 0.01, "seed $seed: it was far")
                 assertTrue(me.acts.none { it.until >= l.t }, "seed $seed: its work was done")
             }
-        }
+        } } finally { CampLeaps.enabled = false }
         assertTrue(seen > 0, "the fixture has camp leaps")
     }
 
@@ -108,7 +109,7 @@ class LeapsTest {
             val perDoor = leaps.toDouble() / doors
             println("leaps: $runs plans, $doors wither doors, $leaps leaps, ${"%.2f".format(perDoor)} a door, ${"%.2f".format(leaps.toDouble() / runs)} a run, gap median ${gaps.sorted().getOrNull(gaps.size / 2)}")
             println("camp leaps: ${"%.2f".format(camp.toDouble() / runs)} a run")
-            assertTrue(camp.toDouble() / runs in 0.3..2.5, "camp leaps a run ${"%.2f".format(camp.toDouble() / runs)} (recorded 1.69; only to a bot camper here)")
+            assertEquals(0, camp, "camp leaps are off")
             assertTrue(perDoor in 0.1..0.65, "leapers per door ${"%.2f".format(perDoor)} (recorded 0.5; the bots crowd the door more than people, so fewer can leap)")
         } finally { Packs.unload() }
     }

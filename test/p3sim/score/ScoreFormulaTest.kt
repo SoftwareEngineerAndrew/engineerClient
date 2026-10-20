@@ -37,14 +37,14 @@ class ScoreFormulaTest {
         assertEquals(26.0, ScoreFormula.fitted(model(), inp(found = 2, total = 3)).secrets)
     }
 
-    @Test fun deathsCostOneThenThreeMoreEachAfter() {
+    @Test fun deathsCostOneThenTwoEachAfter() {
         assertEquals(0, ScoreFormula.deathPenalty(0)); assertEquals(1, ScoreFormula.deathPenalty(1))
-        // max(0, 3d - 2): 1, 4, 7, 10 (fitted on the observed shifts -1.4, -4.3, -7.8).
+        // max(0, 2d - 1): 1, 3, 5, 7.
         val base = ScoreFormula.fitted(model(), inp()).total
         assertEquals(base - 1, ScoreFormula.fitted(model(), inp(deaths = 1)).total)
-        assertEquals(base - 4, ScoreFormula.fitted(model(), inp(deaths = 2)).total)
-        assertEquals(base - 7, ScoreFormula.fitted(model(), inp(deaths = 3)).total)
-        assertEquals(10, ScoreFormula.deathPenalty(4))
+        assertEquals(base - 3, ScoreFormula.fitted(model(), inp(deaths = 2)).total)
+        assertEquals(base - 5, ScoreFormula.fitted(model(), inp(deaths = 3)).total)
+        assertEquals(7, ScoreFormula.deathPenalty(4))
     }
 
     @Test fun puzzlesCostWhatThePackFittedOrTheUnmeasuredTen() {

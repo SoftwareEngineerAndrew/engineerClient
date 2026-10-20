@@ -34,9 +34,11 @@ import java.util.Base64
  * Toggle Auto Ready Up at 53.
  *
  * Picking a class makes it yours at once ("<name> selected the <Class> Class!" for the party, as recorded) and the bots are planned
- * again, the one that had that class taking another. Mort stays clickable for the whole dungeon (COUNTDOWN, CLEAR, BLOOD): after the
- * start a pick takes the run back to its "Start" savepoint with the new class, since the bots' whole plan hangs on who plays what.
- * Server thread.
+ * again, the one that had that class taking another. As on Hypixel, Mort is clickable only before the start (COUNTDOWN): once the
+ * run has begun a click does nothing.
+ *
+ * Everyone starts ready (the countdown's "is now ready!" lines). Toggling to "Not Ready" holds the countdown where it is until every
+ * player who did is ready again; the clock then goes on from the same tick. Server thread.
  */
 object ReadyUpMenu {
     /** The five as the window lists them, with their icons. */
@@ -48,15 +50,18 @@ object ReadyUpMenu {
     /** The Dungeon Orb head's texture (as recorded). */
     private const val ORB_TEX = "ba49f9de12c813329f38d0af2da0f32f32a6dcd52c3221d19090c256376c418c"
 
-    /** Whether you have readied in this run (the ready pane); the run's own scripted countdown goes on either way. */
-    private val readied = HashSet<java.util.UUID>()
+    /** The players who toggled to "Not Ready" in this run's countdown. */
+    private val notReady = HashSet<java.util.UUID>()
 
-    fun reset() { readied.clear() }
+    fun reset() { notReady.clear() }
 
-    /** Mort was clicked by [p]: the window, while the run is in the dungeon. */
+    /** Whether someone is not ready: the countdown holds while this is true. */
+    fun holding(): Boolean = notReady.isNotEmpty()
+
+    /** Mort was clicked by [p]: the window, before the run starts only. */
     fun open(p: ServerPlayer) {
         val run = Runs.current ?: return
-        if (!run.stage.inDungeon) return
+        if (run.stage != RunStage.COUNTDOWN) return
         p.openMenu(SimpleMenuProvider({ id, inv, _ -> Window(id, inv, p) }, Component.literal("Ready Up")))
     }
 
@@ -74,13 +79,8 @@ object ReadyUpMenu {
     /** [p] takes [cls] ("Mage"): the setting the boss uses, the run's record, the line, and the bots planned again. */
     private fun choose(p: ServerPlayer, cls: String) {
         val run = Runs.current ?: return
-        if (!run.stage.inDungeon) return
+        if (run.stage != RunStage.COUNTDOWN) { p.closeContainer(); return }
         if (run.state.players[p.uuid]?.dungeonClass.equals(cls, ignoreCase = true)) return
-        if (run.stage != RunStage.COUNTDOWN) {
-            val start = run.savepoints.list().firstOrNull() ?: return
-            p.closeContainer()
-            if (!run.savepoints.restore(run, start.id)) return
-        }
         val rec = run.state.players[p.uuid] ?: return
         rec.dungeonClass = cls.uppercase()
         if (Sim.isHost(p)) {
@@ -93,8 +93,9 @@ object ReadyUpMenu {
 
     private fun toggleReady(p: ServerPlayer) {
         val run = Runs.current ?: return
-        val now = readied.add(p.uuid)
-        if (!now) readied.remove(p.uuid)
+        if (run.stage != RunStage.COUNTDOWN) { p.closeContainer(); return }
+        val now = notReady.remove(p.uuid)
+        if (!now) notReady.add(p.uuid)
         Sim.chat(if (now) StateText.ready(p.gameProfile.name, colourOf(run, p)) else StateText.notReady(p.gameProfile.name, colourOf(run, p)))
     }
 
@@ -109,15 +110,13 @@ object ReadyUpMenu {
                 it.set(DataComponents.PROFILE, ResolvableProfile.createResolved(sp.gameProfile))
                 it.set(DataComponents.CUSTOM_NAME, Component.literal("§b${sp.gameProfile.name}").withStyle { s -> s.withItalic(false) })
             })
-            val ready = sp.uuid in readied
+            val ready = sp.uuid !in notReady
             c.setItem(13, if (ready) Terminals.named(Items.STAINED_GLASS_PANE.lime(), "§aReady") else Terminals.named(Items.STAINED_GLASS_PANE.red(), "§cNot Ready"))
             val mine = run?.state?.players?.get(sp.uuid)?.dungeonClass
             for ((i, cls) in CLASSES.withIndex()) {
                 val yours = cls.equals(mine, ignoreCase = true)
                 c.setItem(29 + i, Terminals.named(icon(cls), "§a[Lvl ${LEVELS[cls]}] $cls", glint = yours).also {
-                    it.set(DataComponents.LORE, net.minecraft.world.item.component.ItemLore((listOf<net.minecraft.network.chat.MutableComponent>(Component.literal(if (yours) "§aCurrently selected!" else "§eClick to select!")) +
-                        (if (!yours && run != null && run.stage != RunStage.COUNTDOWN) listOf(Component.literal("§7Restarts the run from the start.")) else emptyList())
-                        ).map { l -> l.withStyle { s -> s.withItalic(false) } }))
+                    it.set(DataComponents.LORE, net.minecraft.world.item.component.ItemLore((listOf<net.minecraft.network.chat.MutableComponent>(Component.literal(if (yours) "§aCurrently selected!" else "§eClick to select!"))).map { l -> l.withStyle { s -> s.withItalic(false) } }))
                     it.set(DataComponents.ATTRIBUTE_MODIFIERS, net.minecraft.world.item.component.ItemAttributeModifiers.EMPTY)
                 })
                 val n = run?.state?.players?.values?.count { it.dungeonClass.equals(cls, ignoreCase = true) } ?: 0
