@@ -1413,11 +1413,17 @@ object SimItems {
         val held = p.mainHandItem
         if (held.isEmpty) return
         Sim.sound(SoundEvents.ARROW_SHOOT, ClearItems.PEARL_VOLUME, ClearItems.pearlPitch(Random.nextFloat()), p.position(), net.minecraft.sounds.SoundSource.NEUTRAL)
+        // A replay's pearl lands where and when the recording's did (its spread is random on Hypixel too): this one only flies.
+        val recorded = replayPearl?.invoke(p)
         net.minecraft.world.entity.projectile.Projectile.spawnProjectileFromRotation(
-            net.minecraft.world.entity.projectile.Projectile.ProjectileFactory<SimPearl> { l, o, s -> SimPearl(l, o, s).also { it.addTag(Sim.TAG) } },
+            net.minecraft.world.entity.projectile.Projectile.ProjectileFactory<SimPearl> { l, o, s -> SimPearl(l, o, s).also { it.addTag(Sim.TAG); it.scripted = recorded != null } },
             level, held, p, 0f, ClearItems.PEARL_SPEED, ClearItems.PEARL_SPREAD)
+        if (recorded != null) Fight.later(maxOf(1, recorded.first), "replay pearl") { if (!p.isRemoved) SimPearl.land(p, recorded.second) }
         if (!p.isCreative) held.shrink(1)
     }
+
+    /** Set by a replay: for a pearl [ServerPlayer] throws now, the ticks until the recording's landed and where it put them; null for ADS's own. */
+    @Volatile var replayPearl: ((ServerPlayer) -> Pair<Int, Vec3>?)? = null
 
     /** Sends the held slot back as the server has it (an item the client used in its own prediction has one fewer there than the server's). */
     private fun resyncHeld(p: ServerPlayer) {
