@@ -76,6 +76,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     /** The hotbar, armour and offhand as recorded now (slot -> stack), kept on the host. */
     private val wantInv = HashMap<Int, ItemStack>()
     private var invDirty = false
+    private var lastHost: Vec3? = null
 
     init {
         val mates = file.party.map { p ->
@@ -88,7 +89,37 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
     private fun cls(c: String?) = c?.uppercase()
 
+    /**
+     * The recording's mobs, room by room, as the mobs module plans them: each where it was first seen, its kind and modifier from its tag,
+     * starred as tagged, with the HP its tag showed. Rooms the recording saw no mob in are rolled as usual. Blood's are the blood module's.
+     */
+    private val roomPlans: Map<Int, List<com.engineerclient.p3sim.clear.mobs.PlannedMob>> by lazy {
+        val pack = run.packs.mobs ?: return@lazy emptyMap()
+        val byName = pack.archetypes.sortedByDescending { it.name.length }
+        val out = HashMap<Int, MutableList<com.engineerclient.p3sim.clear.mobs.PlannedMob>>()
+        val unknown = HashMap<String, Int>()
+        for (m in file.mobs) {
+            val room = run.plan.roomAtBlock(m.x, m.z) ?: continue
+            if (room.type == com.engineerclient.p3sim.run.RoomType.BLOOD || room.type == com.engineerclient.p3sim.run.RoomType.ENTRANCE || room.type == com.engineerclient.p3sim.run.RoomType.FAIRY) continue
+            val star = m.tag.contains("✯")
+            val name = m.tag.replace("✯", "").trim()
+            val arch = byName.firstOrNull { name == it.name || name.endsWith(" " + it.name) }
+            if (arch == null) { unknown.merge(name, 1, Int::plus); continue }
+            val word = name.removeSuffix(arch.name).trim()
+            val mod = word.takeIf { it.isNotEmpty() }?.let { pack.modifier(it) }
+            if (word.isNotEmpty() && mod == null) unknown.merge(name, 1, Int::plus)
+            val rng = run.subRandom("replay.mob.${m.id}")
+            val id = if (arch.disguise) com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV2(rng) else com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV4(rng)
+            val hp = m.hp.takeIf { it > 0 } ?: (arch.hpFor(run.config.floor)?.toDouble() ?: 1.0)
+            out.getOrPut(room.index) { ArrayList() } += com.engineerclient.p3sim.clear.mobs.PlannedMob(id, arch.index, star, star || arch.cls == "miniboss", mod?.id.orEmpty(), hp,
+                m.x, m.y, m.z, m.yaw, arch.movement != "static", null)
+        }
+        for ((n, c) in unknown) diff.note(0, "mobs", "the mob pack has no kind for \"$n\" (${c}x): not spawned")
+        out
+    }
+
     fun start() {
+        com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
         for (m in bodies.all()) {
             val rec = run.state.players.getOrPut(m.uuid) { PlayerRecord(m.uuid, m.name, cls(m.cls), true) }
@@ -102,6 +133,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     fun stop(why: String) {
         if (ended) return
         ended = true
+        com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
         SimNet.send(host, NET, "stop")
@@ -120,6 +152,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             for (e in file.events) { val k = e[0].asInt; if (k >= now) break; apply(e, catchUp = true) }
             lastK = now - 1
         }
+        // ADS moving you between ticks (a teleport of its own: a Hyperion, a leap, a pad), against Hypixel's.
+        lastHost?.let { l -> if (l.distanceTo(host.position()) > 2.0) diff.adsTeleport(now, host.position()) }
         while (lastK < now) {
             lastK++
             var pose: JsonArray? = null
@@ -130,6 +164,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             }
             if (pose != null) sendPose(pose)
         }
+        lastHost = host.position()
         // The teammates' party records follow their bodies.
         for (m in bodies.all()) run.state.players[m.uuid]?.let { r -> if (!m.x.isNaN()) { r.x = m.x; r.y = m.y; r.z = m.z; r.extras["yaw"] = m.yaw } }
         bodies.place()
@@ -163,7 +198,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 mate(id)?.let { m -> m.x = r.x; m.y = r.y; m.z = r.z; m.yaw = e.d(9)?.toFloat() ?: m.yaw; m.present = true }
             }
             "emv" -> ents[e.i(2)]?.let { r -> r.x = e.d(3) ?: r.x; r.y = e.d(4) ?: r.y; r.z = e.d(5) ?: r.z }
-            "name" -> ents[e.i(2)]?.name = e.s(3)
+            "name" -> ents[e.i(2)]?.let { r ->
+                r.name = e.s(3)
+                val n = clean(r.name ?: "")
+                if (!catchUp && (n == "Wither Key" || n == "Blood Key")) diff.recordedKeyStand(k, n, r.x, r.y, r.z)
+            }
             "gone", "rm" -> {
                 val id = e.i(2) ?: return
                 ents[id]?.gone = true
@@ -183,13 +222,19 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             // ---- your inventory
             "inv" -> inv(e)
             // ---- what the recording says happened (forced when ADS does not)
-            "eev" -> if (!catchUp && e.i(3) == 3) mobDied(k, e.i(2) ?: return)
+            "eev" -> if (!catchUp && e.i(3) == 3) mobDied(k, e.i(2) ?: return, e.o(4))
             "chat" -> if (!catchUp) chat(k, e.s(2) ?: return)
             "room" -> if (!catchUp) room(k, e)
-            "blk" -> if (!catchUp) diff.recordedBlock(k, e.i(2) ?: return, e.i(3) ?: return, e.i(4) ?: return, e.s(5))
+            "blk" -> if (!catchUp) {
+                val x = e.i(2) ?: return; val y = e.i(3) ?: return; val z = e.i(4) ?: return
+                val you = host.position().distanceTo(Vec3(x + 0.5, y + 0.5, z + 0.5))
+                val mate = bodies.all().filter { !it.x.isNaN() && it.present }.minOfOrNull { Math.sqrt((it.x - x - 0.5).let { d -> d * d } + (it.y - y).let { d -> d * d } + (it.z - z - 0.5).let { d -> d * d }) } ?: 999.0
+                diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
+            }
             "screen" -> if (!catchUp && e.s(3) == "inventory") SimNet.send(host, NET, "inv 1")
             "screenClose" -> if (!catchUp && host.containerMenu === host.inventoryMenu) SimNet.send(host, NET, "inv 0")
             "tpme" -> if (!catchUp) diff.recordedTeleport(k, e)
+            "dung" -> diff.recordedDung(e.o(2))
             // ---- what you sent
             else -> if (!catchUp && e[1].asString.startsWith("o.")) self(e, same, at)
         }
@@ -202,6 +247,14 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private fun self(e: JsonArray, same: List<JsonArray>, at: Int) {
         if (!run.stage.inDungeon) return
         val c = host.connection
+        val before = host.position()
+        val kind = e[1].asString
+        if (kind == "o.use" || kind == "o.useOn" || kind == "o.slot") diff.action(e[0].asInt, "%-8s %s held %s (slot %d) at %s".format(kind, e.s(2) ?: "", SimItems.idOf(host.mainHandItem) ?: host.mainHandItem.item.toString(), host.inventory.selectedSlot, fmt(host.x, host.y, host.z)))
+        selfPacket(e, same, at, c)
+        if (e[1].asString != "o.m" && host.position().distanceTo(before) > 2.0) diff.adsTeleport(e[0].asInt, host.position())
+    }
+
+    private fun selfPacket(e: JsonArray, same: List<JsonArray>, at: Int, c: net.minecraft.server.network.ServerGamePacketListenerImpl) {
         when (e[1].asString) {
             "o.m" -> {
                 val x = e.d(2); val y = e.d(3); val z = e.d(4); val yaw = e.d(5)?.toFloat(); val pitch = e.d(6)?.toFloat()
@@ -276,9 +329,14 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val use = byName ?: slot
         if (byName == null && name != null) diff.note(e[0].asInt, "click", "no \"$name\" in ADS's ${host.containerMenu.javaClass.simpleName}; clicked slot $slot")
         if (use !in 0 until menu.slots.size) return
+        // A leap to a teammate the recording could not see (out of range, so it has no place for them): they were where Hypixel put you.
+        name?.let { mateByName[it] }?.let { m -> leapLanding(e[0].asInt)?.let { at -> m.x = at.x; m.y = at.y; m.z = at.z; run.state.players[m.uuid]?.let { r -> r.x = at.x; r.y = at.y; r.z = at.z } } }
         val input = runCatching { ContainerInput.valueOf(e.s(5)!!) }.getOrNull() ?: ContainerInput.PICKUP
         host.connection.handleContainerClick(ServerboundContainerClickPacket(menu.containerId, menu.stateId, use.toShort(), (e.i(4) ?: 0).toByte(), input, Int2ObjectOpenHashMap(), HashedStack.EMPTY))
     }
+
+    /** Where Hypixel put you within a few ticks after [k] (a leap's landing), or null. */
+    private fun leapLanding(k: Int): Vec3? = (k..k + 15).firstNotNullOfOrNull { kk -> file.at(kk).firstOrNull { it[1].asString == "tpme" }?.get(2)?.takeIf { it.isJsonArray }?.asJsonArray?.let { Vec3(it[0].asDouble, it[1].asDouble, it[2].asDouble) } }
 
     /**
      * ADS's entity for a recorded one: a teammate's body, else the nearest living thing within 6 blocks of where the recorded
@@ -346,18 +404,36 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
     // ------------------------------------------------------------------ teammates' doings
 
-    private fun mobDied(k: Int, id: Int) {
+    /** ADS mobs already matched to a recorded death (one recorded mob, one ADS mob). */
+    private val claimed = HashSet<UUID>()
+    private var bloodKeyBy: String? = null
+
+    /**
+     * A recorded mob died: ADS's mob for it is the one of the same name (the nametag over the recorded body) nearest where it died,
+     * not matched before. Dead already in ADS: fine (you or ADS killed it). Alive: it gets [GRACE] ticks, then it is killed for the
+     * teammate nearest it (a death near you that ADS did not do is ADS's: [ReplayDiff] tells them apart).
+     */
+    private fun mobDied(k: Int, id: Int, brief: JsonObject?) {
         if (mateIdName.containsKey(id)) return
         val r = ents[id] ?: return
-        if (r.type == null || r.type == "minecraft:armor_stand" || r.type == "minecraft:player" && r.name == null && r.x == 0.0) return
+        if (r.type == null || r.type == "minecraft:armor_stand") return
         val rx = r.x; val ry = r.y; val rz = r.z
-        val label = (r.name ?: r.type)
-        // The ADS mob nearest where it died, alive when the recording's died.
-        val mob = Services.mobs.all().filter { it.alive && Math.abs(it.y - ry) < 6 }.minByOrNull { (it.x - rx) * (it.x - rx) + (it.z - rz) * (it.z - rz) }
-            ?.takeIf { Math.hypot(it.x - rx, it.z - rz) < 8 }
-        if (mob == null) { diff.note(k, "mob", "recorded death of $label at ${fmt(rx, ry, rz)}: no living ADS mob within 8"); return }
+        val tag = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.let { mobName(it) }
+        // Only Hypixel's mobs have a tag (a bare body is a part of one: a Giant's, a disguise's).
+        if (tag.isNullOrEmpty()) { if (r.type != "minecraft:bat") return }
+        val label = tag ?: "Bat"
+        val cands = Services.mobs.all().filter { it.id !in claimed && Math.abs(it.y - ry) < 8 && Math.hypot(it.x - rx, it.z - rz) < 14 }
+        val mob = cands.minByOrNull { m -> Math.hypot(m.x - rx, m.z - rz) + (if (sameMob(m.name, label)) 0.0 else 12.0) + (if (m.alive) 0.0 else 1.0) }
+            ?.takeIf { sameMob(it.name, label) || Math.hypot(it.x - rx, it.z - rz) < 4 }
+        val you = Math.hypot(host.x - rx, host.z - rz)
+        if (mob == null) { diff.mobNotFound(k, label, rx, ry, rz, you); return }
+        claimed += mob.id
+        if (!sameMob(mob.name, label)) diff.note(k, "mob", "recorded $label at ${fmt(rx, ry, rz)} matched to ADS's ${mob.name} (no $label within 14)")
+        if (!mob.alive) { diff.mobOk(); return }
         val who = nearestMate(rx, rz)
-        pending += Pending(k + GRACE, "${mob.name} killed (recorded death of $label)", { !mob.alive }) {
+        diff.mobPending(k, label, you, "ADS %s %,.0f/%,.0f hp%s, %.1f blocks from where it died".format(mob.name, mob.hp, mob.maxHp, if (Services.mobs.isAsleep(mob.id)) " asleep" else "", Math.hypot(mob.x - rx, mob.z - rz)))
+        // Far from you it was a teammate's kill: ADS cannot make it, so it is done on the tick.
+        pending += Pending(if (you > FAR) k else k + GRACE, "$label killed (you ${"%.0f".format(you)} blocks away)", { !mob.alive }) {
             Services.damage.hurtMob(run, mob.id, mob.hp + 1e12, DamageSource.OTHER, who)
             if (mob.alive) "hurtMob left it alive" else "killed by ${who?.let { run.state.players[it]?.name } ?: "?"}"
         }
@@ -373,6 +449,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         WITHER_OPENED.find(t)?.let { m -> door(k, DoorKind.WITHER, m.groupValues[1]); return }
         if (t.startsWith("The BLOOD DOOR has been opened!")) { door(k, DoorKind.BLOOD, null); return }
         if (t.startsWith("Party >")) return
+        KEY.find(t)?.let { m -> diff.recordedKeyPick(k, m.groupValues[2] + " Key", m.groupValues[1]); if (m.groupValues[2] == "Blood") bloodKeyBy = m.groupValues[1]; return }
         DIED.find(t)?.let { m -> death(k, m.groupValues[1]); return }
         REVIVED.find(t)?.let { m -> revive(k, m.groupValues[1], m.groupValues[2]); return }
     }
@@ -390,11 +467,12 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
 
     private fun door(k: Int, kind: DoorKind, who: String?) {
-        val by = uuidOf(who)
+        val by = uuidOf(who ?: if (kind == DoorKind.BLOOD) bloodKeyBy else null)
         val at = posOf(by) ?: host.position()
         val door = run.plan.doors.filter { it.kind == kind }.minByOrNull { d -> val c = d.spot; Math.hypot(c.first + 0.5 - at.x, c.second + 0.5 - at.z) } ?: return
         val rec = run.state.doors[door.index]
-        pending += Pending(k + DOOR_GRACE, "${kind.name.lowercase()} door ${door.index} opened by ${who ?: "?"}", { rec.phase != DoorPhase.CLOSED }) {
+        // A teammate's door opens on the tick of its line (Hypixel's body is barrier the next tick, air 14 after); yours had better be ADS's own.
+        pending += Pending(if (by != null && by != host.uuid) k else k + DOOR_GRACE, "${kind.name.lowercase()} door ${door.index} opened by ${who ?: "?"}", { rec.phase != DoorPhase.CLOSED }) {
             var r = Services.doors.tryOpen(run, door.index, by)
             if (r == DoorOpenResult.NO_KEY) {
                 // ADS had no key for it (the teammate took one ADS did not drop, or not yet): given, then opened.
@@ -433,32 +511,57 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         pending += Pending(k + 2, "$name revived by $by", { !rec.ghost }) { Services.damage.revive(run, u, uuidOf(by)); if (!rec.ghost) "revived" else "revive refused" }
     }
 
-    /** A recorded room changing mark: for the differ, and a puzzle the recording solved is solved in ADS too (when it is not). */
+    /**
+     * A recorded room changing mark: for the differ, and ADS's room is brought to it when ADS has not got there by itself in a while
+     * (most often the teammates' work, out of the recording's sight): found (on the map), cleared (white) or done (green, its secrets
+     * credited; a puzzle reported solved).
+     */
     private fun room(k: Int, e: JsonArray) {
         val mark = e.s(3) ?: return
         val tiles = e.get(5).takeIf { it.isJsonArray }?.asJsonArray ?: return
         val t0 = tiles.firstOrNull()?.asJsonArray ?: return
         val placed = run.plan.roomAt(t0[0].asInt, t0[1].asInt) ?: return diff.note(k, "room", "no ADS room at tile ${t0[0]},${t0[1]} (${e.s(2)})")
         diff.recordedRoom(k, placed.index, e.s(2), mark)
-        if (e.s(4) == "PUZZLE" && (mark == "GREEN" || mark == "WHITE")) {
-            val rr = run.state.room(placed.index) ?: return
-            pending += Pending(k + GRACE, "puzzle ${placed.name} solved", { rr.check == CheckMark.GREEN || rr.check == CheckMark.WHITE }) {
-                val pz = PuzzlesModule.puzzleOf(run, placed.index) ?: return@Pending "no ADS puzzle in the room"
-                Services.puzzles.reportSolved(pz, nearestMate(placed.tiles.first().let { (it.x * 32 - 185).toDouble() }, placed.tiles.first().let { (it.z * 32 - 185).toDouble() }))
-                "reported solved"
+        val want = RANK[mark] ?: return
+        if (want == 0) return
+        val rr = run.state.room(placed.index) ?: return
+        val inIt = run.state.roomAt(host.x, host.z)?.index == placed.index
+        val c = placed.tiles.first().let { com.engineerclient.p3sim.pack.DungeonFrame.tileCentre(it.x).toDouble() to com.engineerclient.p3sim.pack.DungeonFrame.tileCentre(it.z).toDouble() }
+        val by = if (inIt) host.uuid else nearestMate(c.first, c.second)
+        val grace = if (want == 1) 10 else GRACE
+        pending += Pending(k + grace, "${placed.name} ${mark.lowercase()}${if (inIt) " (you were in it)" else ""}", { (RANK[rr.check.odin()] ?: 0) >= want }) {
+            when (want) {
+                1 -> com.engineerclient.p3sim.clear.state.DoorsModule.controller?.discover(placed.index)
+                2 -> { com.engineerclient.p3sim.clear.state.DoorsModule.controller?.discover(placed.index); com.engineerclient.p3sim.clear.state.DoorsModule.completeRoom(run, placed.index) }
+                3 -> {
+                    com.engineerclient.p3sim.clear.state.DoorsModule.controller?.discover(placed.index)
+                    val pz = PuzzlesModule.puzzleOf(run, placed.index)
+                    if (pz != null) Services.puzzles.reportSolved(pz, by)
+                    else { com.engineerclient.p3sim.clear.state.DoorsModule.completeRoom(run, placed.index); Services.secrets.creditRoom(run, placed.index, by) }
+                }
             }
+            "ADS now ${rr.check}"
         }
     }
 
+    private fun CheckMark.odin(): String = when (this) { CheckMark.UNDISCOVERED -> "UNDISCOVERED"; CheckMark.NONE -> "NONE"; CheckMark.WHITE -> "WHITE"; CheckMark.GREEN -> "GREEN"; else -> "FAILED" }
+
     companion object {
         const val NET = "ads.replay"
+        private val RANK = mapOf("UNDISCOVERED" to 0, "NONE" to 1, "WHITE" to 2, "GREEN" to 3)
         const val MATE = "replayMate"
         /** Ticks ADS gets to do by itself what the recording did (a kill, a puzzle) before it is done for it. */
         const val GRACE = 20
         const val DOOR_GRACE = 6
+        /** Farther than this from you, a recorded kill was not yours. */
+        const val FAR = 12.0
         private val RIGHT_CLICKS = setOf("o.use", "o.useOn", "o.int")
         private val WITHER_OPENED = Regex("^(\\w{1,16}) opened a WITHER door!")
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")
+        private val KEY = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Wither|Blood) Key!")
+        /** A Hypixel nametag as ADS names the mob: no star, no HP, no colour. */
+        fun mobName(tag: String): String = clean(tag).replace("✯", "").replace(Regex("\\s*[0-9][0-9.,]*[kMB]?❤.*$"), "").trim()
+        fun sameMob(ads: String, rec: String): Boolean { val a = clean(ads).replace("✯", "").trim(); return a.equals(rec, true) || rec.endsWith(" $a") || a.endsWith(" $rec") }
         private val REVIVED = Regex("❣ (\\w{1,16}) was revived by (\\w{1,16})")
         fun clean(s: String) = s.replace(Regex("§."), "").trim()
         fun fmt(x: Double, y: Double, z: Double) = "%.1f %.1f %.1f".format(x, y, z)

@@ -168,6 +168,9 @@ object MobsModule : AdsModule, MobService {
     private val byRoom = HashMap<Int, MutableList<MobEntry>>()
     private val byEntityId = HashMap<Int, MobEntry>()
     private val rolled = HashSet<Int>()
+
+    /** A replay's own mobs for a room (the recording's, as they were), in place of the rolled ones; null for a room it has none for. */
+    @Volatile var roomMobs: ((Run, Int) -> List<PlannedMob>?)? = null
     private var scale = 1.0
     private var noPackSaid = false
     /** MobSpawned events of the start-up roll wait for the first tick: the other modules have not all begun yet while the run starts. */
@@ -320,7 +323,7 @@ object MobsModule : AdsModule, MobService {
             if (pack != null && room != null && placement != null && enabled()) {
                 val alias = run.packs.rooms?.let { r -> { n: String -> r.familyOf(n) } }
                 val params = PlanParams(run.config.floor, scale, if (sReplay?.value == false) SpawnMode.CELLS else SpawnMode.LAYOUTS, sPartial?.value ?: MobRolls.PARTIAL_LAYOUT_WEIGHT, (sMoverShare?.value ?: 0) / 100.0, minibossChance = (sMinibossChance?.value ?: 65) / 100.0)
-                val plans = MobPlanner.planRoom(pack, room.name, alias, placement, params, run.subRandom("mobs.room.$roomIndex"))
+                val plans = roomMobs?.invoke(run, roomIndex) ?: MobPlanner.planRoom(pack, room.name, alias, placement, params, run.subRandom("mobs.room.$roomIndex"))
                 for (pm in plans) register(run, pack, pm, roomIndex)
             }
         }

@@ -48,6 +48,8 @@ object ReplayModule : AdsModule {
         if (to == RunStage.BOSS_ENTRY || to == RunStage.BOSS) session?.takeIf { it.run === run }?.stop("ADS reached the boss")
     }
 
+    override fun onEvent(run: Run, event: com.engineerclient.p3sim.run.RunEvent) { session?.takeIf { it.run === run && !it.ended }?.diff?.adsEvent(event) }
+
     override fun onRunEnd(run: Run, reason: EndReason) { session?.takeIf { it.run === run }?.stop("the run ended ($reason)"); session = null }
 
     override fun runCommands(): List<AdsCommand> = listOf(
@@ -70,7 +72,7 @@ object ReplayModule : AdsModule {
                         ctx.reply("Replaying $id: ${f.self.cls ?: "?"}, with ${f.party.joinToString(", ") { "${it.name} (${it.cls ?: "?"})" }}.")
                         mc.execute {
                             RunStarter.start(RunConfig(layout = LayoutSource.Recorded(id), seed = UiModule.drawSeed(), bots = false, partySize = 5,
-                                noDeaths = false, replay = id), ctx.reply)
+                                noDeaths = false, mobHpScale = 1.0, replay = id), ctx.reply)
                         }
                     }
                 }
