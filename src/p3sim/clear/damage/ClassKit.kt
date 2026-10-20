@@ -6,7 +6,7 @@ package com.engineerclient.p3sim.clear.damage
  *
  * Measured: Ultimate cooldowns from "Used X!" plus the seconds "Your Ultimate is currently on cooldown for N more seconds." still gave (Castle
  * of Stone 150 s n=239, Ragnarok 60 s n=199, Rapid Fire 100 s n=387, Thunderstorm 255 s or 130 s n=1724, two clusters); ability cooldowns the same
- * way or from "Used X!" to "X is now available!" (Explosive Shot 22.3 s n=129, Guided Sheep 16 s, Throwing Axe 10.7 s n=2, Healing Circle 2 s n=10).
+ * way or from "Used X!" to "X is now available!" (Explosive Shot 22.3 s n=129, Guided Sheep 7 s or 15 s, see [abilityCd], Throwing Axe 10.7 s n=2, Healing Circle 2 s n=10).
  * An Ultimate is first ready a median 430 ticks after Mort's first line (n=425), an Ability 411 (n=243); while an Ultimate waits unused its
  * reminder comes every 607 ticks (n=2,119).
  *
@@ -25,7 +25,7 @@ object ClassKit {
 
     private val KITS = listOf(
         Kit("Healer", "Healing Circle", 40, "Wish", 2400),
-        Kit("Mage", "Guided Sheep", 320, "Thunderstorm", 2600),
+        Kit("Mage", "Guided Sheep", 300, "Thunderstorm", 2600),
         Kit("Berserk", "Throwing Axe", 214, "Ragnarok", 1200),
         Kit("Archer", "Explosive Shot", 446, "Rapid Fire", 2000),
         Kit("Tank", "Seismic Wave", 300, "Castle of Stone", 3000),
@@ -36,6 +36,12 @@ object ClassKit {
         val c = dungeonClass?.lowercase()?.let { if (it == "berserker") "berserk" else it } ?: return null
         return KITS.firstOrNull { it.cls.lowercase() == c }
     }
+
+    /**
+     * The Ability's cooldown in ticks. Guided Sheep: 140 for the party's only Mage (doubled), 300 with another Mage (139 DR and ADR replays:
+     * sheep to "is now available!" 139-140 in 169 of 169 lines of a lone Mage, 299-300 in 102 of 106 with two or more; Ctrl+Q and the burst alike).
+     */
+    fun abilityCd(kit: Kit, doubled: Boolean): Int = if (kit.ability == "Guided Sheep") (if (doubled) 140 else 300) else kit.abilityCd
 
     /** The Ultimate's cooldown in ticks: Thunderstorm is 255 s, or 130 s for a Mage whose stats are doubled (the party's only Mage). */
     fun ultimateCd(kit: Kit, doubled: Boolean): Int = if (kit.ultimate == "Thunderstorm") (if (doubled) 2600 else 5100) else kit.ultimateCd

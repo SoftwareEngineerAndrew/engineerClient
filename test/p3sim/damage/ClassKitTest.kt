@@ -20,6 +20,10 @@ class ClassKitTest {
         assertEquals(446, ClassKit.of("Archer")!!.abilityCd)
         assertEquals(2600, ClassKit.ultimateCd(ClassKit.of("Mage")!!, doubled = true))
         assertEquals(5100, ClassKit.ultimateCd(ClassKit.of("Mage")!!, doubled = false))
+        // Guided Sheep: 7 s for the only Mage, 15 s with another.
+        assertEquals(140, ClassKit.abilityCd(ClassKit.of("Mage")!!, doubled = true))
+        assertEquals(300, ClassKit.abilityCd(ClassKit.of("Mage")!!, doubled = false))
+        assertEquals(446, ClassKit.abilityCd(ClassKit.of("Archer")!!, doubled = true))
     }
 
     @Test fun linesAreHypixels() {

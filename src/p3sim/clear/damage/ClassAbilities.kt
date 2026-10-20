@@ -50,9 +50,10 @@ object ClassAbilities {
         val start = run.t0Tick ?: return null
         if (t0 != start) { timers.clear(); t0 = start }
         // The Ability's first readiness is not announced: "is now available!" follows a use (139 DR runs: no such line in 66 Archer, Berserk
-        // and Tank runs unless the Ability had been used). A Mage hears "Guided Sheep is now available!" 164 to 254 ticks after T0 in 69 of
-        // 71 runs without a press seen; what sets it off is UNMEASURED, so the Mage keeps the line at the first readiness.
-        return timers.getOrPut(p.uuid) { Timers(ClassKit.ABILITY_FIRST_READY, ClassKit.ULT_FIRST_READY, abilityNoted = kitOf(run, p)?.cls != "Mage") }
+        // and Tank runs unless the Ability had been used; a Mage's every one follows a sheep, the three-click burst's too). The Mage's sheep
+        // is ready from T0 (first sheep at T0 + 0, 4, 12 ... in 71 Mage runs; no "on cooldown" line before T0 + 420).
+        val mage = kitOf(run, p)?.cls == "Mage"
+        return timers.getOrPut(p.uuid) { Timers(if (mage) 0 else ClassKit.ABILITY_FIRST_READY, ClassKit.ULT_FIRST_READY, abilityNoted = true) }
     }
 
     private fun kitOf(run: Run, p: ServerPlayer): ClassKit.Kit? = ClassKit.of(run.state.players[p.uuid]?.dungeonClass)
@@ -79,9 +80,24 @@ object ClassAbilities {
         } else {
             if (t < tm.abilityAt) { say(p, ClassKit.abilityCooling(tm.abilityAt - t)); return true }
             say(p, ClassKit.used(kit.ability))
-            tm.abilityAt = t + kit.abilityCd; tm.abilityNoted = false
+            tm.abilityAt = t + ClassKit.abilityCd(kit, doubled(run, kit.cls)); tm.abilityNoted = false
             EngineerClient.safely("ads ability") { abilityOf(run, p, kit) }
         }
+        return true
+    }
+
+    /**
+     * A Mage's three-click burst in a run's dungeon: the Guided Sheep on the Ability's own cooldown (one cooldown for both ways), with no
+     * "Used" line, nothing while it cools. False when no run's dungeon has it (P3 keeps [Mage]'s own).
+     */
+    fun burst(p: ServerPlayer): Boolean {
+        val run = DamageModule.activeRun() ?: return false
+        if (run.stage == RunStage.COUNTDOWN) return true
+        val kit = kitOf(run, p)?.takeIf { it.ability == "Guided Sheep" } ?: return true
+        val tm = timersOf(run, p) ?: return true
+        if (run.state.players[p.uuid]?.ghost == true || run.t < tm.abilityAt) return true
+        tm.abilityAt = run.t + ClassKit.abilityCd(kit, doubled(run, kit.cls)); tm.abilityNoted = false
+        EngineerClient.safely("ads ability") { Mage.spawnSheep(p) }
         return true
     }
 
