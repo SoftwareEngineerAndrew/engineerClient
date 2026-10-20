@@ -148,4 +148,40 @@ object CampMech {
         val free = prev.at + prev.line.busy
         return if (free - l in 1..PASS_WINDOW) free else l
     }
+
+    /**
+     * When each recorded line was asked for. A line that printed while the queue was free was asked for on that tick. A line that
+     * printed the moment the line before it ended (back to back) was asked for some time while that line was being said; the tick after
+     * it started is taken. The two lines a player's action sets off (a hit on him, a player out of reach) are taken as asked for when
+     * they printed.
+     */
+    fun requestsOf(printed: List<Request>): List<Request> {
+        val out = ArrayList<Request>()
+        var prev: Request? = null
+        for (p in printed.sortedBy { it.t }) {
+            val before = prev
+            val free = before == null || p.t > before.t + before.line.busy || p.line == Line.ATTACK || p.line == Line.LEDGE
+            out += Request(if (free) p.t else minOf(p.t, before!!.t + 1), p.line)
+            prev = p
+        }
+        return out
+    }
+
+    /** The class of the Watcher's chat line, or null for a line that is not his (or is the pass line). A line of his that no class knows keeps the queue as busy as a reaction. */
+    fun lineOf(chat: String): Line? {
+        val prefix = "[BOSS] The Watcher: "
+        if (!chat.startsWith(prefix)) return null
+        val text = chat.removePrefix(prefix)
+        return when {
+            text.startsWith("You have proven yourself") -> null
+            text == CampLines.INTRO || text == CampLines.INTRO_OTHER -> Line.INTRO
+            text in CampLines.SPAWN -> Line.SPAWN
+            text in CampLines.REACT -> Line.REACT
+            text in CampLines.HANDLE -> Line.HANDLE
+            text in CampLines.ENOUGH -> Line.ENOUGH
+            text in CampLines.ATTACK -> Line.ATTACK
+            text in CampLines.LEDGE -> Line.LEDGE
+            else -> Line.REACT
+        }
+    }
 }
