@@ -92,6 +92,17 @@ object ClassAbilities {
      */
     fun burst(p: ServerPlayer): Boolean {
         val run = DamageModule.activeRun() ?: return false
+        if (replayBursts?.invoke(p) == true) return true
+        return sheep(run, p)
+    }
+
+    /** Set by a replay: true for a player whose sheep come from the recording ([recordedBurst]), not from their clicks. */
+    @Volatile var replayBursts: ((ServerPlayer) -> Boolean)? = null
+
+    /** A recorded sheep of [p]'s: the burst, on the same cooldown. */
+    fun recordedBurst(p: ServerPlayer) { DamageModule.activeRun()?.let { sheep(it, p) } }
+
+    private fun sheep(run: Run, p: ServerPlayer): Boolean {
         if (run.stage == RunStage.COUNTDOWN) return true
         val kit = kitOf(run, p)?.takeIf { it.ability == "Guided Sheep" } ?: return true
         val tm = timersOf(run, p) ?: return true
