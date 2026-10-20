@@ -205,7 +205,20 @@ object SecretsModule : AdsModule, SecretService {
         }
     }
 
+    /**
+     * While a replay runs the team is the recording's: no Mimic or Prince kill drawn for bots, no tombs blown for a teammate's room check-off.
+     * The replay credits what the recording counted (secrets, crypts, the bonuses) on the tick it rose.
+     */
+    @Volatile var teamFromRecording = false
+
+    /** One standing cell of each tomb group of [room] not yet blown (world coordinates), for crediting a teammate's crypt. */
+    fun standingCrypts(run: Run, room: Int): List<com.engineerclient.p3sim.pack.Pos> {
+        val rd = d(run) ?: return emptyList()
+        return rd.groups.ofRoom(room, GroupKind.CRYPT).filter { !rd.groups.isDestroyed(it) }.mapNotNull { it.cells.firstOrNull() }
+    }
+
     private fun tickBonusMobs(rd: RunData) {
+        if (teamFromRecording) return
         val led = rd.run.state.secrets
         val t = rd.run.t
         rd.mimicAt?.let { if (t >= it && !led.mimicKilled) bonus(rd, BonusKind.MIMIC, null) }
@@ -623,7 +636,7 @@ object SecretsModule : AdsModule, SecretService {
             if (s.kind == SecretKind.CHEST || s.kind == SecretKind.LOCKED_CHEST) startChest(rd, s, by, delay = CHEST_STAGGER * chestsOpened++)
         }
         // A teammate blows some of the room's tombs too (the team Crypts count rises without the player), a moment after the check-off.
-        for (g in rd.groups.ofRoom(room, GroupKind.CRYPT)) {
+        if (!teamFromRecording) for (g in rd.groups.ofRoom(room, GroupKind.CRYPT)) {
             if (rd.groups.isDestroyed(g) || rd.botBlasts.any { it.second === g }) continue
             if (rd.miscRandom.nextDouble() < CRYPT_BOT_P) rd.botBlasts += Triple(rd.run.serverTick + rd.miscRandom.nextInt(CRYPT_BOT_DELAY + 1), g, by)
         }

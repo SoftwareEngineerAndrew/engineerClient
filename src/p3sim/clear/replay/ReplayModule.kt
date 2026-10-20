@@ -1,5 +1,6 @@
 package com.engineerclient.p3sim.clear.replay
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.index
 import com.engineerclient.p3sim.P3Sim
@@ -72,12 +73,27 @@ object ReplayModule : AdsModule {
                         ctx.reply("Replaying $id: ${f.self.cls ?: "?"}, with ${f.party.joinToString(", ") { "${it.name} (${it.cls ?: "?"})" }}.")
                         mc.execute {
                             RunStarter.start(RunConfig(layout = LayoutSource.Recorded(id), seed = UiModule.drawSeed(), bots = false, partySize = 5,
-                                noDeaths = false, mobHpScale = 1.0, replay = id), ctx.reply)
+                                noDeaths = false, mobHpScale = 1.0, replay = id)) { msg ->
+                                ctx.reply(msg)
+                                // A layout ADS cannot build: the report says so at once (a batch must not wait on a replay that never starts).
+                                if (FAILED.any { msg.contains(it) }) failedReport(id, msg)
+                            }
                         }
                     }
                 }
             }),
     )
+
+    /** The report of a replay that never started: not complete, and why. */
+    private fun failedReport(id: String, why: String) = EngineerClient.safely("ads replay failed report") {
+        val j = com.google.gson.JsonObject()
+        j.addProperty("id", id); j.addProperty("complete", false); j.addProperty("unbuildable", true); j.addProperty("end", why.replace(Regex("§."), ""))
+        java.nio.file.Files.createDirectories(ReplayFile.dir)
+        java.nio.file.Files.writeString(ReplayFile.dir.resolve("$id.report.json"), j.toString())
+    }
+
+    /** What RunStarter says when a run does not start. */
+    private val FAILED = listOf("not playable", "could not", "There is no recorded layout", " matches ", "Only the host")
 
     const val NET = ReplaySession.NET
 }

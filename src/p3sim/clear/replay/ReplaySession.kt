@@ -71,6 +71,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     var ended = false; private set
 
     /** What a teammate did that ADS must have done by then: checked at [due], done then if it still has not happened. */
+    private var ownName: String? = null
+
+    /** Where the recording had you at the end of the last tick. */
+    private var recPos: Vec3? = null
+
     private class Pending(val due: Int, val what: String, val done: () -> Boolean, val force: () -> String?)
     private val pending = ArrayList<Pending>()
 
@@ -120,6 +125,20 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     }
 
     fun start() {
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = true
+        // You go by the recording's name in the party's lines ("is now ready!", "opened a WITHER door!", "has obtained").
+        run.state.players[host.uuid]?.let { r -> ownName = r.name; r.name = file.self.name }
+        // The Watcher opens his camp the way he did in the recording (what picks one opening or the other on Hypixel is not known).
+        val intro = file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("The Watcher: ") &&
+            (it[2].asString.contains(com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO) || it[2].asString.contains(com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO_OTHER)) }
+        com.engineerclient.p3sim.clear.blood.camp.CampLines.script = HashMap<com.engineerclient.p3sim.clear.blood.camp.CampMech.Line, ArrayDeque<String>>().also { m ->
+            for (e in file.events) if (e.size() > 2 && e[1].asString == "chat" && e[2].isJsonPrimitive) {
+                val t = clean(e[2].asString).substringAfter("[BOSS] The Watcher: ", "").ifEmpty { null } ?: continue
+                com.engineerclient.p3sim.clear.blood.camp.CampLines.classOf(t)?.let { c -> m.getOrPut(c) { ArrayDeque() }.addLast(t) }
+            }
+        }
+        com.engineerclient.p3sim.clear.blood.camp.CampLines.forcedOpening = intro?.get(2)?.asString?.let {
+            if (it.contains(com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO_OTHER)) com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO_OTHER else com.engineerclient.p3sim.clear.blood.camp.CampLines.INTRO }
         TrapsModule.recordingMovesCrushers = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
@@ -136,6 +155,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         if (ended) return
         ended = true
         TrapsModule.recordingMovesCrushers = false
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = false
+        ownName?.let { n -> run.state.players[host.uuid]?.name = n }
+        com.engineerclient.p3sim.clear.blood.camp.CampLines.forcedOpening = null
+        com.engineerclient.p3sim.clear.blood.camp.CampLines.script = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         bodies.removeAll()
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
@@ -166,7 +189,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 if (e[1].asString == "me") { pose = e; continue }
                 EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
             }
-            if (pose != null) sendPose(pose)
+            if (pose != null) { sendPose(pose); recPos = Vec3(pose[2].asDouble, pose[3].asDouble, pose[4].asDouble) }
         }
         lastHost = host.position()
         // The teammates' party records follow their bodies.
@@ -234,12 +257,15 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 val you = host.position().distanceTo(Vec3(x + 0.5, y + 0.5, z + 0.5))
                 val mate = bodies.all().filter { !it.x.isNaN() && it.present }.minOfOrNull { Math.sqrt((it.x - x - 0.5).let { d -> d * d } + (it.y - y).let { d -> d * d } + (it.z - z - 0.5).let { d -> d * d }) } ?: 999.0
                 // A crusher's blocks are the recording's, on their own tick (its pace is checked against the recordings outside the game).
-                if (TrapsModule.isCrusherCell(x, y, z)) diff.setNow(x, y, z, e.s(5)) else diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
+                if (TrapsModule.isCrusherCell(x, y, z)) diff.setNow(x, y, z, e.s(5))
+                // Away from you it is a teammate's doing or the room's: put in on its own tick, so the replay looks as the run did.
+                else if (k > 1 && you > ReplayDiff.NEAR) diff.awayBlock(k, x, y, z, e.s(5), you, mate)
+                else diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
             }
             "screen" -> if (!catchUp && e.s(3) == "inventory") SimNet.send(host, NET, "inv 1")
             "screenClose" -> if (!catchUp && host.containerMenu === host.inventoryMenu) SimNet.send(host, NET, "inv 0")
-            "tpme" -> if (!catchUp) diff.recordedTeleport(k, e)
-            "dung" -> diff.recordedDung(e.o(2))
+            "tpme" -> if (!catchUp) diff.recordedTeleport(k, e, recPos)
+            "dung" -> { diff.recordedDung(e.o(2)); if (!catchUp) team(k, e.o(2)) }
             // ---- what you sent
             else -> if (!catchUp && e[1].asString.startsWith("o.")) self(e, same, at)
         }
@@ -447,6 +473,72 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
     }
 
+    // ------------------------------------------------------------------ the team's score parts
+
+    private var recSecrets = 0; private var recCrypts = 0; private var recMimic = false; private var recPrince = false
+
+    /** The first tick the recording marks each room green. */
+    private val greenAt: Map<Int, Int> by lazy {
+        val m = HashMap<Int, Int>()
+        for (e in file.events) if (e.size() > 5 && e[1].asString == "room" && e.s(3) == "GREEN") {
+            val t0 = e.get(5).takeIf { it.isJsonArray }?.asJsonArray?.firstOrNull()?.asJsonArray ?: continue
+            val r = run.plan.roomAt(t0[0].asInt, t0[1].asInt) ?: continue
+            m.putIfAbsent(r.index, e[0].asInt)
+        }
+        m
+    }
+
+    /**
+     * The party's secrets, crypts, Mimic and Prince as the recording counted them: what ADS has not counted [TEAM_GRACE] ticks later
+     * (a teammate's find, which nothing else in a replay makes) is credited then, in the room a teammate stands in or the one the
+     * recording turns green next. Every credit is listed with the forced work.
+     */
+    private fun team(k: Int, o: JsonObject?) {
+        if (o == null || k <= 0) return
+        val led = run.state.secrets
+        o.get("secretsFound")?.takeIf { it.isJsonPrimitive }?.asInt?.let { s -> if (s > recSecrets) { recSecrets = s
+            pending += Pending(k + TEAM_GRACE, "secrets to $s", { led.teamFound >= s }) { val n = creditSecrets(s); "credited $n, ADS now ${led.teamFound}" } } }
+        o.get("crypts")?.takeIf { it.isJsonPrimitive }?.asInt?.let { c -> if (c > recCrypts) { recCrypts = c
+            pending += Pending(k + TEAM_GRACE, "crypts to $c", { led.crypts >= c }) { val n = creditCrypts(c); "blew $n, ADS now ${led.crypts}" } } }
+        if (o.get("mimic")?.asBoolean == true && !recMimic) { recMimic = true
+            pending += Pending(k + TEAM_GRACE, "mimic killed", { led.mimicKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.MIMIC, null); "ADS mimic ${led.mimicKilled}" } }
+        if (o.get("prince")?.asBoolean == true && !recPrince) { recPrince = true
+            pending += Pending(k + TEAM_GRACE, "prince killed", { led.princeKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.PRINCE, null); "ADS prince ${led.princeKilled}" } }
+    }
+
+    /** The rooms to credit a teammate's find in, best first: where teammates stand (nearest first), then by the recording's next green mark. */
+    private fun teamRooms(): List<Int> {
+        val now = run.t
+        val withMate = bodies.all().filter { !it.x.isNaN() && it.present }.mapNotNull { run.state.roomAt(it.x, it.z)?.index }
+        val rest = run.plan.rooms.map { it.index }.filter { it !in withMate }
+            .sortedBy { r -> greenAt[r]?.let { g -> if (g >= now - TEAM_GRACE) g else Int.MAX_VALUE / 2 + g } ?: Int.MAX_VALUE }
+        return withMate.distinct() + rest
+    }
+
+    private fun mateIn(room: Int): UUID? = bodies.all().firstOrNull { !it.x.isNaN() && it.present && run.state.roomAt(it.x, it.z)?.index == room }?.uuid
+        ?: bodies.all().firstOrNull()?.uuid
+
+    private fun creditSecrets(want: Int): Int {
+        var n = 0
+        for (room in teamRooms()) {
+            for (site in com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room)) {
+                if (run.state.secrets.teamFound >= want) return n
+                if (Services.secrets.found(run, room, site.kind, mateIn(room), site.x, site.y, site.z)) n++
+            }
+            if (run.state.secrets.teamFound >= want) return n
+        }
+        return n
+    }
+
+    private fun creditCrypts(want: Int): Int {
+        var n = 0
+        for (room in teamRooms()) for (p in com.engineerclient.p3sim.clear.secrets.SecretsModule.standingCrypts(run, room)) {
+            if (run.state.secrets.crypts >= want) return n
+            Services.secrets.cryptDestroyed(run, room, mateIn(room), p.x, p.y, p.z); n++
+        }
+        return n
+    }
+
     private fun nearestMate(x: Double, z: Double): UUID? =
         (bodies.all().filter { !it.x.isNaN() && it.present }.map { it.uuid to Math.hypot(it.x - x, it.z - z) } + (host.uuid to Math.hypot(host.x - x, host.z - z)))
             .minByOrNull { it.second }?.first
@@ -570,6 +662,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
 
         const val NET = "ads.replay"
+
+        /** Ticks the replay waits for ADS to count a find of the party's itself before crediting it. */
+        const val TEAM_GRACE = 20
         private val RANK = mapOf("UNDISCOVERED" to 0, "NONE" to 1, "WHITE" to 2, "GREEN" to 3)
         const val MATE = "replayMate"
         /** Ticks ADS gets to do by itself what the recording did (a kill, a puzzle) before it is done for it. */

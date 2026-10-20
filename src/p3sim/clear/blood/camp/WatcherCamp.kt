@@ -30,6 +30,9 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
     private var slots: List<Int> = emptyList()
     private lateinit var home: Vec3
     private var opening = CampLines.INTRO
+
+    /** The camp tick the opening was said at (-1 not yet), for the lines that follow [CampLines.INTRO_OTHER]. */
+    private var openedAt = -1
     private var config = CampConfig()
 
     override val finished: Boolean get() = engine?.finished ?: false
@@ -48,6 +51,10 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         val e = engine ?: return
         val alive = host.mobsAlive().mapTo(HashSet()) { it.toString() }
         e.step(host.ticksSinceOpen, alive)
+        if (opening == CampLines.INTRO_OTHER && openedAt >= 0) {
+            val i = (host.ticksSinceOpen - openedAt) / CampLines.INTRO_OTHER_GAP - 1
+            if ((host.ticksSinceOpen - openedAt) % CampLines.INTRO_OTHER_GAP == 0 && i in CampLines.INTRO_OTHER_MORE.indices) host.watcherSays(CampLines.INTRO_OTHER_MORE[i])
+        }
     }
 
     override fun onEvent(event: RunEvent) {
@@ -92,6 +99,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
     override fun watcherAt(x: Double, y: Double, z: Double, yaw: Float) { host.moveWatcher(x, y, z, yaw) }
 
     override fun say(line: CampMech.Line) {
+        if (line == CampMech.Line.INTRO) openedAt = host.ticksSinceOpen
         val text = if (line == CampMech.Line.INTRO) opening else CampLines.pick(line, host.random) ?: return
         host.watcherSays(text)
     }
@@ -104,6 +112,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         val e = engine ?: return null
         return JsonObject().also { o ->
             o.addProperty("opening", opening)
+            o.addProperty("openedAt", openedAt)
             o.add("wall", JsonArray().also { a -> for (st in wall) a.add(JsonArray().also { p -> p.add(st.cls.name); p.add(st.mobName) }) })
             o.add("engine", e.snapshot())
         }
@@ -121,6 +130,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         if (!e.restore(state)) { start(); return }
         engine = e
         opening = data.get("opening")?.asString ?: opening
+        openedAt = data.get("openedAt")?.asInt ?: -1
         // The mobs the camp had made are the mob service's to bring back; the host must count them as this camp's again.
         (host as? BloodHost)?.let { h ->
             state.getAsJsonArray("mobs").forEach { m -> m.asJsonObject["h"]?.asString?.let { id -> try { h.adopt(UUID.fromString(id)) } catch (_: IllegalArgumentException) {} } }
