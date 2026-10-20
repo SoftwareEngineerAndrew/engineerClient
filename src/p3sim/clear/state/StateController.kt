@@ -358,6 +358,8 @@ class StateController(val run: Run, val rules: StateRules, val cfg: StateConfig,
     private fun fallbackKey(room: Int) {
         val (x, z) = centre(room); dropKey(room, x, z)
         // Left lying, a key in a miniboss room without its miniboss held up every door after it until someone happened past (120 ticks in a replay).
+        // A replay takes its keys on the recorded ticks only ([pickUpKey]): the stand waits for whoever the recording says took it.
+        if (keysFromRecording) return
         val stand = stands.values.firstOrNull { it.room == room }
         val who = state.rooms.getOrNull(room)?.occupants?.firstOrNull { canPick(it) }
         if (stand != null && who != null) pickUp(stand, who)
