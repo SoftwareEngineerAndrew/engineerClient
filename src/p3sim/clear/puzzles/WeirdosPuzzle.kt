@@ -44,6 +44,12 @@ class WeirdosPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.WEIRDOS, c
         names = WeirdosLogic.drawNames(rnd)
         chests = (1..3).mapNotNull { context.anchor("chest$it").firstOrNull() }
         if (chests.size < 3) { scenario = null; return }
+        // A replay: the recording's NPCs (by where their stands were) and the one setting their lines and the solve allow.
+        val spots = (1..3).map { i -> context.room.design?.puzzle?.anchors?.get("chest$i")?.firstOrNull()?.let { a -> world(a.x - 1, a.y, a.z) }?.let { doubleArrayOf(it.x + 0.5, it.z + 0.5) } }
+        replayRoom?.invoke(run, spots)?.let { rec ->
+            rec.names?.takeIf { it.size == 3 }?.let { names = it }
+            WeirdosLogic.fit(names, rec)?.let { scenario = it }
+        }
         placeChests()
         chests.indices.forEach { i ->
             // The stand is the block west of its chest in the room's frame: Odin takes the chest as the stand's block plus one in x.
@@ -114,6 +120,9 @@ class WeirdosPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.WEIRDOS, c
     companion object {
         /** Ticks from the solve line to the room turning green (measured median 3). */
         const val GREEN_AFTER_CHAT_TICKS = 3
+
+        /** Set by a replay: what the recording shows of the room whose NPC stands stand at these (x, z) spots, slot by slot; null for a drawn room. */
+        @Volatile var replayRoom: ((com.engineerclient.p3sim.run.Run, List<DoubleArray?>) -> WeirdosLogic.Recorded?)? = null
 
         /** The NPC names go blank this long after the solve (measured 46). */
         const val NAME_BLANK_TICKS = 46

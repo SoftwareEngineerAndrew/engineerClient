@@ -412,6 +412,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         TrapsModule.recordingMovesCrushers = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = { r -> if (r === run && !ended) recordedBlazes else null }
+        com.engineerclient.p3sim.clear.puzzles.WeirdosPuzzle.replayRoom = { r, spots -> if (r === run && !ended) recordedWeirdos(spots) else null }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) bonusBat else null }
         val rewardChests = ReplayFile.rewardChests(file.events)
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = { r, x, y, z -> if (r === run && !ended) "$x,$y,$z" in rewardChests else null }
@@ -439,6 +440,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.blood.camp.CampLines.script = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = null
+        com.engineerclient.p3sim.clear.puzzles.WeirdosPuzzle.replayRoom = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
@@ -1231,6 +1233,33 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
     }
 
+    /**
+     * Three Weirdos as the recording had it: the NPC whose named stand was within 1.5 blocks of each of ADS's stand [spots], what each
+     * said to you, and who the solve and fail lines name.
+     */
+    private fun recordedWeirdos(spots: List<DoubleArray?>): com.engineerclient.p3sim.clear.puzzles.WeirdosLogic.Recorded? {
+        val all = com.engineerclient.p3sim.clear.puzzles.WeirdosLogic.NAMES.toSet()
+        val first = HashMap<Int, JsonArray>()
+        val stands = ArrayList<Pair<String, JsonArray>>()
+        for (e in file.events) when (e.s(1)) {
+            "spawn" -> e.i(2)?.let { first.putIfAbsent(it, e) }
+            "name" -> { val n = clean(e.s(3) ?: continue); if (n in all) first[e.i(2) ?: continue]?.let { stands += n to it } }
+        }
+        val names = spots.map { s ->
+            s ?: return@map null
+            stands.filter { (_, e) -> Math.hypot((e.d(5) ?: 1e9) - s[0], (e.d(7) ?: 1e9) - s[1]) <= 1.5 }.map { it.first }.distinct().singleOrNull()
+        }
+        if (names.any { it == null }) return null
+        val said = HashMap<String, String>(); var reward: String? = null; val wrong = HashSet<String>()
+        for (e in file.all("chat")) {
+            val t = clean(e.s(2) ?: continue)
+            NPC_LINE.find(t)?.let { m -> if (m.groupValues[1] in names && m.groupValues[2] !in NOT_CLUES) said.putIfAbsent(m.groupValues[1], m.groupValues[2]) }
+            SOLVED.find(t)?.groupValues?.get(2)?.removePrefix("wasn't fooled by ")?.removeSuffix("!")?.takeIf { it in names }?.let { reward = it }
+            FAILED.find(t)?.groupValues?.get(2)?.takeIf { it.startsWith("was fooled by ") }?.removePrefix("was fooled by ")?.removeSuffix("!")?.let { wrong += it }
+        }
+        return com.engineerclient.p3sim.clear.puzzles.WeirdosLogic.Recorded(names.map { it!! }, said, reward, wrong)
+    }
+
     private fun CheckMark.odin(): String = when (this) { CheckMark.UNDISCOVERED -> "UNDISCOVERED"; CheckMark.NONE -> "NONE"; CheckMark.WHITE -> "WHITE"; CheckMark.GREEN -> "GREEN"; else -> "FAILED" }
 
     companion object {
@@ -1290,6 +1319,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val ROMAN = listOf("I", "II", "III", "IV", "V")
         private val ITEM = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Superboom TNT|Revive Stone)(?: x(\\d+))?!$")
         private val WITHER_ESSENCE = Regex("^(\\S+) found a Wither Essence! Everyone gains an extra essence!$")
+        /** What a Weirdos NPC says that is not its clue. */
+        private val NOT_CLUES = setOf("Talk to all of us first!", "You fool!")
+        private val NPC_LINE = Regex("""^\[NPC] (\w+): (.+)$""")
         private val FAILED = Regex("""^PUZZLE FAIL! (\w{1,16}) (.+) (Yikes!|That's a whoopsie!)$""")
         private val SOLVED = Regex("""^PUZZLE SOLVED! (\w{1,16}) (.+) Good job!$""")
         private val IMPLOSION = Regex("""^Your Implosion hit (\d+) enem(?:y|ies) for ([\d,.]+) damage\.$""")

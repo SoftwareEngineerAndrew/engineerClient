@@ -85,4 +85,16 @@ class WeirdosLogicTest {
         assertEquals(3, WeirdosLogic.drawNames(Random(1)).toSet().size)
         assertEquals(21, WeirdosLogic.NAMES.toSet().size)
     }
+
+    @Test fun aReplayTakesTheSettingItsLinesAndSolveAllow() {
+        // 2026-10-03_03-24-40_F7: Winona said set D's first line; Eveleth had the reward.
+        val names = listOf("Marshall", "Eveleth", "Winona")
+        val rec = WeirdosLogic.Recorded(names, mapOf("Winona" to "My chest doesn't have the reward. At least one of the others is telling the truth!"), "Eveleth", emptySet())
+        val sc = WeirdosLogic.fit(names, rec)!!
+        assertEquals(1, sc.reward)
+        assertEquals("My chest doesn't have the reward. At least one of the others is telling the truth!", sc.lines(names)[2])
+        // A wrong pick rules its NPC out; nothing fits a reward that contradicts the lines.
+        assertTrue(WeirdosLogic.fit(names, WeirdosLogic.Recorded(names, emptyMap(), null, setOf("Marshall", "Winona")))!!.reward == 1)
+        assertEquals(null, WeirdosLogic.fit(names, WeirdosLogic.Recorded(names, rec.said, "Winona", emptySet())))
+    }
 }
