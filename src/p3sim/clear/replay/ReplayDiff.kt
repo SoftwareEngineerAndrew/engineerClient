@@ -105,6 +105,24 @@ class ReplayDiff(private val s: ReplaySession) {
         // Before the start Hypixel holds the party in the entrance by putting them back: where to, and from where, in the room's own frame.
         if (k < 0) { if (was != null && to.y < 200 && to.y > 0) canonPoint(to)?.let { a -> canonPoint(was)?.let { b -> setbacks.add(JsonArray().apply { add(k); a.forEach { add(it) }; b.forEach { add(it) } }) } }; return }
         hypTps += k to to
+        if (was != null) tpWay[hypTps.size - 1] = blockedWay(was, to)
+    }
+
+    /** For each of Hypixel's teleports (by index): ADS's blocks with a collision on the straight way it moved you (feet and head), at the time. */
+    private val tpWay = HashMap<Int, String>()
+
+    /** The cells on the line from [a] to [b] (each quarter block, feet and head height) that have a collision in ADS, as "x y z block". */
+    private fun blockedWay(a: Vec3, b: Vec3): String {
+        val seen = LinkedHashSet<BlockPos>()
+        val n = (a.distanceTo(b) * 4).toInt().coerceIn(1, 400)
+        for (i in 1..n) {
+            val p = a.lerp(b, i / n.toDouble())
+            for (dy in listOf(0.1, 1.2)) {
+                val pos = BlockPos.containing(p.x, p.y + dy, p.z)
+                if (!Sim.level.getBlockState(pos).getCollisionShape(Sim.level, pos).isEmpty) seen += pos
+            }
+        }
+        return seen.joinToString(", ") { "${it.x} ${it.y} ${it.z} ${Sim.level.getBlockState(it).block.descriptionId.substringAfterLast('.')}" }
     }
 
     fun adsTeleport(k: Int, to: Vec3) { adsTps += k to to }

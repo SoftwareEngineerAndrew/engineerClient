@@ -86,6 +86,7 @@ object DoorsModule : AdsModule, DoorService {
     override fun keyForRoom(run: Run, roomIndex: Int): KeyKind? = controller?.keyForRoom(roomIndex)
 
     override fun dropKey(run: Run, roomIndex: Int, x: Double, z: Double) { controller?.dropKey(roomIndex, x, z) }
+    override fun pickUpKey(run: Run, by: java.util.UUID, kind: KeyKind, roomIndex: Int?, x: Double, z: Double): Boolean = controller?.pickUpKey(by, kind, roomIndex, x, z) ?: false
 
     override fun tryOpen(run: Run, door: Int, by: UUID?): DoorOpenResult = controller?.tryOpen(door, by) ?: DoorOpenResult.NOT_A_DOOR
 
