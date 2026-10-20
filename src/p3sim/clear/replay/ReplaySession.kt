@@ -132,7 +132,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             val rng = run.subRandom("replay.mob.${m.id}")
             val id = if (arch.disguise) com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV2(rng) else com.engineerclient.p3sim.clear.mobs.MobRolls.uuidV4(rng)
             // Its base HP: a mob first seen after the WITHER door into its room had scaled already.
-            val hp = (firstHp[m.id] ?: m.hp).takeIf { it > 0 }?.let { h -> recordedScale[room.index]?.takeIf { (k, _) -> (firstHpK[m.id] ?: m.k) > k }?.let { Math.round(h / it.second).toDouble() } ?: h }
+            val seen = seenScale[room.index]?.takeIf { f -> ratio(m, arch, mod)?.let { kotlin.math.abs(it / f - 1) < 0.05 } == true }
+            val hp = (firstHp[m.id] ?: m.hp).takeIf { it > 0 }?.let { h -> seen?.let { Math.round(h / it).toDouble() }
+                ?: recordedScale[room.index]?.takeIf { (k, _) -> (firstHpK[m.id] ?: m.k) > k }?.let { Math.round(h / it.second).toDouble() } ?: h }
                 ?: (arch.hpFor(run.config.floor)?.toDouble() ?: 1.0)
             planned[m.id] = id; plannedBack[id] = m.id
             out.getOrPut(room.index) { ArrayList() } += com.engineerclient.p3sim.clear.mobs.PlannedMob(id, arch.index, star, star || arch.cls == "miniboss", mod?.id.orEmpty(), hp,
@@ -244,6 +246,34 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             byRoom.getOrPut(room) { ArrayList() } += k to Math.round(v / l * 20) / 20.0
         }
         byRoom.mapValues { (_, l) -> l.minOf { it.first } to l.groupingBy { it.second }.eachCount().maxBy { it.value }.key }
+    }
+
+    /** A recorded mob's first HP over its kind's (with its word's factor), or null when its kind is unknown. */
+    private fun ratio(m: ReplayFile.Mob, arch: com.engineerclient.p3sim.pack.mobs.MobArchetype, mod: com.engineerclient.p3sim.pack.mobs.MobModifier?): Double? {
+        val base = arch.hpFor(run.config.floor)?.takeIf { it > 0 } ?: return null
+        val h = (firstHp[m.id] ?: m.hp).takeIf { it > 0 } ?: return null
+        return h / (base * (mod?.hpFactor ?: 1.0))
+    }
+
+    /**
+     * The WITHER-door factor of a room no mob of which the recording saw jump (they were all first seen scaled): the commonest ratio (to
+     * 0.05) of their first HP over their kind's, when it is over 1.04. Rooms [recordedScale] knows are not here.
+     */
+    private val seenScale: Map<Int, Double> by lazy {
+        recordedScale.size
+        val pack = run.packs.mobs ?: return@lazy emptyMap()
+        val byName = (pack.archetypes + com.engineerclient.p3sim.clear.mobs.LevelLooks.all).sortedByDescending { it.name.length }
+        val byRoom = HashMap<Int, MutableList<Double>>()
+        for (m in file.mobs) {
+            val room = run.plan.roomAtBlock(m.x, m.z)?.index ?: continue
+            if (room in recordedScale) continue
+            val name = m.tag.replace("✯", "").trim()
+            val arch = byName.firstOrNull { name == it.name || name.endsWith(" " + it.name) } ?: continue
+            val mod = name.removeSuffix(arch.name).trim().takeIf { it.isNotEmpty() }?.let { pack.modifier(it) }
+            val r = ratio(m, arch, mod) ?: continue
+            byRoom.getOrPut(room) { ArrayList() } += Math.round(r * 20) / 20.0
+        }
+        byRoom.mapNotNull { (room, l) -> l.groupingBy { it }.eachCount().maxBy { it.value }.key.takeIf { it > 1.04 }?.let { room to it } }.toMap()
     }
 
     private class Throw(val thr: Int, val land: Int, val x: Double, val y: Double, val z: Double)
@@ -386,7 +416,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = true
         com.engineerclient.p3sim.clear.state.StateController.clearsFromRecording = true
         com.engineerclient.p3sim.clear.secrets.SecretsSettings.replayBoost = recordedBoost
-        com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
+        com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second ?: seenScale[room] else null }
         // Mobs go where the recording has them while it sees them (out of its sight, ADS moves them).
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = { id -> if (ended) null else plannedBack[id]?.let { ents[it] }?.takeIf { !it.gone && !(it.x == 0.0 && it.z == 0.0) }?.let { doubleArrayOf(it.x, it.y, it.z) } }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
