@@ -51,6 +51,8 @@ internal class MobEntry(val record: MobRecord, val plan: PlannedMob, val arch: M
     var builtAt = Int.MIN_VALUE / 2
     var retryAt = Int.MIN_VALUE / 2
     var vanishes = 0
+    /** Level game time of the last build: the level's lookup is trusted only [MobWorld.LOOKUP_GRACE] ticks after it. */
+    var builtGameTime = 0L
     /** Builds that threw, in a row. Each one backs the next try off; the third makes a disguised mob an ordinary body instead. */
     var buildFailures = 0
     var plainBody = false
@@ -108,6 +110,7 @@ internal object MobWorld {
             built.stand.snapTo(e.x, e.y + e.tag.dy, e.z, 0f, 0f)
             for (f in built.fillers) f.snapTo(e.x, e.y, e.z, 0f, 0f)
             Sim.spawn(body)
+            e.builtGameTime = level.gameTime
             for (f in built.fillers) Sim.spawn(f)
             Sim.spawn(built.stand)
             e.body = body; e.fillers = built.fillers; e.stand = built.stand; e.lastTag = text
@@ -258,6 +261,9 @@ internal object MobWorld {
      */
     const val TAG_RANGE = 24
 
+    /** Ticks after a build before a body missing from the level's lookup counts as gone. */
+    const val LOOKUP_GRACE = 40
+
     /** The live tag stands, their tracking re-checked every tick (vanilla re-checks only when someone crosses a 16-block section). */
     private val tags = ArrayList<com.engineerclient.p3sim.TransientStand>()
 
@@ -327,12 +333,14 @@ internal object RealStage : MobStage {
     /**
      * The body is gone when it was removed, when its tag was (the tag is unloaded with its chunk), or when the level no longer holds it
      * although its chunk is loaded: a body that is not saved leaves the level with its chunk without being marked removed, and
-     * checking the flag alone kept such a mob "live" with nothing in the world for good.
+     * checking the flag alone kept such a mob "live" with nothing in the world for good. Not in the first [MobWorld.LOOKUP_GRACE] ticks:
+     * right after a teleport (a practice start) a new body may not be in the lookup yet, and counting it gone held the mob back 10 s.
      */
     override fun isGone(e: MobEntry): Boolean {
         val b = e.body ?: return true
         if (b.isRemoved || e.stand?.isRemoved == true) return true
         val lv = level ?: return false
+        if (lv.gameTime - e.builtGameTime < MobWorld.LOOKUP_GRACE) return false
         return lv.getEntity(b.id) !== b && com.engineerclient.p3sim.run.RunBlocks.isLoaded(Math.floor(b.x).toInt(), Math.floor(b.z).toInt())
     }
     override fun release(e: MobEntry) = MobWorld.dematerialise(e)
