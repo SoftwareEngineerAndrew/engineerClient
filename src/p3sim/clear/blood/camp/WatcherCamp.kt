@@ -38,6 +38,10 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
     private var config = CampConfig()
     /** A replay's recorded lines still to be said, in order. */
     private var replayTexts: ArrayDeque<String>? = null
+    /** The camp's one modifier ([CampMobs.MODIFIER_WEIGHTS]). */
+    private var modifier: String? = null
+    /** A replay's HP for the mob of a wall slot. */
+    private var recordedHp: Map<Int, Double> = emptyMap()
 
     override val finished: Boolean get() = engine?.finished ?: false
 
@@ -57,8 +61,28 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
                 swap[sp.slot] = WallStation(sp.slot, sp.stand, st.cls, st.mobName)
             }
             wall = wall.map { swap[it.slot] ?: it }
+            // The recording's mob of each throw: its head trades places with the one ADS drew there.
+            val mobs = rp.mobs
+            if (mobs != null && mobs.size == o.size) {
+                val fixed = HashSet<Int>()
+                for ((i, st) in o.withIndex()) {
+                    val rec = mobs[i] ?: continue
+                    val here = wall.first { it.slot == st.slot }
+                    val there = wall.firstOrNull { it.mobName == rec.name && it.slot !in fixed } ?: continue
+                    if (there.slot != here.slot) wall = wall.map {
+                        when (it.slot) {
+                            here.slot -> WallStation(here.slot, here.stand, there.cls, there.mobName)
+                            there.slot -> WallStation(there.slot, there.stand, here.cls, here.mobName)
+                            else -> it
+                        }
+                    }
+                    fixed += st.slot
+                    rec.hp?.let { recordedHp = recordedHp + (st.slot to it) }
+                }
+            }
             o.map { st -> wall.first { it.slot == st.slot } }
         }
+        modifier = rp?.modifier ?: CampMobs.modifier(host.random)
         for (st in wall) host.setHead(slots[st.slot], look.keyFor(st, host.random))
         if (rp != null) { config = CampConfig(chatCoins = false, recordedLines = rp.lines); replayTexts = ArrayDeque(rp.texts) }
         engine = CampEngine(home, wall, host.random, this, config, order, rp?.throwTicks?.takeIf { order != null && it.size == order.size })
@@ -117,7 +141,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         val end = engine?.endOf(landing) ?: return null
         val floor = host.room.watcherY
         val y = floor + CampMobs.SPAWN_RISE_LOW + host.random.nextDouble() * (CampMobs.SPAWN_RISE_HIGH - CampMobs.SPAWN_RISE_LOW)
-        val mob = CampMobs.roll(st, host.random)
+        val mob = CampMobs.roll(st, host.random, modifier, recordedHp[st.slot])
         val extras = CampMobs.extras(mob, if (landing.initial) "initial" else "later")
         val kind = when (st.cls) {
             WallClass.GIANT -> KIND_GIANT
@@ -149,6 +173,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         return JsonObject().also { o ->
             o.addProperty("opening", opening)
             o.addProperty("openedAt", openedAt)
+            o.addProperty("modifier", modifier)
             o.add("wall", JsonArray().also { a -> for (st in wall) a.add(JsonArray().also { p -> p.add(st.cls.name); p.add(st.mobName) }) })
             o.add("engine", e.snapshot())
         }
@@ -167,6 +192,7 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
         engine = e
         opening = data.get("opening")?.asString ?: opening
         openedAt = data.get("openedAt")?.asInt ?: -1
+        modifier = data.get("modifier")?.takeIf { it.isJsonPrimitive }?.asString ?: CampMobs.modifier(host.random)
         // The mobs the camp had made are the mob service's to bring back; the host must count them as this camp's again.
         (host as? BloodHost)?.let { h ->
             state.getAsJsonArray("mobs").forEach { m -> m.asJsonObject["h"]?.asString?.let { id -> try { h.adopt(UUID.fromString(id)) } catch (_: IllegalArgumentException) {} } }
@@ -177,9 +203,14 @@ class WatcherCamp(private val host: BloodCampHost) : BloodCamp, CampPort {
 
     /**
      * A replayed camp: [order] the recording's heads as this wall's stations in the order thrown (null: drawn), [lines] the Watcher's lines as
-     * his queue was asked for them (see [CampMech.requestsOf]), [opening] his first line and [texts] the others, in the order he said them.
+     * his queue was asked for them (see [CampMech.requestsOf]), [opening] his first line and [texts] the others, in the order he said them;
+     * [mobs] the mob each throw came down as (by [order]) and [modifier] the camp's.
      */
-    class Replayed(val order: List<WallStation>?, val lines: List<CampMech.Request>, val opening: String?, val texts: List<String>, val throwTicks: List<Int>? = null)
+    class Replayed(val order: List<WallStation>?, val lines: List<CampMech.Request>, val opening: String?, val texts: List<String>, val throwTicks: List<Int>? = null,
+                   val mobs: List<Mob?>? = null, val modifier: String? = null)
+
+    /** A recorded camp mob: its [name] (a wall head's) and its HP when whole, if the recording showed it. */
+    class Mob(val name: String, val hp: Double?)
 
     companion object {
         /** A replay's camp from its wall's stations: the recording's throw order and lines, or null for a camp of its own. */

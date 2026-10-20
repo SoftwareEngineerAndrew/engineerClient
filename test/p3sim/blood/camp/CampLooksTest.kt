@@ -59,7 +59,15 @@ class CampLooksTest {
         val rng = Random(3)
         val c = (1..20000).groupingBy { CampMobs.modifier(rng) }.eachCount()
         assertEquals(setOf("Speedy", "Healthy", "Stormy", "Stealth", "Golden", "Boomer"), c.keys)
-        assertTrue(c.getValue("Speedy") > c.getValue("Boomer") * 1.8)
+        assertTrue(c.getValue("Speedy") > c.getValue("Stormy") * 1.4)
+    }
+
+    @Test
+    fun aCampModifierIsEveryMobsAndARecordedHpIsKept() {
+        val rng = Random(4)
+        val here = Vec3(0.0, 0.0, 0.0)
+        repeat(50) { assertEquals("Golden", CampMobs.roll(WallStation(0, here, WallClass.STANDARD, "Mute"), rng, "Golden").modifier) }
+        assertEquals(13_000_000.0, CampMobs.roll(WallStation(0, here, WallClass.BOSS, "Spirit Bear"), rng, "Stealth", 13_000_000.0).hp)
     }
 
     @Test
