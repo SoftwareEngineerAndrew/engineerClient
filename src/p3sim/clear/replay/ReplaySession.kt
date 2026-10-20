@@ -177,6 +177,26 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         out
     }
     private val hpUsedK = HashMap<Int, Int>()
+
+    /** Your recorded Implosion lines: k, enemies, damage. */
+    private val implosions: List<Triple<Int, Int, Double>> by lazy {
+        file.events.mapNotNull { e ->
+            if (e.size() < 3 || e[1].asString != "chat" || !e[2].isJsonPrimitive) return@mapNotNull null
+            val m = IMPLOSION.find(clean(e[2].asString)) ?: return@mapNotNull null
+            Triple(e[0].asInt, m.groupValues[1].toInt(), m.groupValues[2].replace(",", "").toDouble())
+        }
+    }
+    private val implosionUsed = HashSet<Int>()
+
+    /** The recorded line of the cast ADS runs now: the nearest unused one within [IMPLOSION_NEAR] ticks. */
+    private fun recordedImplosion(by: java.util.UUID): Pair<Int, Double>? {
+        if (forcing || ended || by != host.uuid) return null
+        val now = run.t
+        val i = implosions.indices.filter { it !in implosionUsed && kotlin.math.abs(implosions[it].first - now) <= IMPLOSION_NEAR }
+            .minByOrNull { kotlin.math.abs(implosions[it].first - now) } ?: return null
+        implosionUsed += i
+        return implosions[i].second to implosions[i].third
+    }
     /** Set while the session itself kills a mob (a recorded death), so the hit is not read as yours. */
     private var forcing = false
 
@@ -366,6 +386,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // Mobs go where the recording has them while it sees them (out of its sight, ADS moves them).
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = { id -> if (ended) null else plannedBack[id]?.let { ents[it] }?.takeIf { !it.gone && !(it.x == 0.0 && it.z == 0.0) }?.let { doubleArrayOf(it.x, it.y, it.z) } }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
+        com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = { by -> recordedImplosion(by) }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.teamFromRecording = true
@@ -421,6 +442,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
+        com.engineerclient.p3sim.clear.damage.DamageModule.replayImplosion = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
@@ -1229,6 +1251,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val ROMAN = listOf("I", "II", "III", "IV", "V")
         private val ITEM = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Superboom TNT|Revive Stone)(?: x(\\d+))?!$")
         private val WITHER_ESSENCE = Regex("^(\\S+) found a Wither Essence! Everyone gains an extra essence!$")
+        private val IMPLOSION = Regex("""^Your Implosion hit (\d+) enem(?:y|ies) for ([\d,.]+) damage\.$""")
+        private const val IMPLOSION_NEAR = 4
         private val ESSENCE = Regex("^ESSENCE! (\\w{1,16}) found x(\\d+) (\\w+) Essence!$")
         private val WITHER_OPENED = Regex("^(\\w{1,16}) opened a WITHER door!")
         private val DIED = Regex("☠ (\\w{1,16}) .*became a ghost")

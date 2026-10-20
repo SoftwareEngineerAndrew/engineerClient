@@ -295,6 +295,9 @@ object DamageModule : AdsModule, DamageService {
         for (i in shownSoFar until now) Sim.asPlayer(sp) { Sim.chat(ClassMilestones.line(cls, i, table, seconds)) }
     }
 
+    /** A replay's Implosion line for [caster]'s cast now (enemies, damage), each used once; null for none or not the replay's caster. */
+    @Volatile var replayImplosion: ((UUID) -> Pair<Int, Double>?)? = null
+
     /** A replay's damage for a hit: the HP the recording's mob lost then (null: not the replay's hit to say, 0: Hypixel shows no loss then). */
     @Volatile var replayHit: ((UUID, UUID?) -> Double?)? = null
 
@@ -332,20 +335,22 @@ object DamageModule : AdsModule, DamageService {
         val ids = ImplosionRules.select(box, all.map { ImplosionRules.Candidate(it.id, hitboxOf(it), it.alive, asleep(it)) })
         if (ids.isEmpty() && bats == 0) return Cast(0, 0.0, 0)
         val profile = ImplosionRules.profile(run.config.floor)
-        val base = damage ?: profile.castBase(rolls, implosionMultiplier)
+        // A replay's own cast: the recording's line for it says how hard Hypixel's hit each enemy (the total over the count).
+        val recorded = if (damage == null && caster != null) replayImplosion?.invoke(caster) else null
+        val base = damage ?: recorded?.let { it.second / it.first } ?: profile.castBase(rolls, implosionMultiplier)
         val scale = run.config.mobHpScale ?: 1.0
         // A bat takes the cast's base roll: it has 100 HP, so any hit kills it, but the line's total still adds the roll.
         var hit = bats; var killed = bats; var total = bats * base
         for (id in ids) {
             val before = Services.mobs.mob(id)
             // An explicit damage (a caller's own number) is the same for every mob; otherwise each mob's kind and hp decide.
-            val dmg = if (damage != null || before == null) base else profile.perMob(before.kind, before.miniboss, before.maxHp, scale, base, rolls)
+            val dmg = if (damage != null || recorded != null || before == null) base else profile.perMob(before.kind, before.miniboss, before.maxHp, scale, base, rolls)
             if (hurtMob(run, id, dmg, DamageSource.IMPLOSION, caster)) {
                 hit++; total += dmg
                 if (before != null && !before.alive) killed++
             }
         }
-        return Cast(hit, total, killed)
+        return Cast(hit, if (recorded != null && hit == recorded.first) recorded.second else total, killed)
     }
 
     // ---- secret bats -------------------------------------------------------------------------------------------------------
