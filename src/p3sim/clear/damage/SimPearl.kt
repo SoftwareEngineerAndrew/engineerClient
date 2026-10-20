@@ -17,8 +17,9 @@ import net.minecraft.world.phys.Vec3
 
 /**
  * The ender pearl a player throws in a full run's clear. It flies as vanilla's does (out of the hand at [ClearItems.PEARL_SPEED], the
- * same spread) and lands the way the recordings show Hypixel's do: 32 portal puffs where it hit, the thrower put at the pearl's position
- * of the tick before (their look kept, their fall reset), one enderman teleport sound, and then it is gone. Unlike vanilla's it costs the
+ * same spread) and lands the way the recordings show Hypixel's do: 32 portal puffs where it hit, the thrower put on the middle of the block
+ * it landed on top of (DR, 67 of your pearls: 21 put you at x.5 z.5, each at a whole y or a slab's half; the 46 others off-centre) or
+ * else at the pearl's position of the tick before (their look kept, their fall reset), one enderman teleport sound, and then it is gone. Unlike vanilla's it costs the
  * thrower no health and spawns no endermite, and a mob or a mate it hits is only a place to land: nothing takes damage.
  */
 class SimPearl(level: Level, owner: LivingEntity, stack: ItemStack) : ThrownEnderpearl(level, owner, stack) {
@@ -36,7 +37,8 @@ class SimPearl(level: Level, owner: LivingEntity, stack: ItemStack) : ThrownEnde
         // getOwner(): `owner` here is Projectile's own field (an EntityReference), never the player.
         val thrower = getOwner() as? ServerPlayer
         if (thrower != null && thrower.isAlive && !thrower.isSleeping && thrower.level() === level) {
-            val to = oldPosition()
+            val top = (hit as? net.minecraft.world.phys.BlockHitResult)?.takeIf { it.type == HitResult.Type.BLOCK && it.direction == net.minecraft.core.Direction.UP }
+            val to = top?.let { Vec3(it.blockPos.x + 0.5, it.location.y, it.blockPos.z + 0.5) } ?: oldPosition()
             thrower.teleportTo(level, to.x, to.y, to.z, Relative.ROTATION, 0f, 0f, false)
             thrower.deltaMovement = Vec3.ZERO
             thrower.fallDistance = 0.0
