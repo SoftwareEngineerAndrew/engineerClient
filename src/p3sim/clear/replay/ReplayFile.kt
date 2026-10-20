@@ -16,8 +16,11 @@ import java.util.zip.GZIPInputStream
  * client met them. Kinds starting `o.` are what the recording's player sent (moves, item uses, clicks...); `mmv`, `mrot`, `mhead`, `manim`,
  * `mflags` and `eq` are the teammates' bodies; the rest is what the server did (chat, blocks, entities, Odin's rooms), for the differ.
  */
-class ReplayFile(val id: String, val floor: String?, val self: Person, val party: List<Person>, val idToMate: Map<Int, String>, val events: List<JsonArray>) {
+class ReplayFile(val id: String, val floor: String?, val self: Person, val party: List<Person>, val idToMate: Map<Int, String>, val events: List<JsonArray>, val mobs: List<Mob> = emptyList()) {
     class Person(val name: String, val uuid: String?, val cls: String?, val tex: String?, val sig: String?)
+
+    /** One of Hypixel's mobs: its body, where it was first seen (k), its tag without HP ("✯ Healing Crypt Souleater") and the most HP the tag showed. */
+    class Mob(val id: Int, val type: String?, val k: Int, val x: Double, val y: Double, val z: Double, val yaw: Float, val tag: String, val hp: Double)
 
     /** Events by k, in their order. */
     private val byK: Map<Int, List<JsonArray>> = events.groupBy { it[0].asInt }
@@ -55,7 +58,13 @@ class ReplayFile(val id: String, val floor: String?, val self: Person, val party
             val ids = HashMap<Int, String>()
             o.getAsJsonObject("idToMate")?.entrySet()?.forEach { (k, v) -> k.toIntOrNull()?.let { ids[it] = v.asString } }
             val ev = o.getAsJsonArray("ev").map { it.asJsonArray }
-            return ReplayFile(o.get("id").asString, o.get("floor")?.takeIf { it.isJsonPrimitive }?.asString, self, party, ids, ev)
+            val mobs = o.getAsJsonArray("mobs")?.mapNotNull { m ->
+                val j = m.asJsonObject
+                fun d(k: String) = j.get(k)?.takeIf { it.isJsonPrimitive }?.asDouble
+                Mob(j.get("id").asInt, j.get("type")?.takeIf { it.isJsonPrimitive }?.asString, d("k")?.toInt() ?: 0, d("x") ?: return@mapNotNull null, d("y") ?: 0.0, d("z") ?: 0.0,
+                    d("yaw")?.toFloat() ?: 0f, j.get("tag")?.asString?.trim() ?: return@mapNotNull null, d("hp") ?: 0.0)
+            }.orEmpty()
+            return ReplayFile(o.get("id").asString, o.get("floor")?.takeIf { it.isJsonPrimitive }?.asString, self, party, ids, ev, mobs)
         }
     }
 }
