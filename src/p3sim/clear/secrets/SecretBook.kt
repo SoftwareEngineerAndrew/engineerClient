@@ -54,6 +54,9 @@ class SecretBook(
     /** The sites of [room] not yet found. */
     fun pending(room: Int): List<SecretSite> = plan.room(room)?.sites?.filter { it.key !in found }.orEmpty()
 
+    /** Whether [room] has a secret of [kind], found or not. */
+    fun hasKind(room: Int, kind: SecretKind): Boolean = plan.room(room)?.sites?.any { it.kind == kind } == true
+
     /** How many secrets of [room] are still to find (by the bars' count). */
     fun remaining(room: Int): Int = state.room(room)?.let { it.secretsMax - it.secretsFound } ?: 0
 

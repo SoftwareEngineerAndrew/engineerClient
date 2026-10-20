@@ -390,6 +390,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         TrapsModule.recordingMovesCrushers = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = { r, room -> if (r === run && !ended) roomPlans[room] else null }
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = { r -> if (r === run && !ended) recordedBlazes else null }
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) bonusBat else null }
         // The teammates are party members (tab, leap window, key pickups by position, the score's deaths).
         for (m in bodies.all()) {
             val rec = run.state.players.getOrPut(m.uuid) { PlayerRecord(m.uuid, m.name, cls(m.cls), true) }
@@ -414,6 +415,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.blood.camp.CampLines.script = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         com.engineerclient.p3sim.clear.puzzles.BlazePuzzle.replayBlazes = null
+        com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
@@ -783,13 +785,14 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             BloodDeath(k, tag ?: "camp mob", rx, rz, blood.index, landing).also { lastBlood = it; bloodOwed += it }
             payBlood(); return
         }
+        if (r.type == "minecraft:bat") { batDied(k, rx, ry, rz); return }
         if (r.type == "minecraft:blaze") {
             val hp = brief?.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.let { BLAZE_TAG.find(clean(it)) }?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
             if (hp != null) { blazeDied(k, hp, rx, ry, rz); return }
         }
         // Only Hypixel's mobs have a tag (a bare body is a part of one: a Giant's, a disguise's).
-        if (tag.isNullOrEmpty()) { if (r.type != "minecraft:bat") return }
-        val label = tag ?: "Bat"
+        if (tag.isNullOrEmpty()) return
+        val label = tag
         // Without the recording's throws, any tagged death in the Blood room is a camp death.
         if (blood != null && tag != null && recordedThrows.isEmpty()) {
             // One mob can die as two tagged bodies (a rider): the same name within a tick and two blocks is one death.
@@ -835,9 +838,62 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
     }
 
+    /** Where the recording's bats died (k, x, z), so their secrets are kept for their kills ([creditSecrets]). */
+    private val batDeaths: List<Triple<Int, Double, Double>> by lazy {
+        val type = HashMap<Int, String>(); val at = HashMap<Int, DoubleArray>()
+        val out = ArrayList<Triple<Int, Double, Double>>()
+        for (e in file.events) when (e.s(1)) {
+            "spawn" -> { val id = e.i(2) ?: continue; e.s(3)?.let { type[id] = it }; at[id] = doubleArrayOf(e.d(5) ?: continue, e.d(7) ?: continue) }
+            "emv" -> { val id = e.i(2) ?: continue; at[id] = doubleArrayOf(e.d(3) ?: continue, e.d(5) ?: continue) }
+            "eev" -> { val id = e.i(2) ?: continue; if (e.i(3) == 3 && type[id] == "minecraft:bat") at[id]?.let { out += Triple(e[0].asInt, it[0], it[1]) } }
+        }
+        out
+    }
+
+    /**
+     * Which of the recording's bat deaths carried the bonus point, counted from 1, or 0 for none in sight. The dungeon state first says `bat`
+     * 0 to 3 ticks after that bat's death (50 of 50 DR runs where it died in view); in the 65 runs where it died out of sight there is no
+     * such death, and the bonus is given when the state says it instead ([team]). The first state is the run before's: only those after T0 count.
+     */
+    private val bonusBat: Int by lazy {
+        val flip = batFlip ?: return@lazy 0
+        val i = batDeaths.indexOfLast { it.first <= flip }
+        if (i >= 0 && flip - batDeaths[i].first <= BONUS_BAT_LAG) i + 1 else 0
+    }
+
+    /** The tick the recorded dungeon state first says the bonus bat is dead, or null. */
+    private val batFlip: Int? by lazy {
+        file.events.firstOrNull { e -> e.s(1) == "dung" && e[0].asInt > 0 && e.o(2)?.get("bat")?.takeIf { it.isJsonPrimitive }?.asBoolean == true }?.get(0)?.asInt
+    }
+
+    /** Whether the recording has a bat die in [room] after now. */
+    private fun batLater(room: Int): Boolean = batDeaths.any { (k, x, z) -> k > run.t && run.plan.roomAtBlock(x, z)?.index == room }
+
+    /**
+     * A recorded bat died. Every bat of a clear is a bat secret, so ADS's nearest bat secret of that room not found yet is found by whoever
+     * killed it: yours (you hit or used something just before, near it) gets [KILL_GRACE] ticks to do it yourself, a teammate's is done on its tick.
+     */
+    private fun batDied(k: Int, rx: Double, ry: Double, rz: Double) {
+        val you = Math.hypot(host.x - rx, host.z - rz)
+        val room = run.plan.roomAtBlock(rx, rz) ?: return diff.mobNotFound(k, "Bat", rx, ry, rz, you)
+        fun open() = com.engineerclient.p3sim.clear.secrets.SecretsModule.pendingSecrets(run, room.index).filter { it.kind == com.engineerclient.p3sim.run.SecretKind.BAT }
+        val site = open().minByOrNull { Math.hypot(it.x + 0.5 - rx, it.z + 0.5 - rz) }
+        if (site == null) {
+            // Found already in ADS (by you, or credited) is fine; a room without a bat secret is a difference.
+            if (com.engineerclient.p3sim.clear.secrets.SecretsModule.hasBat(run, room.index)) diff.mobOk() else diff.mobNotFound(k, "Bat", rx, ry, rz, you)
+            return
+        }
+        val yours = you <= FAR && youActed(k)
+        if (yours) diff.mobPending(k, "Bat", you, "ADS bat secret at ${site.x} ${site.y} ${site.z}")
+        val who = if (yours) host.uuid else nearestMate(rx, rz)
+        pending += Pending(if (!yours) k else k + KILL_GRACE, "Bat killed (you ${"%.0f".format(you)} blocks away)", { open().none { it.x == site.x && it.y == site.y && it.z == site.z } }) {
+            if (Services.secrets.found(run, room.index, site.kind, who, site.x, site.y, site.z)) "found by ${who?.let { run.state.players[it]?.name } ?: "?"}" else "not found"
+        }
+    }
+
     // ------------------------------------------------------------------ the team's score parts
 
-    private var recSecrets = 0; private var recCrypts = 0; private var recMimic = false; private var recPrince = false
+    private var recSecrets = 0; private var recCrypts = 0; private var recMimic = false; private var recPrince = false; private var recBat = false
 
     /** The first tick the recording marks each room green. */
     private val greenAt: Map<Int, Int> by lazy {
@@ -864,6 +920,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             pending += Pending(k + TEAM_GRACE, "crypts to $c", { led.crypts >= c }) { val n = creditCrypts(c); "blew $n, ADS now ${led.crypts}" } } }
         if (o.get("mimic")?.asBoolean == true && !recMimic) { recMimic = true
             pending += Pending(k + TEAM_GRACE, "mimic killed", { led.mimicKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.MIMIC, null); "ADS mimic ${led.mimicKilled}" } }
+        // A bonus bat that died out of the recording's sight: a teammate's, given now (one in sight comes with its kill: [bonusBat]).
+        if (o.get("bat")?.asBoolean == true && !recBat) { recBat = true
+            if (bonusBat == 0) pending += Pending(k, "bonus bat", { led.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, null); "ADS bat ${led.batKilled}" } }
         if (o.get("prince")?.asBoolean == true && !recPrince) { recPrince = true
             pending += Pending(k + TEAM_GRACE, "prince killed", { led.princeKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.PRINCE, princeKiller); "ADS prince ${led.princeKilled}" } }
     }
@@ -887,6 +946,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 if (run.state.secrets.teamFound >= want) return n
                 // A Wither Essence a teammate takes later in the recording is theirs, on its tick ([mateEssence]).
                 if (site.kind == com.engineerclient.p3sim.run.SecretKind.ESSENCE && mateEssences.any { it > run.t }) continue
+                // A bat the recording kills later is found on its tick ([batDied]).
+                if (site.kind == com.engineerclient.p3sim.run.SecretKind.BAT && batLater(room)) continue
                 // A chest or skull you click later in the recording is yours to find then, not a teammate's now.
                 if ((yourClicks[BlockPos.asLong(site.x, site.y, site.z)] ?: Int.MIN_VALUE) > run.t) continue
                 if (Services.secrets.found(run, room, site.kind, mateIn(room), site.x, site.y, site.z)) n++
@@ -1119,6 +1180,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         const val TEAM_GRACE = 20
         private val RANK = mapOf("UNDISCOVERED" to 0, "NONE" to 1, "WHITE" to 2, "GREEN" to 3)
         const val MATE = "replayMate"
+        /** The dungeon state says the bonus bat is dead this many ticks after its death at most (50 of 50 DR runs: 0 to 3). */
+        const val BONUS_BAT_LAG = 3
+
         /** Ticks ADS gets to do by itself what the recording did (a kill, a puzzle) before it is done for it. */
         const val GRACE = 20
         const val DOOR_GRACE = 6
