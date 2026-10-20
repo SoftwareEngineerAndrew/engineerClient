@@ -111,7 +111,7 @@ object HudPackets {
     @Volatile var tabWorks = true
         private set
 
-    private fun entry(id: UUID, profile: GameProfile, listed: Boolean, name: Component?): ClientboundPlayerInfoUpdatePacket.Entry =
+    internal fun entry(id: UUID, profile: GameProfile, listed: Boolean, name: Component?): ClientboundPlayerInfoUpdatePacket.Entry =
         ClientboundPlayerInfoUpdatePacket.Entry(id, profile, listed, 1, GameType.SURVIVAL, name, false, 0, null)
 
     /**
