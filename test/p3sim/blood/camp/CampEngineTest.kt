@@ -105,7 +105,7 @@ class CampEngineTest {
         val fly = CampMech.flyTo(home, CampMech.target(first.station.stand), CampMech.V_OPEN)
         assertEquals(90 + fly.n + 1 + CampMech.THROW_DELAY, first.throwTick)
         assertEquals(first.throwTick + CampMech.FLIGHT_INITIAL, first.landTick)
-        assertEquals(first.landTick, first.spawnTick)
+        assertEquals(first.landTick - 1, first.spawnTick)
         val decisions = ran.sim.decisions().take(4)
         assertEquals(90, decisions[0])
         assertTrue(decisions.all { (it - 90) % 30 == 0 }, "opening decisions $decisions")
@@ -113,10 +113,10 @@ class CampEngineTest {
     }
 
     @Test
-    fun aLaterMobIsAddedFortyTicksAfterItsHeadIsThrownAndAnInitialOneEightyAfter() {
+    fun aMobIsAddedATickBeforeItsHeadLands() {
         val ran = run(4)
         for (l in ran.engine.landings) {
-            if (l.initial) { assertEquals(l.throwTick + 80, l.landTick); assertEquals(l.landTick, l.spawnTick) }
+            if (l.initial) { assertEquals(l.throwTick + 80, l.landTick); assertEquals(l.landTick - 1, l.spawnTick) }
             else { assertEquals(l.throwTick + 40, l.landTick); assertEquals(l.throwTick + 39, l.spawnTick) }
         }
     }
