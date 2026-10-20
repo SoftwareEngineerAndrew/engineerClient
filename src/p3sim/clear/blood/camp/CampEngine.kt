@@ -210,7 +210,7 @@ class CampEngine(
         val alive = mobs.count { !it.ws && it.spawnTick < r && it.death >= r }
         when {
             state == State.OPENING && m10 % 3 == 0 && m10 >= CampMech.OPEN_FIRST / CampMech.LOOP -> {
-                if (throws < 4) throwAt(r, CampMech.V_OPEN, initial = true) else goHome(r)
+                if (throws >= 4) goHome(r) else if (recordedThrows?.getOrNull(throws) == null) throwAt(r, CampMech.V_OPEN, initial = true)
             }
             (state == State.AT_HOME || state == State.LATER) && throws < throwOrder.size && m10 >= 42 && recordedThrows?.getOrNull(throws) == null -> {
                 val speed = when {
@@ -246,10 +246,19 @@ class CampEngine(
         const val HEAD_LENGTH_LATER = 12.0
     }
 
-    /** A replay's later leg: leaves now if a slow or fast flight from here throws the next head on its recorded tick (fast, late, once past it). */
+    /**
+     * A replay's leg: leaves now if a flight from here throws the next head on its recorded tick (an initial head at the opening's pace,
+     * a later one slow or fast; once past it, at once and fast).
+     */
     private fun recordedLeg(r: Int) {
         val want = recordedThrows?.getOrNull(throws) ?: return
-        if (throws < 4 || (state != State.AT_HOME && state != State.LATER) || movingUntil >= r) return
+        if (movingUntil >= r) return
+        if (throws < 4) {
+            if (state != State.OPENING) return
+            if (r + CampMech.flyTo(pos, CampMech.target(throwOrder[throws].stand), CampMech.V_OPEN).n + 1 + CampMech.THROW_DELAY >= want) throwAt(r, CampMech.V_OPEN, initial = true)
+            return
+        }
+        if (state != State.AT_HOME && state != State.LATER) return
         val target = CampMech.target(throwOrder[throws].stand)
         fun thrown(s: CampMech.Speed) = r + CampMech.flyTo(pos, target, s.v).n + 1 + CampMech.THROW_DELAY
         val speed = listOf(CampMech.Speed.SLOW, CampMech.Speed.FAST).firstOrNull { thrown(it) == want }

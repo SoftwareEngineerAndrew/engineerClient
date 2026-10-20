@@ -429,4 +429,16 @@ class CampEngineTest {
         for (r in 0..3000) { sim2.now = r; e2.step(r) }
         assertTrue(e2.landings.map { it.throwTick } != ticks)
     }
+
+    @Test fun aReplayThrowsTheInitialHeadsOnTheirRecordedTicksToo() {
+        // The same camp recorded with an opening 60 ticks later than the rule's (every head later by as much).
+        val rec = run(7)
+        val ticks = rec.engine.landings.map { it.throwTick + 60 }
+        val order = rec.engine.landings.map { it.station }
+        val never = Policy({ _, _ -> 100_000 }, { _, _ -> 100_000 })
+        val sim = Sim(never)
+        val e = CampEngine(home, rec.wall, Random(7), sim, CampConfig(chatCoins = false, wsChance = 0.0), order, ticks)
+        for (r in 0..3000) { sim.now = r; e.step(r) }
+        assertEquals(ticks.take(4), e.landings.take(4).map { it.throwTick }, "the four initial heads on their recorded ticks")
+    }
 }
