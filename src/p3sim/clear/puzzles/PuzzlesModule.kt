@@ -141,17 +141,20 @@ object PuzzlesModule : AdsModule, PuzzleHost {
         for (p in humans) {
             run.state.roomAt(p.x, p.z)?.index?.let { occupied += it }
         }
+        // Rooms a party member (a teammate too) stands in, for the puzzles a teammate runs alone.
+        val party by lazy { run.state.players.values.filter { !it.ghost }.mapNotNullTo(HashSet()) { run.state.roomAt(it.x, it.z)?.index } }
         for (puzzle in d.puzzles) {
             val room = puzzle.context.room
+            val inside = room.index in occupied || (puzzle is WorldPuzzle && puzzle.startsForParty && room.index in party)
             if (puzzle is WorldPuzzle) {
-                if (!puzzle.activated && humans.any { near(it, room) }) guard("${puzzle.kind} activate") { puzzle.activate() }
+                if (!puzzle.activated && (humans.any { near(it, room) } || inside)) guard("${puzzle.kind} activate") { puzzle.activate() }
                 if (puzzle.activated) {
-                    if (room.index in occupied) puzzle.noteEntered(run.serverTick)
+                    if (inside) puzzle.noteEntered(run.serverTick)
                     // Wakes the room a few ticks after the first step into it, then runs its timed steps (even with nobody inside).
                     guard("${puzzle.kind} pump") { puzzle.pump(run.serverTick) }
                 }
             }
-            if (room.index in occupied && (puzzle !is WorldPuzzle || (puzzle.activated && puzzle.awake))) guard("${puzzle.kind} onTick") { puzzle.onTick() }
+            if (inside && (puzzle !is WorldPuzzle || (puzzle.activated && puzzle.awake))) guard("${puzzle.kind} onTick") { puzzle.onTick() }
         }
     }
 
