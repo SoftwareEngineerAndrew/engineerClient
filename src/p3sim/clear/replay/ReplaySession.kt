@@ -141,6 +141,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         for (m in bodies.all()) run.state.players[m.uuid]?.extras?.remove(MATE)
         SimNet.send(host, NET, "stop")
         diff.note(run.t, "stop", why)
+        diff.ended(why, run.t, file.bossK, file.lastK, why.startsWith("the recording reached") || why == "ADS reached the boss")
         diff.write()
     }
 
@@ -254,7 +255,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val before = host.position()
         val kind = e[1].asString
         if (kind == "o.use" || kind == "o.useOn" || kind == "o.slot") diff.action(e[0].asInt, "%-8s %s held %s (slot %d) at %s".format(kind, e.s(2) ?: "", SimItems.idOf(host.mainHandItem) ?: host.mainHandItem.item.toString(), host.inventory.selectedSlot, fmt(host.x, host.y, host.z)))
-        selfPacket(e, same, at, c)
+        injecting = this
+        try { selfPacket(e, same, at, c) } finally { injecting = null }
         if (e[1].asString != "o.m" && host.position().distanceTo(before) > 2.0) diff.adsTeleport(e[0].asInt, host.position())
     }
 
@@ -353,7 +355,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val type = b.get("type")?.takeIf { it.isJsonPrimitive }?.asString
         val tag = b.get("tag")?.takeIf { it.isJsonPrimitive }?.asString?.let { clean(it) }
         val box = AABB(x - 6, y - 4, z - 6, x + 6, y + 6, z + 6)
-        val all = Sim.level.getEntities(null as Entity?, box) { it !== host && it.isAlive && it !is ServerPlayer }
+        // Never an item, an orb or an arrow: the server drops a player who attacks one ("Attempting to attack an invalid entity").
+        val all = Sim.level.getEntities(null as Entity?, box) { it !== host && it.isAlive && it !is ServerPlayer && it !is net.minecraft.world.entity.item.ItemEntity &&
+            it !is net.minecraft.world.entity.ExperienceOrb && it !is net.minecraft.world.entity.projectile.arrow.AbstractArrow }
         return all.minByOrNull { en ->
             var d = en.position().distanceTo(Vec3(x, y, z))
             val et = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(en.type).toString()
@@ -551,6 +555,20 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private fun CheckMark.odin(): String = when (this) { CheckMark.UNDISCOVERED -> "UNDISCOVERED"; CheckMark.NONE -> "NONE"; CheckMark.WHITE -> "WHITE"; CheckMark.GREEN -> "GREEN"; else -> "FAILED" }
 
     companion object {
+        /** The session whose recorded packet the server is handling right now (server thread). */
+        @Volatile private var injecting: ReplaySession? = null
+
+        /**
+         * A kick while a recorded packet is handled (AdsReplayKickMixin): the replay keeps going and the report lists it, since a packet
+         * Hypixel took that ADS's server refuses is a difference, not a reason to lose the run. False when no recorded packet is in hand.
+         */
+        @JvmStatic
+        fun swallowKick(reason: String): Boolean {
+            val s = injecting ?: return false
+            s.diff.kick(s.run.t, reason)
+            return true
+        }
+
         const val NET = "ads.replay"
         private val RANK = mapOf("UNDISCOVERED" to 0, "NONE" to 1, "WHITE" to 2, "GREEN" to 3)
         const val MATE = "replayMate"
