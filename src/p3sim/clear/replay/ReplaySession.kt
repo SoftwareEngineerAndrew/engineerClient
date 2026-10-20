@@ -301,6 +301,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = { wall -> if (!ended) recordedCampOf(wall) else null }
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = true
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = { r, room -> if (r === run && !ended) recordedScale[room]?.second else null }
+        // Mobs go where the recording has them while it sees them (out of its sight, ADS moves them).
+        com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = { id -> if (ended) null else plannedBack[id]?.let { ents[it] }?.takeIf { !it.gone && !(it.x == 0.0 && it.z == 0.0) }?.let { doubleArrayOf(it.x, it.y, it.z) } }
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = { mob, by -> hitAmount(mob, by) }
         // The recorded player's pet: Kill Combo lines only if the recording has them.
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = file.events.any { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && it[2].asString.contains("Kill Combo") }
@@ -350,6 +352,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.mobs.MobsModule.roomMobs = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
         com.engineerclient.p3sim.clear.damage.DamageModule.replayHit = null
+        com.engineerclient.p3sim.clear.mobs.MobsModule.replayPose = null
         com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.replay = null
         com.engineerclient.p3sim.clear.state.StateController.keysFromRecording = false
         com.engineerclient.p3sim.clear.damage.DamageModule.killCombo = true
