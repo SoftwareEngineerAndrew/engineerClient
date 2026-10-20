@@ -248,15 +248,15 @@ class StateControllerTest {
         assertEquals(1, r.all<RoomGreen>().count { it.room == 6 })
     }
 
-    @Test fun theBossEntryTurnsTheBloodRoomGreenAtOnce() {
+    @Test fun aBossEntryBeforeTheCheckLeavesTheBloodRoomRed() {
         val r = Rig()
         val pass = r.passLine()
         r.until(pass + 20)
         assertEquals(CheckMark.RED, r.room(6).check)
         r.run.requestStage(RunStage.BOSS_ENTRY)
-        assertEquals(CheckMark.GREEN, r.room(6).check, "nobody enters the boss with the blood room still red")
         r.until(pass + 200)
-        assertEquals(1, r.all<RoomGreen>().count { it.room == 6 })
+        assertEquals(CheckMark.RED, r.room(6).check, "a party in the boss before the check never sees the blood room green")
+        assertEquals(0, r.all<RoomGreen>().count { it.room == 6 })
     }
 
     @Test fun aPendingBloodCheckSurvivesASavepointRestore() {
