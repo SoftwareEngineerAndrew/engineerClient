@@ -60,8 +60,8 @@ class ReplayDiff(private val s: ReplaySession) {
     /** Camp mob spawns, in ticks after each side's own BLOOD door: Hypixel's (from the recording) and ADS's. */
     var campHypixel: List<Int> = emptyList()
     val campAds = ArrayList<Int>()
-    fun mobNotFound(k: Int, label: String, x: Double, y: Double, z: Double, you: Double) {
-        mobsMissing += "%6d  %s at %s (you %.0f blocks away)".format(k, label, ReplaySession.fmt(x, y, z), you)
+    fun mobNotFound(k: Int, label: String, x: Double, y: Double, z: Double, you: Double, why: String = "") {
+        mobsMissing += "%6d  %s at %s (you %.0f blocks away)%s".format(k, label, ReplaySession.fmt(x, y, z), you, if (why.isEmpty()) "" else ": $why")
     }
     /** A recorded death ADS has not done yet; [you]: how far you were (near you, the kill was most likely yours). */
     fun mobPending(k: Int, label: String, you: Double, ads: String) { if (you < 10) mobsNearYou += "%6d  %s (you %.0f blocks away): %s".format(k, label, you, ads) }
