@@ -26,8 +26,11 @@ class CampMob(
 }
 
 object CampMobs {
-    /** Modifier weights over the 1,270 tagged blood mobs: Speedy 316, Healthy 306, Stormy 201, Stealth 156, Golden 150, Boomer 141. */
-    val MODIFIER_WEIGHTS: List<Pair<String, Int>> = listOf("Speedy" to 316, "Healthy" to 306, "Stormy" to 201, "Stealth" to 156, "Golden" to 150, "Boomer" to 141)
+    /**
+     * One modifier for the whole camp: every tagged camp mob of a recorded camp has the same one (88 of 88 DR and ADR camps). Weights are
+     * those camps: Speedy 18, Stealth 17, Golden 15, Healthy 15, Boomer 12, Stormy 11.
+     */
+    val MODIFIER_WEIGHTS: List<Pair<String, Int>> = listOf("Speedy" to 18, "Stealth" to 17, "Golden" to 15, "Healthy" to 15, "Boomer" to 12, "Stormy" to 11)
 
     /** F7 standard mob HP: uniform over the observed 248,000 to 256,000 (median 252,000). */
     const val STANDARD_HP_LOW = 248_000.0
@@ -80,12 +83,12 @@ object CampMobs {
 
     private fun pow(k: Int): Double { var v = 1.0; repeat(k) { v *= LADDER }; return v }
 
-    /** Rolls the mob a wall head makes. */
-    fun roll(station: WallStation, rng: Random): CampMob {
+    /** Rolls the mob a wall head makes: [campModifier] is the camp's (null: its own draw), [recordedHp] a replay's HP for it. */
+    fun roll(station: WallStation, rng: Random, campModifier: String? = null, recordedHp: Double? = null): CampMob {
         val name = if (station.cls == WallClass.GIANT) "Giant" else station.mobName
-        val mod = if (station.cls == WallClass.WANDERING_SOUL) "Boomer" else modifier(rng)
+        val mod = if (station.cls == WallClass.WANDERING_SOUL) "Boomer" else campModifier ?: modifier(rng)
         val healthy = if (mod == "Healthy") HEALTHY else 1.0
-        val hp: Double
+        var hp: Double
         val head: String
         when (station.cls) {
             WallClass.GIANT -> { hp = GIANT_HP * pow(rung(rng)) * healthy; head = ICON_GIANT }
@@ -99,6 +102,7 @@ object CampMobs {
                 hp = Math.round(base * healthy * (if (name == "Ooze") OOZE else 1.0) / 1000.0) * 1000.0; head = ICON_STANDARD
             }
         }
+        if (recordedHp != null) hp = recordedHp
         return CampMob(
             entity = if (station.cls == WallClass.GIANT) "giant" else "player",
             name = name, modifier = mod, hp = hp.roundToLong().toDouble(), tagHead = head,

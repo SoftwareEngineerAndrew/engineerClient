@@ -408,9 +408,36 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         val opening = said.firstOrNull { it.first.line == com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }?.second
         val order = recordedOrder(wall)
+        val mobs = recordedCampLooks
         return com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Replayed(order, camp.requestsOf(said.map { it.first }), opening,
             said.filter { it.first.line != com.engineerclient.p3sim.clear.blood.camp.CampMech.Line.INTRO }.map { it.second },
-            throwTicks = order?.let { recordedThrows.map { it.thr } })
+            throwTicks = order?.let { recordedThrows.map { it.thr } },
+            mobs = mobs.map { it?.second }, modifier = mobs.mapNotNull { it?.first }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key)
+    }
+
+    /**
+     * The recording's camp mob of each throw: the modifier and the mob of the tag over the body that came down with it (body id + 1),
+     * with the highest HP the tag showed (null: only 0 seen).
+     */
+    private val recordedCampLooks: List<Pair<String?, com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Mob>?> by lazy {
+        val names = HashSet(com.engineerclient.p3sim.clear.blood.camp.WallPlan.STANDARD + com.engineerclient.p3sim.clear.blood.camp.WallPlan.WALL_BOSSES + "Giant")
+        val tags = HashMap<Int, ArrayList<String>>()
+        for (e in file.events) if (e.size() > 3 && e[1].asString == "name" && e[3].isJsonPrimitive) tags.getOrPut(e[2].asInt) { ArrayList() } += bareTag(clean(e[3].asString))
+        val out = arrayOfNulls<Pair<String?, com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Mob>>(recordedThrows.size)
+        for ((id, i) in campMobs.entries.sortedBy { it.key }) {
+            if (i !in out.indices || out[i] != null) continue
+            var got: Pair<String?, String>? = null; var hp = 0.0
+            for (t in tags[id + 1].orEmpty()) {
+                val m = CAMP_TAG.find(t) ?: continue
+                var mod: String? = m.groupValues[1].ifEmpty { null }; var name = m.groupValues[2]
+                if (name !in names && mod != null && "$mod $name" in names) { name = "$mod $name"; mod = null }
+                if (name !in names) continue
+                got = mod to name
+                hp = maxOf(hp, hpValue(m.groupValues[3]))
+            }
+            got?.let { out[i] = it.first to com.engineerclient.p3sim.clear.blood.camp.WatcherCamp.Mob(it.second, hp.takeIf { h -> h > 0 }) }
+        }
+        out.toList()
     }
     private val campSeen = HashSet<UUID>()
     private var campSeeded = false
@@ -1481,6 +1508,15 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private val KEY = Regex("^(?:\\[[^\\]]+] )?(\\w{1,16}) has obtained (Wither|Blood) Key!")
         /** A Hypixel nametag as ADS names the mob: no star, no HP, no colour. */
         /** A recorded tag's words: no star, no class icons (the Dungeon Recorder keeps their glyphs, U+E000 on), single spaces. */
+        /** A camp mob's tag, bare: modifier, name, HP ("Stealth Spirit Bear 13M"). */
+        private val CAMP_TAG = Regex("^(?:(Speedy|Stealth|Golden|Healthy|Boomer|Stormy) )?(.+?) ([0-9][0-9.,]*[kM]?)❤$")
+
+        /** A tag's HP ("316.5k", "15M", "90,000") as a number. */
+        fun hpValue(s: String): Double {
+            val n = s.trimEnd('k', 'M').replace(",", "").toDoubleOrNull() ?: return 0.0
+            return n * when { s.endsWith("k") -> 1e3; s.endsWith("M") -> 1e6; else -> 1.0 }
+        }
+
         fun bareTag(tag: String): String = tag.replace(ICONS, "").trim().replace(Regex("\\s+"), " ")
         private val ICONS = Regex("[✯\uE000-\uF8FF]")
 
