@@ -6,6 +6,7 @@ import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -32,14 +33,15 @@ import java.time.format.DateTimeFormatter
  * frame (Odin's rotation and corner), so a recording lines up with the ADS room library directly. A run is a few MB, so it can stay
  * on all the time (and in a party, everyone can run it: the files line up by the server's tick count).
  *
- * Probes (`/brec probes`) are the open questions: turn one on, do what it says in a run, and its moments are marked (some add capture).
+ * Nothing to do but play: every capture is always on, and the guide (a HUD and a pillar in the world) says which room of this run to
+ * go to and what to do there (stay until it is done, stand still a moment) for what ADS still lacks. `/brec guide` shows the counts.
  * Files: <game dir>/devgineerclient-recordings/better/, gzipped JSON Lines; the format is docs/better-recorder.md.
  */
 object BetterRecorder : Module(
     name = "Better Recorder",
     key = null,
     category = Category.custom("Devgineer Client", 860, 10),
-    description = "Records what ADS needs to copy the clear 1:1 - mobs, blocks, sounds, chat, HUD, your clicks, Odin's rooms, room snapshots - in a few MB a run, with positions in each room's own frame. Probes (/brec probes) are the open questions to play through.",
+    description = "Records everything ADS needs to copy the clear 1:1 - mobs, blocks, sounds, chat, HUD, your clicks, Odin's rooms, room snapshots - with positions in each room's own frame. Its guide shows where to go in the run for what is still missing.",
 ) {
     private enum class Where(private val label: String) {
         DUNGEONS("Dungeons"), DUNGEONS_AND_ADS("Dungeons + ADS"), EVERYWHERE("Everywhere");
@@ -54,11 +56,14 @@ object BetterRecorder : Module(
     private val snaps by SelectorSetting("Room Snapshots", Snaps.ALL, desc = "Every block of a room the first time it is seen with its rotation known (and puzzle and trap rooms again when done). About 20 KB a room.")
     private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat out (a line says one was there).")
     private val announce by BooleanSetting("Announce Sightings", true, desc = "Says in chat when a wanted sighting is caught for the first time (Wandering Soul, Crypt Undead...).")
+    private val guideHud by HUD("Guide", "Where to go in this run for what ADS still lacks, and what to do there.", true, 8, 300, 1.2f) { example -> BrGuide.draw(this, example) }
+    private val guidePillar by BooleanSetting("Guide Pillar", true, desc = "A pillar over the room the guide sends you to, seen through walls.")
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         DevgineerClient.safely("better recorder folder") { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
     }
 
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
+    private var guideShown by BooleanSetting("Guide Shown", false, desc = "").hide()
 
     /** On by default, existing installs included (once: turning it off sticks). */
     fun enableByDefault() {
@@ -86,6 +91,7 @@ object BetterRecorder : Module(
 
     init {
         on<TickEvent.End> { DevgineerClient.safely("better recorder tick") { tick() } }
+        on<RenderExtractEvent> { if (guidePillar && session != null) DevgineerClient.safely("better recorder pillar") { BrGuide.render(this) } }
         on<LevelEvent.Load> { DevgineerClient.safely("better recorder world") { stop("world change") } }
         onReceive<Packet<*>>(priority = Int.MIN_VALUE) { DevgineerClient.safely("better recorder in") { BrNet.inbound(this) } }
         onSend<Packet<*>>(priority = Int.MIN_VALUE) { DevgineerClient.safely("better recorder out") { BrNet.outbound(this) } }
@@ -94,9 +100,8 @@ object BetterRecorder : Module(
             d.register(literal("brec")
                 .executes { DevgineerClient.msg(status()); 1 }
                 .then(literal("mark").executes { mark(null); 1 }.then(argument("note", StringArgumentType.greedyString()).executes { c -> mark(StringArgumentType.getString(c, "note")); 1 }))
-                .then(literal("probes").executes { listProbes(); 1 })
-                .then(literal("probe").then(argument("id", StringArgumentType.word()).executes { c -> DevgineerClient.msg(BrProbes.start(StringArgumentType.getString(c, "id"))); 1 }))
-                .then(literal("stop").executes { DevgineerClient.msg(BrProbes.stop(null)); 1 }.then(argument("id", StringArgumentType.word()).executes { c -> DevgineerClient.msg(BrProbes.stop(StringArgumentType.getString(c, "id"))); 1 }))
+                .then(literal("guidetest").executes { BrGuide.inAds = !BrGuide.inAds; DevgineerClient.msg("§7Guide in ADS: ${BrGuide.inAds}"); 1 })
+                .then(literal("guide").executes { DevgineerClient.msg("§aGuide§7 (caught so far / wanted):"); BrGuide.summary().forEach { DevgineerClient.chat(it) }; 1 })
                 .then(literal("wanted").executes { listWanted(); 1 })
                 .then(literal("folder").executes { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir); 1 }))
         }
@@ -120,6 +125,8 @@ object BetterRecorder : Module(
 
     private fun tick() {
         clientTick++
+        // The guide HUD on by default (Odin HUDs start off), once: hiding it sticks.
+        if (!guideShown) { guideShown = true; guideHud.enabled = true; com.odtheking.odin.features.ModuleManager.saveConfigurations() }
         val s = session
         if (s == null) {
             if (enabled && shouldRecord()) start()
@@ -137,7 +144,8 @@ object BetterRecorder : Module(
         counts.clear()
         session = s
         s.start()
-        BrProbes.newRun()
+        BrExtras.newRun()
+        BrGuide.newRun()
     }
 
     private fun stop(why: String) {
@@ -153,14 +161,9 @@ object BetterRecorder : Module(
     }
 
     private fun status(): String {
-        val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else ""}. /brec probes lists the open questions."
+        val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else ""}. /brec guide shows what is still wanted."
         val top = counts.entries.sortedByDescending { it.value }.take(6).joinToString(", ") { "${it.key} ${it.value}" }
-        return "§aBetter Recorder§7: ${s.path.fileName}, tick ${s.t}, ${s.file.lines.get()} lines, ${s.file.bytes.get() / 1024} KB raw. $top. Probes: ${BrProbes.active().ifEmpty { listOf("none") }.joinToString()}"
-    }
-
-    private fun listProbes() {
-        DevgineerClient.msg("§aProbes§7 (/brec probe <id>, /brec stop):")
-        for (p in BrProbes.PROBES) DevgineerClient.chat("§e${p.id}§7 ${p.title}${if (p.id in BrProbes.active()) " §a(on)" else ""}§8 - ${p.how}")
+        return "§aBetter Recorder§7: ${s.path.fileName}, tick ${s.t}, ${s.file.lines.get()} lines, ${s.file.bytes.get() / 1024} KB raw. $top."
     }
 
     // ------------------------------------------------------------------ wanted sightings, counted across recordings
@@ -184,6 +187,6 @@ object BetterRecorder : Module(
     private fun listWanted() {
         val p = wantedCounts()
         DevgineerClient.msg("§aWanted sightings§7 (runs caught in):")
-        for (w in BrProbes.WANTED) DevgineerClient.chat("§7- ${w.title}: §f${p.getProperty(w.id) ?: "0"}")
+        for (w in BrExtras.WANTED) DevgineerClient.chat("§7- ${w.title}: §f${p.getProperty(w.id) ?: "0"}")
     }
 }

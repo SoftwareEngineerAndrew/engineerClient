@@ -15,7 +15,7 @@ import java.util.zip.GZIPOutputStream
  * more than a run makes) are counted and written as a `gap` line, never waited for.
  */
 class BrFile(val path: Path) {
-    private val queue = LinkedBlockingQueue<String>(400_000)
+    private val queue = LinkedBlockingQueue<String>(4_000_000)
     private val dropped = AtomicLong()
     @Volatile private var open = true
     val lines = AtomicLong()
