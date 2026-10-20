@@ -281,9 +281,25 @@ object ADR : Module(
                 // Party members recording the same run take turns, so the first one's recording is on
                 // the site when the next ones look for it ([waitForSibling]).
                 val scan = UploadPacker.scan(file, privateRuns)
-                val id = send(file, scan, waitForSibling(scan.summary))
+                val sibling = waitForSibling(scan.summary)
+                // A connection dropped on the way (Cloudflare resetting the stream, a moment
+                // offline) is tried again twice, after 10 s and a minute. If the first try did get
+                // there after all, the site says this run is already uploaded: that's done too.
+                var id: String? = null
+                for ((i, wait) in listOf(0L, 10_000L, 60_000L).withIndex()) {
+                    if (wait > 0) Thread.sleep(wait)
+                    try {
+                        id = send(file, scan, sibling); break
+                    } catch (e: java.io.IOException) {
+                        if (i == 2) throw e
+                        EngineerClient.logger.warn("[ec] adr upload try ${i + 1} failed, trying again: $e")
+                    } catch (e: Refused) {
+                        if (i == 0 || !e.message.orEmpty().startsWith("409")) throw e
+                        id = ""; break
+                    }
+                }
                 uploadFailSaid = false
-                if (uploadedMessage) EngineerClient.msg("§7ADR: uploaded${if (privateRuns) " privately" else ""} - §f$SITE/adr/$id")
+                if (uploadedMessage) EngineerClient.msg("§7ADR: uploaded${if (privateRuns) " privately" else ""}${if (id.isNullOrEmpty()) "" else " - §f$SITE/adr/$id"}")
             } catch (t: Throwable) {
                 if (t !is Refused) EngineerClient.logger.error("[ec] adr upload failed", t)
                 else EngineerClient.logger.warn("[ec] adr upload refused: ${t.message}")
