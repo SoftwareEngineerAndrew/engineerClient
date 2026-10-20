@@ -20,8 +20,8 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  *    again if his first line was missed.
  * Green / yellow / red by the share of the wait still to go, as Odin's tick timers are.
  */
-object CoffeeTimers : Module(
-    name = "Coffee Timers",
+object Timers2 : Module(
+    name = "Timers2",
     key = null,
     category = Category.custom("Coffee Client", 860, 10),
     description = "Storm's countdowns: his next crush check and his Giga Lightning."

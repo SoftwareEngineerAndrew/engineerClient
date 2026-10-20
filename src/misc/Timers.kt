@@ -32,7 +32,7 @@ import com.engineerclient.storm.StormCrush
  *  - Maxor Move: Maxor starts moving 85 ticks after his first line (80-87 in 38 recorded runs).
  *  - Crystal Spawn: after a laser hit (Maxor becoming damageable) the top crystals come back 40
  *    ticks later.
- *  - (Storm's crush check and Giga Lightning countdowns are Coffee Client's Timers.) His "ENERGY HEED MY
+ *  - (Storm's crush check and Giga Lightning countdowns are Coffee Client's Timers2.) His "ENERGY HEED MY
  *    CALL!" comes 29 ticks after the strike; Purple Pad goes by it.
  *  - Purple Pad: to the pad read to stand on Purple's pillar pad for, so it comes down on him at the
  *    first check he can be crushed on. Pads are read on the 20-tick checks' eve (phase tick 19 mod
