@@ -87,6 +87,8 @@ class ReplayDiff(private val s: ReplaySession) {
 
     /** Hypixel putting you where you already were (after some block clicks): a resync, nothing moves, so not a teleport to match. */
     private var resyncs = 0
+    /** The resyncs' ticks and places: one ADS also made (a blink stopped in your own cell centres you, half a block or less) is matched. */
+    private val resyncAt = ArrayList<Pair<Int, Vec3>>()
     private val setbacks = JsonArray()
 
     /** [design, x, y, z] of a world point in its room's frame (x and z with their fractions). */
@@ -101,7 +103,7 @@ class ReplayDiff(private val s: ReplaySession) {
     fun recordedTeleport(k: Int, e: JsonArray, was: Vec3?) {
         val a = e.get(2).takeIf { it.isJsonArray }?.asJsonArray ?: return
         val to = Vec3(a[0].asDouble, a[1].asDouble, a[2].asDouble)
-        if (was != null && was.distanceTo(to) < 0.5) { resyncs++; return }
+        if (was != null && was.distanceTo(to) < 0.5) { resyncs++; resyncAt += k to to; return }
         // Before the start Hypixel holds the party in the entrance by putting them back: where to, and from where, in the room's own frame.
         if (k < 0) { if (was != null && to.y < 200 && to.y > 0) canonPoint(to)?.let { a -> canonPoint(was)?.let { b -> setbacks.add(JsonArray().apply { add(k); a.forEach { add(it) }; b.forEach { add(it) } }) } }; return }
         hypTps += k to to
@@ -340,6 +342,8 @@ class ReplayDiff(private val s: ReplaySession) {
             if (i != null) { used += i; delays += k - adsTps[i].first } else out += "%6d  Hypixel put you at %s; ADS did not".format(k, ReplaySession.fmt(at.x, at.y, at.z)) +
                 (tpWay[hypTps.indexOfFirst { it.first == k && it.second == at }]?.let { "  ($it)" } ?: "")
         }
+        // ADS's left over that land where a resync of Hypixel's put you, within two ticks: the same small move.
+        for ((k, at) in resyncAt) adsTps.indices.firstOrNull { it !in used && Math.abs(adsTps[it].first - k) <= 2 && adsTps[it].second.distanceTo(at) < 0.5 }?.let { used += it; delays += k - adsTps[it].first }
         for (i in adsTps.indices) if (i !in used) adsTps[i].let { (k, at) -> out += "%6d  ADS put you at %s; Hypixel did not".format(k, ReplaySession.fmt(at.x, at.y, at.z)) }
         if (delays.isNotEmpty()) out += "  ${delays.size} matched; Hypixel's came ${delays.average().let { "%.1f".format(it) }} ticks after ADS's on average (min ${delays.min()}, max ${delays.max()})"
         out += ""
