@@ -748,6 +748,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             val yours = { e: JsonArray -> e[1].asString.startsWith("o.") }
             val evs = all.filter { !yours(it) && !death(it) }
             late += all.filter(yours) + all.filter(death)
+            // Your packets recorded after the tick's tpme were sent once your client had the teleport; the ones before it were not.
+            all.indexOfFirst { it[1].asString == "tpme" }.takeIf { it >= 0 }?.let { i -> afterTp.addAll(all.subList(i, all.size).filter(yours)) }
             for ((i, e) in evs.withIndex()) {
                 if (e[1].asString == "me") { pose = e; continue }
                 EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
@@ -787,6 +789,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     /** Your packets of the tick (and its mob deaths, read after them), once every module has had the tick. */
     private val late = ArrayList<JsonArray>()
 
+    /** Your packets of the tick that the recording has after its tpme (by identity). */
+    private val afterTp = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<JsonArray, Boolean>())
+
     fun tickEnd() {
         if (ended) return
         val now = run.t
@@ -794,6 +799,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         lastHost?.let { l -> if (teleported(l)) diff.adsTeleport(now, host.position()) }
         val evs = late.toList(); late.clear()
         for ((i, e) in evs.withIndex()) EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
+        afterTp.clear()
         lastHost = host.position()
         // The recorded inventory is your client's after its own clicks of the tick (a placed InfiniLeap head is gone from it): set after them.
         if (invDirty) syncInv()
@@ -929,7 +935,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                         val k = e[0].asInt
                         val from = tpWaitFrom ?: k.also { tpWaitFrom = it }
                         val there = x != null && Math.hypot(x - w.x, z!! - w.z) < 1.0 && Math.abs(y!! - w.y) < 1.5
-                        if (tpSeenAt >= from || there || k - from >= TP_ACCEPT_MAX) {
+                        // A tpme of this tick counts only for the moves sent after it (2026-10-03_19-21-12 k746: the move before it, from
+                        // where you stood, was ignored by Hypixel; applied, it stepped you back a cell and failed the Ice Fill).
+                        val seen = if (tpSeenAt == k) e in afterTp else tpSeenAt >= from
+                        if (seen || there || k - from >= TP_ACCEPT_MAX) {
                             c.handleAcceptTeleportPacket(net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket(acc.ec_getAwaitingTeleport(), w.x, w.y, w.z, host.yRot, host.xRot))
                             tpWaitFrom = null
                         }
