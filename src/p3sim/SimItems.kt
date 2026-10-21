@@ -1593,7 +1593,7 @@ object SimItems {
         val eye = Vec3(seen.x, seen.y + 1.27, seen.z)
         val dir = look(p)
         val hit = dda(eye, dir, range)
-        if (hit == null) { return }
+        if (hit == null) { etherwarpRefused?.invoke("no block within ${range.toInt()}"); return }
         val (x, y, z) = hit
         val s = state(x, y, z)
         val above = state(x, y + 1, z)
@@ -1603,7 +1603,13 @@ object SimItems {
             above.block is SkullBlock || above.block is WallSkullBlock || above.block is LadderBlock || above.block is FlowerPotBlock || (top(x, y, z) < 0.03 && !banner)
         val need = if (top(x, y, z) > 1.0) 3 else 2
         // A refused warp is silent: of 578 sneaking AOTV clicks that did not warp (ADR and the Dungeon Recorder, 139 F7 runs), 576 said nothing.
-        if (bad || (1..need).any { !bodyPasses(x, y + it, z) } || rayStops(floor(eye.x).toInt(), floor(eye.y).toInt(), floor(eye.z).toInt())) return
+        val why = when {
+            bad -> "the target ${s.block.descriptionId.substringAfterLast('.')} or above it ${above.block.descriptionId.substringAfterLast('.')}"
+            (1..need).any { !bodyPasses(x, y + it, z) } -> "no room above ${s.block.descriptionId.substringAfterLast('.')}: " + (1..need).joinToString { state(x, y + it, z).block.descriptionId.substringAfterLast('.') }
+            rayStops(floor(eye.x).toInt(), floor(eye.y).toInt(), floor(eye.z).toInt()) -> "your eye in a block"
+            else -> null
+        }
+        if (why != null) { etherwarpRefused?.invoke("$why at $x $y $z"); return }
         etherPuff(p.position())
         tpKeepLook(p, x + 0.5, y + 1.05, z + 0.5)
         // Etherwarp is ender_dragon.hurt 1/0.54 only, HOSTILE; enderman.teleport is the blink's.
@@ -1702,6 +1708,9 @@ object SimItems {
      * Which of two clicks a tick apart Hypixel takes depends on how its ticks fell against yours, which a replay can only read.
      */
     @Volatile var replayCast: (() -> Boolean?)? = null
+
+    /** Set by a replay: told why an etherwarp did not warp (for its report). */
+    @Volatile var etherwarpRefused: ((String) -> Unit)? = null
 
     /** Set by a replay: whether the Hyperion click being handled, made inside an entity it also clicked, cast without its teleport. */
     @Volatile var replayStill: (() -> Boolean)? = null
