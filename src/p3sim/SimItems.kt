@@ -1602,10 +1602,12 @@ object SimItems {
         val bad = (stopsAnyway(s) && !banner) || s.block is SkullBlock || s.block is LadderBlock || s.block is FlowerPotBlock ||
             above.block is SkullBlock || above.block is WallSkullBlock || above.block is LadderBlock || above.block is FlowerPotBlock || (top(x, y, z) < 0.03 && !banner)
         val need = if (top(x, y, z) > 1.0) 3 else 2
+        // A chest is room enough to warp into (2026-10-03_01-39-09 k1239, 2026-10-16_22-15-09 k337: onto the block under one; no refusal seen).
+        fun room(cy: Int) = bodyPasses(x, cy, z) || state(x, cy, z).block is net.minecraft.world.level.block.ChestBlock
         // A refused warp is silent: of 578 sneaking AOTV clicks that did not warp (ADR and the Dungeon Recorder, 139 F7 runs), 576 said nothing.
         val why = when {
             bad -> "the target ${s.block.descriptionId.substringAfterLast('.')} or above it ${above.block.descriptionId.substringAfterLast('.')}"
-            (1..need).any { !bodyPasses(x, y + it, z) } -> "no room above ${s.block.descriptionId.substringAfterLast('.')}: " + (1..need).joinToString { state(x, y + it, z).block.descriptionId.substringAfterLast('.') }
+            (1..need).any { !room(y + it) } -> "no room above ${s.block.descriptionId.substringAfterLast('.')}: " + (1..need).joinToString { state(x, y + it, z).block.descriptionId.substringAfterLast('.') }
             rayStops(floor(eye.x).toInt(), floor(eye.y).toInt(), floor(eye.z).toInt()) -> "your eye in a block"
             else -> null
         }
