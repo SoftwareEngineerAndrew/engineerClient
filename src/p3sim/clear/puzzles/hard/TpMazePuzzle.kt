@@ -16,7 +16,8 @@ import java.util.UUID
  * Odin's solver recognises the landings by their position (y 69.5, x and z on half blocks) and reads the yaw.
  *
  * The frames are stood on, not clicked: a player counts when their feet are in the frame's cell, on top of it (the recordings show
- * the teleport at feet height 69.8, a frame is 0.8125 high). A player is not sent twice within [COOLDOWN_TICKS].
+ * the teleport at feet height 69.8, a frame is 0.8125 high). Hypixel looks at the frames every [CHECK_TICKS] ticks, on its tab
+ * timer's beat, not each tick; a player is not sent twice within [COOLDOWN_TICKS].
  */
 class TpMazePuzzle(override val context: PuzzleContext) : Puzzle {
     override val kind = "TP_MAZE"
@@ -56,7 +57,9 @@ class TpMazePuzzle(override val context: PuzzleContext) : Puzzle {
             }
         }
         val now = context.run.t
-        for (rec in context.run.state.players.values) {
+        val phase = com.engineerclient.p3sim.clear.hud.HudModule.tabPhase?.invoke(context.run) ?: 0
+        val checks = Math.floorMod(context.run.serverTick - phase, CHECK_TICKS) == 0
+        if (checks) for (rec in context.run.state.players.values) {
             if (rec.isBot || rec.ghost) continue
             if (now - (cooldown[rec.uuid] ?: Int.MIN_VALUE / 2) < COOLDOWN_TICKS) continue
             val (cx, cz) = pl.toCanonical(Math.floor(rec.x).toInt(), Math.floor(rec.z).toInt()) ?: continue
@@ -89,8 +92,14 @@ class TpMazePuzzle(override val context: PuzzleContext) : Puzzle {
         /** The top of an end-portal frame above its block's floor. */
         const val FRAME_HEIGHT = 0.8125
 
-        /** Ticks before the same player can be sent again. Unmeasured; long enough to walk off the landing. */
-        const val COOLDOWN_TICKS = 20
+        /**
+         * How often the frames are looked at. DR (4 mazes, 33 teleports): every teleport came on one beat of 5 ticks or a tick off it
+         * (the beat within a tick of the tab's 20), however long you had stood on the frame before (k340 on the pad, sent at 345).
+         */
+        const val CHECK_TICKS = 5
+
+        /** Ticks before the same player can be sent again: DR teleports came 10 ticks apart at the least (most 15-25: walking to a frame). */
+        const val COOLDOWN_TICKS = 10
 
         /** Set by a replay: the recording's steps in [Run]'s maze, each the frame block stepped on and the block landed on (world x, z, x, z). */
         @Volatile var replay: ((com.engineerclient.p3sim.run.Run) -> List<IntArray>?)? = null
