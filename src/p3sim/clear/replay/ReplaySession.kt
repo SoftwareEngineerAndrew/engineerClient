@@ -911,15 +911,16 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                     yaw != null -> ServerboundMovePlayerPacket.Rot(yaw, pitch!!, ground, hcol)
                     else -> ServerboundMovePlayerPacket.StatusOnly(ground, hcol)
                 }
-                // A teleport of ADS's is accepted once the recorded client had one (its tpme, on or after your last click: a tick after
-                // the click for most, DR), or stands where it lands, or after [TP_ACCEPT_MAX] ticks. Before that its moves are from where it
+                // A teleport of ADS's is accepted once the recorded client had one (its tpme, on or after the tick of your first move that
+                // found it waiting: a click's, or a pad's ADS made during the tick; a tick after the click for most, DR), or stands where it
+                // lands, or after [TP_ACCEPT_MAX] ticks. Before that its moves are from where it
                 // stood (the server ignores them) and a second click starts from the landing, as Hypixel's did.
                 (c as com.engineerclient.mixin.ServerTeleportAccessor).let { acc ->
                     val w = acc.ec_getAwaitingPosition()
                     if (w == null) tpWaitFrom = null
                     else {
                         val k = e[0].asInt
-                        val from = tpWaitFrom ?: lastClickK.also { tpWaitFrom = it }
+                        val from = tpWaitFrom ?: k.also { tpWaitFrom = it }
                         val there = x != null && Math.hypot(x - w.x, z!! - w.z) < 1.0 && Math.abs(y!! - w.y) < 1.5
                         if (tpSeenAt >= from || there || k - from >= TP_ACCEPT_MAX) {
                             c.handleAcceptTeleportPacket(net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket(acc.ec_getAwaitingTeleport(), w.x, w.y, w.z, host.yRot, host.xRot))
