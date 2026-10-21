@@ -45,6 +45,8 @@ object ReplayModule : AdsModule {
 
     override fun onTick(run: Run) { session?.takeIf { it.run === run && !it.ended }?.tick() }
 
+    override fun onTickEnd(run: Run) { session?.takeIf { it.run === run && !it.ended }?.tickEnd() }
+
     override fun onStage(run: Run, from: RunStage?, to: RunStage) {
         if (to == RunStage.BOSS_ENTRY || to == RunStage.BOSS) session?.takeIf { it.run === run }?.stop("ADS reached the boss")
     }
