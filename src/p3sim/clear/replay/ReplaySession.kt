@@ -1021,11 +1021,20 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // with none alive yet (ADS's camp behind Hypixel's), the next one ADS throws.
         val blood = run.plan.roomAtBlock(rx, rz)?.takeIf { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD }
         val landing = campMobs[id]
-        if (blood != null && landing != null) {
+        // A camp mob's name (a prefix word or not) is one wherever it died: one that walked out of the Blood room, or one the recorder only
+        // saw once it came into view (2026-10-03_02-56-44: 8 of the camp's throws seen, a Boomer Scarf dying 34 blocks from you).
+        val campName = tag != null && CAMP_NAMES.any { tag == it || tag.endsWith(" $it") }
+        val campRoom = blood ?: run.plan.rooms.firstOrNull { it.type == com.engineerclient.p3sim.run.RoomType.BLOOD }
+        if (campRoom != null && landing != null && (blood != null || campName)) {
             // A camp mob is whatever came down with its head, tagged or not (the Giant's body has no tag); one death per head (a rider's
             // two bodies are one mob).
             if (!campDied.add(landing)) return
-            BloodDeath(k, tag ?: "camp mob", rx, rz, blood.index, landing).also { lastBlood = it; bloodOwed += it }
+            BloodDeath(k, tag ?: "camp mob", rx, rz, campRoom.index, landing).also { lastBlood = it; bloodOwed += it }
+            payBlood(); return
+        }
+        if (campRoom != null && campName && recordedThrows.isNotEmpty()) {
+            if (lastBlood?.let { it.label == tag && k - it.k <= 1 && Math.hypot(it.x - rx, it.z - rz) < 2 } == true) return
+            BloodDeath(k, tag!!, rx, rz, campRoom.index).also { lastBlood = it; bloodOwed += it }
             payBlood(); return
         }
         if (r.type == "minecraft:bat") { batDied(k, rx, ry, rz); return }
@@ -1622,6 +1631,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
         /** The recorder's brief tag for a mob whose tag it had not read. */
         private val UNREAD_TAGS = setOf("???", "MINIBOSS")
+        /** The Watcher's camp mobs' names; not the Parasite's (its split silverfish, levelled mobs of their own, have its name). */
+        private val CAMP_NAMES = (com.engineerclient.p3sim.clear.blood.camp.WallPlan.WALL_BOSSES + com.engineerclient.p3sim.clear.blood.camp.WallPlan.STANDARD) - "Parasite"
         private const val SKULL_HIT = "A Crypt Wither Skull exploded, hitting you for "
         private const val BONE_PLATING = "Your bone plating reduced the damage you took by "
         private const val SKULL_HIT_VOLUME = 0.7f
