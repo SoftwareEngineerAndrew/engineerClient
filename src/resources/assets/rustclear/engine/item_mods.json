@@ -1,0 +1,932 @@
+{
+ "_about": "Packed from docs/f7-sim/data by tools/items/pack_item_mods.py; measured on Hypixel (items-stats.md).",
+ "gems": {
+  "AMBER": {
+   "qualities": {
+    "FINE": {
+     "DIVINE": 54
+    },
+    "PERFECT": {
+     "DIVINE": 120
+    },
+    "ROUGH": {
+     "DIVINE": 28
+    }
+   },
+   "stat": "Mining Speed"
+  },
+  "JADE": {
+   "qualities": {
+    "FINE": {
+     "DIVINE": 30
+    },
+    "PERFECT": {
+     "DIVINE": 60
+    },
+    "ROUGH": {
+     "DIVINE": 14
+    }
+   },
+   "stat": "Mining Fortune"
+  },
+  "JASPER": {
+   "qualities": {
+    "PERFECT": {
+     "EPIC": 11,
+     "MYTHIC": 16
+    }
+   },
+   "stat": "Strength"
+  },
+  "ONYX": {
+   "qualities": {
+    "PERFECT": {
+     "MYTHIC": 12
+    }
+   },
+   "stat": "Crit Damage"
+  },
+  "PERIDOT": {
+   "qualities": {
+    "FINE": {
+     "LEGENDARY": 5,
+     "MYTHIC": 6
+    },
+    "FLAWLESS": {
+     "LEGENDARY": 6,
+     "MYTHIC": 8
+    },
+    "PERFECT": {
+     "MYTHIC": 10
+    },
+    "ROUGH": {
+     "LEGENDARY": 2.5
+    }
+   },
+   "stat": "Farming Fortune"
+  },
+  "SAPPHIRE": {
+   "qualities": {
+    "FINE": {
+     "EPIC": 10
+    },
+    "PERFECT": {
+     "EPIC": 20,
+     "LEGENDARY": 24,
+     "MYTHIC": 30
+    }
+   },
+   "stat": "Intelligence"
+  },
+  "TOPAZ": {
+   "qualities": {
+    "FINE": {
+     "DIVINE": 1.3
+    },
+    "PERFECT": {
+     "DIVINE": 2.2
+    },
+    "ROUGH": {
+     "DIVINE": 0.5
+    }
+   },
+   "stat": "Pristine"
+  }
+ },
+ "names": {
+  "PROSECUTE": "Prosecute",
+  "aiming": "Dragon Tracer",
+  "counter_strike": "Counter-Strike",
+  "dragon_hunter": "Gravity",
+  "ferocious_mana": "Vivacious Vitality",
+  "mana_vampire": "Vampiric Vitality",
+  "strong_mana": "Strong Vitality",
+  "syphon": "Drain",
+  "ultimate_bank": "Bank",
+  "ultimate_reiterate": "Duplex"
+ },
+ "reforges": {
+  "ancient": {
+   "bonus": [
+    "\u00a77Grants \u00a79+1\ue007 Crit Damage \u00a77per",
+    "\u00a7cCatacombs \u00a77skill level you have."
+   ],
+   "class": "armor",
+   "name": "Ancient",
+   "rarities": {
+    "LEGENDARY": {
+     "Crit Chance": 12,
+     "Crit Damage": 50,
+     "Defense": 7,
+     "Health": 7,
+     "Intelligence": 20,
+     "Strength": 25
+    },
+    "MYTHIC": {
+     "Crit Chance": 15,
+     "Crit Damage": 50,
+     "Defense": 7,
+     "Health": 7,
+     "Intelligence": 25,
+     "Strength": 35
+    },
+    "SPECIAL": {
+     "Crit Chance": 15,
+     "Crit Damage": 50,
+     "Defense": 7,
+     "Health": 7,
+     "Intelligence": 25,
+     "Strength": 35
+    },
+    "VERY SPECIAL": {
+     "Crit Chance": 15,
+     "Crit Damage": 50,
+     "Defense": 7,
+     "Health": 7,
+     "Intelligence": 25,
+     "Strength": 35
+    }
+   }
+  },
+  "auspicious": {
+   "class": "drill",
+   "name": "Auspicious",
+   "rarities": {
+    "DIVINE": {
+     "Mining Fortune": 25,
+     "Mining Speed": 100
+    }
+   }
+  },
+  "beady": {
+   "class": "vacuum",
+   "name": "Beady",
+   "rarities": {
+    "EPIC": {
+     "Damage": 20,
+     "Intelligence": 40
+    },
+    "LEGENDARY": {
+     "Damage": 25,
+     "Intelligence": 50
+    },
+    "MYTHIC": {
+     "Damage": 30,
+     "Intelligence": 60
+    }
+   }
+  },
+  "blazing": {
+   "class": "equipment",
+   "name": "Blazing",
+   "rarities": {
+    "EPIC": {
+     "Heat Resistance": 2,
+     "Mining Fortune": 6
+    },
+    "LEGENDARY": {
+     "Heat Resistance": 3,
+     "Mining Fortune": 7
+    }
+   }
+  },
+  "blended": {
+   "class": "equipment",
+   "name": "Blended",
+   "rarities": {
+    "LEGENDARY": {
+     "Attack Speed": 1,
+     "Crit Chance": 3,
+     "Crit Damage": 2,
+     "Defense": 3,
+     "Health": 2,
+     "Intelligence": 2,
+     "Speed": 1,
+     "Strength": 2
+    }
+   }
+  },
+  "blood_shot": {
+   "bonus": [
+    "\u00a77When killing an enemy, you have a",
+    "\u00a7a2.5%\u00a77 chance to cocoon them!",
+    "..."
+   ],
+   "class": "equipment",
+   "name": "Bloodshot",
+   "rarities": {
+    "LEGENDARY": {
+     "Crit Chance": 5,
+     "Crit Damage": 5,
+     "Strength": 5
+    }
+   }
+  },
+  "blooming": {
+   "class": "equipment",
+   "name": "Blooming",
+   "rarities": {
+    "LEGENDARY": {
+     "Farming Fortune": 5,
+     "Speed": 6
+    },
+    "MYTHIC": {
+     "Farming Fortune": 6,
+     "Speed": 6
+    }
+   }
+  },
+  "brilliant": {
+   "class": "equipment",
+   "name": "Brilliant",
+   "rarities": {
+    "LEGENDARY": {
+     "Health": 4,
+     "Intelligence": 12,
+     "Speed": 2
+    },
+    "MYTHIC": {
+     "Health": 5,
+     "Intelligence": 15,
+     "Speed": 2
+    }
+   }
+  },
+  "buzzing": {
+   "class": "vacuum",
+   "name": "Buzzing",
+   "rarities": {
+    "EPIC": {
+     "Farming Fortune": 7
+    },
+    "LEGENDARY": {
+     "Farming Fortune": 9
+    },
+    "MYTHIC": {
+     "Farming Fortune": 11
+    }
+   }
+  },
+  "clean": {
+   "class": "armor",
+   "name": "Clean",
+   "rarities": {
+    "EPIC": {
+     "Crit Chance": 8,
+     "Defense": 15,
+     "Health": 15
+    }
+   }
+  },
+  "coldfused": {
+   "bonus": [
+    "\u00a78Only if Wisp is equipped",
+    "\u00a7c+75 Strength",
+    "\u00a79+55 Crit Damage",
+    "..."
+   ],
+   "class": "sword",
+   "name": "Coldfused",
+   "rarities": {
+    "LEGENDARY": {
+     "Crit Damage": 60,
+     "Magic Find": 2,
+     "Strength": 45
+    }
+   }
+  },
+  "dirty": {
+   "class": "sword",
+   "name": "Dirty",
+   "rarities": {
+    "EPIC": {
+     "Attack Speed": 10,
+     "Ferocity": 9,
+     "Strength": 10
+    }
+   }
+  },
+  "fabled": {
+   "bonus": [
+    "\u00a79\ue007 Crits \u00a77have a chance to deal up to",
+    "\u00a7c+15% \u00a77more \u00a7c\ue050 Damage\u00a77."
+   ],
+   "class": "sword",
+   "name": "Fabled",
+   "rarities": {
+    "MYTHIC": {
+     "Crit Damage": 50,
+     "Strength": 75
+    }
+   }
+  },
+  "fast": {
+   "class": "sword",
+   "name": "Fast",
+   "rarities": {
+    "RARE": {
+     "Attack Speed": 30
+    }
+   }
+  },
+  "fierce": {
+   "class": "armor",
+   "name": "Fierce",
+   "rarities": {
+    "EPIC": {
+     "Crit Chance": 5,
+     "Crit Damage": 14,
+     "Strength": 8
+    },
+    "LEGENDARY": {
+     "Crit Chance": 6,
+     "Crit Damage": 18,
+     "Strength": 10
+    }
+   }
+  },
+  "fleet": {
+   "class": "drill",
+   "name": "Fleet",
+   "rarities": {
+    "DIVINE": {
+     "Block Fortune": 75,
+     "Mining Speed": 100
+    }
+   }
+  },
+  "giant": {
+   "class": "armor",
+   "name": "Giant",
+   "rarities": {
+    "MYTHIC": {
+     "Health": 240
+    },
+    "SPECIAL": {
+     "Health": 240
+    }
+   }
+  },
+  "glacial": {
+   "class": "drill",
+   "name": "Glacial",
+   "rarities": {
+    "DIVINE": {
+     "Mining Fortune": 25
+    }
+   }
+  },
+  "glistening": {
+   "class": "equipment",
+   "name": "Glistening",
+   "rarities": {
+    "EPIC": {
+     "Intelligence": 10,
+     "True Defense": 3.5
+    }
+   }
+  },
+  "heated": {
+   "class": "drill",
+   "name": "Heated",
+   "rarities": {
+    "DIVINE": {
+     "Mining Fortune": 25,
+     "Mining Speed": 70
+    }
+   }
+  },
+  "heavy": {
+   "class": "armor",
+   "name": "Heavy",
+   "rarities": {
+    "EPIC": {
+     "Crit Damage": -3,
+     "Defense": 65,
+     "Speed": -1
+    }
+   }
+  },
+  "heroic": {
+   "class": "sword",
+   "name": "Heroic",
+   "rarities": {
+    "EPIC": {
+     "Attack Speed": 3,
+     "Intelligence": 80,
+     "Strength": 32
+    },
+    "LEGENDARY": {
+     "Attack Speed": 5,
+     "Intelligence": 100,
+     "Strength": 40
+    },
+    "MYTHIC": {
+     "Attack Speed": 7,
+     "Intelligence": 125,
+     "Strength": 50
+    },
+    "RARE": {
+     "Attack Speed": 2,
+     "Intelligence": 65,
+     "Strength": 25
+    }
+   }
+  },
+  "light": {
+   "class": "armor",
+   "name": "Light",
+   "rarities": {
+    "EPIC": {
+     "Attack Speed": 4,
+     "Crit Chance": 2,
+     "Crit Damage": 4,
+     "Defense": 4,
+     "Health": 15,
+     "Speed": 4
+    }
+   }
+  },
+  "loving": {
+   "bonus": [
+    "\u00a77Grants \u00a7c+5% \ue002 Ability Damage\u00a77."
+   ],
+   "class": "armor",
+   "name": "Loving",
+   "rarities": {
+    "MYTHIC": {
+     "Defense": 14,
+     "Health": 14,
+     "Intelligence": 120
+    }
+   }
+  },
+  "lustrous": {
+   "class": "drill",
+   "name": "Lustrous",
+   "rarities": {
+    "DIVINE": {
+     "Mining Fortune": 75,
+     "Mining Speed": 75
+    }
+   }
+  },
+  "menacing": {
+   "class": "equipment",
+   "name": "Menacing",
+   "rarities": {
+    "EPIC": {
+     "Crit Chance": 1,
+     "Crit Damage": 4
+    },
+    "LEGENDARY": {
+     "Crit Chance": 2,
+     "Crit Damage": 4
+    },
+    "MYTHIC": {
+     "Crit Chance": 2,
+     "Crit Damage": 5
+    }
+   }
+  },
+  "mythic": {
+   "class": "armor",
+   "name": "Mythic",
+   "rarities": {
+    "EPIC": {
+     "Crit Chance": 4,
+     "Defense": 8,
+     "Health": 8,
+     "Intelligence": 40,
+     "Speed": 2,
+     "Strength": 8
+    }
+   }
+  },
+  "necrotic": {
+   "class": "armor",
+   "name": "Necrotic",
+   "rarities": {
+    "LEGENDARY": {
+     "Intelligence": 150
+    },
+    "MYTHIC": {
+     "Intelligence": 200
+    }
+   }
+  },
+  "odd_sword": {
+   "class": "sword",
+   "name": "Odd",
+   "rarities": {
+    "LEGENDARY": {
+     "Crit Chance": 25,
+     "Crit Damage": 30,
+     "Intelligence": -50
+    }
+   }
+  },
+  "precise": {
+   "bonus": [
+    "\u00a77Deal \u00a7c+10% \ue050 Damage \u00a77when hitting a",
+    "\u00a77mob's head."
+   ],
+   "class": "bow",
+   "name": "Precise",
+   "rarities": {
+    "MYTHIC": {
+     "Crit Chance": 15,
+     "Crit Damage": 70,
+     "Strength": 34
+    }
+   }
+  },
+  "pure": {
+   "class": "armor",
+   "name": "Pure",
+   "rarities": {
+    "EPIC": {
+     "Attack Speed": 3,
+     "Crit Chance": 8,
+     "Crit Damage": 6,
+     "Defense": 6,
+     "Health": 6,
+     "Intelligence": 6,
+     "Speed": 1,
+     "Strength": 6
+    }
+   }
+  },
+  "renowned": {
+   "bonus": [
+    "\u00a77Grants \u00a7b+1% \ue01a Magic Find \u00a77and \u00a7c+1% \u00a77to",
+    "\u00a77ALL \u00a7cCombat Stats\u00a77."
+   ],
+   "class": "armor",
+   "name": "Renowned",
+   "rarities": {
+    "MYTHIC": {
+     "Attack Speed": 15,
+     "Crit Chance": 12,
+     "Crit Damage": 12,
+     "Defense": 10,
+     "Health": 10,
+     "Intelligence": 12,
+     "Speed": 1,
+     "Strength": 12
+    }
+   }
+  },
+  "smart": {
+   "class": "armor",
+   "name": "Smart",
+   "rarities": {
+    "EPIC": {
+     "Defense": 12,
+     "Health": 12,
+     "Intelligence": 80
+    }
+   }
+  },
+  "spiked": {
+   "class": "armor",
+   "name": "Spiked",
+   "rarities": {
+    "LEGENDARY": {
+     "Attack Speed": 14,
+     "Crit Chance": 10,
+     "Crit Damage": 10,
+     "Defense": 8,
+     "Health": 8,
+     "Intelligence": 10,
+     "Speed": 1,
+     "Strength": 10
+    }
+   }
+  },
+  "spiritual": {
+   "bonus": [
+    "\u00a77Killing an enemy has a \u00a7a10% \u00a77chance to",
+    "\u00a77spawn a Spirit Decoy while in \ue067",
+    "\u00a7cDungeons\u00a77."
+   ],
+   "class": "bow",
+   "name": "Spiritual",
+   "rarities": {
+    "MYTHIC": {
+     "Crit Chance": 14,
+     "Crit Damage": 75,
+     "Strength": 38
+    }
+   }
+  },
+  "sunny": {
+   "class": "armor",
+   "name": "Sunny",
+   "rarities": {
+    "EPIC": {
+     "Farming Wisdom": 4,
+     "Speed": 6
+    },
+    "LEGENDARY": {
+     "Farming Wisdom": 5,
+     "Speed": 8
+    }
+   }
+  },
+  "titanic": {
+   "class": "armor",
+   "name": "Titanic",
+   "rarities": {
+    "EPIC": {
+     "Defense": 25,
+     "Health": 25
+    }
+   }
+  },
+  "waxed": {
+   "class": "equipment",
+   "name": "Waxed",
+   "rarities": {
+    "EPIC": {
+     "Crit Chance": 5,
+     "Health": 10
+    },
+    "LEGENDARY": {
+     "Crit Chance": 6,
+     "Health": 12
+    },
+    "MYTHIC": {
+     "Crit Chance": 7,
+     "Health": 15
+    }
+   }
+  },
+  "wise": {
+   "class": "armor",
+   "name": "Wise",
+   "rarities": {
+    "EPIC": {
+     "Health": 12,
+     "Intelligence": 100,
+     "Speed": 2
+    },
+    "LEGENDARY": {
+     "Health": 15,
+     "Intelligence": 125,
+     "Speed": 2
+    }
+   }
+  },
+  "withered": {
+   "bonus": [
+    "\u00a77Grants \u00a7c+1\ue00d Strength \u00a77per \u00a7cCatacombs",
+    "\u00a77skill level you have."
+   ],
+   "class": "sword",
+   "name": "Withered",
+   "rarities": {
+    "EPIC": {
+     "Strength": 160
+    },
+    "LEGENDARY": {
+     "Strength": 185
+    },
+    "MYTHIC": {
+     "Strength": 220
+    }
+   }
+  }
+ },
+ "statEnchants": {
+  "big_brain": {
+   "1": {
+    "Intelligence": 5
+   },
+   "2": {
+    "Intelligence": 10
+   },
+   "3": {
+    "Intelligence": 15
+   },
+   "4": {
+    "Intelligence": 20
+   },
+   "5": {
+    "Intelligence": 25
+   }
+  },
+  "critical": {
+   "1": {
+    "Crit Damage": 10
+   },
+   "2": {
+    "Crit Damage": 20
+   },
+   "3": {
+    "Crit Damage": 30
+   },
+   "4": {
+    "Crit Damage": 40
+   },
+   "5": {
+    "Crit Damage": 50
+   },
+   "6": {
+    "Crit Damage": 70
+   },
+   "7": {
+    "Crit Damage": 100
+   }
+  },
+  "growth": {
+   "1": {
+    "Health": 15
+   },
+   "2": {
+    "Health": 30
+   },
+   "3": {
+    "Health": 45
+   },
+   "4": {
+    "Health": 60
+   },
+   "5": {
+    "Health": 75
+   },
+   "6": {
+    "Health": 90
+   },
+   "7": {
+    "Health": 105
+   }
+  },
+  "overload": {
+   "1": {
+    "Crit Chance": 1,
+    "Crit Damage": 1
+   },
+   "2": {
+    "Crit Chance": 2,
+    "Crit Damage": 2
+   },
+   "3": {
+    "Crit Chance": 3,
+    "Crit Damage": 3
+   },
+   "4": {
+    "Crit Chance": 4,
+    "Crit Damage": 4
+   },
+   "5": {
+    "Crit Chance": 5,
+    "Crit Damage": 5
+   }
+  },
+  "protection": {
+   "1": {
+    "Defense": 4
+   },
+   "2": {
+    "Defense": 8
+   },
+   "3": {
+    "Defense": 12
+   },
+   "4": {
+    "Defense": 16
+   },
+   "5": {
+    "Defense": 20
+   },
+   "6": {
+    "Defense": 25
+   },
+   "7": {
+    "Defense": 30
+   }
+  },
+  "reflection": {
+   "1": {
+    "Intelligence": 2,
+    "True Defense": 1
+   },
+   "2": {
+    "Intelligence": 4,
+    "True Defense": 2
+   },
+   "3": {
+    "Intelligence": 6,
+    "True Defense": 3
+   },
+   "4": {
+    "Intelligence": 8,
+    "True Defense": 4
+   },
+   "5": {
+    "Intelligence": 10,
+    "True Defense": 5
+   }
+  },
+  "rejuvenate": {
+   "1": {
+    "Health Regen": 1
+   },
+   "2": {
+    "Health Regen": 2
+   },
+   "3": {
+    "Health Regen": 3
+   },
+   "4": {
+    "Health Regen": 4
+   },
+   "5": {
+    "Health Regen": 5
+   }
+  },
+  "respite": {
+   "1": {
+    "Health Regen": 3
+   },
+   "2": {
+    "Health Regen": 6
+   },
+   "3": {
+    "Health Regen": 9
+   },
+   "4": {
+    "Health Regen": 12
+   },
+   "5": {
+    "Health Regen": 15
+   }
+  },
+  "smarty_pants": {
+   "1": {
+    "Intelligence": 5
+   },
+   "2": {
+    "Intelligence": 10
+   },
+   "3": {
+    "Intelligence": 15
+   },
+   "4": {
+    "Intelligence": 20
+   },
+   "5": {
+    "Intelligence": 25
+   }
+  },
+  "sugar_rush": {
+   "1": {
+    "Speed": 2
+   },
+   "2": {
+    "Speed": 4
+   },
+   "3": {
+    "Speed": 6
+   }
+  },
+  "toxophilite": {
+   "1": {
+    "Crit Chance": 1
+   },
+   "10": {
+    "Crit Chance": 10
+   },
+   "2": {
+    "Crit Chance": 2
+   },
+   "3": {
+    "Crit Chance": 3
+   },
+   "4": {
+    "Crit Chance": 4
+   },
+   "5": {
+    "Crit Chance": 5
+   },
+   "6": {
+    "Crit Chance": 6
+   },
+   "7": {
+    "Crit Chance": 7
+   },
+   "8": {
+    "Crit Chance": 8
+   },
+   "9": {
+    "Crit Chance": 9
+   }
+  },
+  "true_protection": {
+   "1": {
+    "True Defense": 5
+   }
+  }
+ }
+}

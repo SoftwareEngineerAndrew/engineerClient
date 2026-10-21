@@ -26,6 +26,12 @@ sourceSets.main {
     kotlin.setSrcDirs(listOf("src"))
     resources.setSrcDirs(listOf("src/resources"))
 }
+// Plain unit tests (no game is started) live in test/, outside src/ so main doesn't pick them up.
+sourceSets.test {
+    java.setSrcDirs(listOf("test"))
+    kotlin.setSrcDirs(listOf("test"))
+    resources.setSrcDirs(listOf("test/resources"))
+}
 
 repositories {
     mavenCentral()
@@ -55,9 +61,18 @@ dependencies {
     // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
     // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
     compileOnly("maven.modrinth:devonian:k8Mog4wx")
+
+    // Rustclear engine unit tests (stat math, tooltips, terminals).
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+    }
+
     processResources {
         // The version is expanded into fabric.mod.json: without it as an input, a version bump alone
         // leaves the processed resources "up to date" and the jar keeps the old version.

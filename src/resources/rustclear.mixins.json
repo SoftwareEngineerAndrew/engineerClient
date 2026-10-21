@@ -1,0 +1,41 @@
+{
+  "required": true,
+  "package": "net.rustclear.mod.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "EngineFluidMixin",
+    "HypixelDecoderMixin",
+    "HypixelEncoderMixin",
+    "EngineBlockHitMixin",
+    "EngineOutlineMixin",
+    "ArmorStandAccessor",
+    "MannequinAccessor",
+    "EnginePearlMixin",
+    "EngineServerDataMixin",
+    "EngineMapMixin",
+    "E4mcDomainMixin",
+    "TitleButtonStyleMixin",
+    "EngineArrowHitMixin",
+    "EngineBowMixin",
+    "EngineProjectileMixin",
+    "EngineLeftClickMixin",
+    "EngineDropMixin",
+    "EngineMenuSlotMixin",
+    "EngineOffhandMixin",
+    "EngineMaxPlayersMixin",
+    "SimLogMixin",
+    "SimLogReceiveMixin",
+    "FallingBlockAccessor",
+    "LivingEntityAccessor",
+    "EngineWitherBarMixin",
+    "EngineDragonMixin",
+    "EnginePortalMixin",
+    "EngineHopperMixin",
+    "EnginePushMixin",
+    "EngineAttackCooldownMixin",
+    "EngineReequipMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

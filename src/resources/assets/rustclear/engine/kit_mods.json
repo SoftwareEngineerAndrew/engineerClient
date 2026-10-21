@@ -1,0 +1,88 @@
+{
+ "ASPECT_OF_THE_VOID": {
+  "enchantments": {
+   "ultimate_wise": 5
+  },
+  "modifier": "heroic",
+  "of": 80,
+  "seen": 72
+ },
+ "DUNGEONBREAKER": {
+  "of": 77,
+  "seen": 77
+ },
+ "HYPERION": {
+  "enchantments": {
+   "PROSECUTE": 6,
+   "bane_of_arthropods": 6,
+   "champion": 10,
+   "cleave": 5,
+   "critical": 6,
+   "cubism": 5,
+   "ender_slayer": 6,
+   "experience": 4,
+   "fire_aspect": 3,
+   "first_strike": 4,
+   "giant_killer": 7,
+   "impaling": 3,
+   "lethality": 6,
+   "life_steal": 5,
+   "looting": 4,
+   "luck": 6,
+   "scavenger": 5,
+   "smite": 7,
+   "tabasco": 3,
+   "thunderlord": 6,
+   "ultimate_swarm": 5,
+   "vampirism": 6,
+   "venomous": 5
+  },
+  "hot_potato_count": 15,
+  "modifier": "heroic",
+  "of": 80,
+  "seen": 50
+ },
+ "RAGNAROCK_AXE": {
+  "art_of_war_count": 1,
+  "enchantments": {
+   "ultimate_chimera": 5
+  },
+  "hot_potato_count": 15,
+  "modifier": "withered",
+  "of": 17,
+  "seen": 17
+ },
+ "STARRED_BONZO_STAFF": {
+  "enchantments": {
+   "telekinesis": 1,
+   "ultimate_wise": 5
+  },
+  "modifier": "heroic",
+  "of": 80,
+  "seen": 72
+ },
+ "TERMINATOR": {
+  "art_of_war_count": 1,
+  "enchantments": {
+   "chance": 5,
+   "cubism": 5,
+   "dragon_hunter": 6,
+   "flame": 2,
+   "impaling": 5,
+   "infinite_quiver": 10,
+   "overload": 5,
+   "piercing": 1,
+   "power": 7,
+   "snipe": 4,
+   "tabasco": 3,
+   "telekinesis": 1,
+   "toxophilite": 10,
+   "ultimate_soul_eater": 5
+  },
+  "hot_potato_count": 15,
+  "modifier": "precise",
+  "of": 78,
+  "seen": 59
+ },
+ "_about": "The default kit's item mods: the most common set per item in 80 recorded F7/M7 runs."
+}

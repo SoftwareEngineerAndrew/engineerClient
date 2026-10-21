@@ -1,0 +1,30 @@
+{
+  "items": [
+    {
+      "id": "RAGNAROCK_AXE",
+      "name": "Ragnarock",
+      "rarity": "RARE",
+      "rarityLine": "RARE SWORD",
+      "type": "SWORD",
+      "nativeDungeon": false,
+      "essence": "Crimson",
+      "starCosts": [100, 250, 500, 1000, 1500],
+      "stats": {"Damage": 200.0, "Strength": 100.0},
+      "material": "golden_sword",
+      "glowing": true,
+      "left": "melee",
+      "right": "ability",
+      "abilities": [
+        {
+          "kind": "Ability",
+          "name": "Ragnarock",
+          "click": "RIGHT CLICK",
+          "text": ["Begin a channel.", "After not taking damage for 3s, gain 1.5x this", "weapon's ❁ Strength for 10s."],
+          "mana": 500.0,
+          "cooldown": 20.0
+        }
+      ],
+      "requirements": []
+    }
+  ]
+}

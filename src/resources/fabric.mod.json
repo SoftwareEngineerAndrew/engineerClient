@@ -8,9 +8,12 @@
   "license": "All-Rights-Reserved",
   "environment": "client",
   "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
-  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.devonian.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
+  "mixins": ["engineerclient.mixins.json", "rustclear.mixins.json","engineerclient.odin.mixins.json", "engineerclient.devonian.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
   "entrypoints": {
+    "preLaunch": ["net.rustclear.mod.online.E4mcPreLaunch"],
     "client": [
+      "net.rustclear.mod.RustclearMod",
+      "net.rustclear.mod.engine.Engine",
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
       { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
       { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
@@ -21,6 +24,10 @@
     "fabric-api": ">=0.161.0",
     "fabric-language-kotlin": ">=1.14.1+kotlin.2.4.20",
     "minecraft": "~26.3",
-    "odin": ">=0.3.7"
+    "odin": ">=0.3.7",
+    "java": ">=25"
+  },
+  "suggests": {
+    "e4mc": "*"
   }
 }
