@@ -1092,7 +1092,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             when (com.engineerclient.p3sim.clear.secrets.SecretsModule.mimicOut(run, nearestMate(rx, rz) ?: host.uuid)) {
                 true -> diff.mobOk()
                 false -> diff.forced(run.t, "the recording's Mimic died (k $k)", "ADS's trapped chest opened")
-                null -> diff.mobNotFound(k, label, rx, ry, rz, Math.hypot(host.x - rx, host.z - rz), "ADS has no trapped chest")
+                null -> diff.mobNotFound(k, label, rx, ry, rz, Math.hypot(host.x - rx, host.z - rz), "ADS has no trapped chest; its chests near: " +
+                    com.engineerclient.p3sim.clear.secrets.SecretsModule.chestSitesNear(run, rx, ry, rz))
             }
             return
         }
