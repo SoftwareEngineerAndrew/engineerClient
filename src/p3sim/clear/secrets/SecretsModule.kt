@@ -714,6 +714,19 @@ object SecretsModule : AdsModule, SecretService {
     fun hasBat(run: Run, room: Int): Boolean = d(run)?.book?.hasKind(room, SecretKind.BAT) == true
 
     /**
+     * For a replay's recorded Mimic: true when the trapped chest has let it out already; else opens the chest for [by] (its zombie and
+     * point follow) and returns false. Null when the run has no trapped chest.
+     */
+    fun mimicOut(run: Run, by: UUID?): Boolean? {
+        val rd = d(run) ?: return null
+        val key = rd.trapped ?: return null
+        if (key in rd.chests) return true
+        val s = rd.plan.site(key) ?: return null
+        startChest(rd, s, by)
+        return false
+    }
+
+    /**
      * Kills every secret bat inside [box] (an Implosion, a Mage beam): the damage module calls this next to its mob hits, since a secret
      * bat is a plain bat entity, not a registered mob. Returns how many died.
      */
@@ -802,11 +815,15 @@ object SecretsModule : AdsModule, SecretService {
         rd.chests[s.key] = ChestRec(s, if (dropsFromRecording) Drop.Nothing else LootTables.chest(chestRandom(rd, s)), by, start, recorded = replayChestReward?.invoke(rd.run, s.x, s.y, s.z))
     }
 
-    /** The Mimic: a plain zombie stands at the chest a tick after the click, and is dead a few ticks later; the Mimic's point counts then. */
+    /**
+     * The Mimic: a plain zombie stands at the chest a tick after the click, and the chest is air that tick (DR: 12 of 12 Mimics, the chest
+     * air within a tick of the zombie in 11); it is dead a few ticks later and the Mimic's point counts then.
+     */
     private fun openTrapped(rd: RunData, s: SecretSite, by: UUID?, start: Int) {
         val delay = TrappedChest.KILL_DELAY.first + rd.miscRandom.nextInt(TrappedChest.KILL_DELAY.last - TrappedChest.KILL_DELAY.first + 1)
         var body: UUID? = null
         rd.later.add(start + 1, {
+            setOrFix(rd, s.x, s.y, s.z, Blocks.AIR.defaultBlockState())
             val level = RunBlocks.level
             if (level != null && RunBlocks.isLoaded(s.x, s.z)) {
                 EntityTypes.ZOMBIE.create(level, EntitySpawnReason.EVENT)?.let { z ->
