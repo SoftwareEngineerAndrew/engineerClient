@@ -115,6 +115,8 @@ object DoorsModule : AdsModule, DoorService {
         val door = c.doorAtBlock(pos.x, pos.y, pos.z) ?: return null
         if (!run.plan.doors[door].kind.hasBody) return null
         c.tryOpen(door, player.uuid)
+        // The click is the door's: the held item's ability does not fire from the use_item the client sends after it.
+        com.engineerclient.p3sim.SimItems.swallowFollowUp(player)
         return InteractionResult.SUCCESS
     }
 
