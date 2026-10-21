@@ -24,7 +24,8 @@ import com.google.gson.JsonObject
  *
  * Lifecycle of one run, in call order:
  *  1. `onRunStart` (once, the dungeon is planned and the world region is registered, the countdown begins);
- *  2. `onStage` at every stage change (`from` is null for the first), `onTick` every server tick, `onEvent` for every bus event;
+ *  2. `onStage` at every stage change (`from` is null for the first), `onTick` every server tick (then `onTickEnd`, once every
+ *     system's `onTick` ran), `onEvent` for every bus event;
  *  3. `onRunEnd` (once). After it nothing else is called for that run.
  * A savepoint restore calls [restore] on every system with the data its [snapshot] returned, in module order, then posts
  * `SavepointRestored`. [onRunStart] is NOT called again by a restore.
@@ -35,6 +36,7 @@ interface RunSystem {
 
     fun onRunStart(run: Run) {}
     fun onTick(run: Run) {}
+    fun onTickEnd(run: Run) {}
     fun onStage(run: Run, from: RunStage?, to: RunStage) {}
     fun onEvent(run: Run, event: RunEvent) {}
     fun onRunEnd(run: Run, reason: EndReason) {}
