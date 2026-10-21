@@ -247,6 +247,23 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && clean(it[2].asString).endsWith(" is ready to use! Press DROP to activate it!") }?.get(0)?.asInt
     }
 
+    /**
+     * The recording's tab refresh, as k mod [TAB_TICKS]: Hypixel's tab counters (Time, rooms, secrets, crypts, deaths) change once a second,
+     * all on one tick of it, a tick later now and then (DR: every change of a run on two neighbouring ticks of the 20). The tick its Time
+     * changed on most; null with fewer than 5 changes.
+     */
+    private val recordedTabPhase: Int? by lazy {
+        var last: String? = null
+        val at = IntArray(TAB_TICKS)
+        for (e in file.events) {
+            if (e.size() < 3 || e[1].asString != "dung" || !e[2].isJsonObject || e[0].asInt <= 0) continue
+            val v = e[2].asJsonObject.get("elapsed")?.takeIf { it.isJsonPrimitive }?.asString ?: continue
+            if (last != null && v != last) at[Math.floorMod(e[0].asInt, TAB_TICKS)]++
+            last = v
+        }
+        if (at.sum() < 5) null else at.indices.maxBy { at[it] }
+    }
+
     /** The tick the recording's Blood room portal appeared (its first nether_portal block; DR: all in one tick), or null. */
     private val recordedPortalK: Int? by lazy {
         file.events.firstOrNull { it.size() > 5 && it[1].asString == "blk" && it[5].isJsonPrimitive && it[5].asString.startsWith("minecraft:nether_portal") }?.get(0)?.asInt
@@ -579,6 +596,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) 0 else null }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = { r -> if (r === run && !ended) recordedTrapped else null }
+        // The tab refreshes on the recording's tick of the second.
+        com.engineerclient.p3sim.clear.hud.HudModule.tabPhase = { r -> if (r === run && !ended) recordedTabPhase?.let { p -> Math.floorMod(p + r.serverTick - r.t, TAB_TICKS) } else null }
         // The Blood room's portal opens on the recording's tick, not on ADS's rolled 80 or 90 after the defeat.
         com.engineerclient.p3sim.clear.blood.BloodModule.portalFromReplay = recordedPortalK != null
         hurtSub = run.bus.on<com.engineerclient.p3sim.run.PlayerDamaged>{ if (it.player == host.uuid && it.percent > 0.0) hurtAt = run.t }
@@ -615,6 +634,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = null
         com.engineerclient.p3sim.clear.blood.BloodModule.portalFromReplay = false
+        com.engineerclient.p3sim.clear.hud.HudModule.tabPhase = null
         hurtSub?.cancel(); hurtSub = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayOpened = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
@@ -652,6 +672,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         // ADS moving you between ticks (a teleport of its own: a Hyperion, a leap, a pad), against Hypixel's.
         lastHost?.let { l -> if (teleported(l)) diff.adsTeleport(now, host.position()) }
+        // Last tick was a tab refresh: the counters as it showed them (the state now is that tick's end).
+        recordedTabPhase?.let { p -> if (Math.floorMod(now - 1 - p, TAB_TICKS) == 0) diff.tabRefreshed() }
         while (lastK < now) {
             lastK++
             var pose: JsonArray? = null
@@ -1644,6 +1666,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
         /** The recorder's brief tag for a mob whose tag it had not read. */
         private val UNREAD_TAGS = setOf("???", "MINIBOSS")
+        /** Hypixel's tab refreshes once a second. */
+        private const val TAB_TICKS = 20
         /** The Watcher's camp mobs' names; not the Parasite's (its split silverfish, levelled mobs of their own, have its name). */
         private val CAMP_NAMES = (com.engineerclient.p3sim.clear.blood.camp.WallPlan.WALL_BOSSES + com.engineerclient.p3sim.clear.blood.camp.WallPlan.STANDARD) - "Parasite"
         private const val SKULL_HIT = "A Crypt Wither Skull exploded, hitting you for "
