@@ -5,6 +5,7 @@ import com.engineerclient.practice.TermInfo
 import com.google.gson.JsonParser
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
@@ -19,7 +20,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Turns down (or pauses) whatever else is playing on the computer through the parts of a run that need your ears:
  * from "Starting in 1 second." (or Mort, if that was missed) until the run has its minimum secrets (Odin's
- * count: the secrets for full secret score) or the boss, whichever is first, and from 30 s into Storm until S4 starts. Everything comes back as it was then, on a world change, when this is turned off and when
+ * count: the secrets for full secret score) or the boss, whichever is first, and from 30 s into Storm until S4 starts. Role Mage (the blood camper, and on to EE2): the clear's quiet
+ * ends when Odin's Blood Camp move timer runs out (the Watcher has moved: kill the mobs), else at "You may pass" or the
+ * boss, and Storm's is from 31 s in until S2 starts. Everything comes back as it was then, on a world change, when this is turned off and when
  * the game closes.
  *
  * Other programs' own volume is what changes, never the system's: on Linux each PulseAudio / PipeWire stream
@@ -32,15 +35,34 @@ object QuietMedia : Module(
     name = "Quiet Media",
     key = null,
     category = Category.custom("Coffee Client", 860, 10),
-    description = "Turns down other apps' audio (music, videos) from 1 s before the run until min secrets, and from 30 s into Storm until S4."
+    description = "Turns down other apps' audio (music, videos) from 1 s before the run until min secrets (Mage: blood's move timer), and from 30 s into Storm until S4 (Mage: 31 s, until S2)."
 ) {
     private val amount by NumberSetting("Quiet Amount", 70, 0..100, 5, desc = "How much quieter other apps get: 70% leaves them at 30% of their volume.", unit = "%")
+    private val role by SelectorSetting("Role", Role.NORMAL, desc = "Normal: quiet until min secrets, and from 30 s into Storm until S4. Mage: quiet until Odin's Blood Camp move timer runs out (it needs Odin's Blood Camp on), and from 31 s into Storm until S2.")
     private val pause by BooleanSetting("Pause", false, desc = "Pauses what's playing (music, videos) instead of turning it down, and plays it again after.")
 
     private const val COUNTDOWN = "Starting in 1 second."
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
-    private const val STORM_QUIET_TICKS = 30 * 20
+    private const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
+
+    private enum class Role(private val label: String) { NORMAL("Normal"), MAGE("Mage"); override fun toString() = label }
+
+    /** Odin's Blood Camp move timer (seconds left, counting down a server tick at a time; null when there is none). */
+    private val moveTime = runCatching {
+        com.odtheking.odin.features.impl.dungeon.BloodCamp::class.java.getDeclaredField("moveTimeSeconds").apply { isAccessible = true }
+    }.getOrNull()
+    private fun moveTimeLeft(): Float? = moveTime?.let { runCatching { it.get(null) as Float? }.getOrNull() }
+    /** The move timer was seen running this clear. */
+    private var moveSeen = false
+
+    /** Blood's done for a mage: Odin's move timer ran out, the Watcher let you go, or the boss. */
+    private fun bloodDone(): Boolean {
+        val left = moveTimeLeft()
+        if (left != null && left > 0f) { moveSeen = true; return false }
+        return moveSeen || watcherDone || DungeonUtils.inBoss
+    }
+    private var watcherDone = false
 
     private enum class Phase { NONE, CLEAR, AFTER_CLEAR, STORM_WAIT, STORM, DONE }
 
@@ -71,6 +93,7 @@ object QuietMedia : Module(
         val wasQuiet = phase == Phase.CLEAR || phase == Phase.STORM
         phase = next
         val isQuiet = next == Phase.CLEAR || next == Phase.STORM
+        if (next == Phase.CLEAR || next == Phase.NONE) { moveSeen = false; watcherDone = false }
         if (isQuiet && !wasQuiet) quiet() else if (!isQuiet && wasQuiet) restore()
     }
 
@@ -88,15 +111,16 @@ object QuietMedia : Module(
             when (message) {
                 COUNTDOWN -> if (phase == Phase.NONE || phase == Phase.DONE) enter(Phase.CLEAR)
                 MORT -> if (phase == Phase.NONE) enter(Phase.CLEAR)
-                STORM_START -> if (phase != Phase.STORM) { stormQuietAt = serverTicks + STORM_QUIET_TICKS; enter(Phase.STORM_WAIT) }
+                WATCHER_DONE -> watcherDone = true
+                STORM_START -> if (phase != Phase.STORM) { stormQuietAt = serverTicks + (if (role == Role.MAGE) 31 else 30) * 20; enter(Phase.STORM_WAIT) }
             }
         }
         on<TickEvent.Server> { serverTicks++ }
         on<TickEvent.End> {
             when (phase) {
-                Phase.CLEAR -> if (DungeonUtils.neededSecretsAmount.let { it > 0 && DungeonUtils.secretCount >= it } || DungeonUtils.inBoss) enter(Phase.AFTER_CLEAR)
+                Phase.CLEAR -> if (if (role == Role.MAGE) bloodDone() else DungeonUtils.neededSecretsAmount.let { it > 0 && DungeonUtils.secretCount >= it } || DungeonUtils.inBoss) enter(Phase.AFTER_CLEAR)
                 Phase.STORM_WAIT -> if (serverTicks >= stormQuietAt) enter(Phase.STORM)
-                Phase.STORM -> if (TermInfo.sectionNumber() == 4) enter(Phase.DONE)
+                Phase.STORM -> if ((TermInfo.sectionNumber() ?: 0) >= (if (role == Role.MAGE) 2 else 4)) enter(Phase.DONE)
                 else -> {}
             }
             // Streams that started while it's quiet (the next song, a new video).
