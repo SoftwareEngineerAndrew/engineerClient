@@ -1335,8 +1335,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private fun door(k: Int, kind: DoorKind, who: String?) {
         val by = uuidOf(who ?: if (kind == DoorKind.BLOOD) bloodKeyBy else null)
         val at = posOf(by) ?: host.position()
-        // The nearest door of the kind still shut (one opened already would count as this one and leave the real one to you).
-        val door = run.plan.doors.filter { it.kind == kind && run.state.doors[it.index].phase == DoorPhase.CLOSED }
+        // The nearest door of the kind still shut or opened in the last [DOOR_JUST_OPENED] ticks (ADS's own click a tick before the line);
+        // one opened long before would count as this one and leave the real one to you.
+        val door = run.plan.doors.filter { it.kind == kind && run.state.doors[it.index].let { d -> d.phase == DoorPhase.CLOSED || (d.openedAt ?: Int.MIN_VALUE) >= run.t - DOOR_JUST_OPENED } }
             .minByOrNull { d -> val c = d.spot; Math.hypot(c.first + 0.5 - at.x, c.second + 0.5 - at.z) } ?: return
         val rec = run.state.doors[door.index]
         // A teammate's door opens on the tick of its line (Hypixel's body is barrier the next tick, air 14 after); yours had better be ADS's own,
@@ -1538,6 +1539,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private const val BONE_PLATING = "Your bone plating reduced the damage you took by "
         private const val SKULL_HIT_VOLUME = 0.7f
         private const val PLATING_NEAR = 3
+        private const val DOOR_JUST_OPENED = 20
         /** The longest ADS's teleport waits for the recorded client's (DR click to tpme: 1,096 the same tick, 5,802 one, 442 two, 136 three). */
         private const val TP_ACCEPT_MAX = 4
         /** A click this many ticks before a recorded chest's lid sound opened it (854 to 856 measured). */
