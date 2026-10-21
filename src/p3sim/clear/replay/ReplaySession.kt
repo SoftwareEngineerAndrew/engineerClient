@@ -647,8 +647,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             lastK++
             var pose: JsonArray? = null
             // What the server sent on a tick is applied before what you sent: your packets of the tick reach the server after it sent its own
-            // (a teammate's key pickup logged after your click on the door still opens it on Hypixel).
-            val evs = file.at(lastK).let { l -> l.filter { !it[1].asString.startsWith("o.") } + l.filter { it[1].asString.startsWith("o.") } }
+            // (a teammate's key pickup logged after your click on the door still opens it on Hypixel). Its mob deaths come last: a cast of
+            // yours on the tick kills on the tick (DR: an Implosion line on its click's tick, its mobs dead on it), so a death is read after it.
+            val evs = file.at(lastK).let { l ->
+                val death = { e: JsonArray -> e[1].asString == "eev" && e.size() > 3 && e[3].isJsonPrimitive && e[3].asInt == 3 }
+                val yours = { e: JsonArray -> e[1].asString.startsWith("o.") }
+                l.filter { !yours(it) && !death(it) } + l.filter(yours) + l.filter(death)
+            }
             for ((i, e) in evs.withIndex()) {
                 if (e[1].asString == "me") { pose = e; continue }
                 EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
