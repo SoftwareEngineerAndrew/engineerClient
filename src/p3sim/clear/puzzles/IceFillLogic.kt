@@ -91,6 +91,22 @@ class IceFillLogic(val floors: List<Set<Cell>>) {
         }
 
         /**
+         * The patch of pattern [i] of floor [f] as (x, z) columns: every cell along the waypoints of its path in [table]. Each completed
+         * floor of 24 recorded Ice Fills (2026-10-03..16) covered exactly one of these, and Hypixel picks the pattern per run.
+         */
+        fun patch(f: Int, i: Int, table: List<List<OdinTables.IcePattern>> = OdinTables.iceFloors): Set<Pair<Int, Int>> {
+            val path = table[f][i].easy
+            val out = LinkedHashSet<Pair<Int, Int>>()
+            for (j in path.indices) {
+                val a = path[j]; val b = path.getOrElse(j + 1) { a }
+                var x = a[0]; var z = a[2]
+                out += x to z
+                while (x != b[0] || z != b[2]) { x += Integer.signum(b[0] - x); z += Integer.signum(b[2] - z); out += x to z }
+            }
+            return out
+        }
+
+        /**
          * Odin's choice per floor: the index of the first pattern whose marker pair reads (air, not air), or -1 when none does
          * (the room is not one of Odin's patterns). [isAir] reads a cell of the room.
          */

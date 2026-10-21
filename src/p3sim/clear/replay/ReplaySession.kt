@@ -650,6 +650,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // A Hyperion click casts as Hypixel's did (its ticks against yours decide which of two quick clicks it takes).
         com.engineerclient.p3sim.SimItems.replayCast = { if (!ended) recordedHypeCasts[lastClickK] else null }
         com.engineerclient.p3sim.SimItems.replayStill = { !ended && lastClickK in recordedHypeStill }
+        val packed = file.events.filter { it[1].asString == "blk" && it.s(5) == "minecraft:packed_ice" }.map { com.engineerclient.p3sim.pack.rooms.WorldPos(it[2].asInt, it[3].asInt, it[4].asInt) }.distinct()
+        com.engineerclient.p3sim.clear.puzzles.IceFillPuzzle.replayPacked = { packed }
         com.engineerclient.p3sim.SimItems.etherwarpRefused = { why -> if (!ended) diff.note(run.t, "etherwarp", "ADS did not warp: $why") }
         diff.note(0, "hyperion", "the recording has ${recordedHypeCasts.size} Hyperion clicks, ${recordedHypeCasts.count { it.value }} cast, ${recordedHypeStill.size} in place inside an entity (${recordedHypeStill.sorted().joinToString()})")
         hurtSub = run.bus.on<com.engineerclient.p3sim.run.PlayerDamaged>{ if (it.player == host.uuid && it.percent > 0.0) hurtAt = run.t }
@@ -694,6 +696,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.SimItems.replayCast = null
         com.engineerclient.p3sim.SimItems.replayStill = null
         com.engineerclient.p3sim.SimItems.etherwarpRefused = null
+        com.engineerclient.p3sim.clear.puzzles.IceFillPuzzle.replayPacked = null
         com.engineerclient.p3sim.clear.hud.HudModule.tabPhase = null
         hurtSub?.cancel(); hurtSub = null
         secretSub?.cancel(); secretSub = null

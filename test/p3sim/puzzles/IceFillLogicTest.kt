@@ -112,4 +112,13 @@ class IceFillLogicTest {
         assertEquals(14, cells.size, "3 columns of 5, minus the blocked cell")
         assertTrue(cells.all { it.y == 70 })
     }
+
+    @Test fun eachPatternPatchHasTheSizeTheRecordedFloorsCovered() {
+        // the packed-ice cells of every completed floor in 24 recorded runs: 8 8 6 6 / 22 24 22 24 20 24 / 46 44 44 42 40
+        val sizes = listOf(listOf(8, 8, 6, 6), listOf(22, 24, 22, 24, 20, 24), listOf(46, 44, 44, 42, 40))
+        for (f in 0..2) assertEquals(sizes[f], sizes[f].indices.map { IceFillLogic.patch(f, it).size }, "floor $f")
+        // a path goes cell to cell: every cell after the first is next to one before it
+        val p = IceFillLogic.patch(2, 0).toList()
+        assertTrue(p.drop(1).all { c -> p.any { o -> Math.abs(o.first - c.first) + Math.abs(o.second - c.second) == 1 } })
+    }
 }
