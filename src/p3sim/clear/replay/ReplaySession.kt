@@ -865,6 +865,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 if (TrapsModule.isCrusherCell(x, y, z)) diff.setNow(x, y, z, e.s(5))
                 // Away from you it is a teammate's doing or the room's: put in on its own tick, so the replay looks as the run did.
                 else if (k > 1 && you > ReplayDiff.NEAR) diff.awayBlock(k, x, y, z, e.s(5), you, mate)
+                // Hypixel's start-of-run updates (k 0-1) dress each room a little differently every run (a design shows all of a set, part or
+                // none of it): no fixed room has them, so they are put in on their own tick too.
+                else if (k <= 1) diff.awayBlock(k, x, y, z, e.s(5), you, mate, cat = "start")
                 else diff.recordedBlock(k, x, y, z, e.s(5), you, mate)
             }
             "screen" -> if (!catchUp && e.s(3) == "inventory") SimNet.send(host, NET, "inv 1")
