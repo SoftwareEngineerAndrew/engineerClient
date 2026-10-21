@@ -190,7 +190,8 @@ object SecretsModule : AdsModule, SecretService {
     private fun pickTrappedChest(rd: RunData) {
         val candidates = rd.plan.all.filter { it.kind == SecretKind.CHEST && !it.baked && !it.hidden && rd.run.plan.rooms.getOrNull(it.room)?.type.let { t -> t == RoomType.NORMAL || t == RoomType.RARE || t == RoomType.YELLOW } }
         val recorded = replayTrapped?.invoke(rd.run)
-        rd.trapped = if (recorded != null) candidates.firstOrNull { BlockPos(it.x, it.y, it.z) in recorded }?.key
+        // A replay's is where the recording had it, whatever chest of whatever room that is (the filter is only for the roll).
+        rd.trapped = if (recorded != null) rd.plan.all.firstOrNull { (it.kind == SecretKind.CHEST || it.kind == SecretKind.LOCKED_CHEST) && BlockPos(it.x, it.y, it.z) in recorded }?.key
             else TrappedChest.pick(candidates, TrappedChest.DEFAULT_CHANCE, rd.run.subRandom("secrets-trapped"))?.key
         if (rd.trapped != null) rd.mimicAt = null
     }
@@ -724,6 +725,14 @@ object SecretsModule : AdsModule, SecretService {
         val s = rd.plan.site(key) ?: return null
         startChest(rd, s, by)
         return false
+    }
+
+    /** For a replay's report: the chest sites within 4 blocks of a point ("x y z KIND roomtype", baked/hidden marked), or "none". */
+    fun chestSitesNear(run: Run, x: Double, y: Double, z: Double): String {
+        val rd = d(run) ?: return "no secrets data"
+        return rd.plan.all.filter { (it.kind == SecretKind.CHEST || it.kind == SecretKind.LOCKED_CHEST) && Math.hypot(it.x + 0.5 - x, it.z + 0.5 - z) < 4 && Math.abs(it.y - y) < 4 }
+            .joinToString(", ") { "${it.x} ${it.y} ${it.z} ${it.kind} ${rd.run.plan.rooms.getOrNull(it.room)?.type}${if (it.baked) " baked" else ""}${if (it.hidden) " hidden" else ""}" }
+            .ifEmpty { "none" }
     }
 
     /**
