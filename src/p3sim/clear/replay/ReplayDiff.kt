@@ -242,7 +242,7 @@ class ReplayDiff(private val s: ReplaySession) {
     }
 
     /** A block a teammate or the room changed away from you: counted when ADS did not have it already, then put in as it is, now. */
-    fun awayBlock(k: Int, x: Int, y: Int, z: Int, state: String?, you: Double, mate: Double) {
+    fun awayBlock(k: Int, x: Int, y: Int, z: Int, state: String?, you: Double, mate: Double, cat: String = "away") {
         val st = state?.let { parse(it) } ?: return
         val pos = BlockPos(x, y, z)
         blockHistory.getOrPut(pos) { ArrayList() } += k to state
@@ -252,8 +252,8 @@ class ReplayDiff(private val s: ReplaySession) {
         if (str(have) == state) return
         val wantId = state.substringBefore('['); val haveId = str(have).substringBefore('[')
         val key = if (wantId == haveId) "$wantId: state differs" else "Hypixel $wantId, ADS $haveId"
-        blockMiss.getValue("away").getOrPut(key) { ArrayList() } += "k $k at $x $y $z: Hypixel $state, ADS ${str(have)} (you %.0f, teammate %.0f)".format(you, mate)
-        canonCell("away", k, pos, st, have, you)?.let { cells.add(it) }
+        blockMiss.getValue(cat).getOrPut(key) { ArrayList() } += "k $k at $x $y $z: Hypixel $state, ADS ${str(have)} (you %.0f, teammate %.0f)".format(you, mate)
+        canonCell(cat, k, pos, st, have, you)?.let { cells.add(it) }
         Sim.level.setBlock(pos, st, Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE); blocksForced++
     }
 
