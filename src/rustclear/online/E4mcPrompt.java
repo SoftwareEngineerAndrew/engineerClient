@@ -109,7 +109,7 @@ public final class E4mcPrompt extends JPanel {
         String project = args.length > 3 ? args[3] : "e4mc";
         Path replace = args.length > 4 ? Path.of(args[4]) : null;
         SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("Rustclear");
+            JFrame frame = new JFrame("ADS");
             E4mcPrompt prompt = new E4mcPrompt(minecraft, mods, rustclear, project, replace);
             frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
             frame.addWindowListener(new WindowAdapter() {
@@ -188,8 +188,8 @@ public final class E4mcPrompt extends JPanel {
         Font body = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
         g.setFont(bold);
         g.setColor(GOLD);
-        g.drawString("RUSTCLEAR", px + 44, py + 30);
-        int tw = g.getFontMetrics().stringWidth("RUSTCLEAR");
+        g.drawString("ADS", px + 44, py + 30);
+        int tw = g.getFontMetrics().stringWidth("ADS");
         g.setFont(body);
         g.setColor(MUTED);
         g.drawString("Party sharing", px + 44 + tw + 10, py + 30);
@@ -213,7 +213,7 @@ public final class E4mcPrompt extends JPanel {
                 ? "e4mc and Krypton together stop you joining any world, singleplayer included. e4all is a "
                     + "fork of e4mc that works with Krypton. Replace e4mc with e4all from Modrinth now? "
                     + "Minecraft closes afterwards; press Play again to start with it."
-                : "Rustclear shares your parties through " + project + ", so friends can join from anywhere and "
+                : "ADS shares your parties through " + project + ", so friends can join from anywhere and "
                     + "nobody sees anyone's IP. It isn't installed. Install it from Modrinth now? Minecraft "
                     + "closes afterwards; press Play again to start with it."
                     + (project.equals("e4all") ? " (e4all is the e4mc fork that works with Krypton.)" : "");

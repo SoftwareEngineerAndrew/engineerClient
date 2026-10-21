@@ -52,7 +52,7 @@ public final class ButtonStyle {
         }
         int textY = y + (h - 8) / 2;
         if (brand) {
-            // The dungeon-map emblem, then RUSTCLEAR centred in what is left.
+            // The dungeon-map emblem, then the label (ADS) centred in what is left.
             int ex = x + 7;
             int ey = y + (h - 8) / 2;
             int[] emblem = {ENTRANCE, NORMAL, NORMAL, NORMAL, PUZZLE, NORMAL, NORMAL, NORMAL, BLOOD};

@@ -12,7 +12,7 @@ import net.rustclear.mod.online.Relays;
 import net.rustclear.mod.ui.RustclearScreen;
 
 /**
- * What the title screen's Rustclear button opens, filling the window: on the left a dungeon map
+ * What the title screen's ADS button opens, filling the window: on the left a dungeon map
  * in the map's own colours with who you are and what is online, on the right the ways to play as
  * large tiles. Make a party (the host's own world, private or public), join one, or queue for a
  * 1v1 or 2v2; scrolling down, the Kit editor and the (coming) Map editor. A
@@ -40,7 +40,7 @@ public final class RustclearMenuScreen extends RustclearScreen {
     private int[] mainView;
 
     public RustclearMenuScreen(Screen parent) {
-        super(Component.literal("Rustclear"), parent);
+        super(Component.literal("ADS"), parent);
     }
 
     @Override
@@ -126,8 +126,8 @@ public final class RustclearMenuScreen extends RustclearScreen {
         rect(g, ex + cell / 2 - 1, ey + cell / 2 - 1 - pulse, 3, 3, 0xFFFFFFFF);
 
         int ty = y + mapW + 16;
-        g.text(font, "RUSTCLEAR", x + (w - font.width("RUSTCLEAR")) / 2, ty, GOLD, true);
-        String tag = "Hypixel dungeons, anywhere.";
+        g.text(font, "ADS", x + (w - font.width("ADS")) / 2, ty, GOLD, true);
+        String tag = "Advanced Dungeon Simulator";
         textCenter(g, fit(tag, w), x + w / 2, ty + 12, MUTED);
 
         // Who and what: the player, the mod, the lobby, the relay.

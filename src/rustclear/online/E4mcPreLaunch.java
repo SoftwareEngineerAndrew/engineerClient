@@ -74,7 +74,7 @@ public final class E4mcPreLaunch implements PreLaunchEntrypoint {
             }
             case E4mcPrompt.DONT_ASK -> {
                 try {
-                    Files.writeString(configDir().resolve(dontAskFile), "Rustclear won't offer to install " + project + " at start-up. Delete this file to be asked again.\n");
+                    Files.writeString(configDir().resolve(dontAskFile), "ADS won't offer to install " + project + " at start-up. Delete this file to be asked again.\n");
                 } catch (Exception e) {
                     LOGGER.warn("Couldn't remember the {} choice: {}", project, e.toString());
                 }

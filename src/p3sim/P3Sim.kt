@@ -286,16 +286,12 @@ object P3Sim : Module(
             EngineerClient.safely("p3sim ghost guard") { GhostGuard.clientTick() }
         }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
-            // The title screen: ADS above Singleplayer, the same size; the Minecraft Realms button becomes Join Hypixel.
-            // No Singleplayer button (another mod's menu): a small ADS button in the corner.
+            // The title screen: the Minecraft Realms button becomes Join Hypixel. The ADS button above Singleplayer
+            // is the menu's (net.rustclear.mod.engine.Engine); P3 practice is in its Practice page.
             if (screen is TitleScreen) EngineerClient.safely("ads title button") {
                 val widgets = Screens.getWidgets(screen)
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val buttons = widgets.filterIsInstance<Button>()
-                val single = buttons.firstOrNull { key(it) == "menu.singleplayer" }
-                widgets.add(Button.builder(Component.literal(FULL_NAME)) { SimWorld.open() }.let {
-                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width, single.height) else it.bounds(w - 164, 4, 160, 16)
-                }.build())
                 val realms = buttons.firstOrNull { key(it) == "menu.online" } ?: return@safely
                 widgets.remove(realms)
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }

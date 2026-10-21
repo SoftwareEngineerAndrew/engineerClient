@@ -7,15 +7,15 @@ import net.minecraft.client.input.InputWithModifiers;
 import net.minecraft.network.chat.Component;
 
 /**
- * The title screen's Rustclear button, above Singleplayer and the same size: the slate panel of
- * the mod's screens with the dungeon-map emblem and RUSTCLEAR in gold ([ButtonStyle]). Still a
+ * The title screen's ADS button, above Singleplayer and the same size: the slate panel of
+ * the mod's screens with the dungeon-map emblem and ADS in gold ([ButtonStyle]). Still a
  * real widget, so keyboard focus and narration work.
  */
 public final class RustclearTitleButton extends AbstractButton {
     private final Runnable action;
 
     public RustclearTitleButton(int x, int y, int width, int height, Runnable action) {
-        super(x, y, width, height, Component.literal("Rustclear"));
+        super(x, y, width, height, Component.literal("ADS"));
         this.action = action;
     }
 

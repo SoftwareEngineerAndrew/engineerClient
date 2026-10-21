@@ -169,7 +169,7 @@ public abstract class RustclearScreen extends Screen {
     }
 
     /**
-     * The header: the 3x3 dungeon-map emblem, RUSTCLEAR in gold, [subtitle], and a badge on the
+     * The header: the 3x3 dungeon-map emblem, ADS in gold, [subtitle], and a badge on the
      * right ([badge] in [badgeColor]; none when null). Ends with the rule under it at py + 22.
      */
     protected void header(GuiGraphicsExtractor g, String subtitle, String badge, int badgeColor) {
@@ -179,8 +179,8 @@ public abstract class RustclearScreen extends Screen {
         for (int i = 0; i < 9; i++) {
             rect(g, ex + (i % 3) * 3, ey + (i / 3) * 3, 2, 2, emblem[i]);
         }
-        g.text(font, "RUSTCLEAR", px + 22, py + 8, GOLD, true);
-        text(g, subtitle, px + 22 + font.width("RUSTCLEAR") + 6, py + 8, MUTED);
+        g.text(font, "ADS", px + 22, py + 8, GOLD, true);
+        text(g, subtitle, px + 22 + font.width("ADS") + 6, py + 8, MUTED);
         if (badge != null) {
             badge(g, badge, px + pw - 8, py + 5, badgeColor);
         }

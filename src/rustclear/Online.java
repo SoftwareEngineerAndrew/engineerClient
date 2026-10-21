@@ -391,6 +391,6 @@ public final class Online {
         Minecraft mc = Minecraft.getInstance();
         Screen back = new RustclearMenuScreen(new TitleScreen());
         ConnectScreen.startConnecting(back, mc, ServerAddress.parseString(clean),
-            new ServerData("Rustclear party", clean, ServerData.Type.OTHER), false, null);
+            new ServerData("ADS party", clean, ServerData.Type.OTHER), false, null);
     }
 }

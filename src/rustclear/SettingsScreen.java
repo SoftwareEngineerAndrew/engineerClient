@@ -86,7 +86,7 @@ public final class SettingsScreen extends RustclearScreen {
     }
 
     private SettingsScreen(Screen parent, boolean leaderboard, boolean lobby) {
-        super(Component.literal(lobby ? "Rustclear party lobby" : "Rustclear dungeon settings"), parent);
+        super(Component.literal(lobby ? "ADS party lobby" : "ADS dungeon settings"), parent);
         this.lobby = lobby;
         if (lobby) {
             tab = Tab.PARTY;

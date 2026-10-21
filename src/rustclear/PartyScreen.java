@@ -38,7 +38,7 @@ public final class PartyScreen extends RustclearScreen {
     private int maxScroll;
 
     public PartyScreen(Screen parent) {
-        super(Component.literal("Rustclear party"), parent);
+        super(Component.literal("ADS party"), parent);
         RustclearMod.sendParty("state", null);
     }
 
