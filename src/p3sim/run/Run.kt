@@ -102,11 +102,12 @@ class Run(
         bus.post(StageChanged(t, null, RunStage.COUNTDOWN))
     }
 
-    /** One server tick: sets the clock, then `onTick` on every system in module order. The engine calls this from `Fight.tick`. */
+    /** One server tick: sets the clock, then `onTick` on every system in module order, then `onTickEnd`. The engine calls this from `Fight.tick`. */
     fun tick(atServerTick: Int) {
         if (!started || ended) return
         serverTick = atServerTick
         for (s in systems) guard(s, "onTick") { s.onTick(this) }
+        if (!ended) for (s in systems) guard(s, "onTickEnd") { s.onTickEnd(this) }
     }
 
     /**

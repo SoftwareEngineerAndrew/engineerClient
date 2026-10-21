@@ -737,20 +737,21 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             lastK++
             var pose: JsonArray? = null
             // What the server sent on a tick is applied before what you sent: your packets of the tick reach the server after it sent its own
-            // (a teammate's key pickup logged after your click on the door still opens it on Hypixel). Its mob deaths come last: a cast of
-            // yours on the tick kills on the tick (DR: an Implosion line on its click's tick, its mobs dead on it), so a death is read after it.
-            val evs = file.at(lastK).let { l ->
-                val death = { e: JsonArray -> e[1].asString == "eev" && e.size() > 3 && e[3].isJsonPrimitive && e[3].asInt == 3 }
-                val yours = { e: JsonArray -> e[1].asString.startsWith("o.") }
-                l.filter { !yours(it) && !death(it) } + l.filter(yours) + l.filter(death)
-            }
+            // (a teammate's key pickup logged after your click on the door still opens it on Hypixel). Yours wait for the tick's end
+            // ([tickEnd]): your client had the tick's world when it sent them, ADS's own changes too (2026-10-03_02-36-19 k17: the entrance
+            // barrier went on the tick of a Hyperion click that went through it). Its mob deaths come last: a cast of yours on the tick
+            // kills on the tick (DR: an Implosion line on its click's tick, its mobs dead on it), so a death is read after it.
+            val all = file.at(lastK)
+            val death = { e: JsonArray -> e[1].asString == "eev" && e.size() > 3 && e[3].isJsonPrimitive && e[3].asInt == 3 }
+            val yours = { e: JsonArray -> e[1].asString.startsWith("o.") }
+            val evs = all.filter { !yours(it) && !death(it) }
+            late += all.filter(yours) + all.filter(death)
             for ((i, e) in evs.withIndex()) {
                 if (e[1].asString == "me") { pose = e; continue }
                 EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
             }
             if (pose != null) { sendPose(pose); recPos = Vec3(pose[2].asDouble, pose[3].asDouble, pose[4].asDouble) }
         }
-        lastHost = host.position()
         // The teammates' party records follow their bodies.
         for (m in bodies.all()) run.state.players[m.uuid]?.let { r -> if (!m.x.isNaN()) { r.x = m.x; r.y = m.y; r.z = m.z; r.extras["yaw"] = m.yaw } }
         bodies.place()
@@ -780,6 +781,18 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         if (essenceRetries.isNotEmpty()) { val l = essenceRetries.toList(); essenceRetries.clear(); for ((by, n) in l) mateEssence(by, n) }
         selfDeaths(now)
+    }
+
+    /** Your packets of the tick (and its mob deaths, read after them), once every module has had the tick. */
+    private val late = ArrayList<JsonArray>()
+
+    fun tickEnd() {
+        if (ended) return
+        val now = run.t
+        val evs = late.toList(); late.clear()
+        for ((i, e) in evs.withIndex()) EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
+        lastHost = host.position()
+        if (invDirty) syncInv()
         diff.tick(now)
         if (now > file.lastK || file.bossK?.let { now >= it } == true) stop("the recording reached ${if (now > file.lastK) "its end" else "the boss"}")
     }
@@ -951,7 +964,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             "o.swing" -> {
                 c.handlePunch(ServerboundPunchPacket.INSTANCE)
                 // A swing that follows a right click in the same tick is that click's; any other is a left click (the sim's shortbows, Mage Beam...).
-                val fromUse = same.subList(0, at).any { it[1].asString in RIGHT_CLICKS }
+                val fromUse = same.subList(0, at).any { it[0].asInt == e[0].asInt && it[1].asString in RIGHT_CLICKS }
                 if (!fromUse) Sim.asPlayer(host) { SimItems.serverLeftClick(host, SimItems.idOf(host.mainHandItem) ?: "") }
             }
             "o.cmd" -> runCatching { ServerboundPlayerCommandPacket.Action.valueOf(e.s(2)!!) }.getOrNull()?.let { c.handlePlayerCommand(ServerboundPlayerCommandPacket(host, it)) }
