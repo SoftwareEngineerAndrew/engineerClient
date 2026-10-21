@@ -147,14 +147,15 @@ object PuzzlesModule : AdsModule, PuzzleHost {
             val room = puzzle.context.room
             val inside = room.index in occupied || (puzzle is WorldPuzzle && puzzle.startsForParty && room.index in party)
             if (puzzle is WorldPuzzle) {
-                if (!puzzle.activated && (humans.any { near(it, room) } || inside)) guard("${puzzle.kind} activate") { puzzle.activate() }
+                if (!puzzle.activated && (humans.any { near(it, room) } || inside || puzzle.ticksUnattended)) guard("${puzzle.kind} activate") { puzzle.activate() }
                 if (puzzle.activated) {
                     if (inside) puzzle.noteEntered(run.serverTick)
                     // Wakes the room a few ticks after the first step into it, then runs its timed steps (even with nobody inside).
                     guard("${puzzle.kind} pump") { puzzle.pump(run.serverTick) }
                 }
             }
-            if (inside && (puzzle !is WorldPuzzle || (puzzle.activated && puzzle.awake))) guard("${puzzle.kind} onTick") { puzzle.onTick() }
+            val unattended = puzzle is WorldPuzzle && puzzle.activated && puzzle.ticksUnattended
+            if ((inside && (puzzle !is WorldPuzzle || (puzzle.activated && puzzle.awake))) || unattended) guard("${puzzle.kind} onTick") { puzzle.onTick() }
         }
     }
 

@@ -40,6 +40,9 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
     /** The column each player stood in when last seen on the active floor, so a step is only counted when they move onto a new one. */
     private val standing = HashMap<UUID, Pair<Int, Int>>()
 
+    /** In a replay: the recording's packed ice in this room by tick, the teammates' steps when none of yours is in it. */
+    private val recordedSteps = ArrayDeque<Pair<Int, WorldPos>>()
+
     /** True from a collapse until the floor comes back. */
     private var collapsed = false
 
@@ -48,6 +51,7 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
 
     override val wakeDelayTicks: Int get() = 0
     override val rewardSignalAtGreen: Boolean get() = false
+    override val ticksUnattended: Boolean get() = replayPacked != null
 
     override fun rewardSpots(): List<WorldPos> = chests
 
@@ -55,7 +59,10 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
         chests = listOf("chest1", "chest2").mapNotNull { context.anchor(it).firstOrNull() }
         val ice = Blocks.ICE
         val isIce = { x: Int, y: Int, z: Int -> stateAt(x, y, z)?.block == ice }
-        replayPacked?.invoke()?.let { useRecordedPatterns(it, isIce) }
+        replayPacked?.invoke()?.let { all ->
+            useRecordedPatterns(all.map { it.second }.distinct(), isIce)
+            recordedSteps.addAll(all.filter { (_, w) -> local(w.x, w.z)?.let { it.first in 0..30 && it.second in 0..30 } == true }.sortedBy { it.first })
+        }
         logic = IceFillLogic((0..2).map { f -> IceFillLogic.scan(f, isIce = isIce, isAir = ::isAirAt) })
         iceCells = (0..2).map { f -> IceFillLogic.scanIce(f, isIce = isIce) }
         obstacles = (0..2).map { f ->
@@ -99,7 +106,8 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
     override fun onTick() {
         val l = logic ?: return
         if (status != PuzzleStatus.UNSOLVED || collapsed || opening) return
-        for (p in playersInRoom()) {
+        val inRoom = playersInRoom()
+        for (p in inRoom) {
             val f = l.activeFloor
             if (f < 0) return
             val feetY = Math.floor(p.y + 0.01).toInt()
@@ -108,20 +116,34 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
             // Only a move onto a different column counts: standing still, or jumping on the spot, is not a step.
             if (standing[p.uuid] == col) continue
             standing[p.uuid] = col
-            val r = l.step(col.first, feetY, col.second)
-            when (r.outcome) {
-                IceFillLogic.Outcome.NOTHING -> {}
-                IceFillLogic.Outcome.COVERED -> {
-                    val c = r.cell!!
-                    setAt(c.x, c.y - 1, c.z, Blocks.PACKED_ICE.defaultBlockState())
-                    world(c.x, c.y - 1, c.z)?.let { w -> Sim.level.levelEvent(2001, BlockPos(w.x, w.y, w.z), Block.getId(Blocks.WOOL.white().defaultBlockState())) }
-                    if (r.floorDone) floorDone(f, c, p.uuid)
-                    if (l.solved) return
-                }
-                IceFillLogic.Outcome.WRONG_BLOCK -> { sayTo(p.uuid, PuzzleLines.ICE_WRONG_BLOCK); collapse(f); return }
-                IceFillLogic.Outcome.DIAGONAL -> { sayTo(p.uuid, PuzzleLines.ICE_DIAGONAL); collapse(f); return }
-            }
+            if (step(l, f, col, feetY, p.uuid)) return
         }
+        // A replay: with none of yours in the room, the recording's packed ice of the tick is a teammate's step, out of your sight.
+        val due = recordedSteps.takeWhile { it.first <= run.t }
+        repeat(due.size) { recordedSteps.removeFirst() }
+        if (inRoom.isEmpty()) for ((_, w) in due) {
+            val f = l.activeFloor
+            if (f < 0 || w.y + 1 != IceFillLogic.FLOOR_Y[f]) continue
+            if (step(l, f, local(w.x, w.z) ?: continue, w.y + 1, TEAMMATE)) return
+        }
+    }
+
+    /** A step onto [col] of floor [f] by [by]: covers it, or collapses the floor. True when the tick is over for the room (a collapse, the solve). */
+    private fun step(l: IceFillLogic, f: Int, col: Pair<Int, Int>, feetY: Int, by: UUID): Boolean {
+        val r = l.step(col.first, feetY, col.second)
+        when (r.outcome) {
+            IceFillLogic.Outcome.NOTHING -> {}
+            IceFillLogic.Outcome.COVERED -> {
+                val c = r.cell!!
+                setAt(c.x, c.y - 1, c.z, Blocks.PACKED_ICE.defaultBlockState())
+                world(c.x, c.y - 1, c.z)?.let { w -> Sim.level.levelEvent(2001, BlockPos(w.x, w.y, w.z), Block.getId(Blocks.WOOL.white().defaultBlockState())) }
+                if (r.floorDone) floorDone(f, c, by)
+                if (l.solved) return true
+            }
+            IceFillLogic.Outcome.WRONG_BLOCK -> { sayTo(by, PuzzleLines.ICE_WRONG_BLOCK); collapse(f); return true }
+            IceFillLogic.Outcome.DIAGONAL -> { sayTo(by, PuzzleLines.ICE_DIAGONAL); collapse(f); return true }
+        }
+        return false
     }
 
     // ---- a floor done -----------------------------------------------------------------------------------------------------
@@ -214,8 +236,11 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
     override fun onReset() { logic?.reset() }
 
     companion object {
-        /** In a replay: where the recording turned ice to packed ice (world positions), so the floors are built as Hypixel had them. */
-        @Volatile var replayPacked: (() -> List<WorldPos>)? = null
+        /** In a replay: where and when (tick) the recording turned ice to packed ice, so the floors are built as Hypixel had them. */
+        @Volatile var replayPacked: (() -> List<Pair<Int, WorldPos>>)? = null
+
+        /** Who a recorded step out of your sight is by: nobody ADS knows. */
+        private val TEAMMATE = UUID(0L, 0L)
 
         /** A collapsed floor comes back this long after it fell (measured: 59 to 61 ticks in 36 of 36). */
         const val COLLAPSE_TICKS = 60
