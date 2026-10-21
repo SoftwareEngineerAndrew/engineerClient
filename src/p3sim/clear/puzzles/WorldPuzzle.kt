@@ -81,6 +81,9 @@ abstract class WorldPuzzle(final override val kind: String, final override val c
     /** Whether a teammate alone in the room runs it, as a player there would (the Quiz: its statue speaks to the whole party). */
     open val startsForParty: Boolean get() = false
 
+    /** Whether the room is built at once and ticks with nobody in it (a replay's Ice Fill, filled by a teammate out of your sight). */
+    open val ticksUnattended: Boolean get() = false
+
     /** Ticks after a player first steps into the room until [wake] runs (measured: Ice Fill 0, Higher Or Lower 7, Tic Tac Toe 24). */
     open val wakeDelayTicks: Int get() = 0
 
