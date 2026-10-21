@@ -13,11 +13,11 @@ plugins {
 apply(plugin = "net.fabricmc.fabric-loom")
 
 group = "com.engineerclient"
-// The release workflow sets EC_VERSION (2026.10.8+abc1234); local builds (ec-build) use GITHUB_REF_NAME.
-version = providers.environmentVariable("EC_VERSION").orElse(providers.environmentVariable("GITHUB_REF_NAME").map { it.removePrefix("v") }).getOrElse("dev")
+// mod_version in gradle.properties is the release version (see RELEASE.md); EC_VERSION still overrides it.
+version = providers.environmentVariable("EC_VERSION").orElse(providers.gradleProperty("mod_version")).get()
 
 base {
-    archivesName.set("engineerclient")
+    archivesName.set("ads")
 }
 
 // Code in src/ (package folders without the com/engineerclient root), resources in src/resources/.
