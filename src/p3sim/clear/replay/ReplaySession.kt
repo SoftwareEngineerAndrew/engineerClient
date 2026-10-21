@@ -236,11 +236,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
     /**
      * Each tick you clicked a Hyperion (main hand) in the recording: whether Hypixel cast for it, by your explode sounds (volume 1, within
-     * 2 blocks of you) in the 3 ticks after, each sound one click's in order.
+     * 2 blocks of where you stood or of a teleport of yours a tick either side: the cast's own lands you there first) in the 3 ticks after,
+     * each sound one click's in order.
      */
     private val recordedHypeCasts: Map<Int, Boolean> by lazy {
         val hotbar = arrayOfNulls<String>(9); var held = 0; var x = 0.0; var z = 0.0
         val clicks = ArrayList<Int>(); val casts = ArrayList<Int>()
+        val tps = file.events.filter { it.size() > 2 && it[1].asString == "tpme" && it[2].isJsonArray }.map { Triple(it[0].asInt, it[2].asJsonArray[0].asDouble, it[2].asJsonArray[2].asDouble) }
         for (e in file.events) {
             if (e.size() < 3) continue
             when (e[1].asString) {
@@ -252,7 +254,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 "o.m" -> if (e.size() > 4 && e[2].isJsonPrimitive) { x = e[2].asDouble; z = e[4].asDouble }
                 "tpme" -> e.get(2).takeIf { it.isJsonArray }?.asJsonArray?.let { x = it[0].asDouble; z = it[2].asDouble }
                 "o.use", "o.useOn" -> if (e.s(2) == "MAIN_HAND" && hotbar[held] == "HYPERION" && clicks.lastOrNull() != e[0].asInt) clicks += e[0].asInt
-                "snd" -> if (e.size() > 7 && e.s(2) == "minecraft:entity.generic.explode" && e[7].asDouble == 1.0 && Math.hypot(e[4].asDouble - x, e[6].asDouble - z) < 2) casts += e[0].asInt
+                "snd" -> if (e.size() > 7 && e.s(2) == "minecraft:entity.generic.explode" && e[7].asDouble == 1.0) {
+                    val k = e[0].asInt; val sx = e[4].asDouble; val sz = e[6].asDouble
+                    if (Math.hypot(sx - x, sz - z) < 2 || tps.any { (tk, tx, tz) -> Math.abs(tk - k) <= 1 && Math.hypot(sx - tx, sz - tz) < 2 }) casts += k
+                }
             }
         }
         val out = HashMap<Int, Boolean>(); var i = 0
