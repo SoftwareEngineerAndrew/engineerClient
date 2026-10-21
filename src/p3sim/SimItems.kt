@@ -1484,15 +1484,25 @@ object SimItems {
         if (state.block is LeverBlock) { Fight.afterPing("lever") { vanillaLeverToggle(pos) }; return InteractionResult.SUCCESS }
         if (state.block is ButtonBlock) return InteractionResult.SUCCESS
         if (id == null) return InteractionResult.SUCCESS
-        // Every item fires here, from use_item_on (Hypixel's model): the client sends no use_item at all after a click
-        // its own useItemOn took (a dispenser, hopper, anvil, beacon or sign opens/answers on the client; a sneaking
-        // AOTV makes a path on dirt), so firing on use_item alone would fire nothing there. The client's follow-up
+        // A block that takes the click itself: the item does nothing. DR clears, block clicks with no use_item after them: a chest
+        // (5 of 5), a hopper, a crafting table, an anvil, a button (2 of 2) and a cauldron (2 Infinileaps) answered nothing, where
+        // dirt, stone bricks, cobblestone and a fence gate fired the AOTV or Hyperion (9 of 9).
+        if (takesClick(state)) return InteractionResult.SUCCESS
+        // Every other item fires here, from use_item_on (Hypixel's model): the client sends no use_item at all after a click
+        // its own useItemOn took (a sneaking AOTV makes a path on dirt), so firing on use_item alone would fire nothing there. The client's follow-up
         // use_item, when it sends one, is swallowed by [blockFired] (one Jerry shot per block click, not 2).
         // The block items (Infinileap/Haunt heads, Superboom) are placed by the client, so there's no follow-up.
         val r = use(p, id, fromBlock = true)
         if (r != InteractionResult.PASS && p.mainHandItem.item !is net.minecraft.world.item.BlockItem) blockFired = id to Fight.serverTick
         // Its SUCCESS keeps vanilla's block use off (the world stays as built); the client's flow doesn't read it.
         return r
+    }
+
+    /** The blocks Hypixel lets have a click instead of the held item (see [useBlock]). */
+    private fun takesClick(s: BlockState) = s.block.let {
+        it is net.minecraft.world.level.block.ChestBlock || it is net.minecraft.world.level.block.HopperBlock ||
+            it is net.minecraft.world.level.block.CraftingTableBlock || it is net.minecraft.world.level.block.AnvilBlock ||
+            it is net.minecraft.world.level.block.AbstractCauldronBlock
     }
 
     /** The item a block click just fired and its server tick: the client's use_item for it in that tick or the next is skipped. */
