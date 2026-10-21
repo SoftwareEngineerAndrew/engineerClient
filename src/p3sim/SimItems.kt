@@ -2570,7 +2570,9 @@ object SimItems {
             sp.closeContainer()
             val e = bot.pos
             // The cooldown is the item's own (2 s for the InfiniLeap, 5 s for the floor item); the floor item is used up by the leap.
-            val cooldownEnd = Fight.serverTick + ClearItems.leapCooldownTicks(item)
+            val cls = DamageModule.activeRun()?.let { r -> r.state.players[sp.uuid]?.dungeonClass?.let { c -> c to r.state.players.values.count { it.dungeonClass.equals(c, ignoreCase = true) } } }
+            val mage = cls?.first.equals("Mage", ignoreCase = true)
+            val cooldownEnd = Fight.serverTick + ClearItems.leapCooldownTicks(item, mage, doubled = cls != null && cls.second <= 1)
             if (item == ClearItems.SPIRIT_LEAP) pearlLeapReady = cooldownEnd else leapReady = cooldownEnd
             if (ClearItems.leapConsumes(item)) useUpLeapItem(sp)
             // You land on them exactly, facing as they face. Practice: where that class normally is in this section; a custom

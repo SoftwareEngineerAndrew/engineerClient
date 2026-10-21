@@ -27,6 +27,10 @@ class ClearItemsTest {
     @Test fun theFloorLeapCoolsFiveSecondsAndTheInfiniLeapTwo() {
         assertEquals(100, ClearItems.leapCooldownTicks(ClearItems.SPIRIT_LEAP))
         assertEquals(40, ClearItems.leapCooldownTicks(ClearItems.INFINILEAP))
+        // A Mage's Cooldown Reduction: 49% with another Mage, 74% as the party's only one.
+        assertEquals(20, ClearItems.leapCooldownTicks(ClearItems.INFINILEAP, mage = true))
+        assertEquals(10, ClearItems.leapCooldownTicks(ClearItems.INFINILEAP, mage = true, doubled = true))
+        assertEquals(100, ClearItems.leapCooldownTicks(ClearItems.SPIRIT_LEAP, mage = true, doubled = true))
     }
 
     @Test fun onlyTheFloorLeapIsUsedUp() {
