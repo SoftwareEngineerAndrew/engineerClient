@@ -1339,9 +1339,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val door = run.plan.doors.filter { it.kind == kind && run.state.doors[it.index].phase == DoorPhase.CLOSED }
             .minByOrNull { d -> val c = d.spot; Math.hypot(c.first + 0.5 - at.x, c.second + 0.5 - at.z) } ?: return
         val rec = run.state.doors[door.index]
-        // A teammate's door opens on the tick of its line (Hypixel's body is barrier the next tick, air 14 after); yours had better be ADS's own.
-        pending += Pending(if (by != null && by != host.uuid) k else k + DOOR_GRACE, "${kind.name.lowercase()} door ${door.index} opened by ${who ?: "?"}", { rec.phase != DoorPhase.CLOSED }) {
-            val keys = run.state.keys
+        // A teammate's door opens on the tick of its line (Hypixel's body is barrier the next tick, air 14 after); yours had better be ADS's own,
+        // unless ADS has no key for it (it cannot open it then: waiting only makes it late, and a teleport through it a tick after the air misses).
+        val keys = run.state.keys
+        val noKey = if (kind == DoorKind.WITHER) keys.witherHeld <= 0 else !keys.bloodHeld
+        pending += Pending(if ((by != null && by != host.uuid) || noKey) k else k + DOOR_GRACE, "${kind.name.lowercase()} door ${door.index} opened by ${who ?: "?"}", { rec.phase != DoorPhase.CLOSED }) {
             if (if (kind == DoorKind.WITHER) keys.witherHeld <= 0 else !keys.bloodHeld) {
                 // ADS had no key for it (the teammate took one ADS did not drop, or not yet): lent, then opened. The next key ADS
                 // gives of that kind pays it back, so ADS never holds one Hypixel's party did not.
