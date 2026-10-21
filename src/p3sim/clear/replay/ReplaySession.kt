@@ -755,7 +755,6 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // The teammates' party records follow their bodies.
         for (m in bodies.all()) run.state.players[m.uuid]?.let { r -> if (!m.x.isNaN()) { r.x = m.x; r.y = m.y; r.z = m.z; r.extras["yaw"] = m.yaw } }
         bodies.place()
-        if (invDirty) syncInv()
         if (hpChecks.isNotEmpty()) {
             val dueHp = hpChecks.filter { it.first <= now }
             hpChecks.removeAll(dueHp)
@@ -794,6 +793,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         val evs = late.toList(); late.clear()
         for ((i, e) in evs.withIndex()) EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
         lastHost = host.position()
+        // The recorded inventory is your client's after its own clicks of the tick (a placed InfiniLeap head is gone from it): set after them.
         if (invDirty) syncInv()
         diff.tick(now)
         if (now > file.lastK || file.bossK?.let { now >= it } == true) stop("the recording reached ${if (now > file.lastK) "its end" else "the boss"}")
