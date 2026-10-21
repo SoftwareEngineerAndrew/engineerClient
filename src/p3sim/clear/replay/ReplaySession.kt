@@ -258,12 +258,32 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private val implosionUsed = HashSet<Int>()
 
     /**
+     * Each recorded line's click (your use_item): the latest one a tick or two before the line, else one on its tick, each click one line
+     * (DR: the line 0 to 2 ticks after the click, mostly 1; 5,688 of 5,707 lines paired so). Click k to the line's index in [implosions].
+     */
+    private val implosionByClick: Map<Int, Int> by lazy {
+        val clicks = file.events.filter { it.size() > 1 && it[1].asString == "o.use" && it[0].asInt > 0 }.mapTo(HashSet()) { it[0].asInt }
+        val out = HashMap<Int, Int>()
+        for ((i, l) in implosions.withIndex()) {
+            val c = intArrayOf(1, 2, 0).map { l.first - it }.firstOrNull { it in clicks && it !in out } ?: continue
+            out[c] = i
+        }
+        out
+    }
+
+    /**
      * The recorded line of the cast ADS runs now: the nearest unused one within [IMPLOSION_NEAR] ticks; none (0 enemies): Hypixel's cast
      * hit nothing, as it says nothing then.
      */
     private fun recordedImplosion(by: java.util.UUID): Pair<Int, Double>? {
         if (forcing || ended || by != host.uuid) return null
         val now = run.t
+        // A cast of your click now: that click's line, or none (Hypixel's hit nothing).
+        if (lastClickK == now) {
+            val i = implosionByClick[now]?.takeIf { it !in implosionUsed } ?: return 0 to 0.0
+            implosionUsed += i
+            return implosions[i].second to implosions[i].third
+        }
         val i = implosions.indices.filter { it !in implosionUsed && kotlin.math.abs(implosions[it].first - now) <= IMPLOSION_NEAR }
             .minByOrNull { kotlin.math.abs(implosions[it].first - now) } ?: return 0 to 0.0
         implosionUsed += i
