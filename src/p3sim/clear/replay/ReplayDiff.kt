@@ -104,6 +104,8 @@ class ReplayDiff(private val s: ReplaySession) {
         val a = e.get(2).takeIf { it.isJsonArray }?.asJsonArray ?: return
         val to = Vec3(a[0].asDouble, a[1].asDouble, a[2].asDouble)
         if (was != null && was.distanceTo(to) < 0.5) { resyncs++; resyncAt += k to to; return }
+        // The boss entry (Maxor's room, y 221.5) is past the replay's end: ADS makes none to match.
+        if (to.y > 200) return
         // Before the start Hypixel holds the party in the entrance by putting them back: where to, and from where, in the room's own frame.
         if (k < 0) { if (was != null && to.y < 200 && to.y > 0) canonPoint(to)?.let { a -> canonPoint(was)?.let { b -> setbacks.add(JsonArray().apply { add(k); a.forEach { add(it) }; b.forEach { add(it) } }) } }; return }
         hypTps += k to to
