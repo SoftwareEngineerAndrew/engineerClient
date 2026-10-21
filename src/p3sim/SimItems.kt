@@ -1286,7 +1286,8 @@ object SimItems {
         // The host's practice: their clicks only. The Infinileap as the game held it (its swap can still be on the way).
         if (Sim.isHost(p) && (Practice.clickRestarts() || Practice.active && (id == "INFINITE_SPIRIT_LEAP" || held == "INFINITE_SPIRIT_LEAP"))) { Practice.restart(); return }
         // Stopped (no phase running): the Bonzo's Staff's left click is the AOTV's, to get around the arena (sneaking: an etherwarp, else a 12-block teleport).
-        if (Fight.phase == null && id == "STARRED_BONZO_STAFF") { val sneak = p.isShiftKeyDown; asClicked(p, "bonzo aotv") { if (sneak) etherwarp(p) else blink(p, 12) }; return }
+        // Never in a clear: Hypixel's does nothing there (DR: 71 lone left clicks of a Bonzo's Staff in the clears, not one teleport).
+        if (Fight.phase == null && DamageModule.activeRun() == null && id == "STARRED_BONZO_STAFF") { val sneak = p.isShiftKeyDown; asClicked(p, "bonzo aotv") { if (sneak) etherwarp(p) else blink(p, 12) }; return }
         // As Mage, a sword's left click is a Mage Beam (and three quick ones a Guided Sheep).
         if (Mage.isMage() && Mage.beamItem(id)) { Fight.afterPing("mage beam") { Mage.click(p) }; return }
         if (id in Bows.SHORTBOWS) Bows.click(p, id!!, left = true)
