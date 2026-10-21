@@ -1379,11 +1379,11 @@ object SimItems {
         if (id == "HYPERION") (Fight.phase as? P2Storm)?.beam()
         when (id) {
             "ASPECT_OF_THE_VOID" -> { val sneak = p.isShiftKeyDown; asClicked(p, "aotv") { if (sneak) etherwarp(p) else blink(p, 12) } }
-            "HYPERION" -> { val cast = replayCast?.invoke(); asClicked(p, "hype") {
+            "HYPERION" -> { val cast = replayCast?.invoke(); val still = replayStill?.invoke() == true; asClicked(p, "hype") {
                 if (cast?.also { if (it) lastHype = Fight.serverTick } ?: hypeReady()) {
                     // In the clear a cast teleports 10 blocks first (92% of recorded casts did); in the boss it never does.
                     val clear = DamageModule.activeRun() != null
-                    if (clear) blink(p, 10)
+                    if (clear && !still) blink(p, 10)
                     implode(p)
                 }
             } }
@@ -1700,6 +1700,9 @@ object SimItems {
      * Which of two clicks a tick apart Hypixel takes depends on how its ticks fell against yours, which a replay can only read.
      */
     @Volatile var replayCast: (() -> Boolean?)? = null
+
+    /** Set by a replay: whether the Hyperion click being handled, made inside an entity it also clicked, cast without its teleport. */
+    @Volatile var replayStill: (() -> Boolean)? = null
 
     private fun hypeReady(): Boolean {
         val now = Fight.serverTick
