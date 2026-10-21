@@ -37,8 +37,14 @@ object ClearItems {
     /** The InfiniLeap's id (the item the hotbar carries). */
     const val INFINILEAP = "INFINITE_SPIRIT_LEAP"
 
-    /** Server ticks of cooldown after a leap: 2 s for the InfiniLeap (measured), 5 s for the floor item (its own lore). */
-    fun leapCooldownTicks(id: String): Int = if (id == SPIRIT_LEAP) 100 else 40
+    /**
+     * Server ticks of cooldown after a leap: 2 s for the InfiniLeap (measured), 5 s for the floor item (its own lore). A Mage's
+     * Cooldown Reduction takes its share off the InfiniLeap's: 49%, or 74% for the party's only Mage (doubled stats), so about 1 s or
+     * 0.5 s. DR clears: Berserk/Tank refused to 38-39 ticks after a leap, the menu from 39; a Mage with another Mage refused at 18, the
+     * menu from 18; the only Mage refused at 1-3, the menu at 13. The floor item's with a Mage is not recorded (left at 5 s).
+     */
+    fun leapCooldownTicks(id: String, mage: Boolean = false, doubled: Boolean = false): Int =
+        if (id == SPIRIT_LEAP) 100 else if (mage) Math.round(40 * (1 - if (doubled) 0.74 else 0.49)).toInt() else 40
 
     /** Whether a completed leap uses one of the stack up (the floor item does, the InfiniLeap never). */
     fun leapConsumes(id: String): Boolean = id == SPIRIT_LEAP
