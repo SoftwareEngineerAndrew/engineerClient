@@ -300,11 +300,11 @@ class ReplayDiff(private val s: ReplaySession) {
     /** ADS's tab refreshed now: its counters as the party reads them. */
     fun tabRefreshed() {
         val st = s.run.state
-        tab = intArrayOf(st.secrets.teamFound, st.secrets.crypts, st.deaths.teamDeaths, st.counters.opened, st.counters.completed, st.score.clearedPct)
+        tab = intArrayOf(st.secrets.teamFound, st.secrets.crypts, st.deaths.teamDeaths, st.counters.opened, st.counters.completed, st.counters.clearedPct)
     }
 
     /** The counters to set against Hypixel's: the last refresh's, else (none yet) the state's now. */
-    private fun adsTab(): IntArray = tab ?: s.run.state.let { st -> intArrayOf(st.secrets.teamFound, st.secrets.crypts, st.deaths.teamDeaths, st.counters.opened, st.counters.completed, st.score.clearedPct) }
+    private fun adsTab(): IntArray = tab ?: s.run.state.let { st -> intArrayOf(st.secrets.teamFound, st.secrets.crypts, st.deaths.teamDeaths, st.counters.opened, st.counters.completed, st.counters.clearedPct) }
 
     fun write() {
         val out = ArrayList<String>()
