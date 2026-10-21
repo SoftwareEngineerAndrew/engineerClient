@@ -1677,15 +1677,16 @@ object SimItems {
     private const val ABILITY_LOCKED = "§cYou cannot use abilities in this room!"
 
     /**
-     * Wither Impact casts once per server tick: a second click handled in the same tick is discarded, blink and Implosion both. In the
-     * DR clears (5,486 casts) a lone click cast 93% of the time, one 1 client tick after a cast 60%, 2 ticks 75%, 3 or more 80-87%: no
-     * cooldown stops the next tick's click, the losses are clicks that Hypixel's lagging ticks handled together.
+     * Wither Impact casts at most every other server tick: a click the tick after a cast is discarded, blink and Implosion both (the
+     * AOTV answers every tick's click). DR clears: every run of a click each tick cast every other tick (72..75 cast 73 and 76); over
+     * 598 clusters of clicks 1-3 ticks apart, casts counted by your explode sounds, "2 ticks apart" misses by 149 casts in all,
+     * "each tick" by 245 and "3 ticks apart" by 236. The rest is Hypixel's ticks drifting from yours.
      */
     private var lastHype by perPlayer { -100 }
 
     private fun hypeReady(): Boolean {
         val now = Fight.serverTick
-        if (now == lastHype) return false
+        if (now - lastHype < 2) return false
         lastHype = now
         return true
     }
