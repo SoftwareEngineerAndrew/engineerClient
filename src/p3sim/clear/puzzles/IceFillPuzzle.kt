@@ -55,6 +55,7 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
         chests = listOf("chest1", "chest2").mapNotNull { context.anchor(it).firstOrNull() }
         val ice = Blocks.ICE
         val isIce = { x: Int, y: Int, z: Int -> stateAt(x, y, z)?.block == ice }
+        replayPacked?.invoke()?.let { useRecordedPatterns(it, isIce) }
         logic = IceFillLogic((0..2).map { f -> IceFillLogic.scan(f, isIce = isIce, isAir = ::isAirAt) })
         iceCells = (0..2).map { f -> IceFillLogic.scanIce(f, isIce = isIce) }
         obstacles = (0..2).map { f ->
@@ -63,6 +64,28 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
         }
         val chosen = IceFillLogic.patterns(isAir = ::isAirAt)
         if (chosen.any { it < 0 }) org.slf4j.LoggerFactory.getLogger("engineerclient").warn("[ads] Ice Fill in ${context.room.designId}${context.room.variantId?.let { "/$it" } ?: ""}: floors ${chosen.indices.filter { chosen[it] < 0 }} match none of Odin's patterns, so Odin cannot solve them")
+    }
+
+    /**
+     * A replay's room: each floor is laid out as the recorded one, the one pattern whose patch holds every cell the recording turned to
+     * packed ice (its ice columns off the patch get the obstacle, polished andesite, the only one recorded). With no recorded cell on a
+     * floor, or several patterns that fit (none exactly) and the room's own among them, the room's floor stays.
+     */
+    private fun useRecordedPatterns(packed: List<WorldPos>, isIce: (Int, Int, Int) -> Boolean) {
+        val air = Blocks.AIR.defaultBlockState()
+        val obstacle = Blocks.POLISHED_ANDESITE.defaultBlockState()
+        val own = IceFillLogic.patterns(isAir = ::isAirAt)
+        for (f in 0..2) {
+            val y = IceFillLogic.FLOOR_Y[f]
+            val cells = packed.filter { it.y == y - 1 }.mapNotNull { local(it.x, it.z) }.filter { it.first in 0..30 && it.second in 0..30 }.toSet()
+            if (cells.isEmpty()) continue
+            val fits = OdinTables.iceFloors[f].indices.filter { IceFillLogic.patch(f, it).containsAll(cells) }
+            // A completed floor covered its whole patch: the pattern that is exactly it (a smaller patch can lie inside a bigger one).
+            val pick = fits.firstOrNull { IceFillLogic.patch(f, it) == cells } ?: if (own[f] in fits) own[f] else fits.firstOrNull() ?: continue
+            if (pick == own[f]) continue
+            val patch = IceFillLogic.patch(f, pick)
+            for (c in IceFillLogic.scanIce(f, isIce = isIce)) setAt(c.x, y, c.z, if ((c.x to c.z) in patch) air else obstacle)
+        }
     }
 
     /** A player steps in: the chests are there behind the gate. */
@@ -191,6 +214,9 @@ class IceFillPuzzle(context: PuzzleContext) : WorldPuzzle(PuzzleKinds.ICE_FILL, 
     override fun onReset() { logic?.reset() }
 
     companion object {
+        /** In a replay: where the recording turned ice to packed ice (world positions), so the floors are built as Hypixel had them. */
+        @Volatile var replayPacked: (() -> List<WorldPos>)? = null
+
         /** A collapsed floor comes back this long after it fell (measured: 59 to 61 ticks in 36 of 36). */
         const val COLLAPSE_TICKS = 60
 
