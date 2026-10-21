@@ -1038,6 +1038,15 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             BloodDeath(k, label, rx, rz, blood.index).also { lastBlood = it; bloodOwed += it }
             payBlood(); return
         }
+        // The Mimic is the trapped chest's zombie, not one of the mob service's: ADS's is out (fine), or its chest opens now.
+        if (label == "Mimic" || label.endsWith(" Mimic")) {
+            when (com.engineerclient.p3sim.clear.secrets.SecretsModule.mimicOut(run, nearestMate(rx, rz) ?: host.uuid)) {
+                true -> diff.mobOk()
+                false -> diff.forced(run.t, "the recording's Mimic died (k $k)", "ADS's trapped chest opened")
+                null -> diff.mobNotFound(k, label, rx, ry, rz, Math.hypot(host.x - rx, host.z - rz), "ADS has no trapped chest")
+            }
+            return
+        }
         val cands = Services.mobs.all().filter { it.id !in claimed && Math.abs(it.y - ry) < 8 && Math.hypot(it.x - rx, it.z - rz) < 14 }
         // A tag the recorder never read ("???", or a damage number over it): no name to go by, so ADS's nearest mob with the same kind of
         // body (a fake player or not) within the 14 blocks.
