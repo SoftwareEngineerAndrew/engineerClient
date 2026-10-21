@@ -239,9 +239,18 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
      * 2 blocks of where you stood or of a teleport of yours a tick either side: the cast's own lands you there first) in the 3 ticks after,
      * each sound one click's in order.
      */
-    private val recordedHypeCasts: Map<Int, Boolean> by lazy {
+    private val recordedHypeCasts: Map<Int, Boolean> get() = hypeCasts.first
+
+    /**
+     * The Hyperion clicks that also right clicked an entity (main hand, same tick) and whose cast went off where you stood, with no
+     * teleport. Standing inside the entity, Hypixel's cast stayed put 27 times and teleported 25 (DR, a teammate within 0.6 blocks):
+     * nothing recorded tells the two apart, so a replay takes the recording's.
+     */
+    private val recordedHypeStill: Set<Int> get() = hypeCasts.second
+
+    private val hypeCasts: Pair<Map<Int, Boolean>, Set<Int>> by lazy {
         val hotbar = arrayOfNulls<String>(9); var held = 0; var x = 0.0; var z = 0.0
-        val clicks = ArrayList<Int>(); val casts = ArrayList<Int>()
+        val clicks = ArrayList<Int>(); val casts = ArrayList<Int>(); val still = HashSet<Int>(); val withEntity = HashSet<Int>()
         val tps = file.events.filter { it.size() > 2 && it[1].asString == "tpme" && it[2].isJsonArray }.map { Triple(it[0].asInt, it[2].asJsonArray[0].asDouble, it[2].asJsonArray[2].asDouble) }
         for (e in file.events) {
             if (e.size() < 3) continue
@@ -254,20 +263,22 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 "o.m" -> if (e.size() > 4 && e[2].isJsonPrimitive) { x = e[2].asDouble; z = e[4].asDouble }
                 "tpme" -> e.get(2).takeIf { it.isJsonArray }?.asJsonArray?.let { x = it[0].asDouble; z = it[2].asDouble }
                 "o.use", "o.useOn" -> if (e.s(2) == "MAIN_HAND" && hotbar[held] == "HYPERION" && clicks.lastOrNull() != e[0].asInt) clicks += e[0].asInt
+                "o.int" -> if (e.s(3) == "MAIN_HAND") withEntity += e[0].asInt
                 "snd" -> if (e.size() > 7 && e.s(2) == "minecraft:entity.generic.explode" && e[7].asDouble == 1.0) {
                     val k = e[0].asInt; val sx = e[4].asDouble; val sz = e[6].asDouble
-                    if (Math.hypot(sx - x, sz - z) < 2 || tps.any { (tk, tx, tz) -> Math.abs(tk - k) <= 1 && Math.hypot(sx - tx, sz - tz) < 2 }) casts += k
+                    val landed = tps.any { (tk, tx, tz) -> Math.abs(tk - k) <= 1 && Math.hypot(sx - tx, sz - tz) < 2 }
+                    if (Math.hypot(sx - x, sz - z) < 2 || landed) { casts += k; if (!landed) still += k }
                 }
             }
         }
-        val out = HashMap<Int, Boolean>(); var i = 0
+        val out = HashMap<Int, Boolean>(); val stays = HashSet<Int>(); var i = 0
         for (k in clicks) {
             while (i < casts.size && casts[i] < k) i++
             val cast = i < casts.size && casts[i] <= k + 3
-            if (cast) i++
+            if (cast) { if (casts[i] in still && k in withEntity) stays += k; i++ }
             out[k] = cast
         }
-        out
+        out to stays
     }
 
     /** The first tick each recorded chest's lid opened (a block.chest.open sound at its centre). */
@@ -638,6 +649,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.blood.BloodModule.portalFromReplay = recordedPortalK != null
         // A Hyperion click casts as Hypixel's did (its ticks against yours decide which of two quick clicks it takes).
         com.engineerclient.p3sim.SimItems.replayCast = { if (!ended) recordedHypeCasts[lastClickK] else null }
+        com.engineerclient.p3sim.SimItems.replayStill = { !ended && lastClickK in recordedHypeStill }
+        diff.note(0, "hyperion", "the recording has ${recordedHypeCasts.size} Hyperion clicks, ${recordedHypeCasts.count { it.value }} cast, ${recordedHypeStill.size} in place inside an entity (${recordedHypeStill.sorted().joinToString()})")
         hurtSub = run.bus.on<com.engineerclient.p3sim.run.PlayerDamaged>{ if (it.player == host.uuid && it.percent > 0.0) hurtAt = run.t }
         // Every secret ADS counts, by whom, against the recording's count: where ADS's total goes past Hypixel's.
         secretSub = run.bus.on<com.engineerclient.p3sim.run.SecretFound> {
@@ -678,6 +691,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = null
         com.engineerclient.p3sim.clear.blood.BloodModule.portalFromReplay = false
         com.engineerclient.p3sim.SimItems.replayCast = null
+        com.engineerclient.p3sim.SimItems.replayStill = null
         com.engineerclient.p3sim.clear.hud.HudModule.tabPhase = null
         hurtSub?.cancel(); hurtSub = null
         secretSub?.cancel(); secretSub = null
