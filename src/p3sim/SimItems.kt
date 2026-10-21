@@ -1597,8 +1597,10 @@ object SimItems {
         val (x, y, z) = hit
         val s = state(x, y, z)
         val above = state(x, y + 1, z)
-        val bad = stopsAnyway(s) || s.block is SkullBlock || s.block is LadderBlock || s.block is FlowerPotBlock ||
-            above.block is SkullBlock || above.block is WallSkullBlock || above.block is LadderBlock || above.block is FlowerPotBlock || top(x, y, z) < 0.03
+        // A standing banner is a floor to warp onto (2026-10-03_02-36-19 k1770: onto a black banner, landing on its cell + 1.05).
+        val banner = s.block is net.minecraft.world.level.block.BannerBlock
+        val bad = (stopsAnyway(s) && !banner) || s.block is SkullBlock || s.block is LadderBlock || s.block is FlowerPotBlock ||
+            above.block is SkullBlock || above.block is WallSkullBlock || above.block is LadderBlock || above.block is FlowerPotBlock || (top(x, y, z) < 0.03 && !banner)
         val need = if (top(x, y, z) > 1.0) 3 else 2
         // A refused warp is silent: of 578 sneaking AOTV clicks that did not warp (ADR and the Dungeon Recorder, 139 F7 runs), 576 said nothing.
         if (bad || (1..need).any { !bodyPasses(x, y + it, z) } || rayStops(floor(eye.x).toInt(), floor(eye.y).toInt(), floor(eye.z).toInt())) return
