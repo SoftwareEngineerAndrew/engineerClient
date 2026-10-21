@@ -18,6 +18,10 @@ import com.engineerclient.p3sim.pack.mobs.MobTag
  * - Parasite: a camp Parasite that dies splits 20 ticks later (108 of 138 recorded splits; the rest 19 or 21) into three silverfish of
  *   33,333 HP on the floor where it died (each up to 0.7 blocks off that spot: the spread is not matched), tag at body id + 1 and 0.375 up,
  *   icon U+E074 `§4` (ADR). Lv30 before the update of 2026-10-03, Lv79 since.
+ * - Prince (Alexander, Bernhard, Christian, Friedrich, Marius, Nicholas, Pieter, Valentin): what a broken crypt lets out in place of a
+ *   Crypt Undead (27 of the 150 seen in 139 DR runs). A fake player holding a bone, one skin (27 of 27; its profile is named "Crypt
+ *   Undead"), its tag at body id + 1 and 2.125 up, 60,000 HP (27 of 27), never starred. Its tag is a dungeon mob's: icons U+E084 U+E07B
+ *   before the name (the Dungeon Recorder keeps no colours: `§2` and `§e`, as every pack tag colours those two).
  * - A levelled tag: `§8[§r§7Lv` level `§r§8] §r` + icons + ` §r§c` name `§r §` HP colour + HP `§r§f/§r§a` max HP `§r§c❤` (ADR, Skeletor
  *   Prime and Parasite); the HP is green, yellow under half (ADR: every reading at 0.50 or more green, every one under yellow). The levels
  *   went up on 2026-10-03 (Lv120 for both before; Lv173 and Lv277 since). The Undead Skeleton's icons are U+E084 U+E081 (the Dungeon
@@ -33,6 +37,13 @@ object LevelLooks {
     const val PARASITE_SPLIT = 3
     const val PARASITE_SPLIT_TICKS = 20
 
+    /** The Princes' names and their one skin. */
+    private val PRINCES = listOf("Alexander", "Bernhard", "Christian", "Friedrich", "Marius", "Nicholas", "Pieter", "Valentin")
+    private const val PRINCE_SKIN = "4999123cf0a41477f706fc6a50891463e8cb50dcbdd2c81c652fcef6fdbde21c"
+
+    /** Whether the archetype is a Prince. */
+    fun isPrince(arch: MobArchetype): Boolean = arch.id.startsWith(PREFIX + "prince_")
+
     /** [level] null: a dungeon mob's tag (the pack's format), not a levelled one. */
     private class Look(val id: String, val name: String, val entity: String, val level: Int?, val hp: Long, val icons: String, val dy: Double, val skin: String?, val hand: String?)
 
@@ -41,7 +52,7 @@ object LevelLooks {
         Look("skeletor_prime", "Skeletor Prime", "minecraft:player", 277, 3_100_000, "§f", 2.125, "1bd3a4f8e22db15e486acac5d456ff35f34ed9ab5c64eec057afd2866d559401", "minecraft:bone"),
         Look("lonely_spider", "Lonely Spider", "minecraft:spider", null, 120_000, "§4", 1.1875, null, null),
         Look("parasite", "Parasite", "minecraft:silverfish", 79, 33_333, "§4", 0.375, null, null),
-    )
+    ) + PRINCES.map { n -> Look("prince_" + n.lowercase(), "Prince $n", "minecraft:player", null, 60_000, "§2§r§e", 2.125, PRINCE_SKIN, "minecraft:bone") }
 
     private val archetypes: List<MobArchetype> = LOOKS.mapIndexed { i, l ->
         MobArchetype(

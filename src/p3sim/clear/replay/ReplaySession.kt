@@ -127,6 +127,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             val name = bareTag(m.tag)
             val arch = byName.firstOrNull { name == it.name || name.endsWith(" " + it.name) }
             if (arch == null) { unknown.merge(name, 1, Int::plus); continue }
+            // What a broken crypt lets out comes on its own tick, not with the room.
+            if (arch.id == CRYPT_UNDEAD || com.engineerclient.p3sim.clear.mobs.LevelLooks.isPrince(arch)) {
+                cryptMobs += CryptMob(m.k, m.id, arch.id, room.index, m.x, m.y, m.z, (firstHp[m.id] ?: m.hp).takeIf { it > 0 }); continue
+            }
             val word = name.removeSuffix(arch.name).trim()
             val mod = word.takeIf { it.isNotEmpty() }?.let { pack.modifier(it) }
             if (word.isNotEmpty() && mod == null) unknownWord.merge(word, 1, Int::plus)
@@ -141,6 +145,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             out.getOrPut(room.index) { ArrayList() } += com.engineerclient.p3sim.clear.mobs.PlannedMob(id, arch.index, star, star || arch.cls == "miniboss", mod?.id.orEmpty(), hp,
                 m.x, m.y, m.z, m.yaw, arch.movement != "static", null)
         }
+        cryptMobs.sortBy { it.k }
         for ((n, c) in unknown) diff.note(0, "mobs", "the mob pack has no kind for \"$n\" (${c}x): not spawned")
         for ((w, c) in unknownWord) diff.note(0, "mobs", "the mob pack has no word \"$w\" (${c}x): spawned without it")
         out
@@ -642,6 +647,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         if (bloodOwed.isNotEmpty()) EngineerClient.safely("ads replay camp") { payBlood() }
         watchCamp(now)
+        while (cryptMobs.isNotEmpty() && cryptMobs.first().k <= now) {
+            val c = cryptMobs.removeFirst()
+            Services.mobs.spawn(run, com.engineerclient.p3sim.run.api.MobSpec(c.kind, c.x, c.y, c.z, roomIndex = c.room, hp = c.hp))?.let { r -> planned[c.id] = r.id; plannedBack[r.id] = c.id }
+                ?: diff.note(now, "mobs", "the recording's ${c.kind} out of a crypt could not be spawned")
+        }
         plating?.let { (k, raw) ->
             if (hurtAt >= k - PLATING_NEAR) { Sim.chat(raw); plating = null }
             else if (now > k + PLATING_NEAR) plating = null
@@ -1237,6 +1247,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         // Your armour's bone plating (DR: one line every 300 ticks or more, the first hit after): the recording's line, when ADS hurt you too.
         if (t.startsWith(BONE_PLATING)) { plating = k to raw; return }
+        // A Prince's bonus point (ADS's Prince is the recording's, its point the line's).
+        if (t.startsWith("A Prince falls.")) {
+            pending += Pending(k, "the Prince's bonus", { run.state.secrets.princeKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.PRINCE, host.uuid); "ADS prince ${run.state.secrets.princeKilled}" }
+            return
+        }
         if (t.startsWith("A Bat has been slain.") && k == yourBatLine) {
             pending += Pending(k, "your bonus bat", { run.state.secrets.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, host.uuid); "ADS bat ${run.state.secrets.batKilled}" }
             return
@@ -1389,6 +1404,13 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         out
     }
+
+    /**
+     * What broken crypts let out in the recording (DR: 150 seen in 139 runs, each alone and 116 with an explosion at it): a Crypt Undead
+     * or a Prince, spawned on the tick and where it was first seen. How often a crypt lets one out is not known (668 crypts in those runs).
+     */
+    private class CryptMob(val k: Int, val id: Int, val kind: String, val room: Int, val x: Double, val y: Double, val z: Double, val hp: Double?)
+    private val cryptMobs = ArrayList<CryptMob>()
 
     /** The ticks of the recording's Crypt Wither Skull hits on you. */
     private val skullHitTicks: Set<Int> by lazy {
@@ -1571,6 +1593,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private const val SKULL_HIT_VOLUME = 0.7f
         private const val PLATING_NEAR = 3
         private const val DOOR_JUST_OPENED = 20
+        private const val CRYPT_UNDEAD = "crypt_undead"
         private val SHEEP_CD_LONE = 136..141
         private val SHEEP_CD_MANY = 288..302
         /** The longest ADS's teleport waits for the recorded client's (DR click to tpme: 1,096 the same tick, 5,802 one, 442 two, 136 three). */

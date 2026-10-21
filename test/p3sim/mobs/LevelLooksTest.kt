@@ -38,6 +38,21 @@ class LevelLooksTest {
     }
 
     @Test
+    fun aPrinceIsTaggedLikeACryptUndead() {
+        val prince = arch("Prince Friedrich")
+        assertTrue(LevelLooks.isPrince(prince))
+        assertTrue(!LevelLooks.levelled(prince))
+        // The Dungeon Recorder's text, icons and all.
+        assertEquals(" Prince Friedrich 60,000❤", MobTags.plain(MobTags.nametagLegacy(assertNotNull(prince.tag), prince.name, null, 60_000.0, 60_000.0, false)))
+        assertEquals("minecraft:player", prince.entity)
+        assertTrue(prince.disguise)
+        assertEquals("4999123cf0a41477f706fc6a50891463e8cb50dcbdd2c81c652fcef6fdbde21c", prince.skin?.id)
+        assertEquals("minecraft:bone", LevelLooks.hand(prince))
+        assertEquals(60_000L, prince.hpFor("F7"))
+        assertEquals(8, LevelLooks.all.count { LevelLooks.isPrince(it) })
+    }
+
+    @Test
     fun bodiesAreHypixels() {
         val undead = arch("Undead Skeleton")
         assertEquals("minecraft:skeleton", undead.entity)
