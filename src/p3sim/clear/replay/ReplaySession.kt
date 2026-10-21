@@ -1217,6 +1217,17 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         // His camp out of the recorded player's sight has no throws or kills to replay: the pass line says when it ended.
         if (t == "[BOSS] The Watcher: " + com.engineerclient.p3sim.clear.blood.WatcherLines.PASS && com.engineerclient.p3sim.clear.blood.BloodModule.passNow()) diff.forced(run.t, "the Watcher let the party pass (recorded k $k)", "ADS's camp had not ended")
         if (t.startsWith("Party >")) return
+        // A Crypt Wither Skull's hit on you (DR: 53 in the clear, every one 23,760, an explosion at you of volume 0.7): what fires it is not
+        // known from the recordings, so the hit is the recording's (the line, the bone plating line of its tick, the sound; your HP
+        // follows the action bar as ever).
+        if (t.startsWith(SKULL_HIT) || (t.startsWith(BONE_PLATING) && k in skullHitTicks)) {
+            Sim.chat(raw)
+            if (t.startsWith(SKULL_HIT)) {
+                Sim.sound(net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE, SKULL_HIT_VOLUME, 1f, host.position().add(0.0, 0.6, 0.0), net.minecraft.sounds.SoundSource.BLOCKS)
+                diff.forced(run.t, "Crypt Wither Skull hit you (recorded k $k)", "its line and sound")
+            }
+            return
+        }
         if (t.startsWith("A Bat has been slain.") && k == yourBatLine) {
             pending += Pending(k, "your bonus bat", { run.state.secrets.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, host.uuid); "ADS bat ${run.state.secrets.batKilled}" }
             return
@@ -1330,6 +1341,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 "no key in ADS (lent one): ${Services.doors.tryOpen(run, door.index, by)}"
             } else Services.doors.tryOpen(run, door.index, by).toString()
         }
+    }
+
+    /** The ticks of the recording's Crypt Wither Skull hits on you. */
+    private val skullHitTicks: Set<Int> by lazy {
+        file.all("chat").filter { clean(it.s(2) ?: "").startsWith(SKULL_HIT) }.mapTo(HashSet()) { it[0].asInt }
     }
 
     /** Recorded deaths of yours (k), to tell ADS's own kills of you from the recording's. */
@@ -1503,6 +1519,9 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
         /** The recorder's brief tag for a mob whose tag it had not read. */
         private val UNREAD_TAGS = setOf("???", "MINIBOSS")
+        private const val SKULL_HIT = "A Crypt Wither Skull exploded, hitting you for "
+        private const val BONE_PLATING = "Your bone plating reduced the damage you took by "
+        private const val SKULL_HIT_VOLUME = 0.7f
         /** The longest ADS's teleport waits for the recorded client's (DR click to tpme: 1,096 the same tick, 5,802 one, 442 two, 136 three). */
         private const val TP_ACCEPT_MAX = 4
         /** A click this many ticks before a recorded chest's lid sound opened it (854 to 856 measured). */
