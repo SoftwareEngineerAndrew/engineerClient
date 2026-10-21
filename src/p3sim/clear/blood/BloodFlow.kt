@@ -64,6 +64,13 @@ class BloodFlow(
     private var watcherGone = false
     private var expedited = false
 
+    /** A replay with the recording's portal: the rolled one is held, and the portal (with its bolt) opens when [portalNow] says. */
+    var portalHeld = false
+    private var portalForced = false
+
+    /** A replay: the recording's portal opened now (the pass line first, if ADS's camp had not said it). */
+    fun portalNow() { if (phase == Phase.CAMP || phase == Phase.PASSED) portalForced = true }
+
     /** Whether the portal blocks are in the world now (open and not yet reset). */
     val portalOpen: Boolean get() = phase == Phase.PORTAL || phase == Phase.ENTERED
 
@@ -98,7 +105,7 @@ class BloodFlow(
             Phase.CLOSED, Phase.ENTERED -> return Step.NONE
             Phase.CAMP -> {
                 val late = campTimeoutTicks > 0 && ticksSinceOpen(tick) >= campTimeoutTicks
-                val portalDue = exit?.let { tick >= it.strikeAt } ?: false
+                val portalDue = portalForced || (!portalHeld && exit?.let { tick >= it.strikeAt } ?: false)
                 if (!campFinished && !late && !portalDue && !expedited) return Step.NONE
                 timedOut = !campFinished && late
                 phase = Phase.PASSED
@@ -110,9 +117,10 @@ class BloodFlow(
             else -> {}
         }
         val e = exit ?: return Step.NONE
-        if (!struck && (expedited || tick >= e.strikeAt)) { struck = true; return Step.STRIKE }
+        val due = if (portalHeld) portalForced else tick >= e.strikeAt
+        if (!struck && (expedited || due)) { struck = true; return Step.STRIKE }
         if (phase == Phase.PASSED) {
-            if (expedited || tick >= e.portalAt) { phase = Phase.PORTAL; return Step.OPEN_PORTAL }
+            if (expedited || (if (portalHeld) portalForced else tick >= e.portalAt)) { phase = Phase.PORTAL; return Step.OPEN_PORTAL }
             if (!watcherGone && tick >= e.watcherGoneAt) { watcherGone = true; return Step.REMOVE_WATCHER }
             return Step.NONE
         }
@@ -133,7 +141,7 @@ class BloodFlow(
     fun reset() {
         phase = Phase.CLOSED; openedAt = null; passedAt = null; timedOut = false
         kills = 0; exit = null; contactAt = null
-        struck = false; watcherGone = false; expedited = false
+        struck = false; watcherGone = false; expedited = false; portalForced = false
     }
 
     /** For a savepoint: how far along the camp was, as ticks relative to now, so the timers resume after the restore. */
