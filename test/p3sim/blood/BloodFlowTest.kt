@@ -22,6 +22,27 @@ class BloodFlowTest {
         return out
     }
 
+    @Test fun aReplaysPortalWaitsForTheRecording() {
+        val f = flow().also { it.portalHeld = true }
+        f.open(1000)
+        f.noteKills(15, 1500)
+        assertEquals(listOf(Step.SAY_PASS), steps(f, 1510))
+        // Long past the rolled delay: still shut, but the Watcher goes at his own time.
+        assertEquals(listOf(Step.REMOVE_WATCHER), steps(f, 1700))
+        assertEquals(Phase.PASSED, f.phase)
+        f.portalNow()
+        assertEquals(listOf(Step.STRIKE, Step.OPEN_PORTAL), steps(f, 1701))
+        assertTrue(f.portalOpen)
+    }
+
+    @Test fun aReplaysPortalSaysThePassLineFirst() {
+        val f = flow().also { it.portalHeld = true }
+        f.open(1000)
+        assertEquals(Step.NONE, f.step(1200, false, false))
+        f.portalNow()
+        assertEquals(listOf(Step.SAY_PASS, Step.STRIKE, Step.OPEN_PORTAL), steps(f, 1201, finished = false))
+    }
+
     @Test fun nothingHappensUntilTheDoorOpens() {
         val f = flow()
         assertEquals(Step.NONE, f.step(5, campFinished = true, contact = true))

@@ -95,6 +95,16 @@ object BloodModule : AdsModule {
 
     /** A replay: the recording's Watcher let the party pass now, so ADS's does on this tick. False when no camp is running. Server thread. */
     fun passNow(): Boolean { if (flow.phase != BloodFlow.Phase.CAMP) return false; forcePass = true; return true }
+
+    /** A replay whose recording shows the portal: ADS's waits for [portalNow] instead of its rolled delay. Server thread. */
+    @Volatile var portalFromReplay = false
+
+    /** A replay: the recording's portal opened now, so ADS's does on this tick. False when the camp is not open or the portal is up. */
+    fun portalNow(): Boolean {
+        if (flow.phase != BloodFlow.Phase.CAMP && flow.phase != BloodFlow.Phase.PASSED) return false
+        if (flow.phase == BloodFlow.Phase.CAMP) forcePass = true
+        flow.portalNow(); return true
+    }
     private var watcher: WatcherEntity? = null
     private var heads: WallHeads? = null
 
@@ -103,7 +113,7 @@ object BloodModule : AdsModule {
     private var barKills = -1
     private var barSince = 0
 
-    private fun newFlow(run: Run?) = BloodFlow(campTimeout(), run?.subRandom("blood-exit") ?: Random(0))
+    private fun newFlow(run: Run?) = BloodFlow(campTimeout(), run?.subRandom("blood-exit") ?: Random(0)).also { it.portalHeld = portalFromReplay }
 
     private fun reset(run: Run?) {
         // The Watcher's bar goes with the room (a restore to before the blood door); tearDown alone leaves it for the entry to rename.

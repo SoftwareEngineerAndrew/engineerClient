@@ -247,6 +247,12 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         file.events.firstOrNull { it.size() > 2 && it[1].asString == "chat" && it[2].isJsonPrimitive && clean(it[2].asString).endsWith(" is ready to use! Press DROP to activate it!") }?.get(0)?.asInt
     }
 
+    /** The tick the recording's Blood room portal appeared (its first nether_portal block; DR: all in one tick), or null. */
+    private val recordedPortalK: Int? by lazy {
+        file.events.firstOrNull { it.size() > 5 && it[1].asString == "blk" && it[5].isJsonPrimitive && it[5].asString.startsWith("minecraft:nether_portal") }?.get(0)?.asInt
+    }
+    private var portalSaid = false
+
     /** Your recorded Implosion lines: k, enemies, damage. */
     private val implosions: List<Triple<Int, Int, Double>> by lazy {
         file.events.mapNotNull { e ->
@@ -573,6 +579,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) 0 else null }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = { r -> if (r === run && !ended) recordedTrapped else null }
+        // The Blood room's portal opens on the recording's tick, not on ADS's rolled 80 or 90 after the defeat.
+        com.engineerclient.p3sim.clear.blood.BloodModule.portalFromReplay = recordedPortalK != null
         hurtSub = run.bus.on<com.engineerclient.p3sim.run.PlayerDamaged>{ if (it.player == host.uuid && it.percent > 0.0) hurtAt = run.t }
         // A chest whose lid Hypixel opened is not locked by then, whatever ADS's lever (no lever was seen pulled for 2026-10-03_01-27-41's Arrow Trap chest).
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayOpened = { r, pos -> if (r === run && !ended) recordedChestOpen[pos]?.let { it <= run.t + CHEST_OPEN_LEAD } ?: false else null }
@@ -606,6 +614,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.puzzles.QuizPuzzle.replay = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = null
+        com.engineerclient.p3sim.clear.blood.BloodModule.portalFromReplay = false
         hurtSub?.cancel(); hurtSub = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayOpened = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
@@ -750,6 +759,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             "room" -> if (!catchUp) room(k, e)
             "blk" -> if (!catchUp) {
                 val x = e.i(2) ?: return; val y = e.i(3) ?: return; val z = e.i(4) ?: return
+                if (k == recordedPortalK && !portalSaid) {
+                    portalSaid = true
+                    if (com.engineerclient.p3sim.clear.blood.BloodModule.portalNow()) diff.forced(run.t, "the Blood room's portal opened (recorded k $k)", "ADS's opens now")
+                }
                 val you = host.position().distanceTo(Vec3(x + 0.5, y + 0.5, z + 0.5))
                 val mate = bodies.all().filter { !it.x.isNaN() && it.present }.minOfOrNull { Math.sqrt((it.x - x - 0.5).let { d -> d * d } + (it.y - y).let { d -> d * d } + (it.z - z - 0.5).let { d -> d * d }) } ?: 999.0
                 // A crusher's blocks are the recording's, on their own tick (its pace is checked against the recordings outside the game).
