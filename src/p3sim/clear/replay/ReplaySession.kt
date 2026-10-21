@@ -789,6 +789,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     fun tickEnd() {
         if (ended) return
         val now = run.t
+        // ADS moving you during the tick (a pad of the maze, a leap): before your packets of the tick can take it back.
+        lastHost?.let { l -> if (teleported(l)) diff.adsTeleport(now, host.position()) }
         val evs = late.toList(); late.clear()
         for ((i, e) in evs.withIndex()) EngineerClient.safely("ads replay ${e[1].asString}") { apply(e, catchUp = false, same = evs, at = i) }
         lastHost = host.position()
