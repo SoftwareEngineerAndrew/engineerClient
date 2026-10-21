@@ -1365,7 +1365,22 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
     /** The ticks you attacked or used an item (main hand) in the recording. */
     private val yourActs: IntArray by lazy {
-        file.events.filter { it.size() > 2 && (it[1].asString == "o.atk" || ((it[1].asString == "o.use" || it[1].asString == "o.useOn") && it.s(2) == "MAIN_HAND")) }.map { it[0].asInt }.toIntArray().also { it.sort() }
+        // The hotbar as the recording had it, to know what each click held: a click with an item that hurts nothing (an AOTV, a leap) is no kill.
+        val hotbar = arrayOfNulls<String>(9); var held = 0
+        val out = ArrayList<Int>()
+        for (e in file.events) {
+            if (e.size() < 3) continue
+            when (e[1].asString) {
+                "o.slot" -> held = e.i(2)?.takeIf { it in 0..8 } ?: held
+                "inv" -> e.get(3).takeIf { it.isJsonArray }?.asJsonArray?.forEach { s ->
+                    val a = s.asJsonArray; val slot = a[0].asInt
+                    if (slot in 0..8) hotbar[slot] = a[1].takeIf { it.isJsonObject }?.asJsonObject?.get("sb")?.takeIf { it.isJsonPrimitive }?.asString
+                }
+                "o.atk" -> out += e[0].asInt
+                "o.use", "o.useOn" -> if (e.s(2) == "MAIN_HAND" && hotbar[held].let { it == null || it !in HARMLESS }) out += e[0].asInt
+            }
+        }
+        out.toIntArray().also { it.sort() }
     }
 
     /** Whether you attacked or used an item in the [YOURS_WITHIN] ticks up to [k]. */
@@ -1666,6 +1681,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
 
         /** The recorder's brief tag for a mob whose tag it had not read. */
         private val UNREAD_TAGS = setOf("???", "MINIBOSS")
+        /** Items whose click hurts no mob: a death near you after one is a teammate's. */
+        private val HARMLESS = setOf("ASPECT_OF_THE_VOID", "ASPECT_OF_THE_END", "INFINITE_SPIRIT_LEAP", "SPIRIT_LEAP", "ENDER_PEARL", "DUNGEONBREAKER",
+            "SUPERBOOM_TNT", "INFINITE_SUPERBOOM_TNT", "WITHER_CLOAK", "SKYBLOCK_MENU", "MAP", "MAP:2", "HAUNT_ABILITY", "TACTICAL_INSERTION", "FISHING_ROD",
+            "MAXOR_ENERGY_CRYSTAL", "POTION", "STONE_BUTTON", "REVIVE_STONE", "ARCHITECT_FIRST_DRAFT", "ENCHANTED_BOOK")
         /** Hypixel's tab refreshes once a second. */
         private const val TAB_TICKS = 20
         /** The Watcher's camp mobs' names; not the Parasite's (its split silverfish, levelled mobs of their own, have its name). */
