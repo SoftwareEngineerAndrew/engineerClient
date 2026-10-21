@@ -548,6 +548,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = { r -> if (r === run && !ended) 0 else null }
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = { r -> if (r === run && !ended) recordedTrapped else null }
+        hurtSub = run.bus.on<com.engineerclient.p3sim.run.PlayerDamaged>{ if (it.player == host.uuid && it.percent > 0.0) hurtAt = run.t }
         // A chest whose lid Hypixel opened is not locked by then, whatever ADS's lever (no lever was seen pulled for 2026-10-03_01-27-41's Arrow Trap chest).
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayOpened = { r, pos -> if (r === run && !ended) recordedChestOpen[pos]?.let { it <= run.t + CHEST_OPEN_LEAD } ?: false else null }
         val rewardChests = ReplayFile.rewardChests(file.events)
@@ -580,6 +581,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         com.engineerclient.p3sim.clear.puzzles.QuizPuzzle.replay = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayBonusBat = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayTrapped = null
+        hurtSub?.cancel(); hurtSub = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayOpened = null
         com.engineerclient.p3sim.clear.secrets.SecretsModule.replayChestReward = null
         com.engineerclient.p3sim.clear.mobs.MobsModule.doorScale = null
@@ -640,6 +642,10 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         }
         if (bloodOwed.isNotEmpty()) EngineerClient.safely("ads replay camp") { payBlood() }
         watchCamp(now)
+        plating?.let { (k, raw) ->
+            if (hurtAt >= k - PLATING_NEAR) { Sim.chat(raw); plating = null }
+            else if (now > k + PLATING_NEAR) plating = null
+        }
         if (witherDebt > 0 || bloodDebt) repayKeys()
         val due = pending.filter { it.due <= now }
         pending.removeAll(due)
@@ -1228,6 +1234,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             }
             return
         }
+        // Your armour's bone plating (DR: one line every 300 ticks or more, the first hit after): the recording's line, when ADS hurt you too.
+        if (t.startsWith(BONE_PLATING)) { plating = k to raw; return }
         if (t.startsWith("A Bat has been slain.") && k == yourBatLine) {
             pending += Pending(k, "your bonus bat", { run.state.secrets.batKilled }) { Services.secrets.bonus(run, com.engineerclient.p3sim.run.BonusKind.BAT, host.uuid); "ADS bat ${run.state.secrets.batKilled}" }
             return
@@ -1342,6 +1350,11 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
             } else Services.doors.tryOpen(run, door.index, by).toString()
         }
     }
+
+    /** ADS's last hurt of you (run tick), and the recording's bone plating line waiting for one ([PLATING_NEAR] ticks either side). */
+    private var hurtSub: com.engineerclient.p3sim.run.RunBus.Subscription? = null
+    private var hurtAt = Int.MIN_VALUE
+    private var plating: Pair<Int, String>? = null
 
     /** The ticks of the recording's Crypt Wither Skull hits on you. */
     private val skullHitTicks: Set<Int> by lazy {
@@ -1522,6 +1535,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private const val SKULL_HIT = "A Crypt Wither Skull exploded, hitting you for "
         private const val BONE_PLATING = "Your bone plating reduced the damage you took by "
         private const val SKULL_HIT_VOLUME = 0.7f
+        private const val PLATING_NEAR = 3
         /** The longest ADS's teleport waits for the recorded client's (DR click to tpme: 1,096 the same tick, 5,802 one, 442 two, 136 three). */
         private const val TP_ACCEPT_MAX = 4
         /** A click this many ticks before a recorded chest's lid sound opened it (854 to 856 measured). */
