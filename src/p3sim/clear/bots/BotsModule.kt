@@ -646,8 +646,12 @@ object BotsModule : AdsModule, BotService {
         val me = run.state.players[viewer]
         val order = leapOrder(me?.dungeonClass)
         val out = ArrayList<LeapTarget>()
-        for (cls in order) {
-            val rec = run.state.players.values.firstOrNull { it.dungeonClass == cls && it.uuid != viewer } ?: continue
+        // Every member, in the class order: two of a class (or of yours) are both in the window (a replay's party of two Mages and two
+        // Archers leapt to each of them).
+        val mates = run.state.players.values.filter { it.uuid != viewer }
+        val ordered = order.flatMap { cls -> mates.filter { it.dungeonClass == cls } }.let { l -> l + mates.filter { it !in l } }
+        for (rec in ordered) {
+            val cls = rec.dungeonClass ?: ""
             val bot = s?.roster?.seatOf(rec.uuid)?.takeIf { !it.isHuman }
             if (bot != null && s != null) {
                 // A far bot's chunk may not be loaded: asking for its block loads it, so the leap lands on real ground.
