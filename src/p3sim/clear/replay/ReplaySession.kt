@@ -677,10 +677,7 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                 // Your Guided Sheep appears by you: of the 317 sheep followed 138 to 140 or 298 to 300 ticks on by "now available", 306 within
                 // 4.5 blocks across and 0.5 down to 2.1 up of where you were (most 0.78 up); a teammate's mostly elsewhere. Its cooldown and
                 // your class rule out the rest.
-                if (!catchUp && r.type == "minecraft:sheep") recPos?.let { at ->
-                    if (kotlin.math.hypot(r.x - at.x, r.z - at.z) < 4.5 && r.y - at.y in -0.5..2.1)
-                        com.engineerclient.p3sim.clear.damage.ClassAbilities.recordedBurst(host)
-                }
+                if (!catchUp && r.type == "minecraft:sheep" && id in yourSheep) com.engineerclient.p3sim.clear.damage.ClassAbilities.recordedBurst(host)
                 mate(id)?.let { m -> m.x = r.x; m.y = r.y; m.z = r.z; m.yaw = e.d(9)?.toFloat() ?: m.yaw; m.present = true }
             }
             "hp" -> e.d(3)?.takeIf { it > 100.0 }?.let { v ->
@@ -1359,6 +1356,36 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
     private var hurtAt = Int.MIN_VALUE
     private var plating: Pair<Int, String>? = null
 
+    /**
+     * Your Guided Sheep (body ids): a sheep that first appears by you (4.5 blocks across, 0.5 down to 2.1 up of where you stood). One that
+     * a "now available" line follows is yours only when that line is its cooldown on (DR: 136 to 141 or 288 to 302 ticks, 307 of 318 lines),
+     * else a teammate's by you; after the last line, every one by you.
+     */
+    private val yourSheep: Set<Int> by lazy {
+        var at: DoubleArray? = null
+        val near = ArrayList<Pair<Int, Int>>()
+        val seen = HashSet<Int>()
+        for (e in file.events) {
+            if (e.size() < 3) continue
+            when (e[1].asString) {
+                "o.m" -> if (e.size() > 4 && !e[2].isJsonNull) at = doubleArrayOf(e[2].asDouble, e[3].asDouble, e[4].asDouble)
+                "spawn" -> if (e.size() > 7 && e.s(3) == "minecraft:sheep" && seen.add(e[2].asInt)) at?.let { p ->
+                    if (Math.hypot(e[5].asDouble - p[0], e[7].asDouble - p[2]) < 4.5 && e[6].asDouble - p[1] in -0.5..2.1) near += e[0].asInt to e[2].asInt
+                }
+            }
+        }
+        val lines = file.all("chat").filter { clean(it.s(2) ?: "") == "Guided Sheep is now available!" }.map { it[0].asInt }
+        val out = HashSet<Int>()
+        for ((k, id) in near) {
+            val next = lines.firstOrNull { it > k }
+            if (next == null) { out += id; continue }
+            // The line's own sheep: the last one by you before it at a cooldown's distance.
+            val own = near.lastOrNull { (s, _) -> s < next && (next - s in SHEEP_CD_LONE || next - s in SHEEP_CD_MANY) }
+            if (own?.second == id) out += id
+        }
+        out
+    }
+
     /** The ticks of the recording's Crypt Wither Skull hits on you. */
     private val skullHitTicks: Set<Int> by lazy {
         file.all("chat").filter { clean(it.s(2) ?: "").startsWith(SKULL_HIT) }.mapTo(HashSet()) { it[0].asInt }
@@ -1540,6 +1567,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
         private const val SKULL_HIT_VOLUME = 0.7f
         private const val PLATING_NEAR = 3
         private const val DOOR_JUST_OPENED = 20
+        private val SHEEP_CD_LONE = 136..141
+        private val SHEEP_CD_MANY = 288..302
         /** The longest ADS's teleport waits for the recorded client's (DR click to tpme: 1,096 the same tick, 5,802 one, 442 two, 136 three). */
         private const val TP_ACCEPT_MAX = 4
         /** A click this many ticks before a recorded chest's lid sound opened it (854 to 856 measured). */
