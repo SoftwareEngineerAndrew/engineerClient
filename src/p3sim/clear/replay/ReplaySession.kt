@@ -1376,7 +1376,8 @@ class ReplaySession(val run: Run, val file: ReplayFile, val host: ServerPlayer) 
                     val a = s.asJsonArray; val slot = a[0].asInt
                     if (slot in 0..8) hotbar[slot] = a[1].takeIf { it.isJsonObject }?.asJsonObject?.get("sb")?.takeIf { it.isJsonPrimitive }?.asString
                 }
-                "o.atk" -> out += e[0].asInt
+                // A hit on a teammate hurts no mob (02-36-19 k120: three mobs a mate killed by you while you hit him).
+                "o.atk" -> if (e.o(2)?.get("mate")?.takeIf { it.isJsonPrimitive } == null) out += e[0].asInt
                 "o.use", "o.useOn" -> if (e.s(2) == "MAIN_HAND" && hotbar[held].let { it == null || it !in HARMLESS }) out += e[0].asInt
             }
         }
