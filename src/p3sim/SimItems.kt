@@ -1497,6 +1497,12 @@ object SimItems {
     /** The item a block click just fired and its server tick: the client's use_item for it in that tick or the next is skipped. */
     private var blockFired: Pair<String, Int>? by perPlayer { null }
 
+    /**
+     * A click another module took on a block (a dungeon door): the client's use_item that follows it does nothing, as Hypixel's does
+     * nothing with it (DR: 55 of 60 clicks a tick before your own door line, a use_item with each, no teleport and no line).
+     */
+    fun swallowFollowUp(p: ServerPlayer) { Sim.asPlayer(p) { idOf(p.mainHandItem)?.let { blockFired = it to Fight.serverTick } } }
+
     /** The server tick of each terminal's last accepted click (same-tick dedupe). */
     private val termClickTick: java.util.WeakHashMap<Station, Int> by perPlayer { java.util.WeakHashMap() }
 
