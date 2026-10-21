@@ -290,6 +290,18 @@ class ReplayDiff(private val s: ReplaySession) {
     private val chatExtra = ArrayList<String>()
     private val chatNumbers = ArrayList<String>()
 
+    /** ADS's tab counters as its last tab refresh showed them (Hypixel's are its tab's too, a second apart): secrets, crypts, deaths, opened, completed, cleared %. */
+    private var tab: IntArray? = null
+
+    /** ADS's tab refreshed now: its counters as the party reads them. */
+    fun tabRefreshed() {
+        val st = s.run.state
+        tab = intArrayOf(st.secrets.teamFound, st.secrets.crypts, st.deaths.teamDeaths, st.counters.opened, st.counters.completed, st.score.clearedPct)
+    }
+
+    /** The counters to set against Hypixel's: the last refresh's, else (none yet) the state's now. */
+    private fun adsTab(): IntArray = tab ?: s.run.state.let { st -> intArrayOf(st.secrets.teamFound, st.secrets.crypts, st.deaths.teamDeaths, st.counters.opened, st.counters.completed, st.score.clearedPct) }
+
     fun write() {
         val out = ArrayList<String>()
         val run = s.run
@@ -298,10 +310,11 @@ class ReplayDiff(private val s: ReplaySession) {
         if (kicks.isNotEmpty()) { out += "Kicks ADS's server would have made (the replay went on):"; out += kicks }
         out += ""
         out += "== Score parts at the end: Hypixel (Odin) vs ADS"
+        val a = adsTab()
         lastDung?.let { d ->
             fun g(k: String) = d.get(k)?.takeIf { it.isJsonPrimitive }?.asString ?: "?"
-            out += "  secrets ${g("secretsFound")} / ${run.state.secrets.teamFound}   crypts ${g("crypts")} / ${run.state.secrets.crypts}   deaths ${g("deaths")} / ${run.state.deaths.teamDeaths}"
-            out += "  rooms opened ${g("openedRooms")} / ${run.state.counters.opened}   completed ${g("completedRooms")} / ${run.state.counters.completed}   cleared ${g("percentCleared")}% / ${run.state.score.clearedPct}%"
+            out += "  secrets ${g("secretsFound")} / ${a[0]}   crypts ${g("crypts")} / ${a[1]}   deaths ${g("deaths")} / ${a[2]}"
+            out += "  rooms opened ${g("openedRooms")} / ${a[3]}   completed ${g("completedRooms")} / ${a[4]}   cleared ${g("percentCleared")}% / ${a[5]}%"
             out += "  bat ${g("bat")} / ${run.state.secrets.batKilled}   mimic ${g("mimic")} / ${run.state.secrets.mimicKilled}   prince ${g("prince")} / ${run.state.secrets.princeKilled}"
         }
         out += ""
@@ -392,8 +405,8 @@ class ReplayDiff(private val s: ReplaySession) {
         j.addProperty("id", s.file.id); j.addProperty("cls", s.file.self.cls); j.addProperty("t", run.t)
         lastDung?.let { j.add("hypixel", it) }
         j.add("ads", JsonObject().apply {
-            addProperty("secretsFound", run.state.secrets.teamFound); addProperty("crypts", run.state.secrets.crypts); addProperty("deaths", run.state.deaths.teamDeaths)
-            addProperty("openedRooms", run.state.counters.opened); addProperty("completedRooms", run.state.counters.completed); addProperty("percentCleared", run.state.score.clearedPct)
+            addProperty("secretsFound", a[0]); addProperty("crypts", a[1]); addProperty("deaths", a[2])
+            addProperty("openedRooms", a[3]); addProperty("completedRooms", a[4]); addProperty("percentCleared", a[5])
         })
         j.addProperty("hpScaleOk", hpScaleOk); j.addProperty("hpScaleOff", hpScaleOff.size); j.addProperty("mobsOk", mobsOk); j.addProperty("mobsNearYou", mobsNearYou.size); j.addProperty("mobsMissing", mobsMissing.size)
         j.addProperty("tpHypixel", hypTps.size); j.addProperty("tpAds", adsTps.size); j.addProperty("tpMatched", delays.size); j.addProperty("tpDelay", if (delays.isEmpty()) 0.0 else delays.average())

@@ -32,6 +32,9 @@ import java.util.UUID
  * FILLED BY: the `hud` work item (owns `src/p3sim/clear/hud/` and below).
  */
 object HudModule : AdsModule, ChannelService {
+    /** A replay: the server tick (mod the refresh) the tab refreshes on, the recording's (Hypixel's tab counters change once a second, on one tick of it); null: 0. */
+    @Volatile var tabPhase: ((Run) -> Int?)? = null
+
     override val id = "hud"
     override val owner = "hud"
 
@@ -213,7 +216,9 @@ object HudModule : AdsModule, ChannelService {
         fun tick() {
             val players = Sim.players()
             if (players.isEmpty()) return
-            if (stones == null || run.serverTick % tabRefresh == 0) stones = players.associate { it.uuid to carriedStones(it) }
+            val phase = tabPhase?.invoke(run) ?: 0
+            val tabNow = Math.floorMod(run.serverTick - phase, tabRefresh) == 0
+            if (stones == null || tabNow) stones = players.associate { it.uuid to carriedStones(it) }
             val ctx = context()
             val tick = run.serverTick
             // Only when the count changed (someone left): a join adds its viewer below, which changes the count on the next tick.
@@ -224,7 +229,7 @@ object HudModule : AdsModule, ChannelService {
                 val v = viewers.getOrPut(p.uuid) { ViewerHud() }
                 if (membershipChanged) v.dirty = true
                 if (sidebarEnabled) guarded("sidebar") { sidebar(p, v, ctx, tick) }
-                if (tabEnabled) guarded("tab") { tab(p, v, ctx, players, realIds, tick) }
+                if (tabEnabled) guarded("tab") { tab(p, v, ctx, players, realIds, tabNow) }
                 // The recorded map stops a few ticks before the boss entry and sends nothing during the fight.
                 if (mapEnabled && ctx.started && ctx.stage.inDungeon) guarded("map") { map(p, v, ctx, raster, tick) }
                 if (barEnabled && tick % HudConstants.ACTION_BAR_TICKS == 0) guarded("action bar") { bar(p, ctx, tick) }
@@ -247,10 +252,10 @@ object HudModule : AdsModule, ChannelService {
             v.sidebar = next
         }
 
-        private fun tab(p: ServerPlayer, v: ViewerHud, ctx: HudContext, online: List<ServerPlayer>, realIds: Lazy<Set<UUID>>, tick: Int) {
+        private fun tab(p: ServerPlayer, v: ViewerHud, ctx: HudContext, online: List<ServerPlayer>, realIds: Lazy<Set<UUID>>, refresh: Boolean) {
             if (!HudPackets.tabWorks) return
             val first = v.tabRows == null
-            if (!first && !v.dirty && tick % tabRefresh != 0) return
+            if (!first && !v.dirty && !refresh) return
             val rows = TabModel.rows(ctx, p.uuid)
             val footer = TabModel.footer(ctx)
             if (first) {
