@@ -185,6 +185,11 @@ object PuzzlesModule : AdsModule, PuzzleHost {
                 val z = (event.data["z"] as? Number)?.toInt() ?: return
                 val room = run.state.roomAt(x + 0.5, z + 0.5)?.index ?: return
                 (d.byRoom[room] as? WorldPuzzle)?.takeIf { it.activated }?.onArrowHit(x, y, z, event.data["by"] as? UUID)
+            } else if (event.source == "damage" && event.name == "arrowHitEntity") {
+                // An arrow kills a Higher Or Lower blaze as a hit does (an Archer's Terminator shot, a few ticks before each recorded death).
+                val e = (event.data["id"] as? Number)?.toInt()?.let { com.engineerclient.p3sim.Sim.level.getEntity(it) } ?: return
+                val by = event.data["by"] as? UUID ?: return
+                (puzzleOfEntity(d, e) as? BlazePuzzle)?.let { bp -> guard("blaze arrow") { bp.onAttack(by, e) } }
             }
             else -> {}
         }
