@@ -113,6 +113,11 @@ public final class Engine implements ClientModInitializer {
             n -> n.equals("Blaze") || Practice.find(RoomStore.get(), n.replace(' ', '_')) != null);
     }
 
+    /** Rooms the single-room practice builds, as /practice names them (underscores for spaces). */
+    public static java.util.List<String> practiceRooms() {
+        return Practice.roomNames(RoomStore.get());
+    }
+
     /** /practice [roomName] from the settings screen: the room alone, a random door, all its secrets. */
     public static void practice(String roomName, boolean mobs) {
         if (isEngineClient()) {

@@ -15,6 +15,9 @@ public final class BossFight {
     private boolean ended;
     /** Effects that outlive their phase (Storm's corpse into P3), ticked until they return false. */
     private final java.util.List<java.util.function.BooleanSupplier> lingering = new java.util.ArrayList<>();
+    /** Practice of one phase: the fight ends instead of moving on from the phase of this name, then [onStop] runs. */
+    private String stopAfter;
+    private Runnable onStop;
 
     public BossFight(BossContext ctx) {
         this.ctx = ctx;
@@ -46,6 +49,15 @@ public final class BossFight {
         }
     }
 
+    /**
+     * Ends the fight where the phase named [phaseName] would hand over to the next (boss practice
+     * of that one phase): it is disposed, the next never starts, and [onStop] runs.
+     */
+    public void stopAfter(String phaseName, Runnable onStop) {
+        this.stopAfter = phaseName;
+        this.onStop = onStop;
+    }
+
     /** Ticks [effect] every server tick from the next one on, across phase changes, until it returns false. */
     public void linger(java.util.function.BooleanSupplier effect) {
         lingering.add(effect);
@@ -68,6 +80,16 @@ public final class BossFight {
             return;
         }
         BossPhase next = phase.next();
+        if (next != null && phase.name().equals(stopAfter)) {
+            ended = true;
+            phase.dispose();
+            phase = null;
+            Runnable stop = onStop;
+            stopAfter = null;
+            onStop = null;
+            stop.run();
+            return;
+        }
         if (next != null) {
             begin(next);
             // This tick is the new phase's clock 0: what it scheduled there runs now.

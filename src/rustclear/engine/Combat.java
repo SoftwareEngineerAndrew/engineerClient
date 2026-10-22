@@ -729,7 +729,7 @@ final class Combat {
         StatSheet s = stats(player);
         double max = Math.max(1, s.get(Stat.HEALTH));
         double now = Math.max(0, Math.min(health(player), max));
-        if (!run.isPractice()) {
+        if (!run.ownsActionBar()) {
             double shield = absorption(player);
             String hp = String.format(Locale.ROOT, "%s%,d/%,d❤", shield > 0 ? "§6" : "§c",
                 (long) Math.floor(now + shield), (long) Math.floor(max));

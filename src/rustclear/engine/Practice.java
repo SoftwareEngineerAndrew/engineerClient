@@ -134,6 +134,18 @@ final class Practice {
 
     /** build_practice_dungeon: a one-room plan, plus a spawn inside each of its doors. */
     static Built build(RoomData data) {
+        return build(data, Layout.DoorType.NORMAL);
+    }
+
+    /**
+     * A Blood room alone for the blood camp practice: [build], its door (a Blood room's one) a
+     * locked blood door, as the camp needs one to open and to face the Watcher's wall from.
+     */
+    static Built buildBlood(RoomData blood) {
+        return build(blood, Layout.DoorType.BLOOD);
+    }
+
+    private static Built build(RoomData data, Layout.DoorType doorType) {
         List<Layout.Segment> segments = new ArrayList<>();
         for (int[] cell : shapeSegments(data.shape())) {
             segments.add(new Layout.Segment(cell[0] + GRID_X, cell[1] + GRID_Z));
@@ -149,7 +161,7 @@ final class Practice {
             int doorZ = cz + oz * 16;
             // Same rule Layout.parse gives the recorded door positions.
             boolean alongX = ((doorX - Layout.ORIGIN_X) / 16) % 2 == 1;
-            doors.add(new Layout.Door(doorX, doorZ, alongX, Layout.DoorType.NORMAL));
+            doors.add(new Layout.Door(doorX, doorZ, alongX, doorType));
             spawns.add(new DoorSpawn(SIDE_LABELS[d[2]], doorX - ox * 2 + 0.5, 69.0, doorZ - oz * 2 + 0.5, INWARD_YAW[d[2]]));
         }
         Layout.Slot slot = new Layout.Slot(data.type(), data.shape(), List.copyOf(segments));
