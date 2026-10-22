@@ -6,6 +6,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ## [Unreleased]
 
 ### Added
+- A Practice page at the top of the ADS menu: pick a full clear (random map or a fixed seed), a single room and the door you enter from, blood rush, blood camp, or a boss phase (P1 Maxor, P2 Storm, P3 in the P3 Sim, P4 Necron, P5 Wither King), with F7 or M7.
 - The ADS logo: the mod's icon (Mod Menu), the ADS title-screen button, the ADS menus' header and the e4mc install prompt.
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 

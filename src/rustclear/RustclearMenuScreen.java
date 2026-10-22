@@ -204,10 +204,12 @@ public final class RustclearMenuScreen extends RustclearScreen {
         String note = online.note();
         int gap = 8;
         int tw = (w - gap) / 2;
-        // Two rows of tiles fill the window; the third (the editors) is scrolled to. Only the tiles scroll.
+        // Practice across the top, then two rows of tiles fill the window; the third (the editors) is
+        // scrolled to. Only the tiles scroll.
         int viewY = y + 18;
         int viewH = h - 18;
-        int th = (viewH - gap) / 2;
+        int ph = Math.max(34, Math.min(56, viewH / 5));
+        int th = (viewH - ph - 2 * gap) / 2;
         mainMaxScroll = th + gap;
         mainScroll = Math.max(0, Math.min(mainMaxScroll, mainScroll));
         mainView = new int[] {x, viewY, w, viewH};
@@ -216,8 +218,11 @@ public final class RustclearMenuScreen extends RustclearScreen {
             mx = -1;
             my = -1;
         }
-        int gy = viewY - mainScroll;
+        int top = viewY - mainScroll;
         beginClip(g, x, viewY, w, viewH);
+        card(g, mx, my, x, top, w, ph, "Practice", "Full clears, a fixed seed, single rooms, blood, and every boss phase. Solo.",
+            null, GOLD, Glyph.TARGET, () -> minecraft.gui.setScreen(new com.engineerclient.ads.PracticeScreen(this)));
+        int gy = top + ph + gap;
         tile(g, mx, my, x, gy, tw, th, "Make a party", "Your own dungeon. Private to play solo, or public for anyone.",
             null, ENTRANCE, Glyph.PARTY, () -> page = Page.MAKE);
         // Joining by address needs no lobby, so this stays open even when the lobby can't be reached.
