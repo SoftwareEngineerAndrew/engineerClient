@@ -45,12 +45,15 @@ object DevScript {
         if (steps == null) {
             if (mc.gui.screen() !is TitleScreen || !Files.exists(file)) return
             steps = ArrayDeque(Files.readAllLines(file).map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") })
+            // Nobody is at the window, so it never has focus: don't pause for that.
+            mc.options.pauseOnLostFocus = false
             Files.move(file, file.resolveSibling("ads-dev-script.txt.done"), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             log("start, ${steps!!.size} steps")
         }
         val queue = steps ?: return
         if (waitTicks > 0) { waitTicks--; return }
         if (waitWorld > 0) {
+            if (mc.player != null && mc.gui.screen() is PauseScreen) mc.gui.setScreen(null)
             val ready = mc.player != null && mc.level != null && mc.gui.screen() == null
             if (!ready && --waitWorld > 0) return
             log(if (ready) "in world" else "waitworld timed out")

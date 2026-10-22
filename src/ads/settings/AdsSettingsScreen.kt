@@ -32,22 +32,16 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
 
     override fun init() {
         if (panels.isNotEmpty()) return
-        // Side by side from the left, wrapping to a new row under the tallest when the window runs out.
+        // As many columns as fit, each panel under the shortest column so far: the panels pack together instead
+        // of each row waiting for its tallest, and more of them fit on screen.
         val saved = LAYOUT[TITLE]
-        var x = 10
-        var y = 30
-        var rowH = 0
+        val columns = maxOf(1, (width - 10) / (WIDTH + 10))
+        val heights = IntArray(columns) { 30 }
         for ((_, title, settings) in sections) {
-            val h = panelHeight(settings)
-            if (x + WIDTH > width - 10 && x > 10) {
-                x = 10
-                y += rowH + 10
-                rowH = 0
-            }
+            val c = heights.indices.minBy { heights[it] }
             val pos = saved?.get(title)
-            panels += Panel(title, settings, pos?.first ?: x, pos?.second ?: y)
-            x += WIDTH + 10
-            rowH = maxOf(rowH, h)
+            panels += Panel(title, settings, pos?.first ?: (10 + c * (WIDTH + 10)), pos?.second ?: heights[c])
+            heights[c] += panelHeight(settings) + 10
         }
     }
 
