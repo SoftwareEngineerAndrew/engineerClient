@@ -70,6 +70,11 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         this.seed = spec.seed();
     }
 
+    /** The floor the practice plays: the spec's, but the Wither King (p5) is always M7. */
+    Floor floor() {
+        return spec.kind() == PracticeSpec.Kind.BOSS && "p5".equalsIgnoreCase(spec.phase()) ? Floor.M7 : spec.floor();
+    }
+
     /** The seed of the map being practised, or null when the mode has none. */
     Long seed() {
         return seed;
@@ -103,6 +108,16 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         greeting.forEach(host::sendSystemMessage);
         DungeonRun at = run;
         switch (spec.kind()) {
+            // Solo, so no lobby to ready up in: the host is ready at once with their class (the one
+            // they last picked, else their Hypixel profile's, else Mage), and the countdown runs.
+            // (A tick on: at the join the host isn't among the level's players yet, and the ready would drop.)
+            case FULL_CLEAR -> at.schedule(1, () -> {
+                if (host.level() == at.level && !at.isReady(host.getUUID())) {
+                    DungeonClass c = PlayerStats.classOf(host);
+                    host.sendSystemMessage(EngineItems.text("§7Playing " + c.color + c.title + "§7."));
+                    at.toggleReady(host);
+                }
+            });
             case BLOOD_RUSH -> at.schedule(START_DELAY, () -> {
                 at.grantBloodKey();
                 at.startNow(false);
@@ -134,8 +149,8 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     // ---------------------------------------------------------------- the modes
 
     /**
-     * A whole run of a seeded map, Mort and the countdown as normal (the solo Ready starts it, and
-     * run timers key on Mort's first line). Planned fully random on the spec's floor: the leader's
+     * A whole run of a seeded map, Mort and the countdown as normal (the host is readied on join,
+     * and run timers key on Mort's first line). Planned fully random on the spec's floor: the leader's
      * room, puzzle and secret filters would make a seed mean a different map.
      */
     private void buildFullClear(boolean fresh) throws Planner.PlanException {
@@ -177,7 +192,7 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
      */
     private void buildBoss(boolean fresh) throws Planner.PlanException {
         String phase = spec.phase() == null ? "" : spec.phase().toLowerCase(Locale.ROOT);
-        Floor floor = phase.equals("p5") ? Floor.M7 : spec.floor();
+        Floor floor = floor();
         Vec3 entry;
         float yaw;
         switch (phase) {

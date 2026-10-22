@@ -245,6 +245,8 @@ final class Party {
         state.open = open;
         state.mode = mode.name();
         state.you = viewer != null && isLeader(viewer);
+        PracticeSession practice = EngineServer.practice();
+        state.practiceFloor = practice == null ? null : practice.floor().code;
         List<Protocol.PartyMember> list = new ArrayList<>();
         for (ServerPlayer p : members) {
             Protocol.PartyMember m = new Protocol.PartyMember();
