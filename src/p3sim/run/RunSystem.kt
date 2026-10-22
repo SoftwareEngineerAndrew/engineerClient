@@ -74,7 +74,7 @@ interface AdsModule : RunSystem {
      * Keep the setting objects in the module; read them by `.value`. Called once at game start. Every constant that is
      * documented as unmeasured and that a player might want to change is a setting.
      */
-    fun registerSettings(host: com.odtheking.odin.features.Module) {}
+    fun registerSettings(host: com.engineerclient.ads.settings.Settings) {}
 
     /** `/ads dev <name>` commands (spikes, probes, tools). */
     fun devCommands(): List<AdsCommand> = emptyList()

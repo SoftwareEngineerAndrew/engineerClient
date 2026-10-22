@@ -24,8 +24,8 @@ import com.engineerclient.p3sim.run.api.MobSpec
 import com.engineerclient.p3sim.run.api.Services
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.NumberSetting
 import net.minecraft.world.entity.Entity
 import java.util.UUID
 import kotlin.random.Random
@@ -86,7 +86,7 @@ object MobsModule : AdsModule, MobService {
     private var sOtherSpeed: NumberSetting<Double>? = null
     private var sPatrolSpeed: NumberSetting<Double>? = null
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         sEnabled = host.registerSetting(BooleanSetting("Mobs Spawn", true, desc = "The clear has its mobs. Off: rooms stay empty (they count as cleared at once)."))
         sFakePlayers = host.registerSetting(BooleanSetting("Mobs Fake Players", true, desc = "Crypt Dreadlords, Souleaters, Zombie Commanders, the minibosses and the Shadow Assassin reach your game as real players (UUID version 2), as on Hypixel, so Odin's and Blade Addons' star ESP draw them. Off: they are zombies."))
         sReplay = host.registerSetting(BooleanSetting("Mobs Replay Rooms", true, desc = "A room gets the mobs of one recorded visit (clusters and counts stay together). Off: every spawn cell rolls on its own with the chance the recordings gave it."))

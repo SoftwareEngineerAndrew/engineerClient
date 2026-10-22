@@ -1,8 +1,8 @@
 package com.engineerclient.p3sim.clear.secrets
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.Module
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.NumberSetting
+import com.engineerclient.ads.settings.Settings
 
 /**
  * The secrets' Odin settings. They live in this object, not in [SecretsModule], so the module object itself stays free of Odin
@@ -42,7 +42,7 @@ object SecretsSettings {
     private var bonusBatS: NumberSetting<Int>? = null
     private var blessingBoostS: BooleanSetting? = null
 
-    fun register(host: Module) {
+    fun register(host: Settings) {
         itemRangeS = host.registerSetting(NumberSetting("Secrets Item Range", ITEM_SPAWN_RANGE, 8.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before an item secret lies on the floor."))
         batRangeS = host.registerSetting(NumberSetting("Secrets Bat Range", BAT_SPAWN_RANGE, 4.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before a secret bat appears."))
         skullRangeS = host.registerSetting(NumberSetting("Secrets Skull Range", SKULL_SPAWN_RANGE, 4.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before a wither essence or key skull appears."))

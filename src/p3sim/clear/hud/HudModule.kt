@@ -13,7 +13,7 @@ import com.engineerclient.p3sim.run.RunEvent
 import com.engineerclient.p3sim.run.api.Audience
 import com.engineerclient.p3sim.run.api.ChannelService
 import com.engineerclient.p3sim.run.api.HudRegistry
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.engineerclient.ads.settings.BooleanSetting
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientGamePacketListener
 import net.minecraft.server.level.ServerPlayer
@@ -46,7 +46,7 @@ object HudModule : AdsModule, ChannelService {
     lateinit var mapOn: BooleanSetting
     lateinit var barOn: BooleanSetting
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         sidebarOn = host.registerSetting(BooleanSetting("Hud Sidebar", true, desc = "Send the Hypixel dungeon sidebar during a run (floor, time, cleared percent, party). Mods read the floor and the cleared percent from it."))
         tabOn = host.registerSetting(BooleanSetting("Hud Tab List", true, desc = "Send the Hypixel dungeon tab list during a run (party, secrets, rooms, puzzles). Mods read the party and the stats from it."))
         mapOn = host.registerSetting(BooleanSetting("Hud Map", true, desc = "Send the dungeon map to the Magical Map during a run (rooms, doors, check marks, party markers)."))

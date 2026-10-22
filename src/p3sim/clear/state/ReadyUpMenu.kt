@@ -85,7 +85,7 @@ object ReadyUpMenu {
         rec.dungeonClass = cls.uppercase()
         if (Sim.isHost(p)) {
             P3Sim.classS.index = Party.CLASSES.indexOfFirst { it.name.equals(cls, ignoreCase = true) }.coerceAtLeast(0)
-            com.engineerclient.EngineerClient.mc.execute { com.odtheking.odin.features.ModuleManager.saveConfigurations() }
+            com.engineerclient.EngineerClient.mc.execute { P3Sim.saveSettings() }
         }
         Sim.chat(StateText.selectedClass(p.gameProfile.name, colourOf(run, p), cls))
         BotsModule.reclass(run)

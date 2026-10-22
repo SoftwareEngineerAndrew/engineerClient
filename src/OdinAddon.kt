@@ -34,21 +34,8 @@ object OdinAddon {
         listOf(
             PovPreviews, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
             com.engineerclient.clearbreakdown.ClearBreakdown,
-            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning, FullRun,
+            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning,
         )
-    }
-
-    /**
-     * The full run's settings (Engineer Client's ADS full run, src/p3sim/run and src/p3sim/clear): its modules add theirs to an
-     * Odin module ([com.engineerclient.p3sim.run.AdsBootstrap.registerSettings]), and ADS's P3Sim is not one, so they get this.
-     */
-    object FullRun : com.odtheking.odin.features.Module(
-        name = "ADS Full Run",
-        category = com.odtheking.odin.features.Category.custom("ADS", 860, 10),
-        description = "The full F7 run (/ads run): the clear's bots, mobs, secrets, traps and blood room.",
-        key = null,
-    ) {
-        init { com.engineerclient.p3sim.run.AdsBootstrap.registerSettings(this) }
     }
 
     private var tickCounter = 0

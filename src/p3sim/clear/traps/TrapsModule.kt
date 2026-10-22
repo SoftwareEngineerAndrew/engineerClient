@@ -19,7 +19,7 @@ import com.engineerclient.p3sim.run.api.Audience
 import com.engineerclient.p3sim.run.api.Services
 import com.engineerclient.p3sim.run.api.TrapService
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.engineerclient.ads.settings.BooleanSetting
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.sounds.SoundEvent
 import net.minecraft.sounds.SoundEvents
@@ -54,7 +54,7 @@ object TrapsModule : AdsModule, TrapService {
     private lateinit var abilitiesOffInPuzzlesS: BooleanSetting
     private lateinit var abilitiesOffInTrapsS: BooleanSetting
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         abilitiesOffInTrapsS = host.registerSetting(BooleanSetting("Abilities Off In Trap Rooms", true,
             desc = "Teleports, blinks and the Wither abilities do nothing while you stand in the Old Trap or the New Trap, as on Hypixel."))
         abilitiesOffInPuzzlesS = host.registerSetting(BooleanSetting("Abilities Off In Puzzle Rooms", false,

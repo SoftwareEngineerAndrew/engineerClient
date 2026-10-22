@@ -139,7 +139,7 @@ object SecretsModule : AdsModule, SecretService {
 
     // ---- lifecycle ----------------------------------------------------------------------------------------------------------------
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) { SecretsSettings.register(host) }
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) { SecretsSettings.register(host) }
 
     override fun onRunStart(run: Run) {
         data = null

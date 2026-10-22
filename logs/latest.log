@@ -1,32 +1,50 @@
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:44] [Test worker/WARN]: [ads] the saved camp had a wall of 30 heads but this room has 20; the camp starts over
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 15 standard, 4 boss heads on 20 stands
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:44] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
-[04:58:52] [Test worker/INFO]: [STDOUT]: [ArenaClipTest] extension cells at x, z -16..-10: 2156
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=408, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: none planned (Run Bots is off)
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK planned (party of 3); 0 teammate death(s) scheduled; blood open at t=408, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=352, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:52] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
-[04:58:53] [Test worker/INFO]: [ads] using your copy of layouts.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-344157568746764594 instead of the one bundled in the jar
-[04:58:53] [Test worker/INFO]: [ads] using your copy of mobs.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-344157568746764594 instead of the one bundled in the jar
-[04:58:54] [Test worker/WARN]: [ads] plug-in broken failed in bloodCamp()
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:37] [Test worker/WARN]: [ads] the saved camp had a wall of 30 heads but this room has 20; the camp starts over
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 15 standard, 4 boss heads on 20 stands
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:37] [Test worker/INFO]: [ads] the Watcher's camp started: 17 standard, 4 boss heads on 30 stands
+[05:10:43] [Test worker/WARN]: [ads] the mob pack has no 'watcher', so it cannot be spawned
+[05:10:43] [Test worker/INFO]: [ads] using your copy of rooms.index.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13188123635350273587/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of rooms.blocks.bin in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13188123635350273587/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of layouts.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13188123635350273587/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of mobs.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13188123635350273587/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of runstate.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13188123635350273587/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of traps.json in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13188123635350273587/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of rooms.index.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-777779759445486789/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of rooms.blocks.bin in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-777779759445486789/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of layouts.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-777779759445486789/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of mobs.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-777779759445486789/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of runstate.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-777779759445486789/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:43] [Test worker/INFO]: [ads] using your copy of traps.json in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-777779759445486789/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:45] [Test worker/INFO]: [ads] using your copy of mobs.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-806955251628317936/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:45] [Test worker/INFO]: [ads] using your copy of mobs.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-10809447895750335824/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:45] [Test worker/INFO]: [ads] using your copy of traps.json in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-10809447895750335824/config/engineerclient/ads/packs instead of the one bundled in the jar
+[05:10:45] [Test worker/WARN]: [ads] Boulder in Boulder: pattern 000000000000000000000000000000000000000000 is not in Odin's table, so Odin cannot solve it
+[05:10:45] [Test worker/WARN]: [ads] Boulder in Boulder: pattern 000000000000000000000000000000000000000000 is not in Odin's table, so Odin cannot solve it
+[05:10:50] [Test worker/INFO]: [STDOUT]: [ArenaClipTest] extension cells at x, z -16..-10: 2156
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=408, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: none planned (Run Bots is off)
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK planned (party of 3); 0 teammate death(s) scheduled; blood open at t=408, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=352, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:50] [Test worker/INFO]: [ads] bots: BERSERK, TANK, MAGE, ARCHER planned (party of 5); 0 teammate death(s) scheduled; blood open at t=378, 4 doors, 11 rooms
+[05:10:51] [Test worker/INFO]: [ads] using your copy of layouts.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13831559387774888544 instead of the one bundled in the jar
+[05:10:51] [Test worker/INFO]: [ads] using your copy of mobs.json.gz in /var/folders/75/qf8tkwss5yx_tdw_0lhq2__h0000gn/T/junit-13831559387774888544 instead of the one bundled in the jar
+[05:10:52] [Test worker/WARN]: [ads] plug-in broken failed in bloodCamp()
 java.lang.IllegalStateException: boom
 	at com.engineerclient.p3sim.run.PluginSeamTest$aFailingPluginIsSkipped$broken$1.bloodCamp(PluginSeamTest.kt:62)
 	at com.engineerclient.p3sim.run.plugin.AdsPlugins.bloodCamp(AdsPlugins.kt:48)
@@ -113,7 +131,7 @@ java.lang.IllegalStateException: boom
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
-[04:58:54] [Test worker/WARN]: [ads] plug-in broken failed in partyStrategies()
+[05:10:52] [Test worker/WARN]: [ads] plug-in broken failed in partyStrategies()
 java.lang.IllegalStateException: boom
 	at com.engineerclient.p3sim.run.PluginSeamTest$aFailingPluginIsSkipped$broken$1.partyStrategies(PluginSeamTest.kt:63)
 	at com.engineerclient.p3sim.run.plugin.AdsPlugins.strategies(AdsPlugins.kt:56)
@@ -200,7 +218,7 @@ java.lang.IllegalStateException: boom
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
-[04:58:54] [Test worker/ERROR]: [ads] a.x failed
+[05:10:52] [Test worker/ERROR]: [ads] a.x failed
 java.lang.IllegalStateException: boom
 	at com.engineerclient.p3sim.run.RunInputTest$M.call(RunInputTest.kt:11)
 	at com.engineerclient.p3sim.run.RunInputTest.aThrowingModuleHasNoOpinion$lambda$0(RunInputTest.kt:24)
@@ -288,7 +306,7 @@ java.lang.IllegalStateException: boom
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
-[04:58:54] [Test worker/ERROR]: [ads] the boss start failed
+[05:10:52] [Test worker/ERROR]: [ads] the boss start failed
 java.lang.IllegalStateException: no boss today
 	at com.engineerclient.p3sim.run.RunSavepointsTest.aFailingBossStarterIsLoggedNotThrown$lambda$0(RunSavepointsTest.kt:168)
 	at com.engineerclient.p3sim.run.Run.beginBoss(Run.kt:170)
@@ -376,14 +394,14 @@ java.lang.IllegalStateException: no boss today
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
-[04:58:54] [Test worker/INFO]: [ads] restored savepoint sp1 "before T0" at t=0 (3 blocks resynced)
-[04:58:54] [Test worker/INFO]: [ads] restored savepoint sp1 "a" at t=0 (0 blocks resynced)
-[04:58:54] [Test worker/INFO]: [ads] restored savepoint sp1 "Start" at t=40 (3 blocks resynced)
-[04:58:54] [Test worker/INFO]: [ads] restored savepoint sp1 "x" at t=40 (3 blocks resynced)
-[04:58:54] [Test worker/INFO]: [ads] restored savepoint sp1 "x" at t=40 (3 blocks resynced)
-[04:58:54] [Test worker/WARN]: [ads] savepoint sp1 (early) cannot be restored in stage BOSS_ENTRY
-[04:58:54] [Test worker/WARN]: [ads] beginBoss ignored in stage BOSS
-[04:58:54] [Test worker/ERROR]: [ads] boom.restore failed
+[05:10:52] [Test worker/INFO]: [ads] restored savepoint sp1 "before T0" at t=0 (3 blocks resynced)
+[05:10:52] [Test worker/INFO]: [ads] restored savepoint sp1 "a" at t=0 (0 blocks resynced)
+[05:10:52] [Test worker/INFO]: [ads] restored savepoint sp1 "Start" at t=40 (3 blocks resynced)
+[05:10:52] [Test worker/INFO]: [ads] restored savepoint sp1 "x" at t=40 (3 blocks resynced)
+[05:10:52] [Test worker/INFO]: [ads] restored savepoint sp1 "x" at t=40 (3 blocks resynced)
+[05:10:52] [Test worker/WARN]: [ads] savepoint sp1 (early) cannot be restored in stage BOSS_ENTRY
+[05:10:52] [Test worker/WARN]: [ads] beginBoss ignored in stage BOSS
+[05:10:52] [Test worker/ERROR]: [ads] boom.restore failed
 java.lang.IllegalStateException: restore boom
 	at com.engineerclient.p3sim.run.RunSavepointsTest$aThrowingSystemDoesNotStopTheRestoreOfTheOthers$boom$1.restore(RunSavepointsTest.kt:113)
 	at com.engineerclient.p3sim.run.RunSavepointsTest$aThrowingSystemDoesNotStopTheRestoreOfTheOthers$boom$1.restore(RunSavepointsTest.kt:110)
@@ -471,45 +489,8 @@ java.lang.IllegalStateException: restore boom
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
-[04:58:54] [Test worker/INFO]: [ads] restored savepoint sp1 "x" at t=0 (3 blocks resynced)
-ds mort failed
-java.lang.IllegalStateException: sim not running
-	at com.engineerclient.p3sim.Sim.getLevel(Sim.kt:29)
-	at com.engineerclient.p3sim.clear.state.MortNpc.spawn(MortNpc.kt:78)
-	at com.engineerclient.p3sim.clear.state.DoorsModule.onRunStart(DoorsModule.kt:69)
-	at com.engineerclient.p3sim.run.Run.begin(Run.kt:97)
-	at com.engineerclient.p3sim.state.DoorsModuleTest.theRunDrivesTheModule(DoorsModuleTest.kt:27)
-	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
-	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:767)
-	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
-	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
-	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156)
-	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147)
-	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
-	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103)
-	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93)
-	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
-	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
-	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
-	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
-	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:92)
-	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:86)
-	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8(TestMethodTestDescriptor.java:217)
-	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
-	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:213)
-	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:138)
-	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:68)
-	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
-	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
-	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
-	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
-	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
-	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
-	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
-	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
-	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+[05:10:52] [Test worker/INFO]: [ads] restored savepoint sp1 "x" at t=0 (3 blocks resynced)
+meThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
 	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
 	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
 	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)

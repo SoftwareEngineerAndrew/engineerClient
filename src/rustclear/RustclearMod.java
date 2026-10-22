@@ -47,7 +47,6 @@ public final class RustclearMod implements ClientModInitializer {
         settings = SettingsStore.load();
         net.rustclear.mod.engine.SimLog.setEnabled(settings.simLog());
         DuelHud.register();
-        net.rustclear.mod.engine.MiniMap.register();
         Online.register();
 
         // Every channel is registered here, before the engine's entrypoint adds its receivers.
