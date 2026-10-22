@@ -3,7 +3,6 @@ package com.engineerclient.p3sim
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.index
-import com.odtheking.odin.features.ModuleManager
 import net.minecraft.world.phys.Vec3
 import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
@@ -97,7 +96,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
             }
             addRenderableWidget(Button.builder(Component.literal(text)) {
                 P3Sim.classS.index = i
-                ModuleManager.saveConfigurations()
+                P3Sim.saveSettings()
                 rebuildWidgets()
             }.tooltip(tip(if (other != null) "${other.name} plays the ${Roles.label(c)}. Click: you take it and they get yours (${Roles.label(P3Sim.myClass)})."
                 else "Play as ${Roles.label(c)}: your jobs become its ${P3Plan.skillName()} role (${roles[c] ?: "none"}); a bot plays each class no player plays."))
@@ -132,7 +131,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
     override fun removed() {
         super.removed()
         Practice.saveMenu(tab?.name, practiceSec.takeIf { it in 1..4 } ?: 1)
-        ModuleManager.saveConfigurations()
+        P3Sim.saveSettings()
     }
 
     // ------------------------------------------------------------------ the top half
@@ -398,7 +397,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         }
         private fun luck() = Math.round(value * 40).toInt() * 5 - 100
         override fun updateMessage() { message = Component.literal("$name: ${if (luck() < 0) "§c" else ""}${luck()}%") }
-        override fun applyValue() { @Suppress("UNCHECKED_CAST") (s as com.odtheking.odin.clickgui.settings.impl.NumberSetting<Int>).value = luck(); ModuleManager.saveConfigurations() }
+        override fun applyValue() { @Suppress("UNCHECKED_CAST") (s as com.odtheking.odin.clickgui.settings.impl.NumberSetting<Int>).value = luck(); P3Sim.saveSettings() }
     }
 
     /** Practice's start timer, 0 to 5 s in tenths. */
@@ -637,7 +636,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
     private fun change(label: String, w: Int, about: String, run: () -> Unit): Button =
         Button.builder(Component.literal(label)) {
             run()
-            ModuleManager.saveConfigurations()
+            P3Sim.saveSettings()
             rebuildWidgets()
         }.tooltip(tip(about)).width(w).build()
 
