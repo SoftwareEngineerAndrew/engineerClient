@@ -73,13 +73,10 @@ object DevgineerClient : ClientModInitializer {
         }
     }
 
-    fun chat(msg: String) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(Component.literal(msg)) }
-    }
+    // In ADS, Devgineer keeps quiet: what it would say in chat goes to the log instead.
+    fun chat(msg: String) = logger.info("[dc chat] ${msg.replace(Regex("§."), "")}")
 
-    fun chat(msg: Component) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(msg) }
-    }
+    fun chat(msg: Component) = chat(msg.string)
 
     /** What every line the mod says in chat starts with. */
     const val PREFIX = "§8[§6DC§8] "

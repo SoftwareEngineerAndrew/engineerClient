@@ -23,6 +23,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed
+- Coffee Client and Devgineer no longer post in chat ("[DC] Boss Recorder: recording", "[dc] build ..."); their lines go to the log instead.
 - With Odin installed, Odin's Splits no longer time runs in the P3 Sim or the engine's worlds; ADS's own Splits show there instead.
 - With Odin installed, ADS's solver handles the sim's and the engine's terminals and Odin's solver stays out of them; Odin is unchanged on Hypixel.
 - Minecraft's tutorial tips ("Destroy the tree"...) never show while ADS is installed.
