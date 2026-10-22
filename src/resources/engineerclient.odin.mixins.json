@@ -2,6 +2,7 @@
   "required": false,
   "minVersion": "0.8",
   "package": "com.engineerclient.mixin.odin",
+  "plugin": "com.engineerclient.mixinplugin.OdinMixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
     "BlockUpdateServerThreadMixin",
@@ -18,7 +19,9 @@
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
     "HighlightRenderMixin",
-    "TermGuiButtonMixin"
+    "TermGuiButtonMixin",
+    "LeapTermsimProtMixin",
+    "NumbersHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 0
