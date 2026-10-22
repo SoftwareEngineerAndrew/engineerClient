@@ -11,7 +11,7 @@ import net.rustclear.mod.engine.boss.BossContext;
 
 /**
  * One of P2's crushers (boss-p2-storm.md §5): a 7x7 column hanging over the floor. A press steps
- * it down 5 layers, one every 4 ticks (each new layer polished diorite in the column's shape); at
+ * it down 5 layers, one every 4 ticks (each new layer the column's terracotta in its shape); at
  * the floor (bottom 169) it waits 25, rises a layer every 4 to 189, waits 27 and steps down 3 to
  * 186, its armed rest. It crushes Storm only within 60 ticks of a step; once it has, it collapses
  * 20 ticks later and is spent for good.
@@ -89,7 +89,7 @@ final class Pillar {
                     return;
                 }
                 bottom--;
-                layer(bottom, Blocks.POLISHED_DIORITE.defaultBlockState());
+                layer(bottom, StormPhase.pillarBlock(index));
                 lowest = Math.min(lowest, bottom);
                 lastStep = now;
                 stepsLeft--;
@@ -129,9 +129,9 @@ final class Pillar {
             && feet.y + StormData.HEAD >= bottom;
     }
 
-    /** Whether [p] stands in its 7x7 square low enough to hide from Giga Lightning. */
+    /** Whether [p] stands in its 7x7 square low enough to hide from Giga Lightning; once crushed (spent) it hides nobody. */
     boolean hides(Vec3 p) {
-        return p.x >= minX && p.x < minX + 7 && p.z >= minZ && p.z < minZ + 7 && p.y <= StormData.HIDE_MAX_Y;
+        return state != State.SPENT && p.x >= minX && p.x < minX + 7 && p.z >= minZ && p.z < minZ + 7 && p.y <= StormData.HIDE_MAX_Y;
     }
 
     /** Crushed: 20 ticks later its lower layers fall as debris and it is spent at its measured bottom. */

@@ -151,7 +151,8 @@ final class BossArena {
                             continue;
                         }
                         int id = room.blockAt(rx, y, rz);
-                        BlockState state = id == 0 ? Blocks.AIR.defaultBlockState() : legacy.get(id, Facing.NORTH);
+                        BlockState state = id == 0 ? Blocks.AIR.defaultBlockState()
+                            : net.rustclear.mod.engine.boss.storm.StormPhase.arenaBlock(x, y, z, legacy.get(id, Facing.NORTH));
                         BlockState old = section.getBlockState(lx, ly, lz);
                         if (old == state) {
                             continue;
