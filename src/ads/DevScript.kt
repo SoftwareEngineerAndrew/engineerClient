@@ -23,6 +23,8 @@ import java.nio.file.Files
  *   sim                    the P3 Sim world
  *   practice clear|rush|camp|p1|p2|p4|p5 [F7|M7]   or   practice room NAME [door] [F7|M7]
  *   cmd TEXT               a command, without its slash
+ *   simaction KIND         a P3 Sim menu action (start, stop, spectateRoute...), as its buttons send them
+ *   perspective N          the camera: 0 first person, 1 third person behind, 2 third person in front
  *   click X Y [right]      a click on the open screen, in GUI coordinates
  *   key CODE               a key press (InputConstants code) on the open screen, or in game with none open
  *   shot NAME              a screenshot, run/screenshots/NAME.png
@@ -100,6 +102,8 @@ object DevScript {
                     else -> error("unknown practice ${args.getOrNull(1)}")
                 })
             }
+            "simaction" -> com.engineerclient.p3sim.SimActions.send(args[1])
+            "perspective" -> mc.options.setCameraType(net.minecraft.client.CameraType.entries[args[1].toInt()])
             "cmd" -> mc.player?.connection?.sendCommand(step.substringAfter(' ')) ?: log("no player for cmd")
             "click" -> {
                 val screen = mc.gui.screen() ?: error("no screen to click")

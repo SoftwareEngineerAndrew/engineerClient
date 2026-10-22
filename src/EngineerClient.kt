@@ -121,7 +121,7 @@ object EngineerClient : ClientModInitializer {
     }
 
     /** What every line the mod says in chat starts with. */
-    const val PREFIX = "§8[§6EC§8] "
+    const val PREFIX = "§8[§6ADS§8] "
 
     /** A line from the mod, with its [PREFIX]. Anything the mod says goes through here. */
     fun msg(text: String) = chat(PREFIX + text)

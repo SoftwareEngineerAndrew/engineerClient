@@ -60,7 +60,7 @@ import java.util.zip.GZIPInputStream
  */
 object ADR : Module(
     name = "ADR",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("ADS", 860, 10),
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the ADR viewer (undonecoffee.com/adr), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {

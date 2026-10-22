@@ -11,6 +11,7 @@
     "HideInventoryEffectsMixin",
     "NoLivingKnockbackMixin",
     "NoPlayerKnockbackMixin",
+    "SpectatorHidesInvisibleMixin",
     "HideBotsSimMixin",
     "OwnArrowsHideMixin",
     "ArrowInGroundInvoker",

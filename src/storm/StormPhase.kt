@@ -27,7 +27,7 @@ import net.minecraft.world.phys.AABB
  */
 object StormPhase : Module(
     name = "Storm Phase",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("ADS", 860, 10),
     description = "F7 P2: a server-tick counter from the start of Storm's phase. His crush hitbox is Sub Splits' Show Crush Info.",
     key = null,
 ) {

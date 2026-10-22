@@ -25,6 +25,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed
+- Chat lines say [ADS] instead of [EC], and the mod is named ADS in Mod Menu and in Odin's menu.
+- Spectate Route runs never count for personal bests (their split times say spectated), and a first time says First PB instead of an old PB of 9999.
 - Players take no knockback in ADS's worlds (the P3 Sim and dungeon/practice worlds): not from hits, arrows, mobs, explosions or bumping into bodies. Your own abilities' movement (Bonzo's Staff, leaps, Superboom) and lava bounce still work.
 - With Odin installed, Odin's Simon Says, Arrows Device and Arrow Align no longer draw or block clicks in ADS's worlds; ADS's own solvers do instead (nothing changes on Hypixel).
 - SS Practice's solver boxes follow ADS's Simon Says settings instead of Odin's Simon Says module.
@@ -46,6 +48,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Releases are now versioned (`vX.Y.Z`, jar `ads-X.Y.Z.jar`) with release notes from this changelog, instead of one rolling release per Minecraft version.
 
 ### Fixed
+- While spectating in the P3 Sim (Spectate Route), the bots' invisible armor stands no longer show.
 - P3 Sim items look right without Hypixel's resource pack: the Superboom TNT is TNT again instead of paper, and every item uses the dungeon engine's base item, head texture and dye.
 - The P3 Sim's ghost kit potions show their textured heads and Hypixel's ability lore with cooldowns.
 - P3 Sim items (and pet tooltips) no longer show the purple and black missing texture without Hypixel's resource pack: they keep their Minecraft look unless the pack is loaded.

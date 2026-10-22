@@ -33,11 +33,14 @@ object AdsPersonalBests {
      * old best after it.
      */
     fun time(group: String, name: String, time: Float, message: String, say: Boolean) {
-        val old = get(group, name) ?: 9999f
-        val note = if (old > time) {
-            set(group, name, time)
-            "§7(§d§lNew PB§r§7) Old PB was §8$old"
-        } else "§8(§7$old§8)"
+        val old = get(group, name)
+        val note = when {
+            // A Spectate Route is the bots' run, not yours: timed, never a PB.
+            com.engineerclient.p3sim.SpectateRoute.active -> "§8(spectated)"
+            old == null -> { set(group, name, time); "§7(§d§lFirst PB§r§7)" }
+            old > time -> { set(group, name, time); "§7(§d§lNew PB§r§7) Old PB was §8${"%.2f".format(java.util.Locale.ROOT, old)}" }
+            else -> "§8(§7${"%.2f".format(java.util.Locale.ROOT, old)}§8)"
+        }
         if (say) EngineerClient.msg("$message${"%.2f".format(java.util.Locale.ROOT, time)}s§7! $note")
     }
 
