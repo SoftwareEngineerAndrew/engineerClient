@@ -68,6 +68,11 @@ public final class StormPhase implements BossPhase {
     private final List<LargeFireball> fireballs = new ArrayList<>();
     private final List<Vec3> fireballLast = new ArrayList<>();
 
+    /** Where boss practice starts the party for this phase alone (StormData.PRACTICE_ENTRY). */
+    public static Vec3 practiceEntry() {
+        return StormData.PRACTICE_ENTRY;
+    }
+
     @Override
     public String name() {
         return "storm";

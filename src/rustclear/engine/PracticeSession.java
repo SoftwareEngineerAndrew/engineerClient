@@ -10,8 +10,10 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.Vec3;
 import net.rustclear.mod.DungeonSettings;
 import net.rustclear.mod.Floor;
+import net.rustclear.mod.engine.boss.storm.StormPhase;
 
 /**
  * A practice the ADS Practice page asked for (PracticeSpec), in the party's dungeon: it builds the
@@ -27,6 +29,10 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     private static final int START_DELAY = 20;
     /** How long a finished timer stays on the action bar (green) before the health and mana line comes back. */
     private static final int RESULT_TICKS = 100;
+    /** Boss practice: from the teleport to a phase's first tick (Maxor's comes TELEPORT_BEFORE after his). */
+    private static final int PHASE_DELAY = 10;
+    /** Facing Storm's side of the room (+x, where he appears) from his practice start. */
+    private static final float STORM_YAW = 270f;
 
     final PracticeSpec spec;
     /** The seed this session's map is built from (FULL_CLEAR), or null. */
@@ -42,6 +48,9 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     /** Blood camp: the Blood room practised (kept for /rs), and the run ticks its door opened at (-1: not yet). */
     private RoomData bloodRoom;
     private long doorTicks = -1;
+    /** Boss practice: the phase's name in the fight ("maxor"...), and the run ticks it began at (-1: not yet). */
+    private String bossPhase;
+    private long phaseStart = -1;
 
     PracticeSession(PracticeSpec spec) {
         this.spec = spec;
@@ -62,11 +71,13 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         greeting.clear();
         rushTicks = -1;
         doorTicks = -1;
+        phaseStart = -1;
         switch (spec.kind()) {
             case FULL_CLEAR -> buildFullClear(fresh);
             case ROOM -> buildRoom(s, fresh);
             case BLOOD_RUSH -> buildBloodRush(fresh);
             case BLOOD_CAMP -> buildBloodCamp(fresh);
+            case BOSS -> buildBoss(fresh);
             default -> throw new Planner.PlanException(spec.kind() + " practice isn't available yet.");
         }
     }
@@ -88,6 +99,11 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
             case BLOOD_CAMP -> at.schedule(START_DELAY, () -> {
                 at.startNow(true);
                 at.openBloodDoorForTest(host);
+            });
+            case BOSS -> at.schedule(START_DELAY, () -> {
+                // Combat and lava only tick in a started run.
+                at.startNow(true);
+                startBoss(at);
             });
             default -> {
             }
@@ -134,10 +150,84 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
      * portal, and the run stops at the portal rather than going on into the boss.
      */
     private void buildBloodCamp(boolean fresh) throws Planner.PlanException {
-        RoomStore store = RoomStore.get();
+        Practice.Built built = bloodPlan(fresh);
+        Practice.DoorSpawn door = built.spawns().get(0);
+        installAlone(built, spec.floor(), new DungeonBuilder.Spawn(door.x(), door.y(), door.z(), door.yaw()));
+        greeting.add(EngineItems.text("§cBlood camp on " + spec.floor().code + ": §7the blood door opens in a second; the clock runs to the portal."));
+    }
+
+    /**
+     * Straight into one boss phase: P1 (Maxor) to his death, P2 (Storm) to his, P4 (Necron) to the
+     * end of the run on F7 or his on M7, P5 (the Wither King, always M7) to the end. The host's
+     * world is the one-room Blood plan (the boss arena sits beside any dungeon), and the arena is
+     * finished here: when the world opens with this practice that second goes behind its loading
+     * screen. A second after the host is in the run starts and the phase begins.
+     */
+    private void buildBoss(boolean fresh) throws Planner.PlanException {
+        String phase = spec.phase() == null ? "" : spec.phase().toLowerCase(Locale.ROOT);
+        Floor floor = phase.equals("p5") ? Floor.M7 : spec.floor();
+        Vec3 entry;
+        float yaw;
+        switch (phase) {
+            case "p1" -> {
+                bossPhase = "maxor";
+                entry = net.rustclear.mod.engine.boss.maxor.MaxorPhase.entry();
+                yaw = 360f;
+            }
+            case "p2" -> {
+                bossPhase = "storm";
+                entry = StormPhase.practiceEntry();
+                yaw = STORM_YAW;
+            }
+            default -> throw new Planner.PlanException("Unknown boss phase '" + spec.phase() + "': p1 or p2.");
+        }
+        installAlone(bloodPlan(fresh), floor, new DungeonBuilder.Spawn(entry.x, entry.y, entry.z, yaw));
+        BossArena.of(run.level).finishNow();
+        run.bossFight.stopAfter(bossPhase, this::phaseOver);
+        greeting.add(EngineItems.text("§cBoss practice: " + bossLabel() + " on " + floor.code + ". §7It starts in a second."));
+    }
+
+    /** The boss phase begins, a second after the host is in (the run already started). */
+    private void startBoss(DungeonRun at) {
+        switch (bossPhase) {
+            // The blood portal's own way in: the teleport, Maxor's bar, then his phase.
+            case "maxor" -> at.bossContext().enterBoss();
+            case "storm" -> at.beginBossPractice(new StormPhase(), StormPhase.practiceEntry(), STORM_YAW, PHASE_DELAY);
+            default -> {
+            }
+        }
+    }
+
+    private String bossLabel() {
+        return switch (bossPhase) {
+            case "maxor" -> "Maxor";
+            case "storm" -> "Storm";
+            case "necron" -> "Necron";
+            case "wither_king" -> "the Wither King";
+            default -> bossPhase;
+        };
+    }
+
+    /** The practised phase is over (the next would begin): its time, and the run stops. */
+    private void phaseOver() {
+        reportPhase(run);
+        run.stop();
+    }
+
+    private void reportPhase(DungeonRun at) {
+        long ticks = phaseStart < 0 ? 0 : at.runTicks() - phaseStart;
+        String label = bossLabel();
+        Component line = EngineItems.styled("§c" + Character.toUpperCase(label.charAt(0)) + label.substring(1)
+                + " §a" + time(ticks) + " §7(" + ticks + " ticks)  ")
+            .append(button("§a[Retry]", "/rs", "§7The same phase again"));
+        at.forEachPlayer(p -> p.sendSystemMessage(line));
+    }
+
+    /** The one-room Blood plan: the same Blood room again, or with [fresh] (or the first time) a random one. */
+    private Practice.Built bloodPlan(boolean fresh) throws Planner.PlanException {
         if (fresh || bloodRoom == null) {
             List<RoomData> bloods = new ArrayList<>();
-            for (RoomData data : store.rooms) {
+            for (RoomData data : RoomStore.get().rooms) {
                 // Practice.buildBlood places the door as a dead end's (the Blood rooms' shape).
                 if (data.type() == RoomType.BLOOD && data.shape() == RoomShape.ONE_BY_ONE_END) {
                     bloods.add(data);
@@ -148,18 +238,18 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
             }
             bloodRoom = bloods.get(RANDOM.nextInt(bloods.size()));
         }
+        return Practice.buildBlood(bloodRoom);
+    }
+
+    /** Installs a one-room [built] plan on [floor], unseeded, the start at [spawn]; the run waits for the session to start it. */
+    private void installAlone(Practice.Built built, Floor floor, DungeonBuilder.Spawn spawn) {
         BuildTimer timer = new BuildTimer();
-        Practice.Built built = Practice.buildBlood(bloodRoom);
-        timer.lap("plan");
-        Practice.DoorSpawn door = built.spawns().get(0);
         Instance in = EngineServer.partyInstance();
         in.practicePick = null;
         in.practiceRoute = null;
-        in.install(built.plan(), store, null, -1, false, RANDOM, timer, spec.floor(), null,
-            new DungeonBuilder.Spawn(door.x(), door.y(), door.z(), door.yaw()), this);
+        in.install(built.plan(), RoomStore.get(), null, -1, false, RANDOM, timer, floor, null, spawn, this);
         run = in.dungeon();
         run.holdStart(true);
-        greeting.add(EngineItems.text("§cBlood camp on " + spec.floor().code + ": §7the blood door opens in a second; the clock runs to the portal."));
     }
 
     /** The named room alone, entering through the spec's door; /rs keeps the door, /rs new rolls a random one again. */
@@ -215,6 +305,10 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
 
     @Override
     public void onTick(DungeonRun at, long runTicks) {
+        if (at == run && bossPhase != null && phaseStart < 0 && at.bossFight.phase() != null
+            && at.bossFight.phase().name().equals(bossPhase)) {
+            phaseStart = runTicks;
+        }
         if (at != run || !ownsActionBar()) {
             return;
         }
@@ -241,6 +335,13 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         Component line = EngineItems.styled("§cBlood rush §a" + time(runTicks) + " §7(" + runTicks + " ticks) · ")
             .append(seedLine("§a[Retry]", "§e[New seed]"));
         at.forEachPlayer(p -> p.sendSystemMessage(line));
+    }
+
+    @Override
+    public void onDefeated(DungeonRun at) {
+        if (at == run && spec.kind() == PracticeSpec.Kind.BOSS) {
+            reportPhase(at);
+        }
     }
 
     @Override
