@@ -49,6 +49,9 @@ object P3Sim : Module(
     /** The full name. */
     const val FULL_NAME = "Advanced Dungeon Simulator"
 
+    /** Writes ADS's settings to disk; the one place that knows where they live. */
+    fun saveSettings() = com.odtheking.odin.features.ModuleManager.saveConfigurations()
+
     val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the ADS menu (a big Restart) in the sim world, as /ads and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
         if (inSim) SimActions.send("restart")
