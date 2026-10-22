@@ -133,6 +133,22 @@ public abstract class RustclearScreen extends Screen {
 
     /** Registers a click area for this frame. Later areas sit on top of earlier ones. */
     protected void click(int x, int y, int w, int h, Runnable action) {
+        Hit hit = clipped(x, y, w, h, action);
+        if (hit != null) {
+            building.add(hit);
+        }
+    }
+
+    /** Registers a right-click area for this frame, as [click] does for the left button. */
+    protected void rightClick(int x, int y, int w, int h, Runnable action) {
+        Hit hit = clipped(x, y, w, h, action);
+        if (hit != null) {
+            rightBuilding.add(hit);
+        }
+    }
+
+    /** The area cut to a scrolled area's window, or null when none of it shows. */
+    private Hit clipped(int x, int y, int w, int h, Runnable action) {
         if (clip != null) {
             // Only the part inside a scrolled area's window can be clicked.
             int x0 = Math.max(x, clip[0]);
@@ -140,15 +156,19 @@ public abstract class RustclearScreen extends Screen {
             int x1 = Math.min(x + w, clip[0] + clip[2]);
             int y1 = Math.min(y + h, clip[1] + clip[3]);
             if (x1 <= x0 || y1 <= y0) {
-                return;
+                return null;
             }
             x = x0;
             y = y0;
             w = x1 - x0;
             h = y1 - y0;
         }
-        building.add(new Hit(x, y, w, h, action));
+        return new Hit(x, y, w, h, action);
     }
+
+    /** Right-click areas, kept as [hits] are; most screens register none. */
+    private volatile List<Hit> rightHits = List.of();
+    private List<Hit> rightBuilding = new ArrayList<>();
 
     /** The window click areas are cut to while a scrolled area is drawn, or null. */
     private int[] clip;
@@ -812,6 +832,7 @@ public abstract class RustclearScreen extends Screen {
     @Override
     public final void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float delta) {
         building = new ArrayList<>();
+        rightBuilding = new ArrayList<>();
         clip = null;
         try {
             extractFrame(g, mx, my, delta);
@@ -820,6 +841,7 @@ public abstract class RustclearScreen extends Screen {
         } finally {
             // Published whole, so a click never sees a half-drawn (or just cleared) frame.
             hits = List.copyOf(building);
+            rightHits = List.copyOf(rightBuilding);
         }
     }
 
@@ -858,6 +880,17 @@ public abstract class RustclearScreen extends Screen {
                             box.setFocused(false);
                         }
                     }
+                    hit.action().run();
+                    return true;
+                }
+            }
+        }
+        // And SDL's right button is 3 (MOUSE_BUTTON_RIGHT), not GLFW's 1.
+        if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+            List<Hit> frame = rightHits;
+            for (int i = frame.size() - 1; i >= 0; i--) {
+                Hit hit = frame.get(i);
+                if (hit.contains(event.x(), event.y())) {
                     hit.action().run();
                     return true;
                 }
