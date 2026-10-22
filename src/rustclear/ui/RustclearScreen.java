@@ -798,6 +798,8 @@ public abstract class RustclearScreen extends Screen {
             ly += 10;
         }
         if (note != null) {
+            // Cut to the tile, so a narrow window doesn't spill it into the next one.
+            note = fit(note, w - 20);
             int nw = font.width(note) + 12;
             int ny = y + h - 18;
             round(g, x + (w - nw) / 2, ny, nw, 12, alpha(enabled ? GOLD : DIM, 0x24));
