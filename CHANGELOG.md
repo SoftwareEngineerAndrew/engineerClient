@@ -5,6 +5,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-22
+
 ### Added
 - Spectate Route button in the P3 Sim menu: a bot plays every class, yours too, and you watch your class's bot run your jobs as a spectator (F5 for third person). You're back in survival when Goldor dies or the run stops. Solo only.
 - Simon Says, i4 (Arrows Device) and Arrow Align solvers in the P3 Sim, the dungeon engine's worlds and on SS Practice's device, without needing Odin; settings in `/ads` (colours, box style, Block Wrong Clicks, aim positions).
