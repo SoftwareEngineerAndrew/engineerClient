@@ -10,13 +10,16 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -26,7 +29,7 @@ import javax.swing.WindowConstants;
  * The start-up question about e4mc, as its own small process (E4mcPreLaunch starts it, with
  * Minecraft's version, the mods folder, Rustclear's version, the mod to install ("e4mc" or "e4all")
  * and, when switching from e4mc to e4all, e4mc's jar as arguments). Drawn by hand in
- * Rustclear's colours: the dungeon-map emblem, gold RUSTCLEAR, a slate panel, flat buttons.
+ * ADS's colours: the ADS logo, gold ADS, a slate panel, flat buttons.
  * Answers with its exit code: [INSTALLED], [NOT_NOW] or [DONT_ASK]. Plain Java and Swing only.
  */
 public final class E4mcPrompt extends JPanel {
@@ -47,7 +50,16 @@ public final class E4mcPrompt extends JPanel {
     private static final Color ON_GOLD = new Color(0x1A1206);
     private static final Color GOOD = new Color(0x6BCB77);
     private static final Color BAD = new Color(0xE0675A);
-    private static final int[] EMBLEM = {0x5DBB4D, 0x8A5A2E, 0x8A5A2E, 0x8A5A2E, 0x8E4CC2, 0x8A5A2E, 0x8A5A2E, 0x8A5A2E, 0xC94A3F};
+    /** The ADS logo from the mod jar (the mod's icon), or null when it can't be read. */
+    private static final BufferedImage LOGO = readLogo();
+
+    private static BufferedImage readLogo() {
+        try (InputStream in = E4mcPrompt.class.getResourceAsStream("/assets/engineerclient/icon.png")) {
+            return in == null ? null : ImageIO.read(in);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     private enum Stage { ASK, INSTALLING, DONE, FAILED }
 
@@ -119,6 +131,9 @@ public final class E4mcPrompt extends JPanel {
                     System.exit(prompt.stage == Stage.DONE ? INSTALLED : NOT_NOW);
                 }
             });
+            if (LOGO != null) {
+                frame.setIconImage(LOGO);
+            }
             frame.setContentPane(prompt);
             frame.setResizable(false);
             frame.pack();
@@ -179,10 +194,10 @@ public final class E4mcPrompt extends JPanel {
         g.setColor(EDGE);
         g.drawRoundRect(px, py, pw - 1, ph - 1, 6, 6);
 
-        // Header: emblem, RUSTCLEAR, and what this is.
-        for (int i = 0; i < 9; i++) {
-            g.setColor(new Color(EMBLEM[i]));
-            g.fillRect(px + 16 + (i % 3) * 6, py + 15 + (i / 3) * 6, 4, 4);
+        // Header: the logo, ADS, and what this is.
+        if (LOGO != null) {
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.drawImage(LOGO, px + 14, py + 11, 22, 22, null);
         }
         Font bold = new Font(Font.SANS_SERIF, Font.BOLD, 15);
         Font body = new Font(Font.SANS_SERIF, Font.PLAIN, 13);

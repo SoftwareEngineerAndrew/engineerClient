@@ -12,7 +12,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 /**
  * How Rustclear draws a button outside its own screens (the title screen's): the slate panel of
  * the mod's GUIs, a gold edge and lift on hover, greyed out when inactive. [brand] buttons get the
- * dungeon-map emblem and gold lettering, as the Rustclear button does.
+ * ADS logo and gold lettering, as the ADS title button does.
  */
 public final class ButtonStyle {
     /** Hover progress per button, eased each frame. */
@@ -52,13 +52,9 @@ public final class ButtonStyle {
         }
         int textY = y + (h - 8) / 2;
         if (brand) {
-            // The dungeon-map emblem, then the label (ADS) centred in what is left.
-            int ex = x + 7;
-            int ey = y + (h - 8) / 2;
-            int[] emblem = {ENTRANCE, NORMAL, NORMAL, NORMAL, PUZZLE, NORMAL, NORMAL, NORMAL, BLOOD};
-            for (int i = 0; i < 9; i++) {
-                RustclearScreen.rect(g, ex + (i % 3) * 3, ey + (i / 3) * 3, 2, 2, emblem[i]);
-            }
+            // The ADS logo, then the label (ADS) centred.
+            int size = Math.max(8, h - 6);
+            RustclearScreen.logo(g, x + 4, y + (h - size) / 2, size);
             String text = label.toUpperCase(java.util.Locale.ROOT);
             g.text(font, text, x + (w - font.width(text)) / 2, textY, lerp(GOLD, 0xFFFFFFFF, t * 0.25f), true);
             return;

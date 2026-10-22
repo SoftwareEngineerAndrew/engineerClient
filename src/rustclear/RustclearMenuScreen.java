@@ -126,7 +126,10 @@ public final class RustclearMenuScreen extends RustclearScreen {
         rect(g, ex + cell / 2 - 1, ey + cell / 2 - 1 - pulse, 3, 3, 0xFFFFFFFF);
 
         int ty = y + mapW + 16;
-        g.text(font, "ADS", x + (w - font.width("ADS")) / 2, ty, GOLD, true);
+        // The logo beside the name, the pair centred.
+        int nameX = x + (w - font.width("ADS") - 13) / 2;
+        logo(g, nameX, ty - 2, 11);
+        g.text(font, "ADS", nameX + 13, ty, GOLD, true);
         String tag = "Advanced Dungeon Simulator";
         textCenter(g, fit(tag, w), x + w / 2, ty + 12, MUTED);
 

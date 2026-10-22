@@ -6,6 +6,7 @@
   "description": "An Odin addon for Hypixel SkyBlock dungeons: M7 phase-3 role rotation, leap-menu POV previews, ADS (Advanced Dungeon Simulator) and Party Finder stats.",
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
+  "icon": "assets/engineerclient/icon.png",
   "environment": "client",
   "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
   "mixins": ["engineerclient.mixins.json", "rustclear.mixins.json","engineerclient.odin.mixins.json", "engineerclient.devonian.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],

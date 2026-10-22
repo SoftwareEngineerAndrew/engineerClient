@@ -6,6 +6,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ## [Unreleased]
 
 ### Added
+- The ADS logo: the mod's icon (Mod Menu), the ADS title-screen button, the ADS menus' header and the e4mc install prompt.
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed

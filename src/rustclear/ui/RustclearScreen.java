@@ -11,7 +11,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.rustclear.mod.Online;
 import net.rustclear.mod.Protocol;
 import net.rustclear.mod.RustclearMod;
@@ -63,6 +65,14 @@ public abstract class RustclearScreen extends Screen {
     }
 
     // ---------------------------------------------------------------- primitives
+
+    /** The ADS logo (art/logo.svg, rendered at 128 px and filtered smooth by its .mcmeta). */
+    public static final Identifier LOGO = Identifier.fromNamespaceAndPath("engineerclient", "textures/gui/logo.png");
+
+    /** The ADS logo, [size] px square at (x, y). */
+    public static void logo(GuiGraphicsExtractor g, int x, int y, int size) {
+        g.blit(RenderPipelines.GUI_TEXTURED, LOGO, x, y, 0f, 0f, size, size, 128, 128, 128, 128);
+    }
 
     public static void rect(GuiGraphicsExtractor g, int x, int y, int w, int h, int c) {
         g.fill(x, y, x + w, y + h, c);
@@ -169,16 +179,11 @@ public abstract class RustclearScreen extends Screen {
     }
 
     /**
-     * The header: the 3x3 dungeon-map emblem, ADS in gold, [subtitle], and a badge on the
+     * The header: the ADS logo, ADS in gold, [subtitle], and a badge on the
      * right ([badge] in [badgeColor]; none when null). Ends with the rule under it at py + 22.
      */
     protected void header(GuiGraphicsExtractor g, String subtitle, String badge, int badgeColor) {
-        int ex = px + 9;
-        int ey = py + 7;
-        int[] emblem = {ENTRANCE, NORMAL, NORMAL, NORMAL, PUZZLE, NORMAL, NORMAL, NORMAL, BLOOD};
-        for (int i = 0; i < 9; i++) {
-            rect(g, ex + (i % 3) * 3, ey + (i / 3) * 3, 2, 2, emblem[i]);
-        }
+        logo(g, px + 7, py + 5, 12);
         g.text(font, "ADS", px + 22, py + 8, GOLD, true);
         text(g, subtitle, px + 22 + font.width("ADS") + 6, py + 8, MUTED);
         if (badge != null) {
@@ -698,6 +703,27 @@ public abstract class RustclearScreen extends Screen {
                 box(g, cx, cy, s, -6, -6, 13, 13, c);
                 cell(g, cx, cy, s, 0, -6, 1, 13, c);
                 cell(g, cx, cy, s, -6, 0, 13, 1, c);
+            }
+        },
+        /** A target, ringed with a dot in the middle: practice. */
+        TARGET {
+            @Override
+            void draw(GuiGraphicsExtractor g, int cx, int cy, int s, int c) {
+                box(g, cx, cy, s, -7, -7, 15, 15, c);
+                box(g, cx, cy, s, -4, -4, 9, 9, alpha(c, 0xB0));
+                cell(g, cx, cy, s, -1, -1, 3, 3, c);
+            }
+        },
+        /** A skull: a boss phase. */
+        SKULL {
+            @Override
+            void draw(GuiGraphicsExtractor g, int cx, int cy, int s, int c) {
+                cell(g, cx, cy, s, -6, -7, 13, 9, c);
+                cell(g, cx, cy, s, -4, 2, 9, 4, c);
+                cell(g, cx, cy, s, -4, -4, 3, 3, RAIL);
+                cell(g, cx, cy, s, 2, -4, 3, 3, RAIL);
+                cell(g, cx, cy, s, -2, 3, 1, 3, RAIL);
+                cell(g, cx, cy, s, 2, 3, 1, 3, RAIL);
             }
         };
 
