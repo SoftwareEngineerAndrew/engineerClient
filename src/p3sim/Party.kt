@@ -159,7 +159,7 @@ object Party {
         if (!planOn || botsFor !== ph) return
         // Mid-P3, a class nobody plays any more (a swap, someone leaving, the host's menu) has its bot back at once, on its
         // role's jobs; then whatever a removed bot had and no player does goes to the bots.
-        for (c in P3Plan.botOrder()) if (!Players.isPlayerClass(c) && botOf(c)?.entity == null) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
+        for (c in botOrder()) if (!Players.isPlayerClass(c) && botOf(c)?.entity == null) takeOver(ph, c, null, P3Plan.plan().jobsOf[c].orEmpty().toSet())
         adoptOrphans(ph)
     }
 
@@ -275,7 +275,7 @@ object Party {
      * its bot back at the next start.
      */
     fun bots(): List<Bot> {
-        val order = P3Plan.botOrder()
+        val order = botOrder()
         val want = order.filter { !Players.isPlayerClass(it) }
         if (bots.map { it.clazz } == want) return bots
         // Mid-P3 the bots' jobs and leaps are kept even when none has a body (Bots off: the plan still does their jobs).
@@ -303,7 +303,7 @@ object Party {
         // Its bot may be there already without a body (a full party's roster change makes one).
         val had = botOf(c)
         if (had?.entity != null) return
-        val order = P3Plan.botOrder()
+        val order = botOrder()
         val b = had ?: Bot(c, order.indexOf(c) + 1).also { bots += it; bots.sortBy { b -> order.indexOf(b.clazz) } }
         b.inSection = phase.section
         // A player's early enter it now owns: done if its section has begun (the player was on it), or there already if
@@ -338,6 +338,12 @@ object Party {
 
     fun bot(slot: Int) = bots().getOrNull(slot - 1)
     private fun botOf(c: DungeonClass?) = bots.firstOrNull { it.clazz == c }
+
+    /** [c]'s bot's body, if it has one (the one a route's watcher watches: [SpectateRoute]). */
+    fun entityOf(c: DungeonClass): Mannequin? = botOf(c)?.entity
+
+    /** The bots' classes in slot order: the leap menu's four, and yours 5th while you watch its bot play ([SpectateRoute]). */
+    private fun botOrder(): List<DungeonClass> = P3Plan.botOrder().let { if (SpectateRoute.active) it + P3Sim.ownClass else it }
 
     /** Bumped by every clear: anything queued before a restart is dropped. */
     private var generation = 0
@@ -787,7 +793,7 @@ object Party {
             // Off and straight back on (a step, a blink the wrong way): still on it.
             else if (youLeftN[into] >= 0 && d <= 3.0 && n - youLeftN[into] <= GhostPlayer.BACK) { youLeftN[into] = -1; GhostCapture.event("back", ee.owner!!.name, into) }
         }
-        val inCore = Sim.players().firstOrNull { GoldorPhase.CORE_BOX.contains(it.position()) }
+        val inCore = Sim.fighters().firstOrNull { GoldorPhase.CORE_BOX.contains(it.position()) }
         if (phase.section >= 5 && youInCoreN < 0 && inCore != null) {
             youInCoreN = n
             GhostCapture.event("core")
@@ -1115,7 +1121,9 @@ object Party {
                     if (at != null) leaps += Leap(b, at) {
                         // Back into the section: onto someone still working in it (else you).
                         bots.firstOrNull { it !== b && it.inSection == s && busy(it) }?.asTarget()
-                            ?: (Sim.players().firstOrNull { GoldorPhase.dtZone(it.position()) == s } ?: Sim.host)?.asTarget()
+                            ?: (Sim.fighters().firstOrNull { GoldorPhase.dtZone(it.position()) == s } ?: Sim.host?.takeIf { !SpectateRoute.watching(it) })?.asTarget()
+                            // Nobody playing (a route watched): onto a bot in it.
+                            ?: bots.firstOrNull { it !== b && it.inSection == s && it.entity != null }?.asTarget()
                     }
                 }
             }
@@ -1319,7 +1327,7 @@ object Party {
         for (into in s..(s + 1).coerceAtMost(5)) {
             val b = eeOf(into)?.takeIf { !it.byYou }?.let { botOf(it.owner) } ?: continue
             if (!b.hold || !eeArrived[into] || released[into]) continue
-            for (pl in Sim.players()) {
+            for (pl in Sim.fighters()) {
                 val c = Players.classOf(pl)
                 if (c !in youOn[into] && pl.position().distanceTo(b.pos) < 3.0) { youOn[into] += c; dbg("§a${pl.gameProfile.name} is on ${b.name}§7 (EE$into)") }
             }

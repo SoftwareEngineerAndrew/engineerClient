@@ -357,7 +357,7 @@ class Devices(val phase: GoldorPhase) {
         private fun rawOnPlate(): Boolean {
             botOn?.let { plateBy = it; return true }
             // A pressure plate: pressed while someone's box overlaps its block (feet within its lower quarter).
-            val p = Sim.players().firstOrNull { pl ->
+            val p = Sim.fighters().firstOrNull { pl ->
                 val b = pl.boundingBox
                 b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
             } ?: return false

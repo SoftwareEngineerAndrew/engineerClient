@@ -97,6 +97,8 @@ object GhostCapture {
         phase = null
         // A section practice has the others' jobs done for you: never a best.
         if (p.from != 1 || p.practice) return
+        // A route watched is the bots' run, not yours.
+        if (SpectateRoute.active) return
         val c = P3Sim.myClass ?: return
         rec = GhostRecording(c.name, P3Plan.skillName())
         phase = p

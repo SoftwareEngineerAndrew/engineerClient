@@ -135,6 +135,17 @@ class SimRestartScreen : RustclearScreen(Component.literal(P3Sim.FULL_NAME), nul
             SimActions.send("start", "what" to Fight.Start.P3.name)
         }
         tip(right, by, font.width("Restart P3") + 16, 17, "Starts P3 over from its beginning, everything reset (Stop: ends it).$party")
+        // Solo, with the bots shown: in a party everyone plays their own class.
+        val watch = !inParty && P3Sim.bots
+        right = button(g, mx, my, "Spectate Route", right - 4, by, Style.SECONDARY, if (!watch) null else Runnable {
+            mc.gui.setScreen(null)
+            SimActions.send("spectateRoute")
+        })
+        tip(right, by, font.width("Spectate Route") + 16, 17, when {
+            inParty -> "Solo only: in a party everyone plays their own class."
+            !P3Sim.bots -> "Needs the bots shown: Advanced > Bots."
+            else -> "Starts P3 with a bot for every class, yours too, and you watching yours play your jobs (F5: first or third person). You're back in survival when it ends (Goldor dead, Stop, Restart P3)."
+        })
         if (inParty) text(g, fit("Starts and stops are the party's.", right - x - 8), x, by + 5, Theme.DIM)
     }
 

@@ -160,6 +160,7 @@ object Fight {
         SimItems.resetShared()
         Players.clear()
         PartyServer.reset()
+        SpectateRoute.reset()
         phase = null
         BossBar.hide()
         Sim.clearEntities()
@@ -187,13 +188,19 @@ object Fight {
         Sim.forEachPlayer { SimItems.reset() }
         SimItems.resetShared()
         BossBar.hide()
+        // A route being watched ends with its run: the watcher back to playing.
+        SpectateRoute.stopped()
     }
 
     fun join(player: ServerPlayer) {
         // A party's joiner (P3Party): a class of their own (its bot gone), set up as the host is and put next to them;
         // the fight goes on as it is (the next start has them in it from the start).
+        // Saved mid-route (the world closed while they watched): out of spectator first.
+        SpectateRoute.joined(player)
         val host = SimServer.player
         if (host != null && host !== player) {
+            // The host's class is theirs to play again, a joiner's in the party now.
+            SpectateRoute.partyJoined()
             // Their game says hello next, with their class and settings (PartyServer.hello): set up again then.
             // No class until their game says which it wants (hello): a stand-in one would take a bot, or someone's pick.
             Sim.asPlayer(player) {
@@ -217,6 +224,7 @@ object Fight {
     fun leave(player: ServerPlayer) {
         // A crystal they carried goes back on its stand (else Maxor's side waits for it forever).
         (phase as? P1Maxor)?.playerLeft(player)
+        SpectateRoute.left(player)
         // Their ghost state goes (a pending revive with it), so a rejoin starts clean.
         Masks.leftOne(player)
         Players.forgetFiles(player)
@@ -359,6 +367,7 @@ object Fight {
         previous = phase
         phase = p
         p.t = 0
+        SpectateRoute.began(p)
         p.start()
     }
 
@@ -416,5 +425,7 @@ object Fight {
         if (p !is P4Necron) EngineerClient.safely("p3sim recorder") { Recorder.tick(serverTick) }
         // This tick's knockback, straight to the player in the burst's own tick (SimItems.push).
         SimItems.flushMotion()
+        // After the phase's tick: a body it made this tick has the watcher's camera at once.
+        EngineerClient.safely("p3sim spectate route") { SpectateRoute.tick() }
     }
 }
