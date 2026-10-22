@@ -207,7 +207,7 @@ object Fight {
         if (phase == null) {
             Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)
             later(20, "welcome") {
-                Sim.note("Welcome to ADS, the Advanced Dungeon Simulator. §fRight click the Nether Star§7 (or /ads) for the menu.")
+                Sim.note("Welcome to ADS, the Advanced Dungeon Simulator. §fRight click the Nether Star§7 (or /ads menu) for the menu.")
                 if (P3Sim.autoStart) start(Start.P3)
             }
         }

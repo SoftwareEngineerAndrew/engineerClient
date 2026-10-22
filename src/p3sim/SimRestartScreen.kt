@@ -12,7 +12,7 @@ import net.rustclear.mod.ui.Theme
 import java.util.Locale
 
 /**
- * The sim's main menu: Esc > ADS Menu, the SkyBlock Menu star (hotbar), `/ads` or the keybind. Drawn with the ADS
+ * The sim's main menu: Esc > ADS Menu, the SkyBlock Menu star (hotbar), `/ads menu` or the keybind. Drawn with the ADS
  * screens' own toolkit ([RustclearScreen]), so it reads as the rest of them.
  *
  * The rail on the left holds the tabs (Plan, Advanced, Settings, Teleport, Practice, Boss), each with a line of

@@ -215,7 +215,7 @@ class PracticeScreen(parent: Screen) : RustclearScreen(Component.literal("ADS pr
         var y = optionsY()
         val notes = listOf(
             "Your role, the section to start from, and spots to teleport to are in the P3 Sim's own menu:",
-            "Esc > ADS Menu, or /ads, once you're in.",
+            "Esc > ADS Menu, or /ads menu, once you're in.",
         )
         for (note in notes) for (line in wrap(note, w)) {
             text(g, line, x, y, Theme.MUTED)
