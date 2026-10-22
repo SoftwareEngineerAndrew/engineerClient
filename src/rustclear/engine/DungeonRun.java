@@ -349,6 +349,9 @@ public final class DungeonRun implements EngineRun {
         @Override
         public void defeated() {
             RunEnd.defeated(DungeonRun.this);
+            if (hooks != null) {
+                hooks.onDefeated(DungeonRun.this);
+            }
         }
 
         @Override
@@ -499,6 +502,24 @@ public final class DungeonRun implements EngineRun {
         int before = net.rustclear.mod.engine.boss.maxor.MaxorPhase.teleportBefore();
         schedule(before - 1, () -> bar.boss("Maxor", 1f));
         schedule(before, () -> bossFight.begin(new net.rustclear.mod.engine.boss.maxor.MaxorPhase()));
+    }
+
+    /**
+     * Boss practice: straight into [phase] with no clear or camp before it. The arena is finished
+     * now (if it isn't yet), the party goes to [at] facing [yaw] (null: they stay where they are),
+     * and the phase begins [delay] ticks later.
+     */
+    void beginBossPractice(net.rustclear.mod.engine.boss.BossPhase phase, net.minecraft.world.phys.Vec3 at, float yaw, int delay) {
+        enteredBoss = true;
+        BossArena.of(level).finishNow();
+        if (at != null) {
+            for (ServerPlayer p : level.players()) {
+                p.teleportTo(level, at.x, at.y, at.z, java.util.Set.of(), yaw, 0f, true);
+                p.resetFallDistance();
+            }
+        }
+        SimLog.event("boss_entry");
+        schedule(delay, () -> bossFight.begin(phase));
     }
 
     private String lastBossPhase;
