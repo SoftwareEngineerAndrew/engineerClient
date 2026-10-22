@@ -16,12 +16,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Before Minecraft opens its window: if e4mc (Rustclear's relay, an optional mod) isn't installed,
- * ask whether to install it. Install fetches it from Modrinth into the mods folder and then closes
- * the game, since mods only load at start-up ("press Play again"); Not now carries on; Don't ask
- * again carries on and remembers it in config/rustclear-e4mc.txt.
+ * Before Minecraft opens its window: ADS needs e4mc (its party relay), so if it isn't in the game it is
+ * installed at once, without asking: fetched from Modrinth into the instance's mods folder, then the game
+ * closes, since Fabric picks its mods before any mod code runs and a jar added now only loads on the next
+ * start ("press Play again"). Only if the download fails does the game start without it. Not in a
+ * development run (the dev mods folder isn't a player's).
  *
- * The question is a window of its own process (E4mcPrompt), as Fabric Loader does for its own
+ * The install shows in a window of its own process (E4mcPrompt), as Fabric Loader does for its own
  * error window: opening Swing inside Minecraft's process clashes with its window on macOS. Only
  * Minecraft's own classes are kept out of here, as nothing of the game is loaded yet.
  *
@@ -32,36 +33,34 @@ import org.slf4j.LoggerFactory;
  */
 public final class E4mcPreLaunch implements PreLaunchEntrypoint {
     private static final Logger LOGGER = LoggerFactory.getLogger("rustclear");
-    private static final String DONT_ASK = "rustclear-e4mc.txt";
-    private static final String DONT_ASK_SWITCH = "rustclear-e4all.txt";
 
     @Override
     public void onPreLaunch() {
-        if (GraphicsEnvironment.isHeadless()) {
+        if (GraphicsEnvironment.isHeadless() || FabricLoader.getInstance().isDevelopmentEnvironment()) {
             return;
         }
         if (kryptonLoaded() && e4mcLoaded() && !e4allLoaded()) {
             Path e4mc = e4mcJar();
             if (e4mc == null) {
                 LOGGER.warn("e4mc and Krypton together stop worlds from loading; remove one, or use e4all instead of e4mc");
-            } else if (!dontAsk(DONT_ASK_SWITCH)) {
-                prompt(e4mc, DONT_ASK_SWITCH);
+            } else {
+                install(e4mc);
             }
             return;
         }
-        if (!e4mcLoaded() && !dontAsk(DONT_ASK)) {
-            prompt(null, DONT_ASK);
+        if (!e4mcLoaded()) {
+            install(null);
         }
     }
 
-    /** Asks about installing [relayProject] (replacing e4mc's jar [replace], if given) and acts on the answer. */
-    private static void prompt(Path replace, String dontAskFile) {
+    /** Installs [relayProject] (replacing e4mc's jar [replace], if given), then closes the game so it loads next start. */
+    private static void install(Path replace) {
         String project = relayProject();
         int choice;
         try {
             choice = ask(project, replace);
         } catch (Exception e) {
-            LOGGER.warn("Couldn't ask about installing {}: {}", project, e.toString());
+            LOGGER.warn("Couldn't install {}: {}", project, e.toString());
             return;
         }
         switch (choice) {
@@ -71,13 +70,6 @@ public final class E4mcPreLaunch implements PreLaunchEntrypoint {
                 }
                 LOGGER.info("{} installed; closing so it loads on the next start", project);
                 System.exit(0);
-            }
-            case E4mcPrompt.DONT_ASK -> {
-                try {
-                    Files.writeString(configDir().resolve(dontAskFile), "ADS won't offer to install " + project + " at start-up. Delete this file to be asked again.\n");
-                } catch (Exception e) {
-                    LOGGER.warn("Couldn't remember the {} choice: {}", project, e.toString());
-                }
             }
             default -> {
             }
@@ -140,21 +132,13 @@ public final class E4mcPreLaunch implements PreLaunchEntrypoint {
             .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("26.3");
     }
 
-    private static Path configDir() {
-        return FabricLoader.getInstance().getConfigDir();
-    }
-
-    private static boolean dontAsk(String file) {
-        return Files.exists(configDir().resolve(file));
-    }
-
     private static String java() {
         return ProcessHandle.current().info().command().orElse("java");
     }
 
-    /** Runs E4mcPrompt as its own process with this game's Java and waits for the player's choice. */
+    /** Runs E4mcPrompt as its own process with this game's Java and waits for the install. */
     private static int ask(String project, Path replace) throws Exception {
-        String rustclear = FabricLoader.getInstance().getModContainer("rustclear")
+        String rustclear = FabricLoader.getInstance().getModContainer("engineerclient")
             .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("dev");
         List<String> command = new ArrayList<>(List.of(java(), "-cp", classpath(), E4mcPrompt.class.getName(),
             minecraftVersion(), FabricLoader.getInstance().getGameDir().resolve("mods").toString(), rustclear, project));
@@ -169,10 +153,10 @@ public final class E4mcPreLaunch implements PreLaunchEntrypoint {
         return process.exitValue();
     }
 
-    /** Rustclear's own classes and Gson's: all the prompt (and E4mcSwap) needs. */
+    /** ADS's own classes and Gson's: all the window (and E4mcSwap) needs. */
     private static String classpath() {
         Set<String> paths = new LinkedHashSet<>();
-        ModContainer mod = FabricLoader.getInstance().getModContainer("rustclear").orElseThrow();
+        ModContainer mod = FabricLoader.getInstance().getModContainer("engineerclient").orElseThrow();
         for (Path p : mod.getOrigin().getPaths()) {
             paths.add(p.toAbsolutePath().toString());
         }
