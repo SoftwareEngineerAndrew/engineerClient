@@ -6,6 +6,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ## [Unreleased]
 
 ### Added
+- Spectate Route button in the P3 Sim menu: a bot plays every class, yours too, and you watch your class's bot run your jobs as a spectator (F5 for third person). You're back in survival when Goldor dies or the run stops. Solo only.
 - Simon Says, i4 (Arrows Device) and Arrow Align solvers in the P3 Sim, the dungeon engine's worlds and on SS Practice's device, without needing Odin; settings in `/ads` (colours, box style, Block Wrong Clicks, aim positions).
 - A HUD editor for ADS's HUDs: drag to move, scroll to resize, right-click or Reset All to reset. Open it from Edit HUDs in `/ads` or with `/ads hud`; places are saved to `config/engineerclient/huds.json`.
 - Splits in the P3 Sim and the dungeon engine's worlds, without needing Odin: each F7/M7 split from Mort to the end in a Splits HUD and a Current Split HUD, with a Splits panel in `/ads`. Personal bests are kept in `config/engineerclient/splits.json`, apart from Odin's.
