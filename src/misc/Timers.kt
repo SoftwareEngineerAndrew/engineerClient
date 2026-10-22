@@ -1,5 +1,8 @@
 package com.engineerclient.misc
 
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.HudElement
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
@@ -29,10 +32,8 @@ import com.engineerclient.storm.StormCrush
  *  - Maxor Move: Maxor starts moving 85 ticks after his first line (80-87 in 38 recorded runs).
  *  - Crystal Spawn: after a laser hit (Maxor becoming damageable) the top crystals come back 40
  *    ticks later.
- *  - Storm: the next crush check (every 20 ticks from the phase starting, a tick before his first
- *    line) until he dies, and his Giga Lightning: it strikes at 520 (519-521 in 662 F7 and 371 M7
- *    runs since the boss update), 33 ticks after "I'd be happy to show you what that's like!", which
- *    sets it again if his first line was missed. His "ENERGY HEED MY CALL!" comes 29 ticks after it.
+ *  - (Storm's crush check and Giga Lightning countdowns are Coffee Client's Timers2.) His "ENERGY HEED MY
+ *    CALL!" comes 29 ticks after the strike; Purple Pad goes by it.
  *  - Purple Pad: to the pad read to stand on Purple's pillar pad for, so it comes down on him at the
  *    first check he can be crushed on. Pads are read on the 20-tick checks' eve (phase tick 19 mod
  *    20) and step their pillar 5 blocks over the next 17 ticks, and a read 41 or 61 ticks before a
@@ -41,12 +42,17 @@ import com.engineerclient.storm.StormCrush
  *    Hypixel's boss update: he is in Purple's zone 107-113 ticks after his lightning line, crushed on
  *    the first check from lightning + 109 (t 660): the reads at t 599 and t 619 (both crush, 97% and
  *    100% with him there). Gone once its pillar steps from one of them.
- *  - Necron: he takes the platform 60 ticks after "I'm afraid, your journey ends now."
+ *  - Section Time: when a terminal section is done, how long it took (TermInfo), for Section Time Seconds.
+ *  - Necron DPS: Necron can first be damaged 89 server ticks after his first line ("You went further than
+ *    any human before, congratulations."): he sidesteps off mid at 81-84 and can't be hit for about 7. In
+ *    recorded runs since the boss update the first damage numbers on him came 89-91 ticks in (75 of 447
+ *    M7 runs at 89-90, almost none earlier; F7 the same, 309 runs). His lines all keep a fixed script
+ *    (ARGH! at 270 in every run), so none of them marks it.
  */
 object Timers : Module(
     name = "Timers",
     category = Category.custom("ADS", 860, 10),
-    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Storm and Purple's pad, and Necron (Goldor's death tick: Odin's Goldor Hud).",
+    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Purple's pad, terminal section times, and Necron becoming damageable (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {
     // --- Clear Countdown ---------------------------------------------------------------------------
@@ -73,26 +79,15 @@ object Timers : Module(
     private val crystalHud by HUD("Crystal Spawn", "Counts down to the top crystals coming back after a laser hit, 2 s.", true, 10, 115, 1.5f) { example ->
         if (example) timer("Crystals", 25, CRYSTALS_BACK, true) else left(crystalsAt, CRYSTALS_BACK)?.let { timer("Crystals", it, CRYSTALS_BACK) } ?: (0 to 0)
     }
-    private val stormCheckHud by HUD("Storm Crush Check", "Counts down to Storm's next crush check, once a second through his phase.", true, 10, 130, 1.5f) { example ->
-        val start = stormStart
-        when {
-            example -> timer("Crush", 12, CRUSH_PERIOD, true)
-            start == null || stormDead -> 0 to 0
-            else -> timer("Crush", CRUSH_PERIOD - Math.floorMod(serverTicks - start, CRUSH_PERIOD), CRUSH_PERIOD)
-        }
-    }
-    private val stormLightningHud by HUD("Storm Lightning", "Counts down to Storm's Giga Lightning striking, 26 s into his phase.", true, 10, 145, 1.5f) { example ->
-        when {
-            example -> timer("Lightning", 300, LIGHTNING, true)
-            stormDead -> 0 to 0
-            else -> left(strikeAt, LIGHTNING)?.let { timer("Lightning", it, LIGHTNING) } ?: (0 to 0)
-        }
-    }
     private val purplePadHud by HUD("Purple Pad", "Storm: counts down to the pad read to be on Purple's pad for (t 599, then t 619 if that one's missed), so he's crushed the moment he gets there. Gone once the pillar comes down.", true, 10, 160, 1.5f) { example ->
         if (example) timer("Purple", 30, PAD_TOTAL, true) else padLeft(purpleReads())?.let { timer("Purple", it, PAD_TOTAL) } ?: (0 to 0)
     }
-    private val necronHud by HUD("Necron Drop", "Counts down to Necron taking the platform, 3 s after \"I'm afraid, your journey ends now.\"", true, 10, 175, 1.5f) { example ->
-        if (example) timer("Necron", 35, NECRON_DROP, true) else left(necronDropAt, NECRON_DROP)?.let { timer("Necron", it, NECRON_DROP) } ?: (0 to 0)
+    private val sectionHud: HudElement by HUD("Section Time", "When a terminal section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.", true, 420, 330, 5f) { example ->
+        draw(if (example) "§514.35" else com.engineerclient.practice.TermInfo.sectionTime(sectionSeconds) ?: return@HUD 0 to 0)
+    }
+    private val sectionSeconds: Double by NumberSetting("Section Time Seconds", 1.5, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionHud.enabled }
+    private val necronHud by HUD("Necron DPS", "Counts down to Necron first taking damage, 4.45 s after his first line (\"You went further than any human before, congratulations.\").", true, 10, 175, 1.5f) { example ->
+        if (example) timer("Necron", 35, NECRON_DPS, true) else left(necronDpsAt, NECRON_DPS)?.let { timer("Necron", it, NECRON_DPS) } ?: (0 to 0)
     }
 
     private const val CAMP_TICKS = 50 * 20
@@ -101,11 +96,8 @@ object Timers : Module(
     private const val EXIT_CORE_TEXT = 16
     private const val MAXOR_MOVE = 85
     private const val CRYSTALS_BACK = 40
-    private const val CRUSH_PERIOD = 20
-    /** Giga Lightning strikes this long into his phase, and this long after "I'd be happy to show you what that's like!". */
-    private const val LIGHTNING = 520
-    private const val STRIKE_AFTER_SHOW = 33
-    private const val NECRON_DROP = 60
+    /** Necron can first be damaged this long after his first line (the first hits land 89-91 in recorded runs). */
+    private const val NECRON_DPS = 89
     /** A pad read this long before a check brings its pillar down on him by then, the read 20 earlier too. */
     private const val PAD_LEAD = 41
     /** He's in Purple's zone for the first check this long after his lightning line. */
@@ -121,12 +113,15 @@ object Timers : Module(
     private const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
     private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
-    private const val STORM_SHOW = "[BOSS] Storm: I'd be happy to show you what that's like!"
     private val STORM_LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
     private val STORM_CRUSHED = setOf("[BOSS] Storm: Oof", "[BOSS] Storm: Ouch, that hurt!")
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private const val CORE_OPENING = "The Core entrance is opening!"
-    private const val NECRON_DROP_LINE = "[BOSS] Necron: I'm afraid, your journey ends now."
+    /** His first line: F7 and M7 alike since the boss update (the other, "Finally, I heard so much about you.", is rare). */
+    private val NECRON_START = setOf(
+        "[BOSS] Necron: You went further than any human before, congratulations.",
+        "[BOSS] Necron: Finally, I heard so much about you. The Eye likes you very much.",
+    )
 
     private var serverTicks = 0
     /** Server tick the Clear Countdown reaches 0 on; null when it isn't showing. */
@@ -147,12 +142,10 @@ object Timers : Module(
     private var stormStart: Int? = null
     private var stormDead = false
     private var lightningAt: Int? = null
-    /** When Giga Lightning strikes. */
-    private var strikeAt: Int? = null
     private var crushes = 0
     /** When Purple's pillar last stepped down. */
     private var purpleStepAt: Int? = null
-    private var necronDropAt: Int? = null
+    private var necronDpsAt: Int? = null
 
     private fun bossTicksLeft(): Int? {
         if (!enabled || DungeonUtils.inBoss) return null
@@ -220,15 +213,14 @@ object Timers : Module(
             message == MAXOR_START -> { inMaxor = true; maxorMoveAt = serverTicks + MAXOR_MOVE; maxorHealth = 0f }
             message == STORM_START -> {
                 inMaxor = false; crystalsAt = null; stormStart = serverTicks - 1; stormDead = false
-                lightningAt = null; crushes = 0; purpleStepAt = null; strikeAt = serverTicks - 1 + LIGHTNING
+                lightningAt = null; crushes = 0; purpleStepAt = null
             }
-            message == STORM_SHOW -> strikeAt = serverTicks + STRIKE_AFTER_SHOW
             message == STORM_DEAD -> stormDead = true
             message in STORM_LIGHTNING -> if (stormStart != null && lightningAt == null) lightningAt = serverTicks
             message in STORM_CRUSHED -> if (stormStart != null) crushes++
             message == GOLDOR_START -> stormStart = null
             message == CORE_OPENING -> coreOpen = true
-            message == NECRON_DROP_LINE -> necronDropAt = serverTicks + NECRON_DROP
+            message in NECRON_START -> if (necronDpsAt == null) necronDpsAt = serverTicks + NECRON_DPS
         }
     }
 
@@ -271,14 +263,14 @@ object Timers : Module(
     private fun reset() {
         bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
-        stormStart = null; stormDead = false; necronDropAt = null
-        lightningAt = null; crushes = 0; purpleStepAt = null; strikeAt = null
+        stormStart = null; stormDead = false; necronDpsAt = null
+        lightningAt = null; crushes = 0; purpleStepAt = null
     }
 
     init {
         clearHud.enabled = true; portalHud.enabled = true
-        maxorHud.enabled = true; crystalHud.enabled = true; stormCheckHud.enabled = true; stormLightningHud.enabled = true
-        necronHud.enabled = true; purplePadHud.enabled = true
+        maxorHud.enabled = true; crystalHud.enabled = true
+        necronHud.enabled = true; purplePadHud.enabled = true; sectionHud.enabled = true
 
         on<MessageEvent.Chat> { chat(message) }
 

@@ -57,6 +57,7 @@ object RandomStuff : Module(
      * render type still shows on the slots Odin hands back to vanilla.
      */
     private val hideTermNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-10 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
+    private val termCursorReset by BooleanSetting("Force Cursor Reset", false, desc = "Opening a terminal always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again. Terminals (and /termsim) only, no other menu.")
     private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
@@ -77,7 +78,7 @@ object RandomStuff : Module(
     //
     // It is the game's own box-blur post chain, so the cost is exactly what the pause menu costs
     // — six full-screen passes — and only for the frames a screen is actually open.
-    private val blurInGui by BooleanSetting("Blur In GUI", true, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
+    private val blurInGui by BooleanSetting("Blur In GUI", false, desc = "Blurs the world behind any open GUI — a chest, the Bazaar, your inventory. The HUD and the GUI itself stay sharp.")
     private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "How far the blur reaches, in pixels. 10 is as far as the game's own blur shader goes.").withDependency { blurInGui }
 
     // --- Enchantment glint ---------------------------------------------------------------------
@@ -289,6 +290,12 @@ object RandomStuff : Module(
 
     /** Hide Item Names: read by GuiItemNameMixin. */
     fun hidesItemNames(): Boolean = enabled && hideItemNames
+
+    /** Force Cursor Reset: whether it is on at all; read by Coffee Client's CursorReset. */
+    fun forcesTermCursorReset(): Boolean = enabled && termCursorReset
+
+    /** Force Cursor Reset: on, and a terminal is open now. */
+    fun termCursorResetNow(): Boolean = forcesTermCursorReset() && inTerminal()
 
     /** A live terminal (Odin tracks the open one) or a practice term sim. */
     private fun inTerminal(): Boolean =

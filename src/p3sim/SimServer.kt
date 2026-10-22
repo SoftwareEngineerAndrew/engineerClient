@@ -23,6 +23,9 @@ object SimServer {
     @Volatile var server: MinecraftServer? = null
         private set
 
+    /** A test driver's per-tick hook (end of every server tick), so it acts on exact ticks even while the server sprints. Null in play. */
+    @Volatile var devTick: ((MinecraftServer) -> Unit)? = null
+
     /** The sim's world: named p3sim and opened by the mod (or built by it before), never just any world of that name. */
     fun isSim(server: MinecraftServer?): Boolean =
         server is IntegratedServer && server.worldData.levelName == SimWorld.NAME &&
@@ -54,11 +57,12 @@ object SimServer {
 
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { s ->
-            if (isSim(s)) { server = s; EngineerClient.logger.info("[p3sim] sim server starting") }
+            if (isSim(s)) { server = s; EngineerClient.logger.info("[p3sim] sim server starting"); com.engineerclient.p3sim.run.EngineSpikes.mark("server-starting") }
             SimWorld.opening = false
         }
         ServerLifecycleEvents.SERVER_STARTED.register { s ->
             if (s !== server) return@register
+            com.engineerclient.p3sim.run.EngineSpikes.mark("server-started")
             EngineerClient.safely("p3sim started") {
                 rules(s)
                 commands(s)
@@ -69,15 +73,26 @@ object SimServer {
         ServerLifecycleEvents.SERVER_STOPPING.register { s ->
             if (s !== server) return@register
             // Saved as built: no fight entities, every changed block back.
+            // A run ends first (its modules clean up, the view distance pin is released), then the boss sim's own cleanup as before.
+            EngineerClient.safely("p3sim stopping run") { com.engineerclient.p3sim.run.Runs.stop() }
             EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
         }
         ServerLifecycleEvents.SERVER_STOPPED.register { s ->
             if (s !== server) return@register
             server = null
             Arena.unload()
+            // The regions this world used (a run's dungeon, the clipped arena) go with it; the next world's, registered already, stay.
+            com.engineerclient.p3sim.run.WorldRegions.worldStopped()
+            com.engineerclient.p3sim.run.ArenaRegion.reset()
+            com.engineerclient.p3sim.run.LagRuntime.reset()
         }
         ServerTickEvents.END_SERVER_TICK.register { s ->
-            if (s === server) EngineerClient.safely("p3sim tick") { Fight.tick(s) }
+            if (s === server) {
+                EngineerClient.safely("p3sim tick") { Fight.tick(s) }
+                devTick?.let { t -> EngineerClient.safely("ads dev tick") { t(s) } }
+                // The lag layer last: it stalls this thread (a freeze) once the tick's work is done.
+                EngineerClient.safely("ads lag") { com.engineerclient.p3sim.run.EngineModule.lagTick(s) }
+            }
         }
         ServerPlayConnectionEvents.JOIN.register { handler, _, s ->
             if (s === server) EngineerClient.safely("p3sim join") { Fight.join(handler.player) }
@@ -105,6 +120,49 @@ object SimServer {
                 1
             })
         )
+        // `/gfs <item> <amount>` (get from sacks): Ender Pearls and Superboom TNT, the two the clear takes from sacks.
+        s.commands.dispatcher.register(
+            Commands.literal("gfs").then(Commands.argument("what", StringArgumentType.greedyString()).executes { c ->
+                val p = c.source.player ?: return@executes 0
+                Sim.asPlayer(p) { getFromSacks(p, StringArgumentType.getString(c, "what")) }
+                1
+            })
+        )
+    }
+
+    /** The sack items `/gfs` hands out: the name it is asked by (lower case, words joined by _, a plural s dropped), its stack and its stack size. */
+    private val SACK_ITEMS = mapOf(
+        "ender_pearl" to Triple("Ender Pearl", { SimItems.PEARLS }, 16),
+        "superboom_tnt" to Triple("Superboom TNT", { SimItems.SUPERBOOM }, 64),
+        "superboom" to Triple("Superboom TNT", { SimItems.SUPERBOOM }, 64),
+    )
+
+    /**
+     * `/gfs ender_pearl 16`: tops up the stacks you have and fills empty slots with up to [what]'s amount (64 when none is given), as Hypixel's
+     * "Moved N Ender Pearl from your Sacks to your inventory." says (recorded). The sacks never run out.
+     */
+    private fun getFromSacks(p: net.minecraft.server.level.ServerPlayer, what: String) {
+        val words = what.trim().split(Regex("\\s+"))
+        val amount = words.last().toIntOrNull()
+        val key = (if (amount != null) words.dropLast(1) else words).joinToString("_").lowercase().removeSuffix("s")
+        val (name, make, max) = SACK_ITEMS[key] ?: run { Sim.chat("§cCouldn't find an item in your Sacks with that name!"); return }
+        val want = (amount ?: 64).coerceAtLeast(1)
+        val id = SimItems.idOf(make())
+        val inv = p.inventory
+        var left = want
+        for (i in 0 until 36) {
+            if (left == 0) break
+            val s = inv.getItem(i)
+            if (!s.isEmpty && SimItems.idOf(s) == id && s.count < max) { val n = minOf(left, max - s.count); s.grow(n); left -= n }
+        }
+        for (i in 0 until 36) {
+            if (left == 0) break
+            if (inv.getItem(i).isEmpty) { val n = minOf(left, max); inv.setItem(i, make().also { it.count = n }); left -= n }
+        }
+        val moved = want - left
+        if (moved == 0) { Sim.chat("§cYou don't have enough space in your inventory!"); return }
+        p.inventoryMenu.broadcastChanges()
+        Sim.chat("§aMoved §f$moved $name§a from your Sacks to your inventory.")
     }
 
     /** The world's rules: no time, weather, mobs, decay, fire, fall damage; things stay as built. */

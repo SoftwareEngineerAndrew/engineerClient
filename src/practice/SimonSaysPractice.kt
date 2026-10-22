@@ -76,7 +76,7 @@ object SimonSaysPractice : Module(
     private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after it (on a skip, after the first show), as in the game. Times are as at 1x.")
     private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
     private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
-    private val follow by BooleanSetting("Follow You", true, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
+    private val follow by BooleanSetting("Follow You", false, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
     private val size by NumberSetting("Size", 1.0, 1.0..3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
 
     /** Odin's Simon Says click sounds, always on: here and on the real device in P3. */

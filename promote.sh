@@ -23,7 +23,7 @@ GRADLE="$HOME/.cache/ec-build/gradle-9.6.1/bin/gradle"
 # Every Minecraft version with a release (tag release-<mc>, jar ADM-<mc>.jar), newest first.
 VERSIONS="26.3 26.2 26.1.2"
 # ADM's own version (the jar's mod version and the release notes); this dev build keeps its date+commit versions.
-export ADM_VERSION="1.0.1"
+export ADM_VERSION="1.0.6"
 
 [ -z "$(git -C "$PUB" status --porcelain)" ] || { echo "promote: $PUB has uncommitted changes" >&2; exit 1; }
 git -C "$PUB" fetch -q origin
@@ -95,14 +95,12 @@ const rules = [
   ['--title "EngineerClient for Minecraft $MC"', '--title "ADM for Minecraft $MC"', true],
   // Panel, prefix, commands, text.
   ['Category.custom("Engineer Client"', 'Category.custom("ADM"', true],
+  // ADM hides the beta's unfinished ADS buttons: the title screen's Run and GUI, the ADS menu's Full Run.
+  ['const val BETA = true', 'const val BETA = false', true],
   ['const val PREFIX = "§8[§6EC§8] "', 'const val PREFIX = "§8[§6ADM§8] "', true],
   ['Added by engineerClient.', 'Added by ADM.', true],
   ['desc = "engineerClient\'s solver', 'desc = "ADM\'s solver', false],
   ['"EC Dynamic Term Roles is OFF", "enable it in the Engineer Client panel"', '"ADM Dynamic Term Roles is OFF", "enable it in the ADM panel"', false],
-  ['ENGINEER_SPLITS("Engineer Splits")', 'ENGINEER_SPLITS("ADM Splits")', true],
-  ['desc = "Odin Splits, or Engineer Splits:', 'desc = "Odin Splits, or ADM Splits:', false],
-  ['desc = "Engineer Splits: ', 'desc = "ADM Splits: ', false],
-  ['Look: Engineer Splits', 'Look: ADM Splits', false],
   // Settings and folders (ConfigMigration moves an Engineer Client install's over on first start).
   ['private const val NAME = "engineerclient"', 'private const val NAME = "adm"', true],
   ['ModuleConfig("engineerclient.json")', 'ModuleConfig("adm.json")', true],

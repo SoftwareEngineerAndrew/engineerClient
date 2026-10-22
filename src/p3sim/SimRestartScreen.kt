@@ -146,6 +146,13 @@ class SimRestartScreen : RustclearScreen(Component.literal(P3Sim.FULL_NAME), nul
             !P3Sim.bots -> "Needs the bots shown: Advanced > Bots."
             else -> "Starts P3 with a bot for every class, yours too, and you watching yours play your jobs (F5: first or third person). You're back in survival when it ends (Goldor dead, Stop, Restart P3)."
         })
+        // In a full run's clear: back to where you entered the room, or to the run's start (savepoint restores, not a rebuilt world).
+        if (com.engineerclient.p3sim.run.ClientRun.inClear) {
+            right = button(g, mx, my, "Restart Room", right - 4, by, Style.SECONDARY) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart", "room") }
+            tip(right, by, font.width("Restart Room") + 16, 17, "Back to where you entered the room you stand in: the run's state, the clock and your gear as they were.")
+            right = button(g, mx, my, "Restart Run", right - 4, by, Style.SECONDARY) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart") }
+            tip(right, by, font.width("Restart Run") + 16, 17, "Back to the start of this run (the same dungeon, no rebuild).")
+        }
         if (inParty) text(g, fit("Starts and stops are the party's.", right - x - 8), x, by + 5, Theme.DIM)
     }
 
@@ -479,15 +486,15 @@ class SimRestartScreen : RustclearScreen(Component.literal(P3Sim.FULL_NAME), nul
         val part = if (p3Part) "P3" else "P1/P2"
         val saved = HotbarLayout.has(p3Part)
         val who = Roles.label(P3Sim.myClass)
-        row("$part hotbar", "Your hotbar, inventory, gear and pet for the $who on ${P3Plan.skillName()}.") {
-            act("Save", "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who on ${P3Plan.skillName()} ($part). " +
+        row("$part hotbar", "Your hotbar, inventory, gear and pet for the $who, on every skill.") {
+            act("Save", "Saves where your items are right now (hotbar and inventory), the slot you hold, what you wear and your pet, for the $who ($part), on every skill. " +
                 "Every start and restart lays it out (without one, your items stay as you left them).", on = saved) {
                 SimActions.send("hotbarSave", "p3" to p3Part)
             }
-            act("Default", "Forgets your saved $part hotbar for the $who on ${P3Plan.skillName()} and lays out the sim's default.", enabled = saved) {
+            act("Default", "Forgets your saved $part hotbar for the $who (every skill) and lays out the sim's default.", enabled = saved) {
                 SimActions.send("hotbarReset", "p3" to p3Part)
             }
-            act("Reset Items", "Your $part items, gear and pet back to your saved hotbar for the $who on ${P3Plan.skillName()} now (or the default, forgetting how you left them).") { SimActions.send("resetItems", "p3" to p3Part) }
+            act("Reset Items", "Your $part items, gear and pet back to your saved hotbar for the $who now (or the default, forgetting how you left them).") { SimActions.send("resetItems", "p3" to p3Part) }
         }
         row("Record", P3Sim.recordS.description) {
             flag("Record", P3Sim.record, P3Sim.recordS.description) { P3Sim.recordS.value = !P3Sim.record }
@@ -873,7 +880,8 @@ class SimRestartScreen : RustclearScreen(Component.literal(P3Sim.FULL_NAME), nul
         val SKILLS = listOf(
             Triple(0, "Normal PF", "The bots play at a normal party finder pace: P3 in about 34 s."),
             Triple(1, "Quality PF", "The bots play at a quality party finder pace: P3 in about 28 s."),
-            Triple(2, "Optimal PF", "The bots play at an optimal party finder pace: P3 in about 22 s."),
+            Triple(2, "Advanced PF", "The bots play at an advanced party finder pace: P3 in about 22 s."),
+            Triple(P3Plan.NEAR_OPTIMAL, "Near Optimal", "Nearly the fastest terms: the archer pre-does S3's device, the tank holds the high EE3, the mage holds by the core for S4 and recores after its 4th."),
             Triple(P3Plan.THEORETICAL, "Theoretical", "The fastest terms, in theory: a far EE2, a high EE3, an EE4 by the core."),
         )
 

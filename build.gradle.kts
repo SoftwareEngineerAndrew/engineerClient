@@ -33,6 +33,15 @@ sourceSets.test {
     resources.setSrcDirs(listOf("test/resources"))
 }
 
+// Headless tests in test/ (same flat layout as src/), fixtures in test/resources/. They cover the pure parts of the ADS full run
+// (src/p3sim/run and src/p3sim/pack, and each module's pure logic): no Minecraft world, no Odin. Fixtures are synthetic;
+// never put recorded data in them (the repo is public). `gradle build` runs them.
+sourceSets.test {
+    java.setSrcDirs(listOf("test"))
+    kotlin.setSrcDirs(listOf("test"))
+    resources.setSrcDirs(listOf("test/resources"))
+}
+
 repositories {
     mavenCentral()
     maven("https://api.modrinth.com/maven") { content { includeGroup("maven.modrinth") } }
@@ -63,17 +72,14 @@ dependencies {
     // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
     compileOnly("maven.modrinth:devonian:k8Mog4wx")
 
-    // Rustclear engine unit tests (stat math, tooltips, terminals).
+    // Unit tests: Rustclear's engine (stat math, tooltips, terminals) and the full run's pure logic.
+    testImplementation(kotlin("test"))
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks {
-    test {
-        useJUnitPlatform()
-    }
-
     processResources {
         // The version is expanded into fabric.mod.json: without it as an input, a version bump alone
         // leaves the processed resources "up to date" and the jar keeps the old version.
@@ -86,6 +92,26 @@ tasks {
     compileKotlin {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_25
+        }
+    }
+
+    test {
+        useJUnitPlatform()
+        // Test classes run in parallel JVMs (one class at a time in each: the pack tests share global state, so not threads in one JVM).
+        // A serial run was 30 s of test time; the box is shared, so the forks are few and their heaps capped.
+        maxParallelForks = (Runtime.getRuntime().availableProcessors() / 4).coerceIn(1, 6)
+        maxHeapSize = "1g"
+        // The optional pack checks (SamplePackTest, RealPackTest) read these folders; without them as inputs a green run would be
+        // reused from the cache when only the packs or the variable changed. Both are skipped when the variable is not set.
+        for (name in listOf("ADS_SAMPLE_PACKS", "ADS_REAL_PACKS", "ADS_BLOOD_FIGHTS")) {
+            inputs.property(name, providers.environmentVariable(name).orElse(""))
+            providers.environmentVariable(name).orNull?.let { dir -> file(dir).takeIf { it.isDirectory }?.let { inputs.dir(it) } }
+        }
+        inputs.property("adsRealReport", providers.environmentVariable("ADS_REAL_REPORT").orElse(""))
+        testLogging {
+            events("failed", "skipped")
+            showStandardStreams = false
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         }
     }
 
