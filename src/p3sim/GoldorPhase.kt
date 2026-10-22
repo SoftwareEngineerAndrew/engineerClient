@@ -222,7 +222,7 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         if (n == -1) goldor.tick(this)   // he moves from n=-1
         if (n < 0) return
         devices.tick()
-        Sim.forEachPlayer { innerChamber(it) }
+        Sim.forEachPlayer { if (!SpectateRoute.watching(it)) innerChamber(it) }
         tauntAt.remove(n)?.let { if (section <= 4) say(it) }
         dialogue()
         // Stand names refresh on a 20-tick grid.
@@ -507,14 +507,16 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
         if (from != 5) Stats.section(4, n - sectionStart[4])
         // Stop After Terms: the run ends here, as the menu's Stop (not in a section practice).
-        if (P3Sim.termsOnly && !practice && from != 5) Fight.later(1, "stop after terms") { Sim.note("Terms done: stopped §7(Stop After Terms)."); Fight.end() }
+        if (P3Sim.termsOnly && !practice && from != 5) Fight.later(1, "stop after terms") { Sim.note("Terms done: stopped §7(Stop After Terms)."); if (SpectateRoute.active) SpectateRoute.finished("§aRoute done§7.") else Fight.end() }
         if (!practice) Blocks.play("core", delay = 1)
         Stats.p3(n)
     }
 
     /** True when everyone (the players and the bots) is in the core. */
     private fun everyoneIn(): Boolean {
-        val ps = Sim.players()
+        // One watching the route isn't in it (they're wherever their class's bot is).
+        val ps = Sim.fighters()
+        if (ps.isEmpty() && SpectateRoute.active) return Party.allIn(CORE_BOX)
         // A ghost (dead, waiting for a revive) isn't waited for.
         if (ps.isEmpty() || ps.any { !Sim.asPlayer(it) { Masks.ghost } && !CORE_BOX.contains(Fight.seenPos(it)) }) return false
         return Party.allIn(CORE_BOX)
@@ -566,6 +568,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
             // Stopping here, the run's recording ends here too (else it grows until the next start).
             // Stop After Goldor: the run ends here, as the menu's Stop.
             if (P3Sim.p3Only) { Fight.later(1, "stop after goldor") { Sim.note("Goldor done: stopped §7(Stop After Goldor)."); Fight.end() }; return }
+            // A route watched ends here too (it's P3's), not dropping its watcher into Necron's start.
+            if (SpectateRoute.active) { Fight.later(1, "spectate route done") { SpectateRoute.finished("§aRoute done§7: Goldor's dead.") }; return }
             handOff = true
         }
     }
