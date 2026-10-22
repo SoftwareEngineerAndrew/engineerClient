@@ -1,6 +1,7 @@
 package net.rustclear.mod.engine;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -1144,7 +1145,33 @@ public final class EngineServer {
 
         // /practice <room> [door] [secrets] (practice.rs; door and secrets optional here, defaulting
         // to a random door and all the room's secrets). /practice off goes back to normal dungeons.
+        // The ADS Practice page's modes too: clear [seed], rush [seed], camp, boss <phase>, and seed.
         s.getCommands().getDispatcher().register(Commands.literal("practice")
+            .then(Commands.literal("clear")
+                .executes(c -> sessionCommand(s, c, PracticeSpec.fullClear(practiceFloor(), null)))
+                .then(RequiredArgumentBuilder.<CommandSourceStack, Long>argument("seed", LongArgumentType.longArg())
+                    .executes(c -> sessionCommand(s, c, PracticeSpec.fullClear(practiceFloor(), LongArgumentType.getLong(c, "seed"))))))
+            .then(Commands.literal("rush")
+                .executes(c -> sessionCommand(s, c, PracticeSpec.bloodRush(practiceFloor(), null)))
+                .then(RequiredArgumentBuilder.<CommandSourceStack, Long>argument("seed", LongArgumentType.longArg())
+                    .executes(c -> sessionCommand(s, c, PracticeSpec.bloodRush(practiceFloor(), LongArgumentType.getLong(c, "seed"))))))
+            .then(Commands.literal("camp").executes(c -> sessionCommand(s, c, PracticeSpec.bloodCamp(practiceFloor()))))
+            .then(Commands.literal("boss")
+                .then(RequiredArgumentBuilder.<CommandSourceStack, String>argument("phase", StringArgumentType.word())
+                    .suggests((c, b) -> suggest(BOSS_PHASES, b))
+                    .executes(c -> sessionCommand(s, c, PracticeSpec.boss(practiceFloor(), StringArgumentType.getString(c, "phase"))))))
+            .then(Commands.literal("seed").executes(c -> {
+                Long seed = practice != null && practice.seed() != null ? practice.seed() : lastSeed;
+                if (seed == null) {
+                    c.getSource().sendSystemMessage(Component.literal("§cNo dungeon has been planned yet."));
+                    return 0;
+                }
+                String value = String.valueOf(seed);
+                c.getSource().sendSystemMessage(EngineItems.styled("§7Seed: ").append(EngineItems.styled("§e" + value)
+                    .withStyle(st -> st.withClickEvent(new net.minecraft.network.chat.ClickEvent.CopyToClipboard(value))
+                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(EngineItems.styled("§eClick to copy the seed"))))));
+                return 1;
+            }))
             .then(Commands.literal("off").executes(c -> {
                 try {
                     newDungeon(s);
@@ -1164,6 +1191,29 @@ public final class EngineServer {
                     .then(RequiredArgumentBuilder.<CommandSourceStack, Integer>argument("secrets", IntegerArgumentType.integer(1, 255))
                         .executes(c -> practiceCommand(s, c, StringArgumentType.getString(c, "door"),
                             IntegerArgumentType.getInteger(c, "secrets")))))));
+    }
+
+    /** /practice boss's phases (PracticeSpec.phase). */
+    private static final List<String> BOSS_PHASES = List.of("p1", "p2", "p4", "p5");
+
+    /** The floor a /practice mode command practises on: the session's, else the world's. */
+    private static Floor practiceFloor() {
+        return practice != null ? practice.spec.floor() : settings.floorOrDefault();
+    }
+
+    /** /practice clear, rush, camp and boss: the party's dungeon set up for [spec] (the leader only). */
+    private static int sessionCommand(MinecraftServer s, CommandContext<CommandSourceStack> c, PracticeSpec spec) {
+        if (c.getSource().getPlayer() != null && !isLeader(c.getSource().getPlayer())) {
+            c.getSource().sendSystemMessage(Component.literal("§cOnly the party leader can start practice."));
+            return 0;
+        }
+        if (spec.kind() == PracticeSpec.Kind.BOSS && !BOSS_PHASES.contains(spec.phase().toLowerCase(Locale.ROOT))) {
+            // Caught here, so a typo doesn't swap the dungeon for a normal one.
+            c.getSource().sendSystemMessage(Component.literal("§cUnknown boss phase '" + spec.phase() + "': p1, p2, p4 or p5."));
+            return 0;
+        }
+        startPractice(s, spec);
+        return 1;
     }
 
     private static int newDungeonCommand(MinecraftServer s, CommandContext<CommandSourceStack> c) {
