@@ -22,6 +22,8 @@
     "ShortbowSimMixin",
     "QuiverSimMixin",
     "PressurePlateSimMixin",
+    "AdsTrapsQuietHookMixin",
+    "AdsTrapsQuietDispenserMixin",
     "LastBreathSimMixin",
     "SimPartyLanMixin",
     "ArcherDropSimMixin",
@@ -53,6 +55,7 @@
     "P3SimWorldMixin",
     "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
+    "SimMoveGuardMixin",
     "SimActorMixin",
     "SpectateRouteSneakMixin",
     "ScoreboardSidebarMixin",
@@ -66,7 +69,19 @@
     "TerminalSolverGuiScaleMixin",
     "TerminalSolverMenuMixin",
     "TerminalSolverOpenMixin",
-    "TerminalSolverScreenMixin"
+    "TerminalSolverScreenMixin",
+    "AdsEngineChunkPaceMixin",
+    "AdsBotsBodyMixin",
+    "AdsEngineNoSaveMixin",
+    "AdsEngineNoChunkFlushMixin",
+    "AdsEngineLeaveScreenMixin",
+    "AdsReplayClientMixin",
+    "AdsReplayMouseMixin",
+    "AdsReplayKeysMixin",
+    "AdsReplaySendMixin",
+    "AdsReplayKickMixin",
+    "AdsReplayChatMixin",
+    "ServerTeleportAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -108,6 +108,10 @@
    "action": "block"
   },
   {
+   "regex": "^Your Explosive Shot hit \\d[\\d,.]* enem(?:y|ies) for (?:[1-9]\\d{0,2}(?:,\\d{3}){3,}|[1-9]\\d{9,})(?:\\.\\d+)? damage",
+   "action": "show"
+  },
+  {
    "regex": "^Your [\\w ]+ hit \\d[\\d,.]* enem(?:y|ies)(?: for \\d[\\d,.]* damage\\.)?!?",
    "action": "block"
   },

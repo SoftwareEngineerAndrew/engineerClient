@@ -37,6 +37,9 @@ object OdinSimBridge {
             return
         }
         bridged = true
+        // The clear of a full run: Odin is left to derive the dungeon itself (see [clearBridge]).
+        if (com.engineerclient.p3sim.run.ClientRun.bridgeAsClear) { clearBridge(); return }
+        inClearBridge = false
         val me = mc.player?.name?.string ?: return
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7
@@ -64,10 +67,41 @@ object OdinSimBridge {
         }
     }
 
+    /** The bridge is in its clear mode (the stage is COUNTDOWN, CLEAR or BLOOD), so the switch back to the boss rewrites everything it left alone. */
+    private var inClearBridge = false
+
+    /**
+     * During the countdown, the clear and the blood room of a full run the bridge does NOT force "in boss": Odin's room scan, map scan and
+     * room-enter events switch themselves off while `inBoss` is set. It sets the floor once (Odin also reads it from the sidebar the server sends),
+     * puts the area back to SinglePlayer, which Odin treats as every area (setting Dungeon would lose that and leave Odin waiting for a location
+     * event that never comes), lets Odin work out inBoss from where the player stands (F7: x and z beyond -7 is the arena), and stops writing the
+     * party: Odin derives it from the tab list the server sends, and two writers would fight. In the boss stages the bridge is what it always was.
+     */
+    private fun clearBridge() {
+        if (!inClearBridge) {
+            inClearBridge = true
+            setArea(Island.SinglePlayer)
+            DungeonListener.inBoss = false
+            // What the bridge wrote for the boss practice goes; Odin's tab parser fills the party in again.
+            DungeonListener.dungeonTeammates = arrayListOf()
+            DungeonListener.dungeonTeammatesNoSelf = emptyList()
+            DungeonListener.leapTeammates = emptyList()
+            teamClass = -1; roster = ""
+        }
+        if (DungeonListener.floor == null) DungeonListener.floor = Floor.F7
+    }
+
+    /** At join, before the first chunk packet: Odin scans a room once, when its centre chunk loads, so it must already believe it is in F7. */
+    fun joinArea() {
+        setArea(Island.Dungeon)
+        DungeonListener.floor = Floor.F7
+    }
+
     private var teamClass = -1
     private var roster = ""
 
     private fun unbridge() {
+        inClearBridge = false
         teamClass = -1
         DungeonListener.floor = null
         DungeonListener.inBoss = false
@@ -85,7 +119,9 @@ object OdinSimBridge {
         val areaField = areaField ?: return
         val skyblockField = skyblockField ?: return
         if (LocationUtils.currentArea != area) areaField.set(null, area)
-        if (skyblockField.getBoolean(null) != (area == Island.Dungeon)) skyblockField.setBoolean(null, area == Island.Dungeon)
+        // SinglePlayer (the clear of a full run) counts as SkyBlock too: it is the dungeon as far as Odin's gates go.
+        val skyblock = area == Island.Dungeon || area == Island.SinglePlayer
+        if (skyblockField.getBoolean(null) != skyblock) skyblockField.setBoolean(null, skyblock)
     }
 
     // ------------------------------------------------------------------ Hide Players

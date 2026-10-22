@@ -49,6 +49,9 @@ object Fight {
     var serverTick = 0
         private set
 
+    /** Where the ping ids start counting down from (recorded: about -700, varying per login). */
+    private val PING_BASE = 698 + kotlin.random.Random.nextInt(100)
+
     /** A queued action, and whose it is ([Sim.asPlayer]: a party player's click stays theirs when it lands). */
     private class Later(val at: Int, val what: String, val epoch: Int, val run: () -> Unit) {
         val actor = Sim.acting
@@ -149,6 +152,7 @@ object Fight {
     fun reset(server: MinecraftServer) {
         // A new sim: nobody's timers from the last one (they'd sit far ahead of this one's ticks).
         PerPlayer.clearAll()
+        com.engineerclient.p3sim.run.LagRuntime.reset()
         serverTick = 0
         epoch++
         later.clear()
@@ -193,11 +197,14 @@ object Fight {
     }
 
     fun join(player: ServerPlayer) {
+        // Hypixel has no advancements: the blaze rod in the hotbar would pop "Into Fire" up at the first tick. Nothing listens for a criterion any more.
+        EngineerClient.safely("ads no advancements") { player.advancements.clearTriggers() }
         // A party's joiner (P3Party): a class of their own (its bot gone), set up as the host is and put next to them;
         // the fight goes on as it is (the next start has them in it from the start).
         // Saved mid-route (the world closed while they watched): out of spectator first.
         SpectateRoute.joined(player)
         val host = SimServer.player
+        if (host === player) com.engineerclient.p3sim.run.EngineSpikes.joined(player)
         if (host != null && host !== player) {
             // The host's class is theirs to play again, a joiner's in the party now.
             SpectateRoute.partyJoined()
@@ -208,8 +215,34 @@ object Fight {
                 setup(player)
                 Sim.tp(player, host.x, host.y, host.z, host.yRot, host.xRot)
             }
+            // In a full run they join the party (a record, a place on the leap list) as well.
+            com.engineerclient.p3sim.run.Runs.playerJoined(player)
             return
         }
+        // The world was opened for a full run: it starts now (instead of the lobby), see com.engineerclient.p3sim.run.Runs.
+        if (com.engineerclient.p3sim.run.RunLauncher.pending != null) {
+            Sim.asPlayer(player) { startPendingRun(player, RUN_START_WAIT) }
+            return
+        }
+        lobby(player)
+    }
+
+    /** Ticks a full run waits for its host to be in the server's player list (JOIN fires before they are). */
+    private const val RUN_START_WAIT = 40
+
+    /**
+     * Starts the full run the world was opened for, once [player] is in the player list: every run system reads `Sim.players()` when
+     * the run begins, and at JOIN the joining player is not in it yet. Falls back to the lobby if the run cannot start.
+     */
+    private fun startPendingRun(player: ServerPlayer, triesLeft: Int): Unit = later(1, "run start") {
+        val pending = com.engineerclient.p3sim.run.RunLauncher.pending ?: return@later
+        if (Sim.players().none { it === player } && triesLeft > 0) { startPendingRun(player, triesLeft - 1); return@later }
+        val res = com.engineerclient.p3sim.run.Runs.start(pending)
+        if (res is com.engineerclient.p3sim.run.Runs.StartResult.Failed) { Sim.note(res.message); lobby(player) }
+    }
+
+    /** The boss practice's arrival: set up, at the lobby spot, with the welcome line. */
+    private fun lobby(player: ServerPlayer) {
         setup(player)
         if (phase == null) {
             Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)
@@ -229,6 +262,7 @@ object Fight {
         Masks.leftOne(player)
         Players.forgetFiles(player)
         val joiner = !Sim.isHost(player)
+        if (joiner) com.engineerclient.p3sim.run.Runs.playerLeft(player)
         val c = Players.classOf(player)
         val theirs = Players.jobsOf(player)
         val at = player.position()
@@ -240,8 +274,11 @@ object Fight {
         if (!Sim.isHost(player)) Sim.everyone { Sim.note("§e${player.gameProfile.name}§7 left the party.") }
     }
 
-    /** Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. */
-    fun setup(player: ServerPlayer) = Sim.asPlayer(player) {
+    /**
+     * Game mode, Hypixel speed, no knockback, no hunger, the boss hotbar. [giveHotbar] false leaves the inventory as it is (a full run
+     * enters the boss with the gear the player cleared with; the hotbar is the run's from its start, ARCHITECTURE 14).
+     */
+    fun setup(player: ServerPlayer, giveHotbar: Boolean = true) = Sim.asPlayer(player) {
         // Hypixel: SURVIVAL. Blocks stay whole through Sim.guardBlocks + DungeonbreakerSimMixin.
         if (player.gameMode() != GameType.CREATIVE) player.setGameMode(GameType.SURVIVAL)
         Sim.guardBlocks()
@@ -257,11 +294,11 @@ object Fight {
         player.absorptionAmount = 16f
         player.removeEffect(MobEffects.SATURATION)
         // Invulnerable players are never hungry or hurt; the effects are Hypixel's (night vision 1, or with haste 0 + mining fatigue 255).
-        // As sent on main: night vision amplifier 1 with flags 7 (ambient, particles, icon); haste and mining fatigue flags 3 (no icon).
-        player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, true))
+        // As sent on main: night vision amplifier 1, ambient and visible but with no icon (all 88 recorded runs); haste and mining fatigue flags 3 (no icon).
+        player.addEffect(MobEffectInstance(MobEffects.NIGHT_VISION, -1, 1, true, true, false))
         player.foodData.setFoodLevel(20); player.foodData.setSaturation(20f)
         // P1/P2's hotbar mid-run there (a joiner arriving), else P3's.
-        SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm, start = true)
+        if (giveHotbar) SimItems.giveHotbar(player, p3 = phase !is P1Maxor && phase !is P2Storm, start = true)
         // Nothing left of a ghost (a rejoin keeps the saved effects and flight).
         if (player.gameMode() != GameType.CREATIVE) {
             player.removeEffect(MobEffects.INVISIBILITY)
@@ -301,8 +338,19 @@ object Fight {
     /** Starts [what] from its beginning (stopping whatever ran). [practice]: a section practice's start ([Practice]); any other start ends practice mode. */
     fun start(what: Start, practice: Boolean = false) = Sim.asPlayer(null) { startAll(what, practice) }
 
-    private fun startAll(what: Start, practice: Boolean) {
+    /**
+     * The boss of a full run ([com.engineerclient.p3sim.run.Run.beginBoss]): P1 starts as a menu start does, but the dungeon stays
+     * standing (the arena was never touched, so nothing is restored or compared), the gear is the one the player cleared with unless
+     * [options] say otherwise, Maxor's first line follows the jump by [com.engineerclient.p3sim.run.BossEntryOptions.firstLineDelayTicks],
+     * and the run's time ([Stats.runStart]) counts from [t0Tick].
+     */
+    fun startRunBoss(options: com.engineerclient.p3sim.run.BossEntryOptions, t0Tick: Int?) =
+        Sim.asPlayer(null) { startAll(Start.P1, false, options, t0Tick) }
+
+    private fun startAll(what: Start, practice: Boolean, run: com.engineerclient.p3sim.run.BossEntryOptions? = null, runT0: Int? = null) {
         if (Sim.players().isEmpty()) return
+        // A start from the menu ends a full run that is on (its dungeon stays standing in the world); the run's own boss start is [run].
+        if (run == null) com.engineerclient.p3sim.run.Runs.stop()
         if (!practice) Practice.exit()
         lastStart = what
         stop()
@@ -312,14 +360,15 @@ object Fight {
         Sim.clearEntities()
         // The bots too: a start that spawns none (P2, P4 with Party Bots off) must not see the last run's.
         Party.clear()
-        Blocks.restoreAll()
+        // A full run's arena was never touched: nothing to put back (and no 6.5 million cells to compare in the entry tick).
+        if (run == null) Blocks.restoreAll()
         // The world as the phases before this one leave it; the 2nd and 3rd devices as before terms (not blank till Goldor's line).
         Blocks.prepare(what)
         if (what != Start.P4) Devices.showIdle()
         resetI4Solver()
         SimItems.rebreak()
         Sim.forEachPlayer { pl ->
-            setup(pl)
+            setup(pl, giveHotbar = run == null || run.giveHotbar)
             // Black Cat At Start: every start (and restart) with Black Cat out, else the pet you had; the Pet Rod or a Phoenix proc swaps it.
             if (P3Sim.blackCatAtStart && P3Sim.phoenix) { P3Sim.setPhoenix(false); applySpeed(pl) }
             Bows.start()
@@ -327,7 +376,7 @@ object Fight {
         }
         Masks.reset()
         refreshPhase = if (kotlin.random.Random.nextInt(36) < 21) 18 else 17
-        Stats.runStart = if (what == Start.P1) serverTick else -1
+        Stats.runStart = if (what == Start.P1) (runT0 ?: serverTick) else -1
         previous = null
         // Our splits: a fresh run from this phase, the ones before it at your Pace times. Queued on
         // the client before any of this fight's lines can reach it (it starts Odin's run too).
@@ -346,7 +395,7 @@ object Fight {
         Recorder.begin(what.label)
         // No "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
         val p: Phase = when (what) {
-            Start.P1 -> P1Maxor()
+            Start.P1 -> P1Maxor(run)
             Start.P2 -> P2Storm()
             // From Storm's death: 3.1 s to Goldor's line, as in the game since the boss update.
             Start.P3 -> StormEnd()
@@ -373,6 +422,7 @@ object Fight {
 
     /** Ends the fight (the menu's Stop): everything back to how it was built. */
     fun end() {
+        com.engineerclient.p3sim.run.Runs.stop()
         Practice.exit()
         stop()
         Sim.clearEntities()
@@ -391,7 +441,10 @@ object Fight {
         serverTick++
         // Hypixel pings every client each server tick; Odin (and this mod) count those as server
         // ticks: Simon Says, terminal first-click protection, splits all run on them.
-        server.playerList.players.forEach { it.connection.send(ClientboundPingPacket(serverTick)) }
+        // Hypixel's ids count down from about -700 (never 0, which Odin ignores).
+        server.playerList.players.forEach { it.connection.send(ClientboundPingPacket(-(PING_BASE + serverTick))) }
+        // The party keeps its food full all run (the world is on normal difficulty, and vanilla hunger would end sprinting at food 6; Hypixel's is always 20).
+        server.playerList.players.forEach { p -> if (p.foodData.foodLevel != 20) { p.foodData.setFoodLevel(20); p.foodData.setSaturation(5f) } }
         if (later.isNotEmpty()) {
             val due = later.filter { it.at <= serverTick }
             later.removeAll(due.toSet())
@@ -409,6 +462,8 @@ object Fight {
             h.addLast(now to pl.position())
             while (h.size > 40) h.removeFirst()
         }
+        // The full run (none in the boss practice): the engine's module first, then every other, ahead of the phase below.
+        EngineerClient.safely("ads run") { com.engineerclient.p3sim.run.Runs.tick(serverTick) }
         EngineerClient.safely("p3sim party") { PartyServer.tick() }
         // Each on its own: one throwing must not stop the phase's tick (the fight would freeze).
         EngineerClient.safely("p3sim blocks") { Blocks.tick() }

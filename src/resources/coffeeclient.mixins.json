@@ -7,6 +7,7 @@
   "client": [
     "CameraOffsetMixin",
     "CursorResetMixin",
+    "FovRangeMixin",
     "OldBlockingMixin",
     "GuiSidebarInvoker",
     "LeverClickMixin",

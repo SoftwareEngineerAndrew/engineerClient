@@ -11,11 +11,11 @@
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",
     "LeapMenuRenderMixin",
-    "NumbersPreviewMixin",
     "OdinDevicesStandDownMixin",
     "OdinTermTimesMixin",
     "PanelOrderMixin",
     "PersonalBestSimMixin",
+    "SecretsCounterMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
@@ -24,7 +24,9 @@
     "LeapTermsimProtMixin",
     "NumbersHandlerMixin",
     "OdinTerminalSolverMixin",
-    "OdinSplitsAdsWorldMixin"
+    "OdinSplitsAdsWorldMixin",
+    "LcmStyleMixin",
+    "MapPathHintsMixin"
   ],
   "injectors": {
     "defaultRequire": 0

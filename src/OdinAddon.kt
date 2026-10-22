@@ -9,7 +9,6 @@ import com.engineerclient.practice.SimonSaysPractice
 import com.engineerclient.pov.PovPreviews
 import com.engineerclient.splits.DungeonSplits
 import com.engineerclient.splits.OdinSplitsLook
-import com.engineerclient.storm.StormPhase
 import com.engineerclient.waypoints.BrWaypoints2
 import com.odtheking.odin.config.ModuleConfig
 import com.odtheking.odin.events.LevelEvent
@@ -33,9 +32,23 @@ object OdinAddon {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            com.engineerclient.practice.TermInfo, StormPhase, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
+            PovPreviews, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
+            com.engineerclient.clearbreakdown.ClearBreakdown,
+            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning, FullRun,
         )
+    }
+
+    /**
+     * The full run's settings (Engineer Client's ADS full run, src/p3sim/run and src/p3sim/clear): its modules add theirs to an
+     * Odin module ([com.engineerclient.p3sim.run.AdsBootstrap.registerSettings]), and ADS's P3Sim is not one, so they get this.
+     */
+    object FullRun : com.odtheking.odin.features.Module(
+        name = "ADS Full Run",
+        category = com.odtheking.odin.features.Category.custom("ADS", 860, 10),
+        description = "The full F7 run (/ads run): the clear's bots, mobs, secrets, traps and blood room.",
+        key = null,
+    ) {
+        init { com.engineerclient.p3sim.run.AdsBootstrap.registerSettings(this) }
     }
 
     private var tickCounter = 0
@@ -55,6 +68,13 @@ object OdinAddon {
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }
+        safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
+        safely("term info") { com.engineerclient.practice.TermInfo.init() }
+        // Room Prediction and LCM Style: settings on Odin's own Dungeon Map (from Ascent Client, same names, so saved values
+        // carry over); Odin's configs are read again so they apply (reading never writes the file).
+        safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
+        safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
+        safely("map configs") { ModuleManager.loadConfigurations() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         safely("terminal guard") { com.engineerclient.terminals.OdinTerminalGuard.install() }
@@ -64,7 +84,7 @@ object OdinAddon {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 

@@ -70,7 +70,7 @@ object P3Sim : Settings("ADS", "ads.json") {
 
     // Kept as objects (not delegates) so the sim's own menu can change them.
     val classS = +SelectorSetting("Your Class", ClassOption.ARCHER, desc = "Your dungeon class (with Odin: its party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
-    val speedS = +NumberSetting("Speed", 600, 100..750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
+    val speedS = +NumberSetting("Speed", 500, 100..750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
     val botsS = +BooleanSetting("Party Bots", true, desc = "The rest of the party's terminals, levers, devices and gates are always done at the plan's times; on, four bots show it (a late one is put on its job). Off: nobody's shown, the plan still runs.")
     val deathTicksS = +SelectorSetting("Death Ticks", DeathTickOption.MASKS, desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
     val terminalS = +SelectorSetting("Terminals", TerminalOption.RANDOM, desc = "Every terminal as this type, or random as on Hypixel.")
@@ -259,6 +259,8 @@ object P3Sim : Settings("ADS", "ads.json") {
         }
         registerKeybinds()
         registerHuds()
+        // The full run (its modules, commands and stage line) runs on Odin: its settings are an Odin module (OdinAddon.FullRun).
+        if (odin) com.engineerclient.p3sim.run.AdsBootstrap.init()
         SimNet.register()
         PartyServer.register()
         PartyClient.register()
@@ -289,10 +291,19 @@ object P3Sim : Settings("ADS", "ads.json") {
                 })
                 cmd.then(ClientCommands.literal("stop").executes { SimActions.send("stop"); 1 })
                 cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
+                // /ads dev ... and /ads run ...: the full-run modules' commands.
+                com.engineerclient.p3sim.run.AdsCommands.attach(cmd)
                 dispatcher.register(cmd)
             }
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
             dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
+        }
+        // Odin scans a room once, when its centre chunk loads, and queues every chunk that loads before it believes it is in a dungeon (and never
+        // flushes the queue, since the sim posts no location change). So the area and floor are set at join, before the first chunk packet.
+        EngineerClient.safely("ads join hook") {
+            net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, _ ->
+                if (inSim && odin) EngineerClient.safely("ads join area") { OdinSimBridge.joinArea() }
+            }
         }
         ClientTickEvents.START_CLIENT_TICK.register {
             // Each on its own: Odin drift breaking the bridge must not stop the party's hello and roster.

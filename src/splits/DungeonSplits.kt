@@ -13,6 +13,7 @@ import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
@@ -20,7 +21,6 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import com.engineerclient.storm.StormCrush
 import com.engineerclient.storm.StormCrushView
-import com.engineerclient.storm.StormPhase
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Colors
@@ -51,7 +51,7 @@ import net.minecraft.world.level.block.Blocks
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("ADS", 860, 10),
-    description = "The blood rush sub splits, room by room; Storm's: his steps with the lightning, every pad read and how late each crush came (and his crush hitbox with Show Crush Info); and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: Engineer Splits); every other section's sub splits and the Scorecard are in Devgineer Client.",
+    description = "The blood rush sub splits, room by room; Storm's: his steps with the lightning, every pad read and how late each crush came (and his crush hitbox with Show Crush Info); and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: ADM); every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
 
@@ -149,9 +149,6 @@ object DungeonSplits : Module(
             draw(this, core.lines(serverTicks, mc.player?.name?.string, core.counted(aliveNames())))
         }
     )
-    private val pasteCore = registerSetting(
-        BooleanSetting("Paste Last In Core", false, desc = "Says in party chat who was last into the core after S4 and their time (e.g. \"Last in core: Name 1.35s\"), once all five are in. Only when every time is exact (each teammate in view just before they came in) and nobody has died.")
-    )
 
     /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
     private var coreGoldor: Triple<Int, net.minecraft.world.phys.Vec3, Int>? = null
@@ -219,9 +216,23 @@ object DungeonSplits : Module(
         SimOdinSplits.stop()
     }
 
+    /**
+     * Recore's Paste Last In Core is timed by the Goldor tracking here, so with it on the tracking
+     * runs with Sub Splits off too: subscribed while either wants it, with nothing drawn.
+     */
+    fun install() {
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register {
+            val want = enabled || com.engineerclient.practice.Recore.let { it.enabled && it.pasteLast }
+            val on = this in EventBus.activeSubscribers
+            if (want && !on) EventBus.subscribe(this) else if (!want && on) EventBus.unsubscribe(this)
+        }
+    }
+
     private fun Stamp.minus(ticks: Int) = Stamp(realMs - ticks * 50L, tick - ticks)
 
     init {
+        // The three HUDs are off until switched on; Odin's HUD flag would also take their toggle away.
+        bloodHud.value.enabled = false; stormHud.value.enabled = false; goldorHud.value.enabled = false
         on<LevelEvent.Load> {
             resetRun()
             serverTicks = 0
@@ -236,7 +247,7 @@ object DungeonSplits : Module(
                     storm.onServerTick(now)
                     // Show Crush Info: each 20-tick crush check from his lightning until he dies.
                     val t = storm.phase(now)
-                    if (showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t + StormPhase.checkOffset))
+                    if (enabled && showCrushInfo.enabled && storm.checking && t != null && StormCrush.isCheck(t))
                         crushView.check(now)?.let { (v, armed) -> storm.onCheck(now, v, armed) }
                 }
             }
@@ -356,7 +367,7 @@ object DungeonSplits : Module(
             }
         }
         on<RenderExtractEvent> {
-            if (showCrushInfo.enabled) with(crushView) { render(hitboxSeconds.value, hitboxMargins.enabled, pillarOutline.enabled, insideColor.value, outsideColor.value) }
+            if (enabled && showCrushInfo.enabled) with(crushView) { render(hitboxSeconds.value, hitboxMargins.enabled, pillarOutline.enabled, insideColor.value, outsideColor.value) }
         }
 
         on<EntityEvent.Remove> {
@@ -434,7 +445,7 @@ object DungeonSplits : Module(
      * singleplayer (the P3 Sim).
      */
     private fun pasteLastIn() {
-        if (!pasteCore.enabled || core.pasted || mc.hasSingleplayerServer() || com.engineerclient.p3sim.P3Sim.inSim) return
+        if (!com.engineerclient.practice.Recore.let { it.enabled && it.pasteLast } || core.pasted || mc.hasSingleplayerServer() || com.engineerclient.p3sim.P3Sim.inSim) return
         val me = mc.player?.name?.string ?: return
         val mates = DungeonUtils.dungeonTeammates.filter { it.name != me }
         if (mates.size != 4 || mates.any { it.isDead }) return
@@ -483,22 +494,19 @@ object DungeonSplits : Module(
 
     /**
      * Necron dead at [at]. On F7 that is all: his split runs on to the run's end, there being no
-     * end animation since Hypixel's boss update. On M7 the Wither King's fight is next, so his steps
-     * end here, and Odin's own Necron split (which ends on "All this, for nothing...") is handed
-     * that line. Once a run: his wither going ~20 ticks after the burst calls this again.
+     * end animation since Hypixel's boss update. On M7 his kill ends here and the relics begin; his
+     * split (and Odin's) runs on to the Wither King's first line, which starts the Dragons. Once a
+     * run: his wither going ~20 ticks after the burst calls this again.
      */
     private fun necronDead(at: Stamp) {
         if (necronDiedAt != null) return
         necronDiedAt = at
-        if (DungeonUtils.floor?.name?.startsWith("M") == true) {
-            subs.onNecronDeath(at)
-            OdinSplitsLook.onNecronDead()
-        }
+        if (DungeonUtils.floor?.name?.startsWith("M") == true) subs.onNecronDeath(at)
     }
 
     /** Necron's wither, as last found, for the backup when his burst is missed. */
     private var necronId: Int? = null
-    /** Necron's death this run: on M7 the end of his own time, the tracker's split running on through the Wither King. */
+    /** Necron's death this run (his kill's end; on M7 the relics' start). */
     private var necronDiedAt: Stamp? = null
 
     private val DEATH_BURST_TNT = 3
@@ -642,7 +650,7 @@ object DungeonSplits : Module(
             val id = ids.getOrElse(i) { "" }
             val value = SubSplitGrades.value(id, ms, ticks, (stop.tick - split.start.tick).toLong())
             val own = st.label.take(2).replace('&', '§')
-            val grade = SubSplitGrades.colour(id, value, st.stop != null, validBest(id, bests[id]), floor == "F7", own)
+            val grade = SubSplitGrades.colour(id, value, st.stop != null, validBest(id, bests[id], floor), floor, own)
             val real = SubSplitGrades.clock(id) == SubSplitGrades.Clock.REAL
             Triple(st, grade + SplitFormat.seconds(if (real) ms else ticks * 50), SplitFormat.seconds(if (real) ticks * 50 else ms))
         }
@@ -694,18 +702,22 @@ object DungeonSplits : Module(
      * Each split as it ends, as a best for its floor (F7, M7) when it is one - every split, the
      * portal too, whatever the splits HUD shows: Pace's targets are these. Only a split that ran
      * from its own line to the next split's (none missed in between) is a time. On M7 Necron's ends
-     * at his death, not at EXTRA STATS after the Wither King: none if his death wasn't seen.
+     * at the Wither King's first line (the Dragons' start): none if that wasn't seen.
      */
     private fun recordSplitBests() {
         val floor = DungeonUtils.floor?.name?.takeIf { it == "F7" || it == "M7" } ?: return
         if (!keepsTimes) return
         val splits = tracker.splits()
         splits.forEachIndexed { i, split ->
-            val stop = (if (floor == "M7" && split.label == SplitTracker.NECRON) necronDiedAt else split.stop) ?: return@forEachIndexed
-            if (!bestsChecked.add(split.label)) return@forEachIndexed
-            val order = SplitPace.ORDER.indexOf(split.label)
+            val stop = split.stop ?: return@forEachIndexed
             val next = splits.getOrNull(i + 1)
-            val whole = if (next != null) SplitPace.ORDER.indexOf(next.label) == order + 1 else order == SplitPace.ORDER.lastIndex
+            // M7: Necron's split without the Dragons after it ran on to the run's end.
+            if (floor == "M7" && split.label == SplitTracker.NECRON && next?.label != SplitTracker.DRAGONS) return@forEachIndexed
+            if (!bestsChecked.add(split.label)) return@forEachIndexed
+            val order = SplitPace.ALL.indexOf(split.label)
+            // The last split: Necron on F7, the Dragons on M7.
+            val whole = if (next != null) SplitPace.ALL.indexOf(next.label) == order + 1
+                else split.label == SplitTracker.DRAGONS || (floor == "F7" && split.label == SplitTracker.NECRON)
             val id = SplitPace.SPLIT_IDS[split.label] ?: return@forEachIndexed
             if (!whole) return@forEachIndexed
             recordBest(floor, id, SubSplitGrades.value(id, stop.realMs - split.start.realMs, (stop.tick - split.start.tick).toLong()), true)
@@ -737,20 +749,20 @@ object DungeonSplits : Module(
     }
 
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
-    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id])
+    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id], floor)
 
     /**
      * Records a finished [value] of [id] as the best on [floor] when it is one. Never in a P3 Sim
      * run, whose earlier rows (Odin's too, via [SimOdinSplits]) are Pace targets, not times.
      */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
-        if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value)) return
+        if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value, floor)) return
         val bests = bests(floor)
-        if (value < (validBest(id, bests[id]) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
+        if (value < (validBest(id, bests[id], floor) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
     }
 
     /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
-    private fun validBest(id: String, best: Long?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it) }
+    private fun validBest(id: String, best: Long?, floor: String?): Long? = best?.takeIf { SubSplitGrades.canBeBest(id, it, floor) }
 
     private fun recentText(floor: String?) = when (floor) { "F7" -> recentF7; "M7" -> recentM7; else -> "" }
 

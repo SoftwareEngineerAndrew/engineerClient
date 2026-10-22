@@ -34,12 +34,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  */
 object OdinSplitsLook {
 
-    private enum class Look(private val label: String) { ODIN_SPLITS("Odin Splits"), ENGINEER_SPLITS("Engineer Splits"); override fun toString() = label }
+    private enum class Look(private val label: String) { ODIN_SPLITS("Odin"), ENGINEER_SPLITS("ADM"); override fun toString() = label }
     private enum class PaceFloor { F7, M7 }
     enum class PaceFrom(private val label: String) { RECENT("Recent Runs"), TARGETS("Targets"); override fun toString() = label }
 
     private val look = SelectorSetting("Look", Look.ENGINEER_SPLITS,
-        desc = "Odin Splits, or Engineer Splits: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
+        desc = "Odin's look, or ADM's: lines as Name > time (ticks), with a Pace line on top, the projected finish from the targets under Pace. Added by engineerClient.")
 
     /** The Engineer look is picked. */
     val engineer: Boolean get() = look.value == Look.ENGINEER_SPLITS
@@ -51,12 +51,12 @@ object OdinSplitsLook {
         desc = "Times that tie or beat your best for that split in gold. Off: they get their colour from the time like any other. Added by engineerClient.")
         .withDependency { colourByTime.value }
 
-    private val showLag = BooleanSetting("Show Lag", true, desc = "Engineer Splits: the Lag line on top, the time lost to lag so far this run (floor 7).")
+    private val showLag = BooleanSetting("Show Lag", true, desc = "ADM look: the Lag line on top, the time lost to lag so far this run (floor 7).")
         .withDependency { engineer }
-    private val showPace = BooleanSetting("Show Pace", true, desc = "Engineer Splits: the Pace line, the projected finish.")
+    private val showPace = BooleanSetting("Show Pace", true, desc = "ADM look: the Pace line, the projected finish.")
         .withDependency { engineer }
 
-    private val enterAfterEntry = BooleanSetting("Enter After Entry", true, desc = "Engineer Splits: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
+    private val enterAfterEntry = BooleanSetting("Enter After Entry", true, desc = "ADM look: only show the Enter line (Boss Entry) once you are in the boss, not counting up through the clear.")
         .withDependency { engineer && bool("Boss Entry Split", true) }
 
     private val pace = DropdownSetting("Pace", desc = "The target times Pace projects the finish from.").withDependency { engineer }
@@ -90,6 +90,7 @@ object OdinSplitsLook {
      * out of the cache Odin fires keybinds from as well, so a saved key can't toggle Splits).
      */
     fun install() {
+        dragonsOnRelics()
         SubSplitGrades.byTime = { colourByTime.value }
         SubSplitGrades.showBest = { showPb.value }
         for (s in listOf(look, colourByTime, showPb, showLag, showPace, enterAfterEntry, pace, paceFrom, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
@@ -110,27 +111,17 @@ object OdinSplitsLook {
     // --- Necron's end ----------------------------------------------------------------------------
 
     /**
-     * M7 only. Odin's splits end Necron's split (and start "Cleared", the Dragons) on "[BOSS] Necron:
-     * All this, for nothing...", which he stopped saying with Hypixel's boss update of 5 Oct 2026.
-     * On F7 there is no end animation, so Necron runs to the end of the run. On M7 the Dragons follow
-     * him, so at his death (DungeonSplits: the TNT burst he dies in) that line is handed to Odin's
-     * SplitsManager as if he had said it. Odin ignores a split's line once that split has its time,
-     * so if the real line also comes, whichever is first counts; off floor 7 no split matches it.
+     * M7 only. Odin's splits end Necron's split and start "Cleared" (the Dragons) on "[BOSS] Necron:
+     * All this, for nothing...", which he stopped saying with Hypixel's boss update of 5 Oct 2026, so
+     * the Dragons never started. Odin's floor 7 splits are a public list: its last split is made to
+     * start on the Wither King's first line instead, said once every relic is placed - Necron's split
+     * runs through the relics, as Sub Splits' does. F7 never says it: Necron runs to the run's end.
      */
-    fun onNecronDead() {
-        if (necronEndFailed) return
-        try {
-            val m = SplitsManager::class.java.getDeclaredMethod("onSplitMessage", String::class.java)
-            m.isAccessible = true
-            m.invoke(SplitsManager, NECRON_END)
-        } catch (t: Throwable) {
-            necronEndFailed = true
-            EngineerClient.logger.error("[ec] couldn't end Odin's Necron split at his death - it runs to the end of the run", t)
-        }
+    private fun dragonsOnRelics() {
+        val i = floor7SplitGroup.indexOfFirst { it.regex.pattern.contains("All this, for nothing") }
+        if (i < 0) return
+        floor7SplitGroup[i] = floor7SplitGroup[i].copy(regex = Regex(Regex.escape(SplitTracker.RELICS_PLACED)))
     }
-
-    private var necronEndFailed = false
-    private const val NECRON_END = "[BOSS] Necron: All this, for nothing..."
 
     private fun fillFromPbs() {
         val master = paceFloor.value == PaceFloor.M7
@@ -219,7 +210,7 @@ object OdinSplitsLook {
     /** With Pace From Recent Runs, split [i]'s typical time (the median of your recent ones), else null. */
     private fun typical(i: Int, master: Boolean): SplitPace.Clocks? {
         if (paceFrom.value != PaceFrom.RECENT) return null
-        val label = SplitPace.ORDER.getOrNull(i) ?: return null
+        val label = SplitPace.ALL.getOrNull(i) ?: return null
         return DungeonSplits.typical(if (master) "M7" else "F7", label)
     }
 
@@ -231,11 +222,11 @@ object OdinSplitsLook {
      */
     private fun pb(i: Int, master: Boolean): SplitPace.Clocks? {
         val floor = if (master) "M7" else "F7"
-        val id = SplitPace.ORDER.getOrNull(i)?.let { SplitPace.SPLIT_IDS[it] }
-        val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.takeIf { SubSplitGrades.canBeBest(sid, it) }?.let { SplitPace.clocks(sid, it) } }
+        val id = SplitPace.ALL.getOrNull(i)?.let { SplitPace.SPLIT_IDS[it] }
+        val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.takeIf { SubSplitGrades.canBeBest(sid, it, floor) }?.let { SplitPace.clocks(sid, it) } }
         val odin = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
             ?.let { secs(it.toDouble()) }
-            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks)) else c.ms >= 1000 }
+            ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks), floor) else c.ms >= 1000 }
         return listOfNotNull(ours, odin).minByOrNull { it.ms }
     }
 
@@ -279,7 +270,7 @@ object OdinSplitsLook {
         val floor = if (master) "M7" else "F7"
         val value = SubSplitGrades.value(id, ms, ticks)
         DungeonSplits.recordBest(floor, id, value, over)
-        return SubSplitGrades.colour(id, value, over, DungeonSplits.bestOf(floor, id), !master, "")
+        return SubSplitGrades.colour(id, value, over, DungeonSplits.bestOf(floor, id), floor, "")
             .takeIf { it.isNotEmpty() }
     }
 

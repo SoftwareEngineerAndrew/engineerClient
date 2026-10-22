@@ -55,6 +55,11 @@ object HealthMana : Module(
     private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.")
     private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.")
 
+    init {
+        // Off until switched on (in this menu or Edit HUD); Odin's HUD flag would also take their toggle away.
+        healthBarHud.enabled = false; manaBarHud.enabled = false
+    }
+
     /**
      * Whether Odin's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
      * % is on and the stat is above the threshold. Read by OdinHuds for every Odin HUD element; only

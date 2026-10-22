@@ -121,6 +121,9 @@ object EngineerClient : ClientModInitializer {
     }
 
     /** What every line the mod says in chat starts with. */
+    /** Engineer Client, the beta: true. promote.sh makes it false for ADM, the public build, which hides the unfinished ADS buttons (full run, GUI). */
+    const val BETA = true
+
     const val PREFIX = "§8[§6ADS§8] "
 
     /** A line from the mod, with its [PREFIX]. Anything the mod says goes through here. */
