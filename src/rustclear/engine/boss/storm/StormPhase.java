@@ -68,6 +68,37 @@ public final class StormPhase implements BossPhase {
     private final List<LargeFireball> fireballs = new ArrayList<>();
     private final List<Vec3> fireballLast = new ArrayList<>();
 
+    /** The four pillars' colours, by index (Purple, Yellow, Green, Red). */
+    private static final net.minecraft.world.level.block.Block[] PILLAR_GLASS = {
+        net.minecraft.world.level.block.Blocks.STAINED_GLASS.purple(), net.minecraft.world.level.block.Blocks.STAINED_GLASS.yellow(),
+        net.minecraft.world.level.block.Blocks.STAINED_GLASS.lime(), net.minecraft.world.level.block.Blocks.STAINED_GLASS.red()};
+    private static final net.minecraft.world.level.block.Block[] PILLAR_TERRACOTTA = {
+        net.minecraft.world.level.block.Blocks.DYED_TERRACOTTA.purple(), net.minecraft.world.level.block.Blocks.DYED_TERRACOTTA.yellow(),
+        net.minecraft.world.level.block.Blocks.DYED_TERRACOTTA.lime(), net.minecraft.world.level.block.Blocks.DYED_TERRACOTTA.red()};
+
+    /** Pillar [index]'s block: terracotta in its colour. */
+    static net.minecraft.world.level.block.state.BlockState pillarBlock(int index) {
+        return PILLAR_TERRACOTTA[index].defaultBlockState();
+    }
+
+    /**
+     * The arena as BossArena builds it: the Bossroom data has Storm's four pillars as stained
+     * glass; on Hypixel they're terracotta in the same colours. Every other block passes through.
+     */
+    public static net.minecraft.world.level.block.state.BlockState arenaBlock(int x, int y, int z,
+                                                                             net.minecraft.world.level.block.state.BlockState state) {
+        if (y < StormData.FLOOR || y > StormData.PILLAR_TOP) {
+            return state;
+        }
+        for (int i = 0; i < 4; i++) {
+            int[] c = StormData.PILLAR_CORNERS[i];
+            if (x >= c[0] && x < c[0] + 7 && z >= c[1] && z < c[1] + 7) {
+                return state.is(PILLAR_GLASS[i]) ? pillarBlock(i) : state;
+            }
+        }
+        return state;
+    }
+
     /** Where boss practice starts the party for this phase alone (StormData.PRACTICE_ENTRY). */
     public static Vec3 practiceEntry() {
         return StormData.PRACTICE_ENTRY;
