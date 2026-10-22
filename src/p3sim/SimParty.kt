@@ -550,10 +550,12 @@ object PartyClient {
     private val ownFile get() = java.io.File(mc.gameDirectory, "config/engineerclient/p3sim-own-settings.json")
     private fun keepOwn(o: JsonObject) = EngineerClient.safely("p3sim own settings keep") { ownFile.parentFile.mkdirs(); ownFile.writeText(o.toString()) }
 
-    /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. All of it is Odin's: nothing without it. */
+    /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info (all Odin's: nothing without it), and ADS's device solvers' resets. */
     private fun fx(what: String) {
-        if (!P3Sim.odin) return
         val o = runCatching { JsonParser.parseString(what).asJsonObject }.getOrNull() ?: return
+        // A restart, a stop or a practice start is a new P3: ADS's device solvers start clean (Odin's below).
+        if (o.get("fx")?.asString in setOf("splitsStart", "splitsStop", "arrowsReset")) EngineerClient.safely("p3sim devices reset") { com.engineerclient.devices.DeviceSolvers.simRestart() }
+        if (!P3Sim.odin) return
         OdinSimBridge.fx(o.get("fx")?.asString ?: return, o.get("n")?.asInt ?: 0, o.get("split")?.asString)
     }
 
