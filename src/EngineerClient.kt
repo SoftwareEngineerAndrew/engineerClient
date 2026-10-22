@@ -1,22 +1,7 @@
 package com.engineerclient
 
-import com.engineerclient.adr.ADR
-import com.engineerclient.misc.AgroSphere
-import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
-import com.engineerclient.practice.SimonSaysPractice
-import com.engineerclient.pov.PovPreviews
-
-import com.engineerclient.splits.DungeonSplits
-import com.engineerclient.splits.OdinSplitsLook
-import com.engineerclient.storm.StormPhase
-import com.engineerclient.waypoints.BrWaypoints2
 import com.mojang.brigadier.arguments.StringArgumentType
-import com.odtheking.odin.config.ModuleConfig
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
@@ -33,7 +18,6 @@ object EngineerClient : ClientModInitializer {
     val logger: Logger = LoggerFactory.getLogger("engineerclient")
     val mc: Minecraft get() = Minecraft.getInstance()
 
-    private var tickCounter = 0
     /** [keepWindowUp] has run (once is enough: the attribute sticks). */
     private var windowKept = false
 
@@ -73,16 +57,9 @@ object EngineerClient : ClientModInitializer {
         windowKept = true
     }
 
-    /**
-     * Every module, in the order the ClickGUI panel lists them (PanelOrderMixin: Odin itself sorts
-     * a panel by name width).
-     */
-    val MODULES: List<com.odtheking.odin.features.Module> by lazy {
-        listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits,
-            com.engineerclient.practice.TermInfo, StormPhase, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers,
-        )
-    }
+    /** Odin is installed: the Odin addon ([OdinAddon]) loads, everything else runs either way. */
+    @JvmStatic
+    val odin: Boolean = FabricLoader.getInstance().isModLoaded("odin")
 
     override fun onInitializeClient() {
         try { ConfigMigration.rename(mc.gameDirectory.toPath()) } catch (t: Throwable) { logger.warn("[ec] moving Engineer Client's settings to ADM failed", t) }
@@ -90,46 +67,16 @@ object EngineerClient : ClientModInitializer {
         val firstRun = EcConfig.load()
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, _ -> EcConfig.migrateRoleBindings() }
 
-        // Register our own module into Odin's module system: own ClickGUI panel
-        // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
-        // subscription lifecycle. This is Odin's documented addon path.
-        ModuleManager.registerModules(ModuleConfig("engineerclient.json"), *MODULES.toTypedArray())
-
-        // Additions to Odin's own modules (e.g. the Engineer Splits look on Odin's Splits) go in
-        // before anything saves the configs, which would drop saved values for settings that don't
-        // exist yet.
-        safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
-        safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
-        safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
-        safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
-        safely("splits look") { OdinSplitsLook.install() }
-        safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
-        safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
-        runCatching { com.engineerclient.misc.LaunchStats.install() }
-        safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
+        // The sim first: on a first start it reads its settings from Odin's file, before Odin can save over it.
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
+        // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.
+        if (odin) safely("odin addon") { OdinAddon.init(firstRun) }
 
-        // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
-        // fresh install nothing has saved state yet, so turn these on once.
-        if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, StormPhase, SimonSaysPractice)) if (!m.enabled) m.toggle()
-            ModuleManager.saveConfigurations()
-        }
-
-        // Odin's event bus: world load resets class detection.
-        on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
-        EventBus.subscribe(this)
-
-        // Own-class poll: once a second is plenty; Odin keeps the teammate list fresh from packets.
         ClientTickEvents.END_CLIENT_TICK.register {
-            if (++tickCounter % 20 == 0) safely("classPoll") { ClassDetect.poll() }
             if (!windowKept) safely("window") { keepWindowUp() }
             if (!exclusiveChecked) safely("exclusive fullscreen") { noExclusiveFullscreen() }
         }
 
-        DeadPlayers.register()
-        com.engineerclient.misc.Witherborn.register()
-        com.engineerclient.misc.I4Complete.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
             "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +
                 "  odin ${FabricLoader.getInstance().getModContainer("odin").map { it.metadata.version.friendlyString }.orElse("?")}",
@@ -192,18 +139,12 @@ object EngineerClient : ClientModInitializer {
 
     private fun registerCommand() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            // /adr: the link to all your uploaded runs, private ones included.
-            // /adr online: ADR Online in your browser, signed in.
-            for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
-                .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
-            // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
-            dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
-            // /adm on its own: Odin's settings menu, as its /od opens it; /adm help lists the rest.
-            // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
+            // /adm on its own: Odin's settings menu, as its /od opens it (ADS's settings without Odin); /adm help
+            // lists the rest. Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
             // name — a bare redirect would not run the root executes on the alias itself.
             for (name in COMMANDS) dispatcher.register(
                 literal(name)
-                    .executes { mc.schedule { mc.setScreenAndShow(com.odtheking.odin.clickgui.ClickGUI) }; 1 }
+                    .executes { if (odin) OdinAddon.openClickGui() else com.engineerclient.p3sim.P3Sim.openSettings(); 1 }
                     .then(literal("help").executes { ctx ->
                         HELP.forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1
@@ -230,8 +171,3 @@ object EngineerClient : ClientModInitializer {
         }
     }
 }
-
-/** A selector's place in its option list (Odin's selectors hold the enum constant); setting it wraps around. */
-var <E : Enum<E>> com.odtheking.odin.clickgui.settings.impl.SelectorSetting<E>.index: Int
-    get() = options.indexOf(value)
-    set(i) { value = options[Math.floorMod(i, options.size)] }

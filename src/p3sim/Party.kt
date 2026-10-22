@@ -2,7 +2,6 @@ package com.engineerclient.p3sim
 
 import net.minecraft.world.entity.EntityTypes
 import com.mojang.authlib.GameProfile
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.EntityType

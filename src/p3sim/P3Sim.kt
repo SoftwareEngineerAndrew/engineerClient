@@ -1,21 +1,20 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.Island
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.Floor
+import com.engineerclient.ads.settings.AdsSettingsScreen
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.KeybindSetting
+import com.engineerclient.ads.settings.NumberSetting
+import com.engineerclient.ads.settings.SelectorSetting
+import com.engineerclient.ads.settings.Setting
+import com.engineerclient.ads.settings.Settings
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import net.fabricmc.loader.api.FabricLoader
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.resources.Identifier
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
@@ -32,27 +31,32 @@ import com.mojang.blaze3d.platform.InputConstants
  *
  * The world is the real arena at Hypixel's coordinates; the fight runs on the world's own
  * (integrated) server ([SimServer], [Fight]): Goldor, terminals, levers, devices, gates, death
- * ticks, and Maxor/Storm/Necron around it. The menu ([SimRestartScreen]: the keybind, `/p3sim`, or the
- * SkyBlock Menu star in the hotbar) starts any phase or section and teleports anywhere.
+ * ticks, and Maxor/Storm/Necron around it. The menu ([SimRestartScreen]: the keybind, `/ads menu`, `/p3sim`, or the
+ * SkyBlock Menu star in the hotbar) starts any phase or section and teleports anywhere; `/ads` opens its settings.
+ *
+ * It needs no Odin: its settings are its own ([Settings], config/engineerclient/ads.json). With Odin installed
+ * ([odin]), Odin's dungeon features also see the sim as F7 ([OdinSimBridge]).
  *
  * Nothing of it exists anywhere else: every piece checks [inSim] (the client) or
  * [SimServer.isSim] (the server), both of which are only true in that one singleplayer world.
  */
-object P3Sim : Module(
-    name = "ADS",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "Advanced Dungeon Simulator: F7's boss in a singleplayer world of its own. /ads (or the title screen button) opens it. Only ever active in that world.",
-    key = null,
-) {
+object P3Sim : Settings("ADS", "ads.json") {
     /** The short name, on buttons and in chat. */
     const val NAME = "ADS"
     /** The full name. */
     const val FULL_NAME = "Advanced Dungeon Simulator"
 
-    /** Writes ADS's settings to disk; the one place that knows where they live. */
-    fun saveSettings() = com.odtheking.odin.features.ModuleManager.saveConfigurations()
+    /**
+     * Odin is installed. The sim runs without it; with it, Odin's dungeon features join in ([OdinSimBridge], only
+     * ever reached behind this).
+     */
+    @JvmStatic
+    val odin: Boolean = FabricLoader.getInstance().isModLoaded("odin")
 
-    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the ADS menu (a big Restart) in the sim world, as /ads and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
+    /** Writes ADS's settings to disk (config/engineerclient/ads.json); the one place that knows where they live. */
+    fun saveSettings() = save()
+
+    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the ADS menu (a big Restart) in the sim world, as /ads menu and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
         if (inSim) SimActions.send("restart")
     }
@@ -65,7 +69,7 @@ object P3Sim : Module(
     enum class MaskOption { SPIRIT, BONZO }
 
     // Kept as objects (not delegates) so the sim's own menu can change them.
-    val classS = +SelectorSetting("Your Class", ClassOption.ARCHER, desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
+    val classS = +SelectorSetting("Your Class", ClassOption.ARCHER, desc = "Your dungeon class (with Odin: its party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
     val speedS = +NumberSetting("Speed", 600, 100..750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
     val botsS = +BooleanSetting("Party Bots", true, desc = "The rest of the party's terminals, levers, devices and gates are always done at the plan's times; on, four bots show it (a late one is put on its job). Off: nobody's shown, the plan still runs.")
     val deathTicksS = +SelectorSetting("Death Ticks", DeathTickOption.MASKS, desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
@@ -99,38 +103,47 @@ object P3Sim : Module(
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
     val showTimesS = +BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
 
-    /** Practice: each task's time as you do it (like the Simon Says sim's). */
-    private val practiceHud by HUD("Practice Splits", "In practice (the menu's Practice tab): the time, and each of your tasks with the time it was done.", true, 10, 210, 1.5f) { example ->
-        val lines = if (example) listOf("§6Practice S2 §f6.45", "§7Lights §a2.10", "§7T3 §a4.85", "§7EE3 §e...")
-        else {
+    val practiceHudS = +BooleanSetting("Practice Splits HUD", true, desc = "In practice (the menu's Practice tab): the time, and each of your tasks with the time it was done.")
+    val practiceTimeHudS = +BooleanSetting("Practice Time HUD", true, desc = "A practice's final time, large (as Term Info's Section Time), for 4 seconds.")
+    val practiceStartHudS = +BooleanSetting("Practice Start Timer HUD", true, desc = "A practice's start timer counting down, large, until terminals and the rest are up.")
+
+    /**
+     * The practice HUDs, drawn over the game (Fabric's HUD layers) where they always were: Odin's HUD editor once
+     * placed them, so the place and size are fixed now. Each draws its lines at ([x], [y]) at [scale].
+     */
+    private class Hud(val name: String, val on: BooleanSetting, val x: Int, val y: Int, val scale: Float, val lines: () -> List<String>?)
+
+    private val huds = listOf(
+        // Practice: each task's time as you do it (like the Simon Says sim's).
+        Hud("practice_splits", practiceHudS, 10, 210, 1.5f) {
             val mode = Practice.mode
             // Nothing during the start timer.
-            if (!inSim || mode == null || Practice.ticks < 0 || Practice.tasks.isEmpty()) return@HUD 0 to 0
+            if (mode == null || Practice.ticks < 0 || Practice.tasks.isEmpty()) return@Hud null
             val next = Practice.tasks.firstOrNull { it.at < 0 }
             listOf("§6Practice $mode ${if (Practice.endTicks >= 0) "§a" else "§f"}${Practice.secs(Practice.ticks)}") +
                 Practice.tasks.map { t -> "§7${t.label} " + if (t.at >= 0) "§a${Practice.secs(t.at)}" else if (t === next) "§e..." else "§8-" }
+        },
+        // Practice: the final time, large, as Term Info's section times look.
+        Hud("practice_time", practiceTimeHudS, 420, 300, 5f) {
+            Practice.endTicks.takeIf { Practice.active && it >= 0 && System.currentTimeMillis() - Practice.endMs < 4000 }?.let { listOf("§5${Practice.secs(it)}") }
+        },
+        // Practice: the start timer counting down, large.
+        Hud("practice_start", practiceStartHudS, 440, 250, 4f) {
+            Practice.ticks.takeIf { Practice.active && it < 0 }?.let { listOf("§e${"%.1f".format(java.util.Locale.ROOT, -it / 20.0)}") }
+        },
+    )
+
+    private fun drawHuds(g: GuiGraphicsExtractor) {
+        if (!inSim || mc.gui.hud.isHidden) return
+        for (h in huds) {
+            if (!h.on.value) continue
+            val lines = h.lines() ?: continue
+            g.pose().pushMatrix()
+            g.pose().translate(h.x.toFloat(), h.y.toFloat())
+            g.pose().scale(h.scale)
+            lines.forEachIndexed { i, l -> g.text(mc.font, l, 0, i * 10, -1, true) }
+            g.pose().popMatrix()
         }
-        lines.forEachIndexed { i, l -> text(l, 0, i * 10, com.odtheking.odin.utils.Colors.WHITE, shadow = true) }
-        (lines.maxOf { mc.font.width(it) }) to lines.size * 10
-    }
-
-    /** Practice: the final time, large, as Term Info's section times look. */
-    private val practiceTimeHud by HUD("Practice Time", "A practice's final time, large (as Term Info's Section Time), for 4 seconds.", true, 420, 300, 5f) { example ->
-        val t = if (example) "§514.35" else Practice.endTicks.takeIf { inSim && Practice.active && it >= 0 && System.currentTimeMillis() - Practice.endMs < 4000 }?.let { "§5${Practice.secs(it)}" } ?: return@HUD 0 to 0
-        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
-        mc.font.width(t) to 10
-    }
-
-    /** Practice: the start timer counting down, large. */
-    private val practiceStartHud by HUD("Practice Start Timer", "A practice's start timer counting down, large, until terminals and the rest are up.", true, 440, 250, 4f) { example ->
-        val t = if (example) "§e2.4" else Practice.ticks.takeIf { inSim && Practice.active && it < 0 }?.let { "§e${"%.1f".format(java.util.Locale.ROOT, -it / 20.0)}" } ?: return@HUD 0 to 0
-        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
-        mc.font.width(t) to 10
-    }
-
-    init {
-        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
-        practiceHud.enabled = true; practiceTimeHud.enabled = true; practiceStartHud.enabled = true
     }
 
     val autoStart: Boolean get() = autoStartS.value
@@ -188,19 +201,15 @@ object P3Sim : Module(
     val debugBots: Boolean get() = debugBotsS.value
     val record: Boolean get() = recordS.value
 
-    /** Hide Players is Odin's own (its module and its Hide All / Distance settings); in the sim its rule hides the bots too. */
-    val hidePlayers: Boolean get() = com.odtheking.odin.features.impl.render.HidePlayers.enabled
-    fun toggleHidePlayers() = com.odtheking.odin.features.impl.render.HidePlayers.toggle()
+    /** Hide Players is Odin's own (its module and its Hide All / Distance settings); in the sim its rule hides the bots too. Without Odin, off. */
+    val hidePlayers: Boolean get() = odin && OdinSimBridge.hidePlayers
+    fun toggleHidePlayers() { if (odin) OdinSimBridge.toggleHidePlayers() }
 
     /** A bot (a mannequin in the sim) Odin's Hide Players would hide if it were a player. Client thread. */
     @JvmStatic
     fun hideBot(e: net.minecraft.world.entity.Entity): Boolean {
-        if (!hidePlayers || !inSim || e !is net.minecraft.world.entity.decoration.Mannequin) return false
-        val hp = com.odtheking.odin.features.impl.render.HidePlayers
-        if ((hp.settings["Hide all"] as? BooleanSetting)?.value == true) return true
-        val d = (hp.settings["Distance"] as? NumberSetting<*>)?.value?.toDouble() ?: 3.0
-        val me = mc.player ?: return false
-        return e.distanceToSqr(me) <= d * d
+        if (!odin || !inSim || e !is net.minecraft.world.entity.decoration.Mannequin) return false
+        return OdinSimBridge.hidesBot(e)
     }
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()
@@ -249,6 +258,14 @@ object P3Sim : Module(
         get() = localSim || (P3Party.joined && mc.level != null)
 
     fun init() {
+        if (!load()) {
+            migrateFromOdin()
+            save()
+        }
+        registerKeybinds()
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("engineerclient", "ads_practice")) { g, _ ->
+            EngineerClient.safely("ads practice huds") { drawHuds(g) }
+        }
         SimNet.register()
         PartyServer.register()
         PartyClient.register()
@@ -268,9 +285,10 @@ object P3Sim : Module(
                 .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Loadouts.open(p) } }; 1 })
         }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            // /ads, and /p3sim as before.
+            // /ads: ADS's settings; /ads menu: the sim's menu (or opens the sim), as /p3sim on its own does.
             for (name in listOf("ads", "p3sim")) {
-                val cmd = ClientCommands.literal(name).executes { openMenuOrSim(); 1 }
+                val cmd = ClientCommands.literal(name).executes { if (name == "ads") openSettings() else openMenuOrSim(); 1 }
+                cmd.then(ClientCommands.literal("menu").executes { openMenuOrSim(); 1 })
                 for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {
                     if (inSim) SimActions.send("start", "what" to s.name) else SimWorld.open(); 1
                 })
@@ -283,21 +301,21 @@ object P3Sim : Module(
         }
         ClientTickEvents.START_CLIENT_TICK.register {
             // Each on its own: Odin drift breaking the bridge must not stop the party's hello and roster.
-            EngineerClient.safely("p3sim bridge") { bridge() }
+            if (odin) EngineerClient.safely("p3sim bridge") { OdinSimBridge.tick() }
             EngineerClient.safely("p3sim client items") { SimItems.clientTick() }
             EngineerClient.safely("p3sim party client") { PartyClient.tick() }
             EngineerClient.safely("p3sim ghost guard") { GhostGuard.clientTick() }
         }
         ScreenEvents.AFTER_INIT.register { _, screen, w, _ ->
-            // The title screen: the Minecraft Realms button becomes Join Hypixel. The ADS button above Singleplayer
-            // is the menu's (net.rustclear.mod.engine.Engine); P3 practice is in its Practice page.
-            if (screen is TitleScreen) EngineerClient.safely("ads title button") {
+            // The title screen: the Minecraft Realms button becomes Join Hypixel (Random Stuff's, so with Odin). The ADS
+            // button above Singleplayer is the menu's (net.rustclear.mod.engine.Engine); P3 practice is in its Practice page.
+            if (screen is TitleScreen && odin) EngineerClient.safely("ads title button") {
                 val widgets = Screens.getWidgets(screen)
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val buttons = widgets.filterIsInstance<Button>()
                 val realms = buttons.firstOrNull { key(it) == "menu.online" } ?: return@safely
                 widgets.remove(realms)
-                widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
+                widgets.add(Button.builder(Component.literal("Join Hypixel")) { OdinSimBridge.joinHypixel(screen) }
                     .bounds(realms.x, realms.y, realms.width, realms.height).build())
             }
             // In the sim, Esc's ADS Menu takes Open to LAN's place (right under Save and Quit if that
@@ -346,71 +364,47 @@ object P3Sim : Module(
         if (inSim) mc.execute { mc.gui.setScreen(SimRestartScreen()) } else SimWorld.open()
     }
 
-    // ------------------------------------------------------------------ Odin
+    /** `/ads`: every ADS setting, in panels as Odin's Click GUI lays a module's out. */
+    fun openSettings() = mc.execute { mc.gui.setScreen(AdsSettingsScreen(this, groups())) }
 
-    private var bridged = false
+    private fun groups(): List<Pair<String, List<Setting<*>>>> {
+        val groups = listOf(
+            "You" to listOf(classS, speedS, phoenixS, blackCatS, realMasksS, wornMaskS, terrorAtTermsS, mageAllS, hydraStartS, shortbowCooldownS),
+            "Bots" to listOf(botsS, realMovesS),
+            "Terminals & Devices" to listOf(terminalS, noMelodiesS, firstClickMelodyS, clickLimitS, termLuckS, ssLuckS),
+            "Ping" to listOf(pingS, jitterS),
+            "Goldor & Run" to listOf(deathTicksS, goldorKillS, lavaS, termsOnlyS, p3OnlyS, autoStartS, showTimesS),
+            "Dungeonbreaker" to listOf(breakerRefillS, breakerRegenS, breakerInfiniteS, breakerPermaS),
+            "Recording & Debug" to listOf(recordS, debugBotsS),
+            "Keybinds" to all.filterIsInstance<KeybindSetting>(),
+            "HUDs" to listOf(practiceHudS, practiceTimeHudS, practiceStartHudS),
+        )
+        // A setting added later without a panel here still shows, in the last one.
+        val placed = groups.flatMap { it.second }.toSet()
+        val rest = all.filter { it !in placed }
+        return if (rest.isEmpty()) groups else groups.dropLast(1) + (groups.last().first to groups.last().second + rest)
+    }
 
     /**
-     * Tells Odin it is in F7's boss with a party of five, every tick while in the sim (Odin clears
-     * it all on each world load). Odin's dungeon features (terminal solver, leap menu, Simon Says,
-     * splits...) then work in the sim as they do on Hypixel.
+     * A first start with no ads.json: ADS was an Odin module, so its settings are in Odin's file for this mod
+     * (config/odin/addons/engineerclient.json), under the module's name: ADS, or P3 Sim Beta / P3 Sim before that
+     * (ConfigMigration renames those, but only once Odin's file is there). The values are written the same way;
+     * the HUDs were Odin HUDs, of which only the on/off carries over.
      */
-    private fun bridge() {
-        if (!inSim) {
-            if (bridged) { bridged = false; unbridge() }
-            return
-        }
-        bridged = true
-        // On in the sim, so its HUDs (practice) show: the module's switch does nothing else.
-        if (!enabled) toggle()
-        val me = mc.player?.name?.string ?: return
-        setArea(Island.Dungeon)
-        DungeonListener.floor = Floor.F7
-        DungeonListener.inBoss = true
-        // The party as the sim's server has it (players and bots, in your leap order); none until it says (the server's
-        // own lists aren't this thread's to read).
-        val sent = PartyClient.team.takeIf { PartyClient.me != null && it.isNotEmpty() } ?: return
-        val names = sent.joinToString { "${it.name}/${it.clazz}" }
-        val mine = PartyClient.me ?: return
-        if (DungeonListener.dungeonTeammates.size != 1 + sent.size || DungeonListener.dungeonTeammates.none { it.name == me } || teamClass != mine.ordinal || roster != names) {
-            teamClass = mine.ordinal
-            roster = names
-            val team = arrayListOf(DungeonPlayer(me, mine, 50, mc.player?.skin))
-            sent.forEach { m ->
-                // A player's skin from their entity here, when it's loaded.
-                val skin = if (m.player) mc.level?.players()?.firstOrNull { it.gameProfile.name == m.name }?.let { (it as? net.minecraft.client.player.AbstractClientPlayer)?.skin } else null
-                team += DungeonPlayer(m.name, m.clazz, 50, skin)
+    private fun migrateFromOdin() {
+        val file = mc.gameDirectory.toPath().resolve("config").resolve("odin").resolve("addons").resolve("engineerclient.json")
+        try {
+            if (!java.nio.file.Files.exists(file)) return
+            val modules = JsonParser.parseString(java.nio.file.Files.readString(file)).asJsonArray.mapNotNull { it.takeIf { m -> m.isJsonObject }?.asJsonObject }
+            val module = listOf("ADS", "P3 Sim Beta", "P3 Sim").firstNotNullOfOrNull { n -> modules.firstOrNull { it["name"]?.asString == n } } ?: return
+            val old = module.getAsJsonObject("settings") ?: return
+            readFrom(old)
+            for ((hud, setting) in listOf("Practice Splits" to practiceHudS, "Practice Time" to practiceTimeHudS, "Practice Start Timer" to practiceStartHudS)) {
+                (old[hud] as? JsonObject)?.get("enabled")?.let { runCatching { setting.value = it.asBoolean } }
             }
-
-            val others = team.filter { it.name != me }
-            DungeonListener.dungeonTeammates = team
-            DungeonListener.dungeonTeammatesNoSelf = others
-            // Odin's leap menu quadrants in the plan's leap slot order (slot 1 = top left ... 4 = bottom right).
-            DungeonListener.leapTeammates = others
+            EngineerClient.logger.info("[ads] settings moved from Odin's config to ads.json")
+        } catch (t: Throwable) {
+            EngineerClient.logger.warn("[ads] reading the old settings from Odin's config failed, keeping defaults", t)
         }
-    }
-
-    private var teamClass = -1
-    private var roster = ""
-
-    private fun unbridge() {
-        teamClass = -1
-        DungeonListener.floor = null
-        DungeonListener.inBoss = false
-        DungeonListener.dungeonTeammates = arrayListOf()
-        DungeonListener.dungeonTeammatesNoSelf = emptyList()
-        DungeonListener.leapTeammates = emptyList()
-        setArea(Island.Unknown)
-    }
-
-    // Resolved once: if Odin renames them, the bridge stays off instead of failing every tick.
-    private val areaField = runCatching { LocationUtils::class.java.getDeclaredField("currentArea").apply { isAccessible = true } }.getOrNull()
-    private val skyblockField = runCatching { LocationUtils::class.java.getDeclaredField("isInSkyblock").apply { isAccessible = true } }.getOrNull()
-
-    private fun setArea(area: Island) {
-        val areaField = areaField ?: return
-        val skyblockField = skyblockField ?: return
-        if (LocationUtils.currentArea != area) areaField.set(null, area)
-        if (skyblockField.getBoolean(null) != (area == Island.Dungeon)) skyblockField.setBoolean(null, area == Island.Dungeon)
     }
 }

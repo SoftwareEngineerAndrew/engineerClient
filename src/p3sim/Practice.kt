@@ -2,7 +2,6 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.client.Minecraft
 import java.io.File
 import java.util.Locale
@@ -200,7 +199,7 @@ object Practice {
         mode = m; section = s
         tasks = emptyList(); ticks = 0; endTicks = -1
         // The last try's times come down at once (the Section Time too, not only once the start timer ends).
-        com.engineerclient.practice.TermInfo.simClearTime()
+        if (P3Sim.odin) OdinSimBridge.fx("termClear")
         startedMs = System.currentTimeMillis()
         Fight.start(listOf(Fight.Start.S1, Fight.Start.S2, Fight.Start.S3, Fight.Start.S4)[s - 1], practice = true)
         // The preset's blocks already mined away (back with the next start's restore).

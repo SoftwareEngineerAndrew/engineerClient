@@ -2,15 +2,13 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.engineerclient.index
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.NumberSetting
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
@@ -552,28 +550,11 @@ object PartyClient {
     private val ownFile get() = java.io.File(mc.gameDirectory, "config/engineerclient/p3sim-own-settings.json")
     private fun keepOwn(o: JsonObject) = EngineerClient.safely("p3sim own settings keep") { ownFile.parentFile.mkdirs(); ownFile.writeText(o.toString()) }
 
-    /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. */
+    /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. All of it is Odin's: nothing without it. */
     private fun fx(what: String) {
+        if (!P3Sim.odin) return
         val o = runCatching { JsonParser.parseString(what).asJsonObject }.getOrNull() ?: return
-        val n = o.get("n")?.asInt ?: 0
-        when (o.get("fx")?.asString) {
-            "splitsStart" -> {
-                val split = o.get("split")?.asString ?: return
-                EngineerClient.safely("p3sim splits") { com.engineerclient.splits.DungeonSplits.simStart(split, n) }
-                EngineerClient.safely("p3sim arrows device") { Fight.resetArrowsDevice() }
-            }
-            "splitsStop" -> {
-                EngineerClient.safely("p3sim splits stop") { com.engineerclient.splits.DungeonSplits.simStop() }
-                // Stop and practice starts too: Odin's i4 solver forgets the blocks it marked hit.
-                EngineerClient.safely("p3sim arrows device") { Fight.resetArrowsDevice() }
-                EngineerClient.safely("p3sim tick timers stop") { com.engineerclient.misc.OdinTickTimers.stopAll() }
-            }
-            "masksReset" -> EngineerClient.safely("p3sim masks") { com.engineerclient.misc.OdinMasksUsed.resetTimers() }
-            "arrowsReset" -> EngineerClient.safely("p3sim arrows device") { Fight.resetArrowsDevice() }
-            "termStart" -> EngineerClient.safely("p3sim term info") { com.engineerclient.practice.TermInfo.simStart(n) }
-            "termClear" -> EngineerClient.safely("p3sim term info") { com.engineerclient.practice.TermInfo.simClearTime() }
-            "sectionTime" -> EngineerClient.safely("p3sim term info") { com.engineerclient.practice.TermInfo.simSectionTime(n) }
-        }
+        OdinSimBridge.fx(o.get("fx")?.asString ?: return, o.get("n")?.asInt ?: 0, o.get("split")?.asString)
     }
 
     /** Server side: [fx] on every game in the sim (or [to]'s alone), in order with the fight's packets. */

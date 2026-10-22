@@ -2,7 +2,6 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.client.Minecraft
 import net.minecraft.world.phys.Vec3
 import java.io.File
@@ -235,13 +234,12 @@ object P3Plan {
         return odinOrder(o) ?: o
     }
 
-    /** The leap menu sorted as Odin does by default: by class priority, into Odin's quadrants. On unless you choose your own order. */
+    /** The leap menu sorted as Odin does by default: by class priority, into Odin's quadrants. On unless you choose your own order; without Odin, the plan's order. */
     var odinSort = true
 
-    private fun odinOrder(classes: List<DungeonClass>): List<DungeonClass>? = runCatching {
-        val players = classes.map { com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer(Roles.label(it), it, 50, null) }.sortedBy { it.clazz.priority }
-        com.odtheking.odin.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
-    }.getOrNull()?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
+    private fun odinOrder(classes: List<DungeonClass>): List<DungeonClass>? =
+        (if (P3Sim.odin) runCatching { OdinSimBridge.leapOrder(classes) }.getOrNull() else null)
+            ?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
 
     /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */
     fun cycleSlot(slot: Int, back: Boolean = false) {

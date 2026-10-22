@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.engineerclient.mixin",
+  "plugin": "com.engineerclient.mixinplugin.OdinFeatureMixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
     "ArmorFoilMixin",
@@ -31,7 +32,6 @@
     "GuiRenderStateBlurMixin",
     "GuiItemNameMixin",
     "ItemFoilMixin",
-    "LeapTermsimProtMixin",
     "LivingEntityAccessor",
     "LocalPlayerDropMixin",
     "MinecraftAccessor",
@@ -44,7 +44,6 @@
     "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
     "SimActorMixin",
-    "NumbersHandlerMixin",
     "ScoreboardSidebarMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",

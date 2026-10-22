@@ -1,6 +1,7 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.OdinAddon
 import com.engineerclient.adr.ADR
 import com.google.gson.JsonObject
 import com.odtheking.odin.clickgui.settings.RenderableSetting
@@ -68,7 +69,7 @@ object LaunchStats {
             addProperty("mc", FabricLoader.getInstance().getModContainer("minecraft").map { it.metadata.version.friendlyString }.orElse("?"))
             addProperty("playtimeMs", playtimeMs)
             add("modules", JsonObject().also { modules ->
-                for (m in EngineerClient.MODULES) modules.add(m.name, JsonObject().apply {
+                for (m in OdinAddon.MODULES) modules.add(m.name, JsonObject().apply {
                     addProperty("enabled", m.enabled)
                     if (m.enabled) add("settings", JsonObject().also { s ->
                         for ((key, setting) in m.settings) {

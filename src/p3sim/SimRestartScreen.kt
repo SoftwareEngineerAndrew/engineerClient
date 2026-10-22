@@ -2,7 +2,6 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.engineerclient.index
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.input.MouseButtonEvent
@@ -13,7 +12,7 @@ import net.rustclear.mod.ui.Theme
 import java.util.Locale
 
 /**
- * The sim's main menu: Esc > ADS Menu, the SkyBlock Menu star (hotbar), `/ads` or the keybind. Drawn with the ADS
+ * The sim's main menu: Esc > ADS Menu, the SkyBlock Menu star (hotbar), `/ads menu` or the keybind. Drawn with the ADS
  * screens' own toolkit ([RustclearScreen]), so it reads as the rest of them.
  *
  * The rail on the left holds the tabs (Plan, Advanced, Settings, Teleport, Practice, Boss), each with a line of
@@ -458,7 +457,8 @@ class SimRestartScreen : RustclearScreen(Component.literal(P3Sim.FULL_NAME), nul
             flag("Terror At Terms", P3Sim.terrorAtTerms, P3Sim.terrorAtTermsS.description) { P3Sim.toggleTerrorAtTerms() }
             flag("Black Cat Start", P3Sim.blackCatAtStart, "Black Cat At Start: " + P3Sim.blackCatS.description) { P3Sim.toggleBlackCatAtStart() }
             flag("Section Times", P3Sim.showTimes, P3Sim.showTimesS.description) { P3Sim.showTimesS.value = !P3Sim.showTimes }
-            flag("Hide Players", P3Sim.hidePlayers, "On: other players out of sight.") { P3Sim.toggleHidePlayers() }
+            // Odin's Hide Players: only with Odin.
+            if (P3Sim.odin) flag("Hide Players", P3Sim.hidePlayers, "On: other players out of sight.") { P3Sim.toggleHidePlayers() }
             flag("Debug Bots", P3Sim.debugBots, P3Sim.debugBotsS.description) { P3Sim.debugBotsS.value = !P3Sim.debugBots }
         }
 

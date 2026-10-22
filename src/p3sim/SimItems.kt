@@ -1218,7 +1218,7 @@ object SimItems {
     /** The drop key from a player's game ([clientDrop]), as theirs: Ctrl+Q is the class ability. */
     fun serverDrop(p: ServerPlayer, fullStack: Boolean) {
         if (!fullStack) return
-        if (P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER) asClicked(p, "archer ability") { volley(p) }
+        if (P3Sim.myClass == DungeonClass.ARCHER) asClicked(p, "archer ability") { volley(p) }
         // The Mage's: Guided Sheep.
         else if (Mage.isMage()) Fight.afterPing("guided sheep") { Mage.ability(p) }
     }
