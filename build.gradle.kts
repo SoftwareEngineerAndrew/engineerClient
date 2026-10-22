@@ -49,7 +49,8 @@ dependencies {
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json). 0.3.7 for 26.3 is not released
+    // Odin is an optional runtime mod (recommended in fabric.mod.json; ADS and the P3 Sim run without it,
+    // the Odin addon loads only with it). 0.3.7 for 26.3 is not released
     // yet: compiled against the 26.3 port build (OdinFabric PR #164, CI run 37808382947), which the
     // release workflow downloads into libs/odin; kept out of git.
     compileOnly(files("libs/odin"))
