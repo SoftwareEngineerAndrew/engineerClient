@@ -70,6 +70,25 @@ public final class NecronPhase implements BossPhase {
         this.removeGoldor = removeGoldor;
     }
 
+    /** Where boss practice starts the party for this phase alone (NecronData.PRACTICE_ENTRY). */
+    public static Vec3 practiceEntry() {
+        return NecronData.PRACTICE_ENTRY;
+    }
+
+    /**
+     * Boss practice of this phase alone: P3's end floor drop (p4_blocks.json "p3end") put in at once,
+     * as Goldor's phase would have played it; the phase should begin [practiceDropLead] ticks later.
+     */
+    public static void dropFloorNow(BossContext ctx) {
+        for (BossFrames.Frame f : BossFrames.get("p4_blocks.json", "p3end")) {
+            ctx.blocks().set(f.pos(), f.state());
+        }
+    }
+
+    public static int practiceDropLead() {
+        return NecronData.PRACTICE_DROP_LEAD;
+    }
+
     @Override
     public String name() {
         return "necron";

@@ -13,7 +13,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.rustclear.mod.DungeonSettings;
 import net.rustclear.mod.Floor;
+import net.rustclear.mod.engine.boss.necron.NecronPhase;
 import net.rustclear.mod.engine.boss.storm.StormPhase;
+import net.rustclear.mod.engine.boss.witherking.WitherKingPhase;
 
 /**
  * A practice the ADS Practice page asked for (PracticeSpec), in the party's dungeon: it builds the
@@ -33,6 +35,15 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     private static final int PHASE_DELAY = 10;
     /** Facing Storm's side of the room (+x, where he appears) from his practice start. */
     private static final float STORM_YAW = 270f;
+    /** Facing north (-z) from Necron's practice start, toward where he stands. */
+    private static final float NECRON_YAW = 180f;
+    /**
+     * The blessings a boss-only practice starts with, as a clear would have found them (no clear
+     * runs before it). OPEN: a typical S+ clear's totals, not measured: Power XX (four level V
+     * drops), Life, Stone and Wisdom X, and the Quiz's Time V.
+     */
+    private static final java.util.Map<String, Integer> BOSS_BLESSINGS = java.util.Map.of(
+        "power", 20, "life", 10, "stone", 10, "wisdom", 10, "time", 5);
 
     final PracticeSpec spec;
     /** The seed this session's map is built from (FULL_CLEAR), or null. */
@@ -179,11 +190,26 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
                 entry = StormPhase.practiceEntry();
                 yaw = STORM_YAW;
             }
-            default -> throw new Planner.PlanException("Unknown boss phase '" + spec.phase() + "': p1 or p2.");
+            case "p4" -> {
+                bossPhase = "necron";
+                entry = NecronPhase.practiceEntry();
+                yaw = NECRON_YAW;
+            }
+            case "p5" -> {
+                bossPhase = "wither_king";
+                entry = WitherKingPhase.practiceEntry();
+                yaw = 180f;
+            }
+            default -> throw new Planner.PlanException("Unknown boss phase '" + spec.phase() + "': p1, p2, p4 or p5.");
         }
         installAlone(bloodPlan(fresh), floor, new DungeonBuilder.Spawn(entry.x, entry.y, entry.z, yaw));
         BossArena.of(run.level).finishNow();
-        run.bossFight.stopAfter(bossPhase, this::phaseOver);
+        BOSS_BLESSINGS.forEach(run::addBlessing);
+        // Necron ends an F7 run and the Wither King an M7 one (onDefeated); the others stop where the next would begin.
+        boolean endsRun = bossPhase.equals("wither_king") || bossPhase.equals("necron") && !floor.master();
+        if (!endsRun) {
+            run.bossFight.stopAfter(bossPhase, this::phaseOver);
+        }
         greeting.add(EngineItems.text("§cBoss practice: " + bossLabel() + " on " + floor.code + ". §7It starts in a second."));
     }
 
@@ -193,6 +219,13 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
             // The blood portal's own way in: the teleport, Maxor's bar, then his phase.
             case "maxor" -> at.bossContext().enterBoss();
             case "storm" -> at.beginBossPractice(new StormPhase(), StormPhase.practiceEntry(), STORM_YAW, PHASE_DELAY);
+            case "necron" -> {
+                // P3's end as Goldor leaves it: the floor under the core's south end gone, the party falling into P4.
+                NecronPhase.dropFloorNow(at.bossContext());
+                at.beginBossPractice(new NecronPhase(null), NecronPhase.practiceEntry(), NECRON_YAW, NecronPhase.practiceDropLead());
+            }
+            // It puts the party on its floor itself.
+            case "wither_king" -> at.beginBossPractice(new WitherKingPhase(), null, 0f, PHASE_DELAY);
             default -> {
             }
         }

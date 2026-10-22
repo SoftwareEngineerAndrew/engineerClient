@@ -87,6 +87,11 @@ public final class WitherKingPhase implements BossPhase {
         }
     }
 
+    /** Where the party stands as this phase starts (it puts them there itself), for boss practice's respawns. */
+    public static Vec3 practiceEntry() {
+        return WitherKingData.FLOOR_SPOT;
+    }
+
     @Override
     public String name() {
         return "wither_king";
