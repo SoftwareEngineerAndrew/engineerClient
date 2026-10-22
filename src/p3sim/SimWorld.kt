@@ -44,6 +44,8 @@ object SimWorld {
             if (P3Sim.inSim) return@execute
             if (mc.level != null) mc.disconnectFromWorld(Component.literal("Opening ADS"))
             opening = true
+            // Leaving the sim lands on the ADS menu, as leaving the dungeon engine's world does.
+            net.rustclear.mod.engine.Engine.backToRustclear = true
             try { openOrCreate() } catch (t: Throwable) { failed("open", t) }
         }
     }

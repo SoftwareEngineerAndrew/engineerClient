@@ -21,6 +21,7 @@ import java.nio.file.Files
  *   waitworld [N]          until in a world with no screen open (at most N ticks, default 1200)
  *   open title|ads|practice|settings|p3menu|pause|close
  *   sim                    the P3 Sim world
+ *   leave                  out of the world, as Save and Quit does
  *   practice clear|rush|camp|p1|p2|p4|p5 [F7|M7]   or   practice room NAME [door] [F7|M7]
  *   cmd TEXT               a command, without its slash
  *   simaction KIND         a P3 Sim menu action (start, stop, spectateRoute...), as its buttons send them
@@ -88,6 +89,7 @@ object DevScript {
                 })
             }
             "sim" -> com.engineerclient.p3sim.SimWorld.open()
+            "leave" -> mc.disconnectFromWorld(net.minecraft.network.chat.Component.literal("Leaving"))
             "practice" -> {
                 val floor = Floor.of(args.lastOrNull { it.equals("F7", true) || it.equals("M7", true) } ?: "M7")
                 EnginePractice.start(when (args.getOrNull(1)) {

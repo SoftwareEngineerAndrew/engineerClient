@@ -25,6 +25,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed
+- Leaving the P3 Sim takes you back to the ADS menu instead of Minecraft's title screen.
 - Chat lines say [ADS] instead of [EC], and the mod is named ADS in Mod Menu and in Odin's menu.
 - Spectate Route runs never count for personal bests (their split times say spectated), and a first time says First PB instead of an old PB of 9999.
 - Players take no knockback in ADS's worlds (the P3 Sim and dungeon/practice worlds): not from hits, arrows, mobs, explosions or bumping into bodies. Your own abilities' movement (Bonzo's Staff, leaps, Superboom) and lava bounce still work.
