@@ -13,9 +13,8 @@ import com.engineerclient.ads.settings.Settings
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import net.fabricmc.loader.api.FabricLoader
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
-import net.minecraft.client.gui.GuiGraphicsExtractor
-import net.minecraft.resources.Identifier
+import com.engineerclient.ads.hud.AdsHud
+import com.engineerclient.ads.hud.AdsHuds
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
@@ -109,41 +108,34 @@ object P3Sim : Settings("ADS", "ads.json") {
     val practiceStartHudS = +BooleanSetting("Practice Start Timer HUD", true, desc = "A practice's start timer counting down, large, until terminals and the rest are up.")
 
     /**
-     * The practice HUDs, drawn over the game (Fabric's HUD layers) where they always were: Odin's HUD editor once
-     * placed them, so the place and size are fixed now. Each draws its lines at ([x], [y]) at [scale].
+     * The practice HUDs, ADS HUDs ([AdsHud]: placed in the HUD editor, `/ads hud`), at the places and sizes Odin's HUD
+     * editor once gave them. Each draws its lines (null: nothing) in the sim only; [example] is what the editor shows.
      */
-    private class Hud(val name: String, val on: BooleanSetting, val x: Int, val y: Int, val scale: Float, val lines: () -> List<String>?)
+    private fun practiceHud(id: String, name: String, on: BooleanSetting, x: Int, y: Int, scale: Float, example: List<String>, lines: () -> List<String>?) =
+        AdsHuds.register(AdsHud(id, name, on.description, x, y, scale, on) { ex ->
+            val shown = if (ex) example else if (inSim) lines() ?: emptyList() else emptyList()
+            shown.forEachIndexed { i, l -> text(mc.font, l, 0, i * 10, -1, true) }
+            (shown.maxOfOrNull { mc.font.width(it) } ?: 0) to shown.size * 10
+        })
 
-    private val huds = listOf(
+    private fun registerHuds() {
         // Practice: each task's time as you do it (like the Simon Says sim's).
-        Hud("practice_splits", practiceHudS, 10, 210, 1.5f) {
+        practiceHud("practice_splits", "Practice Splits", practiceHudS, 10, 210, 1.5f,
+            listOf("§6Practice S1 §f12.35", "§7Lever §a3.10", "§7Terminal 1 §a6.85", "§7Terminal 2 §e...", "§7Device §8-")) {
             val mode = Practice.mode
             // Nothing during the start timer.
-            if (mode == null || Practice.ticks < 0 || Practice.tasks.isEmpty()) return@Hud null
+            if (mode == null || Practice.ticks < 0 || Practice.tasks.isEmpty()) return@practiceHud null
             val next = Practice.tasks.firstOrNull { it.at < 0 }
             listOf("§6Practice $mode ${if (Practice.endTicks >= 0) "§a" else "§f"}${Practice.secs(Practice.ticks)}") +
                 Practice.tasks.map { t -> "§7${t.label} " + if (t.at >= 0) "§a${Practice.secs(t.at)}" else if (t === next) "§e..." else "§8-" }
-        },
+        }
         // Practice: the final time, large, as Term Info's section times look.
-        Hud("practice_time", practiceTimeHudS, 420, 300, 5f) {
+        practiceHud("practice_time", "Practice Time", practiceTimeHudS, 420, 300, 5f, listOf("§512.35")) {
             Practice.endTicks.takeIf { Practice.active && it >= 0 && System.currentTimeMillis() - Practice.endMs < 4000 }?.let { listOf("§5${Practice.secs(it)}") }
-        },
+        }
         // Practice: the start timer counting down, large.
-        Hud("practice_start", practiceStartHudS, 440, 250, 4f) {
+        practiceHud("practice_start", "Practice Start Timer", practiceStartHudS, 440, 250, 4f, listOf("§e2.5")) {
             Practice.ticks.takeIf { Practice.active && it < 0 }?.let { listOf("§e${"%.1f".format(java.util.Locale.ROOT, -it / 20.0)}") }
-        },
-    )
-
-    private fun drawHuds(g: GuiGraphicsExtractor) {
-        if (!inSim || mc.gui.hud.isHidden) return
-        for (h in huds) {
-            if (!h.on.value) continue
-            val lines = h.lines() ?: continue
-            g.pose().pushMatrix()
-            g.pose().translate(h.x.toFloat(), h.y.toFloat())
-            g.pose().scale(h.scale)
-            lines.forEachIndexed { i, l -> g.text(mc.font, l, 0, i * 10, -1, true) }
-            g.pose().popMatrix()
         }
     }
 
@@ -264,9 +256,7 @@ object P3Sim : Settings("ADS", "ads.json") {
             save()
         }
         registerKeybinds()
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("engineerclient", "ads_practice")) { g, _ ->
-            EngineerClient.safely("ads practice huds") { drawHuds(g) }
-        }
+        registerHuds()
         SimNet.register()
         PartyServer.register()
         PartyClient.register()
@@ -290,6 +280,8 @@ object P3Sim : Settings("ADS", "ads.json") {
             for (name in listOf("ads", "p3sim")) {
                 val cmd = ClientCommands.literal(name).executes { if (name == "ads") openSettings() else openMenuOrSim(); 1 }
                 cmd.then(ClientCommands.literal("menu").executes { openMenuOrSim(); 1 })
+                // /ads hud: the HUD editor, to place ADS's HUDs.
+                cmd.then(ClientCommands.literal("hud").executes { com.engineerclient.ads.hud.AdsHudEditor.open(); 1 })
                 for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {
                     if (inSim) SimActions.send("start", "what" to s.name) else SimWorld.open(); 1
                 })

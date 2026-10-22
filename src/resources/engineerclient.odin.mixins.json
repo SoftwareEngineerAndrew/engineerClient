@@ -22,7 +22,8 @@
     "TermGuiButtonMixin",
     "LeapTermsimProtMixin",
     "NumbersHandlerMixin",
-    "OdinTerminalSolverMixin"
+    "OdinTerminalSolverMixin",
+    "OdinSplitsAdsWorldMixin"
   ],
   "injectors": {
     "defaultRequire": 0

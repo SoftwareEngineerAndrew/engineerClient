@@ -73,6 +73,8 @@ object EngineerClient : ClientModInitializer {
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
         // ADS's own terminal solver, for the sim's and Rustclear's terminals.
         safely("terminal solver") { com.engineerclient.terminals.AdsTerminalSolver.init() }
+        // ADS's splits, in the sim and Rustclear worlds (Odin's step aside there).
+        safely("ads splits") { com.engineerclient.ads.splits.AdsSplits.init() }
         // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.
         if (odin) safely("odin addon") { OdinAddon.init(firstRun) }
 
