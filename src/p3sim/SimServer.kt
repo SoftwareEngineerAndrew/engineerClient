@@ -85,6 +85,8 @@ object SimServer {
         ServerPlayConnectionEvents.DISCONNECT.register { handler, s ->
             if (s === server) EngineerClient.safely("p3sim leave") { Fight.leave(handler.player) }
         }
+        // Before SimItems': a route's watcher's clicks never reach them.
+        SpectateRoute.register()
         SimItems.register()
     }
 

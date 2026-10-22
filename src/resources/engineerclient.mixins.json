@@ -45,6 +45,7 @@
     "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
     "SimActorMixin",
+    "SpectateRouteSneakMixin",
     "ScoreboardSidebarMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",
