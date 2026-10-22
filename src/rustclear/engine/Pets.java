@@ -579,8 +579,8 @@ public final class Pets {
         tag.putString("uuid", pet.uuid());
         tag.putInt(LEVEL_TAG, pet.level());
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-        stack.set(DataComponents.TOOLTIP_STYLE,
-            Identifier.fromNamespaceAndPath("hypixel_skyblock", pet.rarity().name().toLowerCase(Locale.ROOT)));
+        // Only with Hypixel's pack loaded: without it the tooltip frame is the missing texture.
+        com.engineerclient.ads.HypixelPack.tooltip(stack, pet.rarity().name().toLowerCase(Locale.ROOT));
     }
 
     /** The pet [stack] is, or null. */
