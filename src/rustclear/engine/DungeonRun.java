@@ -171,7 +171,23 @@ public final class DungeonRun implements EngineRun {
         /** The boss is beaten (Necron on F7, the Wither King on M7). */
         default void onDefeated(DungeonRun run) {
         }
+
+        /** Every tick of the started run, after the run's own work. */
+        default void onTick(DungeonRun run, long runTicks) {
+        }
+
+        /** Whether the entrance has no Mort (only his hidden name stand, for mods that anchor on it). */
+        default boolean skipMort() {
+            return false;
+        }
+
+        /** Whether practice's timer has the action bar (Combat's health and mana line stays off). */
+        default boolean ownsActionBar() {
+            return false;
+        }
     }
+    /** The run began without Mort's lines ([startNow] quiet): practice dropped straight into the camp or a boss. */
+    private boolean quietMort;
     private Mannequin mort;
     /** Practice mode's route timer, or null in a normal run (Dungeon::practice_room). */
     private Practice.Route practice;
@@ -550,6 +566,16 @@ public final class DungeonRun implements EngineRun {
         return practice != null;
     }
 
+    /** Whether a practice timer has the action bar: a practice room's route, or a session's (hooks). */
+    boolean ownsActionBar() {
+        return practice != null || hooks != null && hooks.ownsActionBar();
+    }
+
+    /** The team holds the blood key (blood rush practice starts with it). */
+    void grantBloodKey() {
+        bloodKey = true;
+    }
+
     /** Dungeon::from_layout's neighbour wiring: which door and room lies past each side of each cell. */
     private void linkNeighbours() {
         for (RoomState room : rooms) {
@@ -639,7 +665,19 @@ public final class DungeonRun implements EngineRun {
             level.addFreshEntity(mortName);
         }
         for (RoomState room : rooms) {
-            if (room.type() == RoomType.ENTRANCE && practice == null) {
+            if (room.type() == RoomType.ENTRANCE && practice == null && hooks != null && hooks.skipMort()) {
+                // Practice that starts at once: no Mort to ready at, but his name stand where it'd be.
+                BlockPos pos = room.placed.toWorld(15, 69, 4);
+                mortName = new ArmorStand(EntityTypes.ARMOR_STAND, level);
+                ((ArmorStandAccessor) mortName).rustclear$setMarker(true);
+                mortName.snapTo(pos.getX() + 0.5, pos.getY() + 2.55, pos.getZ() + 0.5, 0f, 0f);
+                mortName.setInvisible(true);
+                mortName.setNoGravity(true);
+                mortName.setPermanentlyInvulnerable(true);
+                mortName.setCustomName(EngineItems.text("§bMort"));
+                mortName.setCustomNameVisible(false);
+                level.addFreshEntity(mortName);
+            } else if (room.type() == RoomType.ENTRANCE && practice == null) {
                 BlockPos pos = room.placed.toWorld(15, 69, 4);
                 mort = new Mannequin(EntityTypes.MANNEQUIN, level);
                 mort.snapTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, room.placed.facing().rotateYaw(0f), 0f);
@@ -1195,6 +1233,9 @@ public final class DungeonRun implements EngineRun {
             if (blood) {
                 if (finishedAt < 0) {
                     finishedAt = runTicks;
+                    if (hooks != null) {
+                        hooks.onBloodDoor(this, runTicks);
+                    }
                 }
                 broadcast("§cThe §lBLOOD DOOR§c has been opened!");
                 broadcast("§5A shiver runs down your spine...");
@@ -1538,22 +1579,43 @@ public final class DungeonRun implements EngineRun {
     private void tickStarting() {
         countdown--;
         if (countdown == 0) {
+            beginRun();
+        } else if (countdown <= 80 && countdown % 20 == 0) {
+            int seconds = countdown / 20;
+            broadcast("§aStarting in " + seconds + " second" + (seconds == 1 ? "" : "s") + ".");
+        }
+    }
+
+    /** The countdown's end (or [startNow]): Mort's first line, and the run starts. */
+    private void beginRun() {
+        if (!quietMort) {
             forEachPlayer(p -> {
                 sound(p, SoundEvents.ENDER_DRAGON_GROWL, 1f, 1f);
                 sound(p, SoundEvents.VILLAGER_TRADE, 1f, 0.7f);
             });
-            forEachPlayer(this::announceClass);
-            forEachPlayer(p -> Pets.trigger(p, Pets.Trigger.DUNGEON_START));
+        }
+        forEachPlayer(this::announceClass);
+        forEachPlayer(p -> Pets.trigger(p, Pets.Trigger.DUNGEON_START));
+        if (!quietMort) {
             broadcast("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.");
-            score.reset();
-            score.master = floor.master();
-            score.startNanos = System.nanoTime();
-            state = State.STARTED;
-            runTicks = 0;
-            start();
-        } else if (countdown <= 80 && countdown % 20 == 0) {
-            int seconds = countdown / 20;
-            broadcast("§aStarting in " + seconds + " second" + (seconds == 1 ? "" : "s") + ".");
+        }
+        score.reset();
+        score.master = floor.master();
+        score.startNanos = System.nanoTime();
+        state = State.STARTED;
+        runTicks = 0;
+        start();
+    }
+
+    /**
+     * Practice: the run starts now, with no ready-up or countdown. [quiet] leaves out Mort's lines
+     * (and the start sounds), for a practice that starts somewhere other than the entrance.
+     */
+    void startNow(boolean quiet) {
+        if (state == State.NOT_READY || state == State.STARTING) {
+            quietMort = quiet;
+            forEachPlayer(p -> ready.add(p.getUUID()));
+            beginRun();
         }
     }
 
@@ -1578,14 +1640,14 @@ public final class DungeonRun implements EngineRun {
 
         // No Mort in a practice room, but his lines still go out: client mods take them as the start
         // of the run (Devonian's splits and star-mob boxes, Skyblocker's score and map).
-        if (runTicks == 1 && practice != null) {
+        if (runTicks == 1 && practice != null && !quietMort) {
             broadcast("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.");
         }
-        if (runTicks == 40) {
+        if (runTicks == 40 && !quietMort) {
             forEachPlayer(p -> sound(p, SoundEvents.VILLAGER_TRADE, 1f, 0.7f));
             broadcast("§e[NPC] §bMort§f: You should find it useful if you get lost.");
         }
-        if (runTicks == 70) {
+        if (runTicks == 70 && !quietMort) {
             forEachPlayer(p -> sound(p, SoundEvents.VILLAGER_TRADE, 1f, 0.7f));
             broadcast("§e[NPC] §bMort§f: Good luck.");
         }
@@ -1661,6 +1723,9 @@ public final class DungeonRun implements EngineRun {
         }
         if (practice != null) {
             practice.tick(this, runTicks);
+        }
+        if (hooks != null) {
+            hooks.onTick(this, runTicks);
         }
     }
 
