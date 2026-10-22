@@ -75,6 +75,12 @@ public final class EngineServer {
     private static final Map<String, String> preferredTeams = new HashMap<>();
     /** A matchmade duel the next world opens for, or null. */
     private static volatile Match pendingMatch;
+    /** A practice the next world opens for (the ADS Practice page), or null. */
+    private static volatile PracticeSpec pendingPractice;
+    /** The practice the party's dungeon is set up for, or null for a normal dungeon. */
+    private static PracticeSession practice;
+    /** A line for the host once they're in (why a practice couldn't start), or null. */
+    private static String hostNotice;
     /** This world is a matchmade duel: it starts once everyone matched is in, without readying. */
     private static boolean autoStartDuel;
     /** The server tick the matchmade party became full, or -1. */
@@ -102,8 +108,8 @@ public final class EngineServer {
     /** Whether practice rooms spawn their mobs: the leader's choice, as practice rebuilds everyone's dungeon. */
     private static boolean practiceMobs;
     private static final Random RANDOM = new Random();
-    /** The seed of the last dungeon newDungeon built, and the one the next must use (null: a fresh one). */
-    static volatile long lastSeed;
+    /** The seed of the last dungeon planned in this game (newDungeon or a practice), or null before the first. */
+    private static volatile Long lastSeed;
     /** Most block hits a guest may send in one tick (a held click sends one per tick). */
     private static final int MAX_HITS_PER_TICK = 4;
     /** This tick's hits per guest: the tick, then the blocks hit (BlockPos longs). */
@@ -555,6 +561,13 @@ public final class EngineServer {
             }
             rules(s);
             commands(s);
+            PracticeSpec spec = pendingPractice;
+            pendingPractice = null;
+            if (spec != null && match == null) {
+                // Opened for practice (EnginePractice): set up for it, or a normal dungeon if it can't be.
+                startPractice(s, spec);
+                return;
+            }
             try {
                 newDungeon(s);
             } catch (Planner.PlanException e) {
@@ -583,6 +596,8 @@ public final class EngineServer {
                 Equipment.clear();
                 Pets.clear();
                 practiceMobs = false;
+                practice = null;
+                hostNotice = null;
                 hitsThisTick.clear();
                 hitTick.clear();
                 EngineProtocol.reset();
@@ -637,6 +652,15 @@ public final class EngineServer {
                 home.toSpawn(player);
                 if (home.run() != null) {
                     home.run().equip(player);
+                }
+                if (isHost(player)) {
+                    if (practice != null) {
+                        practice.onJoin(player);
+                    }
+                    if (hostNotice != null) {
+                        player.sendSystemMessage(EngineItems.text(hostNotice));
+                        hostNotice = null;
+                    }
                 }
                 EngineProtocol.sendHello(player);
             }
@@ -811,7 +835,7 @@ public final class EngineServer {
         }
     }
 
-    /** A new party dungeon that meets the current settings; leaves practice mode. Not during a duel. */
+    /** A new party dungeon that meets the current settings; leaves practice mode (and any practice session). Not during a duel. */
     public static void newDungeon(MinecraftServer s) throws Planner.PlanException {
         if (duels != null) {
             throw new Planner.PlanException("The party is in a duel. Go back to the party first.");
@@ -821,10 +845,11 @@ public final class EngineServer {
         timer.lap("data");
         // Plan first, so settings no dungeon meets leave the current one standing.
         long seed = RANDOM.nextLong();
-        lastSeed = seed;
         Random random = new Random(seed);
         DungeonPlan next = Planner.plan(store, settings, random);
         timer.lap("plan");
+        practice = null;
+        lastSeed = seed;
         partyInstance.practicePick = null;
         partyInstance.practiceRoute = null;
         partyInstance.install(next, store, null, -1, practiceMobs, random, timer, settings.floorOrDefault(), seed, null, null);
@@ -881,6 +906,7 @@ public final class EngineServer {
             autoStartDuel = false;
             // Nobody is in the party's dungeon while they race.
             partyInstance.dispose();
+            practice = null;
             party.sync(run(), duels, true);
         }
     }
@@ -918,12 +944,101 @@ public final class EngineServer {
         pendingMatch = match;
     }
 
+    // ---------------------------------------------------------------- practice sessions
+
+    /** The next world opens set up for [spec] (call before EngineWorld.open). */
+    public static void preparePractice(PracticeSpec spec) {
+        pendingPractice = spec;
+    }
+
+    /** Switches the open engine world to [spec] (any thread); nothing when no engine world runs. */
+    public static void practiceNow(PracticeSpec spec) {
+        MinecraftServer s = server;
+        if (s != null) {
+            s.execute(() -> startPractice(s, spec));
+        }
+    }
+
+    /** The seed of the last dungeon planned in this game, or null before the first. */
+    public static Long lastSeed() {
+        return lastSeed;
+    }
+
+    static void setLastSeed(long seed) {
+        lastSeed = seed;
+    }
+
+    /** The practice the party's dungeon is set up for, or null. */
+    static PracticeSession practice() {
+        return practice;
+    }
+
+    static Instance partyInstance() {
+        return partyInstance;
+    }
+
+    /** Sets the party's dungeon up for [spec] (server thread); a normal dungeon, and the reason, when it can't be. */
+    static void startPractice(MinecraftServer s, PracticeSpec spec) {
+        if (duels != null) {
+            tellHost(s, "§cThe party is in a duel. Go back to the party first.");
+            return;
+        }
+        if (party != null && party.mode().duel()) {
+            // Practice is solo: a duel mode's start would take the run over.
+            party.setMode(Party.Mode.PARTY);
+        }
+        buildPractice(s, new PracticeSession(spec), false);
+    }
+
+    /** /rs (and /rs new, [fresh]) in a practice session: the same practice again, or a new map of it. */
+    private static void restartSession(MinecraftServer s, boolean fresh) {
+        buildPractice(s, practice, fresh);
+    }
+
+    private static void buildPractice(MinecraftServer s, PracticeSession session, boolean fresh) {
+        practice = null;
+        try {
+            session.build(s, fresh);
+        } catch (Planner.PlanException | RuntimeException e) {
+            RustclearMod.LOGGER.warn("Couldn't set up Rustclear practice {}: {}", session.spec, e.toString());
+            try {
+                newDungeon(s);
+            } catch (Planner.PlanException again) {
+                settings = new DungeonSettings();
+                newDungeonOrLog(s);
+            }
+            tellHost(s, "§c" + e.getMessage() + " §7A normal dungeon instead.");
+            return;
+        }
+        practice = session;
+        session.joinPresent(s);
+    }
+
+    /** [legacy] to the host now, or once they join. */
+    private static void tellHost(MinecraftServer s, String legacy) {
+        for (ServerPlayer player : s.getPlayerList().getPlayers()) {
+            if (isHost(player)) {
+                player.sendSystemMessage(EngineItems.text(legacy));
+                return;
+            }
+        }
+        hostNotice = legacy;
+    }
+
     /**
      * load_practice_room (/practice <room> [door] [secrets]): the named room alone, everyone just
      * inside [door] ("random" or null for any), and the route timer armed for [secrets] (null: all
      * of the room's). Returns the chat reply; throws IllegalArgumentException with the reason.
      */
     static String practice(MinecraftServer s, String roomName, String door, Integer secrets) {
+        String reply = practiceRoom(s, roomName, door, secrets, settings.floorOrDefault());
+        // A room picked by hand (or from the settings screen) ends any practice session.
+        practice = null;
+        return reply;
+    }
+
+    /** [practice] on [floor], leaving any practice session as it is (PracticeSession's ROOM builds through here). */
+    static String practiceRoom(MinecraftServer s, String roomName, String door, Integer secrets, Floor floor) {
         if (duels != null) {
             throw new IllegalArgumentException("The party is in a duel. Go back to the party first.");
         }
@@ -953,40 +1068,47 @@ public final class EngineServer {
         String prefix = name + " " + Character.toUpperCase(chosen.label().charAt(0)) + target + "/" + total;
         partyInstance.practicePick = pick;
         partyInstance.practiceRoute = new Practice.Route(target, prefix, chosen);
-        partyInstance.install(built.plan(), store, partyInstance.practiceRoute, pick.waterPattern(), practiceMobs, RANDOM, timer);
+        partyInstance.practiceFloor = floor;
+        partyInstance.install(built.plan(), store, partyInstance.practiceRoute, pick.waterPattern(), practiceMobs, RANDOM, timer,
+            floor, null, null, null);
         return "§aPracticing " + name + " from the " + chosen.label() + " door"
             + (target > 0 ? " (" + target + "/" + total + " secrets)." : ".");
     }
 
     /** restart_practice_room (/rs in practice): the same room rebuilt from scratch, everyone back at the same door, the timer reset. */
-    private static void restartPractice(MinecraftServer s) {
+    static void restartPractice(MinecraftServer s) {
         Instance in = partyInstance;
         Practice.Route old = in.practiceRoute;
         BuildTimer timer = new BuildTimer();
         Practice.Built built = Practice.build(in.practicePick.data());
         timer.lap("plan");
         in.practiceRoute = new Practice.Route(old.target, old.prefix, old.spawn);
-        in.install(built.plan(), RoomStore.get(), in.practiceRoute, in.practicePick.waterPattern(), practiceMobs, RANDOM, timer);
+        in.install(built.plan(), RoomStore.get(), in.practiceRoute, in.practicePick.waterPattern(), practiceMobs, RANDOM, timer,
+            in.practiceFloor, null, null, null);
     }
 
     private static void commands(MinecraftServer s) {
         HypixelSignals.commands(s);
         ItemCommand.register(s);
-        // /rs: a new dungeon, as on the Rustclear server; in practice mode, the practice room reset.
+        // /rs: a new dungeon, as on the Rustclear server; in practice mode, the practice room reset;
+        // in a practice session the same practice again (the same seed). /rs new: a new map of it.
         s.getCommands().getDispatcher().register(Commands.literal("rs").executes(c -> {
+            if (duels == null && practice != null) {
+                restartSession(s, false);
+                return 1;
+            }
             if (duels == null && partyInstance.practiceRoute != null) {
                 restartPractice(s);
                 return 1;
             }
-            try {
-                newDungeon(s);
-            } catch (Planner.PlanException e) {
-                c.getSource().sendSystemMessage(Component.literal("§c" + e.getMessage()));
-                return 0;
+            return newDungeonCommand(s, c);
+        }).then(Commands.literal("new").executes(c -> {
+            if (duels == null && practice != null) {
+                restartSession(s, true);
+                return 1;
             }
-            c.getSource().sendSystemMessage(Component.literal("§aNew dungeon!"));
-            return 1;
-        }));
+            return newDungeonCommand(s, c);
+        })));
 
         // engineerClient's Save Hotbar / Default Hotbar (also on the Speed tab of Dungeon settings).
         // Hypixel's /sbmenu, as the 9th slot's item opens it.
@@ -1042,6 +1164,17 @@ public final class EngineServer {
                     .then(RequiredArgumentBuilder.<CommandSourceStack, Integer>argument("secrets", IntegerArgumentType.integer(1, 255))
                         .executes(c -> practiceCommand(s, c, StringArgumentType.getString(c, "door"),
                             IntegerArgumentType.getInteger(c, "secrets")))))));
+    }
+
+    private static int newDungeonCommand(MinecraftServer s, CommandContext<CommandSourceStack> c) {
+        try {
+            newDungeon(s);
+        } catch (Planner.PlanException e) {
+            c.getSource().sendSystemMessage(Component.literal("§c" + e.getMessage()));
+            return 0;
+        }
+        c.getSource().sendSystemMessage(Component.literal("§aNew dungeon!"));
+        return 1;
     }
 
     private static int practiceCommand(MinecraftServer s, CommandContext<CommandSourceStack> c, String door, Integer secrets) {

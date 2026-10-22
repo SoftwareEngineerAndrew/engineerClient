@@ -26,6 +26,8 @@ final class Instance {
     /** The practice room loaded with /practice, or null when playing normal dungeons. */
     Practice.Pick practicePick;
     Practice.Route practiceRoute;
+    /** The floor the practice room was loaded on, for /rs. */
+    Floor practiceFloor = Floor.F7;
 
     Instance(ServerLevel level, String team) {
         this.level = level;
