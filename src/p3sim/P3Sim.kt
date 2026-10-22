@@ -2,10 +2,12 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
+import com.engineerclient.ads.settings.AdsSettingsScreen
 import com.engineerclient.ads.settings.BooleanSetting
 import com.engineerclient.ads.settings.KeybindSetting
 import com.engineerclient.ads.settings.NumberSetting
 import com.engineerclient.ads.settings.SelectorSetting
+import com.engineerclient.ads.settings.Setting
 import com.engineerclient.ads.settings.Settings
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -29,8 +31,8 @@ import com.mojang.blaze3d.platform.InputConstants
  *
  * The world is the real arena at Hypixel's coordinates; the fight runs on the world's own
  * (integrated) server ([SimServer], [Fight]): Goldor, terminals, levers, devices, gates, death
- * ticks, and Maxor/Storm/Necron around it. The menu ([SimRestartScreen]: the keybind, `/p3sim`, or the
- * SkyBlock Menu star in the hotbar) starts any phase or section and teleports anywhere.
+ * ticks, and Maxor/Storm/Necron around it. The menu ([SimRestartScreen]: the keybind, `/ads menu`, `/p3sim`, or the
+ * SkyBlock Menu star in the hotbar) starts any phase or section and teleports anywhere; `/ads` opens its settings.
  *
  * It needs no Odin: its settings are its own ([Settings], config/engineerclient/ads.json). With Odin installed
  * ([odin]), Odin's dungeon features also see the sim as F7 ([OdinSimBridge]).
@@ -54,7 +56,7 @@ object P3Sim : Settings("ADS", "ads.json") {
     /** Writes ADS's settings to disk (config/engineerclient/ads.json); the one place that knows where they live. */
     fun saveSettings() = save()
 
-    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the ADS menu (a big Restart) in the sim world, as /ads and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
+    val menuKey by KeybindSetting("Menu Keybind", InputConstants.UNKNOWN, "Opens the ADS menu (a big Restart) in the sim world, as /ads menu and the SkyBlock Menu star in your hotbar do; the full menu is in Esc. Outside it, opens the sim.").onPress { openMenuOrSim() }
     val restartKey by KeybindSetting("Restart Keybind", InputConstants.UNKNOWN, "In the sim: starts whatever you last started again (P3, S2, P2...), from scratch; in practice, the practice.").onPress {
         if (inSim) SimActions.send("restart")
     }
@@ -283,9 +285,10 @@ object P3Sim : Settings("ADS", "ads.json") {
                 .executes { ctx -> ctx.source.player?.let { p -> Sim.asPlayer(p) { Loadouts.open(p) } }; 1 })
         }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            // /ads, and /p3sim as before.
+            // /ads: ADS's settings; /ads menu: the sim's menu (or opens the sim), as /p3sim on its own does.
             for (name in listOf("ads", "p3sim")) {
-                val cmd = ClientCommands.literal(name).executes { openMenuOrSim(); 1 }
+                val cmd = ClientCommands.literal(name).executes { if (name == "ads") openSettings() else openMenuOrSim(); 1 }
+                cmd.then(ClientCommands.literal("menu").executes { openMenuOrSim(); 1 })
                 for (s in Fight.Start.entries) cmd.then(ClientCommands.literal(s.name.lowercase()).executes {
                     if (inSim) SimActions.send("start", "what" to s.name) else SimWorld.open(); 1
                 })
@@ -359,6 +362,27 @@ object P3Sim : Settings("ADS", "ads.json") {
 
     fun openMenuOrSim() {
         if (inSim) mc.execute { mc.gui.setScreen(SimRestartScreen()) } else SimWorld.open()
+    }
+
+    /** `/ads`: every ADS setting, in panels as Odin's Click GUI lays a module's out. */
+    fun openSettings() = mc.execute { mc.gui.setScreen(AdsSettingsScreen(this, groups())) }
+
+    private fun groups(): List<Pair<String, List<Setting<*>>>> {
+        val groups = listOf(
+            "You" to listOf(classS, speedS, phoenixS, blackCatS, realMasksS, wornMaskS, terrorAtTermsS, mageAllS, hydraStartS, shortbowCooldownS),
+            "Bots" to listOf(botsS, realMovesS),
+            "Terminals & Devices" to listOf(terminalS, noMelodiesS, firstClickMelodyS, clickLimitS, termLuckS, ssLuckS),
+            "Ping" to listOf(pingS, jitterS),
+            "Goldor & Run" to listOf(deathTicksS, goldorKillS, lavaS, termsOnlyS, p3OnlyS, autoStartS, showTimesS),
+            "Dungeonbreaker" to listOf(breakerRefillS, breakerRegenS, breakerInfiniteS, breakerPermaS),
+            "Recording & Debug" to listOf(recordS, debugBotsS),
+            "Keybinds" to all.filterIsInstance<KeybindSetting>(),
+            "HUDs" to listOf(practiceHudS, practiceTimeHudS, practiceStartHudS),
+        )
+        // A setting added later without a panel here still shows, in the last one.
+        val placed = groups.flatMap { it.second }.toSet()
+        val rest = all.filter { it !in placed }
+        return if (rest.isEmpty()) groups else groups.dropLast(1) + (groups.last().first to groups.last().second + rest)
     }
 
     /**
