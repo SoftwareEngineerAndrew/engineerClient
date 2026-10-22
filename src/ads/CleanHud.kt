@@ -8,7 +8,8 @@ import net.minecraft.client.tutorial.TutorialSteps
 /**
  * Minecraft's own clutter that ADS's worlds don't want, gone wherever the mod is installed: the tutorial's toasts
  * ("Destroy the tree", "Open your inventory"...) and the potion effects shown on screen (the HUD's icons top right;
- * the list beside the inventory is HideInventoryEffectsMixin's).
+ * the list beside the inventory is HideInventoryEffectsMixin's). The recipe book's "New Recipe(s) Unlocked!" toasts
+ * are HideRecipeToastMixin's.
  */
 object CleanHud {
     fun init() {
