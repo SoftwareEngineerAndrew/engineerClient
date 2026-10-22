@@ -36,12 +36,12 @@ final class NecronData {
     /** He stands here all fight (a wither, synced health 1.0), spawned 2 ticks before his first line. */
     static final Vec3 HOME = new Vec3(54.0, 66.0, 76.0);
     /**
-     * Boss practice's start: in the core's south end over the floor that falls into P4 (p4_blocks.json
-     * "p3end": its y 113 floor at x 50-58, z 110-118 goes in the first frame, with air below to P4's
-     * floor at y 64 in the arena data). GoldorData.CHAMBER_BACK, the core's north end, never falls.
-     * OPEN: where in the core Hypixel's party stands as it falls.
+     * Boss practice's start: a few blocks over Necron's own platform (his island at x 49-61,
+     * z 69-83, which no platform break touches), south of him, so the host drops onto it. Not the
+     * core's south end: from there they land on the south platform, which falls into the lava at
+     * N+59 (p4_blocks.json "south").
      */
-    static final Vec3 PRACTICE_ENTRY = new Vec3(54.5, 114.0, 114.5);
+    static final Vec3 PRACTICE_ENTRY = new Vec3(54.5, 70.0, 81.5);
     /** p3end's first frame is N - 6 (GoldorPhase plays it NECRON_AFTER_FORGIVE - 6 after the forgive line). */
     static final int PRACTICE_DROP_LEAD = 6;
     static final int SPAWN_BEFORE = 2;
