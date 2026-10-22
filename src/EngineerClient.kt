@@ -69,6 +69,8 @@ object EngineerClient : ClientModInitializer {
 
         // The sim first: on a first start it reads its settings from Odin's file, before Odin can save over it.
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
+        // ADS's own terminal solver, for the sim's and Rustclear's terminals.
+        safely("terminal solver") { com.engineerclient.terminals.AdsTerminalSolver.init() }
         // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.
         if (odin) safely("odin addon") { OdinAddon.init(firstRun) }
 
