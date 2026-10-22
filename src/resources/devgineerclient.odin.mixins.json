@@ -2,6 +2,7 @@
   "required": false,
   "minVersion": "0.8",
   "package": "com.devgineerclient.mixin.odin",
+  "plugin": "com.engineerclient.mixinplugin.OdinMixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
     "ArrowsDeviceAimMixin"

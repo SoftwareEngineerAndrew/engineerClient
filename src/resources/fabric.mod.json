@@ -16,8 +16,8 @@
       "net.rustclear.mod.RustclearMod",
       "net.rustclear.mod.engine.Engine",
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
-      { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
-      { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
+      "com.coffeeclient.CoffeeEntry",
+      "com.devgineerclient.DevgineerEntry"
     ]
   },
   "depends": {
