@@ -3,7 +3,7 @@ package com.engineerclient.ads
 import com.engineerclient.EngineerClient
 import com.engineerclient.p3sim.SimWorld
 import com.engineerclient.p3sim.clear.ui.LayoutBrowserModel
-import com.engineerclient.p3sim.clear.ui.LayoutBrowserScreen
+
 import com.engineerclient.p3sim.clear.ui.RunStarter
 import com.engineerclient.p3sim.clear.ui.UiModule
 import com.engineerclient.p3sim.clear.ui.UiSettings
@@ -271,7 +271,7 @@ class PracticeScreen(parent: Screen) : RustclearScreen(Component.literal("ADS pr
     private fun mc() = net.minecraft.client.Minecraft.getInstance()
 
     private fun seedRow(g: GuiGraphicsExtractor, mx: Int, my: Int, x: Int, w: Int) {
-        val y = optionsY() + 20
+        val y = floorY() + 20
         text(g, "Map", x, y + 3, Theme.TEXT)
         var cx = x + 60
         cx += choice(g, mx, my, "New map each time", cx, y, !settings.fixedSeed) { settings.fixedSeed = false } + 4
