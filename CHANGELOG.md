@@ -6,6 +6,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ## [Unreleased]
 
 ### Added
+- ADS solves terminals in the P3 Sim and the dungeon engine's worlds, without needing Odin, with Odin's Terminal Solver options (Odin, Normal and Custom GUI render types, client prediction, first click protection, Rubix mode, melody options, colours) under `/ads` > Terminals and Terminal Colors.
+- Show Numbers setting, to hide Click in Order's 1-10.
 - `/ads` opens ADS's settings in an Odin-style panel screen, without needing Odin.
 - Practice Splits HUD, Practice Time HUD and Practice Start Timer HUD settings to switch the practice HUDs.
 - Practice from the ADS Practice page in a solo world: full clear, single room, blood rush, blood camp and boss phases (P1 Maxor, P2 Storm, P4 Necron, P5 Wither King).
@@ -19,6 +21,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed
+- With Odin installed, ADS's solver handles the sim's and the engine's terminals and Odin's solver stays out of them; Odin is unchanged on Hypixel.
 - Minecraft's tutorial tips ("Destroy the tree"...) never show while ADS is installed.
 - Potion effects are no longer shown on screen: no effect icons on the HUD and no effect list beside the inventory.
 - The pause (Esc) menu's buttons use the same ADS style as the title screen's.
