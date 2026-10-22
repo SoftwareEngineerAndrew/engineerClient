@@ -241,7 +241,8 @@ public final class RustclearMod implements ClientModInitializer {
     }
 
     public static String version() {
-        return FabricLoader.getInstance().getModContainer("rustclear")
+        // Rustclear is part of ADS now: the version is ADS's own (mod id engineerclient).
+        return FabricLoader.getInstance().getModContainer("engineerclient")
             .map(c -> c.getMetadata().getVersion().getFriendlyString())
             .orElse("dev");
     }

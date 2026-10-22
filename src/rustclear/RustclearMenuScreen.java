@@ -12,8 +12,8 @@ import net.rustclear.mod.online.Relays;
 import net.rustclear.mod.ui.RustclearScreen;
 
 /**
- * What the title screen's ADS button opens, filling the window: on the left a dungeon map
- * in the map's own colours with who you are and what is online, on the right the ways to play as
+ * What the title screen's ADS button opens, filling the window: on the left who you are and
+ * what is online, on the right the ways to play as
  * large tiles. Make a party (the host's own world, private or public), join one, or queue for a
  * 1v1 or 2v2; scrolling down, the Kit editor and the (coming) Map editor. A
  * private party nobody is invited to is how you play solo, so that path never needs anything
@@ -21,16 +21,6 @@ import net.rustclear.mod.ui.RustclearScreen;
  */
 public final class RustclearMenuScreen extends RustclearScreen {
     private enum Page { MAIN, MAKE }
-
-    /** The rail's dungeon: E entrance, N room, P puzzle, T trap, Y miniboss, F fairy, B blood. */
-    private static final String[] MAP = {
-        "NNPN.Y",
-        "N.NFNN",
-        "ENNTNP",
-        "N.NNPN",
-        "NNYN.N",
-        ".NNNNB",
-    };
 
     private Page page = Page.MAIN;
     /** How far the main page's tiles are scrolled, in pixels, and how far they can be. */
@@ -95,46 +85,12 @@ public final class RustclearMenuScreen extends RustclearScreen {
         int w = railW - 22;
         int y = py + 32;
 
-        // A small dungeon, drawn the way the map item draws one.
-        int cell = Math.max(8, Math.min(16, (w - 5 * 3) / 6));
-        int gap = Math.max(2, cell / 5);
-        int mapW = cell * 6 + gap * 5;
-        int mx0 = x + (w - mapW) / 2;
-        round(g, mx0 - 6, y - 4, mapW + 12, mapW + 12, alpha(PANEL_EDGE, 0x60));
-        for (int r = 0; r < 6; r++) {
-            for (int c = 0; c < 6; c++) {
-                char room = MAP[r].charAt(c);
-                if (room == '.') {
-                    continue;
-                }
-                int cx = mx0 + c * (cell + gap);
-                int cy = y + 2 + r * (cell + gap);
-                rect(g, cx, cy, cell, cell, roomColor(room));
-                // Doors to the room on the right and below.
-                if (c < 5 && MAP[r].charAt(c + 1) != '.') {
-                    rect(g, cx + cell, cy + cell / 3, gap, Math.max(2, cell / 3), lerp(NORMAL, RAIL, 0.25f));
-                }
-                if (r < 5 && MAP[r + 1].charAt(c) != '.') {
-                    rect(g, cx + cell / 3, cy + cell, Math.max(2, cell / 3), gap, lerp(NORMAL, RAIL, 0.25f));
-                }
-            }
-        }
-        // The player's arrow on the entrance, pulsing.
-        int ex = mx0;
-        int ey = y + 2 + 2 * (cell + gap);
-        int pulse = (int) (System.currentTimeMillis() / 400 % 2);
-        rect(g, ex + cell / 2 - 1, ey + cell / 2 - 1 - pulse, 3, 3, 0xFFFFFFFF);
-
-        int ty = y + mapW + 16;
-        // The logo beside the name, the pair centred.
-        int nameX = x + (w - font.width("ADS") - 13) / 2;
-        logo(g, nameX, ty - 2, 11);
-        g.text(font, "ADS", nameX + 13, ty, GOLD, true);
+        int ty = y;
         String tag = "Advanced Dungeon Simulator";
-        textCenter(g, fit(tag, w), x + w / 2, ty + 12, MUTED);
+        textCenter(g, fit(tag, w), x + w / 2, ty, MUTED);
 
         // Who and what: the player, the mod, the lobby, the relay.
-        int iy = ty + 32;
+        int iy = ty + 20;
         rect(g, x, iy - 7, w, 1, PANEL_EDGE);
         String lobby = online.ready() ? "Online" : online.checking() ? "Checking" : "Unavailable";
         info(g, x, iy, w, "Player", minecraft.getUser().getName(), TEXT);
@@ -183,18 +139,6 @@ public final class RustclearMenuScreen extends RustclearScreen {
     private void info(GuiGraphicsExtractor g, int x, int y, int w, String label, String value, int color) {
         text(g, label, x, y, DIM);
         textRight(g, fit(value, w - font.width(label) - 8), x + w, y, color);
-    }
-
-    private static int roomColor(char room) {
-        return switch (room) {
-            case 'E' -> ENTRANCE;
-            case 'P' -> PUZZLE;
-            case 'T' -> TRAP;
-            case 'Y' -> MINIBOSS;
-            case 'F' -> 0xFFE58BC4;
-            case 'B' -> BLOOD;
-            default -> NORMAL;
-        };
     }
 
     // ---------------------------------------------------------------- pages
