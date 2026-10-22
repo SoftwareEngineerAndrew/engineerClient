@@ -7,3 +7,4 @@ libs/
 *.iml
 .DS_Store
 .worktrees/
+.claude/settings.local.json
