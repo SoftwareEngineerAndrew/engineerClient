@@ -699,8 +699,9 @@ object SimItems {
      * tooltip style, the hidden-components list; and no unbreakable where Hypixel sends none.
      */
     fun hy(s: ItemStack, model: String?, style: String, unbreakable: Boolean = true, hidden: List<String> = Lore.HIDDEN): ItemStack {
-        if (model != null) s.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse("hypixel_skyblock:item/$model"))
-        s.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:$style"))
+        // Only with Hypixel's pack loaded: without it the model is the missing-texture square.
+        if (model != null) com.engineerclient.ads.HypixelPack.model(s, model)
+        com.engineerclient.ads.HypixelPack.tooltip(s, style)
         val types = java.util.LinkedHashSet<net.minecraft.core.component.DataComponentType<*>>()
         for (h in hidden) net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getValue(net.minecraft.resources.Identifier.parse(h))?.let { types.add(it) }
         s.set(DataComponents.TOOLTIP_DISPLAY, net.minecraft.world.item.component.TooltipDisplay(false, types))
@@ -759,8 +760,8 @@ object SimItems {
         "§9Ferocity: §a+10", "", "§7§8This item can be reforged!", "",
         "§6Ability: Showtime  §e§lRIGHT CLICK", "§7Shoots balloons that create a large explosion", "§7on impact, dealing up to §c16,956.3 §7damage.", "§8Mana Cost: §341", "",
         "§5§lEPIC DUNGEON SWORD"), glint = true).also {
-        it.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse("hypixel_skyblock:item/island_relevant/dungeons/bonzos_staff_fragged"))
-        it.set(DataComponents.TOOLTIP_STYLE, net.minecraft.resources.Identifier.parse("hypixel_skyblock:epic"))
+        com.engineerclient.ads.HypixelPack.model(it, "island_relevant/dungeons/bonzos_staff_fragged")
+        com.engineerclient.ads.HypixelPack.tooltip(it, "epic")
     }
     val SPIRIT_BOW get() = item(Items.BOW, "ITEM_SPIRIT_BOW", "§5Spirit Shortbow", listOf("§7Shortbow: instantly shoots!"), glint = true)
     val DUNGEONBREAKER get() = item(Items.DIAMOND_PICKAXE, "DUNGEONBREAKER", "§cDungeonbreaker", breakerLore(charges), glint = true).also {
@@ -836,7 +837,7 @@ object SimItems {
         val s = ItemStack(Items.FEATHER)
         s.count = quiverArrows.coerceIn(1, 64)
         s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
-        s.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse("hypixel_skyblock:item/uncategorized/flint_arrow"))
+        com.engineerclient.ads.HypixelPack.model(s, "uncategorized/flint_arrow")
         s.set(DataComponents.CUSTOM_NAME, Component.literal("Flint Arrow").withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.WHITE) })
         val lore = listOf("§7Damage: §c+1", "", "§8Stats added when shot!", "§f§lCOMMON ARROW", "§8§m                                ",
             "§7Arrows Remaining: §a" + "%,d".format(java.util.Locale.ROOT, quiverArrows), "", "§8This item is a preview of your", "§8currently selected arrow.")

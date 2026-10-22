@@ -29,5 +29,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - The title screen has one ADS button (above Singleplayer); it opens the dungeon menu, now branded ADS. The separate Advanced Dungeon Simulator button is gone.
 - Releases are now versioned (`vX.Y.Z`, jar `ads-X.Y.Z.jar`) with release notes from this changelog, instead of one rolling release per Minecraft version.
 
+### Fixed
+- P3 Sim items (and pet tooltips) no longer show the purple and black missing texture without Hypixel's resource pack: they keep their Minecraft look unless the pack is loaded.
+
 ### Removed
 - Dragging the practice HUDs in Odin's HUD editor; they stay at their default places for now.
