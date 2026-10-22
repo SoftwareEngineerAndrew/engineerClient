@@ -2,7 +2,8 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.engineerclient.ads.settings.AdsSettingsScreen
+import com.engineerclient.ads.settings.AdsSettingsRegistry
+import com.engineerclient.ads.settings.SettingsPanel
 import com.engineerclient.ads.settings.BooleanSetting
 import com.engineerclient.ads.settings.KeybindSetting
 import com.engineerclient.ads.settings.NumberSetting
@@ -364,8 +365,12 @@ object P3Sim : Settings("ADS", "ads.json") {
         if (inSim) mc.execute { mc.gui.setScreen(SimRestartScreen()) } else SimWorld.open()
     }
 
-    /** `/ads`: every ADS setting, in panels as Odin's Click GUI lays a module's out. */
-    fun openSettings() = mc.execute { mc.gui.setScreen(AdsSettingsScreen(this, groups())) }
+    /** `/ads`: every ADS setting, in panels as Odin's Click GUI lays a module's out (the sim's are the first). */
+    fun openSettings() = AdsSettingsRegistry.open()
+
+    init {
+        AdsSettingsRegistry.register { groups().map { (title, settings) -> SettingsPanel(this, title, settings) } }
+    }
 
     private fun groups(): List<Pair<String, List<Setting<*>>>> {
         val groups = listOf(

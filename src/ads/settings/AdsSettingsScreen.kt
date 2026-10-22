@@ -15,10 +15,7 @@ import java.util.Locale
  * a box for on/off, a slider for numbers, the current choice for selectors (left click next, right click back), a
  * key box for keybinds (click, then press a key; Esc clears it). Hovering a row shows what it does.
  */
-class AdsSettingsScreen(
-    private val owner: Settings,
-    private val groups: List<Pair<String, List<Setting<*>>>>,
-) : Screen(Component.literal("${owner.title} settings")) {
+class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Component.literal("ADS settings")) {
 
     private class Panel(val title: String, val settings: List<Setting<*>>, var x: Int, var y: Int)
 
@@ -36,11 +33,11 @@ class AdsSettingsScreen(
     override fun init() {
         if (panels.isNotEmpty()) return
         // Side by side from the left, wrapping to a new row under the tallest when the window runs out.
-        val saved = LAYOUT[owner.title]
+        val saved = LAYOUT[TITLE]
         var x = 10
         var y = 30
         var rowH = 0
-        for ((title, settings) in groups) {
+        for ((_, title, settings) in sections) {
             val h = panelHeight(settings)
             if (x + WIDTH > width - 10 && x > 10) {
                 x = 10
@@ -60,8 +57,8 @@ class AdsSettingsScreen(
     override fun extractRenderState(g: GuiGraphicsExtractor, mx: Int, my: Int, delta: Float) {
         g.fill(0, 0, width, height, 0x90000000.toInt())
         RustclearScreen.logo(g, 8, 6, 14)
-        g.text(font, owner.title, 26, 9, TEXT, true)
-        g.text(font, "Drag a panel by its name · scroll to move them all · hover for help", 26 + font.width(owner.title) + 8, 9, MUTED, false)
+        g.text(font, TITLE, 26, 9, TEXT, true)
+        g.text(font, "Drag a panel by its name · scroll to move them all · hover for help", 26 + font.width(TITLE) + 8, 9, MUTED, false)
 
         var tooltip: Setting<*>? = null
         for (p in panels) {
@@ -174,7 +171,7 @@ class AdsSettingsScreen(
             if (button != InputConstants.MOUSE_BUTTON_LEFT) {
                 it.value = InputConstants.Type.MOUSE.getOrCreate(button)
                 listening = null
-                owner.save()
+                save()
                 return true
             }
             listening = null
@@ -207,7 +204,7 @@ class AdsSettingsScreen(
             is KeybindSetting -> listening = s
             else -> {}
         }
-        owner.save()
+        save()
         return true
     }
 
@@ -232,7 +229,7 @@ class AdsSettingsScreen(
         }
         if (sliding != null) {
             sliding = null
-            owner.save()
+            save()
             return true
         }
         return super.mouseReleased(event)
@@ -244,7 +241,7 @@ class AdsSettingsScreen(
         val s = row?.second
         if (s is NumberSetting<*>) {
             s.set(s.value.toDouble() + Math.signum(scrollY) * s.step)
-            owner.save()
+            save()
             return true
         }
         scroll = (scroll - Math.signum(scrollY).toInt() * 16).coerceAtLeast(-200)
@@ -256,7 +253,7 @@ class AdsSettingsScreen(
         if (k != null) {
             k.value = if (event.key() == InputConstants.KEY_ESCAPE) InputConstants.UNKNOWN else InputConstants.getKey(event)
             listening = null
-            owner.save()
+            save()
             return true
         }
         return super.keyPressed(event)
@@ -265,13 +262,16 @@ class AdsSettingsScreen(
     override fun isPauseScreen(): Boolean = false
 
     override fun removed() {
-        owner.save()
+        save()
         rememberLayout()
     }
 
     private fun rememberLayout() {
-        LAYOUT[owner.title] = panels.associate { it.title to (it.x to it.y) }
+        LAYOUT[TITLE] = panels.associate { it.title to (it.x to it.y) }
     }
+
+    /** Saves every owner shown: a change in any panel lands in its own file. */
+    private fun save() = sections.map { it.owner }.distinct().forEach { it.save() }
 
     private fun fit(s: String, w: Int): String {
         if (font.width(s) <= w) return s
@@ -281,6 +281,8 @@ class AdsSettingsScreen(
     }
 
     private companion object {
+        const val TITLE = "ADS"
+
         // Odin's Click GUI: 160 wide, 21 px rows, 6 px padding, gray26 body, gray38 surface, its default blue.
         const val WIDTH = 160
         const val ROW = 21
@@ -294,7 +296,7 @@ class AdsSettingsScreen(
         const val TEXT = 0xFFFFFFFF.toInt()
         const val MUTED = 0xFFAAAAAA.toInt()
 
-        /** Panel positions per owner for the rest of the game, so the screen opens as it was left. */
+        /** Panel positions for the rest of the game, so the screen opens as it was left. */
         val LAYOUT = HashMap<String, Map<String, Pair<Int, Int>>>()
 
         fun pretty(name: String) = name.lowercase(Locale.ROOT).split('_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
