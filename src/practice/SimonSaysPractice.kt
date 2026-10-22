@@ -3,6 +3,9 @@ package com.engineerclient.practice
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.mixin.MinecraftAccessor
+import com.engineerclient.devices.AdsSimonSays
+import com.engineerclient.devices.DeviceRender
+import com.engineerclient.devices.DeviceSolvers
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
@@ -15,11 +18,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.playSoundSettings
-import com.odtheking.odin.utils.render.BoxStyle
-import com.odtheking.odin.utils.render.drawStyledBox
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import com.odtheking.odin.events.TickEvent
@@ -99,11 +98,6 @@ object SimonSaysPractice : Module(
 
     /** Reference times for each round's clicking (skip, r3, r4): the fastest healers' medians from ADR runs. */
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05)
-
-    // Odin's Simon Says colours.
-    private val FIRST = Colors.MINECRAFT_GREEN.withAlpha(0.5f)
-    private val SECOND = Colors.MINECRAFT_GOLD.withAlpha(0.5f)
-    private val THIRD = Colors.MINECRAFT_RED.withAlpha(0.5f)
 
     private val BUTTON: BlockState by lazy { BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, "minecraft:stone_button[face=wall,facing=west,powered=false]", false).blockState() }
 
@@ -809,11 +803,14 @@ object SimonSaysPractice : Module(
         if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
         (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
         if (blocked) { playSoundSettings(WRONG_SOUND); return }
-        if (isStart) { playSoundSettings(CORRECT_SOUND); return }
+        if (isStart) { playSoundSettings(if (DeviceSolvers.inAdsWorld() && AdsSimonSays.blocksClick(pos, count = false)) WRONG_SOUND else CORRECT_SOUND); return }
 
+        // In ADS's worlds Odin's Simon Says stands down and ADS's draws and blocks: its answer, and its blocks.
+        val ads = DeviceSolvers.inAdsWorld()
+        if (ads && AdsSimonSays.blocksClick(pos, count = false)) { playSoundSettings(WRONG_SOUND); return }
         @Suppress("UNCHECKED_CAST")
-        val order = odinOrder.get(null) as List<BlockPos>
-        val i = odinNeeded.getInt(null)
+        val order = if (ads) AdsSimonSays.answer else odinOrder.get(null) as List<BlockPos>
+        val i = if (ads) AdsSimonSays.next else odinNeeded.getInt(null)
         val right = order.getOrNull(i) == pos.east()
         playSoundSettings(if (right) CORRECT_SOUND else WRONG_SOUND)
         Real.press(right, last = right && i == order.size - 1, System.currentTimeMillis())
@@ -929,11 +926,12 @@ object SimonSaysPractice : Module(
             val v = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
                 mc.gameRenderer.mainCamera().position().takeIf { mc.options.cameraType.isFirstPerson })
             EngineerClient.safely("ss practice draw") { draw(p, v, context) }
-            if (!SimonSays.enabled) return@on
+            // ADS's Simon Says solver settings (on, colours, style), as in the sim.
+            if (!AdsSimonSays.enabled) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
-                    drawStyledBox(v.box(solverBox(p, lamp)), when (i) { 0 -> FIRST; 1 -> SECOND; else -> THIRD }, BoxStyle.FILLED_OUTLINE, true)
+                    DeviceRender.box(context, v.box(solverBox(p, lamp)), AdsSimonSays.colorFor(i, 0), AdsSimonSays.style)
                 }
                 return@on
             }
@@ -941,10 +939,9 @@ object SimonSaysPractice : Module(
             val shown = device.shown
             val next = device.next
             for (i in next until shown.size) {
-                val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
                 // Odin's box: on the grid's face where the button sits, in the real device's frame.
                 val lamp = lampAt(shown[i])
-                drawStyledBox(v.box(solverBox(p, lamp)), colour, BoxStyle.FILLED_OUTLINE, true)
+                DeviceRender.box(context, v.box(solverBox(p, lamp)), AdsSimonSays.colorFor(i, next), AdsSimonSays.style)
             }
         }
         // The real device: the same sounds as here, right or wrong, read off Odin's solution. After
