@@ -37,6 +37,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Releases are now versioned (`vX.Y.Z`, jar `ads-X.Y.Z.jar`) with release notes from this changelog, instead of one rolling release per Minecraft version.
 
 ### Fixed
+- P3 Sim items look right without Hypixel's resource pack: the Superboom TNT is TNT again instead of paper, and every item uses the dungeon engine's base item, head texture and dye.
+- The P3 Sim's ghost kit potions show their textured heads and Hypixel's ability lore with cooldowns.
 - P3 Sim items (and pet tooltips) no longer show the purple and black missing texture without Hypixel's resource pack: they keep their Minecraft look unless the pack is loaded.
 
 ### Removed
