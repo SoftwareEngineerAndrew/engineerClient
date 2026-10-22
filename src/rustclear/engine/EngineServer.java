@@ -823,12 +823,11 @@ public final class EngineServer {
         long seed = RANDOM.nextLong();
         lastSeed = seed;
         Random random = new Random(seed);
-        DungeonRun.nextSeed = seed;
         DungeonPlan next = Planner.plan(store, settings, random);
         timer.lap("plan");
         partyInstance.practicePick = null;
         partyInstance.practiceRoute = null;
-        partyInstance.install(next, store, null, -1, practiceMobs, random, timer);
+        partyInstance.install(next, store, null, -1, practiceMobs, random, timer, settings.floorOrDefault(), seed, null, null);
         holdForDuel();
     }
 

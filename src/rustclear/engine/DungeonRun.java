@@ -145,14 +145,30 @@ public final class DungeonRun implements EngineRun {
     final BossFight bossFight;
     /** Each puzzle room's logic, by room index. */
     private final Map<Integer, Puzzle> puzzles = new HashMap<>();
-    private final Random random = seeded();
-    /** The seed the next run's own Random starts from (EngineServer.newDungeon), used once; null: unseeded. */
-    static volatile Long nextSeed;
+    /** The run's own Random: from the dungeon's seed (mixed, so it isn't the planner's stream), or unseeded. */
+    private final Random random;
+    /** The dungeon's seed (EngineServer.newDungeon, practice), or null for an unseeded run (duels). */
+    private final Long seed;
+    /** The practice session watching this run, or null in a normal one. */
+    private final PracticeHooks hooks;
 
-    private static Random seeded() {
-        Long seed = nextSeed;
-        nextSeed = null;
-        return seed == null ? new Random() : new Random(seed * 31 + 7);
+    /**
+     * What a practice run (PracticeSession) hears of the run, and where it may take over. Every
+     * hook is a no-op by default, so a session implements only what its mode needs.
+     */
+    interface PracticeHooks {
+        /** The blood door opened, [runTicks] after Mort's first line. */
+        default void onBloodDoor(DungeonRun run, long runTicks) {
+        }
+
+        /** The party is going through the blood portal; true when practice ends the run there (no boss). */
+        default boolean onEnterBoss(DungeonRun run) {
+            return false;
+        }
+
+        /** The boss is beaten (Necron on F7, the Wither King on M7). */
+        default void onDefeated(DungeonRun run) {
+        }
     }
     private Mannequin mort;
     /** Practice mode's route timer, or null in a normal run (Dungeon::practice_room). */
@@ -172,9 +188,17 @@ public final class DungeonRun implements EngineRun {
     private static final int PRACTICE_ENTRANCE_Z = 0;
 
     public DungeonRun(ServerLevel level, DungeonPlan plan, Floor floor) {
+        this(level, plan, floor, null, null);
+    }
+
+    /** A run of [plan] on [floor]; [seed] (null: unseeded) makes its rolls repeat, [hooks] is practice's or null. */
+    DungeonRun(ServerLevel level, DungeonPlan plan, Floor floor, Long seed, PracticeHooks hooks) {
         this.level = level;
         this.plan = plan;
         this.floor = floor;
+        this.seed = seed;
+        this.hooks = hooks;
+        this.random = seed == null ? new Random() : new Random(seed * 31 + 7);
         Arrays.fill(grid, -1);
         for (Layout.Door door : plan.layout().doors) {
             doors.add(new DoorState(door));
