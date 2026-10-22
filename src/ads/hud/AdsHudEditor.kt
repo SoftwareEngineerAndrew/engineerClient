@@ -22,6 +22,7 @@ class AdsHudEditor(private val parent: Screen? = null) : Screen(Component.litera
     private var dragging: AdsHud? = null
     private var grabX = 0
     private var grabY = 0
+    private val settled = HashSet<AdsHud>()
 
     private fun shown() = AdsHuds.all.filter { it.enabled.value }
 
@@ -46,6 +47,8 @@ class AdsHudEditor(private val parent: Screen? = null) : Screen(Component.litera
         val over = if (dragging != null) dragging else hovered(mx.toDouble(), my.toDouble())
         for (h in shown()) {
             h.render(g, example = true)
+            // As Odin's editor opens: each HUD pulled onto the screen (once its size is known), so none is out of reach.
+            if (h !in settled) { settled += h; h.clampToScreen() }
             // Odin's outline round each HUD, thicker under the mouse.
             outline(g, h.x - 1, h.y - 1, maxOf(h.scaledWidth, MIN_BOX) + 2, maxOf(h.scaledHeight, MIN_BOX) + 2, if (h === over) TEXT else OUTLINE)
         }
