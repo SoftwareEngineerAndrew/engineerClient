@@ -5,6 +5,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
 ### Added
 - Everything new in Engineer Client up to 2026-10-21 (214 changes), merged in:
   - Engineer Client's full F7 run, without needing Odin: countdown, a recorded dungeon with bots, mobs, secrets, puzzles, traps and the blood camp, then the boss. Start it from Practice > Full clear with Engine: Engineer Client (layout random, by seed or picked from the recorded layouts; party size and bots; lag; no deaths and mob HP per run), or `/ads run`. Its other settings are the Full Run panels in `/ads`; in a run's clear the P3 Sim menu has Restart Room and Restart Run.
