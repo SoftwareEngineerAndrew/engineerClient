@@ -9,6 +9,7 @@
     "AdsSplitsTickMixin",
     "ArmorFoilMixin",
     "HideInventoryEffectsMixin",
+    "HideRecipeToastMixin",
     "HideBotsSimMixin",
     "OwnArrowsHideMixin",
     "ArrowInGroundInvoker",
