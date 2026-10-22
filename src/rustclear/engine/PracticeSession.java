@@ -33,8 +33,8 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     private static final int RESULT_TICKS = 100;
     /** Boss practice: from the teleport to a phase's first tick (Maxor's comes TELEPORT_BEFORE after his). */
     private static final int PHASE_DELAY = 10;
-    /** Facing Storm's side of the room (+x, where he appears) from his practice start. */
-    private static final float STORM_YAW = 270f;
+    /** Facing west, into the room and toward the Yellow and Green pads, from his practice start under Red. */
+    private static final float STORM_YAW = 90f;
     /** Facing north (-z) from Necron's practice start, toward where he stands. */
     private static final float NECRON_YAW = 180f;
     /**

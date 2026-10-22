@@ -38,12 +38,12 @@ final class StormData {
     /** He appears here (at Maxor's kill + 60; this model starts him with his first line). */
     static final Vec3 SPAWN = new Vec3(103.0, 188.0, 53.0);
     /**
-     * Boss practice's start: the middle of the room on its lower floor, between the four pads.
-     * Read from the arena's data (Bossroom): (63..83, 38..68) is open floor with its top block at
-     * y 164 and air to the ceiling at y 213, so a player stands at y 165. OPEN: where Hypixel's
-     * party lands from P1.
+     * Boss practice's start: on the floor under the Red pillar (its 7x7 at (97..103, 38..44), the
+     * floor's top block at y 168), by the Red pad where the party drops into P3. Red never moves
+     * or breaks, so it hides you from Giga Lightning all phase; from there you walk out to the
+     * pads. (The room's middle, where the party lands from P1, is open to the lightning.)
      */
-    static final Vec3 PRACTICE_ENTRY = new Vec3(73.5, 165.0, 53.5);
+    static final Vec3 PRACTICE_ENTRY = new Vec3(100.5, 169.0, 41.5);
     /** The opening route at 0.40 b/t (ADS's waypoints), parking at exactly (102.375, 183, 52.375) at t 424. */
     static final Vec3[] ROUTE = {new Vec3(73, 183, 83), new Vec3(43, 183, 53), new Vec3(73, 183, 23), new Vec3(103, 183, 53),
         new Vec3(102.375, 183.0, 52.375)};
@@ -70,7 +70,7 @@ final class StormData {
     static final double GIGA_MIN = 4_215;
     static final double GIGA_MAX = 15_841;
     static final double GIGA_M7 = 999_999_999;
-    /** Hidden: inside a pillar's 7x7 square at y <= 171.5. */
+    /** Hidden: inside an unspent pillar's 7x7 square at y <= 171.5 (a crushed one hides nobody). */
     static final double HIDE_MAX_Y = 171.5;
     /** After the enrage: skull pairs every 5 ticks from about +16 (median) until crush 2. */
     static final int SKULLS_AFTER_ENRAGE = 16;
@@ -78,6 +78,8 @@ final class StormData {
 
     // ---- pillars (crushers): 7x7, -x/-z corners; Red never moves
     static final int[][] PILLAR_CORNERS = {{97, 62}, {43, 62}, {43, 38}, {97, 38}};
+    /** The columns hang from here (Red's from 181) to their top under the ceiling. */
+    static final int PILLAR_TOP = 205;
     static final String[] PILLAR_NAMES = {"Purple", "Yellow", "Green", "Red"};
     /** Pads (ADS's boxes, unverified: low): x1, x2, z1, z2, y 169.5-171.5. OPEN: Q2 */
     static final int[][] PADS = {{111, 118, 91, 98}, {29, 36, 91, 98}, {29, 36, 9, 16}};
