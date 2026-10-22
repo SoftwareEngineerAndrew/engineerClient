@@ -3,7 +3,7 @@
   "id": "engineerclient",
   "version": "${version}",
   "name": "Engineer Client",
-  "description": "An Odin addon for Hypixel SkyBlock dungeons: M7 phase-3 role rotation, leap-menu POV previews, ADS (Advanced Dungeon Simulator) and Party Finder stats.",
+  "description": "Hypixel SkyBlock dungeons: ADS (Advanced Dungeon Simulator), which runs on its own, and with Odin installed M7 phase-3 role rotation, leap-menu POV previews and Party Finder stats.",
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
   "icon": "assets/engineerclient/icon.png",
@@ -16,8 +16,8 @@
       "net.rustclear.mod.RustclearMod",
       "net.rustclear.mod.engine.Engine",
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
-      { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
-      { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
+      "com.coffeeclient.CoffeeEntry",
+      "com.devgineerclient.DevgineerEntry"
     ]
   },
   "depends": {
@@ -25,8 +25,10 @@
     "fabric-api": ">=0.161.0",
     "fabric-language-kotlin": ">=1.14.1+kotlin.2.4.20",
     "minecraft": "~26.3",
-    "odin": ">=0.3.7",
     "java": ">=25"
+  },
+  "recommends": {
+    "odin": ">=0.3.7"
   },
   "suggests": {
     "e4mc": "*"

@@ -1,4 +1,4 @@
-package com.engineerclient.mixin;
+package com.engineerclient.mixin.odin;
 
 import com.engineerclient.misc.RandomStuff;
 import com.engineerclient.practice.InfNumbersSim;

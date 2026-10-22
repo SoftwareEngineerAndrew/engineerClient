@@ -1,11 +1,10 @@
 package com.engineerclient.p3sim
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.BERSERK
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.HEALER
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.MAGE
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK
+import com.engineerclient.p3sim.DungeonClass.ARCHER
+import com.engineerclient.p3sim.DungeonClass.BERSERK
+import com.engineerclient.p3sim.DungeonClass.HEALER
+import com.engineerclient.p3sim.DungeonClass.MAGE
+import com.engineerclient.p3sim.DungeonClass.TANK
 import net.minecraft.world.phys.Vec3
 
 /**

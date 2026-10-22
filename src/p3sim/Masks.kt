@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.index
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
@@ -317,8 +316,8 @@ object Masks {
         // in the first inventory slot. The Haunt opens the "Teleport to Player" menu; the abilities are inert here. The selected slot stays.
         inv.setItem(0, SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "HAUNT_ABILITY", "§aHaunt"))
         val (a3, a5) = when (P3Sim.myClass) {
-            com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.MAGE -> SimItems.ghostStack(net.minecraft.world.item.Items.BRICKS, "MAGE_DUNGEON_ABILITY_1", "§aPop-up Wall") to SimItems.ghostStack(net.minecraft.world.item.Items.BLAZE_POWDER, "MAGE_DUNGEON_ABILITY_3", "§aFireball")
-            com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.TANK -> SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "TANK_DUNGEON_ABILITY_1", "§aStun Potion") to SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "TANK_DUNGEON_ABILITY_2", "§aAbsorption Potion")
+            DungeonClass.MAGE -> SimItems.ghostStack(net.minecraft.world.item.Items.BRICKS, "MAGE_DUNGEON_ABILITY_1", "§aPop-up Wall") to SimItems.ghostStack(net.minecraft.world.item.Items.BLAZE_POWDER, "MAGE_DUNGEON_ABILITY_3", "§aFireball")
+            DungeonClass.TANK -> SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "TANK_DUNGEON_ABILITY_1", "§aStun Potion") to SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "TANK_DUNGEON_ABILITY_2", "§aAbsorption Potion")
             // Berserk is the recorded Warrior kit; Archer and Healer were never recorded, so they get it too.
             else -> SimItems.ghostStack(net.minecraft.world.item.Items.PLAYER_HEAD, "WARRIOR_DUNGEON_ABILITY_1", "§aStrength Potion") to SimItems.ghostStack(net.minecraft.world.item.Items.IRON_AXE, "GHOST_THROWING_AXE", "§aGhost Axe")
         }

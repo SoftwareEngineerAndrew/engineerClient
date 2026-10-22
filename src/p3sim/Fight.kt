@@ -207,7 +207,7 @@ object Fight {
         if (phase == null) {
             Sim.tp(player, Spots.LOBBY.x, Spots.LOBBY.y, Spots.LOBBY.z, Spots.LOBBY.yaw, Spots.LOBBY.pitch)
             later(20, "welcome") {
-                Sim.note("Welcome to ADS, the Advanced Dungeon Simulator. §fRight click the Nether Star§7 (or /ads) for the menu.")
+                Sim.note("Welcome to ADS, the Advanced Dungeon Simulator. §fRight click the Nether Star§7 (or /ads menu) for the menu.")
                 if (P3Sim.autoStart) start(Start.P3)
             }
         }
@@ -264,23 +264,10 @@ object Fight {
     }
 
     /**
-     * Odin's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
-     * a world load; a sim restart is a new P3, so it starts clean too.
-     */
-    /**
      * Odin's i4 solver forgets its marked blocks once the restore's block changes are in the games: the board's lit
      * (emerald) block going back to blue terracotta reads to it as a hit, so the reset at the start alone isn't enough.
      */
     private fun resetI4Solver() = later(2, "i4 solver reset") { PartyClient.send("arrowsReset") }
-
-    fun resetArrowsDevice() {
-        val c = com.odtheking.odin.features.impl.boss.ArrowsDevice::class.java
-        fun field(name: String) = c.getDeclaredField(name).apply { isAccessible = true }
-        (field("markedPositions").get(null) as? MutableSet<*>)?.clear()
-        field("targetPosition").set(null, null)
-        field("isDeviceComplete").setBoolean(null, false)
-        field("optimalAimPositions").set(null, emptyList<Any>())
-    }
 
     /**
      * Your speed stat: the setting is without Black Cat; Black Cat adds 100 (and 100 to the cap), Phoenix out
