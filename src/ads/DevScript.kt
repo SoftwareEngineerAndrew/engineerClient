@@ -26,6 +26,10 @@ import java.nio.file.Files
  *   click X Y [right]      a click on the open screen, in GUI coordinates
  *   key CODE               a key press (InputConstants code) on the open screen, or in game with none open
  *   shot NAME              a screenshot, run/screenshots/NAME.png
+ *   tp X Y Z               moves the player there (the integrated server's player)
+ *   column X Y1 Y2 Z       logs the blocks from Y1 to Y2 at (X, Z) on the server
+ *   floormap Y X1 X2 Z1 Z2 logs a map of the blocks at height Y ('#' solid, '~' fluid, '.' air)
+ *   status                 logs the player's position, health and game mode
  *   log TEXT / quit
  *
  * Each step is logged as "[devscript]"; a step that fails is logged and the script goes on.
@@ -117,6 +121,53 @@ object DevScript {
             "shot" -> {
                 val name = (args.getOrNull(1) ?: "shot") + ".png"
                 Screenshot.grab(mc.gameDirectory, name, mc.gameRenderer.mainRenderTarget(), 1) { msg -> log("saved ${msg.string}") }
+            }
+            "status" -> {
+                val p = mc.player ?: return log("status: no player")
+                log("status: pos %.2f %.2f %.2f, health %.1f/%.1f, mode %s, alive %s, lava %s, fire %s".format(
+                    p.x, p.y, p.z, p.health, p.maxHealth, mc.gameMode?.playerMode, p.isAlive, p.isInLava, p.isOnFire))
+            }
+            "tp" -> {
+                val id = mc.player?.uuid ?: return log("tp: no player")
+                val (x, y, z) = args.drop(1).take(3).map { it.toDouble() }
+                val server = mc.singleplayerServer ?: return log("tp: no integrated server")
+                server.execute {
+                    val p = server.playerList.getPlayer(id) ?: return@execute
+                    p.teleportTo(p.level(), x, y, z, emptySet(), p.yRot, p.xRot, true)
+                    p.resetFallDistance()
+                }
+            }
+            "column" -> {
+                val (x, y1, y2, z) = args.drop(1).take(4).map { it.toInt() }
+                val server = mc.singleplayerServer ?: return log("column: no integrated server")
+                val id = mc.player?.uuid ?: return log("column: no player")
+                server.execute {
+                    val level = server.playerList.getPlayer(id)?.level() ?: return@execute
+                    val runs = ArrayList<String>()
+                    var last = ""; var from = y1
+                    for (y in y1..y2 + 1) {
+                        val name = if (y > y2) "" else level.getBlockState(net.minecraft.core.BlockPos(x, y, z)).toString()
+                            .removePrefix("Block{minecraft:").replace("}", "")
+                        if (name != last) { if (y > y1) runs += "$from-${y - 1} $last"; last = name; from = y }
+                    }
+                    log("column $x $z: ${runs.joinToString(", ")}")
+                }
+            }
+            "floormap" -> {
+                // floormap Y X1 X2 Z1 Z2: one line per z, '#' where a player could stand on (x, Y), '~' over fluid.
+                val (y, x1, x2, z1, z2) = args.drop(1).take(5).map { it.toInt() }
+                val server = mc.singleplayerServer ?: return log("floormap: no integrated server")
+                val id = mc.player?.uuid ?: return log("floormap: no player")
+                server.execute {
+                    val level = server.playerList.getPlayer(id)?.level() ?: return@execute
+                    for (z in z1..z2) {
+                        val row = (x1..x2).joinToString("") { x ->
+                            val s = level.getBlockState(net.minecraft.core.BlockPos(x, y, z))
+                            when { s.isAir -> "."; !s.fluidState.isEmpty -> "~"; else -> "#" }
+                        }
+                        log("floormap y$y z$z $row")
+                    }
+                }
             }
             "log" -> {}
             "quit" -> mc.stop()
