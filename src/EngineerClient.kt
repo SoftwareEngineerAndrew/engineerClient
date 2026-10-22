@@ -68,6 +68,7 @@ object EngineerClient : ClientModInitializer {
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, _ -> EcConfig.migrateRoleBindings() }
 
         // The sim first: on a first start it reads its settings from Odin's file, before Odin can save over it.
+        safely("clean hud") { com.engineerclient.ads.CleanHud.init() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
         // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.
         if (odin) safely("odin addon") { OdinAddon.init(firstRun) }
