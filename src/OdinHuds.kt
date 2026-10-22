@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  *    stat is above the threshold. The HUD editor (example = true) always draws them.
  *  - The Engineer Splits look: for Odin's two Splits HUDs, [OdinSplitsLook.render] draws instead.
  *  - P3 Sim practice: the P3 tick timers and Term Info's progress draw nothing ([PRACTICE_HIDDEN]).
+ *  - ADS's worlds (the sim, Rustclear's): Odin's Splits HUDs draw nothing, ADS's own Splits show the run there.
  * It is also what POV Previews calls to draw a kept HUD a second time, above the previews.
  */
 object OdinHuds {
@@ -28,6 +29,8 @@ object OdinHuds {
             val h = hud ?: return block(g, example)
             if (!example && HealthMana.hidesOdinHud(h)) return 0 to 0
             if (!example && name in PRACTICE_HIDDEN && com.engineerclient.p3sim.Practice.active && com.engineerclient.p3sim.P3Sim.inSim) return 0 to 0
+            // In ADS's worlds ADS's own Splits HUDs show the run; Odin's two draw nothing there.
+            if (!example && OdinSplitsLook.isSplitsHud(h) && com.engineerclient.ads.AdsWorlds.active) return 0 to 0
             return OdinSplitsLook.render(h, g, example) ?: block(g, example)
         }
     }

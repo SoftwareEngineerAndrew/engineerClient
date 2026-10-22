@@ -21,7 +21,8 @@
     "HighlightRenderMixin",
     "TermGuiButtonMixin",
     "LeapTermsimProtMixin",
-    "NumbersHandlerMixin"
+    "NumbersHandlerMixin",
+    "OdinSplitsAdsWorldMixin"
   ],
   "injectors": {
     "defaultRequire": 0
