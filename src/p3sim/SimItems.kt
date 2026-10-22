@@ -113,7 +113,8 @@ object SimItems {
         val out = if (s.item == l.item) s else s.transmuteCopy(l.item, s.count)
         if (l.profile != null) out.set(DataComponents.PROFILE, l.profile) else if (l.item != Items.PLAYER_HEAD) out.remove(DataComponents.PROFILE)
         l.dye?.let { out.set(DataComponents.DYED_COLOR, it) }
-        if (l.glint) out.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true) else out.remove(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)
+        // The engine's glint adds to the sim's (recorded from Hypixel) rather than taking it away.
+        if (l.glint) out.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
         if (engineText) {
             l.name?.let { out.set(DataComponents.CUSTOM_NAME, it) }
             l.lore?.let { out.set(DataComponents.LORE, it) }
