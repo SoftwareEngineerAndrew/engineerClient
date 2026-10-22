@@ -53,6 +53,10 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
         RustclearScreen.logo(g, 8, 6, 14)
         g.text(font, TITLE, 26, 9, TEXT, true)
         g.text(font, "Drag a panel by its name · scroll to move them all · hover for help", 26 + font.width(TITLE) + 8, 9, MUTED, false)
+        // Edit HUDs, top right: the HUD editor (back here when it closes).
+        val hb = hudButton()
+        RustclearScreen.round(g, hb[0], hb[1], hb[2], hb[3], if (mx in hb[0] until hb[0] + hb[2] && my in hb[1] until hb[1] + hb[3]) ACCENT else SURFACE)
+        g.text(font, EDIT_HUDS, hb[0] + 8, hb[1] + (hb[3] - 8) / 2, TEXT, false)
 
         var tooltip: Setting<*>? = null
         for (p in panels) {
@@ -130,6 +134,12 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
         }
     }
 
+    /** The Edit HUDs button: x, y, width, height. */
+    private fun hudButton(): IntArray {
+        val w = font.width(EDIT_HUDS) + 16
+        return intArrayOf(width - w - 8, 4, w, 16)
+    }
+
     private fun valueText(s: NumberSetting<*>): String {
         val n = s.value.toDouble()
         val shown = if (s.isInt || n == Math.floor(n)) n.toLong().toString() else String.format(Locale.ROOT, "%.1f", n)
@@ -169,6 +179,13 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
                 return true
             }
             listening = null
+        }
+        val hb = hudButton()
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && mx >= hb[0] && mx < hb[0] + hb[2] && my >= hb[1] && my < hb[1] + hb[3]) {
+            save()
+            rememberLayout()
+            net.minecraft.client.Minecraft.getInstance().gui.setScreen(com.engineerclient.ads.hud.AdsHudEditor(this))
+            return true
         }
         // A header starts a drag (the topmost panel first).
         for (p in panels.asReversed()) {
@@ -276,6 +293,7 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
 
     private companion object {
         const val TITLE = "ADS"
+        const val EDIT_HUDS = "Edit HUDs"
 
         // Odin's Click GUI: 160 wide, 21 px rows, 6 px padding, gray26 body, gray38 surface, its default blue.
         const val WIDTH = 160

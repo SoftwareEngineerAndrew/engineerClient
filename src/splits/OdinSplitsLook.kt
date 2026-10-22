@@ -169,6 +169,10 @@ object OdinSplitsLook {
         }
     }
 
+    /** [hud] is one of Odin's two Splits HUDs (its display or its current split). */
+    fun isSplitsHud(hud: HudElement): Boolean =
+        hud === (Splits.settings["Splits Display HUD"] as? HUDSetting)?.value || hud === (Splits.settings[CURRENT_SPLIT_HUD] as? HUDSetting)?.value
+
     private fun bool(name: String, fallback: Boolean) = (Splits.settings[name] as? BooleanSetting)?.value ?: fallback
 
     private fun options() = EngineerLook.Options(

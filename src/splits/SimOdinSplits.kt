@@ -66,6 +66,8 @@ object SimOdinSplits {
      * "took" lines would print ~1.79e9 s) and its HUD shows rows through the lead-in as Hypixel's does.
      */
     fun start(odinName: String, headMs: Long = 0) {
+        // ADS's own splits time the sim (AdsSplits); Odin's stay out of ADS's worlds (OdinSplitsAdsWorldMixin).
+        if (com.engineerclient.ads.AdsWorlds.active) return
         pending = odinName
         this.headMs = headMs
         needStart = true
