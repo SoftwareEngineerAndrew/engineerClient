@@ -41,15 +41,20 @@ class BooleanSetting(name: String, default: Boolean = false, desc: String = "") 
     override fun read(json: JsonElement) { value = json.asBoolean }
 }
 
-/** A number in [min]..[max] in steps of [step]; Int or Double, whichever the default is. */
+/**
+ * A number in [min]..[max] in steps of [step]; Int or Double, whichever the default is. Made as
+ * `NumberSetting(name, default, range, ...)` (the companion's invoke, so the type comes from the default).
+ */
 class NumberSetting<T : Number> private constructor(
     name: String, default: T, val min: Double, val max: Double, val step: Double, val unit: String, desc: String,
     private val of: (Double) -> T,
 ) : Setting<T>(name, default, desc) {
-    constructor(name: String, default: Int, range: IntRange, step: Int = 1, unit: String = "", desc: String = "") :
-        this(name, default as T, range.first.toDouble(), range.last.toDouble(), step.toDouble(), unit, desc, { (it.roundToInt() as Any) as T })
-    constructor(name: String, default: Double, range: ClosedFloatingPointRange<Double>, step: Double = 0.1, unit: String = "", desc: String = "") :
-        this(name, default as T, range.start, range.endInclusive, step, unit, desc, { (it as Any) as T })
+    companion object {
+        operator fun invoke(name: String, default: Int, range: IntRange, step: Int = 1, unit: String = "", desc: String = ""): NumberSetting<Int> =
+            NumberSetting(name, default, range.first.toDouble(), range.last.toDouble(), step.toDouble(), unit, desc) { it.roundToInt() }
+        operator fun invoke(name: String, default: Double, range: ClosedFloatingPointRange<Double>, step: Double = 0.1, unit: String = "", desc: String = ""): NumberSetting<Double> =
+            NumberSetting(name, default, range.start, range.endInclusive, step, unit, desc) { it }
+    }
 
     override var value: T = default
         set(v) { field = of(snap(v.toDouble())) }
