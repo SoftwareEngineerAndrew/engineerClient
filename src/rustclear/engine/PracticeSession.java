@@ -39,6 +39,9 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     private boolean joined;
     /** Blood rush: the run ticks the blood door opened at, or -1 while the clock runs. */
     private long rushTicks = -1;
+    /** Blood camp: the Blood room practised (kept for /rs), and the run ticks its door opened at (-1: not yet). */
+    private RoomData bloodRoom;
+    private long doorTicks = -1;
 
     PracticeSession(PracticeSpec spec) {
         this.spec = spec;
@@ -58,10 +61,12 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         joined = false;
         greeting.clear();
         rushTicks = -1;
+        doorTicks = -1;
         switch (spec.kind()) {
             case FULL_CLEAR -> buildFullClear(fresh);
             case ROOM -> buildRoom(s, fresh);
             case BLOOD_RUSH -> buildBloodRush(fresh);
+            case BLOOD_CAMP -> buildBloodCamp(fresh);
             default -> throw new Planner.PlanException(spec.kind() + " practice isn't available yet.");
         }
     }
@@ -73,12 +78,19 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         }
         joined = true;
         greeting.forEach(host::sendSystemMessage);
-        if (spec.kind() == PracticeSpec.Kind.BLOOD_RUSH) {
-            DungeonRun rush = run;
-            rush.schedule(START_DELAY, () -> {
-                rush.grantBloodKey();
-                rush.startNow(false);
+        DungeonRun at = run;
+        switch (spec.kind()) {
+            case BLOOD_RUSH -> at.schedule(START_DELAY, () -> {
+                at.grantBloodKey();
+                at.startNow(false);
             });
+            // The host "opens" the blood door: the camp starts as on Hypixel, the boss arena builds behind it.
+            case BLOOD_CAMP -> at.schedule(START_DELAY, () -> {
+                at.startNow(true);
+                at.openBloodDoorForTest(host);
+            });
+            default -> {
+            }
         }
     }
 
@@ -114,6 +126,40 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
         run.holdStart(true);
         greeting.add(EngineItems.text("§cBlood rush on " + spec.floor().code + ": §7you hold the blood key; the clock starts in a second."));
         greeting.add(seedLine("§a[Retry]", "§e[New seed]"));
+    }
+
+    /**
+     * One of the Blood rooms alone, its door a blood door, the host just inside: a second after
+     * they're in the door opens and the Watcher's camp runs as in a run; the clock is door to
+     * portal, and the run stops at the portal rather than going on into the boss.
+     */
+    private void buildBloodCamp(boolean fresh) throws Planner.PlanException {
+        RoomStore store = RoomStore.get();
+        if (fresh || bloodRoom == null) {
+            List<RoomData> bloods = new ArrayList<>();
+            for (RoomData data : store.rooms) {
+                // Practice.buildBlood places the door as a dead end's (the Blood rooms' shape).
+                if (data.type() == RoomType.BLOOD && data.shape() == RoomShape.ONE_BY_ONE_END) {
+                    bloods.add(data);
+                }
+            }
+            if (bloods.isEmpty()) {
+                throw new Planner.PlanException("The dungeon data has no Blood room.");
+            }
+            bloodRoom = bloods.get(RANDOM.nextInt(bloods.size()));
+        }
+        BuildTimer timer = new BuildTimer();
+        Practice.Built built = Practice.buildBlood(bloodRoom);
+        timer.lap("plan");
+        Practice.DoorSpawn door = built.spawns().get(0);
+        Instance in = EngineServer.partyInstance();
+        in.practicePick = null;
+        in.practiceRoute = null;
+        in.install(built.plan(), store, null, -1, false, RANDOM, timer, spec.floor(), null,
+            new DungeonBuilder.Spawn(door.x(), door.y(), door.z(), door.yaw()), this);
+        run = in.dungeon();
+        run.holdStart(true);
+        greeting.add(EngineItems.text("§cBlood camp on " + spec.floor().code + ": §7the blood door opens in a second; the clock runs to the portal."));
     }
 
     /** The named room alone, entering through the spec's door; /rs keeps the door, /rs new rolls a random one again. */
@@ -158,7 +204,7 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
 
     @Override
     public boolean skipMort() {
-        return spec.kind() == PracticeSpec.Kind.BLOOD_RUSH;
+        return spec.kind() != PracticeSpec.Kind.FULL_CLEAR;
     }
 
     @Override
@@ -173,8 +219,7 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
             return;
         }
         // Practice.Route's timer: gold while running, green once done.
-        String text = rushTicks < 0 ? String.format(Locale.ROOT, "§6%.2fs", runTicks * 0.05)
-            : String.format(Locale.ROOT, "§a%.2fs", rushTicks * 0.05);
+        String text = rushTicks < 0 ? "§6" + time(runTicks) : "§a" + time(rushTicks);
         for (ServerPlayer player : at.level.players()) {
             player.sendOverlayMessage(EngineItems.text(text));
         }
@@ -182,16 +227,47 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
 
     @Override
     public void onBloodDoor(DungeonRun at, long runTicks) {
-        if (at != run || spec.kind() != PracticeSpec.Kind.BLOOD_RUSH || rushTicks >= 0) {
+        if (at != run) {
+            return;
+        }
+        if (spec.kind() == PracticeSpec.Kind.BLOOD_CAMP) {
+            doorTicks = runTicks;
+            return;
+        }
+        if (spec.kind() != PracticeSpec.Kind.BLOOD_RUSH || rushTicks >= 0) {
             return;
         }
         rushTicks = runTicks;
-        Component line = EngineItems.styled(String.format(Locale.ROOT, "§cBlood rush §a%.2fs §7(%d ticks) · ", runTicks * 0.05, runTicks))
+        Component line = EngineItems.styled("§cBlood rush §a" + time(runTicks) + " §7(" + runTicks + " ticks) · ")
             .append(seedLine("§a[Retry]", "§e[New seed]"));
         at.forEachPlayer(p -> p.sendSystemMessage(line));
     }
 
+    @Override
+    public boolean onEnterBoss(DungeonRun at) {
+        if (at != run || spec.kind() != PracticeSpec.Kind.BLOOD_CAMP) {
+            return false;
+        }
+        long ticks = doorTicks < 0 ? at.runTicks() : at.runTicks() - doorTicks;
+        Component line = EngineItems.styled("§cBlood camp §a" + time(ticks) + " §7(" + ticks + " ticks, door to portal)  ")
+            .append(button("§a[Retry]", "/rs", "§7Another camp in the same Blood room"))
+            .append(EngineItems.styled(" "))
+            .append(button("§e[New room]", "/rs new", "§7Another camp in a random Blood room"));
+        at.forEachPlayer(p -> p.sendSystemMessage(line));
+        at.stop();
+        return true;
+    }
+
     // ---------------------------------------------------------------- chat
+
+    /** [ticks] as a practice time: "34.55s", or "1:02.35" from a minute. */
+    static String time(long ticks) {
+        double seconds = ticks * 0.05;
+        if (seconds < 60) {
+            return String.format(Locale.ROOT, "%.2fs", seconds);
+        }
+        return String.format(Locale.ROOT, "%d:%05.2f", (long) (seconds / 60), seconds % 60);
+    }
 
     /** "Seed: N" (click to copy) with a [retry] (/rs) and a [fresh] (/rs new) button. */
     private Component seedLine(String retry, String fresh) {

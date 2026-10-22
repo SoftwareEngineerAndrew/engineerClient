@@ -483,6 +483,9 @@ public final class DungeonRun implements EngineRun {
             return;
         }
         enteredBoss = true;
+        if (hooks != null && hooks.onEnterBoss(this)) {
+            return;
+        }
         BossArena.of(level).finishNow();
         net.minecraft.world.phys.Vec3 at = net.rustclear.mod.engine.boss.maxor.MaxorPhase.entry();
         for (ServerPlayer p : level.players()) {
@@ -569,6 +572,11 @@ public final class DungeonRun implements EngineRun {
     /** Whether a practice timer has the action bar: a practice room's route, or a session's (hooks). */
     boolean ownsActionBar() {
         return practice != null || hooks != null && hooks.ownsActionBar();
+    }
+
+    /** The run is over without a boss (blood camp practice at the portal): its clock and the clear's ticking stop. */
+    void stop() {
+        state = State.FINISHED;
     }
 
     /** The team holds the blood key (blood rush practice starts with it). */
