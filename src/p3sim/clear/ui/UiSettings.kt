@@ -1,11 +1,12 @@
 package com.engineerclient.p3sim.clear.ui
 
 import com.engineerclient.p3sim.run.LagPreset
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.KeybindSetting
+import com.engineerclient.ads.settings.NumberSetting
+import com.engineerclient.ads.settings.SelectorSetting
+import com.engineerclient.ads.settings.StringSetting
+import com.engineerclient.ads.settings.hide
 import com.mojang.blaze3d.platform.InputConstants
 
 /**
@@ -27,7 +28,7 @@ object UiSettings {
 
     @Volatile private var ready = false
 
-    fun register(host: com.odtheking.odin.features.Module) {
+    fun register(host: com.engineerclient.ads.settings.Settings) {
         bots = host.registerSetting(BooleanSetting("Run Bots", true, "Teammate bots in a full run: they walk the dungeon and their rooms check off on the measured schedule. Off: you clear alone and the party list is just you."))
         partySize = host.registerSetting(NumberSetting("Run Party Size", 5, 1..5, 1, desc = "Players in a full run, you included. The bots are the classes nobody plays. 1 is the same as bots off."))
         lag = host.registerSetting(SelectorSetting("Run Lag", LagPreset.TYPICAL, "Server lag in a full run, as net ticks lost per minute: Good 14.5, Typical 30.3, Bad 56.6, High slot (an instance slot above 200) 54.6. Off: no lag at all."))

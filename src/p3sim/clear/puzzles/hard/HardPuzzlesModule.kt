@@ -6,7 +6,7 @@ import com.engineerclient.p3sim.run.Run
 import com.engineerclient.p3sim.run.RunEvent
 import com.engineerclient.p3sim.run.api.PuzzleType
 import com.engineerclient.p3sim.run.api.Services
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.ads.settings.NumberSetting
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -23,7 +23,7 @@ object HardPuzzlesModule : AdsModule {
 
     private lateinit var routeGroupsS: NumberSetting<Int>
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         routeGroupsS = host.registerSetting(NumberSetting("Teleport Maze Route Groups", TpMazeModel.DEFAULT_ROUTE_GROUPS, 2..7, 1,
             desc = "How many of the Teleport Maze's seven pad groups the way to the chest passes through. A recorded solve takes about 11 hops; this model visits each group once, so 7 is the closest."))
     }

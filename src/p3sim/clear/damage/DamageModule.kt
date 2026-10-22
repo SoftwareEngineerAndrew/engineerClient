@@ -18,7 +18,7 @@ import com.engineerclient.p3sim.run.api.HurtResult
 import com.engineerclient.p3sim.run.api.MobRecord
 import com.engineerclient.p3sim.run.api.Services
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.ads.settings.NumberSetting
 import net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvents
@@ -86,7 +86,7 @@ object DamageModule : AdsModule, DamageService {
     /** What a fresh Wither Shield soaks, in percent of max health. UNMEASURED. */
     val shieldPoolPercent: Double get() = if (::shieldS.isInitialized) shieldS.value.toDouble() else WitherShield.DEFAULT_POOL_PERCENT
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         arrowS = host.registerSetting(NumberSetting("Clear Arrow Damage", 1200, 50..20000, 50, unit = "k", desc = "In a full run: the HP one arrow takes off a mob (thousands). Not measured on Hypixel; F7 mobs have 420k to 8.8M."))
         beamS = host.registerSetting(NumberSetting("Clear Beam Damage", 1000, 50..20000, 50, unit = "k", desc = "In a full run: the HP one Mage beam takes off a mob (thousands). Not measured on Hypixel."))
         meleeS = host.registerSetting(NumberSetting("Clear Sword Damage", 500, 50..20000, 50, unit = "k", desc = "In a full run: the HP a sword hit takes off a mob (thousands). Not measured on Hypixel."))

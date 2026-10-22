@@ -6,7 +6,6 @@ import com.engineerclient.p3sim.clear.bots.BotStrategies
 import com.engineerclient.p3sim.pack.Packs
 import com.engineerclient.p3sim.run.LagPreset
 import com.engineerclient.p3sim.run.LayoutSource
-import com.odtheking.odin.features.ModuleManager
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.components.StringWidget
@@ -185,7 +184,7 @@ class RunStartScreen : Screen(Component.literal("${P3Sim.FULL_NAME}: full run"))
     override fun removed() {
         super.removed()
         save()
-        ModuleManager.saveConfigurations()
+        com.engineerclient.ads.FullRunSettings.save()
     }
 
     override fun added() {

@@ -2,6 +2,7 @@ package com.engineerclient.ads.settings
 
 import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.client.input.MouseButtonEvent
@@ -13,7 +14,9 @@ import java.util.Locale
  * `/ads`: ADS's settings on their own, looking like Odin's Click GUI (its panel size, row height, greys and blue
  * accent) without needing Odin. One draggable panel per group, a header with the group's name, a row per setting:
  * a box for on/off, a slider for numbers, the current choice for selectors (left click next, right click back), a
- * key box for keybinds (click, then press a key; Esc clears it). Hovering a row shows what it does.
+ * key box for keybinds (click, then press a key; Esc clears it). Hovering a row shows what it does. The search bar
+ * at the bottom (focused on opening, so typing goes straight in) keeps only the settings whose name or help matches,
+ * and the panels with any; a panel whose name matches keeps all of its own.
  */
 class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Component.literal("ADS settings")) {
 
@@ -29,8 +32,19 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
     /** The keybind waiting for a key. */
     private var listening: KeybindSetting? = null
     private var scroll = 0
+    private var search: EditBox? = null
 
     override fun init() {
+        val sw = minOf(SEARCH_W, width - 20)
+        search = EditBox(font, (width - sw) / 2 + 6, height - SEARCH_H - 8 + (SEARCH_H - 8) / 2, sw - 12, 10, Component.literal("Search")).also { box ->
+            box.setBordered(false)
+            box.setMaxLength(40)
+            box.setHint(Component.literal("Search settings..."))
+            box.value = query
+            box.setResponder { query = it; scroll = 0 }
+            addRenderableWidget(box)
+            setInitialFocus(box)
+        }
         if (panels.isNotEmpty()) return
         // As many columns as fit, each panel under the shortest column so far: the panels pack together instead
         // of each row waiting for its tallest, and more of them fit on screen.
@@ -48,6 +62,17 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
     private fun rowHeight(s: Setting<*>) = if (s is NumberSetting<*>) SLIDER_ROW else ROW
     private fun panelHeight(settings: List<Setting<*>>) = HEADER + settings.filter { it.shown() }.sumOf { rowHeight(it) } + 4
 
+    /** [p]'s rows as the search leaves them: all shown ones with no search, else the matches (all, when its name matches). */
+    private fun rows(p: Panel): List<Setting<*>> {
+        val shown = p.settings.filter { it.shown() }
+        val q = query.trim().lowercase(Locale.ROOT)
+        if (q.isEmpty() || p.title.lowercase(Locale.ROOT).contains(q)) return shown
+        return shown.filter { it.name.lowercase(Locale.ROOT).contains(q) || it.description.lowercase(Locale.ROOT).contains(q) }
+    }
+
+    /** The panels drawn now: with a search on, only the ones with a matching row. */
+    private fun visible(): List<Panel> = if (query.isBlank()) panels else panels.filter { rows(it).isNotEmpty() }
+
     override fun extractRenderState(g: GuiGraphicsExtractor, mx: Int, my: Int, delta: Float) {
         g.fill(0, 0, width, height, 0x90000000.toInt())
         RustclearScreen.logo(g, 8, 6, 14)
@@ -59,11 +84,12 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
         g.text(font, EDIT_HUDS, hb[0] + 8, hb[1] + (hb[3] - 8) / 2, TEXT, false)
 
         var tooltip: Setting<*>? = null
-        for (p in panels) {
+        val drawn = visible()
+        for (p in drawn) {
             val px = p.x
             val py = p.y - scroll
-            val shown = p.settings.filter { it.shown() }
-            val h = panelHeight(p.settings)
+            val shown = rows(p)
+            val h = HEADER + shown.sumOf { rowHeight(it) } + 4
             // Odin's panel: a dark body, a slightly lighter header with the name centred, the accent under it.
             RustclearScreen.round(g, px, py, WIDTH, h, BACKGROUND)
             RustclearScreen.round(g, px, py, WIDTH, HEADER, SURFACE)
@@ -81,6 +107,16 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
                 ry += rh
             }
         }
+        if (drawn.isEmpty()) {
+            val none = "No setting matches \"${query.trim()}\"."
+            g.text(font, none, (width - font.width(none)) / 2, height / 2, MUTED, false)
+        }
+        // The search bar, bottom centre, in the panels' colours.
+        val sw = minOf(SEARCH_W, width - 20)
+        val sx = (width - sw) / 2
+        val sy = height - SEARCH_H - 8
+        RustclearScreen.round(g, sx, sy, sw, SEARCH_H, BACKGROUND)
+        g.fill(sx, sy + SEARCH_H - 1, sx + sw, sy + SEARCH_H, if (search?.isFocused == true) ACCENT else SURFACE)
         super.extractRenderState(g, mx, my, delta)
         val t = tooltip
         if (t != null && t.description.isNotEmpty() && dragging == null && sliding == null) {
@@ -153,11 +189,11 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
 
     /** The setting row under (mx, my) and its top, or null. */
     private fun rowAt(mx: Double, my: Double): Triple<Panel, Setting<*>, Int>? {
-        for (p in panels.asReversed()) {
+        for (p in visible().asReversed()) {
             val py = p.y - scroll
             if (mx < p.x || mx >= p.x + WIDTH) continue
             var ry = py + HEADER
-            for (s in p.settings.filter { it.shown() }) {
+            for (s in rows(p)) {
                 val rh = rowHeight(s)
                 if (my >= ry && my < ry + rh) return Triple(p, s, ry)
                 ry += rh
@@ -187,8 +223,11 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
             net.minecraft.client.Minecraft.getInstance().gui.setScreen(com.engineerclient.ads.hud.AdsHudEditor(this))
             return true
         }
+        // The search bar takes its own clicks.
+        val box = search
+        if (box != null && box.isMouseOver(mx, my)) return super.mouseClicked(event, doubleClick)
         // A header starts a drag (the topmost panel first).
-        for (p in panels.asReversed()) {
+        for (p in visible().asReversed()) {
             val py = p.y - scroll
             if (mx >= p.x && mx < p.x + WIDTH && my >= py && my < py + HEADER) {
                 dragging = p
@@ -199,7 +238,7 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
                 return true
             }
         }
-        val (_, s, _) = rowAt(mx, my) ?: return super.mouseClicked(event, doubleClick)
+        val (_, s, _) = rowAt(mx, my) ?: run { search?.isFocused = false; return super.mouseClicked(event, doubleClick) }
         val back = button == InputConstants.MOUSE_BUTTON_RIGHT
         when (s) {
             is BooleanSetting -> s.value = !s.value
@@ -307,6 +346,11 @@ class AdsSettingsScreen(private val sections: List<SettingsPanel>) : Screen(Comp
         const val ACCENT = 0xFF3296DC.toInt()
         const val TEXT = 0xFFFFFFFF.toInt()
         const val MUTED = 0xFFAAAAAA.toInt()
+        const val SEARCH_W = 220
+        const val SEARCH_H = 20
+
+        /** The search, kept for the rest of the game so the screen opens as it was left. */
+        var query = ""
 
         /** Panel positions for the rest of the game, so the screen opens as it was left. */
         val LAYOUT = HashMap<String, Map<String, Pair<Int, Int>>>()

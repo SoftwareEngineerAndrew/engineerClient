@@ -5,8 +5,8 @@ import com.engineerclient.p3sim.P4Necron
 import com.engineerclient.p3sim.Sim
 import com.engineerclient.EngineerClient
 import com.engineerclient.p3sim.run.api.Services
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.engineerclient.ads.settings.NumberSetting
+import com.engineerclient.ads.settings.SelectorSetting
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 
@@ -29,7 +29,7 @@ object EngineModule : AdsModule {
     lateinit var lagPresetS: SelectorSetting<LagOption>
     lateinit var lagBurstS: NumberSetting<Double>
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         lagPresetS = host.registerSetting(SelectorSetting("Lag Preset", LagOption.OFF, desc = "Makes the sim's server lose ticks the way Hypixel's does: it freezes for a moment, then runs a burst to catch up, and part of the lost time never comes back. Good, Typical and Bad lose 14.5, 30.3 and 56.6 ticks a minute (the measured 10th, 50th and 90th percentile of F7 runs); High slot is an instance slot above 200 (about 1.8 times Typical). A run's own lag choice takes priority."))
         lagBurstS = host.registerSetting(NumberSetting("Lag Burst Rate", LagBurst.DEFAULT_RATE, 1.0..6.0, 0.5, desc = "How many times faster than normal the server runs the ticks it catches up after a freeze. Not measured on Hypixel (only how many ticks come back is), so this is a guess; 2 is the default."))
     }
@@ -40,7 +40,8 @@ object EngineModule : AdsModule {
             net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register { mc -> EngineerClient.safely("ads spike client") { EngineSpikes.clientTick(mc) } }
         }
         // The mods that read Hypixel's mod API (location, party) and the packets they would send to a server that cannot read them.
-        EngineerClient.safely("ads hypixel mod api") { HypixelModApi.install() }
+        // Odin's packet events carry the mod API's answers, so only with Odin (the API is for Odin and mods like it).
+        if (com.engineerclient.p3sim.P3Sim.odin) EngineerClient.safely("ads hypixel mod api") { HypixelModApi.install() }
         // Every mob the sim adds in a world that is not PEACEFUL stays: vanilla would otherwise despawn it by distance (ARCHITECTURE 14).
         EngineerClient.safely("ads persistent mobs") {
             net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents.ENTITY_LOAD.register { entity, level ->

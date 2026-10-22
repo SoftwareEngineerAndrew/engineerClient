@@ -36,8 +36,8 @@ object AdsBootstrap {
         for (m in AdsModules.all) EngineerClient.safely("ads ${m.id} init") { m.onInit() }
     }
 
-    /** Lets every module add its settings to the ADS Odin module ([host] is `P3Sim`). Called from `P3Sim`'s init block. */
-    fun registerSettings(host: com.odtheking.odin.features.Module) {
+    /** Lets every module add its settings to [host] (ADS's FullRunSettings). Called once at start-up, before its file is read. */
+    fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         for (m in AdsModules.all) EngineerClient.safely("ads ${m.id} settings") { m.registerSettings(host) }
     }
 }

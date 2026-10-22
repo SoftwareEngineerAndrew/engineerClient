@@ -22,6 +22,13 @@ object PracticeSettings {
         var room: String? = null,
         /** north, east, south, west or random. */
         var door: String = "random",
+        /** Full clear's dungeon: "recorded" (Engineer Client's full run: bots, lag, recorded layouts) or "engine" (Rustclear's). */
+        var clearEngine: String = "recorded",
+        /** The recorded run's layout: "random", "seed" or "recorded" (one from the layout browser). */
+        var runLayout: String = "random",
+        var runSeed: String = "",
+        /** The recorded layout's id, chosen in the browser. */
+        var runLayoutId: String? = null,
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()

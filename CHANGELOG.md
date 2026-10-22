@@ -7,7 +7,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ### Added
 - Everything new in Engineer Client up to 2026-10-21 (214 changes), merged in:
-  - With Odin: Engineer Client's full F7 run (`/ads run`): countdown, a recorded dungeon with bots, mobs, secrets, puzzles, traps and the blood camp, then the boss. It is Engineer Client's beta, separate from the Practice page's dungeon engine. Its settings are under ADS Full Run in Odin's menu; in a run's clear the P3 Sim menu has Restart Room and Restart Run.
+  - Engineer Client's full F7 run, without needing Odin: countdown, a recorded dungeon with bots, mobs, secrets, puzzles, traps and the blood camp, then the boss. Start it from Practice > Full clear with Engine: Engineer Client (layout random, by seed or picked from the recorded layouts; party size and bots; lag; no deaths and mob HP per run), or `/ads run`. Its other settings are the Full Run panels in `/ads`; in a run's clear the P3 Sim menu has Restart Room and Restart Run.
   - Recore: Paste Last In Core, Core Leap Highlight and Highlight All Players In Core (Core Leap moves here from Term Info).
   - Clear Breakdown: when a run ends, who cleared which rooms (solo or helped) and each player's secrets, replacing Odin's Secrets Counter lines.
   - Room Prediction and LCM Style on Odin's Dungeon Map (from Ascent Client).
@@ -15,12 +15,14 @@ Changes in ADS. The process for adding entries and cutting releases is in
   - Coffee Client: Quiet Media (other apps' audio turned down or paused through the clear and Storm), Coffee Timers and Role Times, and the FOV slider goes to 130.
   - Necron DPS timer, counting down to Necron's first damage.
   - P3 Sim: Near Optimal skill level.
+- A search bar at the bottom of `/ads`: type to show only the settings (and panels) whose name or help matches.
 
 ### Changed
 - P3 Sim: the Optimal PF skill level is now Advanced PF, a saved hotbar applies to every skill of its class, and the default speed is 500.
 - Term Info is a Coffee Client module again (terms, levers, device, gate, or Simple Mode's total), and Force Cursor Reset moved to Random Stuff.
 
 ### Removed
+- Rustclear's minimap in the top left corner of the dungeon engine's runs (and over the Spirit Leap menu).
 - Storm Phase (Storm Ticks counter, Modulo 20, Tick Offset); Storm's crush hitbox is still Sub Splits' Show Crush Info.
 
 ## [0.1.0] - 2026-10-22

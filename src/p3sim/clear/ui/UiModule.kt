@@ -21,12 +21,10 @@ object UiModule : AdsModule {
     override val id = "ui"
     override val owner = "savepoints"
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) = UiSettings.register(host)
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) = UiSettings.register(host)
 
-    /** Opens the start screen (client thread; safe to call from a command or a key). */
-    fun openStartScreen() {
-        mc.execute { mc.gui.setScreen(RunStartScreen()) }
-    }
+    /** Opens the start screen: ADS's Practice page on Full clear (safe to call from a command or a key). */
+    fun openStartScreen() = com.engineerclient.ads.PracticeScreen.openRecordedClear()
 
     /** The full run is the beta's only: ADM has none of its /ads run commands. */
     override fun runCommands(): List<AdsCommand> = if (com.engineerclient.EngineerClient.BETA) fullRunCommands() else emptyList()

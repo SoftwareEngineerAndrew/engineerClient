@@ -11,8 +11,8 @@ import com.engineerclient.p3sim.run.api.DoorOpenResult
 import com.engineerclient.p3sim.run.api.DoorService
 import com.engineerclient.p3sim.run.api.KeyPlan
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.NumberSetting
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -44,7 +44,7 @@ object DoorsModule : AdsModule, DoorService {
     private var pickupRadiusS: NumberSetting<*>? = null
     private var synthesiseS: BooleanSetting? = null
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         countdownDelayS = host.registerSetting(NumberSetting("Doors Arrival Wait", 60, 0..400, 5, unit = " ticks", desc = "How long after a run starts the \"Starting in 4 seconds\" count begins. Hypixel: a median 57 ticks after the potions line you read on arriving."))
         pickupRadiusS = host.registerSetting(NumberSetting("Doors Key Pickup Radius", 2.5, 1.0..6.0, 0.5, unit = " blocks", desc = "How close you or a teammate has to be to take a Wither or Blood Key off the floor. Not measured: most keys on Hypixel are taken in the tick they appear (by whoever killed the last mob), the rest after about 8 ticks."))
         synthesiseS = host.registerSetting(BooleanSetting("Doors Synthesise Clears", true, desc = "A room with no mob that has to die turns white on the measured schedule (median 50 ticks after it is discovered) instead of staying grey. Trap rooms are not on it: they turn white when their end chest is opened."))

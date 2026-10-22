@@ -40,9 +40,9 @@ import com.engineerclient.p3sim.pack.DungeonFrame
 import com.engineerclient.p3sim.pack.layouts.DoorKind
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.Module
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.NumberSetting
+import com.engineerclient.ads.settings.Settings
 import com.engineerclient.p3sim.DungeonClass
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -77,7 +77,7 @@ object BotsModule : AdsModule, BotService {
     private lateinit var namesS: BooleanSetting
     private lateinit var playersS: BooleanSetting
 
-    override fun registerSettings(host: Module) {
+    override fun registerSettings(host: Settings) {
         showDistanceS = host.registerSetting(NumberSetting("Bots Show Distance", BotTuning.BODY_RADIUS.toInt(), 24..120, 4, desc = "How near you have to be for a teammate bot to be drawn. Bots farther away are still running the plan; you just do not see them (the world only keeps the rooms near you loaded)."))
         speedScaleS = host.registerSetting(NumberSetting("Bots Speed Scale", 1.0, 0.5..2.0, 0.1, desc = "How fast the bots travel between rooms compared with the measured pace of a real party (1.0). Faster bots get ahead of you sooner; their rooms still finish on the same schedule."))
         coverS = host.registerSetting(BooleanSetting("Bots Cover Your Rooms", true, desc = "A room the plan gave to you that you have not gone into after a while is cleared by a bot, as a teammate would. Off: your share waits for you."))

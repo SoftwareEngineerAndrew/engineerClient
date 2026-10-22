@@ -13,9 +13,16 @@ import net.minecraft.network.chat.Component
  * The small browser of recorded layouts, opened from the start screen's "Recorded" row. One button per layout with its date,
  * rooms, puzzles, secrets and recorded time (hover for the puzzle names and the recorded party's classes); a search box (type
  * "boulder" or "2026-09" or a room name), a sort, and a switch for layouts that were not recorded completely. Clicking one
- * chooses it and goes back to [parent]. No data pack: the screen says where the packs go.
+ * chooses it ([onChoose]) and goes back to [parent]. No data pack: the screen says where the packs go.
  */
-class LayoutBrowserScreen(private val parent: RunStartScreen) : Screen(Component.literal("Recorded layouts")) {
+class LayoutBrowserScreen(
+    private val parent: Screen,
+    /** The layout chosen now (underlined in the list), or null. */
+    private val current: () -> String?,
+    private val onChoose: (String) -> Unit,
+) : Screen(Component.literal("Recorded layouts")) {
+    constructor(parent: RunStartScreen) : this(parent, { RunStartScreen.currentChoice() }, { parent.chose(it) })
+
     private var query = lastQuery
     private var sort = lastSort
     private var poolOnly = lastPoolOnly
@@ -64,7 +71,7 @@ class LayoutBrowserScreen(private val parent: RunStartScreen) : Screen(Component
         }
         for (r in LayoutBrowserModel.page(view, page, pageSize)) {
             val text = font.plainSubstrByWidth(r.line(), w - 12)
-            addRenderableWidget(Button.builder(Component.literal(if (r.id == parentChoice()) "§a§n$text" else text)) { parent.chose(r.id); mc.gui.setScreen(parent) }
+            addRenderableWidget(Button.builder(Component.literal(if (r.id == parentChoice()) "§a§n$text" else text)) { onChoose(r.id); mc.gui.setScreen(parent) }
                 .tooltip(tip(detail(r))).bounds(cx - w / 2, y, w, 20).build())
             y += ROW
         }
@@ -75,7 +82,7 @@ class LayoutBrowserScreen(private val parent: RunStartScreen) : Screen(Component
         addRenderableWidget(Button.builder(Component.literal("Back")) { onClose() }.bounds(cx + w / 2 - 24 - 62, by, 56, 20).build())
     }
 
-    private fun parentChoice(): String? = RunStartScreen.currentChoice()
+    private fun parentChoice(): String? = current()
 
     /** The hover text: everything the one line leaves out. */
     private fun detail(r: LayoutRow): String = buildList {

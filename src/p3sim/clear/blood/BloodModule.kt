@@ -18,8 +18,8 @@ import com.engineerclient.p3sim.run.plugin.BloodCamp
 import com.engineerclient.p3sim.clear.blood.camp.WatcherCamp
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.engineerclient.ads.settings.BooleanSetting
+import com.engineerclient.ads.settings.NumberSetting
 import net.minecraft.world.InteractionResult
 import org.slf4j.LoggerFactory
 import kotlin.random.Random
@@ -71,7 +71,7 @@ object BloodModule : AdsModule {
     private lateinit var placeholderFirstS: NumberSetting<Int>
     private lateinit var placeholderIntervalS: NumberSetting<Int>
 
-    override fun registerSettings(host: com.odtheking.odin.features.Module) {
+    override fun registerSettings(host: com.engineerclient.ads.settings.Settings) {
         campTimeoutS = host.registerSetting(NumberSetting("Blood Camp Timeout", DEFAULT_CAMP_TIMEOUT, 0..24000, 100, unit = " ticks", desc = "If the blood room's camp has not finished this long after the blood door opened, the Watcher lets the party pass anyway. 0: never. Only a safety net; not measured."))
         headsS = host.registerSetting(BooleanSetting("Blood Wall Heads", true, desc = "Put the blood room's wall heads on their stands when the blood door opens. Off: bare walls."))
         placeholderMobsS = host.registerSetting(NumberSetting("Blood Placeholder Mobs", DEFAULT_PLACEHOLDER_MOBS, 0..40, 1, desc = "Only for a blood room with too few wall heads for the Watcher's camp: the plain stand-in releases this many ordinary mobs, one at a time. Not the real camp."))

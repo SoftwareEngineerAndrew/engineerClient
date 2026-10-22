@@ -259,8 +259,9 @@ object P3Sim : Settings("ADS", "ads.json") {
         }
         registerKeybinds()
         registerHuds()
-        // The full run (its modules, commands and stage line) runs on Odin: its settings are an Odin module (OdinAddon.FullRun).
-        if (odin) com.engineerclient.p3sim.run.AdsBootstrap.init()
+        // The full run: its settings (ADS's own, so no Odin needed), then its modules, commands and stage line.
+        com.engineerclient.ads.FullRunSettings.init()
+        com.engineerclient.p3sim.run.AdsBootstrap.init()
         SimNet.register()
         PartyServer.register()
         PartyClient.register()

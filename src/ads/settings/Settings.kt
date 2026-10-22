@@ -36,6 +36,9 @@ abstract class Setting<T>(val name: String, val default: T, val description: Str
 
 fun <S : Setting<*>> S.withDependency(shown: () -> Boolean): S = also { it.shown = shown }
 
+/** Never shown in the menus (kept and saved all the same), as Odin's hide(). */
+fun <S : Setting<*>> S.hide(): S = also { it.shown = { false } }
+
 class BooleanSetting(name: String, default: Boolean = false, desc: String = "") : Setting<Boolean>(name, default, desc) {
     override fun write(): JsonElement = JsonPrimitive(value)
     override fun read(json: JsonElement) { value = json.asBoolean }
@@ -83,6 +86,15 @@ class SelectorSetting<E : Enum<E>>(name: String, default: E, desc: String = "") 
     override fun read(json: JsonElement) { options.firstOrNull { it.name == json.asString }?.let { value = it } }
 }
 
+/** A line of text, at most [length] characters. */
+class StringSetting(name: String, default: String = "", val length: Int = 64, desc: String = "", val placeholder: String = "") : Setting<String>(name, default, desc) {
+    override var value: String = default
+        set(v) { field = v.take(length) }
+
+    override fun write(): JsonElement = JsonPrimitive(value)
+    override fun read(json: JsonElement) { value = json.asString }
+}
+
 /** A key; [onPress] runs when it goes down in game (not while a screen is open). */
 class KeybindSetting(name: String, default: InputConstants.Key, desc: String = "") : Setting<InputConstants.Key>(name, default, desc) {
     var action: () -> Unit = {}
@@ -97,6 +109,9 @@ abstract class Settings(val title: String, private val file: String) {
     val all = mutableListOf<Setting<*>>()
 
     operator fun <S : Setting<*>> S.unaryPlus(): S = also { all += it }
+
+    /** Adds [setting] from outside the owner (the full run's modules add theirs this way, as to an Odin module). */
+    fun <S : Setting<*>> registerSetting(setting: S): S = setting.also { if (it !in all) all += it }
 
     /** For settings declared with `by`: adds it to [all] too. */
     operator fun <T, S : Setting<T>> S.provideDelegate(thisRef: Any?, property: KProperty<*>): S = also { if (it !in all) all += it }
