@@ -59,6 +59,8 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     /** Blood camp: the Blood room practised (kept for /rs), and the run ticks its door opened at (-1: not yet). */
     private RoomData bloodRoom;
     private long doorTicks = -1;
+    /** Room: whether this session has built its room (until then /practice's last room isn't this one). */
+    private boolean roomBuilt;
     /** Boss practice: the phase's name in the fight ("maxor"...), and the run ticks it began at (-1: not yet). */
     private String bossPhase;
     private long phaseStart = -1;
@@ -288,10 +290,11 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
     /** The named room alone, entering through the spec's door; /rs keeps the door, /rs new rolls a random one again. */
     private void buildRoom(MinecraftServer s, boolean fresh) {
         Instance in = EngineServer.partyInstance();
-        if (!fresh && in.practicePick != null && in.practiceRoute != null) {
+        if (!fresh && roomBuilt && in.practicePick != null && in.practiceRoute != null) {
             EngineServer.restartPractice(s);
         } else {
             greeting.add(EngineItems.text(EngineServer.practiceRoom(s, spec.room(), spec.door(), null, spec.floor())));
+            roomBuilt = true;
         }
         run = in.dungeon();
     }
