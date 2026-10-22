@@ -1,6 +1,6 @@
 package com.engineerclient.mixin.odin;
 
-import com.engineerclient.EngineerClient;
+import com.engineerclient.OdinAddon;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.odtheking.odin.features.Module;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,7 +13,7 @@ import java.util.List;
 
 /**
  * Odin lists a ClickGUI panel's modules by how wide their names are, longest first. Our panel is
- * listed in the order of {@link EngineerClient#getMODULES()} instead; every other panel is left
+ * listed in the order of {@link OdinAddon#getMODULES()} instead; every other panel is left
  * as Odin sorts it. The panel is the composable {@code Panel(Category, ...)} in {@code PanelKt}, which
  * sorts once, when the panel is first composed.
  */
@@ -28,7 +28,7 @@ public class PanelOrderMixin {
     )
     private static List<Module> ec$ourOrder(List<Module> sorted) {
         try {
-            List<Module> order = EngineerClient.INSTANCE.getMODULES();
+            List<Module> order = OdinAddon.INSTANCE.getMODULES();
             if (sorted.isEmpty() || !order.contains(sorted.get(0))) return sorted;
             List<Module> ours = new ArrayList<>(sorted);
             // Anything not in the list (there should be nothing) keeps Odin's place, after ours.
