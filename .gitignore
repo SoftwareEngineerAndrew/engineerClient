@@ -8,3 +8,4 @@ libs/
 .DS_Store
 .worktrees/
 .claude/settings.local.json
+.vendor/
