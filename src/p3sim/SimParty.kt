@@ -550,11 +550,20 @@ object PartyClient {
     private val ownFile get() = java.io.File(mc.gameDirectory, "config/engineerclient/p3sim-own-settings.json")
     private fun keepOwn(o: JsonObject) = EngineerClient.safely("p3sim own settings keep") { ownFile.parentFile.mkdirs(); ownFile.writeText(o.toString()) }
 
-    /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. All of it is Odin's: nothing without it. */
+    /**
+     * What the fight does on your game: ADS's splits (with or without Odin), then Odin's: its timers and solvers, Term
+     * Info and the Sub Splits, nothing of which runs without it.
+     */
     private fun fx(what: String) {
-        if (!P3Sim.odin) return
         val o = runCatching { JsonParser.parseString(what).asJsonObject }.getOrNull() ?: return
-        OdinSimBridge.fx(o.get("fx")?.asString ?: return, o.get("n")?.asInt ?: 0, o.get("split")?.asString)
+        val fx = o.get("fx")?.asString ?: return
+        val n = o.get("n")?.asInt ?: 0
+        val split = o.get("split")?.asString
+        when (fx) {
+            "splitsStart" -> if (split != null) EngineerClient.safely("ads splits start") { com.engineerclient.ads.splits.AdsSplitsManager.simStart(split, n) }
+            "splitsStop" -> EngineerClient.safely("ads splits stop") { com.engineerclient.ads.splits.AdsSplitsManager.simStop() }
+        }
+        if (P3Sim.odin) OdinSimBridge.fx(fx, n, split)
     }
 
     /** Server side: [fx] on every game in the sim (or [to]'s alone), in order with the fight's packets. */

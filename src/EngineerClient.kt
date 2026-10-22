@@ -69,6 +69,8 @@ object EngineerClient : ClientModInitializer {
 
         // The sim first: on a first start it reads its settings from Odin's file, before Odin can save over it.
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
+        // ADS's splits, in the sim and Rustclear worlds (Odin's step aside there).
+        safely("ads splits") { com.engineerclient.ads.splits.AdsSplits.init() }
         // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.
         if (odin) safely("odin addon") { OdinAddon.init(firstRun) }
 
