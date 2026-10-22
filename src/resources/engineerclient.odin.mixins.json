@@ -21,7 +21,8 @@
     "HighlightRenderMixin",
     "TermGuiButtonMixin",
     "LeapTermsimProtMixin",
-    "NumbersHandlerMixin"
+    "NumbersHandlerMixin",
+    "OdinTerminalSolverMixin"
   ],
   "injectors": {
     "defaultRequire": 0

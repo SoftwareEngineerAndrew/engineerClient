@@ -57,6 +57,7 @@ object OdinAddon {
         safely("splits look") { OdinSplitsLook.install() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
+        safely("terminal guard") { com.engineerclient.terminals.OdinTerminalGuard.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
 
