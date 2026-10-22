@@ -6,6 +6,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ## [Unreleased]
 
 ### Added
+- Simon Says, i4 (Arrows Device) and Arrow Align solvers in the P3 Sim, the dungeon engine's worlds and on SS Practice's device, without needing Odin; settings in `/ads` (colours, box style, Block Wrong Clicks, aim positions).
 - A HUD editor for ADS's HUDs: drag to move, scroll to resize, right-click or Reset All to reset. Open it from Edit HUDs in `/ads` or with `/ads hud`; places are saved to `config/engineerclient/huds.json`.
 - Splits in the P3 Sim and the dungeon engine's worlds, without needing Odin: each F7/M7 split from Mort to the end in a Splits HUD and a Current Split HUD, with a Splits panel in `/ads`. Personal bests are kept in `config/engineerclient/splits.json`, apart from Odin's.
 - ADS solves terminals in the P3 Sim and the dungeon engine's worlds, without needing Odin, with Odin's Terminal Solver options (Odin, Normal and Custom GUI render types, client prediction, first click protection, Rubix mode, melody options, colours) under `/ads` > Terminals and Terminal Colors.
@@ -23,6 +24,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed
+- With Odin installed, Odin's Simon Says, Arrows Device and Arrow Align no longer draw or block clicks in ADS's worlds; ADS's own solvers do instead (nothing changes on Hypixel).
+- SS Practice's solver boxes follow ADS's Simon Says settings instead of Odin's Simon Says module.
 - Coffee Client and Devgineer no longer post in chat ("[DC] Boss Recorder: recording", "[dc] build ..."); their lines go to the log instead.
 - With Odin installed, Odin's Splits no longer time runs in the P3 Sim or the engine's worlds; ADS's own Splits show there instead.
 - With Odin installed, ADS's solver handles the sim's and the engine's terminals and Odin's solver stays out of them; Odin is unchanged on Hypixel.
