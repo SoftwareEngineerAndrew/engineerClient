@@ -52,11 +52,13 @@ public final class ButtonStyle {
         }
         int textY = y + (h - 8) / 2;
         if (brand) {
-            // The ADS logo, then the label (ADS) centred.
+            // The ADS logo right beside the label (ADS), the pair centred together.
             int size = Math.max(8, h - 6);
-            RustclearScreen.logo(g, x + 4, y + (h - size) / 2, size);
             String text = label.toUpperCase(java.util.Locale.ROOT);
-            g.text(font, text, x + (w - font.width(text)) / 2, textY, lerp(GOLD, 0xFFFFFFFF, t * 0.25f), true);
+            int gap = 4;
+            int left = x + (w - size - gap - font.width(text)) / 2;
+            RustclearScreen.logo(g, left, y + (h - size) / 2, size);
+            g.text(font, text, left + size + gap, textY, lerp(GOLD, 0xFFFFFFFF, t * 0.25f), true);
             return;
         }
         String text = fit(font, label, w - 8);
