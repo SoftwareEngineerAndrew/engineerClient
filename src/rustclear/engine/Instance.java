@@ -6,6 +6,7 @@ import java.util.Set;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
+import net.rustclear.mod.Floor;
 import net.rustclear.mod.RustclearMod;
 
 /**
@@ -54,6 +55,18 @@ final class Instance {
      */
     void install(DungeonPlan next, RoomStore store, Practice.Route route, int waterPattern, boolean practiceMobs,
                  Random random, BuildTimer timer) {
+        install(next, store, route, waterPattern, practiceMobs, random, timer,
+            EngineServer.settings().floorOrDefault(), null, null, null);
+    }
+
+    /**
+     * [install] on [floor] (not the leader's saved one), with the run seeded from [runSeed] (null:
+     * unseeded), its start at [spawnOverride] when given (as a route's door is), and [hooks] for
+     * practice (null in a normal run).
+     */
+    void install(DungeonPlan next, RoomStore store, Practice.Route route, int waterPattern, boolean practiceMobs,
+                 Random random, BuildTimer timer, Floor floor, Long runSeed,
+                 DungeonBuilder.Spawn spawnOverride, DungeonRun.PracticeHooks hooks) {
         if (run != null) {
             run.dispose();
             run = null;
@@ -75,7 +88,10 @@ final class Instance {
             Practice.DoorSpawn door = route.spawn;
             spawn = new DungeonBuilder.Spawn(door.x(), door.y(), door.z(), door.yaw());
         }
-        DungeonRun dungeon = new DungeonRun(level, plan, EngineServer.settings().floorOrDefault());
+        if (spawnOverride != null) {
+            spawn = spawnOverride;
+        }
+        DungeonRun dungeon = new DungeonRun(level, plan, floor, runSeed, hooks);
         run = dungeon;
         if (route != null) {
             dungeon.startPractice(route, waterPattern, practiceMobs);
