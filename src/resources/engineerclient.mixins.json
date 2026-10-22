@@ -51,7 +51,12 @@
     "SsPracticeInputMixin",
     "TerminalNumberMixin",
     "WandInputMixin",
-    "WandScrollMixin"
+    "WandScrollMixin",
+    "TerminalSolverCustomGuiMixin",
+    "TerminalSolverGuiScaleMixin",
+    "TerminalSolverMenuMixin",
+    "TerminalSolverOpenMixin",
+    "TerminalSolverScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
