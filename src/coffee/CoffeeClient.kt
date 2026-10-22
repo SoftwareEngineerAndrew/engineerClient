@@ -133,9 +133,8 @@ object CoffeeClient : ClientModInitializer {
         }
     }
 
-    fun chat(msg: String) {
-        mc.schedule { mc.gui.hud.chat.addClientSystemMessage(Component.literal(msg)) }
-    }
+    // In ADS, Coffee keeps quiet: what it would say in chat goes to the log instead.
+    fun chat(msg: String) = logger.info("[cc chat] ${msg.replace(Regex("§."), "")}")
 
     /** What every line the mod says in chat starts with. */
     const val PREFIX = "§8[§6CC§8] "
