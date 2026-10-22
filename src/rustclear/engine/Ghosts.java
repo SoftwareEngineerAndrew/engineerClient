@@ -248,35 +248,24 @@ final class Ghosts {
     /** Hotbar 1 Haunt, 4 and 6 the class's two ghost abilities, 9 the map (kept), and 10 Ghost Arrows in the bag. */
     private void giveKit(ServerPlayer player) {
         Inventory inv = player.getInventory();
-        inv.setItem(0, kitItem(head(HAUNT_SKIN), "HAUNT_ABILITY", "§aHaunt", "Haunt", "§7Teleport to an alive player!", "2s",
-            "§a§lUNCOMMON DUNGEON ITEM"));
+        inv.setItem(0, kitStack("HAUNT_ABILITY"));
         switch (PlayerStats.classOf(player)) {
             case MAGE -> {
-                inv.setItem(3, kitItem(new ItemStack(Items.BRICKS), "MAGE_DUNGEON_ABILITY_1", "§aPop-up Wall", "Instant Wall",
-                    "§7Create a 5x3 wall at the block you are looking\n§7at which lasts for §a10§7 seconds.", "20s", "§a§lUNCOMMON DUNGEON ITEM"));
-                inv.setItem(5, kitItem(new ItemStack(Items.BLAZE_POWDER), "MAGE_DUNGEON_ABILITY_3", "§aFireball", "Fireball",
-                    "§7Shoots a fireball, dealing damage based on\n§7your Mage level!", "15s", "§a§lUNCOMMON DUNGEON ITEM"));
+                inv.setItem(3, kitStack("MAGE_DUNGEON_ABILITY_1"));
+                inv.setItem(5, kitStack("MAGE_DUNGEON_ABILITY_3"));
             }
             case BERSERK -> {
-                inv.setItem(3, kitItem(head(STRENGTH_SKIN), "WARRIOR_DUNGEON_ABILITY_1", "§aStrength Potion", "Buff Potion",
-                    "§7Throw a potion which temporarily gives all\n§7teammates in a §a10§7 block radius §c+30❁ Strength§7.", "20s",
-                    "§a§lUNCOMMON DUNGEON ITEM"));
-                inv.setItem(5, kitItem(new ItemStack(Items.IRON_AXE), "GHOST_THROWING_AXE", "§aGhost Axe", "Ghost Axe",
-                    "§7Throw an Axe, dealing damage based on your\n§7Berserk level!", "10s", "§8This item can be reforged!\n§a§lUNCOMMON DUNGEON AXE"));
+                inv.setItem(3, kitStack("WARRIOR_DUNGEON_ABILITY_1"));
+                inv.setItem(5, kitStack("GHOST_THROWING_AXE"));
             }
             case TANK -> {
-                inv.setItem(3, kitItem(head(STUN_SKIN), "TANK_DUNGEON_ABILITY_1", "§aStun Potion", "Stun Potion",
-                    "§7Throw a potion which temporarily stuns all\n§7monsters in a §a10§7 block radius.", "20s", "§a§lUNCOMMON DUNGEON ITEM"));
-                inv.setItem(5, kitItem(head(ABSORPTION_SKIN), "TANK_DUNGEON_ABILITY_2", "§aAbsorption Potion", "Absorption Potion",
-                    "§7Throw a potion which gives all teammates in a\n§a10§7 block radius §a200§7 HP worth of absorption\n§7for §a3§7 seconds.",
-                    "20s", "§a§lUNCOMMON DUNGEON ITEM"));
+                inv.setItem(3, kitStack("TANK_DUNGEON_ABILITY_1"));
+                inv.setItem(5, kitStack("TANK_DUNGEON_ABILITY_2"));
             }
             case ARCHER -> {
                 // Recorded (10 own Archer deaths, e.g. 2026-10-03_02-25-42_F7_9d5ac3): two shortbows.
-                inv.setItem(3, bowItem("ARCHER_DUNGEON_ABILITY_2", "§aStun Bow", "§7Temporarily stuns any non-boss\n"
-                    + "§7dungeon monster for a short period\n§7of time when shot.", "§a§lUNCOMMON DUNGEON BOW"));
-                inv.setItem(5, bowItem("ARCHER_DUNGEON_ABILITY_3", "§9Healing Bow", "§7Shoot a teammate to heal them for\n"
-                    + "§a10% §7of their max HP and grant them\n§c+50❁ Strength §7for §a10 §7seconds.", "§9§lRARE DUNGEON BOW"));
+                inv.setItem(3, kitStack("ARCHER_DUNGEON_ABILITY_2"));
+                inv.setItem(5, kitStack("ARCHER_DUNGEON_ABILITY_3"));
             }
             default -> {
                 // The Healer ghost kit was never recorded (the recorder never plays Healer): Haunt, map and arrows only.
@@ -289,6 +278,33 @@ final class Ghosts {
         arrows.setCount(10);
         inv.setItem(9, arrows);
         player.inventoryMenu.sendAllDataToRemote();
+    }
+
+    /** The ghost kit's item with SkyBlock id [id] (Haunt, the class abilities, the Ghost Axe), or null for another id. */
+    static ItemStack kitStack(String id) {
+        return switch (id) {
+            case "HAUNT_ABILITY" -> kitItem(head(HAUNT_SKIN), id, "§aHaunt", "Haunt", "§7Teleport to an alive player!", "2s",
+                "§a§lUNCOMMON DUNGEON ITEM");
+            case "MAGE_DUNGEON_ABILITY_1" -> kitItem(new ItemStack(Items.BRICKS), id, "§aPop-up Wall", "Instant Wall",
+                "§7Create a 5x3 wall at the block you are looking\n§7at which lasts for §a10§7 seconds.", "20s", "§a§lUNCOMMON DUNGEON ITEM");
+            case "MAGE_DUNGEON_ABILITY_3" -> kitItem(new ItemStack(Items.BLAZE_POWDER), id, "§aFireball", "Fireball",
+                "§7Shoots a fireball, dealing damage based on\n§7your Mage level!", "15s", "§a§lUNCOMMON DUNGEON ITEM");
+            case "WARRIOR_DUNGEON_ABILITY_1" -> kitItem(head(STRENGTH_SKIN), id, "§aStrength Potion", "Buff Potion",
+                "§7Throw a potion which temporarily gives all\n§7teammates in a §a10§7 block radius §c+30❁ Strength§7.", "20s",
+                "§a§lUNCOMMON DUNGEON ITEM");
+            case "GHOST_THROWING_AXE" -> kitItem(new ItemStack(Items.IRON_AXE), id, "§aGhost Axe", "Ghost Axe",
+                "§7Throw an Axe, dealing damage based on your\n§7Berserk level!", "10s", "§8This item can be reforged!\n§a§lUNCOMMON DUNGEON AXE");
+            case "TANK_DUNGEON_ABILITY_1" -> kitItem(head(STUN_SKIN), id, "§aStun Potion", "Stun Potion",
+                "§7Throw a potion which temporarily stuns all\n§7monsters in a §a10§7 block radius.", "20s", "§a§lUNCOMMON DUNGEON ITEM");
+            case "TANK_DUNGEON_ABILITY_2" -> kitItem(head(ABSORPTION_SKIN), id, "§aAbsorption Potion", "Absorption Potion",
+                "§7Throw a potion which gives all teammates in a\n§a10§7 block radius §a200§7 HP worth of absorption\n§7for §a3§7 seconds.",
+                "20s", "§a§lUNCOMMON DUNGEON ITEM");
+            case "ARCHER_DUNGEON_ABILITY_2" -> bowItem(id, "§aStun Bow", "§7Temporarily stuns any non-boss\n"
+                + "§7dungeon monster for a short period\n§7of time when shot.", "§a§lUNCOMMON DUNGEON BOW");
+            case "ARCHER_DUNGEON_ABILITY_3" -> bowItem(id, "§9Healing Bow", "§7Shoot a teammate to heal them for\n"
+                + "§a10% §7of their max HP and grant them\n§c+50❁ Strength §7for §a10 §7seconds.", "§9§lRARE DUNGEON BOW");
+            default -> null;
+        };
     }
 
     private static ItemStack head(String skin) {

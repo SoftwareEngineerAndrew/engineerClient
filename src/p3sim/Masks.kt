@@ -52,7 +52,8 @@ object Masks {
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", id); it.putBoolean("p3sim", true) }))
         s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
         SimItems.hy(s, null, style)
-        return s
+        // The skin and glint as the engine has the mask.
+        return SimItems.engineLook(s, id)
     }
 
     /** Where the spare mask is kept: the first inventory slot (as on Hypixel: /stats' slot 54). */

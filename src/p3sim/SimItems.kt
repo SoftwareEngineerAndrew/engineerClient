@@ -85,7 +85,40 @@ object SimItems {
         tag.putBoolean("p3sim", true)
         extra(tag)
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(tag))
-        return s
+        return engineLook(s, id)
+    }
+
+    /** How Rustclear's engine draws one SkyBlock item: base item, head skin, dye, glint, and its lore and name. */
+    class Look(val item: Item, val profile: ResolvableProfile?, val dye: net.minecraft.world.item.component.DyedItemColor?, val glint: Boolean,
+               val lore: ItemLore?, val name: Component?)
+
+    private val looks = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<Look>>()
+
+    /** The engine's [Look] for SkyBlock id [id] (cached), or null when the engine has no such item. */
+    fun look(id: String): Look? = looks.computeIfAbsent(id) { key ->
+        val e = runCatching { net.rustclear.mod.engine.SkyblockItems.stack(key) }
+            .onFailure { EngineerClient.logger.warn("[p3sim] no engine item for {}", key, it) }.getOrNull()
+        java.util.Optional.ofNullable(e?.let { Look(it.item, it.get(DataComponents.PROFILE), it.get(DataComponents.DYED_COLOR),
+            it.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) == true, it.get(DataComponents.LORE), it.get(DataComponents.CUSTOM_NAME)) })
+    }.orElse(null)
+
+    /**
+     * [s] (a sim item with SkyBlock id [id]) as Rustclear's engine draws that item: its base item, head skin, dye and
+     * glint, so it looks right without Hypixel's resource pack (the Superboom is TNT, not paper). The sim's own name,
+     * lore, custom data and the rest stay; [engineText] takes the engine's name and lore too. An id the engine
+     * doesn't know keeps [s] as it is.
+     */
+    fun engineLook(s: ItemStack, id: String?, engineText: Boolean = false): ItemStack {
+        val l = id?.let { look(it) } ?: return s
+        val out = if (s.item == l.item) s else s.transmuteCopy(l.item, s.count)
+        if (l.profile != null) out.set(DataComponents.PROFILE, l.profile) else if (l.item != Items.PLAYER_HEAD) out.remove(DataComponents.PROFILE)
+        l.dye?.let { out.set(DataComponents.DYED_COLOR, it) }
+        if (l.glint) out.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true) else out.remove(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)
+        if (engineText) {
+            l.name?.let { out.set(DataComponents.CUSTOM_NAME, it) }
+            l.lore?.let { out.set(DataComponents.LORE, it) }
+        }
+        return out
     }
 
     /** Hypixel's item text as recorded from the server; {UXXXX} stands for a private-use glyph, {T}/{SEC} for Terror's piece count and stack seconds. */
@@ -735,7 +768,8 @@ object SimItems {
         val s = if (id != null) item(base, id, name) else ItemStack(base).also { it.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { st -> st.withItalic(false) }) }
         s.remove(DataComponents.UNBREAKABLE)
         s.count = count
-        return s
+        // The ghost kit as the engine has it: textured potion heads, and Hypixel's lore with the cooldowns.
+        return engineLook(s, id, engineText = true)
     }
 
     fun idOf(s: ItemStack): String? = s.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getStringOr("id", "")?.takeIf { it.isNotEmpty() }
@@ -750,9 +784,9 @@ object SimItems {
         return s
     }
 
-    // Superboom is paper with Hypixel's item model: no BlockItem, so the client never
-    // "places" it (no place sound, swing or resend). Still infinite (never consumed) and needs a block target.
-    val SUPERBOOM get() = item(Items.PAPER, "SUPERBOOM_TNT", Lore.SUPERBOOM_TNT_NAME, Lore.SUPERBOOM_TNT, glint = true).also { it.count = 64; hy(it, "uncategorized/superboom_tnt", "rare", unbreakable = false) }
+    // Superboom is TNT, as the engine has it (Hypixel sends paper drawn by its pack's model). A block click never
+    // places it: the client's use_item_on is sent without a prediction (register). Infinite, and needs a block target.
+    val SUPERBOOM get() = item(Items.TNT, "SUPERBOOM_TNT", Lore.SUPERBOOM_TNT_NAME, Lore.SUPERBOOM_TNT, glint = true).also { it.count = 64; hy(it, "uncategorized/superboom_tnt", "rare", unbreakable = false) }
     val HYPERION get() = item(Items.IRON_SWORD, "HYPERION", Lore.HYPERION_NAME, Lore.HYPERION, glint = true).also { hy(it, "uncategorized/hyperion", "mythic") }
     /** Bonzo's Staff as Hypixel sends it: glyph + "Heroic" name, epic tooltip, fragged model, glint. Lore stats are one real item's. */
     val BONZO get() = item(Items.BLAZE_ROD, "STARRED_BONZO_STAFF", "§5\uE068 Heroic Bonzo's Staff §6✪✪✪✪✪", listOf(
@@ -793,7 +827,7 @@ object SimItems {
         s.set(DataComponents.LORE, ItemLore(Lore.INFINITE_SPIRIT_LEAP.map { l -> Component.literal(l).withStyle { it.withItalic(false) } }))
         hy(s, null, "epic", unbreakable = false)
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", "INFINITE_SPIRIT_LEAP"); it.putBoolean("p3sim", true) }))
-    }
+    }.let { engineLook(it, "INFINITE_SPIRIT_LEAP") }
     val JERRY get() = item(Items.GOLDEN_HORSE_ARMOR, "JERRY_STAFF", Lore.JERRY_STAFF_NAME, Lore.JERRY_STAFF, glint = true).also { hy(it, "community_center/mayor/jerry/jerrychine_gun", "legendary", unbreakable = false) }
     val CLOAK get() = item(Items.STONE_SWORD, "WITHER_CLOAK", Lore.WITHER_CLOAK_NAME, Lore.WITHER_CLOAK).also { hy(it, "uncategorized/wither_cloak_sword", "legendary") }
     val MENU get() = item(Items.NETHER_STAR, "SKYBLOCK_MENU", Lore.SKYBLOCK_MENU_NAME, Lore.SKYBLOCK_MENU).also { hy(it, null, "common", unbreakable = false) }
@@ -965,7 +999,7 @@ object SimItems {
         h.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
         h.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("id", if (wise) "WISE_WITHER_HELMET" else "RACING_HELMET"); it.putBoolean("p3sim", true) }))
         hy(h, null, "mythic")
-        wear(p, net.minecraft.world.entity.EquipmentSlot.HEAD, h)
+        wear(p, net.minecraft.world.entity.EquipmentSlot.HEAD, engineLook(h, idOf(h)))
     }
 
     /**
@@ -1030,6 +1064,9 @@ object SimItems {
             val id = idOf(player.getItemInHand(hand))
             if (simClient(level)) {
                 if (id == "SKYBLOCK_MENU") { mc.execute { mc.gui.setScreen(SimRestartScreen()) }; return@register InteractionResult.FAIL }
+                // The Superboom is TNT: the click goes to the server as a use_item_on (CONSUME sends it), but this game
+                // places nothing, plays no place sound and doesn't swing, as with Hypixel's paper one.
+                if (id == "SUPERBOOM_TNT") return@register InteractionResult.CONSUME
                 return@register InteractionResult.PASS
             }
             if (!simServer(level) || player !is ServerPlayer) return@register InteractionResult.PASS
@@ -1312,7 +1349,7 @@ object SimItems {
             if (phase.devices.use(pos)) return InteractionResult.SUCCESS
             if (id == "SUPERBOOM_TNT") {
                 Fight.afterPing("superboom") { Fight.later(1, "superboom") { superboom(p, pos, hitFace) } }
-                // Paper (no BlockItem): the client follows this use_item_on with a use_item, swallowed like the staffs'.
+                // A use_item that follows this use_item_on (Hypixel's paper one sends it; ours doesn't) is swallowed like the staffs'.
                 blockFired = id to Fight.serverTick
                 return InteractionResult.SUCCESS
             }
@@ -1327,7 +1364,7 @@ object SimItems {
         // its own useItemOn took (a dispenser, hopper, anvil, beacon or sign opens/answers on the client; a sneaking
         // AOTV makes a path on dirt), so firing on use_item alone would fire nothing there. The client's follow-up
         // use_item, when it sends one, is swallowed by [blockFired] (one Jerry shot per block click, not 2).
-        // The block items (Infinileap/Haunt heads, Superboom) are placed by the client, so there's no follow-up.
+        // The block items (Infinileap/Haunt heads) are placed by the client, so there's no follow-up.
         val r = use(p, id, fromBlock = true)
         if (r != InteractionResult.PASS && p.mainHandItem.item !is net.minecraft.world.item.BlockItem) blockFired = id to Fight.serverTick
         // Its SUCCESS keeps vanilla's block use off (the world stays as built); the client's flow doesn't read it.
