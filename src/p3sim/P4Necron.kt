@@ -1,7 +1,6 @@
 package com.engineerclient.p3sim
 
 import net.minecraft.world.entity.EntityTypes
-import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import net.minecraft.core.BlockPos

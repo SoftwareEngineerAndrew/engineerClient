@@ -16,7 +16,6 @@ import net.minecraft.world.BossEvent
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.CustomData
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.world.phys.Vec3
 import kotlin.math.min
 import kotlin.random.Random
