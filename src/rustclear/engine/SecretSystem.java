@@ -395,7 +395,7 @@ public final class SecretSystem {
                 locked.opened = true;
                 openChest(pos);
                 run.foundSecret(locked.room);
-                chestBlessing(player);
+                chestBlessing(player, pos);
             }
             return true;
         }
@@ -405,7 +405,7 @@ public final class SecretSystem {
                 if (!secret.obtained) {
                     openChest(pos);
                     found(secret);
-                    chestBlessing(player);
+                    chestBlessing(player, pos);
                     if (isTrapCompletion(secret)) {
                         secret.room.trapCompleted = true;
                         run.map.drawRoom(run.rooms, run.doors, secret.room.index);
@@ -470,8 +470,9 @@ public final class SecretSystem {
     }
 
     /** A secret chest's blessing, if it holds one (Blessings: 39%, I or II, 23 ticks after the lid). */
-    private void chestBlessing(ServerPlayer player) {
-        java.util.Random random = run.random();
+    private void chestBlessing(ServerPlayer player, BlockPos pos) {
+        // The chest's own roll, so a replayed map's chests hold the same blessings whatever order they're opened in.
+        java.util.Random random = run.derived("chest", pos.hashCode());
         if (random.nextDouble() >= Blessings.CHEST_CHANCE) {
             return;
         }

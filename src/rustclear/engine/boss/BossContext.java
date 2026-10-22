@@ -46,6 +46,9 @@ public interface BossContext {
     /** The run's random. */
     java.util.Random random();
 
+    /** A Random of its own for [stream] ("blood"...), from the dungeon's seed: a replayed map rolls it the same. */
+    java.util.Random random(String stream);
+
     /**
      * The Blood room: its centre (x.5, floor + 4, z.5; the Watcher's home), the floor's y, and
      * the side the blood door is on (a unit step in x or z from the centre).
