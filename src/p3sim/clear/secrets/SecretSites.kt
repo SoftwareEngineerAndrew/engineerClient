@@ -34,6 +34,8 @@ class SecretSite(
     val socket: SocketInfo? = null,
     /** A chest that does not exist until something reveals it (a key room's door opening). */
     val hidden: Boolean = false,
+    /** How near (3D, blocks) a player inside the room must come before it spawns, as measured ([SpawnRanges]); null: the type's setting. */
+    val spawnRange: Double? = null,
 ) {
     /** The key this site goes by in the book and in a savepoint. */
     val key: String get() = "$room:$id"
@@ -104,15 +106,15 @@ class SecretPlan(val rooms: List<RoomSecrets>) {
          * Resolves the plan's rooms. A room without a design or a placement (a headless test plan) has no sites. When the data
          * lists more secrets than the room's maximum (one design does), the first [RoomSecrets.max] are kept, the supplemental
          * ones last. When a secret names alternative spots (`alt`), [random] picks one of them, so the same seed gives the
-         * same spot.
+         * same spot. [spawns] gives each item, bat and skull its measured spawn radius, and a bat its measured spot.
          */
-        fun build(plan: DungeonPlan, random: Random): SecretPlan {
+        fun build(plan: DungeonPlan, random: Random, spawns: SpawnRanges.Table = SpawnRanges.bundled): SecretPlan {
             val rooms = plan.rooms.map { r ->
                 val design = r.design
                 val placement = r.placement
                 if (design == null || placement == null) return@map RoomSecrets(r.index, r.secretsMax, emptyList())
                 val q = placement.quarterTurns
-                val all = design.secrets.mapNotNull { s -> site(r.index, s, placement, q, random) }
+                val all = design.secrets.mapNotNull { s -> site(r.index, s, placement, q, random, spawns.of(design.id, s.id)?.takeIf { it.type == s.type }) }
                 // Main data first, supplemental last, original order inside each group; then cap at the room's maximum.
                 val kept = all.sortedBy { if (it.supplemental) 1 else 0 }.take(r.secretsMax)
                 val spec = RedstoneKeys.forDesign(design.id) ?: return@map RoomSecrets(r.index, r.secretsMax, kept)
@@ -140,13 +142,14 @@ class SecretPlan(val rooms: List<RoomSecrets>) {
             return RoomSecrets(room, max, counting, gates, socket.chests.filter { !it.counts }.map { it.site })
         }
 
-        private fun site(room: Int, s: RoomSecret, placement: Placement, q: Int, random: Random): SecretSite? {
+        private fun site(room: Int, s: RoomSecret, placement: Placement, q: Int, random: Random, spawn: SpawnRanges.Site?): SecretSite? {
             val kind = kindOf(s.type) ?: return null
             val choices = listOf(s.pos) + s.alt
-            val p = if (choices.size > 1) choices[random.nextInt(choices.size)] else s.pos
+            // A bat's spot in the rooms pack is often where it was killed: it spawns where the recordings saw it appear.
+            val p = if (choices.size > 1) choices[random.nextInt(choices.size)] else if (kind == SecretKind.BAT && spawn != null) spawn.pos else s.pos
             val w = placement.toWorld(p.x, p.y, p.z)
             val lever = s.lever?.let { l -> placement.toWorld(l.x, l.y, l.z).let { Pos(it.x, it.y, it.z) } }
-            return SecretSite(room, s.id, kind, w.x, w.y, w.z, rotateFacing(s.facing, q), lever, s.baked, q, s.src == "supplemental")
+            return SecretSite(room, s.id, kind, w.x, w.y, w.z, rotateFacing(s.facing, q), lever, s.baked, q, s.src == "supplemental", spawnRange = spawn?.radius)
         }
     }
 }

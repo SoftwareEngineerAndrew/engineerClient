@@ -293,32 +293,41 @@ object SecretsModule : AdsModule, SecretService {
         for (job in rd.later.takeDue(now)) job()
     }
 
-    /** The timer of the measured proximity spawn: a repeating 20-tick pass over the party. */
-    const val SPAWN_PERIOD = 20
+    /** Hypixel's proximity check runs every 5 ticks: a teleport into range shows the secret 1 to 5 ticks later, about equally often (ADR). */
+    const val SPAWN_PERIOD = 5
 
     private fun humans(rd: RunData): List<ServerPlayer> = Sim.players().filter { p -> rd.run.state.players[p.uuid]?.let { !it.isBot && !it.ghost } ?: false }
 
     /**
-     * Brings items, bats and skulls into the world when a party member is near: by the distance sideways (not the room), the way Hypixel's
-     * timer does. Chests are not here: they exist from the start of the run.
+     * Brings items, bats and skulls into the world when a party member comes near, the way Hypixel's check does: standing inside the secret's
+     * room, within its radius in 3D from the feet (a party waiting at the room's door does not bring one in, however near). Each secret has
+     * its own measured radius ([SecretSite.spawnRange], [SpawnRanges]); one without uses its type's setting. Chests are not here: they
+     * exist from the start of the run.
      */
     private fun spawnPass(rd: RunData) {
         val near = humans(rd)
         if (near.isEmpty()) return
-        fun within(x: Int, z: Int, range: Double): Boolean {
+        val rooms = rd.run.plan.rooms
+        fun within(room: Int, x: Double, y: Double, z: Double, range: Double): Boolean {
+            val placement = rooms.getOrNull(room)?.placement
             val r2 = range * range
-            return near.any { p -> val dx = x + 0.5 - p.x; val dz = z + 0.5 - p.z; dx * dx + dz * dz <= r2 }
+            return near.any { p ->
+                val dx = x - p.x; val dy = y - p.y; val dz = z - p.z
+                dx * dx + dy * dy + dz * dz <= r2 && (placement == null || placement.ownsColumn(Math.floor(p.x).toInt(), Math.floor(p.z).toInt()))
+            }
         }
         for (s in rd.plan.all) {
-            val range = when (s.kind) {
+            val fallback = when (s.kind) {
                 SecretKind.ITEM -> SecretsSettings.itemRange
                 SecretKind.BAT -> SecretsSettings.batRange
                 SecretKind.ESSENCE -> SecretsSettings.skullRange
                 else -> continue
             }
-            if (within(s.x, s.z, range)) ensure(rd, s)
+            val range = s.spawnRange?.takeIf { SecretsSettings.measuredRanges } ?: fallback
+            // measured from the item's cell at its floor, the bat's and the skull's block centre
+            if (within(s.room, s.x + 0.5, s.y + if (s.kind == SecretKind.ITEM) 0.0 else 0.5, s.z + 0.5, range)) ensure(rd, s)
         }
-        for (g in rd.plan.gates) if (g.key !in rd.gatesTaken && within(g.x, g.z, SecretsSettings.skullRange)) ensureGate(rd, g)
+        for (g in rd.plan.gates) if (g.key !in rd.gatesTaken && within(g.room, g.x + 0.5, g.y + 0.5, g.z + 0.5, SecretsSettings.skullRange)) ensureGate(rd, g)
     }
 
     /** Makes sure a site is in the world: its skull placed, its floor item or bat alive. A found one-shot secret is left alone. */
