@@ -120,6 +120,9 @@ object PartyTracker {
     /** Sends a /p list, unless one went unanswered lately (twice: ever, this game). */
     private fun ask(now: Long, why: String) {
         if (answerBy != 0L || failures >= 2 || now < pausedUntil) return
+        // ADS's own worlds (practice, parties, the P3 Sim) report mc.hypixel.net for other mods' sake
+        // (EngineServerDataMixin), but have no /p to ask: it would only print "Unknown command".
+        if (net.rustclear.mod.engine.Engine.isEngineClient() || EngineerClient.mc.hasSingleplayerServer()) return
         lastAsk = now
         hideUntil = now + HIDE_MS
         answerBy = now + HIDE_MS
