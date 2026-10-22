@@ -69,6 +69,8 @@ object EngineerClient : ClientModInitializer {
 
         // The sim first: on a first start it reads its settings from Odin's file, before Odin can save over it.
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
+        // ADS's own device solvers (Simon Says, i4, Arrow Align) for its worlds, with or without Odin.
+        safely("device solvers") { com.engineerclient.devices.DeviceSolvers.init() }
         // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.
         if (odin) safely("odin addon") { OdinAddon.init(firstRun) }
 
