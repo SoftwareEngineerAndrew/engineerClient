@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "engineerclient",
   "version": "${version}",
-  "name": "Engineer Client",
+  "name": "ADS",
   "description": "Hypixel SkyBlock dungeons: ADS (Advanced Dungeon Simulator), which runs on its own, and with Odin installed M7 phase-3 role rotation, leap-menu POV previews and Party Finder stats.",
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",

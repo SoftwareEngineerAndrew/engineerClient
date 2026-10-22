@@ -50,7 +50,7 @@ import java.util.Locale
  */
 object TermInfo : Module(
     name = "Term Info",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("ADS", 860, 10),
     description = "F7 terminals: section progress HUD, hides the terminal completion titles, and each section's time when it's done.",
     key = null,
 ) {

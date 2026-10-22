@@ -73,7 +73,7 @@ import java.io.File
  */
 object BrWaypoints2 : Module(
     name = "BR Roles",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("ADS", 860, 10),
     description = "Boxes that group a room's starred mobs, shown while any of them is alive. Made on undonecoffee.com/brroles.",
     key = null,
 ) {
