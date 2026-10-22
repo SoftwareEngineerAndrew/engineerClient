@@ -91,7 +91,6 @@ final class PracticeSession implements DungeonRun.PracticeHooks {
             case BLOOD_RUSH -> buildBloodRush(fresh);
             case BLOOD_CAMP -> buildBloodCamp(fresh);
             case BOSS -> buildBoss(fresh);
-            default -> throw new Planner.PlanException(spec.kind() + " practice isn't available yet.");
         }
     }
 
