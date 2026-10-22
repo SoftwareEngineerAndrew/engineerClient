@@ -25,6 +25,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything from the Rustclear mod (0.8.0): full dungeon runs with every room, puzzle, blood camp and the F7/M7 boss, parties, 1v1 and 2v2 duels, the kit editor and the SkyBlock menus.
 
 ### Changed
+- Players take no knockback in ADS's worlds (the P3 Sim and dungeon/practice worlds): not from hits, arrows, mobs, explosions or bumping into bodies. Your own abilities' movement (Bonzo's Staff, leaps, Superboom) and lava bounce still work.
 - With Odin installed, Odin's Simon Says, Arrows Device and Arrow Align no longer draw or block clicks in ADS's worlds; ADS's own solvers do instead (nothing changes on Hypixel).
 - SS Practice's solver boxes follow ADS's Simon Says settings instead of Odin's Simon Says module.
 - Coffee Client and Devgineer no longer post in chat ("[DC] Boss Recorder: recording", "[dc] build ..."); their lines go to the log instead.
