@@ -26,16 +26,16 @@ import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
 /**
- * The start-up question about e4mc, as its own small process (E4mcPreLaunch starts it, with
+ * The start-up install of e4mc, which ADS needs to share parties: as its own small process (E4mcPreLaunch starts it, with
  * Minecraft's version, the mods folder, Rustclear's version, the mod to install ("e4mc" or "e4all")
  * and, when switching from e4mc to e4all, e4mc's jar as arguments). Drawn by hand in
  * ADS's colours: the ADS logo, gold ADS, a slate panel, flat buttons.
- * Answers with its exit code: [INSTALLED], [NOT_NOW] or [DONT_ASK]. Plain Java and Swing only.
+ * It installs at once (no question), then says to press Play again. Answers with its exit code:
+ * [INSTALLED], or [NOT_NOW] when the install failed and the player starts without it. Plain Java and Swing only.
  */
 public final class E4mcPrompt extends JPanel {
     public static final int INSTALLED = 0;
     public static final int NOT_NOW = 1;
-    public static final int DONT_ASK = 2;
 
     // Rustclear's palette (ui.Theme), without its Minecraft-side helpers.
     private static final Color SHADE = new Color(0x0A0D10);
@@ -61,7 +61,7 @@ public final class E4mcPrompt extends JPanel {
         }
     }
 
-    private enum Stage { ASK, INSTALLING, DONE, FAILED }
+    private enum Stage { INSTALLING, DONE, FAILED }
 
     private record Button(String label, boolean primary, Runnable action, Rectangle box) {}
 
@@ -71,7 +71,7 @@ public final class E4mcPrompt extends JPanel {
     private final String project;
     /** e4mc's jar when this is the switch to e4all (e4mc and Krypton don't work together), else null. */
     private final Path replace;
-    private Stage stage = Stage.ASK;
+    private Stage stage = Stage.INSTALLING;
     private String detail = "";
     private final List<Button> buttons = new ArrayList<>();
     private Button hovered;
@@ -127,7 +127,7 @@ public final class E4mcPrompt extends JPanel {
             frame.addWindowListener(new WindowAdapter() {
                 @Override
                 public void windowClosing(WindowEvent e) {
-                    // Closing the window is "Not now" (or, once installed, the same as OK).
+                    // Closing the window is starting without it (or, once installed, the same as OK).
                     System.exit(prompt.stage == Stage.DONE ? INSTALLED : NOT_NOW);
                 }
             });
@@ -141,6 +141,7 @@ public final class E4mcPrompt extends JPanel {
             frame.setAlwaysOnTop(true);
             frame.setVisible(true);
             frame.toFront();
+            prompt.install();
         });
     }
 
@@ -216,7 +217,6 @@ public final class E4mcPrompt extends JPanel {
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 17));
         g.setColor(TEXT);
         String title = switch (stage) {
-            case ASK -> replace != null ? "Switch to e4all?" : "Install " + project + "?";
             case INSTALLING -> "Installing " + project;
             case DONE -> project + " is installed";
             case FAILED -> "Couldn't install " + project;
@@ -224,15 +224,8 @@ public final class E4mcPrompt extends JPanel {
         g.drawString(title, x, y);
         g.setFont(body);
         String text = switch (stage) {
-            case ASK -> replace != null
-                ? "e4mc and Krypton together stop you joining any world, singleplayer included. e4all is a "
-                    + "fork of e4mc that works with Krypton. Replace e4mc with e4all from Modrinth now? "
-                    + "Minecraft closes afterwards; press Play again to start with it."
-                : "ADS shares your parties through " + project + ", so friends can join from anywhere and "
-                    + "nobody sees anyone's IP. It isn't installed. Install it from Modrinth now? Minecraft "
-                    + "closes afterwards; press Play again to start with it."
-                    + (project.equals("e4all") ? " (e4all is the e4mc fork that works with Krypton.)" : "");
-            case INSTALLING -> "Downloading from Modrinth and checking it";
+            case INSTALLING -> (replace != null ? "Swapping e4mc for e4all (e4mc and Krypton can't run together). " : "ADS needs it to share parties. ")
+                + "Downloading from Modrinth and checking it";
             case DONE -> "Installed " + detail + " in your mods folder. Minecraft will close now; press Play "
                 + "again in your launcher.";
             case FAILED -> detail + " You can try again, or start without it and use a tunnel or LAN instead.";
@@ -259,11 +252,6 @@ public final class E4mcPrompt extends JPanel {
         g.fillRect(px + 16, by - 12, pw - 32, 1);
         int right = px + pw - 16;
         switch (stage) {
-            case ASK -> {
-                right = button(g, replace != null ? "Switch to e4all" : "Install " + project, true, right, by, this::install) - 8;
-                right = button(g, "Not now", false, right, by, () -> System.exit(NOT_NOW)) - 8;
-                button(g, "Don't ask again", false, right, by, () -> System.exit(DONT_ASK));
-            }
             case DONE -> button(g, "OK", true, right, by, () -> System.exit(INSTALLED));
             case FAILED -> {
                 right = button(g, "Try again", true, right, by, this::install) - 8;
@@ -274,8 +262,8 @@ public final class E4mcPrompt extends JPanel {
         }
         g.setColor(DIM);
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
-        g.drawString(project.equals("e4all") ? "e4all is a fork of skyevg's e4mc; Rustclear fetches it from Modrinth."
-            : "e4mc is made by skyevg; Rustclear fetches it from Modrinth.", px + 16, py + ph - 12);
+        g.drawString(project.equals("e4all") ? "e4all is a fork of skyevg's e4mc; ADS fetches it from Modrinth."
+            : "e4mc is made by skyevg; ADS fetches it from Modrinth.", px + 16, py + ph - 12);
     }
 
     /** A flat button ending at [right]: gold when primary. Returns its left edge. */
