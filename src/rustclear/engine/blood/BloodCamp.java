@@ -150,7 +150,8 @@ public final class BloodCamp {
         pz = -room.doorDz();
         qx = -pz;
         qz = px;
-        Random random = ctx.random();
+        // The camp's setup (modifier, Watcher, wall, throw times) from the dungeon's seed.
+        Random random = ctx.random("blood");
         modifier = BloodData.Modifier.values()[random.nextInt(BloodData.Modifier.values().length)];
         watcherMax = ctx.profile().watcherHealth;
         spawnWatcher(random);

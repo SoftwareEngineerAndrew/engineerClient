@@ -37,6 +37,13 @@ final class StormData {
     // ---- movement
     /** He appears here (at Maxor's kill + 60; this model starts him with his first line). */
     static final Vec3 SPAWN = new Vec3(103.0, 188.0, 53.0);
+    /**
+     * Boss practice's start: the middle of the room on its lower floor, between the four pads.
+     * Read from the arena's data (Bossroom): (63..83, 38..68) is open floor with its top block at
+     * y 164 and air to the ceiling at y 213, so a player stands at y 165. OPEN: where Hypixel's
+     * party lands from P1.
+     */
+    static final Vec3 PRACTICE_ENTRY = new Vec3(73.5, 165.0, 53.5);
     /** The opening route at 0.40 b/t (ADS's waypoints), parking at exactly (102.375, 183, 52.375) at t 424. */
     static final Vec3[] ROUTE = {new Vec3(73, 183, 83), new Vec3(43, 183, 53), new Vec3(73, 183, 23), new Vec3(103, 183, 53),
         new Vec3(102.375, 183.0, 52.375)};

@@ -26,13 +26,15 @@ abstract class Puzzle {
     protected final DungeonRun run;
     protected final RoomState room;
     protected final ServerLevel level;
-    protected final Random random = new Random();
+    /** The puzzle's rolls, from the dungeon's seed (a fresh stream for each reset of the room's puzzle). */
+    protected final Random random;
     private final List<Entity> spawned = new ArrayList<>();
 
     Puzzle(DungeonRun run, RoomState room) {
         this.run = run;
         this.room = room;
         this.level = run.level;
+        this.random = run.derived("puzzle", room.index * 64 + run.puzzleResets(room.index));
     }
 
     // ---------------------------------------------------------------- events (override what's needed)

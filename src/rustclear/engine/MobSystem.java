@@ -322,6 +322,8 @@ public final class MobSystem {
             // mobs caught a Withermancer and a Skeleton Soldier that had followed the player in.
             return;
         }
+        // The room's own rolls, from the dungeon's seed: a replayed map spawns the same mobs.
+        Random rolls = run.derived("mobs", room.index);
         MobStore.Spots spots = store.spots(room.data().name());
         List<List<MobStore.Spawn>> runs = new ArrayList<>();
         Float miniYaw = null;
@@ -351,15 +353,15 @@ public final class MobSystem {
                     full.add(visit);
                 }
             }
-            for (MobStore.Spawn spawn : full.get(random.nextInt(full.size()))) {
-                spawnOne(room, spawn);
+            for (MobStore.Spawn spawn : full.get(rolls.nextInt(full.size()))) {
+                spawnOne(room, spawn, rolls);
             }
         }
         // Hypixel's normal rooms with a miniboss always have one at the same block, rolled from the four kinds.
         for (int[] spot : spots.minis()) {
             BlockPos at = room.placed.toWorld(spot[0], spot[1], spot[2]);
             float yaw = room.placed.facing().rotateYaw(miniYaw != null ? miniYaw : 0f);
-            spawnMiniboss(room, rollMiniboss(), at.getX() + 0.5, at.getY(), at.getZ() + 0.5, yaw);
+            spawnMiniboss(room, rollMiniboss(rolls), at.getX() + 0.5, at.getY(), at.getZ() + 0.5, yaw, rolls);
         }
     }
 
@@ -414,8 +416,8 @@ public final class MobSystem {
      * Angry Archaeologist 16% (the BR roles site's 1,032 sightings, Lost/Frozen split 2.4:1 by the measured HP
      * samples in mobs-spawns-pathing.md §2). OPEN: 71
      */
-    private Archetype rollMiniboss() {
-        int r = random.nextInt(100);
+    private static Archetype rollMiniboss(Random rolls) {
+        int r = rolls.nextInt(100);
         if (r < 36) {
             return Archetype.SHADOW_ASSASSIN;
         }
@@ -435,7 +437,7 @@ public final class MobSystem {
         return n;
     }
 
-    private void spawnOne(RoomState room, MobStore.Spawn spawn) {
+    private void spawnOne(RoomState room, MobStore.Spawn spawn, Random rolls) {
         Archetype archetype = Archetype.of(spawn.fullName());
         PlacedRoom placed = room.placed;
         Facing facing = placed.facing();
@@ -463,12 +465,12 @@ public final class MobSystem {
             fels.add(new FelsMarker(marker, new Vec3(x, y, z), yaw, room, counts, spawn, nametag));
             return;
         }
-        spawnActive(room, archetype, spawn, x, y, z, yaw, nametag, counts);
+        spawnActive(room, archetype, spawn, x, y, z, yaw, nametag, counts, rolls);
     }
 
-    /** spawn_active_mob: the entity itself, dressed, named and tracked. */
+    /** spawn_active_mob: the entity itself, dressed, named and tracked; its modifier rolled from [rolls]. */
     private Tracked spawnActive(RoomState room, Archetype archetype, MobStore.Spawn spawn, double x, double y, double z,
-                                float yaw, String nametag, boolean counts) {
+                                float yaw, String nametag, boolean counts, Random rolls) {
         Kind kind = archetype != null ? archetype.kind : Kind.of(spawn.type());
         LivingEntity living;
         if (kind == Kind.PLAYER && archetype != null) {
@@ -533,7 +535,7 @@ public final class MobSystem {
         level.addFreshEntity(living);
         level.addFreshEntity(tag);
         Tracked tracked = new Tracked(room, archetype, counts, tag);
-        Modifier modifier = takesModifier(archetype) ? Modifier.roll(random) : null;
+        Modifier modifier = takesModifier(archetype) ? Modifier.roll(rolls) : null;
         tracked.modifier = modifier;
         tracked.ai = new MobAi(archetype, new Vec3(x, y, z), room == null ? -1 : room.index, kind == Kind.PLAYER,
             modifier == null ? 1.0 : modifier.speedFactor(kind));
@@ -782,7 +784,7 @@ public final class MobSystem {
             if (near) {
                 it.remove();
                 f.marker.discard();
-                spawnActive(f.room, Archetype.FELS, f.spawn, f.at.x, f.at.y, f.at.z, f.yaw, f.nametag, f.counts);
+                spawnActive(f.room, Archetype.FELS, f.spawn, f.at.x, f.at.y, f.at.z, f.yaw, f.nametag, f.counts, random);
             }
         }
     }
@@ -1011,7 +1013,7 @@ public final class MobSystem {
             nametag = "§c" + archetype.fullName;
         }
         MobStore.Spawn spawn = new MobStore.Spawn("player", false, archetype.fullName, 0, 0, 0, 0f, gear, null, null);
-        Tracked tracked = spawnActive(room, archetype, spawn, x, y, z, 0f, nametag, counts);
+        Tracked tracked = spawnActive(room, archetype, spawn, x, y, z, 0f, nametag, counts, random);
         if (tracked != null) {
             tracked.onDeath = onDeath;
         }
@@ -1022,6 +1024,7 @@ public final class MobSystem {
      * default_dirt.rs): one boss standing at the room's spot, facing back toward the door.
      */
     void roomEntered(RoomState room) {
+        Random rolls = run.derived("mini", room.index);
         String name = room.data().name();
         String id = room.data().id();
         Archetype[] random4 = {Archetype.SHADOW_ASSASSIN, Archetype.LOST_ADVENTURER, Archetype.FROZEN_ADVENTURER,
@@ -1036,18 +1039,18 @@ public final class MobSystem {
             boss = Archetype.LOST_ADVENTURER;
         } else if (name.equals("Dragon")) {
             spot = room.placed.toWorld(15, 69, 11);
-            boss = random4[random.nextInt(4)];
+            boss = random4[rolls.nextInt(4)];
         } else if (name.equals("Default") && id.equals("210,66")) {
             spot = room.placed.toWorld(13, 70, 5);
-            boss = random4[random.nextInt(4)];
+            boss = random4[rolls.nextInt(4)];
         } else {
             return;
         }
-        spawnMiniboss(room, boss, spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, room.placed.facing().rotateYaw(180f));
+        spawnMiniboss(room, boss, spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, room.placed.facing().rotateYaw(180f), rolls);
     }
 
     /** spawn_shadow_assassin, spawn_lost_adventurer, spawn_frozen_adventurer, spawn_angry_archaeologist. */
-    private void spawnMiniboss(RoomState room, Archetype boss, double x, double y, double z, float yaw) {
+    private void spawnMiniboss(RoomState room, Archetype boss, double x, double y, double z, float yaw, Random rolls) {
         Map<String, MobStore.Piece> gear = new HashMap<>();
         String hp = "";
         String nametag;
@@ -1078,7 +1081,7 @@ public final class MobSystem {
         }
         room.starredMobsRemaining++;
         MobStore.Spawn spawn = new MobStore.Spawn("player", true, boss.fullName, 0, 0, 0, 0f, gear, null, null);
-        Tracked tracked = spawnActive(room, boss, spawn, x, y, z, yaw, nametag, true);
+        Tracked tracked = spawnActive(room, boss, spawn, x, y, z, yaw, nametag, true, rolls);
         if (tracked != null && boss == Archetype.SHADOW_ASSASSIN) {
             // Unseen until its first ambush.
             for (Map.Entry<Entity, Tracked> e : mobs.entrySet()) {
@@ -1113,7 +1116,7 @@ public final class MobSystem {
         }
         MobStore.Spawn spawn = new MobStore.Spawn(archetype.kind == Kind.PLAYER ? "player" : "zombie", false,
             archetype.fullName, 0, 0, 0, 0f, gear, mob.skin(), mob.signature());
-        Tracked tracked = spawnActive(room, archetype, spawn, x, y, z, yaw, mob.label(), false);
+        Tracked tracked = spawnActive(room, archetype, spawn, x, y, z, yaw, mob.label(), false, random);
         if (tracked == null) {
             return null;
         }
@@ -1178,7 +1181,7 @@ public final class MobSystem {
         gear.put("feet", new MobStore.Piece("minecraft:leather_boots", null, 0xDBCC8F, null));
         String nametag = "§8[§7Lv" + Archetype.MIMIC.stats(run.floor).level() + "§8]§c§lMimic";
         MobStore.Spawn spawn = new MobStore.Spawn("zombie", false, "Mimic", 0, 0, 0, 0f, gear, null, null);
-        Tracked tracked = spawnActive(room, Archetype.MIMIC, spawn, x, y, z, 0f, nametag, false);
+        Tracked tracked = spawnActive(room, Archetype.MIMIC, spawn, x, y, z, 0f, nametag, false, random);
         if (tracked == null) {
             return;
         }
@@ -1493,7 +1496,7 @@ public final class MobSystem {
             if (f.room == room) {
                 it.remove();
                 f.marker.discard();
-                spawnActive(f.room, Archetype.FELS, f.spawn, f.at.x, f.at.y, f.at.z, f.yaw, f.nametag, f.counts);
+                spawnActive(f.room, Archetype.FELS, f.spawn, f.at.x, f.at.y, f.at.z, f.yaw, f.nametag, f.counts, random);
             }
         }
         int killed = 0;

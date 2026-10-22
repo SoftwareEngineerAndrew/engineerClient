@@ -145,15 +145,49 @@ public final class DungeonRun implements EngineRun {
     final BossFight bossFight;
     /** Each puzzle room's logic, by room index. */
     private final Map<Integer, Puzzle> puzzles = new HashMap<>();
-    private final Random random = seeded();
-    /** The seed the next run's own Random starts from (EngineServer.newDungeon), used once; null: unseeded. */
-    static volatile Long nextSeed;
+    /** Resets per puzzle room, by room index (each one's fresh puzzle rolls a stream of its own). */
+    private final Map<Integer, Integer> puzzleResets = new HashMap<>();
+    /** The run's own Random: from the dungeon's seed (mixed, so it isn't the planner's stream), or unseeded. */
+    private final Random random;
+    /** The dungeon's seed (EngineServer.newDungeon, practice), or null for an unseeded run (duels). */
+    private final Long seed;
+    /** The practice session watching this run, or null in a normal one. */
+    private final PracticeHooks hooks;
 
-    private static Random seeded() {
-        Long seed = nextSeed;
-        nextSeed = null;
-        return seed == null ? new Random() : new Random(seed * 31 + 7);
+    /**
+     * What a practice run (PracticeSession) hears of the run, and where it may take over. Every
+     * hook is a no-op by default, so a session implements only what its mode needs.
+     */
+    interface PracticeHooks {
+        /** The blood door opened, [runTicks] after Mort's first line. */
+        default void onBloodDoor(DungeonRun run, long runTicks) {
+        }
+
+        /** The party is going through the blood portal; true when practice ends the run there (no boss). */
+        default boolean onEnterBoss(DungeonRun run) {
+            return false;
+        }
+
+        /** The boss is beaten (Necron on F7, the Wither King on M7). */
+        default void onDefeated(DungeonRun run) {
+        }
+
+        /** Every tick of the started run, after the run's own work. */
+        default void onTick(DungeonRun run, long runTicks) {
+        }
+
+        /** Whether the entrance has no Mort (only his hidden name stand, for mods that anchor on it). */
+        default boolean skipMort() {
+            return false;
+        }
+
+        /** Whether practice's timer has the action bar (Combat's health and mana line stays off). */
+        default boolean ownsActionBar() {
+            return false;
+        }
     }
+    /** The run began without Mort's lines ([startNow] quiet): practice dropped straight into the camp or a boss. */
+    private boolean quietMort;
     private Mannequin mort;
     /** Practice mode's route timer, or null in a normal run (Dungeon::practice_room). */
     private Practice.Route practice;
@@ -172,9 +206,17 @@ public final class DungeonRun implements EngineRun {
     private static final int PRACTICE_ENTRANCE_Z = 0;
 
     public DungeonRun(ServerLevel level, DungeonPlan plan, Floor floor) {
+        this(level, plan, floor, null, null);
+    }
+
+    /** A run of [plan] on [floor]; [seed] (null: unseeded) makes its rolls repeat, [hooks] is practice's or null. */
+    DungeonRun(ServerLevel level, DungeonPlan plan, Floor floor, Long seed, PracticeHooks hooks) {
         this.level = level;
         this.plan = plan;
         this.floor = floor;
+        this.seed = seed;
+        this.hooks = hooks;
+        this.random = seed == null ? new Random() : new Random(seed * 31 + 7);
         Arrays.fill(grid, -1);
         for (Layout.Door door : plan.layout().doors) {
             doors.add(new DoorState(door));
@@ -307,6 +349,9 @@ public final class DungeonRun implements EngineRun {
         @Override
         public void defeated() {
             RunEnd.defeated(DungeonRun.this);
+            if (hooks != null) {
+                hooks.onDefeated(DungeonRun.this);
+            }
         }
 
         @Override
@@ -327,6 +372,11 @@ public final class DungeonRun implements EngineRun {
         @Override
         public Random random() {
             return random;
+        }
+
+        @Override
+        public Random random(String stream) {
+            return derived(stream, 0);
         }
 
         @Override
@@ -436,6 +486,9 @@ public final class DungeonRun implements EngineRun {
             return;
         }
         enteredBoss = true;
+        if (hooks != null && hooks.onEnterBoss(this)) {
+            return;
+        }
         BossArena.of(level).finishNow();
         net.minecraft.world.phys.Vec3 at = net.rustclear.mod.engine.boss.maxor.MaxorPhase.entry();
         for (ServerPlayer p : level.players()) {
@@ -449,6 +502,24 @@ public final class DungeonRun implements EngineRun {
         int before = net.rustclear.mod.engine.boss.maxor.MaxorPhase.teleportBefore();
         schedule(before - 1, () -> bar.boss("Maxor", 1f));
         schedule(before, () -> bossFight.begin(new net.rustclear.mod.engine.boss.maxor.MaxorPhase()));
+    }
+
+    /**
+     * Boss practice: straight into [phase] with no clear or camp before it. The arena is finished
+     * now (if it isn't yet), the party goes to [at] facing [yaw] (null: they stay where they are),
+     * and the phase begins [delay] ticks later.
+     */
+    void beginBossPractice(net.rustclear.mod.engine.boss.BossPhase phase, net.minecraft.world.phys.Vec3 at, float yaw, int delay) {
+        enteredBoss = true;
+        BossArena.of(level).finishNow();
+        if (at != null) {
+            for (ServerPlayer p : level.players()) {
+                p.teleportTo(level, at.x, at.y, at.z, java.util.Set.of(), yaw, 0f, true);
+                p.resetFallDistance();
+            }
+        }
+        SimLog.event("boss_entry");
+        schedule(delay, () -> bossFight.begin(phase));
     }
 
     private String lastBossPhase;
@@ -517,6 +588,21 @@ public final class DungeonRun implements EngineRun {
     /** Whether this run is a practice room (its action bar is the route timer's). */
     boolean isPractice() {
         return practice != null;
+    }
+
+    /** Whether a practice timer has the action bar: a practice room's route, or a session's (hooks). */
+    boolean ownsActionBar() {
+        return practice != null || hooks != null && hooks.ownsActionBar();
+    }
+
+    /** The run is over without a boss (blood camp practice at the portal): its clock and the clear's ticking stop. */
+    void stop() {
+        state = State.FINISHED;
+    }
+
+    /** The team holds the blood key (blood rush practice starts with it). */
+    void grantBloodKey() {
+        bloodKey = true;
     }
 
     /** Dungeon::from_layout's neighbour wiring: which door and room lies past each side of each cell. */
@@ -608,7 +694,19 @@ public final class DungeonRun implements EngineRun {
             level.addFreshEntity(mortName);
         }
         for (RoomState room : rooms) {
-            if (room.type() == RoomType.ENTRANCE && practice == null) {
+            if (room.type() == RoomType.ENTRANCE && practice == null && hooks != null && hooks.skipMort()) {
+                // Practice that starts at once: no Mort to ready at, but his name stand where it'd be.
+                BlockPos pos = room.placed.toWorld(15, 69, 4);
+                mortName = new ArmorStand(EntityTypes.ARMOR_STAND, level);
+                ((ArmorStandAccessor) mortName).rustclear$setMarker(true);
+                mortName.snapTo(pos.getX() + 0.5, pos.getY() + 2.55, pos.getZ() + 0.5, 0f, 0f);
+                mortName.setInvisible(true);
+                mortName.setNoGravity(true);
+                mortName.setPermanentlyInvulnerable(true);
+                mortName.setCustomName(EngineItems.text("§bMort"));
+                mortName.setCustomNameVisible(false);
+                level.addFreshEntity(mortName);
+            } else if (room.type() == RoomType.ENTRANCE && practice == null) {
                 BlockPos pos = room.placed.toWorld(15, 69, 4);
                 mort = new Mannequin(EntityTypes.MANNEQUIN, level);
                 mort.snapTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, room.placed.facing().rotateYaw(0f), 0f);
@@ -1164,6 +1262,9 @@ public final class DungeonRun implements EngineRun {
             if (blood) {
                 if (finishedAt < 0) {
                     finishedAt = runTicks;
+                    if (hooks != null) {
+                        hooks.onBloodDoor(this, runTicks);
+                    }
                 }
                 broadcast("§cThe §lBLOOD DOOR§c has been opened!");
                 broadcast("§5A shiver runs down your spine...");
@@ -1243,6 +1344,7 @@ public final class DungeonRun implements EngineRun {
             room.puzzleFailed = false;
             room.puzzleCompleted = false;
             score.puzzlesInFail = Math.max(0, score.puzzlesInFail - 1);
+            puzzleResets.merge(room.index, 1, Integer::sum);
             Puzzle fresh = Puzzles.create(this, room);
             if (fresh != null) {
                 puzzles.put(room.index, fresh);
@@ -1329,6 +1431,27 @@ public final class DungeonRun implements EngineRun {
         return random;
     }
 
+    /**
+     * A Random of its own for one [stream] of rolls ("puzzle", "mobs", "chest"...) at [index]: from
+     * the dungeon's seed, mixed (splitmix64), so a replayed map rolls the same puzzles, mobs and
+     * chests whatever happened before. Unseeded: a fresh one off the run's random.
+     */
+    Random derived(String stream, int index) {
+        if (seed == null) {
+            return new Random(random.nextLong());
+        }
+        long z = seed ^ stream.hashCode() * 0x9E3779B97F4A7C15L ^ index * 0xC2B2AE3D27D4EB4FL;
+        z += 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return new Random(z ^ (z >>> 31));
+    }
+
+    /** How often [roomIndex]'s puzzle has been reset this run (each reset rolls a new puzzle). */
+    int puzzleResets(int roomIndex) {
+        return puzzleResets.getOrDefault(roomIndex, 0);
+    }
+
     void schedule(int delay, Runnable task) {
         tasks.add(new Task(ticks + delay, task));
     }
@@ -1349,8 +1472,9 @@ public final class DungeonRun implements EngineRun {
             if (!wither && !blood) {
                 pickups.add(Pickup.spawn(level, at.x, at.y - 1, at.z, Pickup.Kind.TNT));
             }
-            if (random.nextBoolean()) {
-                Pickup.Kind blessing = Blessings.itemKind(random);
+            Random drop = derived("clear", room.index);
+            if (drop.nextBoolean()) {
+                Pickup.Kind blessing = Blessings.itemKind(drop);
                 pickups.add(Pickup.spawn(level, at.x, at.y - 1, at.z + 1, blessing));
             }
         }
@@ -1484,22 +1608,43 @@ public final class DungeonRun implements EngineRun {
     private void tickStarting() {
         countdown--;
         if (countdown == 0) {
+            beginRun();
+        } else if (countdown <= 80 && countdown % 20 == 0) {
+            int seconds = countdown / 20;
+            broadcast("§aStarting in " + seconds + " second" + (seconds == 1 ? "" : "s") + ".");
+        }
+    }
+
+    /** The countdown's end (or [startNow]): Mort's first line, and the run starts. */
+    private void beginRun() {
+        if (!quietMort) {
             forEachPlayer(p -> {
                 sound(p, SoundEvents.ENDER_DRAGON_GROWL, 1f, 1f);
                 sound(p, SoundEvents.VILLAGER_TRADE, 1f, 0.7f);
             });
-            forEachPlayer(this::announceClass);
-            forEachPlayer(p -> Pets.trigger(p, Pets.Trigger.DUNGEON_START));
+        }
+        forEachPlayer(this::announceClass);
+        forEachPlayer(p -> Pets.trigger(p, Pets.Trigger.DUNGEON_START));
+        if (!quietMort) {
             broadcast("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.");
-            score.reset();
-            score.master = floor.master();
-            score.startNanos = System.nanoTime();
-            state = State.STARTED;
-            runTicks = 0;
-            start();
-        } else if (countdown <= 80 && countdown % 20 == 0) {
-            int seconds = countdown / 20;
-            broadcast("§aStarting in " + seconds + " second" + (seconds == 1 ? "" : "s") + ".");
+        }
+        score.reset();
+        score.master = floor.master();
+        score.startNanos = System.nanoTime();
+        state = State.STARTED;
+        runTicks = 0;
+        start();
+    }
+
+    /**
+     * Practice: the run starts now, with no ready-up or countdown. [quiet] leaves out Mort's lines
+     * (and the start sounds), for a practice that starts somewhere other than the entrance.
+     */
+    void startNow(boolean quiet) {
+        if (state == State.NOT_READY || state == State.STARTING) {
+            quietMort = quiet;
+            forEachPlayer(p -> ready.add(p.getUUID()));
+            beginRun();
         }
     }
 
@@ -1524,14 +1669,14 @@ public final class DungeonRun implements EngineRun {
 
         // No Mort in a practice room, but his lines still go out: client mods take them as the start
         // of the run (Devonian's splits and star-mob boxes, Skyblocker's score and map).
-        if (runTicks == 1 && practice != null) {
+        if (runTicks == 1 && practice != null && !quietMort) {
             broadcast("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.");
         }
-        if (runTicks == 40) {
+        if (runTicks == 40 && !quietMort) {
             forEachPlayer(p -> sound(p, SoundEvents.VILLAGER_TRADE, 1f, 0.7f));
             broadcast("§e[NPC] §bMort§f: You should find it useful if you get lost.");
         }
-        if (runTicks == 70) {
+        if (runTicks == 70 && !quietMort) {
             forEachPlayer(p -> sound(p, SoundEvents.VILLAGER_TRADE, 1f, 0.7f));
             broadcast("§e[NPC] §bMort§f: Good luck.");
         }
@@ -1607,6 +1752,9 @@ public final class DungeonRun implements EngineRun {
         }
         if (practice != null) {
             practice.tick(this, runTicks);
+        }
+        if (hooks != null) {
+            hooks.onTick(this, runTicks);
         }
     }
 
