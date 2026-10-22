@@ -9,6 +9,8 @@
     "AdsSplitsTickMixin",
     "ArmorFoilMixin",
     "HideInventoryEffectsMixin",
+    "NoLivingKnockbackMixin",
+    "NoPlayerKnockbackMixin",
     "HideBotsSimMixin",
     "OwnArrowsHideMixin",
     "ArrowInGroundInvoker",
