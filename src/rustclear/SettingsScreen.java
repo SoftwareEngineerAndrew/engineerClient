@@ -293,14 +293,16 @@ public final class SettingsScreen extends RustclearScreen {
      * health and damage, so it takes a new dungeon), everyone else's to see.
      */
     private void floorSwitch(GuiGraphicsExtractor g, int mx, int my) {
-        Floor current = settings.floorOrDefault();
+        // A practice (ADS's Practice page) set its own floor: shown as it is, not the leader's to switch here.
+        Floor practice = practiceFloor();
+        Floor current = practice != null ? practice : settings.floorOrDefault();
         int right = px + pw - 8 - (font.width(badgeText) + 16) - 8;
         int x = right - (choiceWidth("F7") + choiceWidth("M7") + 3);
         // M7 rests on alpha recordings only (decision 6): say so next to the switch.
-        String label = current.master() ? "alpha-measured · Floor" : "Floor";
+        String label = (practice != null ? "Practice · " : "") + (current.master() ? "alpha-measured · Floor" : "Floor");
         text(g, label, x - font.width(label) - 5, py + 8, DIM);
         for (Floor f : Floor.values()) {
-            Runnable pick = editable && f != current ? () -> settings.floor = f.code : null;
+            Runnable pick = editable && practice == null && f != current ? () -> settings.floor = f.code : null;
             int w = choice(g, mx, my, f.code, x, py + 5, f == current, pick);
             if (f == current && f.master()) {
                 // Master Mode in the map's blood red.
@@ -308,6 +310,12 @@ public final class SettingsScreen extends RustclearScreen {
             }
             x += w + 3;
         }
+    }
+
+    /** The floor of the practice the party's dungeon is set up for, or null in a normal dungeon. */
+    private static Floor practiceFloor() {
+        Protocol.PartyState party = RustclearMod.party;
+        return party == null || party.practiceFloor == null ? null : Floor.of(party.practiceFloor);
     }
 
     private void railTab(GuiGraphicsExtractor g, int mx, int my, Tab which, String name, String summary, int color, int y) {
