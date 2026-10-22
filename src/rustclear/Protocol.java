@@ -346,6 +346,9 @@ public final class Protocol {
         public String winReason;
         /** Set when the party is ending (the host left), with why. */
         public String closed;
+        /** The floor ("M7") of the practice the dungeon is set up for (ADS's Practice page), or null in a normal dungeon. */
+        @SerializedName("practice_floor")
+        public String practiceFloor;
     }
 
     public static final class Room {

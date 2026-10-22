@@ -12,6 +12,7 @@
     "NoLivingKnockbackMixin",
     "NoPlayerKnockbackMixin",
     "SpectatorHidesInvisibleMixin",
+    "HideRecipeToastMixin",
     "HideBotsSimMixin",
     "OwnArrowsHideMixin",
     "ArrowInGroundInvoker",

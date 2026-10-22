@@ -49,7 +49,8 @@ class P2Storm : Fight.Phase("P2") {
         var resetAt = -1
         val square get() = AABB(minX.toDouble(), 168.5, minZ.toDouble(), minX + 7.0, 170.5, minZ + 7.0)
         val centre get() = Vec3(minX + 3.5, 169.0, minZ + 3.5)
-        fun under(p: Vec3) = square.contains(p)
+        /** Hidden from Giga Lightning: in its square, unless Storm has crushed it (a spent pillar hides nobody). */
+        fun under(p: Vec3) = !spent && square.contains(p)
         fun resting() = !spent && steps == 0 && floorAt < 0 && !raising && lowerTo < 0 && bottom > 169
     }
 
