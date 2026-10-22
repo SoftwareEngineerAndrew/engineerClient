@@ -46,6 +46,9 @@ object Sim {
     /** Everyone in the sim, the host first. */
     fun players(): List<ServerPlayer> = SimServer.server?.playerList?.players?.toList().orEmpty()
 
+    /** The players in the fight, where they stand: everyone but one watching the bots' route ([SpectateRoute]). */
+    fun fighters(): List<ServerPlayer> = players().filter { !SpectateRoute.watching(it) }
+
     /** The host: the player whose game it is (the first in), whoever [player] is now. */
     val host: ServerPlayer? get() = SimServer.player
 

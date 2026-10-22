@@ -36,6 +36,8 @@ object Stats {
 
     /** Records [ticks] for [key] if it's a best; the chat suffix. */
     fun best(what: String, ticks: Int): String {
+        // A route watched is the bots' run: no personal best of yours.
+        if (SpectateRoute.active) return ""
         val key = "$what @ ${P3Plan.skillName()} ${Roles.label(P3Sim.ownClass)}" + if (P3Plan.skill == P3Plan.RANDOM) " ${P3Plan.botMin}-${P3Plan.botMax}s" else ""
         val old = bests.getProperty(key)?.toIntOrNull()
         if (old != null && ticks >= old) return " §8PB ${s(old)}"
@@ -54,6 +56,7 @@ object Stats {
         for (p in Sim.players()) Sim.asPlayer(p) {
             if (!P3Sim.showTimes) return@asPlayer
             Sim.note("$parts$total" + if (Sim.isHost(p)) best else "")
+            if (SpectateRoute.watching(p)) return@asPlayer
             val n = p.gameProfile.name
             Sim.note("You did §f${mine[n] ?: 0}§7 of the jobs; death ticks taken: §f${deaths[n] ?: 0}")
         }

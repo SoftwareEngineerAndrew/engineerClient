@@ -119,15 +119,15 @@ object Players {
     /** [p]'s class: the host's from their menu, a joiner's as given here. */
     fun classOf(p: ServerPlayer): DungeonClass = if (Sim.isHost(p)) P3Sim.ownClass else profiles[p.uuid]?.clazz ?: P3Sim.ownClass
 
-    /** The player playing [c], or null (a bot's, or nobody's). */
-    fun playerOf(c: DungeonClass?): ServerPlayer? = if (c == null) null else Sim.players().firstOrNull { hasClass(it) && classOf(it) == c }
+    /** The player playing [c], or null (a bot's, or nobody's: one watching its bot [SpectateRoute] doesn't play it). */
+    fun playerOf(c: DungeonClass?): ServerPlayer? = if (c == null) null else Sim.players().firstOrNull { hasClass(it) && classOf(it) == c && !SpectateRoute.watching(it) }
 
     /** The classes the joiners play (any thread: a copy kept by the server's tick). */
     @Volatile var joinerClasses: Set<DungeonClass> = emptySet()
         private set
 
-    /** Every class a player plays, the host's included. */
-    fun playerClasses(): Set<DungeonClass> = joinerClasses + P3Sim.ownClass
+    /** Every class a player plays, the host's included (not while they watch its bot: [SpectateRoute]). */
+    fun playerClasses(): Set<DungeonClass> = if (SpectateRoute.active) joinerClasses else joinerClasses + P3Sim.ownClass
 
     /** Whether a player plays [c] (no bot then). */
     fun isPlayerClass(c: DungeonClass?) = c != null && c in playerClasses()
@@ -141,6 +141,8 @@ object Players {
     }
 
     fun jobsOf(p: ServerPlayer): Set<String> {
+        // Watching the route: their jobs are their class's bot's.
+        if (SpectateRoute.watching(p)) return emptySet()
         if (Sim.isHost(p)) return P3Plan.mine()
         // Not yet in (no class until their hello): nothing of theirs.
         if (!hasClass(p)) return emptySet()
@@ -325,9 +327,10 @@ object PartyServer {
         SimNet.onServer("shared") { p, data -> shared(p, data) }
         SimNet.onServer("plan") { p, data -> plan(p, data) }
         SimNet.onServer("act") { p, data -> SimActions.run(p, data) }
-        SimNet.onServer("hit") { p, data -> SimItems.serverHit(p, data) }
-        SimNet.onServer("left") { p, data -> SimItems.serverLeftClick(p, data) }
-        SimNet.onServer("drop") { p, data -> SimItems.serverDrop(p, data == "1") }
+        // Not from one watching the route (they're out of the fight).
+        SimNet.onServer("hit") { p, data -> if (!SpectateRoute.watching(p)) SimItems.serverHit(p, data) }
+        SimNet.onServer("left") { p, data -> if (!SpectateRoute.watching(p)) SimItems.serverLeftClick(p, data) }
+        SimNet.onServer("drop") { p, data -> if (!SpectateRoute.watching(p)) SimItems.serverDrop(p, data == "1") }
     }
 
     /**
@@ -724,6 +727,7 @@ object SimActions {
                     Fight.start(Fight.lastStart)
                 }
             }
+            "spectateRoute" -> SpectateRoute.start(p)
             "practiceRestart" -> if (Sim.isHost(p)) Practice.restart() else Sim.note("Practice is the host's: their start, jobs and checkpoints.")
             "stop" -> {
                 if (!Sim.isHost(p)) Sim.everyone { Sim.note("§f$who§7 stopped the run.") }

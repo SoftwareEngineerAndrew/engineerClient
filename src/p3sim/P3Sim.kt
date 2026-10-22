@@ -202,6 +202,8 @@ object P3Sim : Settings("ADS", "ads.json") {
     @JvmStatic
     fun hideBot(e: net.minecraft.world.entity.Entity): Boolean {
         if (!odin || !inSim || e !is net.minecraft.world.entity.decoration.Mannequin) return false
+        // The bot you watch (Spectate Route) in third person: never hidden (it's always within Distance of you).
+        if (e === mc.cameraEntity) return false
         return OdinSimBridge.hidesBot(e)
     }
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
