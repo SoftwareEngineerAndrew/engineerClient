@@ -145,6 +145,8 @@ public final class DungeonRun implements EngineRun {
     final BossFight bossFight;
     /** Each puzzle room's logic, by room index. */
     private final Map<Integer, Puzzle> puzzles = new HashMap<>();
+    /** Resets per puzzle room, by room index (each one's fresh puzzle rolls a stream of its own). */
+    private final Map<Integer, Integer> puzzleResets = new HashMap<>();
     /** The run's own Random: from the dungeon's seed (mixed, so it isn't the planner's stream), or unseeded. */
     private final Random random;
     /** The dungeon's seed (EngineServer.newDungeon, practice), or null for an unseeded run (duels). */
@@ -351,6 +353,11 @@ public final class DungeonRun implements EngineRun {
         @Override
         public Random random() {
             return random;
+        }
+
+        @Override
+        public Random random(String stream) {
+            return derived(stream, 0);
         }
 
         @Override
@@ -1267,6 +1274,7 @@ public final class DungeonRun implements EngineRun {
             room.puzzleFailed = false;
             room.puzzleCompleted = false;
             score.puzzlesInFail = Math.max(0, score.puzzlesInFail - 1);
+            puzzleResets.merge(room.index, 1, Integer::sum);
             Puzzle fresh = Puzzles.create(this, room);
             if (fresh != null) {
                 puzzles.put(room.index, fresh);
@@ -1353,6 +1361,27 @@ public final class DungeonRun implements EngineRun {
         return random;
     }
 
+    /**
+     * A Random of its own for one [stream] of rolls ("puzzle", "mobs", "chest"...) at [index]: from
+     * the dungeon's seed, mixed (splitmix64), so a replayed map rolls the same puzzles, mobs and
+     * chests whatever happened before. Unseeded: a fresh one off the run's random.
+     */
+    Random derived(String stream, int index) {
+        if (seed == null) {
+            return new Random(random.nextLong());
+        }
+        long z = seed ^ stream.hashCode() * 0x9E3779B97F4A7C15L ^ index * 0xC2B2AE3D27D4EB4FL;
+        z += 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return new Random(z ^ (z >>> 31));
+    }
+
+    /** How often [roomIndex]'s puzzle has been reset this run (each reset rolls a new puzzle). */
+    int puzzleResets(int roomIndex) {
+        return puzzleResets.getOrDefault(roomIndex, 0);
+    }
+
     void schedule(int delay, Runnable task) {
         tasks.add(new Task(ticks + delay, task));
     }
@@ -1373,8 +1402,9 @@ public final class DungeonRun implements EngineRun {
             if (!wither && !blood) {
                 pickups.add(Pickup.spawn(level, at.x, at.y - 1, at.z, Pickup.Kind.TNT));
             }
-            if (random.nextBoolean()) {
-                Pickup.Kind blessing = Blessings.itemKind(random);
+            Random drop = derived("clear", room.index);
+            if (drop.nextBoolean()) {
+                Pickup.Kind blessing = Blessings.itemKind(drop);
                 pickups.add(Pickup.spawn(level, at.x, at.y - 1, at.z + 1, blessing));
             }
         }
