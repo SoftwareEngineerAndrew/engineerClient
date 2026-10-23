@@ -61,10 +61,6 @@ dependencies {
     // level extract, so the POV previews no longer call it; optional at runtime.
     compileOnly("maven.modrinth:sodium:bAZQdGpg")
 
-    // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
-    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
-    compileOnly("maven.modrinth:devonian:k8Mog4wx")
-
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
