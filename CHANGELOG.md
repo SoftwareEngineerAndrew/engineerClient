@@ -5,6 +5,9 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ## [Unreleased]
 
+### Added
+- Coffee Random Stuff: Mute Sounds In P4 (off to begin with) mutes every sound during Necron's fight on F7/M7 only, from his first line until he's dead, and only while you're down at his platform.
+
 ## [0.4.0] - 2026-10-23
 
 ### Changed
