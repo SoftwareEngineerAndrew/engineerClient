@@ -9,6 +9,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - Everything new in Engineer Client up to 2026-10-22, merged in:
   - Room Prediction on every floor (F1-F7, M1-M7), each from its own recorded maps.
   - LCM Colors on Odin's Dungeon Map (a colour for every room type, used by LCM Style and Room Prediction), and an LCM Style for Map Info's score HUD.
+- ADS's own minimap, without needing Odin: the dungeon map as a HUD on Hypixel and in ADS's worlds, with room names, secrets, check marks, the special column's guesses and everyone's heads, in LCM's look or Odin's. With Odin installed, LCM Map Info's score shows under it. Turn it on in `/ads` > Minimap (off to begin with) and move it with Edit HUDs.
 
 ### Changed
 - Full run secrets: every item, bat and skull spawns at its own measured distance, as on Hypixel (Secrets Measured Ranges), and the old ranges are now the defaults for secrets without one (Secrets Default Item/Bat/Skull Range).
