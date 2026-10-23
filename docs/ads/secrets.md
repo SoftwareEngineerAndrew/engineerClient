@@ -32,8 +32,10 @@ What the secrets module does in a clear, what it leaves to others, and the numbe
   1st, 2nd, 3rd or 4th counted bat (70 / 24 / 5 / 1 percent), by anyone, with two orb pings.
 - **Floor items** are Hypixel's stacks (Spirit Leap x5, Inflatable Jerry x2, skull skins, models, rarity styles) and are picked up
   inside the game's own box, with the server's pickup sound.
-- **Appearing.** Floor items 32 blocks from the nearest party member (sideways), bats 14, skulls 16, on a 20-tick pass, in any room or
-  gap.
+- **Appearing.** Floor items, bats and skulls spawn when a party member is inside their room and within the secret's own radius (3D,
+  from the feet), checked every 5 ticks; bats at the spot they were recorded spawning. The radii (3 to 31 blocks, about 10 typical) are
+  measured per secret: [secret-spawns.md](secret-spawns.md), `ads/secret-spawns.json` ([SpawnRanges]). A secret without one uses its
+  type's default setting.
 - **Levers.** A used secret lever always says "This lever has already been used."; a sneaking player gets that line as well as the
   opening line; the wall ticks nine times, five ticks apart, in every room but Buttons, Old Trap and Bridges.
 - **Teammates.** A bot's find runs the same ceremonies: its chest opens (lid, harp if a human is near, the lines at the reveal), its

@@ -1,12 +1,16 @@
-// Monte-Carlo completion of a partly discovered map, with the rules found in the recorded maps:
-//  - 7 big rooms from the usual shape mixes (each shape at most twice, ~22 tiles), the rest 1x1s
+// Monte-Carlo completion of a partly discovered map, with the rules found in the recorded maps (floors.mjs;
+// each floor's numbers are common.mjs FLOORS):
+//  - the floor's big rooms from its usual shape mixes (each shape at most twice), the rest 1x1s
 //  - the doors form one tree; every unknown room hangs off one door from the discovered part
 //  - 1x1 dead ends are exactly blood + trap + yellow + the tab list's puzzles (+ rares on 5-puzzle maps)
-//  - the wither path is a tile walk of 9 or 10 steps from the entrance to blood, and the fairy (a 1x1)
-//    is exactly 4 steps before blood
+//  - the wither path is a tile walk of 9 or 10 steps from the entrance to blood (7 or 8 on F1-F4), and the
+//    fairy (a 1x1) is exactly 4 steps before blood (3 on F1-F4)
 //  - trap, yellow and puzzles are spread at random over the other 1x1 dead ends
+//  - F4-F6: the dead ends the main grid is short of are puzzles in the column east of it, each behind one
+//    door from a normal room west of it; none when the tab list's puzzles are more than that tops up to
 // Every sample is one complete map that keeps all of that; the predictions are what the samples agree on.
 import { edgeId } from './features.mjs';
+import { FLOORS } from './common.mjs';
 
 export const SHAPES = ['TwoByOne', 'ThreeByOne', 'FourByOne', 'TwoByTwo', 'L'];
 const PLACEMENTS = {
@@ -17,18 +21,42 @@ const PLACEMENTS = {
   L: [[[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 1]], [[1, 0], [0, 1], [1, 1]]],
 };
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-export const OUT = ['n', 'o', 'P', 'T', 'Y', 'B', 'F', 'R'];
+// x: a puzzle column tile with no room
+export const OUT = ['n', 'o', 'P', 'T', 'Y', 'B', 'F', 'R', 'x'];
 const OI = Object.fromEntries(OUT.map((c, i) => [c, i]));
 const isDoor = k => k === 'n' || k === 'w' || k === 'b';
 
-// Walk length weights (entrance to blood) and blood distance-from-entrance weights; calib2.mjs fits MW.
-export const TABLES2 = {
-  WD: Array.from({ length: 20 }, (_, d) => d === 9 || d === 10 ? 1 : d === 7 ? 0.023 : d === 8 ? 0.06 : 0),
-  MW: Array.from({ length: 16 }, (_, m) => m >= 1 ? 1 : 0),
-  FM: Array.from({ length: 16 }, (_, m) => m >= 1 ? 1 : 0),
-  // big-room placement weight per tile, in the frame with the entrance on the top row, left half
-  BW: new Array(36).fill(1),
-};
+/** Each floor's big room shape mixes (counts in SHAPES order) and how many maps had them: F3/F4 and F5/F6 alike, F7's 7-room maps only. */
+export function combosFor(Ls) {
+  const group = f => ({ 3: '34', 4: '34', 5: '56', 6: '56' })[f] ?? f;
+  const by = {};
+  for (const L of Ls) {
+    const c = SHAPES.map(s => L.rooms.filter(r => r.shape === s).length);
+    if (L.floor[1] === '7' && c.reduce((a, b) => a + b) !== 7) continue;
+    const m = by[group(L.floor[1])] ||= new Map(); const k = c.join(''); m.set(k, (m.get(k) || 0) + 1);
+  }
+  const out = {};
+  for (const f of '1234567') { const m = by[group(f)]; if (m) out[f] = [...m].map(([k, w]) => ({ counts: [...k].map(Number), w })); }
+  return out;
+}
+
+/** Walk length weights (entrance to blood): the floor's two lengths, the two shorter ones rarely (a big room's corner cut). */
+export function walkWeights(rules) {
+  const top = rules.fairy === 3 ? 7 : 9;
+  return Array.from({ length: 20 }, (_, d) => d === top || d === top + 1 ? 1 : d === top - 2 ? 0.023 : d === top - 1 ? 0.06 : 0);
+}
+
+/** Flat tables for a floor; calib2.mjs fits MW (blood distance from the entrance), FM (the fairy's) and BW. */
+export function defaultTables(rules = FLOORS[7]) {
+  return {
+    WD: walkWeights(rules),
+    MW: Array.from({ length: 16 }, (_, m) => m >= 1 ? 1 : 0),
+    FM: Array.from({ length: 16 }, (_, m) => m >= 1 ? 1 : 0),
+    // big-room placement weight per tile, in the frame with the entrance on the top row, left half (F7 only)
+    BW: new Array(36).fill(1),
+  };
+}
+export const TABLES2 = defaultTables();
 
 /** Fewest steps between tiles s and t (indices) inside a room's tiles. */
 function inRoom(tiles, s, t, W) {
@@ -52,17 +80,28 @@ function inRoom(tiles, s, t, W) {
 /** What the map shows that doesn't change between samples. */
 export function prepare(obs, combos) {
   const { W, H, tile, edge } = obs;
+  const rules = obs.rules || FLOORS[7];
   const ek = (x, z, dx, dz) => edge.get(edgeId(x, z, dx, dz));
-  const unknown = [];
-  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (tile[z][x] < 0) unknown.push(z * W + x);
+  // unknown tiles of the main grid; puzzle column tiles behind a door the map shows (a room for sure), and
+  // those whose west side nobody has seen (a room or not); a column tile with a wall to its west is empty
+  const unknown = [], column = [], open = [], cells = [];
+  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
+    if (tile[z][x] >= 0) continue;
+    const t = z * W + x;
+    if (x < rules.w) { unknown.push(t); cells.push(t); }
+    else if (rules.column && x === rules.w) {
+      if (tile[z][x - 1] < 0) { open.push(t); cells.push(t); }
+      else if (isDoor(ek(x, z, -1, 0))) { column.push(t); cells.push(t); }
+    }
+  }
   const isUnk = new Uint8Array(W * H); for (const t of unknown) isUnk[t] = 1;
   // entries: unknown tile -> { kind, from: the known tile across the door }
   const entry = new Map(); let bad = false;
-  for (const t of unknown) {
+  for (const t of [...unknown, ...column]) {
     const x = t % W, z = (t / W) | 0;
     for (const [dx, dz] of DIRS) {
       const nx = x + dx, nz = z + dz;
-      if (nx < 0 || nz < 0 || nx >= W || nz >= H || isUnk[nz * W + nx]) continue;
+      if (nx < 0 || nz < 0 || nx >= W || nz >= H || tile[nz][nx] < 0) continue;
       const k = ek(x, z, dx, dz);
       if (!isDoor(k)) continue;
       if (entry.has(t)) bad = true; // two doors into one unknown tile from the known side: no tree does that
@@ -108,34 +147,37 @@ export function prepare(obs, combos) {
     }
   }
   const remP = Math.max(0, obs.puzzles - found.P);
-  const needDead = remP + (found.T ? 0 : 1) + (found.Y ? 0 : 1) + (found.B ? 0 : 1);
+  const needDead = remP + (rules.trap && !found.T ? 1 : 0) + (found.Y ? 0 : 1) + (found.B ? 0 : 1);
+  // the puzzle column only tops the dead ends (puzzles, trap, yellow) up to its target, never past it
+  const topUp = !!rules.column && obs.puzzles + (rules.trap ? 1 : 0) + 1 <= rules.target;
   const okCombos = combos.filter(c => c.counts.every((v, i) => v >= knownBig[i]));
   let ent = [0, 0]; if (entId >= 0) { const e = obs.rooms.get(entId).tiles[0]; ent = [e.x, e.z]; }
-  // each tile's index in the entrance frame (6x6 only; other sizes keep their own)
+  // each tile's index in the entrance frame (F7's 6x6 only; other floors keep their own)
   const frame = new Int32Array(W * H);
   {
     const SYM = [(x, z) => [x, z], (x, z) => [5 - z, x], (x, z) => [5 - x, 5 - z], (x, z) => [z, 5 - x], (x, z) => [5 - x, z], (x, z) => [z, x], (x, z) => [x, 5 - z], (x, z) => [5 - z, 5 - x]];
     let f = SYM[0];
-    if (W === 6 && H === 6) for (const g of SYM) { const [x, z] = g(ent[0], ent[1]); if (z === 0 && x <= 2) { f = g; break; } }
+    if (rules.w === 6 && rules.h === 6) for (const g of SYM) { const [x, z] = g(ent[0], ent[1]); if (z === 0 && x <= 2) { f = g; break; } }
     for (let t = 0; t < W * H; t++) { const [x, z] = f(t % W, (t / W) | 0); frame[t] = z * W + x; }
   }
-  return { W, H, unknown, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, okCombos, ent, frame, puzzles: obs.puzzles };
+  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, puzzles: obs.puzzles };
 }
 
 export function sample(obs, combos, opts) {
   const P0 = prepare(obs, combos);
-  const { W, H, unknown, isUnk, entry, found, knownBig, head, headDist, fairyDist, remP, needDead, okCombos, ent, frame } = P0;
-  const rnd = opts.rnd, N = opts.samples || 500, TB = opts.tables || TABLES2;
+  const { W, H, rules, unknown, column, open, cells, isUnk, entry, found, knownBig, head, headDist, fairyDist, remP, needDead, topUp, okCombos, ent, frame } = P0;
+  const rnd = opts.rnd, N = opts.samples || 500, TB = opts.tables || defaultTables(rules);
   const entries = [...entry.keys()];
   const entryIndex = new Map(entries.map((t, i) => [t, i]));
-  const tileIdx = new Int32Array(W * H).fill(-1); unknown.forEach((t, i) => { tileIdx[t] = i; });
-  const counts = unknown.map(() => new Float64Array(OUT.length));
+  const tileIdx = new Int32Array(W * H).fill(-1); cells.forEach((t, i) => { tileIdx[t] = i; });
+  const counts = cells.map(() => new Float64Array(OUT.length));
   const branch = entries.map(() => ({ tiles: 0, rooms: 0, c: new Float64Array(OUT.length) }));
-  const result = { accepted: 0, tries: 0, unknown, entries: entries.map(t => ({ t, kind: entry.get(t).kind })), probs: null, branch: null };
+  const result = { accepted: 0, tries: 0, unknown: cells, entries: entries.map(t => ({ t, kind: entry.get(t).kind })), probs: null, branch: null };
   const finish = () => {
-    const a = result.weight || 1;
-    result.probs = counts.map(c => { const s = c.reduce((x, y) => x + y, 0); return s ? Array.from(c, v => v / s) : null; });
-    result.branch = branch.map(b => ({ rooms: b.rooms / a, tiles: b.tiles / a, c: Array.from(b.c, v => v / a) }));
+    const a = result.weight || 0;
+    // a puzzle column tile no sample put a room on is empty ('x')
+    result.probs = counts.map(c => { if (!a) return null; const p = Array.from(c, v => v / a); p[OI.x] = Math.max(0, 1 - p.reduce((x, y) => x + y, 0)); return p; });
+    result.branch = branch.map(b => ({ rooms: b.rooms / (a || 1), tiles: b.tiles / (a || 1), c: Array.from(b.c, v => v / (a || 1)) }));
     return result;
   };
   if (P0.bad || !okCombos.length || (!found.B && head < 0)) return finish();
@@ -176,8 +218,10 @@ export function sample(obs, combos, opts) {
     }
     if (fail) continue;
     for (const t of unknown) if (owner[t] < 0) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne' }); }
+    // the puzzle column's rooms behind a door the map shows
+    for (const t of column) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne', col: true }); }
     const R = rooms.length;
-    // 2. which rooms touch, and where a door between them could go
+    // 2. which rooms touch, and where a door between them could go (the main grid's rooms only)
     const slots = Array.from({ length: R }, () => new Map()); // neighbour -> [[tile in me, tile in them]]
     for (const t of unknown) {
       const x = t % W, z = (t / W) | 0;
@@ -188,8 +232,10 @@ export function sample(obs, combos, opts) {
         slots[a].get(b).push([t, n]); slots[b].get(a).push([n, t]);
       }
     }
-    // 3. the door tree, grown from the entry rooms (random door from the tree to a new room)
-    const parent = new Int32Array(R).fill(-2), inTile = new Int32Array(R), outTile = new Int32Array(R), root = new Int32Array(R).fill(-1);
+    // 3. the door tree, grown from the entry rooms (random door from the tree to a new room); room arrays
+    //    leave space for the puzzle column rooms added in 5
+    const RM = R + open.length;
+    const parent = new Int32Array(RM).fill(-2), inTile = new Int32Array(RM), outTile = new Int32Array(RM), root = new Int32Array(RM).fill(-1);
     const order = [];
     for (const t of entries) { const r = owner[t]; parent[r] = -1; inTile[r] = t; root[r] = entryIndex.get(t); order.push(r); }
     const grow = opts.grow ?? 0.3;
@@ -209,17 +255,20 @@ export function sample(obs, combos, opts) {
       parent[v] = u; outTile[v] = tu; inTile[v] = tv; root[v] = root[u]; order.push(v);
     }
     if (order.length < R) continue;
-    const deg = new Int32Array(R);
+    const deg = new Int32Array(RM);
     for (let r = 0; r < R; r++) { deg[r]++; if (parent[r] >= 0) deg[parent[r]]++; }
     const dead = [];
     for (let r = 0; r < R; r++) if (rooms[r].shape === 'OneByOne' && deg[r] === 1) dead.push(r);
-    if (dead.length !== needDead) {
-      const extra = dead.length - needDead;
-      if (!(P0.puzzles === 5 && extra > 0 && extra <= 2 && rnd() < (opts.rareRate ?? 0.25))) continue;
+    // dead ends past the specials are rare rooms (5-puzzle maps); short of them, the puzzle column makes up the rest
+    let short = needDead - dead.length;
+    if (short < 0) {
+      if (!(P0.puzzles === 5 && short >= -2 && rnd() < (opts.rareRate ?? 0.25))) continue;
+      short = 0;
     }
-    // 4. blood: a 1x1 dead end in the wither door's branch at walk distance 9-10 from the entrance,
-    //    with a 1x1 fairy exactly 4 steps before it
-    const type = new Array(R).fill(null);
+    if (short > 0 && !topUp || column.length && !topUp) continue;
+    // 4. blood: a 1x1 dead end of the main grid in the wither door's branch at the floor's walk distance from
+    //    the entrance, with a 1x1 fairy exactly the floor's steps before it
+    const type = new Array(RM).fill(null);
     let weight = 1; // how likely this map is next to the others: the summed weight of its blood spots
     if (!found.B) {
       const hb = entryIndex.get(head), hr = owner[head];
@@ -232,15 +281,15 @@ export function sample(obs, combos, opts) {
       }
       const cands = [], ws = [], fairies = [];
       for (const b of dead) {
-        if (root[b] !== hb) continue;
+        if (root[b] !== hb || rooms[b].col) continue;
         if ((entry.get(head).kind === 'b') !== (b === hr)) continue;
         const D = dist[b];
         let w = TB.WD[D] || 0; if (!w) continue;
         let fairy = -1;
-        if (found.F) { if (D !== fairyDist + 4) continue; }
+        if (found.F) { if (D !== fairyDist + rules.fairy) continue; }
         else {
-          // the room on blood's chain whose entry tile is at D - 4, and it must be a 1x1
-          for (let u = parent[b]; u >= 0; u = parent[u]) if (dist[u] === D - 4 && rooms[u].shape === 'OneByOne') { fairy = u; break; }
+          // the room on blood's chain whose entry tile is the floor's steps before it, and it must be a 1x1
+          for (let u = parent[b]; u >= 0; u = parent[u]) if (dist[u] === D - rules.fairy && rooms[u].shape === 'OneByOne') { fairy = u; break; }
           if (fairy < 0) continue;
         }
         const bt = rooms[b].tiles[0];
@@ -257,17 +306,32 @@ export function sample(obs, combos, opts) {
       if (!found.F) type[fairies[k]] = 'F';
       result.lastBlood = { D: dist[cands[k]] };
     } else if (!found.F) continue;
-    // 5. trap, yellow, puzzles, rares on the other dead ends, at random
-    const rest = dead.filter(r => !type[r]);
+    // 5. the puzzle column rooms still short, at random beside normal rooms (big, or a 1x1 with two doors already)
+    const colRooms = dead.filter(r => rooms[r].col);
+    if (short > 0) {
+      const hosts = open.filter(t => { const h = owner[t - 1]; return rooms[h].shape !== 'OneByOne' || deg[h] >= 2 && type[h] !== 'F'; });
+      if (hosts.length < short) continue;
+      for (let i = 0; i < short; i++) {
+        const j = i + Math.floor(rnd() * (hosts.length - i)); [hosts[i], hosts[j]] = [hosts[j], hosts[i]];
+        const t = hosts[i], h = owner[t - 1], r = rooms.length;
+        owner[t] = r; rooms.push({ tiles: [t], shape: 'OneByOne', col: true });
+        parent[r] = h; outTile[r] = t - 1; inTile[r] = t; root[r] = root[h]; deg[r] = 1; deg[h]++;
+        colRooms.push(r);
+      }
+    }
+    // 6. trap, yellow, puzzles, rares on the other dead ends, at random; the puzzle column's last
+    const rest = dead.filter(r => !type[r] && !rooms[r].col);
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    for (let i = colRooms.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [colRooms[i], colRooms[j]] = [colRooms[j], colRooms[i]]; }
+    rest.push(...colRooms);
     let ri = 0;
-    if (!found.T) type[rest[ri++]] = 'T';
+    if (rules.trap && !found.T) type[rest[ri++]] = 'T';
     if (!found.Y) type[rest[ri++]] = 'Y';
     for (let k = 0; k < remP; k++) type[rest[ri++]] = 'P';
     while (ri < rest.length) type[rest[ri++]] = 'R';
     result.accepted++; result.weight = (result.weight || 0) + weight;
-    if (opts.onSample) opts.onSample({ rooms, type, parent, root, R, ent, weight });
-    for (let r = 0; r < R; r++) {
+    if (opts.onSample) opts.onSample({ rooms, type, parent, root, R: rooms.length, ent, weight });
+    for (let r = 0; r < rooms.length; r++) {
       const c = OI[type[r] || (rooms[r].shape === 'OneByOne' ? 'o' : 'n')];
       const b = branch[root[r]]; b.rooms += weight; b.tiles += weight * rooms[r].tiles.length; b.c[c] += weight;
       for (const t of rooms[r].tiles) counts[tileIdx[t]][c] += weight;

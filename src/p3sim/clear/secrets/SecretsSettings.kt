@@ -10,12 +10,13 @@ import com.engineerclient.ads.settings.Settings
  */
 object SecretsSettings {
     /**
-     * How far (sideways, any height) a party member must be before a floor item, a bat or a wither essence skull appears. Measured as the distance to the nearest
-     * party member when each first showed up: items at about 31 blocks (27.8 to 42.2), bats about 6.5 (up to 17), skulls about 10 (3 to 19). A repeating 20-tick pass.
+     * How near (3D, from the feet) a party member inside the room must come before a floor item, a bat or a skull appears, for a secret with no
+     * measured radius of its own ([SpawnRanges]: most have one, from 3 to 31 blocks; these are the medians, items 10.5, bats 10.2, skulls
+     * 10.4; key skulls and the few that appear on an event use them too). The 32 blocks an item was once put at is how far the client is told about items, not when Hypixel spawns them.
      */
-    const val ITEM_SPAWN_RANGE = 32.0
-    const val BAT_SPAWN_RANGE = 14.0
-    const val SKULL_SPAWN_RANGE = 16.0
+    const val ITEM_SPAWN_RANGE = 10.5
+    const val BAT_SPAWN_RANGE = 10.0
+    const val SKULL_SPAWN_RANGE = 10.5
     /**
      * How far past a player's body (sideways) an item is picked up. Hypixel's reach is longer than the game's own 1 block: in 215 recorded pickups
      * by a player standing still (ADR), the item was a median 2.4 blocks from them (centres), 87% of the cluster within 2.7. 2.25 past the body is
@@ -35,6 +36,7 @@ object SecretsSettings {
     private var itemRangeS: NumberSetting<Double>? = null
     private var batRangeS: NumberSetting<Double>? = null
     private var skullRangeS: NumberSetting<Double>? = null
+    private var measuredRangesS: BooleanSetting? = null
     private var pickupRangeS: NumberSetting<Double>? = null
     private var boomRadiusS: NumberSetting<Double>? = null
     private var leverTicksS: NumberSetting<Int>? = null
@@ -43,9 +45,10 @@ object SecretsSettings {
     private var blessingBoostS: BooleanSetting? = null
 
     fun register(host: Settings) {
-        itemRangeS = host.registerSetting(NumberSetting("Secrets Item Range", ITEM_SPAWN_RANGE, 8.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before an item secret lies on the floor."))
-        batRangeS = host.registerSetting(NumberSetting("Secrets Bat Range", BAT_SPAWN_RANGE, 4.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before a secret bat appears."))
-        skullRangeS = host.registerSetting(NumberSetting("Secrets Skull Range", SKULL_SPAWN_RANGE, 4.0..64.0, 1.0, unit = " blocks", desc = "How near (sideways) a party member must be before a wither essence or key skull appears."))
+        measuredRangesS = host.registerSetting(BooleanSetting("Secrets Measured Ranges", true, desc = "Each item, bat and skull secret spawns at its own recorded distance (inside its room, 3D). Off: every one uses the default ranges below."))
+        itemRangeS = host.registerSetting(NumberSetting("Secrets Default Item Range", ITEM_SPAWN_RANGE, 2.0..48.0, 0.5, unit = " blocks", desc = "How near (3D, inside its room) a party member must come before an item secret with no recorded distance lies on the floor."))
+        batRangeS = host.registerSetting(NumberSetting("Secrets Default Bat Range", BAT_SPAWN_RANGE, 2.0..48.0, 0.5, unit = " blocks", desc = "How near (3D, inside its room) a party member must come before a secret bat with no recorded distance appears."))
+        skullRangeS = host.registerSetting(NumberSetting("Secrets Default Skull Range", SKULL_SPAWN_RANGE, 2.0..48.0, 0.5, unit = " blocks", desc = "How near (3D, inside its room) a party member must come before a wither essence or key skull with no recorded distance appears."))
         pickupRangeS = host.registerSetting(NumberSetting("Secrets Pickup Range", PICKUP_RANGE, 0.0..5.0, 0.5, unit = " blocks", desc = "How far past your body (sideways) you reach to pick up an item secret. Hypixel's is about 2.25 (recorded); the game's own is 1."))
         boomRadiusS = host.registerSetting(NumberSetting("Secrets Superboom Radius", SUPERBOOM_RADIUS, 1.0..8.0, 0.5, unit = " blocks", desc = "How far a Superboom TNT reaches: a crypt or secret wall with any block this close to the blast is destroyed whole."))
         leverTicksS = host.registerSetting(NumberSetting("Secrets Lever Wall Time", LEVER_WALL_TICKS, 0..100, 1, unit = " ticks", desc = "How long a lever's wall stays an invisible barrier before it opens for good."))
@@ -57,6 +60,7 @@ object SecretsSettings {
     val itemRange: Double get() = itemRangeS?.value ?: ITEM_SPAWN_RANGE
     val batRange: Double get() = batRangeS?.value ?: BAT_SPAWN_RANGE
     val skullRange: Double get() = skullRangeS?.value ?: SKULL_SPAWN_RANGE
+    val measuredRanges: Boolean get() = measuredRangesS?.value ?: true
     val pickupRange: Double get() = pickupRangeS?.value ?: PICKUP_RANGE
     val superboomRadius: Double get() = boomRadiusS?.value ?: SUPERBOOM_RADIUS
     val leverWallTicks: Int get() = leverTicksS?.value ?: LEVER_WALL_TICKS

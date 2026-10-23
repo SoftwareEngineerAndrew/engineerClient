@@ -8,12 +8,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Synthetic 6x6 maps (tile = z * 6 + x), built by hand. */
+/** Synthetic 6x6 maps (tile = z * 6 + x, as Odin's on every floor), built by hand. */
 class MapPredictorTest {
 
     /** [rooms] discovered (kind, tiles), [doors] (a, b, kind) between tiles; every other edge by a discovered tile is a wall. */
-    private fun map(rooms: List<Pair<Kind, IntArray>>, doors: List<Triple<Int, Int, Byte>>, puzzles: Int = 3): MapView {
-        val v = MapView(6, 6, puzzles)
+    private fun map(rooms: List<Pair<Kind, IntArray>>, doors: List<Triple<Int, Int, Byte>>, puzzles: Int = 3, rules: FloorRules = FloorRules.F7): MapView {
+        val v = MapView(6, 6, puzzles, rules)
         for ((k, t) in rooms) assertNotNull(v.addRoom(k, t))
         val byPair = doors.associate { (a, b, k) -> (minOf(a, b) to maxOf(a, b)) to k }
         v.closeEdges { a, b -> byPair[minOf(a, b) to maxOf(a, b)] }
@@ -21,9 +21,10 @@ class MapPredictorTest {
     }
 
     /** Entrance at (1,0), a 2x2 behind it with a wither door down from (2,2) to (2,3), normal doors east and west. */
-    private fun opening() = map(
+    private fun opening(puzzles: Int = 3, rules: FloorRules = FloorRules.F7) = map(
         listOf(Kind.ENTRANCE to intArrayOf(1), Kind.NORMAL to intArrayOf(7, 8, 13, 14)),
         listOf(Triple(1, 7, Edge.DOOR), Triple(14, 20, Edge.WITHER), Triple(8, 9, Edge.DOOR), Triple(7, 6, Edge.DOOR)),
+        puzzles, rules,
     )
 
     private fun predict(v: MapView, samples: Int = 400): Prediction {
@@ -137,6 +138,87 @@ class MapPredictorTest {
         )
         val p = predict(v, 200)
         assertEquals(1f, assertNotNull(p.probs[20])[Cls.BLOOD], 1e-4f)
+    }
+
+    @Test fun aSmallFloorStaysInItsGrid() {
+        // F1: a 4x5 grid, no trap room
+        val p = predict(opening(2, FloorRules.F1))
+        assertEquals(0, p.level)
+        for (t in 0 until 36) if (t % 6 >= 4 || t / 6 >= 5) assertNull(p.probs[t], "tile $t")
+        assertEquals(0.0, total(p, Cls.TRAP), 1e-6)
+        assertEquals(1.0, total(p, Cls.YELLOW), 1e-4)
+        assertEquals(1.0, total(p, Cls.BLOOD), 1e-4)
+        assertEquals(1.0, total(p, Cls.FAIRY), 1e-4)
+        assertEquals(2.0, total(p, Cls.PUZZLE), 1e-4)
+    }
+
+    @Test fun bloodIsThreeStepsPastAKnownFairyOnTheLowerFloors() {
+        // F3: a 1x3 down from the entrance, then a wither door from its end (1,3) to the fairy at (2,3), four
+        // steps in, and its wither door on to (3,3): blood's walk is 7, 3 steps past the fairy
+        val v = map(
+            listOf(Kind.ENTRANCE to intArrayOf(1), Kind.NORMAL to intArrayOf(7, 13, 19), Kind.FAIRY to intArrayOf(20)),
+            listOf(Triple(1, 7, Edge.DOOR), Triple(19, 20, Edge.WITHER), Triple(20, 21, Edge.WITHER), Triple(13, 14, Edge.DOOR)),
+            2, FloorRules.F3,
+        )
+        val p = predict(v, 300)
+        assertEquals(0, p.level)
+        var seen = 0.0
+        for (t in 0 until 36) {
+            val b = p.probs[t]?.get(Cls.BLOOD) ?: continue
+            if (b <= 0f) continue
+            seen += b
+            assertTrue(dist(t, 20) % 2 == 1 && dist(t, 20) <= 3, "blood at $t, ${dist(t, 20)} from the fairy")
+        }
+        assertEquals(1.0, seen, 1e-4)
+    }
+
+    /** F5's puzzle column tiles (x = 5): what the samples put there. */
+    private fun columnTiles(p: Prediction) = (0 until 6).map { p.probs[it * 6 + 5] }
+
+    @Test fun thePuzzleColumnTopsUpTheDeadEnds() {
+        // F5 with 3 puzzles: trap, yellow and the puzzles are the 5 dead ends the column tops up to
+        val p = predict(opening(3, FloorRules.F5))
+        assertEquals(0, p.level)
+        assertEquals(3.0, total(p, Cls.PUZZLE), 1e-4)
+        assertEquals(1.0, total(p, Cls.TRAP), 1e-4)
+        assertEquals(1.0, total(p, Cls.BLOOD), 1e-4)
+        var puzzles = 0.0
+        for (probs in columnTiles(p)) {
+            if (probs == null) continue
+            // a 1x1 dead end or nothing: never a normal room, blood or the fairy
+            for (c in intArrayOf(Cls.BIG, Cls.NORMAL, Cls.BLOOD, Cls.FAIRY)) assertEquals(0f, probs[c])
+            assertTrue(probs.sum() <= 1.0001f)
+            puzzles += probs[Cls.PUZZLE]
+        }
+        assertTrue(puzzles > 0.05, "puzzles in the column: $puzzles")
+    }
+
+    @Test fun noPuzzleColumnPastItsTarget() {
+        // F5 with 4 puzzles: more dead ends than the column tops up to, so it's empty
+        val p = predict(opening(4, FloorRules.F5))
+        assertEquals(0, p.level)
+        assertTrue(columnTiles(p).all { it == null })
+        assertEquals(4.0, total(p, Cls.PUZZLE), 1e-4)
+    }
+
+    /** F5: a 1x3 east of the entrance along the top row up to the column, a wither door down from its middle. */
+    private fun besideTheColumn(door: Boolean) = map(
+        listOf(Kind.ENTRANCE to intArrayOf(1), Kind.NORMAL to intArrayOf(2, 3, 4)),
+        listOf(Triple(1, 2, Edge.DOOR), Triple(3, 9, Edge.WITHER)) + if (door) listOf(Triple(4, 5, Edge.DOOR)) else emptyList(),
+        3, FloorRules.F5,
+    )
+
+    @Test fun aColumnTileBehindADoorIsADeadEnd() {
+        val p = predict(besideTheColumn(true))
+        val tile = assertNotNull(p.probs[5])
+        assertEquals(1f, tile[Cls.PUZZLE] + tile[Cls.TRAP] + tile[Cls.YELLOW] + tile[Cls.RARE], 1e-4f)
+        assertTrue(tile[Cls.PUZZLE] > 0.5f)
+    }
+
+    @Test fun aColumnTileBehindAWallIsEmpty() {
+        val p = predict(besideTheColumn(false))
+        assertNull(p.probs[5])
+        assertTrue(p.splits.none { it.tile == 5 })
     }
 
     @Test fun aMapNoTreeFitsGivesNothing() {
