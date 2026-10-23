@@ -4,7 +4,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
 /**
- * Own-class detection, for Party Finder Stats' mark on your class. Odin already parses the
+ * Own-class detection, for Party Finder Classes' mark on your class. Odin already parses the
  * dungeon tab list into DungeonUtils.dungeonTeammates (class + level per player); we only watch
  * the entry that is us, and stash the last class seen so it is known outside a dungeon too.
  */

@@ -6,8 +6,6 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.RenderExtractEvent
-import com.engineerclient.pf.HubNametags
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
@@ -58,7 +56,7 @@ object RandomStuff : Module(
      */
     private val hideTermNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-10 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
     private val termCursorReset by BooleanSetting("Force Cursor Reset", false, desc = "Opening a terminal always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again. Terminals (and /termsim) only, no other menu.")
-    private val partyFinderStats by BooleanSetting("Party Finder Stats", true, desc = "In the Party Finder, each listed player's Catacombs level, secrets and S+ PB for the floor, and which classes the party is missing (yours in bold).")
+    private val partyFinderStats by BooleanSetting("Party Finder Classes", true, desc = "In the Party Finder, which classes each party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
@@ -110,15 +108,6 @@ object RandomStuff : Module(
 
     private val autoJoinSkyblock by BooleanSetting("Auto Join Skyblock", false, desc = "Each time you connect to Hypixel (Prism's join on launch, the server list...), /skyblock goes out right after you land, and again until you're on Skyblock.")
     private val skyblockDelay by NumberSetting("Skyblock Join Delay", 0.2, 0.0..3.0, 0.05, desc = "How long after landing on Hypixel the first /skyblock goes out.", unit = "s").withDependency { autoJoinSkyblock }
-
-    // --- Hub Nametag Stats ------------------------------------------------------------------------
-    //
-    // In the Dungeon Hub, a stat line over real players' nametags: Catacombs level, secrets and the
-    // S+ PB on one floor (HubNametags draws it).
-
-    private val hubNametags by BooleanSetting("Hub Nametag Stats", true, desc = "In the Dungeon Hub, Catacombs level, secrets and the S+ PB on the PB Floor over players' nametags.")
-    private val pbFloor by SelectorSetting("PB Floor", HubNametags.PbFloor.F7, desc = "Which floor's S+ PB the nametag stats show.").withDependency { hubNametags }
-    private val nametagGap by NumberSetting("Gap", 0f, 0.0..1.0, 0.05f, desc = "Extra space between a player's nametag and the stat line, in blocks.").withDependency { hubNametags }
 
     // --- Clean ---------------------------------------------------------------------------------
     //
@@ -307,10 +296,6 @@ object RandomStuff : Module(
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
-        }
-
-        on<RenderExtractEvent> {
-            if (enabled && hubNametags) HubNametags.render(this, pbFloor, nametagGap.toDouble())
         }
 
         on<MessageEvent.Overlay> {
