@@ -367,6 +367,14 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         if (on) gfx.fill(cb[0] + 3, cb[1] + 3, cb[0] + CHECK - 3, cb[1] + CHECK - 3, CHECKED.rgba)
         gfx.text(LABEL, cb[0] + CHECK + 4, cb[1] + 1, WHITE, shadow = true)
 
+        // Recheck Party: a /p list now (PartyTracker); the spots redo themselves when it answers.
+        val rb = recheckButton()
+        val rHot = dragging < 0 && mouseX >= rb[0] && mouseX < rb[2] && mouseY >= rb[1] && mouseY < rb[3]
+        gfx.fill(rb[0], rb[1], rb[2], rb[3], (if (rHot) CHECK_HOT else OUTLINE).rgba)
+        gfx.fill(rb[0] + 1, rb[1] + 1, rb[2] - 1, rb[3] - 1, (if (rHot) HOVER else BOX).rgba)
+        val label = if (PartyTracker.checking) RECHECKING else RECHECK
+        gfx.text(label, (rb[0] + rb[2] - mc.font.width(label)) / 2, rb[1] + 4, WHITE, shadow = true)
+
         // The quarter a drop would go to.
         if (dragging >= 0) {
             val q = spotAt(mouseX, mouseY)
@@ -420,10 +428,24 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         return intArrayOf(x0, y0, x0 + w, y0 + CHECK)
     }
 
+    /** The Recheck Party button, centred under the bottom boxes: x0, y0, x1, y1. */
+    private fun recheckButton(): IntArray {
+        val w = maxOf(mc.font.width(RECHECK), mc.font.width(RECHECKING)) + 16
+        val x0 = (width - w) / 2
+        val y0 = box(2)[3] + 10
+        return intArrayOf(x0, y0, x0 + w, y0 + 16)
+    }
+
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
         val cb = checkbox()
         if (isLeft(event) && event.x() >= cb[0] && event.x() < cb[2] && event.y() >= cb[1] && event.y() < cb[3]) {
             LeapOrder.setCustom(!LeapOrder.custom)
+            mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
+            return true
+        }
+        val rb = recheckButton()
+        if (isLeft(event) && event.x() >= rb[0] && event.x() < rb[2] && event.y() >= rb[1] && event.y() < rb[3]) {
+            EngineerClient.safely("leap order recheck") { PartyTracker.recheck() }
             mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
             return true
         }
@@ -488,6 +510,8 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         val QUARTER = Color(255, 255, 255, 0.06f)
         const val CHECK = 10
         const val LABEL = "Custom Sorting"
+        const val RECHECK = "Recheck Party"
+        const val RECHECKING = "§7Checking..."
         val CHECKED = Color(85, 255, 85, 1f)
         val CHECK_HOT = Color(200, 200, 200, 1f)
     }
