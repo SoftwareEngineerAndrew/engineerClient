@@ -14,7 +14,8 @@ package com.engineerclient.mappred
  *  - trap, yellow and puzzles are spread at random over the other 1x1 dead ends
  *
  * The weights were fitted so that maps sampled from the first two rooms of a run come out like the
- * recorded ones (tools/mappred, which also re-checks every rule).
+ * recorded ones (tools/mappred, which also re-checks every rule). The other floors follow the same rules
+ * with their own numbers ([FloorRules], [FloorStats]); their rooms are among [NAMES], with the same secrets.
  */
 object MapStats {
     /** Big room shape counts (1x2, 1x3, 1x4, 2x2, L) and how many maps had them. */

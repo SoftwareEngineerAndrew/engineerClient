@@ -31,3 +31,30 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
 - A room name comes up at most once a map, always with the same secrets, and within its pool (shape or type) about
   equally often (yellow Default and New Trap twice the others): with the tab list's secret total that names the last
   rooms (`node gen-names.mjs` writes MapStats.NAMES).
+
+## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
+
+    node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
+    FLOORS=1 SAMPLES=150 node <tools>/calib2.mjs 450 6 tables-f1.json      # one table per main grid size:
+    FLOORS=2,3,4 SAMPLES=150 node <tools>/calib2.mjs 450 6 tables-f234.json  # 4x5, 5x5, 5x6
+    FLOORS=5,6 SAMPLES=100 node <tools>/calib2.mjs 450 6 tables-f56.json
+    FLOORS=5,6 node <tools>/evaluate.mjs 200 400 prim 0.3 tables-f56.json   # FLOORS works for every script
+    node <tools>/gen-floors.mjs tables-f1.json tables-f234.json tables-f56.json > FloorStats.kt
+
+Every rule above holds on every floor (F and M alike); what differs is in `common.mjs` FLOORS and FloorRules.kt:
+
+- The main grid is 4x5 on F1, 5x5 on F2-F4, 5x6 on F5-F6 (Odin's map draws F4 as 6x5 and F5/F6 as 6x6).
+- F4-F6 have a puzzle column east of it (x = 5): only 1x1 dead ends (puzzles; trap or yellow only when the
+  main grid has fewer than two), each behind one door from a normal room in column 4 (a big room, or a 1x1 with
+  two doors already). It tops the dead ends (puzzles + trap + yellow) up to 5 on F5/F6 (99%) and 6 on F4 (79%,
+  else one or two short): as many column rooms as the main grid is short of, none when the tab list's puzzles
+  are more than that. So a 4-puzzle F5 has an empty column.
+- Big rooms: F1 4 of different shapes, F2 always one of each, F3/F4 5 (sometimes 6), F5/F6 6; never more than
+  two of a shape.
+- No trap room on F1-F2. Yellow and the fairy on every floor.
+- The wither path walks 7 or 8 steps with the fairy 3 before blood on F1-F4; 9 or 10 and 4 on F5-F7.
+- The entrance is in a corner only on F1 (about a quarter of maps).
+- The lower floors have fewer rooms: a room on one floor is on every floor above it, so a name is left out
+  below the first floor it's seen on only where those floors would have had it at least 5 times (F1/F2 have
+  5 puzzles and 2 minibosses, no Ice Fill below F7).
+- The recorder sometimes reads a door at the dungeon's edge with no room behind it; sim.mjs counts it a wall.

@@ -7,8 +7,8 @@ import kotlin.test.Test
 
 /**
  * Optional: predictions for partial maps from a file outside the repo (ADS_MAP_SNAPSHOTS, one map a
- * line: "w h puzzles|KIND:t,t;...|a,b,edge;..."), written next to it as <file>.out for scoring by
- * the analysis scripts. Skipped when the variable isn't set.
+ * line: "w h puzzles [floor]|KIND:t,t;...|a,b,edge;..."; F7 when there's no floor), written next to it
+ * as <file>.out for scoring by the analysis scripts. Skipped when the variable isn't set.
  */
 class MapSnapshotsCheck {
     @Test fun predictSnapshots() {
@@ -19,8 +19,9 @@ class MapSnapshotsCheck {
         for (line in File(path!!).readLines()) {
             if (line.isBlank()) continue
             val (head, rooms, edges) = line.split('|')
-            val (w, h, puzzles) = head.split(' ').map { it.toInt() }
-            val v = MapView(w, h, puzzles)
+            val nums = head.split(' ').map { it.toInt() }
+            val (w, h, puzzles) = nums
+            val v = MapView(w, h, puzzles, FloorRules.of(nums.getOrElse(3) { 7 }) ?: FloorRules.F7)
             for (r in rooms.split(';').filter { it.isNotEmpty() }) {
                 val (k, t) = r.split(':')
                 v.addRoom(Kind.valueOf(k), t.split(',').map { it.toInt() }.toIntArray())

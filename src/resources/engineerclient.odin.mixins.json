@@ -20,6 +20,7 @@
     "HighlightRenderMixin",
     "TermGuiButtonMixin",
     "LcmStyleMixin",
+    "LcmMapInfoMixin",
     "MapPathHintsMixin"
   ],
   "injectors": {
