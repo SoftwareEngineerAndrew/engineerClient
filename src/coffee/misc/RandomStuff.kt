@@ -40,6 +40,16 @@ object RandomStuff : Module(
     private val ding = CompletionDing()
     private val mutePartyInBoss by BooleanSetting("Mute Party Chat In Boss", true, desc = "In a dungeon boss, party chat messages make no sound (Hypixel's chat ping). Guild and private messages still do.")
     private val partyPing = PartyPing()
+    private val muteP4 by BooleanSetting("Mute Sounds In P4", false, desc = "Mutes every sound during Necron's fight (F7/M7 P4) only: from his first line, while you're down at his platform, until he's dead. Nothing before or after it.")
+    private val necron = NecronMute()
+
+    /**
+     * Read by SoundVolumeMixin for every sound: true only while all of these hold, so nothing outside P4 is
+     * ever muted - the module and setting on, Necron's fight open in chat ([NecronMute]), and you in F7/M7's
+     * boss at P4's height (Odin's phase).
+     */
+    fun mutesSound(): Boolean =
+        enabled && muteP4 && necron.open && DungeonUtils.isFloor(7) && DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P4
 
     private val hideCompletionTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening ones.")
 
@@ -145,6 +155,10 @@ object RandomStuff : Module(
             partyPing.chat(PartyPing.isPartyLine(content.string.replace(Regex("§."), "").trim()), System.currentTimeMillis())?.let(::replayPing)
         }
         ClientTickEvents.END_CLIENT_TICK.register { partyPing.expired(System.currentTimeMillis())?.let(::replayPing) }
+        // Mute Sounds In P4: Necron's fight opens and closes on chat (see NecronMute).
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
+            if (!overlay) necron.chat(content.string.replace(Regex("§."), ""))
+        }
 
         on<TickEvent.End> {
             if (hideDamage) mc.player?.hurtTime = 0
@@ -166,7 +180,7 @@ object RandomStuff : Module(
             }
         }
 
-        on<LevelEvent.Load> { pendingArmorStands.clear(); keyPositions.clear() }
+        on<LevelEvent.Load> { pendingArmorStands.clear(); keyPositions.clear(); necron.reset() }
     }
 
     // Switched off, the tick above stops running, so the sidebar is handed back to vanilla here:

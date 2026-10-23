@@ -17,6 +17,8 @@ public class SoundVolumeMixin {
 
     @Inject(method = "calculateVolume(Lnet/minecraft/client/resources/sounds/SoundInstance;)F", at = @At("RETURN"), cancellable = true)
     private void cc$scaleVolume(SoundInstance sound, CallbackInfoReturnable<Float> cir) {
+        // Random Stuff's Mute Sounds In P4: silent, including sounds already looping (their volume is asked again each tick).
+        if (com.coffeeclient.misc.RandomStuff.INSTANCE.mutesSound()) { cir.setReturnValue(0f); return; }
         float m = SoundEditor.multiplier(sound.getIdentifier().toString());
         if (m != 1f) cir.setReturnValue(cir.getReturnValueF() * m);
     }
