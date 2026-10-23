@@ -88,6 +88,17 @@ object LcmMapInfo {
         }
     }
 
+    /** The score lines for ADS's minimap (drawn under it), or none if they couldn't be worked out. */
+    fun scoreLines(): List<String> = try {
+        lines()
+    } catch (t: Throwable) {
+        if (!failed) {
+            failed = true
+            EngineerClient.logger.error("[ec] dtMap score failed", t)
+        }
+        emptyList()
+    }
+
     private fun disableInBoss(): Boolean = (MapInfo.settings["Disable in boss"] as? BooleanSetting)?.value ?: true
 
     /** dtMap's score text (its Score.actualRender): one line if it's narrower than the map, else two. */
