@@ -5,6 +5,10 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ## [Unreleased]
 
+### Changed
+- A custom leap order no longer switches the Leap Menu back off Custom as soon as anyone joins or leaves. It only does once the party is clearly a different one: out of a party for 10 minutes, more than 3 of its players gone, or none of the order's players left in the party. An unsure party list never switches it.
+- The Leap Order screen (`/od leaporder`, `/lo`) is just the boxes and a Custom Sorting checkbox above them: it ticks itself when you move anyone, and clicking it switches the Leap Menu between Custom and the sorting from before.
+
 ## [0.3.0] - 2026-10-22
 
 ### Added
