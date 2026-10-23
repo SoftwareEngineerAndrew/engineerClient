@@ -4,11 +4,11 @@ package com.engineerclient.mappred
  * Names for the rooms nobody has named yet, from the dungeon's secret total: every name comes up at most
  * once a map ([MapStats.NAMES]), so the unnamed rooms take different names from their pools, and their
  * secrets have to add up to what the named rooms leave of the total ([targets]: each total the tab list
- * allows, less the named rooms' secrets).
+ * allows, less the named rooms' secrets). [missing]: names the floor never has ([FloorRules.missingNames]).
  */
-class SecretNames(used: Set<String>, private val targets: IntArray) {
+class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set<String> = emptySet()) {
     /** Names still free in each pool. */
-    val avail: Array<List<RoomName>> = Array(MapStats.POOLS) { p -> MapStats.NAMES.filter { it.pool == p && it.name !in used } }
+    val avail: Array<List<RoomName>> = Array(MapStats.POOLS) { p -> MapStats.NAMES.filter { it.pool == p && it.name !in used && it.name !in missing } }
     private val poolWeight = DoubleArray(MapStats.POOLS) { p -> avail[p].sumOf { it.seen.toDouble() } }
     private val minSec = IntArray(MapStats.POOLS) { p -> avail[p].minOfOrNull { it.secrets } ?: 0 }
     private val maxSec = IntArray(MapStats.POOLS) { p -> avail[p].maxOfOrNull { it.secrets } ?: 0 }

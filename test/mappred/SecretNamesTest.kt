@@ -37,6 +37,14 @@ class SecretNamesTest {
         assertTrue(share(r, sn, Shape.TWO.ordinal, "Bridges") > 0)
     }
 
+    @Test fun aFloorsMissingRoomsAreNoName() {
+        // a puzzle with 1 secret is Tic Tac Toe or a Blaze, and F1 has no Blaze
+        val sn = SecretNames(emptySet(), intArrayOf(1), FloorRules.F1.missingNames)
+        val r = assertNotNull(sn.solve(intArrayOf(MapStats.POOL_PUZZLE)))
+        assertEquals(1.0, share(r, sn, MapStats.POOL_PUZZLE, "Tic Tac Toe"), 1e-9)
+        assertTrue(sn.avail[MapStats.POOL_PUZZLE].none { it.name == "Lower Blaze" })
+    }
+
     @Test fun noNamesFitMeansThisCantBeTheMap() {
         val sn = SecretNames(emptySet(), intArrayOf(99))
         assertEquals(0.0, assertNotNull(sn.solve(intArrayOf(Shape.TWO.ordinal))).likelihood)

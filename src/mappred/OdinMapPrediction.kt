@@ -28,8 +28,9 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
- * Map Prediction on Odin's Dungeon Map (F7/M7): what the unknown tiles probably are, from what the
- * map has shown so far and the rules every recorded map follows ([MapPredictor], [MapStats]).
+ * Map Prediction on Odin's Dungeon Map (F1-F7, M1-M7): what the unknown tiles probably are, from what the
+ * map has shown so far and the rules every recorded map of the floor follows ([MapPredictor], [FloorRules]).
+ * On F4-F6 that includes the puzzle column east of the main grid, where a tile is a puzzle or nothing.
  *
  * Each "?" tile behind a door is coloured by its chances (purple puzzle, orange trap, yellow
  * miniboss, red blood, pink fairy; the grey rest is a normal room; the tile behind a blood door is the
@@ -55,7 +56,7 @@ object OdinMapPrediction {
     private enum class Mode { ADM, ODIN }
 
     private val mode = SelectorSetting("Room Prediction", Mode.ADM,
-        desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded F7/M7 map follows, updated as rooms open. Odin: Odin's own guess. Added by engineerClient.")
+        desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Odin: Odin's own guess. Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
@@ -123,13 +124,18 @@ object OdinMapPrediction {
         pathDoors.clear()
     }
 
-    private fun supported(): Boolean = DungeonUtils.inClear && DungeonUtils.floor?.floorNumber == 7
+    /** The floor's rules; null on the entrance floor (no recorded maps). */
+    private fun rules(): FloorRules? = FloorRules.of(DungeonUtils.floor?.floorNumber ?: 0)
+
+    private fun supported(): Boolean = DungeonUtils.inClear && rules() != null
 
     /** The map as Odin has read it, discovered rooms only; null when it can't be read cleanly yet. */
     private fun view(): MapView? {
+        val rules = rules() ?: return null
         val puzzles = DungeonUtils.puzzleCount
         if (puzzles <= 0) return null
-        val v = MapView(W, W, puzzles)
+        // Odin's tiles count from the dungeon's north-west corner on every floor, the floor's grid within its 6x6
+        val v = MapView(W, W, puzzles, rules)
         for (room in DungeonScan.rooms) {
             if (!room.isViewable || room.tiles.isEmpty()) continue
             val kind = when (room.type) {
