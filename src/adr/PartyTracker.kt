@@ -117,6 +117,21 @@ object PartyTracker {
         ask(now, "asked for")
     }
 
+    /**
+     * The Leap Order screen's Recheck Party: a /p list now, whatever happened before (unanswered ones and the
+     * pause after them forgotten). At most one every 2 s. Its answer is read and kept out of chat with ADR on;
+     * with ADR off it shows in chat, and Odin's party list reads it.
+     */
+    fun recheck() = synchronized(state) {
+        val now = System.currentTimeMillis()
+        if (EngineerClient.mc.player == null || now - lastAsk < 2_000L) return
+        failures = 0; pausedUntil = 0L; answerBy = 0L
+        ask(now, "recheck")
+    }
+
+    /** A /p list is out and not answered yet. */
+    val checking: Boolean get() = answerBy != 0L && System.currentTimeMillis() < answerBy
+
     /** Sends a /p list, unless one went unanswered lately (twice: ever, this game). */
     private fun ask(now: Long, why: String) {
         if (answerBy != 0L || failures >= 2 || now < pausedUntil) return
