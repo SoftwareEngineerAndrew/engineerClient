@@ -6,8 +6,8 @@ import kotlin.test.assertTrue
 
 class NecronMuteTest {
     @Test
-    fun opensOnEitherFirstLine() {
-        for (line in NecronMute.START_LINES) {
+    fun opensOnGoldorDyingOrAnyNecronLine() {
+        for (line in listOf("[BOSS] Goldor: ....", "[BOSS] Necron: You went further than any human before, congratulations.", "[BOSS] Necron: ARGH!")) {
             val m = NecronMute()
             m.chat(line)
             assertTrue(m.open, line)
@@ -15,24 +15,26 @@ class NecronMuteTest {
     }
 
     @Test
-    fun nothingBeforeNecronOpensIt() {
+    fun nothingBeforeItOpensIt() {
         val m = NecronMute()
-        for (line in listOf("[BOSS] Goldor: Who dares trespass into my domain?", "[BOSS] Goldor: ....", "The Core entrance is opening!", "[BOSS] Necron: ARGH!"))
+        for (line in listOf("[BOSS] Goldor: Who dares trespass into my domain?", "The Core entrance is opening!", "[BOSS] Storm: Pathetic Maxor, just like expected."))
             m.chat(line)
         assertFalse(m.open)
     }
 
     @Test
-    fun closesOnEveryEnd() {
-        for (end in listOf("[BOSS] Necron: All this, for nothing...", "[BOSS] Wither King: You... again?", "                             > EXTRA STATS <")) {
+    fun overUntilANewWorld() {
+        for (end in listOf("[BOSS] Necron: All this, for nothing...", "                             > EXTRA STATS <")) {
             val m = NecronMute()
-            m.chat("[BOSS] Necron: You went further than any human before, congratulations.")
+            m.chat("[BOSS] Goldor: ....")
             m.chat(end)
             assertFalse(m.open, end)
+            assertTrue(m.over, end)
+            // A Necron line after the end doesn't open it again.
+            m.chat("[BOSS] Necron: ARGH!")
+            assertFalse(m.open, end)
+            m.reset()
+            assertFalse(m.over, end)
         }
-        val m = NecronMute()
-        m.chat("[BOSS] Necron: You went further than any human before, congratulations.")
-        m.reset()
-        assertFalse(m.open)
     }
 }
