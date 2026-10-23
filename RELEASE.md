@@ -1,16 +1,15 @@
 # Committing and releasing
 
 How changes go from the working tree to a GitHub release on
-https://github.com/duetigh/ADS. Check this file before every commit and
-every push.
+https://github.com/SoftwareEngineerAndrew/engineerClient. Check this file
+before every commit and every push.
 
 ## Rules
 
 - **Never push automatically.** Commits stay local until the owner
   explicitly asks for a push. Committing does not imply pushing.
-- **Push only to `origin` (duetigh/ADS).** Never push to `upstream`
-  (SoftwareEngineerAndrew/engineerClient); its push URL is set to `DISABLED`
-  locally.
+- **Push only to `origin` (SoftwareEngineerAndrew/engineerClient).** ADS
+  lives there now; the old fork (duetigh/ADS) is no longer pushed to.
 - **Every push to `main` is a release.** The `release` workflow builds the
   jar and publishes a GitHub release for the version in
   `gradle.properties`. A push that skips the release steps below fails CI.
@@ -69,8 +68,8 @@ Only when the owner asks to push:
 5. **Push:** `git push origin main`.
 6. **Watch the release:**
    ```sh
-   gh run watch -R duetigh/ADS
-   gh release view vx.y.z -R duetigh/ADS
+   gh run watch -R SoftwareEngineerAndrew/engineerClient
+   gh release view vx.y.z -R SoftwareEngineerAndrew/engineerClient
    ```
 
 ## What the release workflow does
@@ -83,7 +82,12 @@ Only when the owner asks to push:
    and fails if it is missing or empty (changelog not cut).
 3. Appends every commit since the previous `v*` tag as a "Commits" list.
 4. Downloads the Odin jar, builds with JDK 25 and publishes release
-   `vX.Y.Z` titled `ADS X.Y.Z`, with `ads-X.Y.Z.jar` attached.
+   `vX.Y.Z` titled `ADS X.Y.Z`, with `ads-X.Y.Z.jar` attached (and the same
+   jar as `EngineerClient-<mc>.jar`).
+5. Replaces Engineer Client's rolling `release-<mc>` release with the new jar
+   as `EngineerClient-<mc>.jar`, so the download link Engineer Client's
+   players already have (`releases/download/release-26.3/EngineerClient-26.3.jar`)
+   keeps getting each release.
 
 The tag is only created when the release succeeds, so after a failed run,
 fix the problem, commit, and push again with the same version.

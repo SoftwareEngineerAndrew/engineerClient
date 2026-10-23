@@ -13,6 +13,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 - ADS's own leap menu, without needing Odin: everyone in a corner of the Spirit Leap screen, click or press a key to leap, with Odin's sortings, corner or class keys, On Key Release and Leap Announce, plus Click Delay and Map Leap built in. Turn it on in `/ads` > Leap Menu (off to begin with); while it's on, Odin's Leap Menu steps aside.
 
 ### Changed
+- ADS is now released from Engineer Client's repository (github.com/SoftwareEngineerAndrew/engineerClient), and Engineer Client's download link (EngineerClient-26.3.jar) now gets ADS.
 - Full run secrets: every item, bat and skull spawns at its own measured distance, as on Hypixel (Secrets Measured Ranges), and the old ranges are now the defaults for secrets without one (Secrets Default Item/Bat/Skull Range).
 
 ## [0.2.0] - 2026-10-22
