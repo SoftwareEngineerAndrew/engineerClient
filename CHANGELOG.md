@@ -5,6 +5,14 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ## [Unreleased]
 
+### Added
+- Everything new in Engineer Client up to 2026-10-22, merged in:
+  - Room Prediction on every floor (F1-F7, M1-M7), each from its own recorded maps.
+  - LCM Colors on Odin's Dungeon Map (a colour for every room type, used by LCM Style and Room Prediction), and an LCM Style for Map Info's score HUD.
+
+### Changed
+- Full run secrets: every item, bat and skull spawns at its own measured distance, as on Hypixel (Secrets Measured Ranges), and the old ranges are now the defaults for secrets without one (Secrets Default Item/Bat/Skull Range).
+
 ## [0.2.0] - 2026-10-22
 
 ### Added
