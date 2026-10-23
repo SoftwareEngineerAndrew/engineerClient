@@ -12,8 +12,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.List;
 
 /**
- * Rewrites a container item's tooltip lines in place: Party Finder Stats appends each listed
- * member's Catacombs level / secrets / floor PB to their row. For every other screen and item the
+ * Rewrites a container item's tooltip lines in place: Party Finder Classes adds the classes a
+ * listed party is missing to its Members line. For every other screen and item the
  * original list is returned untouched.
  */
 @Mixin(AbstractContainerScreen.class)

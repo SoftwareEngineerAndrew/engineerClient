@@ -15,6 +15,10 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ### Changed
 - ADS is now released from Engineer Client's repository (github.com/SoftwareEngineerAndrew/engineerClient), and Engineer Client's download link (EngineerClient-26.3.jar) now gets ADS.
 - Full run secrets: every item, bat and skull spawns at its own measured distance, as on Hypixel (Secrets Measured Ranges), and the old ranges are now the defaults for secrets without one (Secrets Default Item/Bat/Skull Range).
+- Party Finder keeps showing the missing classes on the Members line, now under its own Party Finder Classes toggle.
+
+### Removed
+- Everything that used Devonian's dungeon stats (from Engineer Client): Party Finder Stats' stat columns, Hub Nametag Stats and ADR Online's PB push.
 
 ## [0.2.0] - 2026-10-22
 

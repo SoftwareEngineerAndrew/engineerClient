@@ -1,7 +1,6 @@
 package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.pf.PlayerStats
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -18,7 +17,7 @@ import java.util.concurrent.CompletionStage
 
 /**
  * ADR Online (undonecoffee.com/adr/online): while ADR is on, a WebSocket to the
- * site says who you are, your party ([PartyTracker]), where you are and your PBs, so the page can
+ * site says who you are, your party ([PartyTracker]), and where you are, so the page can
  * list everyone online by party. It signs in with this install's owner token (the one uploads
  * carry); nothing comes back but pongs.
  *
@@ -38,7 +37,6 @@ object OnlineLink {
     private var sentParty = -1
     private var partyChangedAt = 0L
     private var sentWhere = ""
-    private var sentStats = ""
     private var lastPing = 0L
     /** The last frame handed to the socket; the next one waits for it (see [sendText]). */
     private var sending: CompletableFuture<WebSocket> = CompletableFuture.completedFuture(null)
@@ -67,7 +65,6 @@ object OnlineLink {
         if (now - lastPing > 30_000) {
             lastPing = now
             sendText("ping")
-            stats()?.let { if (it.toString() != sentStats) { sentStats = it.toString(); send(it) } }
         }
     }
 
@@ -87,17 +84,6 @@ object OnlineLink {
         }
     }
 
-    /** Your own PBs and Catacombs, once looked up (ADR's Party Finder stats). */
-    private fun stats(): JsonObject? {
-        val st = (PlayerStats.lookup(EngineerClient.mc.user.name) as? PlayerStats.Ready)?.stats ?: return null
-        return JsonObject().apply {
-            addProperty("t", "stats")
-            addProperty("cataXp", st.cataXp)
-            st.sPlus["f"]?.get("7")?.let { addProperty("f7", it.toLong()) }
-            st.sPlus["m"]?.get("7")?.let { addProperty("m7", it.toLong()) }
-        }
-    }
-
     private fun hello() = JsonObject().apply {
         val u = EngineerClient.mc.user
         addProperty("t", "hello"); addProperty("name", u.name); addProperty("uuid", u.profileId.toString().replace("-", ""))
@@ -113,7 +99,7 @@ object OnlineLink {
                 backoff = 5_000L
                 // Everything set up and hello on its way before tick() can see the socket, so hello is
                 // always the first frame and the resets don't land after tick() has sent.
-                sentParty = -1; sentWhere = ""; sentStats = ""; lastPing = 0L
+                sentParty = -1; sentWhere = ""; lastPing = 0L
                 sending = ws.sendText(hello().toString(), true)
                 socket = ws
             }
@@ -130,7 +116,7 @@ object OnlineLink {
     /**
      * The JDK socket takes one text frame at a time: a second sendText while the first is still out
      * fails ("Send pending") without throwing, and the frame is lost. One tick can send party, where,
-     * ping and stats together, so each frame waits for the one before it, whether that one went or not.
+     * and ping together, so each frame waits for the one before it, whether that one went or not.
      */
     private fun sendText(text: String) {
         val ws = socket ?: return
