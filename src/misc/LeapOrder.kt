@@ -44,9 +44,11 @@ import net.minecraft.world.entity.player.PlayerSkin
  * `/od leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: Odin's leap menu as it would look, the
  * order's players in their spots, to drag between them. `/lo a b c d` sets it as Odin's command does.
  *
- * Changing the order (any way) switches Odin's Leap Menu sorting to Custom, and the next change in who's in the
- * party switches it back to what it was (Odin Sorting if it was already Custom). Kept across restarts in
- * config/engineerclient/leaporder-sorting.txt: the sorting to go back to, then the party it was set for.
+ * Changing the order (any way) switches Odin's Leap Menu sorting to Custom. It goes back to what it was (Odin
+ * Sorting if it was already Custom) only once the party is clearly a different one ([dropReason]): a player or
+ * two swapping out doesn't. Only ADR's party tracker counts, and only when it has no doubt, so a party that
+ * isn't known never switches it. Kept across restarts in config/engineerclient/leaporder-sorting.txt: the
+ * sorting to go back to, the party it was set for, since when you've been out of a party ("-" when in one).
  */
 object LeapOrder {
     private val file by lazy { FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("leaporder.txt") }
@@ -56,6 +58,13 @@ object LeapOrder {
     private var revertTo: LeapMenu.Sorting? = null
     /** Who (besides you) was in the party when the order was set; null until the party is known. */
     private var orderParty: Set<String>? = null
+    /** Since when you've surely been out of a party, or null while in one (or it isn't known). */
+    private var aloneSince: Long? = null
+
+    /** Out of a party this long: the order is for a party that's gone. */
+    private const val ALONE_MS = 10 * 60_000L
+    /** More of the order's party than this gone: it's another party. */
+    private const val MAX_SWAPPED = 3
 
     fun install() {
         runCatching {
@@ -70,6 +79,7 @@ object LeapOrder {
                 val lines = Files.readAllLines(autoFile)
                 revertTo = LeapMenu.Sorting.entries.firstOrNull { it.name == lines.getOrNull(0)?.trim() }
                 orderParty = lines.getOrNull(1)?.takeIf { it.trim() != "?" }?.let { l -> l.split(' ').filter { it.isNotBlank() }.toSet() }
+                aloneSince = lines.getOrNull(2)?.trim()?.toLongOrNull()
             }
         }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't read $autoFile", it) }
 
@@ -142,6 +152,19 @@ object LeapOrder {
 
     private val sorting get() = LeapMenu.settings["Sorting"] as? SelectorSetting<LeapMenu.Sorting>
 
+    /** Whether Odin's Leap Menu sorts by the order (sorting Custom). */
+    val custom get() = sorting?.value == LeapMenu.Sorting.CUSTOM
+
+    /** The Leap Order screen's checkbox: on is as setting the order, off puts back the sorting from before. */
+    fun setCustom(on: Boolean) {
+        val s = sorting ?: return
+        if (on == custom) return
+        if (on) { useCustom(); return }
+        // checkParty sees it's no longer Custom and forgets the rest.
+        s.value = revertTo ?: LeapMenu.Sorting.ODIN
+        ModuleManager.saveConfigurations()
+    }
+
     /** The order was just set: sort the leap menu by it, for this party. */
     private fun useCustom() {
         val s = sorting ?: return
@@ -149,35 +172,64 @@ object LeapOrder {
             revertTo = s.value
             s.value = LeapMenu.Sorting.CUSTOM
             ModuleManager.saveConfigurations()
-            EngineerClient.msg("§7Leap Menu sorting: §fCustom§7 (back to ${label(revertTo!!)} when the party changes)")
+            EngineerClient.msg("§7Leap Menu sorting: §fCustom§7 (back to ${label(revertTo!!)} once you're with a different party)")
         } else if (revertTo == null) revertTo = LeapMenu.Sorting.ODIN
         orderParty = party()
+        aloneSince = null
         saveAuto()
     }
 
-    /** The party changed since the order was set: back to the sorting from before. */
+    /** The party is clearly another one since the order was set: back to the sorting from before. */
     private fun checkParty() {
         val back = revertTo ?: return
         val s = sorting ?: return
         // Set back to something else by hand: nothing to put back.
-        if (s.value != LeapMenu.Sorting.CUSTOM) { revertTo = null; orderParty = null; saveAuto(); return }
-        val now = party() ?: return
-        val was = orderParty ?: run { orderParty = now; saveAuto(); return }
-        if (now == was) return
+        if (s.value != LeapMenu.Sorting.CUSTOM) { revertTo = null; orderParty = null; aloneSince = null; saveAuto(); return }
+        val why = dropReason(System.currentTimeMillis()) ?: return
         s.value = back
         revertTo = null
         orderParty = null
+        aloneSince = null
         ModuleManager.saveConfigurations()
         saveAuto()
-        EngineerClient.msg("§7Party changed, Leap Menu sorting back to §f${label(back)}")
+        EngineerClient.msg("§7Leap Menu sorting back to §f${label(back)}§7: $why")
     }
 
-    /** Who's in your party besides you (lower case), or null while that isn't known: ADR's tracker, else Odin's. */
+    /**
+     * Why the order no longer fits, or null while it might. Any one of:
+     *  - out of a party for [ALONE_MS] straight;
+     *  - more than [MAX_SWAPPED] of the party it was set for gone;
+     *  - none of the order's players left in the party.
+     * Kept quiet while the party isn't surely known.
+     */
+    private fun dropReason(now: Long): String? {
+        val me = mc.user.name.lowercase(Locale.ROOT)
+        val order = DungeonUtils.customLeapOrder.map { it.lowercase(Locale.ROOT) }.filter { it != me }.toSet()
+
+        val party = party()
+        if (party != null && party.isEmpty()) {
+            val since = aloneSince ?: now.also { aloneSince = it; saveAuto() }
+            if (now - since > ALONE_MS) return "out of a party for ${ALONE_MS / 60_000} minutes"
+        } else if (party != null) {
+            if (aloneSince != null) { aloneSince = null; saveAuto() }
+            val was = orderParty ?: party.also { orderParty = it; saveAuto() }
+            val gone = was.count { it !in party }
+            if (gone > MAX_SWAPPED) return "$gone of the party it was set for are gone"
+            if (order.isNotEmpty() && order.none { it in party }) return "none of the leap order's players are in the party"
+        }
+        return null
+    }
+
+    /**
+     * Who's in your party besides you (lower case; empty: not in one), or null while that isn't surely known.
+     * Only ADR's tracker with no doubt: Odin's list can be partial (after a Party Finder join it only has whoever
+     * joined since), and a partial list would read as people having left.
+     */
     private fun party(): Set<String>? {
         val me = mc.user.name.lowercase(Locale.ROOT)
         val names = synchronized(PartyTracker.state) {
-            PartyTracker.state.members.keys.toList().takeIf { PartyTracker.state.known }
-        } ?: PartyUtils.members.toList().takeIf { it.isNotEmpty() } ?: return null
+            PartyTracker.state.members.keys.toList().takeIf { PartyTracker.state.known && PartyTracker.state.doubt == null }
+        } ?: return null
         return names.map { it.lowercase(Locale.ROOT) }.filter { it != me }.toSet()
     }
 
@@ -189,7 +241,7 @@ object LeapOrder {
         if (back == null) Files.deleteIfExists(autoFile)
         else {
             Files.createDirectories(autoFile.parent)
-            Files.write(autoFile, listOf(back.name, orderParty?.sorted()?.joinToString(" ") ?: "?"))
+            Files.write(autoFile, listOf(back.name, orderParty?.sorted()?.joinToString(" ") ?: "?", aloneSince?.toString() ?: "-"))
         }
     }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't write $autoFile", it) }
 
@@ -305,12 +357,15 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
             false -> if (sawHeld) drop(mouseX, mouseY)
             null -> {}
         }
-        val font = mc.font
-        fun centred(text: String, y: Int) = gfx.text(text, (width - font.width(text)) / 2, y, WHITE, shadow = true)
-        centred("§6§lLeap Order", 12)
-        centred("§7Drag a player into another quarter of the screen to swap them. Saved as you drop.", 26)
-        if (LeapMenu.type != LeapMenu.Sorting.CUSTOM) centred("§cOdin's Leap Menu sorting isn't Custom, so it won't use this order.", 38)
-        centred("§8Top left is first, then top right, bottom left, bottom right.", height - 20)
+
+        // Whether the leap menu uses this order: Odin's sorting is Custom.
+        val cb = checkbox()
+        val on = LeapOrder.custom
+        val hot = dragging < 0 && mouseX >= cb[0] && mouseX < cb[2] && mouseY >= cb[1] && mouseY < cb[3]
+        gfx.fill(cb[0], cb[1], cb[0] + CHECK, cb[1] + CHECK, (if (hot) CHECK_HOT else OUTLINE).rgba)
+        gfx.fill(cb[0] + 1, cb[1] + 1, cb[0] + CHECK - 1, cb[1] + CHECK - 1, BOX.rgba)
+        if (on) gfx.fill(cb[0] + 3, cb[1] + 3, cb[0] + CHECK - 3, cb[1] + CHECK - 3, CHECKED.rgba)
+        gfx.text(LABEL, cb[0] + CHECK + 4, cb[1] + 1, WHITE, shadow = true)
 
         // The quarter a drop would go to.
         if (dragging >= 0) {
@@ -357,7 +412,21 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         gfx.pose().popMatrix()
     }
 
+    /** The Custom checkbox, centred above the top boxes (its label included): x0, y0, x1, y1. */
+    private fun checkbox(): IntArray {
+        val w = CHECK + 4 + mc.font.width(LABEL)
+        val x0 = (width - w) / 2
+        val y0 = box(0)[1] - CHECK - 10
+        return intArrayOf(x0, y0, x0 + w, y0 + CHECK)
+    }
+
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
+        val cb = checkbox()
+        if (isLeft(event) && event.x() >= cb[0] && event.x() < cb[2] && event.y() >= cb[1] && event.y() < cb[3]) {
+            LeapOrder.setCustom(!LeapOrder.custom)
+            mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
+            return true
+        }
         val i = spotAt(event.x(), event.y())
         if (isLeft(event) && i >= 0 && names[i].isNotEmpty()) {
             dragging = i
@@ -392,6 +461,8 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
             val order = names.filter { it.isNotEmpty() }
             for (i in 0 until 4) names[i] = order.getOrElse(i) { "" }
             LeapOrder.set(order)
+            // Moving anyone flicks Custom on, even back to the order it was.
+            LeapOrder.setCustom(true)
             mc.player?.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.4f, 1.2f)
         }
         dragging = -1
@@ -415,5 +486,9 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         val EMPTY = Color(0, 0, 0, 0.25f)
         val OUTLINE = Color(120, 120, 120, 1f)
         val QUARTER = Color(255, 255, 255, 0.06f)
+        const val CHECK = 10
+        const val LABEL = "Custom Sorting"
+        val CHECKED = Color(85, 255, 85, 1f)
+        val CHECK_HOT = Color(200, 200, 200, 1f)
     }
 }
