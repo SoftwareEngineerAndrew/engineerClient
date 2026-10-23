@@ -5,6 +5,8 @@ Changes in ADS. The process for adding entries and cutting releases is in
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
 ### Added
 - Everything new in Engineer Client up to 2026-10-22, merged in:
   - Room Prediction on every floor (F1-F7, M1-M7), each from its own recorded maps.
