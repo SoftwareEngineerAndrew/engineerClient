@@ -15,9 +15,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(SoundEngine.class)
 public class SoundVolumeMixin {
 
+    /** Random Stuff's Mute Sounds In P4: a new sound isn't started (play reads its volume through the other overload). */
+    @Inject(method = "play(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine$PlayResult;", at = @At("HEAD"), cancellable = true)
+    private void cc$muteP4(SoundInstance sound, CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
+        if (com.coffeeclient.misc.RandomStuff.INSTANCE.mutesSound()) cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
+    }
+
     @Inject(method = "calculateVolume(Lnet/minecraft/client/resources/sounds/SoundInstance;)F", at = @At("RETURN"), cancellable = true)
     private void cc$scaleVolume(SoundInstance sound, CallbackInfoReturnable<Float> cir) {
-        // Random Stuff's Mute Sounds In P4: silent, including sounds already looping (their volume is asked again each tick).
+        // Mute Sounds In P4, for sounds already playing (only those that tick are asked again: loops, music).
         if (com.coffeeclient.misc.RandomStuff.INSTANCE.mutesSound()) { cir.setReturnValue(0f); return; }
         float m = SoundEditor.multiplier(sound.getIdentifier().toString());
         if (m != 1f) cir.setReturnValue(cir.getReturnValueF() * m);
