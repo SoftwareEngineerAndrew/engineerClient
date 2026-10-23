@@ -1,9 +1,11 @@
 // Partial-map observations from full layouts, and the features the predictor sees for each unknown tile.
-// A layout here is a complete() one from common.mjs (6x6 F7/M7 unless said otherwise).
+// A layout here is a complete() one from common.mjs (its floor's grid, with the puzzle column on F4-F6).
 
-export const CLASSES = ['n', 'o', 'P', 'T', 'Y', 'B', 'F', 'R'];
+// x: a puzzle column tile with no room
+export const CLASSES = ['n', 'o', 'P', 'T', 'Y', 'B', 'F', 'R', 'x'];
 export const CLS = Object.fromEntries(CLASSES.map((c, i) => [c, i]));
 export function classOf(r) {
+  if (!r) return 'x';
   switch (r.type) {
     case 'NORMAL': return r.shape === 'OneByOne' ? 'o' : 'n';
     case 'PUZZLE': return 'P'; case 'TRAP': return 'T'; case 'CHAMPION': return 'Y';
@@ -20,7 +22,8 @@ function doorKinds(L) {
     const id = (d.bx === d.ax + 1 ? 'h' : 'v') + d.ax + ',' + d.az;
     let k = d.what;
     if (d.a === d.b) k = 'same';
-    else if (k === '-') k = 'none';
+    // the recorder sometimes reads a door at the dungeon's edge with no room behind it
+    else if (k === '-' || d.a < 0 || d.b < 0) k = 'none';
     else if (k === 'e' || k === 'f') k = 'n';
     m.set(id, k);
   }
@@ -88,5 +91,5 @@ export function observe(L, known) {
   }
   const rooms = new Map();
   for (const i of known) { const r = L.rooms[i]; rooms.set(i, { type: r.type, cls: classOf(r), shape: r.shape, tiles: r.tiles }); }
-  return { W, H, tile, edge, rooms, puzzles: L.rooms.filter(r => r.type === 'PUZZLE').length };
+  return { W, H, tile, edge, rooms, puzzles: L.rooms.filter(r => r.type === 'PUZZLE').length, rules: L.rules };
 }

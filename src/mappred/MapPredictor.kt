@@ -35,9 +35,10 @@ object Edge {
 
 /**
  * The discovered part of a [w] x [h] dungeon map: the rooms the map shows (tile = z * w + x), the
- * edges between tiles, and the tab list's puzzle count. Only what the map shows goes in.
+ * edges between tiles, and the tab list's puzzle count. Only what the map shows goes in. [rules] are the
+ * floor's; tiles outside its grid are no part of the dungeon.
  */
-class MapView(val w: Int, val h: Int, val puzzles: Int) {
+class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = FloorRules.F7) {
     val roomAt = IntArray(w * h) { -1 }
     val kinds = ArrayList<Kind>()
     val shapes = ArrayList<Shape>()
@@ -83,7 +84,7 @@ class MapView(val w: Int, val h: Int, val puzzles: Int) {
 
     /** Changes whenever anything the predictor reads changes. */
     fun key(): String = buildString {
-        append(w).append('x').append(h).append(':').append(puzzles).append(':')
+        append(w).append('x').append(h).append(':').append(rules.floor).append(':').append(puzzles).append(':')
         for (i in kinds.indices) append(kinds[i].ordinal).append(roomTiles[i].joinToString(",")).append(names[i] ?: "").append(';')
         append(secretTotals.joinToString(",")).append(':')
         append(edges.joinToString(""))
@@ -122,10 +123,11 @@ class PredictedDoor(val a: Int, val b: Int, val chance: Float, val wither: Float
 class NamedRoom(val tiles: IntArray, val name: RoomName, val chance: Float)
 
 /**
- * The prediction: for each unknown tile the chance of each [Cls] (null for discovered tiles), for
- * each door into the unknown what is behind it, and the big rooms seen in at least 5% of samples
- * (likeliest first). [level] 0 keeps every rule; higher levels are looser fallbacks for maps the
- * rules don't fit (a misread map, an unusual dungeon).
+ * The prediction: for each unknown tile the chance of each [Cls] (null for discovered tiles and tiles no
+ * room can be on; on a puzzle column tile they add up to the chance there's a room at all), for each door
+ * into the unknown what is behind it, and the big rooms seen in at least 5% of samples (likeliest first).
+ * [level] 0 keeps every rule; higher levels are looser fallbacks for maps the rules don't fit (a misread
+ * map, an unusual dungeon).
  */
 class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val splits: List<Split>, val samples: Int, val level: Int,
                  val bigRooms: List<BigRoom> = emptyList(), val namedRooms: List<NamedRoom> = emptyList(),
@@ -133,14 +135,21 @@ class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val spli
 
 /**
  * Room predictions for a partly discovered map: many complete maps are drawn that fit what the map
- * shows and the rules every recorded F7/M7 map follows ([MapStats]), and the prediction is what they
- * agree on. [run] can be called again to add samples (each call refines the same prediction).
+ * shows and the rules every recorded map of its floor follows ([FloorRules]), and the prediction is what
+ * they agree on. [run] can be called again to add samples (each call refines the same prediction).
  */
 class MapPredictor(private val view: MapView) {
     private val w = view.w
     private val h = view.h
     private val n = w * h
+    private val rules = view.rules
+    /** Unknown tiles of the main grid. */
     private val unknown: IntArray
+    /** Puzzle column tiles behind a door the map shows (a room for sure), and those nobody has seen the west side of (a room or not). */
+    private val column: IntArray
+    private val open: IntArray
+    /** Every tile a room can still be on: [unknown], [column], [open]. */
+    private val cells: IntArray
     private val isUnk = BooleanArray(n)
     private val tileIdx = IntArray(n) { -1 }
     private val entryDoor = ByteArray(n)
@@ -156,6 +165,8 @@ class MapPredictor(private val view: MapView) {
     private var fairyDist = -1
     private val remP: Int
     private val needDead: Int
+    /** The puzzle column can top the dead ends up: the tab list's puzzles, trap and yellow don't go past its target. */
+    private val topUp: Boolean
     private val combos: List<IntArray>
     private val frame = IntArray(n) { it }
 
@@ -178,11 +189,24 @@ class MapPredictor(private val view: MapView) {
     private var levelTries = 0L
 
     init {
-        unknown = (0 until n).filter { view.roomAt[it] < 0 }.toIntArray()
-        unknown.forEachIndexed { i, t -> isUnk[t] = true; tileIdx[t] = i }
+        // the floor's tiles: its main grid, and on F4-F6 the puzzle column east of it, whose rooms have one
+        // door, to the west; a column tile with a wall there is empty
+        val unk = ArrayList<Int>(); val col = ArrayList<Int>(); val opn = ArrayList<Int>(); val all = ArrayList<Int>()
+        for (t in 0 until n) {
+            val x = t % w; val z = t / w
+            if (view.roomAt[t] >= 0 || z >= rules.h) continue
+            if (x < rules.w) { unk += t; all += t }
+            else if (rules.puzzleColumn && x == rules.w) when {
+                view.roomAt[t - 1] < 0 -> { opn += t; all += t }
+                Edge.isDoor(view.edge(t - 1, t)) -> { col += t; all += t }
+            }
+        }
+        unknown = unk.toIntArray(); column = col.toIntArray(); open = opn.toIntArray(); cells = all.toIntArray()
+        for (t in unknown) isUnk[t] = true
+        cells.forEachIndexed { i, t -> tileIdx[t] = i }
         val ents = ArrayList<Int>()
-        for (t in unknown) for (nb in neighbours(t)) {
-            if (isUnk[nb]) continue
+        for (t in unknown + column) for (nb in neighbours(t)) {
+            if (view.roomAt[nb] < 0) continue
             val k = view.edge(t, nb)
             if (!Edge.isDoor(k)) continue
             if (entryDoor[t] != 0.toByte()) bad = true // two doors into one unknown tile: no tree does that
@@ -201,15 +225,16 @@ class MapPredictor(private val view: MapView) {
         }
         if (entId >= 0) walkKnownPath(entId)
         remP = maxOf(0, view.puzzles - found[Cls.PUZZLE])
-        needDead = remP + (if (found[Cls.TRAP] > 0) 0 else 1) + (if (found[Cls.YELLOW] > 0) 0 else 1) + (if (found[Cls.BLOOD] > 0) 0 else 1)
-        combos = MapStats.COMBOS.filter { c -> (0 until 5).all { c[it] >= knownBig[it] } }
+        needDead = remP + (if (!rules.trap || found[Cls.TRAP] > 0) 0 else 1) + (if (found[Cls.YELLOW] > 0) 0 else 1) + (if (found[Cls.BLOOD] > 0) 0 else 1)
+        topUp = rules.puzzleColumn && view.puzzles + (if (rules.trap) 1 else 0) + 1 <= rules.deadEndTarget
+        combos = rules.combos.filter { c -> (0 until 5).all { c[it] >= knownBig[it] } }
         setUpSecrets()
-        if (w == 6 && h == 6 && entTile >= 0) {
+        if (rules.bigTile != null && w == 6 && h == 6 && entTile >= 0) {
             val ex = entTile % w; val ez = entTile / w
             val f = SYM.firstOrNull { s -> val (x, z) = s(ex, ez); z == 0 && x <= 2 } ?: SYM[0]
             for (t in 0 until n) { val (x, z) = f(t % w, t / w); frame[t] = z * w + x }
         }
-        counts = Array(unknown.size) { DoubleArray(Cls.COUNT) }
+        counts = Array(cells.size) { DoubleArray(Cls.COUNT) }
         splitRooms = DoubleArray(entries.size); splitTiles = DoubleArray(entries.size)
         splitCls = Array(entries.size) { DoubleArray(Cls.COUNT) }
     }
@@ -232,7 +257,7 @@ class MapPredictor(private val view: MapView) {
         }
         val targets = view.secretTotals.map { it - known }.filter { it >= 0 }.toIntArray()
         if (targets.isEmpty()) return
-        secrets = SecretNames(used, targets); secretsOn = true
+        secrets = SecretNames(used, targets, rules.missingNames); secretsOn = true
     }
 
     private fun fixedName(k: Kind): String? = when (k) { Kind.ENTRANCE -> "Entrance"; Kind.BLOOD -> "Blood"; Kind.FAIRY -> "Fairy"; else -> null }
@@ -323,7 +348,7 @@ class MapPredictor(private val view: MapView) {
 
     /** Draws samples until [samples] more are kept or [maxTries] have been tried; falls back a level when a level keeps nothing. */
     fun run(samples: Int, maxTries: Int, rnd: Random): Int {
-        if (bad || unknown.isEmpty()) return 0
+        if (bad || cells.isEmpty()) return 0
         var kept = 0; var tries = 0
         while (kept < samples && tries < maxTries && level <= 2) {
             tries++; levelTries++
@@ -358,10 +383,10 @@ class MapPredictor(private val view: MapView) {
             val c = combos[pick(cw, combos.size, rnd)]
             for (i in 0 until 5) repeat(c[i] - knownBig[i]) { todo += Shape.entries[i] }
         } else {
-            // loose: up to 7 big rooms, at most two of a shape
+            // loose: up to the floor's most big rooms, at most two of a shape
             val pool = ArrayList<Shape>(); for (i in 0 until 5) repeat(maxOf(0, 2 - knownBig[i])) { pool += Shape.entries[i] }
             pool.shuffle(rnd)
-            repeat(minOf(pool.size, maxOf(0, 7 - knownBig.sum()))) { todo += pool[it] }
+            repeat(minOf(pool.size, maxOf(0, rules.maxBig - knownBig.sum()))) { todo += pool[it] }
         }
         todo.shuffle(rnd); todo.sortByDescending { it.size }
         val owner = IntArray(n) { -1 }
@@ -369,11 +394,11 @@ class MapPredictor(private val view: MapView) {
         val candTiles = ArrayList<IntArray>(); var cw = DoubleArray(64)
         for (shape in todo) {
             candTiles.clear()
-            for (cells in PLACEMENTS[shape.ordinal]) for (t0 in unknown) {
+            for (offs in PLACEMENTS[shape.ordinal]) for (t0 in unknown) {
                 val x0 = t0 % w; val z0 = t0 / w
-                val tiles = IntArray(cells.size / 2); var ok = true; var ents = 0
+                val tiles = IntArray(offs.size / 2); var ok = true; var ents = 0
                 for (c in tiles.indices) {
-                    val x = x0 + cells[c * 2]; val z = z0 + cells[c * 2 + 1]
+                    val x = x0 + offs[c * 2]; val z = z0 + offs[c * 2 + 1]
                     if (x >= w || z >= h) { ok = false; break }
                     val t = z * w + x
                     if (!isUnk[t] || owner[t] >= 0) { ok = false; break }
@@ -383,7 +408,8 @@ class MapPredictor(private val view: MapView) {
                 if (!ok || ents > 1) continue
                 if (candTiles.size == cw.size) cw = cw.copyOf(cw.size * 2)
                 var wt = 1.0
-                if (w == 6 && h == 6) for (t in tiles) wt *= MapStats.BIG_TILE[frame[t]]
+                val bigTile = rules.bigTile
+                if (bigTile != null && w == 6 && h == 6) for (t in tiles) wt *= bigTile[frame[t]]
                 cw[candTiles.size] = wt
                 candTiles += tiles
             }
@@ -393,9 +419,12 @@ class MapPredictor(private val view: MapView) {
             rooms += tiles; roomShape += shape
         }
         for (t in unknown) if (owner[t] < 0) { owner[t] = rooms.size; rooms += intArrayOf(t); roomShape += Shape.ONE }
+        // the puzzle column's rooms behind a door the map shows
+        val firstColumn = rooms.size
+        for (t in column) { owner[t] = rooms.size; rooms += intArrayOf(t); roomShape += Shape.ONE }
         val r = rooms.size
 
-        // 2. which rooms touch, and where a door between them could go (packed as myTile * n + theirTile)
+        // 2. which rooms of the main grid touch, and where a door between them could go (packed as myTile * n + theirTile)
         val nbs = Array(r) { ArrayList<Int>() }
         val slots = Array(r) { ArrayList<ArrayList<Int>>() }
         for (t in unknown) for (nt in intArrayOf(if (t % w + 1 < w) t + 1 else -1, if (t / w + 1 < h) t + w else -1)) {
@@ -407,8 +436,9 @@ class MapPredictor(private val view: MapView) {
             slots[b][nbs[b].indexOf(a)] += nt * n + t
         }
 
-        // 3. the door tree, grown from the entry rooms
-        val parent = IntArray(r) { -2 }; val inTile = IntArray(r); val outTile = IntArray(r); val root = IntArray(r) { -1 }
+        // 3. the door tree, grown from the entry rooms (with room for the puzzle column rooms 5 adds)
+        val rm = r + open.size
+        val parent = IntArray(rm) { -2 }; val inTile = IntArray(rm); val outTile = IntArray(rm); val root = IntArray(rm) { -1 }
         val order = ArrayList<Int>(r)
         for (t in entries) { val o = owner[t]; parent[o] = -1; inTile[o] = t; root[o] = entryIndex[t]; order += o }
         while (order.size < r) {
@@ -427,17 +457,24 @@ class MapPredictor(private val view: MapView) {
             val p = sl[rnd.nextInt(sl.size)]
             parent[v] = u; outTile[v] = p / n; inTile[v] = p % n; root[v] = root[u]; order += v
         }
-        val deg = IntArray(r)
+        val deg = IntArray(rm)
         for (i in 0 until r) { deg[i]++; if (parent[i] >= 0) deg[parent[i]]++ }
         val dead = (0 until r).filter { roomShape[it] == Shape.ONE && deg[it] == 1 }.toMutableList()
-        if (level < 2 && dead.size != needDead) {
-            val extra = dead.size - needDead
-            if (!(view.puzzles == 5 && extra in 1..2 && rnd.nextDouble() < MapStats.RARE_RATE)) return false
-        }
+        // dead ends past the specials are rare rooms (5-puzzle maps); the ones short of them, the puzzle
+        // column makes up (where it tops up at all; at a looser level wherever the floor has one)
+        val canTopUp = topUp || level > 0 && rules.puzzleColumn
+        var short = needDead - dead.size
+        if (level < 2) {
+            if (short < 0) {
+                if (!(view.puzzles == 5 && short >= -2 && rnd.nextDouble() < MapStats.RARE_RATE)) return false
+                short = 0
+            }
+            if (!canTopUp && (short > 0 || column.isNotEmpty())) return false
+        } else short = if (canTopUp) maxOf(0, short) else 0
 
-        // 4. blood: a 1x1 dead end behind the wither door, its walk from the entrance 9-10 steps, with a 1x1
-        //    fairy exactly 4 steps before it
-        val type = IntArray(r) { -1 }
+        // 4. blood: a 1x1 dead end of the main grid behind the wither door, its walk from the entrance the
+        //    floor's 9-10 steps (7-8), with a 1x1 fairy exactly the floor's 4 (3) steps before it
+        val type = IntArray(rm) { -1 }
         var wgt = 1.0
         if (found[Cls.BLOOD] == 0) {
             val hb = if (head >= 0) entryIndex[head] else -1
@@ -450,25 +487,26 @@ class MapPredictor(private val view: MapView) {
             val cand = IntArray(dead.size); val fair = IntArray(dead.size); val ws = DoubleArray(dead.size); var nc = 0
             val bloodDoor = head >= 0 && entryDoor[head] == Edge.BLOOD
             for (b in dead) {
+                if (b >= firstColumn) continue
                 if (level == 0 && hb < 0) continue
                 if (hb >= 0 && root[b] != hb) continue
                 // behind the blood door is blood, at every level
                 if (bloodDoor != (b == hr) && (bloodDoor || level == 0)) continue
                 val d = dist[b]
-                var wb = if (level == 0) MapStats.WALK.getOrElse(d) { 0f }.toDouble() else 1.0
+                var wb = if (level == 0) rules.walk.getOrElse(d) { 0f }.toDouble() else 1.0
                 if (wb <= 0) continue
                 var f = -1
-                if (found[Cls.FAIRY] > 0) { if (level == 0 && d != fairyDist + MapStats.FAIRY_BEFORE_BLOOD) continue }
+                if (found[Cls.FAIRY] > 0) { if (level == 0 && d != fairyDist + rules.fairyBeforeBlood) continue }
                 else {
                     var u = parent[b]
                     while (u >= 0) {
-                        if (roomShape[u] == Shape.ONE && (if (level == 0) dist[u] == d - MapStats.FAIRY_BEFORE_BLOOD else deg[u] >= 2)) { f = u; break }
+                        if (roomShape[u] == Shape.ONE && (if (level == 0) dist[u] == d - rules.fairyBeforeBlood else deg[u] >= 2)) { f = u; break }
                         u = parent[u]
                     }
                     if (f < 0 && level == 0) continue
                 }
-                wb *= MapStats.BLOOD_FROM_ENTRANCE.getOrElse(manhattan(rooms[b][0])) { 0f }
-                if (f >= 0) wb *= MapStats.FAIRY_FROM_ENTRANCE.getOrElse(manhattan(rooms[f][0])) { 0f }
+                wb *= rules.bloodFromEntrance.getOrElse(manhattan(rooms[b][0])) { 0f }
+                if (f >= 0) wb *= rules.fairyFromEntrance.getOrElse(manhattan(rooms[f][0])) { 0f }
                 if (wb <= 0) continue
                 cand[nc] = b; fair[nc] = f; ws[nc] = wb; nc++
             }
@@ -484,20 +522,36 @@ class MapPredictor(private val view: MapView) {
             }
         } else if (found[Cls.FAIRY] == 0 && level == 0) return false
 
-        // 5. trap, yellow, puzzles, rares on the other dead ends, at random
-        val rest = dead.filter { type[it] < 0 }.toMutableList(); rest.shuffle(rnd)
+        // 5. the puzzle column rooms still short, at random beside normal rooms (big, or a 1x1 with two doors already)
+        val columnRooms = dead.filter { it >= firstColumn }.toMutableList()
+        if (short > 0) {
+            val hosts = open.filter { t -> val o = owner[t - 1]; roomShape[o] != Shape.ONE || deg[o] >= 2 && type[o] != Cls.FAIRY }.toMutableList()
+            if (hosts.size < short && level < 2) return false
+            hosts.shuffle(rnd)
+            for (t in hosts.take(short)) {
+                val o = owner[t - 1]; val c = rooms.size
+                owner[t] = c; rooms += intArrayOf(t); roomShape += Shape.ONE
+                parent[c] = o; outTile[c] = t - 1; inTile[c] = t; root[c] = root[o]; deg[c] = 1; deg[o]++
+                columnRooms += c
+            }
+        }
+        val all = rooms.size
+
+        // 6. trap, yellow, puzzles, rares on the other dead ends, at random; the puzzle column's last
+        val rest = dead.filter { type[it] < 0 && it < firstColumn }.toMutableList(); rest.shuffle(rnd)
+        columnRooms.shuffle(rnd); rest += columnRooms
         var ri = 0
-        if (found[Cls.TRAP] == 0 && ri < rest.size) type[rest[ri++]] = Cls.TRAP
+        if (rules.trap && found[Cls.TRAP] == 0 && ri < rest.size) type[rest[ri++]] = Cls.TRAP
         if (found[Cls.YELLOW] == 0 && ri < rest.size) type[rest[ri++]] = Cls.YELLOW
         repeat(remP) { if (ri < rest.size) type[rest[ri++]] = Cls.PUZZLE }
         while (ri < rest.size) type[rest[ri++]] = Cls.RARE
 
-        // 6. the secret total: the unnamed rooms' names have to add up to what the named ones leave
-        val cls = IntArray(r) { if (type[it] >= 0) type[it] else if (roomShape[it] == Shape.ONE) Cls.NORMAL else Cls.BIG }
+        // 7. the secret total: the unnamed rooms' names have to add up to what the named ones leave
+        val cls = IntArray(all) { if (type[it] >= 0) type[it] else if (roomShape[it] == Shape.ONE) Cls.NORMAL else Cls.BIG }
         var names: SecretNames.Result? = null
         val sn = secrets
-        if (secretsOn && sn != null && unnamedKnown.size + r <= SecretNames.MAX_ROOMS) {
-            val pools = IntArray(unnamedKnown.size + r) { if (it < unnamedKnown.size) unnamedKnown[it] else poolOfCls(cls[it - unnamedKnown.size], roomShape[it - unnamedKnown.size]) }
+        if (secretsOn && sn != null && unnamedKnown.size + all <= SecretNames.MAX_ROOMS) {
+            val pools = IntArray(unnamedKnown.size + all) { if (it < unnamedKnown.size) unnamedKnown[it] else poolOfCls(cls[it - unnamedKnown.size], roomShape[it - unnamedKnown.size]) }
             names = sn.solve(pools)
             if (names != null) {
                 if (names.likelihood <= 0.0) return false
@@ -507,10 +561,10 @@ class MapPredictor(private val view: MapView) {
 
         weight += wgt
         // the doors between unknown rooms: the wither path runs from the head room down to blood
-        val blood = (0 until r).firstOrNull { type[it] == Cls.BLOOD } ?: -1
-        val onPath = BooleanArray(r)
+        val blood = (0 until all).firstOrNull { type[it] == Cls.BLOOD } ?: -1
+        val onPath = BooleanArray(all)
         if (blood >= 0) { var u = blood; while (u >= 0) { onPath[u] = true; u = parent[u] } }
-        for (v in 0 until r) {
+        for (v in 0 until all) {
             val u = parent[v]; if (u < 0) continue
             val a = minOf(outTile[v], inTile[v]); val b = maxOf(outTile[v], inTile[v])
             val d = doorCounts.getOrPut(a * n + b) { DoubleArray(4) }
@@ -518,7 +572,7 @@ class MapPredictor(private val view: MapView) {
             if (onPath[u] && onPath[v]) { if (v == blood) d[2] += wgt else d[1] += wgt }
             if (type[u] == Cls.FAIRY || type[v] == Cls.FAIRY) d[3] += wgt
         }
-        for (o in 0 until r) {
+        for (o in 0 until all) {
             val c = cls[o]
             if (names != null && sn != null) {
                 var m = 0L; for (t in rooms[o]) m = m or (1L shl t)
@@ -538,10 +592,11 @@ class MapPredictor(private val view: MapView) {
     /** What the samples so far agree on; null before any was kept. */
     fun prediction(): Prediction? {
         if (accepted == 0 || weight <= 0) return null
+        // over every sample: a puzzle column tile's chances add up to the chance of a room there
         val probs = arrayOfNulls<FloatArray>(n)
-        unknown.forEachIndexed { i, t ->
-            val c = counts[i]; val s = c.sum()
-            if (s > 0) probs[t] = FloatArray(Cls.COUNT) { (c[it] / s).toFloat() }
+        cells.forEachIndexed { i, t ->
+            val c = counts[i]
+            if (c.sum() > 0) probs[t] = FloatArray(Cls.COUNT) { (c[it] / weight).toFloat() }
         }
         val splits = entries.mapIndexed { i, t ->
             Split(t, entryDoor[t], (splitRooms[i] / weight).toFloat(), (splitTiles[i] / weight).toFloat(), FloatArray(Cls.COUNT) { (splitCls[i][it] / weight).toFloat() })

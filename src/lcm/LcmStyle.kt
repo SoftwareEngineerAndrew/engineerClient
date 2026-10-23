@@ -3,7 +3,10 @@ package com.engineerclient.lcm
 import com.engineerclient.EngineerClient
 import com.engineerclient.mappred.OdinMapPrediction
 import com.odtheking.odin.OdinMod.mc
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.SpecialColumn
@@ -31,7 +34,8 @@ import net.minecraft.world.entity.player.PlayerSkin
  * its own, in its Legit Mode with its default look, from what Odin's map already knows.
  *
  * - Background: dtMap's translucent black, no outline, sized to the floor's rooms plus 5 on each side.
- * - Rooms: dtMap's colours (fairy pink, rare gold), drawn tile by tile with the gaps inside a room filled.
+ * - Rooms: dtMap's colours (fairy pink, rare gold) unless changed under LCM Colors, drawn tile by tile with
+ *   the gaps inside a room filled.
  *   A room nobody has opened shows only where Odin shows it: dark grey, dark red for blood, or the special
  *   column's guess (one to three darkened colours in dtMap's split patterns), with no "?".
  * - Doors: 9 wide, coloured by the special room behind them; a door to a room nobody has opened is dark grey.
@@ -50,7 +54,22 @@ import net.minecraft.world.entity.player.PlayerSkin
 object LcmStyle {
 
     private val style = BooleanSetting("LCM Style", false,
-        desc = "Draws the map like LCM's map (dtMap) in its Legit Mode: its colours, background, doors, room names, check marks, Prince crowns and player heads (yours as its white marker). Room Prediction draws its guesses the same way, with its chances instead of \"?\". Added by engineerClient.")
+        desc = "Draws the map like LCM's map (dtMap) in its Legit Mode: its colours (changed under LCM Colors), background, doors, room names, check marks, Prince crowns and player heads (yours as its white marker). Room Prediction draws its guesses the same way, with its chances instead of \"?\". Added by engineerClient.")
+
+    private val colors = DropdownSetting("LCM Colors",
+        desc = "The colour LCM Style draws each type of room in (a door takes the colour of the room behind it). dtMap's colours to begin with.").withDependency { style.value }
+    private val unopenedColor = colorSetting("Unopened", 0xFF1E1E1E.toInt(), "rooms nobody has opened yet")
+    private val normalColor = colorSetting("Normal", 0xFF6B3A11.toInt(), "normal rooms")
+    private val puzzleColor = colorSetting("Puzzle", 0xFF750085.toInt(), "puzzle rooms")
+    private val trapColor = colorSetting("Trap", 0xFFD87F33.toInt(), "the trap room")
+    private val yellowColor = colorSetting("Yellow", 0xFFFEDF00.toInt(), "the yellow (miniboss) room")
+    private val bloodColor = colorSetting("Blood", 0xFFFF0000.toInt(), "the blood room")
+    private val entranceColor = colorSetting("Entrance", 0xFF148500.toInt(), "the entrance")
+    private val fairyColor = colorSetting("Fairy", 0xFFF4138B.toInt(), "the fairy room")
+    private val rareColor = colorSetting("Rare", 0xFFFFCB59.toInt(), "rare rooms")
+
+    private fun colorSetting(type: String, default: Int, what: String) =
+        ColorSetting("LCM $type Room", Color(default), true, desc = "LCM Style's colour for $what.").withDependency { style.value && colors.value }
 
     private const val ROOM = 16
     private const val TILE = 20
@@ -58,17 +77,17 @@ object LcmStyle {
     private const val DOOR = 9
     private const val DARKEN = 0.4f
 
-    // dtMap's default colours (C1Map)
+    // the room colours (LCM Colors, dtMap's by default) and dtMap's other default colours (C1Map)
     private const val BACKGROUND = 0x46000000
-    const val UNOPENED = 0xFF1E1E1E.toInt()
-    const val BLOOD = 0xFFFF0000.toInt()
-    const val NORMAL = 0xFF6B3A11.toInt()
-    const val PUZZLE = 0xFF750085.toInt()
-    const val CHAMPION = 0xFFFEDF00.toInt()
-    const val TRAP = 0xFFD87F33.toInt()
-    private const val ENTRANCE = 0xFF148500.toInt()
-    const val FAIRY = 0xFFF4138B.toInt()
-    const val RARE = 0xFFFFCB59.toInt()
+    val UNOPENED: Int get() = unopenedColor.value.rgba
+    val BLOOD: Int get() = bloodColor.value.rgba
+    val NORMAL: Int get() = normalColor.value.rgba
+    val PUZZLE: Int get() = puzzleColor.value.rgba
+    val CHAMPION: Int get() = yellowColor.value.rgba
+    val TRAP: Int get() = trapColor.value.rgba
+    private val ENTRANCE: Int get() = entranceColor.value.rgba
+    val FAIRY: Int get() = fairyColor.value.rgba
+    val RARE: Int get() = rareColor.value.rgba
     const val WITHER = 0xFF000000.toInt()
     private const val NO_CLASS = 0xB2000000.toInt()
 
@@ -84,7 +103,7 @@ object LcmStyle {
     private val selfMarker = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/self_marker.png")
 
     /** The rooms dtMap's room data marks as having a Prince. */
-    private val princeRooms = setOf("Big Red Flag", "Chambers", "Doors", "Flags", "Grass Ruin", "Leaves", "Market",
+    internal val princeRooms = setOf("Big Red Flag", "Chambers", "Doors", "Flags", "Grass Ruin", "Leaves", "Market",
         "Pirate", "Quartz Knight", "Red Blue", "Skull", "Sloth", "Supertall", "Waterfall", "Withermancer")
 
     private val leapMenus = setOf("Spirit Leap", "Teleport to Player")
@@ -96,6 +115,8 @@ object LcmStyle {
 
     fun install() {
         DungeonMap.registerSetting(style)
+        // right below LCM Style
+        for (s in listOf(colors, unopenedColor, normalColor, puzzleColor, trapColor, yellowColor, bloodColor, entranceColor, fairyColor, rareColor)) DungeonMap.registerSetting(s)
     }
 
     /** True while the map HUD is drawn here instead of by Odin (LcmStyleMixin). */
@@ -134,7 +155,7 @@ object LcmStyle {
     private fun disableInBoss(): Boolean = (DungeonMap.settings["Disable in Boss"] as? BooleanSetting)?.value ?: true
 
     /** The floor's rooms across and down, as dtMap sizes its map. */
-    private fun mapSize(example: Boolean): Pair<Int, Int> {
+    internal fun mapSize(example: Boolean): Pair<Int, Int> {
         if (example) return 6 to 6
         return when (DungeonUtils.floor?.floorNumber) {
             0 -> 4 to 4
@@ -168,15 +189,15 @@ object LcmStyle {
         else -> UNOPENED
     }
 
-    /** dtMap's colour for one of Odin's room or door colour settings (the special column's guesses, Odin's example doors). */
-    private fun dtColor(c: Color): Int = when (c.rgba) {
-        DungeonMap.puzzleRoomColor.rgba -> PUZZLE
-        DungeonMap.trapRoomColor.rgba -> TRAP
-        DungeonMap.championRoomColor.rgba -> CHAMPION
-        DungeonMap.entranceRoomColor.rgba -> ENTRANCE
-        DungeonMap.bloodRoomColor.rgba, DungeonMap.bloodDoorColor.rgba -> BLOOD
-        DungeonMap.fairyRoomColor.rgba, DungeonMap.fairyDoorColor.rgba -> FAIRY
-        else -> NORMAL
+    /** The room type one of Odin's room or door colour settings stands for (the special column's guesses, Odin's example doors). */
+    private fun typeOf(c: Color): RoomType = when (c.rgba) {
+        DungeonMap.puzzleRoomColor.rgba -> RoomType.PUZZLE
+        DungeonMap.trapRoomColor.rgba -> RoomType.TRAP
+        DungeonMap.championRoomColor.rgba -> RoomType.CHAMPION
+        DungeonMap.entranceRoomColor.rgba -> RoomType.ENTRANCE
+        DungeonMap.bloodRoomColor.rgba, DungeonMap.bloodDoorColor.rgba -> RoomType.BLOOD
+        DungeonMap.fairyRoomColor.rgba, DungeonMap.fairyDoorColor.rgba -> RoomType.FAIRY
+        else -> RoomType.NORMAL
     }
 
     /** dtMap's darkening: each channel times the multiplier, alpha kept. */
@@ -184,7 +205,7 @@ object LcmStyle {
         (c and 0xFF000000.toInt()) or (((c shr 16 and 255) * m).toInt() shl 16) or (((c shr 8 and 255) * m).toInt() shl 8) or ((c and 255) * m).toInt()
 
     /** Opened on the map (or walked into), not just seen behind a door. */
-    private fun opened(room: DungeonRoom?): Boolean = room != null && room.isViewable && room.checkmark != MapCheckmark.QUESTION_MARK
+    internal fun opened(room: DungeonRoom?): Boolean = room != null && room.isViewable && room.checkmark != MapCheckmark.QUESTION_MARK
 
     /** Each tile, and the gaps between neighbouring tiles of the room (the middle of a 2x2 too, never an L's missing corner). */
     private fun fillTiles(g: GuiGraphicsExtractor, room: DungeonRoom, color: Int) {
@@ -248,12 +269,12 @@ object LcmStyle {
         }
     }
 
-    /** Odin's special column guess for a tile in this column, in dtMap's colours and order, darkened. */
-    private fun specialGuess(column: Int): IntArray = SpecialColumn.colorGuessForUnknown(column).map { dtColor(it) }
-        .sortedBy { guessOrder.indexOf(it).let { i -> if (i < 0) guessOrder.size else i } }.map { darker(it) }.toIntArray()
+    /** Odin's special column guess for a tile in this column, in these colours and dtMap's order, darkened. */
+    private fun specialGuess(column: Int): IntArray = SpecialColumn.colorGuessForUnknown(column).map { typeOf(it) }
+        .sortedBy { guessOrder.indexOf(it).let { i -> if (i < 0) guessOrder.size else i } }.map { darker(roomColor(it)) }.toIntArray()
 
     /** The order guesses go in a [guessTile], as dtMap has them: puzzle outside (or on top), trap, yellow in the middle (or below). */
-    private val guessOrder = listOf(PUZZLE, TRAP, CHAMPION)
+    private val guessOrder = listOf(RoomType.PUZZLE, RoomType.TRAP, RoomType.CHAMPION)
 
     /** dtMap's guess tile at (x, z): one colour, two as top and bottom halves, three as an L, its opposite corner and a middle square. */
     fun guessTile(g: GuiGraphicsExtractor, x: Int, z: Int, colors: IntArray) {
@@ -285,7 +306,7 @@ object LcmStyle {
             DoorType.Wither -> WITHER
             DoorType.Blood -> BLOOD
             DoorType.Fairy -> FAIRY
-            else -> dtColor(door.color)
+            else -> roomColor(typeOf(door.color))
         } else doorColor(door, a, b)
 
         doorAt(g, door.position.x, door.position.z, door.rotation.offset.x == 1, color)

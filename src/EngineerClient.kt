@@ -105,9 +105,11 @@ object EngineerClient : ClientModInitializer {
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
-        // Room Prediction and LCM Style: settings on Odin's own Dungeon Map (from Ascent Client, same names, so saved values
-        // carry over); Odin's configs are read again so they apply (reading never writes the file).
+        // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map, and Map Info's LCM Style
+        // (from Ascent Client, same names, so saved values carry over); Odin's configs are read again so they apply
+        // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
+        safely("lcm map info") { com.engineerclient.lcm.LcmMapInfo.install() }
         safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
