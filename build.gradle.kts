@@ -68,10 +68,6 @@ dependencies {
     // level extract, so the POV previews no longer call it; optional at runtime.
     compileOnly("maven.modrinth:sodium:bAZQdGpg")
 
-    // Devonian's dungeon-stats cache feeds Party Finder and Hub Nametag Stats when it is installed.
-    // Optional at runtime (DevonianBridge checks isModLoaded); 1.34.9 for 26.3.
-    compileOnly("maven.modrinth:devonian:k8Mog4wx")
-
     // Unit tests: Rustclear's engine (stat math, tooltips, terminals) and the full run's pure logic.
     testImplementation(kotlin("test"))
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
