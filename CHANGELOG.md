@@ -6,7 +6,7 @@ Changes in ADS. The process for adding entries and cutting releases is in
 ## [Unreleased]
 
 ### Added
-- Coffee Random Stuff: Mute Sounds In P4 (off to begin with) mutes every sound during Necron's fight on F7/M7 only, from his first line until he's dead, and only while you're down at his platform.
+- Coffee Random Stuff: Mute Sounds In P4 (off to begin with) mutes every sound in F7's Necron phase, from Goldor dying until the run ends. F7 only.
 
 ## [0.4.0] - 2026-10-23
 

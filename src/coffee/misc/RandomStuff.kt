@@ -40,16 +40,16 @@ object RandomStuff : Module(
     private val ding = CompletionDing()
     private val mutePartyInBoss by BooleanSetting("Mute Party Chat In Boss", true, desc = "In a dungeon boss, party chat messages make no sound (Hypixel's chat ping). Guild and private messages still do.")
     private val partyPing = PartyPing()
-    private val muteP4 by BooleanSetting("Mute Sounds In P4", false, desc = "Mutes every sound during Necron's fight (F7/M7 P4) only: from his first line, while you're down at his platform, until he's dead. Nothing before or after it.")
+    private val muteP4 by BooleanSetting("Mute Sounds In P4", false, desc = "F7 only: mutes every sound in Necron's phase, from Goldor dying until the run ends.")
     private val necron = NecronMute()
 
     /**
-     * Read by SoundVolumeMixin for every sound: true only while all of these hold, so nothing outside P4 is
-     * ever muted - the module and setting on, Necron's fight open in chat ([NecronMute]), and you in F7/M7's
-     * boss at P4's height (Odin's phase).
+     * Read by SoundVolumeMixin for every sound: in F7's boss (not M7), from Goldor's death or Necron's first line
+     * until his death or the run's end ([NecronMute]), or at P4's height (Odin's phase) before then.
      */
     fun mutesSound(): Boolean =
-        enabled && muteP4 && necron.open && DungeonUtils.isFloor(7) && DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P4
+        enabled && muteP4 && DungeonUtils.floor == com.odtheking.odin.utils.skyblock.dungeon.Floor.F7 && DungeonUtils.inBoss &&
+            !necron.over && (necron.open || DungeonUtils.getF7Phase() == M7Phases.P4)
 
     private val hideCompletionTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening ones.")
 
