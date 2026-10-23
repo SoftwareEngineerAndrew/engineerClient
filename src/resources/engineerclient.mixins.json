@@ -5,6 +5,8 @@
   "plugin": "com.engineerclient.mixinplugin.OdinFeatureMixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "AdsLeapRenderMixin",
+    "AdsLeapScreenMixin",
     "AdsMinimapPacketMixin",
     "AdsSplitsChatMixin",
     "AdsSplitsTickMixin",

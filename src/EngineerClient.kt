@@ -77,6 +77,8 @@ object EngineerClient : ClientModInitializer {
         safely("ads splits") { com.engineerclient.ads.splits.AdsSplits.init() }
         // ADS's minimap (Odin's map code, without Odin), off until turned on in `/ads`.
         safely("ads minimap") { com.engineerclient.ads.map.AdsMinimap.init() }
+        // ADS's leap menu (Odin's, without Odin), off until turned on in `/ads`.
+        safely("ads leap menu") { com.engineerclient.ads.leap.AdsLeapMenu.init() }
         // ADS's own device solvers (Simon Says, i4, Arrow Align) for its worlds, with or without Odin.
         safely("device solvers") { com.engineerclient.devices.DeviceSolvers.init() }
         // Everything that runs on Odin (its modules, the additions to Odin's own, its event bus), only with Odin.

@@ -35,10 +35,10 @@ object MinimapRenderer {
     private fun tileRoom(index: Int): DungeonRoom? = if (index in 0 until 36) DungeonScan.tiles[index].room else null
 
     /** A world position on the map. */
-    private fun worldToMap(v: Double): Float = ((v + 201.0) * TILE / 32.0).toFloat()
+    fun worldToMap(v: Double): Float = ((v + 201.0) * TILE / 32.0).toFloat()
 
     /** A marker from the map item (for someone too far away to see) on the map. */
-    private fun markerToMap(x: Int, z: Int): Pair<Float, Float> {
+    fun markerToMap(x: Int, z: Int): Pair<Float, Float> {
         val gap = DungeonScan.roomGap.toFloat()
         return ((x + 128) / 2f - DungeonScan.startX) * TILE / gap to ((z + 128) / 2f - DungeonScan.startY) * TILE / gap
     }
@@ -98,8 +98,14 @@ object MinimapRenderer {
             else -> 0xFF3C3C3C.toInt()
         }
 
-        /** The whole HUD, 128 square like the map item. */
-        fun draw(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        /** A point in map units on the HUD (Odin draws the map where the map item does, at its size). */
+        fun toHud(x: Float, z: Float): Pair<Float, Float> {
+            val s = DungeonScan.roomSize / 16f
+            return DungeonScan.startX + x * s to DungeonScan.startY + z * s
+        }
+
+        /** The whole HUD, 128 square like the map item; [players] false leaves the heads off (Map Leap draws its own). */
+        fun draw(g: GuiGraphicsExtractor, example: Boolean, players: Boolean = true): Pair<Int, Int> {
             g.fill(0, 0, SIZE, SIZE, BACKGROUND)
             g.fill(0, 0, SIZE, 1, OUTLINE); g.fill(0, SIZE - 1, SIZE, SIZE, OUTLINE)
             g.fill(0, 0, 1, SIZE, OUTLINE); g.fill(SIZE - 1, 0, SIZE, SIZE, OUTLINE)
@@ -111,7 +117,7 @@ object MinimapRenderer {
                 g.pose().translate(DungeonScan.startX.toFloat(), DungeonScan.startY.toFloat())
                 g.pose().scale(DungeonScan.roomSize / 16f)
                 drawMap(g, DungeonScan.rooms, DungeonScan.doors.values, DungeonScan.pathHints, example = false)
-                if (!AdsDungeon.inBoss) drawPlayers(g)
+                if (players && !AdsDungeon.inBoss) drawPlayers(g)
             }
             g.pose().popMatrix()
             return SIZE to SIZE
@@ -317,17 +323,24 @@ object MinimapRenderer {
             }
         }
 
-        fun draw(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        /** The HUD's size for the floor's grid. */
+        fun size(example: Boolean): Pair<Int, Int> {
             val (cols, rows) = gridSize(example)
-            val width = cols * TILE - (TILE - ROOM) + PAD * 2
-            val height = rows * TILE - (TILE - ROOM) + PAD * 2
+            return cols * TILE - (TILE - ROOM) + PAD * 2 to rows * TILE - (TILE - ROOM) + PAD * 2
+        }
+
+        /** A point in map units on the HUD. */
+        fun toHud(x: Float, z: Float): Pair<Float, Float> = PAD + x to PAD + z
+
+        fun draw(g: GuiGraphicsExtractor, example: Boolean, players: Boolean = true): Pair<Int, Int> {
+            val (width, height) = size(example)
             g.fill(0, 0, width, height, BACKGROUND)
             g.pose().pushMatrix()
             g.pose().translate(PAD.toFloat(), PAD.toFloat())
             if (example) drawMap(g, MinimapExample.rooms, MinimapExample.doors, emptyList(), true)
             else {
                 drawMap(g, DungeonScan.rooms, DungeonScan.doors.values, DungeonScan.pathHints, false)
-                if (!AdsDungeon.inBoss) drawPlayers(g)
+                if (players && !AdsDungeon.inBoss) drawPlayers(g)
             }
             g.pose().popMatrix()
             return width to height

@@ -38,6 +38,7 @@ object AdsMinimap : Settings("Minimap", "minimap.json") {
     private val guessesS = +BooleanSetting("Special Column Guesses", true, "Unopened 1x1 rooms show what they can still be (puzzle, trap or yellow), worked out from what's open.")
         .withDependency { enabledS.value }
 
+    val look: Look get() = lookS.value
     val roomText: RoomText get() = roomTextS.value
     val textScale: Float get() = textScaleS.value.toFloat()
     val guesses: Boolean get() = guessesS.value

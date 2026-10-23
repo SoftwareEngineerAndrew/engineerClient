@@ -5,6 +5,7 @@
   "plugin": "com.engineerclient.mixinplugin.OdinMixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "AdsLeapOdinMixin",
     "BlockUpdateServerThreadMixin",
     "ClickGuiOpenMixin",
     "HudElementMixin",
