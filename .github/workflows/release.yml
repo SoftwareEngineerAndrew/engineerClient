@@ -72,7 +72,27 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$TAG" "build/libs/ads-$VERSION.jar" \
+          # The same jar under Engineer Client's name too, for links to the latest release's EngineerClient-<mc>.jar.
+          MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)
+          cp "build/libs/ads-$VERSION.jar" "EngineerClient-$MC.jar"
+          gh release create "$TAG" "build/libs/ads-$VERSION.jar" "EngineerClient-$MC.jar" \
             --target "$GITHUB_SHA" \
             --title "ADS $VERSION" \
-            --notes-file release-notes.md
+            --notes-file release-notes.md \
+            --latest
+
+      # Engineer Client's players download releases/download/release-<mc>/EngineerClient-<mc>.jar (one rolling
+      # release per Minecraft version). That release now carries ADS's jar, so the link keeps working and updating.
+      - name: Update Engineer Client's download link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)
+          jar="EngineerClient-$MC.jar"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$MC/$jar"
+          gh release delete "release-$MC" --yes --cleanup-tag || true
+          gh release create "release-$MC" "$jar" --target "$GITHUB_SHA" --latest=false \
+            --title "EngineerClient for Minecraft $MC" \
+            --notes "$(printf '**[Download for Minecraft %s](%s)**: ADS %s (Engineer Client is now ADS; see [%s](https://github.com/%s/releases/tag/%s) for what changed).\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API and Fabric Language Kotlin; Odin is optional.' "$MC" "$url" "$VERSION" "$TAG" "$GITHUB_REPOSITORY" "$TAG")"

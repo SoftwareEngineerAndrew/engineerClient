@@ -9,3 +9,4 @@ libs/
 .worktrees/
 .claude/settings.local.json
 .vendor/
+.vscode/
