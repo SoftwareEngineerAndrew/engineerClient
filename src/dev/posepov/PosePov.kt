@@ -88,14 +88,19 @@ object PosePov : Module(
         ClientTickEvents.END_CLIENT_TICK.register {
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
         }
-        onReceive<ClientboundBlockUpdatePacket> { BlockMesh.dirty(pos) }
-        onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, _ -> BlockMesh.dirty(pos) } }
+        // This run's block changes, on top of the known rooms and arena (see KnownWorld).
+        onReceive<ClientboundBlockUpdatePacket> { KnownWorld.change(pos, blockState); BlockMesh.dirty(pos) }
+        onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, state -> KnownWorld.change(pos, state); BlockMesh.dirty(pos) } }
         onReceive<ClientboundLevelChunkWithLightPacket> {
             val level = mc.level ?: return@onReceive
             BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY)
         }
-        onReceive<ClientboundForgetLevelChunkPacket> { BlockMesh.forget(pos.minBlockX shr 4, pos.minBlockZ shr 4) }
-        on<LevelEvent.Load> { BlockMesh.clear() }
+        // An unloaded chunk falls back to what is known about it (or nothing).
+        onReceive<ClientboundForgetLevelChunkPacket> {
+            val level = mc.level ?: return@onReceive
+            BlockMesh.dirtyColumn(pos.minBlockX shr 4, pos.minBlockZ shr 4, level.minSectionY, level.maxSectionY)
+        }
+        on<LevelEvent.Load> { KnownWorld.reset(); BlockMesh.clear() }
     }
 
     override fun onDisable() {
@@ -139,6 +144,8 @@ object PosePov : Module(
             around.sortBy { k -> val a = SectionPos.x(k) - cx; val b = SectionPos.y(k) - cy; val c = SectionPos.z(k) - cz; a * a + b * b + c * c }
             wanted += around
         }
+        KnownWorld.load { mc.execute { BlockMesh.clear() } }
+        KnownWorld.refresh(level) { x0, z0, x1, z1 -> BlockMesh.dirtyBox(x0, z0, x1, z1, level.minSectionY, level.maxSectionY) }
         BlockMesh.update(level, wanted.toList())
 
         for (i in 0 until FEEDS) {

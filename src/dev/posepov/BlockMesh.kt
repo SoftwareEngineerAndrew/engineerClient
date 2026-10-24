@@ -10,7 +10,6 @@ import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
 import net.minecraft.core.SectionPos
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * The world as Pose POV draws it: one flat-coloured mesh per 16³ section, read straight off the
@@ -26,7 +25,6 @@ object BlockMesh {
     private val sections = HashMap<Long, Section>()
     /** Sections whose blocks changed, and when: rebuilt [DIRTY_DELAY_MS] later, once the packet has been applied. */
     private val dirtyAt = ConcurrentHashMap<Long, Long>()
-    private val forgotten = ConcurrentLinkedQueue<Long>()
 
     private const val DIRTY_DELAY_MS = 100L
     private const val MAX_SECTIONS = 4096
@@ -58,18 +56,16 @@ object BlockMesh {
         for (sy in minSy..maxSy) dirtyAt[SectionPos.asLong(cx, sy, cz)] = now
     }
 
-    fun forget(cx: Int, cz: Int) { forgotten.add(SectionPos.asLong(cx, 0, cz)) }
+    /** Every section over the blocks x0..x1, z0..z1 (a room just placed). */
+    fun dirtyBox(x0: Int, z0: Int, x1: Int, z1: Int, minSy: Int, maxSy: Int) {
+        for (cx in (x0 shr 4)..(x1 shr 4)) for (cz in (z0 shr 4)..(z1 shr 4)) dirtyColumn(cx, cz, minSy, maxSy)
+    }
 
     /**
      * Builds what [wanted] (nearest first) is missing or has gone stale, for at most
      * [BUILD_BUDGET_NS] this frame.
      */
     fun update(level: ClientLevel, wanted: List<Long>) {
-        while (true) {
-            val col = forgotten.poll() ?: break
-            val cx = SectionPos.x(col); val cz = SectionPos.z(col)
-            sections.keys.filter { SectionPos.x(it) == cx && SectionPos.z(it) == cz }.forEach { free(it) }
-        }
         val start = System.nanoTime()
         val now = System.currentTimeMillis()
         for (key in wanted) {
@@ -77,7 +73,6 @@ object BlockMesh {
             if (key in sections && !stale) continue
             if (key !in sections && dirtyAt[key]?.let { now - it < DIRTY_DELAY_MS } == true) continue
             val sx = SectionPos.x(key); val sz = SectionPos.z(key)
-            if (!level.hasChunk(sx, sz)) continue
             dirtyAt.remove(key)
             free(key)
             sections[key] = build(level, sx, SectionPos.y(key), sz)
@@ -93,29 +88,27 @@ object BlockMesh {
 
     fun clear() {
         sections.values.forEach { it.buffer?.close() }
-        sections.clear(); dirtyAt.clear(); forgotten.clear()
+        sections.clear(); dirtyAt.clear()
     }
 
     private fun build(level: ClientLevel, sx: Int, sy: Int, sz: Int): Section {
         if (sy < level.minSectionY || sy > level.maxSectionY) return Section(null, 0)
-        val section = level.getChunk(sx, sz).sections[level.getSectionIndexFromSectionY(sy)]
-        if (section.hasOnlyAir()) return Section(null, 0)
+        // Nothing known here and nothing loaded (or only air): skip the 4096 lookups.
+        if (KnownWorld.unknown(sx, sz) && (!level.hasChunk(sx, sz) || level.getChunk(sx, sz).sections[level.getSectionIndexFromSectionY(sy)].hasOnlyAir())) return Section(null, 0)
         val format = DefaultVertexFormat.POSITION_COLOR
         val pos = BlockPos.MutableBlockPos()
         val near = BlockPos.MutableBlockPos()
         ByteBufferBuilder(format.vertexSize * 4 * 1024).use { bytes ->
             val bb = BufferBuilder(bytes, PrimitiveTopology.QUADS, format)
             for (ly in 0..15) for (lz in 0..15) for (lx in 0..15) {
-                val state = section.getBlockState(lx, ly, lz)
+                val state = KnownWorld.stateAt(level, near, (sx shl 4) + lx, (sy shl 4) + ly, (sz shl 4) + lz)
                 if (state.isAir) continue
                 val x = (sx shl 4) + lx; val y = (sy shl 4) + ly; val z = (sz shl 4) + lz
                 pos.set(x, y, z)
                 val rgb = state.getMapColor(level, pos).col
                 if (rgb == 0) continue
                 for (f in 0..5) {
-                    near.set(x + DX[f], y + DY[f], z + DZ[f])
-                    val inside = lx + DX[f] in 0..15 && ly + DY[f] in 0..15 && lz + DZ[f] in 0..15
-                    val other = if (inside) section.getBlockState(lx + DX[f], ly + DY[f], lz + DZ[f]) else level.getBlockState(near)
+                    val other = KnownWorld.stateAt(level, near, x + DX[f], y + DY[f], z + DZ[f])
                     if (other.isSolidRender) continue
                     face(bb, f, x.toFloat(), y.toFloat(), z.toFloat(), shade(rgb, SHADE[f]))
                 }
