@@ -9,7 +9,8 @@
 //               its end: ruled out (blood 55% on an edge, 9% in a corner, real 86%, 33%; the tree too deep)
 //         grow: the tree grown cell by cell, a new free cell starting a big room with chance c * shapes left /
 //               free cells (order field c<k>[p][d][u]: p shape and placement picked together, d the room's
-//               cells grown at once in a chain, u its cells joined by a random spanning tree inside)
+//               cells grown at once in a chain, u its cells joined by a random spanning tree inside, f the room
+//               behind the entrance finished at once, then a door from it to every free neighbouring cell)
 //         cells: a door tree over all 36 single cells first (the entrance one door), then the big rooms merged
 //               onto it by their top-left corner, only where the tree already joins their cells
 //         rooms: the big rooms first, then the tree over the rooms, each big room's cells joined by a random
@@ -21,7 +22,7 @@
 //   blood uni (any candidate alike), far, w<a> (weight tiles from the entrance ^ a)
 // Every variant: blood a 1x1 dead end 9 or 10 tree steps out with a 1x1 four steps back (the fairy), and the
 // map tried again unless 4-7 1x1 dead ends besides entrance and blood (2-5 puzzles with trap and yellow).
-// Closest so far: cells:bfs0.2:rnd:res4.
+// Closest so far: grow:bfs0.1:c3f (nothing held back); cells:bfs0.2:rnd:res4 before it.
 const T0 = './';
 const { complete } = await import(T0 + 'common.mjs');
 const { prep } = await import(T0 + 'sim.mjs');
@@ -99,6 +100,8 @@ function tree(rule, n, adj, r) {
   return parent;
 }
 
+const shuffleArr = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
 // ---------------------------------------------------------------- big rooms
 function placements(shape, free) {
   const out = [];
@@ -125,7 +128,8 @@ function generate(variant, ent, shapes) {
       // free cells; a claimed cell is grown only from its own room's cells
       // c<k>[p][d]: p = the shape and placement picked together (shapes with more placements over the cell more
       // often), d = the room's cells grown at once, each from the one before where it can (a chain inside)
-      const mm = /^c([\d.]+)([a-z]*)$/.exec(order); const c = +mm[1], byPlace = mm[2].includes('p'), chain = mm[2].includes('d'), ust = mm[2].includes('u');
+      const mm = /^c([\d.]+)([a-z]*)$/.exec(order); const c = +mm[1], byPlace = mm[2].includes('p'), chain = mm[2].includes('d'), ust = mm[2].includes('u'), flood = mm[2].includes('f');
+      // f = the room behind the entrance finished at once, then a door from it to every free neighbouring cell
       // u = each big room's cells joined inside by a random spanning tree, a cell grown only from its parent in it
       const intPar = new Int32Array(N).fill(-1);
       const q = rule.startsWith('bfs') ? (rule === 'bfs' ? 1 : +rule.slice(3)) : 0;
@@ -156,6 +160,12 @@ function generate(variant, ent, shapes) {
       let bloodCell = -1;
       const fr = u => u === bloodCell ? [] : NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u] && (intPar[w] < 0 || intPar[w] === u)));
       add(NB[ent][ri(NB[ent].length)], ent);
+      if (flood) {
+        const r1 = owner[grown[1]];
+        if (r1 >= 0) { let more = true; while (more) { more = false; for (const u of [...grown]) if (owner[u] === r1) for (const w of fr(u)) if (owner[w] === r1) { add(w, u, true); more = true; } } }
+        const firstCells = r1 >= 0 ? grown.filter(t => owner[t] === r1) : [grown[1]];
+        for (const u of firstCells) for (const w of shuffleArr(fr(u))) if (parent[w] === -2) add(w, u);
+      }
       if (kind === 'pgrow') {
         // the wither path first: 9 or 10 steps, each from the cell just added (rooms can start on it), the
         // fairy (4 before the end) and blood (the end) kept 1x1; nothing grows off blood
@@ -364,7 +374,7 @@ for (const L of Ls.slice(0, maxMaps)) {
   if (shapes.length !== 7) continue;
   const R = realAsGen(L); accum('real', stats(R, R.ent));
   for (const v of variants) { const g = generate(v, R.ent, shapes); if (!g) { fails[v] = (fails[v] || 0) + 1; continue; } accum(v, stats(g, R.ent));
-    if (process.env.DUMP) (dumped[v] ||= []).push({ ent: R.ent, owner: [...g.owner], shape: g.shape }); }
+    if (process.env.DUMP) (dumped[v] ||= []).push({ ent: R.ent, owner: [...g.owner], shape: g.shape, depth: [...g.depth], parent: [...g.parent] }); }
 }
 for (const m in acc) for (const k of Object.keys(acc[m])) { const mm = /^2x2 blocks of 1x1s \| (dead=\d+)$/.exec(k); if (mm) acc[m][k] = acc[m][k] / (acc[m][`n | ${mm[1]}`] || 1) * cnt[m]; }
 for (const m in acc) { const a = acc[m]['2x2 on path, neighbouring entry/exit'] || 0; acc[m]['2x2 on path, goes around (share)'] = a ? (acc[m]['2x2 on path, goes around'] || 0) / a * cnt[m] : 0; }
