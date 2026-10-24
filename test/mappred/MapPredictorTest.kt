@@ -231,4 +231,55 @@ class MapPredictorTest {
         assertEquals(0, p.run(50, 5_000, Random(1)))
         assertNull(p.prediction())
     }
+    /** [opening] with a puzzle someone has been in behind its east door, at (3,1), and the tab's puzzle lines [slots]. */
+    private fun quizEast(slots: List<String?>, rules: FloorRules = FloorRules.F7): MapView {
+        val v = MapView(6, 6, 3, rules)
+        assertNotNull(v.addRoom(Kind.ENTRANCE, intArrayOf(1)))
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(7, 8, 13, 14)))
+        assertNotNull(v.addRoom(Kind.PUZZLE, intArrayOf(9), "Quiz"))
+        val doors = mapOf((1 to 7) to Edge.DOOR, (14 to 20) to Edge.WITHER, (8 to 9) to Edge.DOOR, (6 to 7) to Edge.DOOR)
+        v.closeEdges { a, b -> doors[minOf(a, b) to maxOf(a, b)] }
+        v.puzzleSlots = slots
+        return v
+    }
+
+    /** The tab's order: column by column (x, then z). */
+    private fun before(t: Int, of: Int) = t % 6 * 6 + t / 6 < of % 6 * 6 + of / 6
+
+    private fun puzzlesWhere(p: Prediction, where: (Int) -> Boolean) = (0 until 36).filter(where).sumOf { (p.probs[it]?.get(Cls.PUZZLE) ?: 0f).toDouble() }
+
+    @Test fun theTabsFirstPuzzleHasNoneBeforeIt() {
+        val p = predict(quizEast(listOf("Quiz", null, null)))
+        assertEquals(0, p.level)
+        assertEquals(0.0, puzzlesWhere(p) { before(it, 9) }, 1e-4)
+        assertEquals(2.0, puzzlesWhere(p) { !before(it, 9) && it != 9 }, 1e-4)
+    }
+
+    @Test fun theTabsLastPuzzleHasEveryOtherBeforeIt() {
+        val p = predict(quizEast(listOf(null, null, "Quiz")))
+        assertEquals(0, p.level)
+        assertEquals(2.0, puzzlesWhere(p) { before(it, 9) }, 1e-4)
+    }
+
+    @Test fun theTabsMiddlePuzzleSplitsTheRest() {
+        val p = predict(quizEast(listOf(null, "Quiz", null)))
+        assertEquals(1.0, puzzlesWhere(p) { before(it, 9) }, 1e-4)
+        assertEquals(1.0, puzzlesWhere(p) { !before(it, 9) && it != 9 }, 1e-4)
+    }
+
+    @Test fun withoutTheTabOrderPuzzlesGoAnywhere() {
+        // unnamed slots, or a floor without the rule: nothing pinned
+        for (v in listOf(quizEast(listOf(null, null, null)), quizEast(listOf("Quiz", null, null), FloorRules.F6))) {
+            val p = predict(v)
+            assertTrue(puzzlesWhere(p) { before(it, 9) } > 0.1)
+            assertTrue(puzzlesWhere(p) { !before(it, 9) && it != 9 } > 0.1)
+        }
+    }
+
+    @Test fun bothBlazeRoomsAreHigherOrLower() {
+        assertTrue(MapPredictor.isTabPuzzle("Lower Blaze", "Higher Or Lower"))
+        assertTrue(MapPredictor.isTabPuzzle("Higher Blaze", "Higher Or Lower"))
+        assertTrue(MapPredictor.isTabPuzzle("Quiz", "Quiz"))
+        assertTrue(!MapPredictor.isTabPuzzle("Quiz", "Boulder") && !MapPredictor.isTabPuzzle(null, "Quiz"))
+    }
 }
