@@ -27,6 +27,7 @@ import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DoorType
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
+import com.odtheking.odin.features.impl.dungeon.map.tile.RoomRotation
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
@@ -137,7 +138,8 @@ object BrWaypoints2 : Module(
         /** Written to the file. A box placed before Odin has worked out its room waits to be. */
         var saved = false
 
-        fun aabb() = AABB(c[0].toDouble(), c[1].toDouble(), c[2].toDouble(), c[3].toDouble(), c[4].toDouble(), c[5].toDouble())
+        /** Its corners never change once it is made: a room placed again gets new boxes ([loadRooms]). */
+        val aabb = AABB(c[0].toDouble(), c[1].toDouble(), c[2].toDouble(), c[3].toDouble(), c[4].toDouble(), c[5].toDouble())
     }
 
     private val boxes = mutableListOf<Box>()
@@ -149,7 +151,7 @@ object BrWaypoints2 : Module(
     private val savedFile = lazy { read() }
     private val saved: MutableMap<String, MutableList<IntArray>> by savedFile
     /** Each room whose boxes are in the world, and the rotation and clay block they were placed by. */
-    private val loadedRooms = HashMap<String, String>()
+    private val loadedRooms = HashMap<String, Pair<RoomRotation?, BlockPos?>>()
 
     // --- starred mobs ----------------------------------------------------------------------------
 
@@ -198,7 +200,7 @@ object BrWaypoints2 : Module(
             BrRoles.newRun(dungeonOver = wasInDungeon)
             wasInDungeon = false
             entryDoors.clear(); noPlanSaid.clear(); walkedIn.clear(); myTile = null
-            boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
+            boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear(); drawnCache = null
             rushing = false; rushRoom = null; rushed.clear(); startDoor = false; barriers.clear(); witherSides.clear(); path = emptyMap(); exits = emptyMap(); entrances = emptyMap(); lastRoom = null
             beforeFairy = null; witherSeen = false
         }
@@ -208,7 +210,7 @@ object BrWaypoints2 : Module(
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
             val text = content.string.replace(CONTROL_CODES, "")
-            mc.execute { if (!BrRoles.onChat(text)) onChat(text) }
+            mc.execute { drawnCache = null; if (!BrRoles.onChat(text)) onChat(text) }
         }
 
         // A door starting to fall: its blocks all turn to barrier on one tick — sometimes before its
@@ -218,6 +220,7 @@ object BrWaypoints2 : Module(
         }
 
         on<TickEvent.End> {
+            drawnCache = null
             BrRoles.settingKilling = killers.ordinal + 2
             BrRoles.settingRole = when (myRole.ordinal) { 0 -> null; 1 -> 0; else -> myRole.ordinal - 1 }
             BrRoles.doorKills = doorKills
@@ -242,8 +245,8 @@ object BrWaypoints2 : Module(
         on<RenderExtractEvent> {
             if (!DungeonUtils.inDungeons) return@on
 
-            for ((box, colour, label, next, done) in drawn()) {
-                val bb = box.aabb()
+            for ((box, colour, label, next, done) in drawnNow()) {
+                val bb = box.aabb
                 // Done (Recolor Done Boxes): a whole box in Done Color, number greyed, never "next".
                 if (done && recolorDone) {
                     drawFilledBox(bb, doneColor.withAlpha(opacity), depth = false)
@@ -623,8 +626,8 @@ object BrWaypoints2 : Module(
      * roles, or with no plan for the door the rush came in by, every box purple with its number.
      */
     private fun drawn(): List<Drawn> {
-        // Asked every frame in a dungeon. With no room that can show boxes (all of boss, the gaps between rooms)
-        // there is nothing to draw: skip hashing every box and claiming every mob seen this run.
+        // Asked at most once a tick in a dungeon ([drawnNow]). With no room that can show boxes (all of boss, the
+        // gaps between rooms) there is nothing to draw: skip hashing every box and claiming every mob seen this run.
         if (shownRooms().isEmpty()) return emptyList()
         val out = ArrayList<Drawn>()
         val live = shown()
@@ -649,6 +652,28 @@ object BrWaypoints2 : Module(
             for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false, b !in liveSet)
         }
         return out
+    }
+
+    /**
+     * [drawn] as of the last tick. Mobs, boxes, the room you are in, the rush and the role settings
+     * all move on ticks, so it is worked out on the first frame after each, and again after a chat
+     * line (party roles, the rush's lines), a world load, the site's boxes coming in, or All Rooms or
+     * Recolor Done Boxes being switched. What Odin reads off packets in between (map checkmarks, its
+     * room scan, the floor and classes) and the site's roles coming in show from the next tick.
+     */
+    private var drawnCache: List<Drawn>? = null
+    private var drawnAllRooms = false
+    private var drawnRecolor = false
+
+    private fun drawnNow(): List<Drawn> {
+        drawnCache?.let { if (drawnAllRooms == allRooms && drawnRecolor == recolorDone) return it }
+        return drawn().also { drawnCache = it; drawnAllRooms = allRooms; drawnRecolor = recolorDone }
+    }
+
+    // Switched off, it hears no ticks to keep [drawnCache] current.
+    override fun onDisable() {
+        super.onDisable()
+        drawnCache = null
     }
 
     /**
@@ -704,12 +729,12 @@ object BrWaypoints2 : Module(
         var best: Box? = null
         var most = 0.0
         for (box in boxes) {
-            val o = overlap(mob.spawn, box.aabb())
+            val o = overlap(mob.spawn, box.aabb)
             if (o > most) { most = o; best = box }
         }
         if (best != null || mob.room == null) return best
-        return boxes.filter { it.room == mob.room && gap(mob.spawn, it.aabb()) <= CLAIM_REACH * CLAIM_REACH }
-            .minByOrNull { gap(mob.spawn, it.aabb()) }
+        return boxes.filter { it.room == mob.room && gap(mob.spawn, it.aabb) <= CLAIM_REACH * CLAIM_REACH }
+            .minByOrNull { gap(mob.spawn, it.aabb) }
     }
 
     /** How far apart two boxes are at their closest; 0 if they touch. */
@@ -791,13 +816,13 @@ object BrWaypoints2 : Module(
      * Pipes, Pit, Waterfall, Hallway and Quartz Knight can read NORTH first and only turn WEST up to
      * ~180 ticks later, and boxes placed or saved by the first guess would come out rotated.
      */
-    private fun placed(name: String): DungeonRoom? = DungeonScan.rooms.firstOrNull { r ->
-        r.name == name && r.rotation != null && r.clayPos != null &&
-            r.tiles.size == (r.data?.shape?.tileAmount ?: r.tiles.size)
-    }
+    private fun placed(name: String): DungeonRoom? = DungeonScan.rooms.firstOrNull { it.name == name && workedOut(it) }
+
+    private fun workedOut(r: DungeonRoom) = r.rotation != null && r.clayPos != null &&
+        r.tiles.size == (r.data?.shape?.tileAmount ?: r.tiles.size)
 
     /** The rotation and clay block a room's boxes are placed by. */
-    private fun transform(room: DungeonRoom) = "${room.rotation}|${room.clayPos}"
+    private fun transform(room: DungeonRoom) = room.rotation to room.clayPos
 
     /**
      * Puts each saved room's boxes into the world once Odin has worked the room out, and puts them
@@ -805,6 +830,7 @@ object BrWaypoints2 : Module(
      * out are kept where they are and saved now.
      */
     private fun loadRooms() {
+        if (!roomsToLoad()) return
         val names = saved.keys + boxes.filter { !it.saved }.mapNotNull { it.room }
         for (name in names.toSet()) {
             val room = placed(name) ?: continue
@@ -822,6 +848,23 @@ object BrWaypoints2 : Module(
             loadedRooms[name] = t
             if (boxes.any { it.room == name && !it.saved }) save(name)
         }
+    }
+
+    /**
+     * Whether [loadRooms] has anything to do: a room with boxes Odin has worked out, and not as its
+     * boxes were last put in. Asked every tick in a dungeon, where almost always every such room is
+     * in already, so it goes over Odin's rooms once.
+     */
+    private fun roomsToLoad(): Boolean {
+        val withBoxes = saved.keys
+        if (boxes.any { !it.saved }) return true
+        for (r in DungeonScan.rooms) {
+            val name = r.name ?: continue
+            if (name !in withBoxes || !workedOut(r)) continue
+            val by = loadedRooms[name]
+            if (by == null || by.first != r.rotation || by.second != r.clayPos) return true
+        }
+        return false
     }
 
     /** Saves a room's boxes as they are now. False if Odin has not worked the room out yet. */
@@ -905,6 +948,7 @@ object BrWaypoints2 : Module(
         // Put the boxes back from the new copy; ones placed here and not saved yet stay.
         boxes.removeAll { it.saved }
         loadedRooms.clear()
+        drawnCache = null
     }
 
     /**
