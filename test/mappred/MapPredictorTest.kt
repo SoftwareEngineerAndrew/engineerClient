@@ -57,6 +57,27 @@ class MapPredictorTest {
         assertEquals(3.0, total(p, Cls.PUZZLE), 1e-4)
     }
 
+    @Test fun aRoomShownBeforeTheWayToItIsLeftOutUntilItJoins() {
+        // the opening, and a 1x1 at (3,3) already on the map with a door into (2,3), the tile the wither door leads
+        // into: two doors into one unknown tile from parts the map doesn't join yet - no tree, unless it's left out
+        val v = MapView(6, 6, 3, FloorRules.F7)
+        assertNotNull(v.addRoom(Kind.ENTRANCE, intArrayOf(1)))
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(7, 8, 13, 14)))
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(21)))
+        val doors = mapOf((1 to 7) to Edge.DOOR, (14 to 20) to Edge.WITHER, (8 to 9) to Edge.DOOR, (6 to 7) to Edge.DOOR, (20 to 21) to Edge.DOOR)
+        v.closeEdges { a, b -> doors[minOf(a, b) to maxOf(a, b)] }
+        assertEquals(0, MapPredictor(v).run(50, 20_000, Random(1)))
+        val joined = v.connectedPart()
+        assertEquals(2, joined.kinds.size)
+        assertEquals(-1, joined.roomAt[21])
+        val p = predict(joined)
+        assertEquals(0, p.level)
+        assertEquals(1.0, total(p, Cls.BLOOD), 1e-4)
+        // a map with nothing cut off is its own connected part
+        val whole = opening()
+        assertTrue(whole.connectedPart() === whole)
+    }
+
     @Test fun heldCellsKeepEveryMapWhole() {
         val f7 = FloorRules.F7
         val held = FloorRules(7, 6, 6, false, 0, true, f7.fairyBeforeBlood, f7.combos, f7.walk, f7.bloodFromEntrance,

@@ -85,6 +85,38 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
         }
     }
 
+    /**
+     * Only the rooms the entrance reaches through doors between discovered rooms (this view itself when that's all
+     * of them). A room can show on the map before the room it's reached through - in 8% of real runs, for 3 s at
+     * the median and up to most of a minute - and no door tree joins two parts with one unknown room between them
+     * twice, so the cut-off rooms are left out (as unknown) until the rest of the way shows.
+     */
+    fun connectedPart(): MapView {
+        val ent = kinds.indexOf(Kind.ENTRANCE); if (ent < 0) return this
+        val seen = BooleanArray(kinds.size); seen[ent] = true
+        val queue = ArrayDeque(listOf(ent))
+        while (queue.isNotEmpty()) {
+            val i = queue.removeFirst()
+            for (t in roomTiles[i]) for (nb in neighbours(t)) {
+                val o = roomAt[nb]
+                if (o < 0 || seen[o] || !Edge.isDoor(edge(t, nb))) continue
+                seen[o] = true; queue.addLast(o)
+            }
+        }
+        if (seen.all { it }) return this
+        val out = MapView(w, h, puzzles, rules)
+        for (i in kinds.indices) if (seen[i]) out.addRoom(kinds[i], roomTiles[i], names[i])
+        out.secretTotals = secretTotals; out.puzzleSlots = puzzleSlots
+        out.closeEdges { a, b -> edge(a, b).takeIf { Edge.isDoor(it) } }
+        return out
+    }
+
+    private fun neighbours(t: Int): IntArray {
+        val x = t % w; val z = t / w; val o = ArrayList<Int>(4)
+        if (x + 1 < w) o += t + 1; if (x > 0) o += t - 1; if (z + 1 < h) o += t + w; if (z > 0) o += t - w
+        return o.toIntArray()
+    }
+
     /** Changes whenever anything the predictor reads changes. */
     fun key(): String = buildString {
         append(w).append('x').append(h).append(':').append(rules.floor).append(':').append(puzzles).append(':')
