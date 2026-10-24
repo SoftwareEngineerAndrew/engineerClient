@@ -138,8 +138,10 @@ object PosePov : Module(
     private val skyColor = Vector4f(((SKY shr 16) and 255) / 255f, ((SKY shr 8) and 255) / 255f, (SKY and 255) / 255f, 1f)
 
     init {
+        // Only when the under-GUI hook didn't draw this frame (it can't have matched): on top of the HUD then, but still there.
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
-            DevgineerClient.safely("pose pov") { if (wants()) draw(guiGraphics) }
+            DevgineerClient.safely("pose pov") { if (!drewUnderGui && wants()) draw(guiGraphics) }
+            drewUnderGui = false
         }
         ClientTickEvents.END_CLIENT_TICK.register {
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
@@ -168,6 +170,12 @@ object PosePov : Module(
         releaseFeeds()
         BlockMesh.clear()
     }
+
+    /** The feeds, under all of the frame's GUI (PosePovUnderGuiMixin): the HUD, the leap menu and every mod draw over them. */
+    fun drawUnderGui(gfx: GuiGraphicsExtractor) {
+        DevgineerClient.safely("pose pov") { if (wants()) { draw(gfx); drewUnderGui = true } }
+    }
+    private var drewUnderGui = false
 
     private fun wants(): Boolean {
         if (!enabled || !LeapMenu.enabled) return false

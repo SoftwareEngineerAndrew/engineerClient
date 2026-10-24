@@ -30,6 +30,7 @@
     "MoveEntityPacketAccessor",
     "PacketApplyTapMixin",
     "PosePovRenderMixin",
+    "PosePovUnderGuiMixin",
     "PacketDecoderTapMixin",
     "PacketEncoderTapMixin",
     "PacketProcessorDrainMixin",
