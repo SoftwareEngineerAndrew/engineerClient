@@ -25,6 +25,10 @@
 //   blood uni (any candidate alike), far, w<a> (weight tiles from the entrance ^ a)
 // Every variant: blood a 1x1 dead end 9 or 10 tree steps out with a 1x1 four steps back (the fairy), and the
 // map tried again unless 4-7 1x1 dead ends besides entrance and blood (2-5 puzzles with trap and yellow).
+//   u:mode=grow|post/q=/p=/f=/c=/k=/m=/r= one generator with the open questions as parameters: the rooms made
+//         while the tree grows (grow, chance c * shapes left / free cells) or after it (post, the cells in the
+//         growth order shuffled by m, each tried with chance c); k tries at a random placement over the cell
+//         (0 = any that fits); q, p oldest-/newest-first; f the first room's doors to all its neighbours; r held cells
 // Closest so far: grow:bfs0.1:c3f (nothing held back); cells:bfs0.2:rnd:res4 before it.
 const T0 = './';
 const { complete } = await import(T0 + 'common.mjs');
@@ -37,6 +41,7 @@ const ri = n => Math.floor(rnd() * n);
 const nb = t => { const x = t % W, z = (t / W) | 0, o = []; if (x + 1 < W) o.push(t + 1); if (x > 0) o.push(t - 1); if (z + 1 < W) o.push(t + W); if (z > 0) o.push(t - W); return o; };
 const NB = Array.from({ length: N }, (_, t) => nb(t));
 const SHAPES = ['TwoByOne', 'ThreeByOne', 'FourByOne', 'TwoByTwo', 'L'];
+const SIZE = [2, 3, 4, 4, 3];
 const ORIENT = {
   TwoByOne: [[[0, 0], [1, 0]], [[0, 0], [0, 1]]],
   ThreeByOne: [[[0, 0], [1, 0], [2, 0]], [[0, 0], [0, 1], [0, 2]]],
@@ -125,10 +130,64 @@ function generate(variant, ent, shapes) {
   for (let attempt = 0; attempt < (+process.env.ATTEMPTS || 400); attempt++) {
     const owner = new Int32Array(N).fill(-1); owner[ent] = 0; const shape = ['OneByOne']; let next = 1;
     let parent;
+    // MIX=random7: the big rooms not the real map's but 7 drawn at random each attempt (at most two of a shape)
+    if (process.env.MIX === 'random7') { const c = [0, 0, 0, 0, 0]; shapes = []; for (let k = 0; k < 7; k++) { const okS = [0, 1, 2, 3, 4].filter(i => c[i] < 2); const i = okS[ri(okS.length)]; c[i]++; shapes.push(SHAPES[i]); } }
     const todo = [...shapes]; for (let i = todo.length - 1; i > 0; i--) { const j = ri(i + 1); [todo[i], todo[j]] = [todo[j], todo[i]]; }
     if (order === 'big') todo.sort((a, b) => ORIENT[b][0].length - ORIENT[a][0].length);
     let ok = true, fixed = null;
-    if (kind === 'grow' || kind === 'pgrow') {
+    if (kind === 'u') {
+      // the unified generator: u:mode=grow|post/q=/p=/f=0|1/c=/k=/m=/r= (see the header)
+      const P = Object.fromEntries(rule.split('/').map(kv => kv.split('=')).map(([k, v]) => [k, k === 'mode' ? v : +v]));
+      // b=<tiles>: the shapes not given but picked as the rooms start, at most two of one, each keeping the budget
+      // (7 rooms making exactly b tiles) reachable; al: the start chance c * rooms left^al / free cells
+      const budget = P.b || 0, al = P.al ?? 1;
+      const cnt = [0, 0, 0, 0, 0]; let tilesSoFar = 0;
+      const feas = (roomsLeft, need) => { if (roomsLeft === 0) return need === 0; for (let i = 0; i < 5; i++) if (cnt[i] < 2 && SIZE[i] <= need) { cnt[i]++; const f = feas(roomsLeft - 1, need - SIZE[i]); cnt[i]--; if (f) return true; } return false; };
+      const K = P.k || 0, held = new Set();
+      if (P.r) { const cs = shuffleArr([...Array(N).keys()].filter(t => t !== ent)); for (let i = 0; i < P.r; i++) held.add(cs[i]); }
+      parent = new Int32Array(N).fill(-2); parent[ent] = -1;
+      const grown = [ent], left = [...todo]; let te = null;
+      const freeOk = (t, v) => t !== ent && owner[t] === -1 && !held.has(t) && (P.mode === 'post' || t === v || parent[t] === -2);
+      const joined = ts => !te || internal(ts).filter(k => te.has(k)).length === ts.length - 1;
+      const placed = () => cnt.reduce((a, b) => a + b, 0);
+      if (budget) { left.length = 0; const refill = () => { left.length = 0; const rl = 7 - placed(); if (rl <= 0) return; for (let i = 0; i < 5; i++) if (cnt[i] < 2) { cnt[i]++; if (feas(rl - 1, budget - tilesSoFar - SIZE[i])) left.push(SHAPES[i]); cnt[i]--; } }; refill(); left.refill = refill; }
+      const place = (k, ts) => { for (const t of ts) owner[t] = next; shape.push(left[k]); next++; const si = SHAPES.indexOf(left[k]); cnt[si]++; tilesSoFar += SIZE[si]; if (left.refill) left.refill(); else left.splice(k, 1); };
+      const tryStart = v => {
+        if (!left.length) return;
+        if (K === 0) {
+          // any fitting placement over the cell, a shape among those that have one
+          const opts = left.map(s2 => placements(s2, Array.from({ length: N }, (_, t) => freeOk(t, v))).filter(ts => ts.includes(v) && joined(ts)));
+          const can = left.map((_, i) => i).filter(i => opts[i].length); if (!can.length) return;
+          const i = can[ri(can.length)]; place(i, opts[i][ri(opts[i].length)]); return;
+        }
+        for (let tr = 0; tr < K; tr++) {
+          const sk = ri(left.length); const all = placements(left[sk], Array(N).fill(true)).filter(ts => ts.includes(v)); if (!all.length) continue;
+          const ts = all[ri(all.length)]; if (ts.every(t => freeOk(t, v)) && joined(ts)) { place(sk, ts); return; }
+        }
+      };
+      const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u]));
+      const add = v => { grown.push(v); if (P.mode === 'grow' && owner[v] === -1) { let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++; if (rnd() < Math.min(1, P.c * Math.pow(Math.max(7 - placed(), 0), al) / Math.max(free, 1))) tryStart(v); } };
+      const first = NB[ent][ri(NB[ent].length)]; parent[first] = ent; add(first);
+      if (P.f) { const r1 = owner[first]; let more = r1 >= 0; while (more) { more = false; for (const u of [...grown]) if (owner[u] === r1) for (const w of fr(u)) if (owner[w] === r1) { parent[w] = u; grown.push(w); more = true; } }
+        for (const u of grown.filter(t => t !== ent && (r1 < 0 ? t === first : owner[t] === r1))) for (const w of shuffleArr(fr(u))) if (parent[w] === -2 && owner[w] === -1) { parent[w] = u; add(w); } }
+      let head = 1;
+      while (grown.length < N) {
+        let u = -1, v = -1;
+        if (P.q && rnd() < P.q) { while (head < grown.length) { const f2 = fr(grown[head]); if (f2.length) { u = grown[head]; v = f2[ri(f2.length)]; break; } head++; } }
+        if (u < 0 && P.p && rnd() < P.p) { const last = grown[grown.length - 1]; const f2 = fr(last); if (f2.length) { u = last; v = f2[ri(f2.length)]; } }
+        if (u < 0) { let cnt = 0; for (let i = 1; i < grown.length; i++) for (const w of fr(grown[i])) { cnt++; if (rnd() * cnt < 1) { u = grown[i]; v = w; } } }
+        if (u < 0) { ok = false; break; }
+        parent[v] = u; add(v);
+      }
+      if (ok && P.mode === 'post') {
+        // the rooms after the tree: cells visited in the growth order shuffled by m (0 = as grown, large = random),
+        // each free one tried with chance c, up to 3 passes
+        te = new Set(); for (let t = 0; t < N; t++) if (parent[t] >= 0) te.add(key(t, parent[t]));
+        const ord = grown.map((t, i) => [t, i + (P.m || 0) * N * rnd()]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
+        for (let pass = 0; pass < 3 && left.length; pass++) for (const v of ord) { if (!left.length) break; if (v === ent || owner[v] !== -1 || held.has(v)) continue; if (rnd() < P.c) tryStart(v); }
+      }
+      if (left.length || (budget && placed() !== 7)) ok = false;
+    } else if (kind === 'grow' || kind === 'pgrow') {
       // the tree grown cell by cell from the entrance; a new free cell starts a big room (one of the shapes
       // left, a placement over it whose other cells are free and not grown yet) with chance c * shapes left /
       // free cells; a claimed cell is grown only from its own room's cells
@@ -351,6 +410,11 @@ function stats(M, ent) {
     add(along ? 'doors: along the edge' : onB(ax, az) || onB(bx, bz) ? 'doors: inside to edge cell' : 'doors: inside');
     add(az === bz ? 'doors: east-west' : 'doors: north-south');
   }
+  // where the big tiles are: tiles from the entrance, on the map's edge; big rooms touching
+  { let dsum = 0, nb = 0, edge = 0; for (let t = 0; t < N; t++) { const r = M.owner[t]; if (M.shape[r] === 'OneByOne') continue; nb++; dsum += md(ent, t); const x = t % W, z = (t / W) | 0; if (x === 0 || z === 0 || x === 5 || z === 5) edge++; }
+    add('big tiles: tiles from entrance', dsum / Math.max(nb, 1)); add('big tiles on the edge', edge);
+    const tp = new Set(); for (let t = 0; t < N; t++) for (const u of NB[t]) { const a = M.owner[t], b = M.owner[u]; if (a !== b && M.shape[a] !== 'OneByOne' && M.shape[b] !== 'OneByOne') tp.add(Math.min(a, b) * 64 + Math.max(a, b)); }
+    add('big rooms touching (pairs)', tp.size); }
   // the entrance's surroundings: the two cells beside it on its edge, and the room behind it
   { const ex = ent % W, ez = (ent / W) | 0; const along = ez === 0 || ez === 5 ? [[ex - 1, ez], [ex + 1, ez]] : [[ex, ez - 1], [ex, ez + 1]];
     for (const [x, z] of along) { if (x < 0 || z < 0 || x >= W || z >= W) continue; const r = M.owner[z * W + x];
@@ -361,6 +425,9 @@ function stats(M, ent) {
   const one = t => M.shape[M.owner[t]] === 'OneByOne';
   let q = 0; for (let z = 0; z < 5; z++) for (let x = 0; x < 5; x++) { const t = z * W + x; if (one(t) && one(t + 1) && one(t + W) && one(t + W + 1)) q++; }
   add('2x2 blocks of 1x1s', q);
+  { const SZ = { TwoByOne: 2, ThreeByOne: 3, FourByOne: 4, TwoByTwo: 4, L: 3 }; let tl = 0; const cnt = { TwoByOne: 0, ThreeByOne: 0, FourByOne: 0, TwoByTwo: 0, L: 0 };
+    for (let r = 1; r < M.R; r++) if (M.shape[r] !== 'OneByOne') { tl += SZ[M.shape[r]]; cnt[M.shape[r]]++; }
+    add(`big tiles total ${tl}`); add(`mix ${SHAPES.map(s2 => cnt[s2]).join('')}`); }
   if (M.depth) {
     // the walk to the tile each big room is entered by, and what share of the tiles at that walk are big
     for (let r = 1; r < M.R; r++) { if (M.shape[r] === 'OneByOne') continue; let d = 99; for (let t = 0; t < N; t++) if (M.owner[t] === r) d = Math.min(d, M.depth[t]); add(`big room entered at walk ${Math.min(d, 9)}`); }

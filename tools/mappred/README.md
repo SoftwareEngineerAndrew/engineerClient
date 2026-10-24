@@ -161,6 +161,25 @@ entrance (-0.47 to -0.93, real -0.20), the quota running out close to it; the tr
 cell in a random pass (try1) gets the entrance and edge pulls (-0.24, +0.21) but neither the packing
 (-0.26) nor the 1x1 blobs (-0.03, real +0.12). No single one of these is the generator yet.
 
+Why 7 big rooms of 22 tiles (2476 maps): the big tiles are never fewer than 22 (22 in 88.5%, 23 in 10.7%, 24
+in 0.8%); 1% of maps have 6 big rooms, and those make 22 too. All 9 mixes of 7 rooms (two at most of a shape)
+that make 22 turn up, nothing else but a few 23s and 24s. Not a byproduct of the dead-end target: 7 shapes
+at random each attempt, the dead ends checked, leave 22 tiles in only 28-34% of the maps (generator.mjs
+MIX=random7); not "add rooms until 22" (35%, and up to 25). So a budget: the shapes picked one at a time,
+each keeping 7 rooms of exactly 22 tiles reachable (a 23 budget about 11% of the time). Within it a second
+copy of a shape is less likely than the first (one 1x3 and one L 17.3%, two 1x3 6.2%, two L 5.3%):
+picking alike gives chi-square 533 on the 9 mixes, a second copy at 0.73 the first's weight and shape
+weights 1x2 0.39, 1x4 0.83 (1x3, 2x2, L 1) give 79. Not the room designs (1x2 has the most, 14, and is
+picked least); not counts decided shape by shape in a fixed order (600 at best); not where they fit (made
+as the tree grows under the budget, two 1x4s and two 1x2s come out 13%, real 3%). What sets the weights is
+open.
+
+When the big rooms start: the share of the rooms entered at each walk that are big falls from 0.70 at
+walk 1 to 0.41 at walk 4 (grow c3: 0.70 to 0.52); a start chance falling faster than the shapes left
+(c * shapes left^a / free cells, a = 2 or 3: generator.mjs u al=) makes the first rooms all big and fits
+far worse (mismatch 2535-10172 against 1191 for a = 1). The dip at walks 3-4 is the 1x1s the first room's
+doors lead to (the cells beside the entrance), not a falling rate.
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
