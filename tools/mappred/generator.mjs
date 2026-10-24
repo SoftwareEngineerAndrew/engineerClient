@@ -147,7 +147,11 @@ function generate(variant, ent, shapes) {
       const cnt = [0, 0, 0, 0, 0]; let tilesSoFar = 0;
       const feas = (roomsLeft, need) => { if (roomsLeft === 0) return need === 0; for (let i = 0; i < 5; i++) if (cnt[i] < 2 && SIZE[i] <= need) { cnt[i]++; const f = feas(roomsLeft - 1, need - SIZE[i]); cnt[i]--; if (f) return true; } return false; };
       const K = P.k || 0, held = new Set();
-      if (P.r) { const cs = shuffleArr([...Array(N).keys()].filter(t => t !== ent)); for (let i = 0; i < P.r; i++) held.add(cs[i]); }
+      // held cells: r, plus rp per puzzle of the map being matched (CUR.puzzles); re = an edge cell's weight to be one
+      // (corners re too), interior cells 1
+      const nHeld = Math.round((P.r || 0) + (P.rp || 0) * CUR.puzzles);
+      if (nHeld) { const cs = [...Array(N).keys()].filter(t => t !== ent); const isEdge = t => { const x = t % W, z = (t / W) | 0; return x === 0 || z === 0 || x === 5 || z === 5; };
+        for (let i = 0; i < nHeld && cs.length; i++) { const ws = cs.map(t => isEdge(t) ? (P.re ?? 1) : 1); let r = rnd() * ws.reduce((a, b) => a + b, 0), j = 0; while (r > ws[j] && j < ws.length - 1) r -= ws[j++]; held.add(cs[j]); cs.splice(j, 1); } }
       parent = new Int32Array(N).fill(-2); parent[ent] = -1;
       const grown = [ent], left = [...todo]; let te = null;
       const freeOk = (t, v) => t !== ent && owner[t] === -1 && !held.has(t) && (P.mode === 'post' || t === v || parent[t] === -2);
@@ -339,8 +343,10 @@ function generate(variant, ent, shapes) {
     else pick = cand[ri(cand.length)];
     const [blood, fairy] = pick;
     let dead = 0; for (let r = 1; r < R; r++) if (shape[r] === 'OneByOne' && deg[r] === 1 && r !== owner[blood]) dead++;
-    // the game's dead-end range: 2-5 puzzles besides trap and yellow (8, a rare room, hardly ever)
-    if (dead < 4 || dead > 7) continue;
+    // the game's dead-end range: 2-5 puzzles besides trap and yellow (8, a rare room, hardly ever); with EXACT the map
+    // being matched's own count: its puzzles + trap + yellow (+ a rare on 5-puzzle maps)
+    if (process.env.EXACT) { const want = CUR.puzzles + 2; if (!(dead === want || CUR.puzzles === 5 && dead === want + 1)) continue; }
+    else if (dead < 4 || dead > 7) continue;
     // the path as cells, blood back to the entrance
     const pathCells = []; for (let t = blood; t >= 0; t = parent[t]) pathCells.unshift(t);
     const doors = []; for (let t = 0; t < N; t++) if (parent[t] >= 0 && owner[parent[t]] !== owner[t]) doors.push([t, parent[t]]);
@@ -467,11 +473,14 @@ const variants = process.argv.slice(2).length ? process.argv.slice(2) : ['cells:
 const acc = {}, cnt = {};
 const accum = (m, o) => { acc[m] ||= {}; cnt[m] = (cnt[m] || 0) + 1; for (const k in o) acc[m][k] = (acc[m][k] || 0) + o[k]; };
 const fails = {}; const dumped = {};
+/** The real map being matched: its puzzle count (the generator gets it as it gets the entrance). */
+var CUR = { puzzles: 3 };
 const maxMaps = +(process.env.MAPS || 600);
 for (const L of Ls.slice(0, maxMaps)) {
   const shapes = L.rooms.filter(r => r.shape !== 'OneByOne').map(r => r.shape);
   if (shapes.length !== 7) continue;
   const R = realAsGen(L); accum('real', stats(R, R.ent));
+  CUR = { puzzles: L.rooms.filter(r => r.type === 'PUZZLE').length };
   for (const v of variants) { const g = generate(v, R.ent, shapes); if (!g) { fails[v] = (fails[v] || 0) + 1; continue; } accum(v, stats(g, R.ent));
     if (process.env.DUMP) (dumped[v] ||= []).push({ ent: R.ent, owner: [...g.owner], shape: g.shape, depth: [...g.depth], parent: [...g.parent] }); }
 }
