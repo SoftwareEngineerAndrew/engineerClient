@@ -13,13 +13,16 @@ import { edgeId } from './features.mjs';
 import { FLOORS } from './common.mjs';
 
 export const SHAPES = ['TwoByOne', 'ThreeByOne', 'FourByOne', 'TwoByTwo', 'L'];
-const PLACEMENTS = {
+export const PLACEMENTS = {
   TwoByOne: [[[0, 0], [1, 0]], [[0, 0], [0, 1]]],
   ThreeByOne: [[[0, 0], [1, 0], [2, 0]], [[0, 0], [0, 1], [0, 2]]],
   FourByOne: [[[0, 0], [1, 0], [2, 0], [3, 0]], [[0, 0], [0, 1], [0, 2], [0, 3]]],
   TwoByTwo: [[[0, 0], [1, 0], [0, 1], [1, 1]]],
-  L: [[[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 1]], [[1, 0], [0, 1], [1, 1]]],
+  // never with its north-west corner missing (no recorded map has one)
+  L: [[[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 1]]],
 };
+// opts.fourL: also the L the recorded maps never have (the old placements, to compare against)
+const PLACEMENTS_4L = { ...PLACEMENTS, L: [...PLACEMENTS.L, [[1, 0], [0, 1], [1, 1]]] };
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 // x: a puzzle column tile with no room
 export const OUT = ['n', 'o', 'P', 'T', 'Y', 'B', 'F', 'R', 'x'];
@@ -160,7 +163,10 @@ export function prepare(obs, combos) {
     if (rules.w === 6 && rules.h === 6) for (const g of SYM) { const [x, z] = g(ent[0], ent[1]); if (z === 0 && x <= 2) { f = g; break; } }
     for (let t = 0; t < W * H; t++) { const [x, z] = f(t % W, (t / W) | 0); frame[t] = z * W + x; }
   }
-  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, puzzles: obs.puzzles };
+  // the discovered tiles that are 1x1 rooms
+  const oneAt = new Uint8Array(W * H);
+  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) { const i = tile[z][x]; if (i >= 0 && obs.rooms.get(i)?.tiles.length === 1) oneAt[z * W + x] = 1; }
+  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, oneAt, puzzles: obs.puzzles };
 }
 
 export function sample(obs, combos, opts) {
@@ -196,8 +202,9 @@ export function sample(obs, combos, opts) {
     const rooms = [];
     let fail = false;
     for (const shape of todo) {
-      const cands = [], cw2 = []; let cwT = 0;
-      for (const cells of PLACEMENTS[shape]) for (const t0 of unknown) {
+      const cands = [], cw2 = [], cAt = []; let cwT = 0;
+      const AW = TB.AW?.[shape];
+      (opts.fourL ? PLACEMENTS_4L : PLACEMENTS)[shape].forEach((cells, oi) => { for (const t0 of unknown) {
         const x0 = t0 % W, z0 = (t0 / W) | 0;
         let ok = true, ents = 0; const tiles = [];
         for (const [dx, dz] of cells) {
@@ -208,16 +215,27 @@ export function sample(obs, combos, opts) {
           if (entry.has(t)) ents++;
           tiles.push(t);
         }
-        if (ok && ents <= 1) { let w = 1; for (const t of tiles) w *= TB.BW[frame[t]] ?? 1; cands.push(tiles); cw2.push(w); cwT += w; }
-      }
+        if (ok && ents <= 1) {
+          let w = 1; for (const t of tiles) w *= TB.BW[frame[t]] ?? 1;
+          // AW: each shape's own weight per orientation and top-left tile, in the map's own directions
+          if (AW?.[oi]) w *= AW[oi][t0] ?? 1;
+          cands.push(tiles); cw2.push(w); cAt.push([oi, t0]); cwT += w;
+        }
+      } });
       if (!cands.length) { fail = true; break; }
       let s4 = rnd() * cwT, pk = 0; while (s4 > cw2[pk] && pk < cands.length - 1) s4 -= cw2[pk++];
       const pick = cands[pk];
       for (const t of pick) owner[t] = rooms.length;
-      rooms.push({ tiles: pick, shape });
+      rooms.push({ tiles: pick, shape, orient: cAt[pk][0], anchor: cAt[pk][1] });
     }
     if (fail) continue;
     for (const t of unknown) if (owner[t] < 0) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne' }); }
+    // opts.bunch: maps with more 2x2 blocks of 1x1 rooms kept more often (exp(bunch * blocks), by rejection)
+    if (opts.bunch) {
+      const one = t => isUnk[t] ? rooms[owner[t]].shape === 'OneByOne' : P0.oneAt[t];
+      let q = 0; for (let z = 0; z + 1 < H; z++) for (let x = 0; x + 1 < rules.w; x++) { const t = z * W + x; if (one(t) && one(t + 1) && one(t + W) && one(t + W + 1)) q++; }
+      if (rnd() >= Math.exp(opts.bunch * (q - 9))) continue;
+    }
     // the puzzle column's rooms behind a door the map shows
     for (const t of column) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne', col: true }); }
     const R = rooms.length;

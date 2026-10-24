@@ -1,6 +1,7 @@
 package com.engineerclient.mappred
 
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.random.Random
 
 /** A room's kind, from its colour on the map. */
@@ -431,7 +432,9 @@ class MapPredictor(private val view: MapView) {
         val candTiles = ArrayList<IntArray>(); var cw = DoubleArray(64)
         for (shape in todo) {
             candTiles.clear()
-            for (offs in PLACEMENTS[shape.ordinal]) for (t0 in unknown) {
+            val anchorW = if (w == 6 && h == 6) rules.anchorWeights?.get(shape.ordinal) else null
+            for (oi in PLACEMENTS[shape.ordinal].indices) for (t0 in unknown) {
+                val offs = PLACEMENTS[shape.ordinal][oi]
                 val x0 = t0 % w; val z0 = t0 / w
                 val tiles = IntArray(offs.size / 2); var ok = true; var ents = 0
                 for (c in tiles.indices) {
@@ -447,6 +450,7 @@ class MapPredictor(private val view: MapView) {
                 var wt = 1.0
                 val bigTile = rules.bigTile
                 if (bigTile != null && w == 6 && h == 6) for (t in tiles) wt *= bigTile[frame[t]]
+                if (anchorW != null) wt *= anchorW[oi][t0]
                 cw[candTiles.size] = wt
                 candTiles += tiles
             }
@@ -456,6 +460,17 @@ class MapPredictor(private val view: MapView) {
             rooms += tiles; roomShape += shape
         }
         for (t in unknown) if (owner[t] < 0) { owner[t] = rooms.size; rooms += intArrayOf(t); roomShape += Shape.ONE }
+        // the 1x1 rooms bunch up more than placing the big rooms at random gives ([FloorRules.bunch]): each 2x2
+        // block of 1x1s, discovered or not, makes the map likelier
+        var layoutW = 1.0
+        if (rules.bunch > 0.0) {
+            var blocks = 0
+            for (z in 0 until rules.h - 1) for (x in 0 until rules.w - 1) {
+                val t = z * w + x
+                if (isOne(t, owner, roomShape) && isOne(t + 1, owner, roomShape) && isOne(t + w, owner, roomShape) && isOne(t + w + 1, owner, roomShape)) blocks++
+            }
+            layoutW = exp(rules.bunch * blocks)
+        }
         // the puzzle column's rooms behind a door the map shows
         val firstColumn = rooms.size
         for (t in column) { owner[t] = rooms.size; rooms += intArrayOf(t); roomShape += Shape.ONE }
@@ -512,7 +527,7 @@ class MapPredictor(private val view: MapView) {
         // 4. blood: a 1x1 dead end of the main grid behind the wither door, its walk from the entrance the
         //    floor's 9-10 steps (7-8), with a 1x1 fairy exactly the floor's 4 (3) steps before it
         val type = IntArray(rm) { -1 }
-        var wgt = 1.0
+        var wgt = layoutW
         if (found[Cls.BLOOD] == 0) {
             val hb = if (head >= 0) entryIndex[head] else -1
             val hr = if (head >= 0) owner[head] else -1
@@ -552,7 +567,7 @@ class MapPredictor(private val view: MapView) {
                 if (bloodDoor) type[hr] = Cls.BLOOD
             } else {
                 var total = 0.0; for (i in 0 until nc) total += ws[i]
-                wgt = if (level == 0) total else 1.0
+                wgt *= if (level == 0) total else 1.0
                 val k = pick(ws, nc, rnd)
                 type[cand[k]] = Cls.BLOOD
                 if (fair[k] >= 0) type[fair[k]] = Cls.FAIRY
@@ -642,6 +657,12 @@ class MapPredictor(private val view: MapView) {
         return true
     }
 
+    /** Tile [t] is a 1x1 room: discovered, or in this sample. */
+    private fun isOne(t: Int, owner: IntArray, roomShape: List<Shape>): Boolean {
+        val k = view.roomAt[t]
+        return if (k >= 0) view.shapes[k] == Shape.ONE else owner[t] >= 0 && roomShape[owner[t]] == Shape.ONE
+    }
+
     private fun manhattan(t: Int): Int = if (entTile < 0) 0 else abs(t % w - entTile % w) + abs(t / w - entTile / w)
 
     /** What the samples so far agree on; null before any was kept. */
@@ -682,13 +703,13 @@ class MapPredictor(private val view: MapView) {
         /** Tries at one level, with nothing kept, before the next looser one. */
         private const val LEVEL_TRIES = 30_000L
 
-        /** Cells (dx, dz pairs) of each big shape's placements, in [Shape] order. */
+        /** Cells (dx, dz pairs) of each big shape's placements, in [Shape] order; an L never has its north-west corner missing. */
         private val PLACEMENTS = arrayOf(
             arrayOf(intArrayOf(0, 0, 1, 0), intArrayOf(0, 0, 0, 1)),
             arrayOf(intArrayOf(0, 0, 1, 0, 2, 0), intArrayOf(0, 0, 0, 1, 0, 2)),
             arrayOf(intArrayOf(0, 0, 1, 0, 2, 0, 3, 0), intArrayOf(0, 0, 0, 1, 0, 2, 0, 3)),
             arrayOf(intArrayOf(0, 0, 1, 0, 0, 1, 1, 1)),
-            arrayOf(intArrayOf(0, 0, 1, 0, 0, 1), intArrayOf(0, 0, 1, 0, 1, 1), intArrayOf(0, 0, 0, 1, 1, 1), intArrayOf(1, 0, 0, 1, 1, 1)),
+            arrayOf(intArrayOf(0, 0, 1, 0, 0, 1), intArrayOf(0, 0, 1, 0, 1, 1), intArrayOf(0, 0, 0, 1, 1, 1)),
         )
 
         /** The 8 turns and flips of a 6x6 grid. */

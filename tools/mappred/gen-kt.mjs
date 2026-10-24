@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { complete } from './common.mjs';
 import { SHAPES } from './sampler2.mjs';
-const T = JSON.parse(readFileSync('tables3.json', 'utf8'));
+const T = JSON.parse(readFileSync(process.argv[2] || 'tables3.json', 'utf8'));
 const all = complete();
 const combo = new Map(); let n7 = 0;
 for (const L of all) { const c = SHAPES.map(s => L.rooms.filter(r => r.shape === s).length); if (c.reduce((a, b) => a + b) !== 7) continue; n7++; const k = c.join(''); combo.set(k, (combo.get(k) || 0) + 1); }
@@ -13,3 +13,5 @@ console.log(`val WALK = floatArrayOf(${f(T.WD)})`);
 console.log(`val BLOOD_FROM_ENTRANCE = floatArrayOf(${f(T.MW)})`);
 console.log(`val FAIRY_FROM_ENTRANCE = floatArrayOf(${f(T.FM)})`);
 console.log(`val BIG_TILE = floatArrayOf(\n${[0, 1, 2, 3, 4, 5].map(z => '    ' + f(T.BW.slice(z * 6, z * 6 + 6)) + ',').join('\n')}\n)`);
+// each shape's weight per orientation and top-left tile (calib-aw.mjs), when the tables have them
+if (T.AW) console.log(`val ANCHOR = arrayOf(\n${SHAPES.map(s => `    arrayOf(\n${T.AW[s].map(a => `        floatArrayOf(${f(a)}),`).join('\n')}\n    ),`).join('\n')}\n)`);

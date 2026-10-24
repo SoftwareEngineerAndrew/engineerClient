@@ -295,6 +295,16 @@ class MapPredictorTest {
         }
     }
 
+    @Test fun anLNeverHasItsNorthWestCornerMissing() {
+        val p = predict(opening())
+        val ls = p.bigRooms.filter { it.tiles.size == 3 && MapView.shapeOf(it.tiles, 6) == Shape.L }
+        assertTrue(ls.isNotEmpty())
+        for (l in ls) {
+            val x0 = l.tiles.minOf { it % 6 }; val z0 = l.tiles.minOf { it / 6 }
+            assertTrue(z0 * 6 + x0 in l.tiles, "an L at ${l.tiles.toList()} without its north-west corner")
+        }
+    }
+
     @Test fun bothBlazeRoomsAreHigherOrLower() {
         assertTrue(MapPredictor.isTabPuzzle("Lower Blaze", "Higher Or Lower"))
         assertTrue(MapPredictor.isTabPuzzle("Higher Blaze", "Higher Or Lower"))

@@ -20,6 +20,20 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
 
 - The doors make one tree (no loops); the entrance is on an edge, never a corner, with one door.
 - Exactly 7 big rooms (99.4%), never more than two of one shape, 22 tiles of them (88%) - so 14 1x1s, 21 rooms.
+- An L room never has its north-west corner missing (0 of 2200+ Ls; the other three orientations about a third
+  each): each room is placed by the top-left corner of its bounding box, which only that L leaves empty.
+- A big room takes any spot it fits (every orientation and place alike), not an orientation first: holding the
+  rest of each map, the orientations come out as that gives them (`orient.mjs`-style check, within 1 s.e.).
+- The 1x1s bunch up more than placing the big rooms at random gives, the more the fewer dead ends (puzzles)
+  the map has: 2x2 blocks of four 1x1s are 1.6 a map on 2-puzzle maps, 0.84 on 5-puzzle ones (the sampler
+  gave 1.06 and 0.71). The puzzle count isn't just what the dead ends leave (no map has fewer than 5 or more
+  than 9 1x1 dead ends besides the entrance, which no free tree gives), so the dead ends are a target, and the
+  layout leans to it: `FloorRules.bunch` weighs each 2x2 block of 1x1s (sampler2 `opts.bunch`; off until a
+  held-out evaluation backs a value).
+- Each shape has its own places, beyond the shared per-tile weights: 1x4s run along the map's edges and into
+  its corners, 1x2s keep off them, and not alike top and bottom (the map's own directions): `calib-aw.mjs`
+  fits a weight per shape, orientation and top-left tile (`FloorRules.anchorWeights`, sampler2 `tables.AW`; none
+  set yet).
 - Every special room (entrance, blood, trap, yellow, puzzles, rares) is a 1x1 dead end, and a normal 1x1 is
   never a dead end: the 1x1 dead ends besides entrance and blood are exactly puzzles + trap + yellow + rares.
   Rares only on 5-puzzle maps (the dead ends past the 5th puzzle).
