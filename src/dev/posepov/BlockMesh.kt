@@ -96,6 +96,8 @@ object BlockMesh {
      */
     fun pump(level: ClientLevel, budgetNs: Long, near: List<Long>, everything: Boolean) {
         pumpStart = System.nanoTime(); pumpBudget = budgetNs
+        // A resource pack change moves every texture: the shared pieces built so far are for the old atlas.
+        if (MeshDisk.check()) dropShared()
         drainTouched()
         val now = System.currentTimeMillis()
 
@@ -117,7 +119,7 @@ object BlockMesh {
                 if (own !in roomOwn && dirtyRoom[own] == null) roomOwn[own] = buildRoom(level, r, lx, ly, lz, true)
             } else {
                 val dk = designKey(r, lx, ly, lz)
-                if (dk !in designs) designs[dk] = buildRoom(level, r, lx, ly, lz, false)
+                if (dk !in designs) { if (!MeshDisk.ready) return@forEachPiece true; designs[dk] = fromDisk("d/$dk") { buildRoom(level, r, lx, ly, lz, false, "d/$dk") } }
             }
             !overBudget()
         }
@@ -136,12 +138,18 @@ object BlockMesh {
     private fun want(level: ClientLevel, key: Long): Boolean {
         val sx = SectionPos.x(key); val sy = SectionPos.y(key); val sz = SectionPos.z(key)
         if (inArena(sx, sz) && key !in touchedArena) {
-            if (key !in arena) { arena[key] = buildArena(level, sx, sy, sz); return !overBudget() }
+            if (key !in arena) { if (!MeshDisk.ready) return true; arena[key] = fromDisk("a/$key") { buildArena(level, sx, sy, sz, "a/$key") }; return !overBudget() }
             return true
         }
         if (key in world || dirtyAt[key]?.let { System.currentTimeMillis() - it < DIRTY_DELAY_MS } == true) return true
         world[key] = buildWorld(level, sx, sy, sz)
         return !overBudget()
+    }
+
+    /** A shared piece from disk when it was built in an earlier session (null for an empty one), else [build] (which keeps it there). */
+    private inline fun fromDisk(key: String, build: () -> Mesh?): Mesh? {
+        val (count, bytes) = MeshDisk.read(key) ?: return build()
+        return bytes?.let { Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, it), count) }
     }
 
     private var pumpStart = 0L
@@ -152,7 +160,7 @@ object BlockMesh {
         for (lx in 0..((r.x1 - r.x0) shr 4)) for (lz in 0..((r.z1 - r.z0) shr 4)) for (ly in (r.y0 shr 4)..(r.y1 shr 4)) if (!f(lx, ly, lz)) return
     }
 
-    private fun buildRoom(level: ClientLevel, r: KnownWorld.Room, lx: Int, ly: Int, lz: Int, own: Boolean): Mesh? {
+    private fun buildRoom(level: ClientLevel, r: KnownWorld.Room, lx: Int, ly: Int, lz: Int, own: Boolean, cacheKey: String? = null): Mesh? {
         val pos = BlockPos.MutableBlockPos()
         val bx0 = lx shl 4; val bz0 = lz shl 4
         val bx1 = minOf(bx0 + 15, r.x1 - r.x0); val bz1 = minOf(bz0 + 15, r.z1 - r.z0)
@@ -163,13 +171,13 @@ object BlockMesh {
             else { x, y, z -> if (x < 0 || z < 0 || x > r.x1 - r.x0 || z > r.z1 - r.z0) KnownWorld.AIR else r.designAt(x, y, z) }
         val skip: (Int, Int, Int) -> Boolean =
             if (own) { x, _, z -> KnownWorld.roomAt(r.x0 + x, r.z0 + z) !== r } else { _, _, _ -> false }
-        return mesh(level, bx0..bx1, y0..y1, bz0..bz1, r.x0, r.z0, at, skip)
+        return mesh(level, bx0..bx1, y0..y1, bz0..bz1, r.x0, r.z0, at, skip, cacheKey)
     }
 
-    private fun buildArena(level: ClientLevel, sx: Int, sy: Int, sz: Int): Mesh? {
+    private fun buildArena(level: ClientLevel, sx: Int, sy: Int, sz: Int, cacheKey: String): Mesh? {
         val a = com.engineerclient.p3sim.Arena.data
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
-        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false })
+        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false }, cacheKey)
     }
 
     private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int): Mesh? {
@@ -185,9 +193,9 @@ object BlockMesh {
     /** The faces of the cells in the box, in [at]'s frame, whose origin is world ([ox], 0, [oz]) (for tints and model variants). */
     private inline fun mesh(
         level: ClientLevel, xs: IntRange, ys: IntRange, zs: IntRange, ox: Int, oz: Int,
-        noinline at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean,
+        noinline at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean, cacheKey: String? = null,
     ): Mesh? {
-        if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) return null
+        if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) { cacheKey?.let { MeshDisk.write(it, 0, null) }; return null }
         cellAt = at
         val format = DefaultVertexFormat.POSITION_TEX_COLOR
         val world = BlockPos.MutableBlockPos()
@@ -201,8 +209,9 @@ object BlockMesh {
                 for (f in 0..5) hidden[f] = at(x + DX[f], y + DY[f], z + DZ[f]).isSolidRender
                 block(bb, level, state, world, x, y, z)
             }
-            val data = bb.build() ?: return null
+            val data = bb.build() ?: run { cacheKey?.let { MeshDisk.write(it, 0, null) }; return null }
             data.use {
+                cacheKey?.let { k -> MeshDisk.write(k, it.drawState().indexCount(), it.vertexBuffer()) }
                 return Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, it.vertexBuffer()), it.drawState().indexCount())
             }
         }
@@ -245,6 +254,10 @@ object BlockMesh {
 
     fun clear() {
         newRun()
+        dropShared()
+    }
+
+    private fun dropShared() {
         designs.values.forEach { it?.buffer?.close() }; designs.clear()
         arena.values.forEach { it?.buffer?.close() }; arena.clear()
     }
