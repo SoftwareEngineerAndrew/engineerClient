@@ -267,6 +267,25 @@ class MapPredictorTest {
         assertEquals(1.0, puzzlesWhere(p) { !before(it, 9) && it != 9 }, 1e-4)
     }
 
+    @Test fun aPuzzleNotFirstInTheTabMakesTheDeadEndBeforeItAPuzzle() {
+        // Quiz in the bottom-left corner, (0,5), second on the tab: one puzzle comes before it, so in the left
+        // column above it; there the only 1x1 dead end can be (0,0), at the end of the column from (0,4)
+        val v = MapView(6, 6, 5, FloorRules.F7)
+        assertNotNull(v.addRoom(Kind.ENTRANCE, intArrayOf(1)))
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(7, 13, 19, 25)))
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(31)))
+        assertNotNull(v.addRoom(Kind.PUZZLE, intArrayOf(30), "Quiz"))
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(24)))
+        val doors = mapOf((1 to 7) to Edge.DOOR, (25 to 31) to Edge.DOOR, (30 to 31) to Edge.DOOR, (24 to 25) to Edge.DOOR,
+            (18 to 24) to Edge.DOOR, (19 to 20) to Edge.WITHER, (7 to 8) to Edge.DOOR)
+        v.closeEdges { a, b -> doors[minOf(a, b) to maxOf(a, b)] }
+        assertTrue(predict(v).probs[0]!![Cls.PUZZLE] < 0.9f)
+        v.puzzleSlots = listOf(null, "Quiz", null, null, null)
+        val p = predict(v)
+        assertEquals(0, p.level)
+        assertEquals(1f, p.probs[0]!![Cls.PUZZLE], 1e-4f)
+    }
+
     @Test fun withoutTheTabOrderPuzzlesGoAnywhere() {
         // unnamed slots, or a floor without the rule: nothing pinned
         for (v in listOf(quizEast(listOf(null, null, null)), quizEast(listOf("Quiz", null, null), FloorRules.F6))) {
