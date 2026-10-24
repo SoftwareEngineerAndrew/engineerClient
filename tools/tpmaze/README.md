@@ -22,7 +22,9 @@ not used for pairs). A landing whose yaw looks at nothing is Hypixel putting the
   that leads to the end (95% within 0.04 degrees, all within 0.3): 4,090 of 4,092 landings agree within their maze, and 241 of 241 walks into the
   end left from that pad. One landing names it alone 59% of the time; the first two landings 96%. Not the frame: the landing cell.
 - **Pads are two-way pairs.** A drops you beside B, B drops you beside A: 102 of 102 pads seen both ways agree, no contradiction
-  in 3,753 pairs. So the pad you land beside takes you back, and the end pad pairs with the final pad.
+  in 3,753 pairs. So the pad you land beside takes you back. The final pad is one way: nothing lands you beside it (0 of 3,830
+  landings), and the end pad sends you out to the room's entrance (449 of the recorder's own teleports). So the start pad's twin
+  and 13 pairs use the other 27 pads.
 - **No pad pairs inside its own cell** (0 of 3,753). A cell's pads can lead into the same cell (21% of cells with 2+ known).
 - **The final pad's cell is at least two steps from the start's.** Of 584 teleports out of the cell the start pad leads into, none
   landed in the final pad's cell (pairs drawn at random: 12.2%; 41% of random mazes would be 0 or 1 steps). 39 mazes are settled at
