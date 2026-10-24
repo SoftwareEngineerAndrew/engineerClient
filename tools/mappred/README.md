@@ -189,6 +189,23 @@ walk 1 to 0.41 at walk 4 (grow c3: 0.70 to 0.52); a start chance falling faster 
 far worse (mismatch 2535-10172 against 1191 for a = 1). The dip at walks 3-4 is the 1x1s the first room's
 doors lead to (the cells beside the entrance), not a falling rate.
 
+The systematic search (generator.mjs u:, nothing taken from the real maps: the big rooms from the budget,
+w=0.39,1,0.83,1,1 s=0.73; 60 random settings on 400 maps, then 16 around the best on 800): the closest is
+`u:mode=grow/q=0.05/f=1/c=8/k=3/r=4/b=22/w=0.39,1,0.83,1,1/s=0.73` - the rooms made as the tree grows (start
+chance 8 * shapes left / free cells, 3 tries at a random placement over the cell), the first room's doors to
+all its neighbours, 4 cells held back. The first room's doors are needed most (mismatch 1897 without them,
+1000-1250 with), 2-3 tries beat 1 and "any that fits", held cells still help (1500 maps: 1449 with 4, 3038
+without): in a generator that makes the rooms as the tree grows they keep the big rooms off the entrance
+(placefit -0.34, without -0.77, real -0.20) and apart (7.08 pairs touching, without 7.90, real 6.86) - they
+stand in for something that holds the big rooms back early, not found. Still off: going round inside a 2x2
+(0.2%, real 11%), the fairy (14-21% on an edge, real 28%), the entrance's pull (-0.34).
+
+Predicting with it (MCMC on a part-known map) needs the chance of a whole map under the generator, a sum over
+every order the tree could have grown in: not workable; what carries over (the held cells) is in the
+predictor. Tuning the predictor's own settings on the score (grow, reserve, bunch: 18 settings on training
+maps, the best confirmed on held-out ones) found nothing better than what it has: the training maps' best
+(grow 0.2, reserve 4, bunch 0.1) was worse held-out (-1.0477, real order -1.0707; now -1.0427, -1.0669).
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
