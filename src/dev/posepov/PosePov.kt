@@ -162,7 +162,9 @@ object PosePov : Module(
                 feeds[i]?.destroyBuffers()
                 TextureTarget("dc:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
             }
-            renderFeed(target, p.getEyePosition(pt), p.getViewYRot(pt), p.getViewXRot(pt), w, h)
+            val eye = p.getEyePosition(pt); val yaw = p.getViewYRot(pt); val pitch = p.getViewXRot(pt)
+            FrameLog.feed(i, p, pt, eye, yaw, pitch)
+            renderFeed(target, eye, yaw, pitch, w, h)
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -224,6 +226,7 @@ object PosePov : Module(
             val transforms = draws.keys.associateWith { k ->
                 RenderSystem.getDynamicUniforms().writeTransform(Matrix4f(view).translate((k shr 32).toInt().toFloat(), 0f, k.toInt().toFloat()))
             }
+            FrameLog.slices(transforms.values.map { it.offset() })
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = if (maxIndices > 0) quadIndices.getBuffer(maxIndices) else null
             RenderSystem.getDevice().createCommandEncoder().createRenderPass(
