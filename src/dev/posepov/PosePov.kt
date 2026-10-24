@@ -6,7 +6,11 @@ import com.mojang.blaze3d.pipeline.TextureTarget
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.renderpearl.api.GpuFormat
 import com.mojang.renderpearl.api.commands.RenderPassDescriptor
+import com.mojang.renderpearl.api.pipeline.ColorTargetState
 import com.mojang.renderpearl.api.pipeline.CompareOp
+import com.mojang.blaze3d.vertex.DefaultVertexFormat
+import net.minecraft.client.renderer.BindGroupLayouts
+import net.minecraft.client.renderer.texture.TextureAtlas
 import com.mojang.renderpearl.api.pipeline.DepthStencilState
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology
 import com.mojang.renderpearl.api.pipeline.RenderPipeline
@@ -68,8 +72,18 @@ object PosePov : Module(
     private const val SKY = 0xFF78A7FF.toInt()
 
     private val PIPELINE: RenderPipeline = RenderPipelines.register(
-        RenderPipeline.builder(RenderPipelines.DEBUG_FILLED_SNIPPET)
+        // The block atlas, textured as vanilla's position_tex_color draws it (transparent texels discarded: glass, leaves).
+        RenderPipeline.builder()
             .withLocation(Identifier.fromNamespaceAndPath("devgineerclient", "pipeline/pose_pov"))
+            .withVertexShader("core/position_tex_color")
+            .withFragmentShader("core/position_tex_color")
+            .withBindGroupLayout(BindGroupLayouts.GLOBALS)
+            .withBindGroupLayout(BindGroupLayouts.PROJECTION)
+            .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER0)
+            .withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+            .withPrimitiveTopology(PrimitiveTopology.QUADS)
+            .withColorTargetState(ColorTargetState.DEFAULT)
             .withCull(false)
             // Reversed Z: depth is cleared to 0 and nearer is greater.
             .withDepthStencilState(DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, true))
@@ -238,6 +252,8 @@ object PosePov : Module(
                 if (indices == null) return@use
                 RenderSystem.bindDefaultUniforms(pass)
                 pass.setPipeline(RenderSystem.getCompiledPipeline(PIPELINE))
+                val atlas = mc.textureManager.getTexture(TextureAtlas.LOCATION_BLOCKS)
+                pass.setUniform("Sampler0", atlas.textureView, atlas.sampler)
                 pass.setIndexBuffer(indices, quadIndices.type())
                 for ((k, meshes) in draws) {
                     pass.setUniform("DynamicTransforms", transforms.getValue(k))

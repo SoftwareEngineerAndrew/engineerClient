@@ -10,6 +10,14 @@ import com.engineerclient.p3sim.pack.DungeonFrame
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
 import net.minecraft.core.SectionPos
+import net.minecraft.core.Direction
+import net.minecraft.client.model.geom.builders.UVPair
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart
+import net.minecraft.client.renderer.texture.TextureAtlasSprite
+import net.minecraft.client.resources.model.geometry.BakedQuad
+import net.minecraft.util.RandomSource
+import net.minecraft.world.level.block.LiquidBlock
+import net.minecraft.world.level.block.RenderShape
 import net.minecraft.world.level.block.state.BlockState
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,7 +45,7 @@ object BlockMesh {
 
     private const val DIRTY_DELAY_MS = 100L
 
-    private val SHADE = floatArrayOf(0.5f, 1f, 0.8f, 0.8f, 0.6f, 0.6f) // down, up, north, south, west, east
+    private val SHADE = floatArrayOf(0.5f, 1f, 0.8f, 0.8f, 0.6f, 0.6f) // the game's side shades: down, up, north, south, west, east
     private val DX = intArrayOf(0, 0, 0, 0, -1, 1)
     private val DY = intArrayOf(-1, 1, 0, 0, 0, 0)
     private val DZ = intArrayOf(0, 0, -1, 1, 0, 0)
@@ -180,7 +188,7 @@ object BlockMesh {
         at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean,
     ): Mesh? {
         if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) return null
-        val format = DefaultVertexFormat.POSITION_COLOR
+        val format = DefaultVertexFormat.POSITION_TEX_COLOR
         val world = BlockPos.MutableBlockPos()
         ByteBufferBuilder(format.vertexSize * 4 * 1024).use { bytes ->
             val bb = BufferBuilder(bytes, PrimitiveTopology.QUADS, format)
@@ -188,12 +196,9 @@ object BlockMesh {
                 if (skip(x, y, z)) continue
                 val state = at(x, y, z)
                 if (state.isAir) continue
-                val rgb = state.getMapColor(level, world.set(x + ox, y, z + oz)).col
-                if (rgb == 0) continue
-                for (f in 0..5) {
-                    if (at(x + DX[f], y + DY[f], z + DZ[f]).isSolidRender) continue
-                    face(bb, f, x.toFloat(), y.toFloat(), z.toFloat(), shade(rgb, SHADE[f]))
-                }
+                world.set(x + ox, y, z + oz)
+                for (f in 0..5) hidden[f] = at(x + DX[f], y + DY[f], z + DZ[f]).isSolidRender
+                block(bb, level, state, world, x.toFloat(), y.toFloat(), z.toFloat())
             }
             val data = bb.build() ?: return null
             data.use {
@@ -243,22 +248,68 @@ object BlockMesh {
         arena.values.forEach { it?.buffer?.close() }; arena.clear()
     }
 
-    private fun shade(rgb: Int, k: Float): Int {
+    // --- one block ------------------------------------------------------------------------------------------------------
+
+    /** Which of the six neighbours hide that side (Direction order: down, up, north, south, west, east); set per cell by [mesh]. */
+    private val hidden = BooleanArray(6)
+    private val parts = ArrayList<BlockStateModelPart>()
+    private val random = RandomSource.create()
+    private val DIRS = Direction.entries.toTypedArray()
+
+    /**
+     * The block's own baked model at ([x], [y], [z]): every quad with its texture from the block atlas and its tint (grass,
+     * leaves), shaded by the side it faces; a side's quads are left out when the block next to it hides them. A liquid has no
+     * model, so it is a cube of its texture.
+     */
+    private fun block(bb: BufferBuilder, level: ClientLevel, state: BlockState, world: BlockPos, x: Float, y: Float, z: Float) {
+        if (state.block is LiquidBlock) {
+            val sprite = mc().modelManager.blockStateModelSet.getParticleMaterial(state).sprite()
+            val tint = tint(level, state, world, 0)
+            for (f in 0..5) if (!hidden[f]) cube(bb, f, x, y, z, sprite, mul(tint, SHADE[f]))
+            return
+        }
+        if (state.renderShape == RenderShape.INVISIBLE) return
+        parts.clear()
+        random.setSeed(state.getSeed(world))
+        mc().modelManager.blockStateModelSet.get(state).collectParts(random, parts)
+        for (part in parts) {
+            for (d in DIRS) if (!hidden[d.ordinal]) for (q in part.getQuads(d)) quad(bb, level, state, world, q, x, y, z)
+            for (q in part.getQuads(null)) quad(bb, level, state, world, q, x, y, z)
+        }
+    }
+
+    private fun quad(bb: BufferBuilder, level: ClientLevel, state: BlockState, world: BlockPos, q: BakedQuad, x: Float, y: Float, z: Float) {
+        val info = q.materialInfo()
+        val tint = if (info.isTinted) tint(level, state, world, info.tintIndex()) else -1
+        val c = mul(tint, SHADE[q.direction().ordinal])
+        for (k in 0..3) {
+            val p = q.position(k); val uv = q.packedUV(k)
+            bb.addVertex(x + p.x(), y + p.y(), z + p.z()).setUv(UVPair.unpackU(uv), UVPair.unpackV(uv)).setColor(c)
+        }
+    }
+
+    private fun tint(level: ClientLevel, state: BlockState, world: BlockPos, index: Int): Int =
+        mc().blockColors.getTintSource(state, index)?.colorInWorld(state, level, world) ?: -1
+
+    private fun mul(rgb: Int, k: Float): Int {
         val r = ((rgb shr 16 and 255) * k).toInt(); val g = ((rgb shr 8 and 255) * k).toInt(); val b = ((rgb and 255) * k).toInt()
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 
-    private fun face(bb: BufferBuilder, f: Int, x: Float, y: Float, z: Float, c: Int) {
+    /** One side of a full cube, the whole [s] across it. */
+    private fun cube(bb: BufferBuilder, f: Int, x: Float, y: Float, z: Float, s: TextureAtlasSprite, c: Int) {
         val X = x + 1; val Y = y + 1; val Z = z + 1
+        val u0 = s.u0; val u1 = s.u1; val v0 = s.v0; val v1 = s.v1
+        fun v(px: Float, py: Float, pz: Float, u: Float, v: Float) { bb.addVertex(px, py, pz).setUv(u, v).setColor(c) }
         when (f) {
-            0 -> { v(bb, x, y, z, c); v(bb, X, y, z, c); v(bb, X, y, Z, c); v(bb, x, y, Z, c) }
-            1 -> { v(bb, x, Y, z, c); v(bb, x, Y, Z, c); v(bb, X, Y, Z, c); v(bb, X, Y, z, c) }
-            2 -> { v(bb, x, y, z, c); v(bb, x, Y, z, c); v(bb, X, Y, z, c); v(bb, X, y, z, c) }
-            3 -> { v(bb, x, y, Z, c); v(bb, X, y, Z, c); v(bb, X, Y, Z, c); v(bb, x, Y, Z, c) }
-            4 -> { v(bb, x, y, z, c); v(bb, x, y, Z, c); v(bb, x, Y, Z, c); v(bb, x, Y, z, c) }
-            else -> { v(bb, X, y, z, c); v(bb, X, Y, z, c); v(bb, X, Y, Z, c); v(bb, X, y, Z, c) }
+            0 -> { v(x, y, z, u0, v0); v(X, y, z, u1, v0); v(X, y, Z, u1, v1); v(x, y, Z, u0, v1) }
+            1 -> { v(x, Y, z, u0, v0); v(x, Y, Z, u0, v1); v(X, Y, Z, u1, v1); v(X, Y, z, u1, v0) }
+            2 -> { v(x, y, z, u1, v1); v(x, Y, z, u1, v0); v(X, Y, z, u0, v0); v(X, y, z, u0, v1) }
+            3 -> { v(x, y, Z, u0, v1); v(X, y, Z, u1, v1); v(X, Y, Z, u1, v0); v(x, Y, Z, u0, v0) }
+            4 -> { v(x, y, z, u0, v1); v(x, y, Z, u1, v1); v(x, Y, Z, u1, v0); v(x, Y, z, u0, v0) }
+            else -> { v(X, y, z, u1, v1); v(X, Y, z, u1, v0); v(X, Y, Z, u0, v0); v(X, y, Z, u0, v1) }
         }
     }
 
-    private fun v(bb: BufferBuilder, x: Float, y: Float, z: Float, c: Int) { bb.addVertex(x, y, z).setColor(c) }
+    private fun mc() = net.minecraft.client.Minecraft.getInstance()
 }
