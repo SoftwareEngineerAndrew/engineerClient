@@ -36,6 +36,13 @@ class FloorRules(
     val missingNames: Set<String>,
     /** The tab lists the puzzles in their order on the map (x, then z), so a named one fixes how many come before it. */
     val puzzleOrder: Boolean = false,
+    /** Each 2x2 block of 1x1 rooms weighs a map by e^bunch: the 1x1s bunch up, the more the fewer dead ends (puzzles) a map has. */
+    val bunch: Double = 0.0,
+    /**
+     * Each big shape's own weight per orientation ([MapPredictor]'s placements, in order) and top-left tile
+     * (z * 6 + x, the map's own directions, not turned to the entrance), on top of [bigTile] (F7's 6x6 only).
+     */
+    val anchorWeights: Array<Array<FloatArray>>? = null,
 ) {
     /** The most big rooms a map of this floor has (the loosest fallback's cap). */
     val maxBig = combos.maxOf { c -> (0 until 5).sumOf { c[it] } }
