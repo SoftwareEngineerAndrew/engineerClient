@@ -76,10 +76,23 @@ function realLayout(L) {
   for (const r of L.rooms) if (r.shape !== 'OneByOne') ow.shapeOf[r.i] = r.shape;
   return ow;
 }
-function genLayout(ent, shapes, held) {
+function genLayout(ent, shapes, held, how = 'scatter') {
   for (let attempt = 0; attempt < 300; attempt++) {
     const ow = new Int32Array(N).fill(-1); ow.shapeOf = {}; ow[ent] = -2;
-    const hs = shuffle([...Array(N).keys()].filter(t => t !== ent)).slice(0, held); for (const t of hs) ow[t] = -3;
+    let hs;
+    if (how === 'scatter') hs = shuffle([...Array(N).keys()].filter(t => t !== ent)).slice(0, held);
+    else {
+      // 'blob': one connected group grown from a random cell; 'blobs2': two; 'entrance': grown from beside the entrance
+      hs = []; const seeds = how === 'blobs2' ? 2 : 1; const per = Math.ceil(held / seeds);
+      for (let s2 = 0; s2 < seeds; s2++) {
+        let start = how === 'entrance' ? NB[ent][Math.floor(rnd() * NB[ent].length)] : Math.floor(rnd() * N);
+        if (start === ent || hs.includes(start)) continue;
+        const grp = [start];
+        while (grp.length < per) { const fr = []; for (const t of grp) for (const u of NB[t]) if (u !== ent && !grp.includes(u) && !hs.includes(u)) fr.push(u); if (!fr.length) break; grp.push(fr[Math.floor(rnd() * fr.length)]); }
+        hs.push(...grp);
+      }
+    }
+    for (const t of hs) ow[t] = -3;
     let ok = true;
     for (const [i, s] of shuffle([...shapes]).entries()) { const c = spots(ow, s, -99); if (!c.length) { ok = false; break; } for (const t of c[Math.floor(rnd() * c.length)]) ow[t] = 100 + i; ow.shapeOf[100 + i] = s; }
     if (!ok) continue;
@@ -109,12 +122,12 @@ function weightedLayout(ent, shapes, beta) {
   return null;
 }
 const Ls = complete().filter(L => L.rooms.filter(r => r.shape !== 'OneByOne').length === 7).slice(0, +(process.env.MAPS || 1500));
-const sets = { real: [], uniform: [], 'held 5': [], 'held 7': [] };
+const sets = { real: [], uniform: [], 'held 5': [], 'blob 5': [], 'blobs2 6': [], 'entr 5': [] };
 for (const L of Ls) {
   const e = L.rooms.find(r => r.type === 'ENTRANCE').tiles[0], ent = e.z * W + e.x;
   sets.real.push(...choices(realLayout(L), ent));
   const shapes = L.rooms.filter(r => r.shape !== 'OneByOne').map(r => r.shape);
-  for (const [name, h] of [['uniform', 0], ['held 5', 5], ['held 7', 7]]) { const ow = genLayout(ent, shapes, h); if (ow) sets[name].push(...choices(ow, ent)); }
+  for (const [name, h, how] of [['uniform', 0], ['held 5', 5], ['blob 5', 5, 'blob'], ['blobs2 6', 6, 'blobs2'], ['entr 5', 5, 'entrance']]) { const ow = genLayout(ent, shapes, h, how); if (ow) sets[name].push(...choices(ow, ent)); }
 }
 if (process.env.CALIB) {
   // match the weighted generator's fit to the real one, feature by feature (edge sides, big sides, entrance, distance)
@@ -129,6 +142,15 @@ if (process.env.CALIB) {
     beta = beta.map((b, i) => b + 0.8 * gap[i] / sd[i]);
   }
   process.exit(0);
+}
+if (process.env.GEN) {
+  // layouts from generator.mjs DUMP: owner with the entrance room 0, shape per room
+  const dump = JSON.parse((await import('node:fs')).readFileSync(process.env.GEN, 'utf8'));
+  for (const [v, list] of Object.entries(dump)) { sets[v] = [];
+    for (const { ent, owner, shape } of list) { const ow = new Int32Array(N).fill(-1); ow.shapeOf = {};
+      for (let t = 0; t < N; t++) { const r = owner[t]; ow[t] = r === 0 ? -2 : shape[r] === 'OneByOne' ? -1 : r; if (shape[r] !== 'OneByOne') ow.shapeOf[r] = shape[r]; }
+      sets[v].push(...choices(ow, ent)); } }
+  for (const k of ['held 5', 'blob 5', 'blobs2 6', 'entr 5']) delete sets[k];
 }
 const fits = Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, fit(v)]));
 console.log(`${Ls.length} maps; weight per standard deviation of each feature (0 = no pull; + = the chosen spot has more of it)`);

@@ -105,6 +105,27 @@ out first and turns nearer blood), the 1x1s beside the entrance (dead ends 0.45 
 going round inside a 2x2 (2% of the times it enters and leaves by neighbouring cells, real 11%), the rest of
 the bunching, and the entrance's edges.
 
+### Where the big rooms' pulls come from (placefit.mjs on generator.mjs DUMPs)
+
+placefit.mjs fits, for each big room with the rest of its map fixed, what makes its spot likelier than the
+others its shape could take (per standard deviation; uniform placement shows what fixing the rest gives alone):
+
+    pull on a big room's spot        real   uniform   cell tree   + 4 held   grow c2   grow c4
+    tiles from the entrance        -0.20     +0.02      -0.21      -0.15     -0.22     -0.85
+    touches the entrance           +0.16     -0.12      +0.16      +0.17     +0.05     +0.11
+    sides on the map's edge        +0.14     -0.42      -0.06      +0.11     +0.07     +0.10
+    2x2 blocks of 1x1s left        +0.14     -0.02      -0.08      -0.01     +0.14     +0.11
+    sides on other big rooms       -0.05     -0.25      -0.28      -0.17     -0.18     +0.33
+
+The entrance pull is the tree's: big rooms merged only where a shallow cell tree already joins their cells
+sit as near the entrance as the real ones, with nothing fitted for it. What's left - big rooms on the map's
+edge, against each other, the 1x1s left in blobs - is what the held cells stand in for (the edge, not the
+blobs). Making the big rooms while the tree grows (`grow`) leaves the 1x1s in blobs as the real maps do (the
+cells grown once the shapes have run out, or where none fits): c2 gets every pull above roughly right, but
+too many 1x1s with 3+ doors (2.1 a map, real 1.6) and 1x4 dead ends; c4 gets those and the bunching (1.32,
+real 1.24) but puts the big rooms too near the entrance. So the rooms are likely made during the growth, by
+a rule not yet found between those two.
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
