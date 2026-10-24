@@ -15,6 +15,8 @@ import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.LeverBlock
+import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.shapes.VoxelShape
 
 /** A box around each P3 lever's hitbox (each lever's own shape: it depends on how the lever faces), in F7/M7 boss and the P3 Sim Beta. */
 object HighlightLevers : Module(
@@ -34,7 +36,20 @@ object HighlightLevers : Module(
     )
     /** The lights device's 5x4 levers (x 58-62, y 133-136, z 142). */
     private val DEVICE_LEVERS = (58..62).flatMap { x -> (133..136).map { y -> BlockPos(x, y, 142) } }
+    /** Section levers first, so without [deviceLevers] the loop stops after them. */
     private val ALL_LEVERS = SECTION_LEVERS + DEVICE_LEVERS
+
+    /**
+     * Each lever's box and the shape it was made from. Shapes are shared and never change, so a box is only made again
+     * when its lever's shape does (placed facing another way), not every frame.
+     */
+    private val shapes = arrayOfNulls<VoxelShape>(ALL_LEVERS.size)
+    private val boxes = arrayOfNulls<AABB>(ALL_LEVERS.size)
+
+    /** The last fill and the [leverColor] value it was made from: by value, as the setting's colour is edited in place. */
+    private var fillColor: Color? = null
+    private var fillRgba = 0
+    private var fillAlpha = 0f
 
     init {
         on<RenderExtractEvent> { CoffeeClient.safely("highlight levers") { draw() } }
@@ -43,15 +58,32 @@ object HighlightLevers : Module(
     private fun RenderExtractEvent.draw() {
         if (!com.engineerclient.p3sim.P3Sim.inSim && !(DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7)) return
         val level = mc.level ?: return
-        val fill = leverColor.withAlpha(leverColor.alphaFloat * 0.2f)
-        for (pos in if (deviceLevers) ALL_LEVERS else SECTION_LEVERS) {
+        // Every setting read is a Compose state read: once a frame, not once per lever.
+        val color = leverColor
+        val fill = if (leverFill) fillOf(color) else null
+        val depth = !leverWalls
+        val count = if (deviceLevers) ALL_LEVERS.size else SECTION_LEVERS.size
+        for (i in 0 until count) {
+            val pos = ALL_LEVERS[i]
             val state = level.getBlockState(pos)
             if (state.block !is LeverBlock) continue
             val shape = state.getShape(level, pos)
             if (shape.isEmpty) continue
-            val box = shape.bounds().move(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
-            if (leverFill) drawFilledBox(box, fill, depth = !leverWalls)
-            drawWireFrameBox(box, leverColor, depth = !leverWalls)
+            if (shape !== shapes[i]) {
+                boxes[i] = shape.bounds().move(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
+                shapes[i] = shape
+            }
+            val box = boxes[i]!!
+            if (fill != null) drawFilledBox(box, fill, depth = depth)
+            drawWireFrameBox(box, color, depth = depth)
         }
+    }
+
+    /** [color] at a fifth of its alpha. */
+    private fun fillOf(color: Color): Color {
+        val rgba = color.rgba
+        val alpha = color.alphaFloat
+        fillColor?.let { if (rgba == fillRgba && alpha == fillAlpha) return it }
+        return color.withAlpha(alpha * 0.2f).also { fillColor = it; fillRgba = rgba; fillAlpha = alpha }
     }
 }
