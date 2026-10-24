@@ -136,6 +136,7 @@ object PosePov : Module(
     }
 
     private fun releaseFeeds() {
+        if (!captured) menuFrames = 0
         queued.clear()
         for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null }
     }
@@ -229,8 +230,27 @@ object PosePov : Module(
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = if (most > 0) quadIndices.getBuffer(most) else null
             for (job in queued) renderFeed(job.target, job.eye, job.yaw, job.pitch, job.w, job.h, quadIndices, indices)
+            capture()
         }
         queued.clear()
+    }
+
+    // TEMPORARY, for the shaking: frames 30-41 of the first leap menu each session, every feed as drawn, read back from the GPU
+    // into config/devgineerclient/posepov-shots.
+    private var menuFrames = 0
+    private var captured = false
+
+    private fun capture() {
+        if (captured) return
+        val frame = menuFrames++
+        if (frame < 30) return
+        if (frame > 41) { captured = true; return }
+        val dir = net.fabricmc.loader.api.FabricLoader.getInstance().configDir.resolve("devgineerclient").resolve("posepov-shots")
+        java.nio.file.Files.createDirectories(dir)
+        for ((i, job) in queued.withIndex()) {
+            val file = dir.resolve(String.format(java.util.Locale.ROOT, "f%02d-feed%d.png", frame, i))
+            net.minecraft.client.Screenshot.takeScreenshot(job.target, 2) { img -> img.use { runCatching { it.writeToFile(file) } } }
+        }
     }
 
     private fun renderFeed(target: TextureTarget, eye: Vec3, yaw: Float, pitch: Float, w: Int, h: Int, quadIndices: RenderSystem.AutoStorageIndexBuffer, indices: com.mojang.renderpearl.api.buffers.GpuBuffer?) {
