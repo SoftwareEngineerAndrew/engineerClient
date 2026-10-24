@@ -1,7 +1,7 @@
 package com.engineerclient.splits
 
 /**
- * The blood rush, room by room, rebuilt every frame so the room being run counts up live.
+ * The blood rush, room by room; the room being run is rebuilt every frame so it counts up live.
  *
  * A room starts the moment the door into it starts falling and ends when the door out of it
  * starts falling, so the rooms tile end to end. Every time in a room is measured from that room's
@@ -33,7 +33,9 @@ class BloodRunDetail {
     private class Room(var start: Stamp) {
         var name = UNNAMED
         var mapId: String? = null
+        /** Can still be set once the room is over (by the next door down), so setting it drops [row]. */
         var toFairy = false
+            set(value) { field = value; row = null }
         var doorFell: Stamp? = null
         var mobKilled: Stamp? = null
         var keyPicked: Stamp? = null
@@ -47,15 +49,20 @@ class BloodRunDetail {
         var keySeenAt: Double? = null
         /** The pickup line had no name ("A Wither Key was picked up!"). */
         var pickupAnonymous = false
+
+        /** Its compact row once it is over, made once: nothing but [toFairy] changes in a finished room. */
+        var row: String? = null
     }
 
     private val rooms = mutableListOf<Room>()
     private var room: Room? = null
     private var started = false
     private var done = false
+    /** The lines once the rush is over, with the level and Total row they were made for: nothing in them changes until [reset]. */
+    private var doneLines: Triple<Level, Boolean, List<String>>? = null
 
     fun reset() {
-        rooms.clear(); room = null; started = false; done = false
+        rooms.clear(); room = null; started = false; done = false; doneLines = null
     }
 
     /** True from Mort to the blood door — the only time the module needs to watch doors and keys. */
@@ -146,10 +153,16 @@ class BloodRunDetail {
 
     private fun all() = rooms + listOfNotNull(room)
 
-    fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> = when (level) {
-        Level.COMPACT -> compact(now, totalRow)
-        Level.DETAILED -> detailed(now)
-        Level.DEBUG -> debug(now)
+    fun lines(level: Level, now: Stamp, totalRow: Boolean = true): List<String> {
+        doneLines?.let { (l, t, kept) -> if (l == level && t == totalRow) return kept }
+        val out = when (level) {
+            Level.COMPACT -> compact(now, totalRow)
+            Level.DETAILED -> detailed(now)
+            Level.DEBUG -> debug(now)
+        }
+        // After the blood door no room is being run, so [now] is in none of the lines.
+        if (done) doneLines = Triple(level, totalRow, out)
+        return out
     }
 
     /**
@@ -166,10 +179,7 @@ class BloodRunDetail {
      */
     private fun compact(now: Stamp, totalRow: Boolean): List<String> {
         val out = mutableListOf<String>()
-        for (r in all()) {
-            val live = if (r === room) now else null
-            out += row(name(r) + ": ", keySpan(r, live), pickupSpan(r, live), doorSpan(r, live), span(r.start, r.doorOpened))
-        }
+        for (r in all()) out += if (r === room) row(r, now) else r.row ?: row(r, null).also { r.row = it }
         if (totalRow && done && rooms.isNotEmpty()) {
             fun avg(f: (Room) -> Pair<Long, Long>?) = rooms.mapNotNull(f).takeIf { it.isNotEmpty() }?.let(::mean)
             out += row(TOTAL + "Avg: ", avg { keySpan(it, null) }, avg { pickupSpan(it, null) }, avg { doorSpan(it, null) }, avg { span(it.start, it.doorOpened) })
@@ -185,6 +195,9 @@ class BloodRunDetail {
 
     private fun pickupSpan(r: Room, live: Stamp?) = span(r.mobKilled, r.keyPicked ?: live)
     private fun doorSpan(r: Room, live: Stamp?) = span(r.keyPicked, r.doorOpened ?: live)
+
+    /** [r]'s row, counting up to [live] while it is the room being run. */
+    private fun row(r: Room, live: Stamp?) = row(name(r) + ": ", keySpan(r, live), pickupSpan(r, live), doorSpan(r, live), span(r.start, r.doorOpened))
 
     /**
      * One compact row as tab-separated cells — the door (with its bar), the key, the name, the

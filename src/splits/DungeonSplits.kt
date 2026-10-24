@@ -157,6 +157,8 @@ object DungeonSplits : Module(
     private val barriers = mutableListOf<Pair<Int, Int>>()
     private val cleared = mutableListOf<Pair<Int, Int>>()
     private val keysSeen = HashSet<Int>()
+    /** Each named stand's name as the key scan last read it, so an unchanged one is not read again. */
+    private val standNames = it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<net.minecraft.network.chat.Component>()
     private val crystalsSeen = HashSet<Int>()
     /** The Watcher's mobs in view, so one is counted once however many times it is added. */
     private val watchedMobs = HashSet<Int>()
@@ -169,7 +171,7 @@ object DungeonSplits : Module(
         core.reset(); coreGoldor = null
         storm.reset(); crushView.reset()
         goldorAt = null; goldorMoved = false; necronId = null; necronDiedAt = null; watcherAt = null
-        barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
+        barriers.clear(); cleared.clear(); keysSeen.clear(); standNames.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
     }
 
     /**
@@ -326,8 +328,12 @@ object DungeonSplits : Module(
 
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
             if (blood.active) for (e in level.entitiesForRendering()) {
-                if (e !is ArmorStand || e.id in keysSeen) continue
-                val name = e.customName?.string ?: continue
+                if (e !is ArmorStand) continue
+                val tag = e.customName ?: continue
+                // A stand's name is a new object whenever the server changes it: the same object
+                // again is text already read.
+                if (standNames.put(e.id, tag) === tag || e.id in keysSeen) continue
+                val name = tag.string
                 if ("Wither Key" in name || "Blood Key" in name) {
                     keysSeen += e.id
                     blood.onKeySpawned(now(), distanceTo(e))
@@ -379,6 +385,7 @@ object DungeonSplits : Module(
             // probably out of view, not his death.
             if (Witherborn.isBoss(entity) && open(SplitTracker.MAXOR) && distanceTo(entity) <= 48) subs.onMaxorDead(now())
             watchedMobs.remove(entity.id)
+            standNames.remove(entity.id)
         }
     }
 
@@ -846,7 +853,10 @@ object DungeonSplits : Module(
     private fun table(gfx: GuiGraphicsExtractor, lines: List<String>, right: Set<Int>): Pair<Int, Int> {
         val rows = lines.map { it.split('\t') }
         val cols = rows.maxOf { it.size }
-        val widths = IntArray(cols) { c -> rows.maxOf { r -> r.getOrNull(c)?.let(mc.font::width) ?: 0 } }
+        // Each cell measured once, and every frame: the same text can measure differently after a
+        // resource reload or with Odin's Custom Name Replacer changed.
+        val cellWidths = rows.map { r -> IntArray(r.size) { mc.font.width(r[it]) } }
+        val widths = IntArray(cols) { c -> cellWidths.maxOf { it.getOrElse(c) { 0 } } }
         // Where each column starts.
         val starts = IntArray(cols)
         for (c in 1 until cols) starts[c] = starts[c - 1] + widths[c - 1]
@@ -854,7 +864,7 @@ object DungeonSplits : Module(
             val y = i * LINE_HEIGHT
             row.forEachIndexed { c, cell ->
                 if (cell.isEmpty()) return@forEachIndexed
-                val x = if (c in right) starts[c] + widths[c] - mc.font.width(cell) else starts[c]
+                val x = if (c in right) starts[c] + widths[c] - cellWidths[i][c] else starts[c]
                 gfx.text(cell, x, y, Colors.WHITE, shadow = true)
             }
         }
