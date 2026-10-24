@@ -2,9 +2,13 @@
 // statistics none of them were fitted to (the README's "How the maps are made" has what they showed).
 //   LAYOUTS=layouts.jsonl node generator.mjs [variant...]     (MAPS=n real maps, QUIET=1 scores only)
 //   ACCEPT=<variant> ATTEMPTS=1 TRIES=n node generator.mjs     how often one attempt passes, per entrance cell
+//   DUMP=file.json: the generated layouts, for placefit.mjs GEN=file.json
 //
 // A variant is kind:tree:order[:res<k>[:blood]]:
-//   kind  cells: a door tree over all 36 single cells first (the entrance one door), then the big rooms merged
+//   kind  grow: the tree grown cell by cell, a new free cell starting a big room with chance c * shapes left /
+//               free cells (order field c<k>[p][d][u]: p shape and placement picked together, d the room's
+//               cells grown at once in a chain, u its cells joined by a random spanning tree inside)
+//         cells: a door tree over all 36 single cells first (the entrance one door), then the big rooms merged
 //               onto it by their top-left corner, only where the tree already joins their cells
 //         rooms: the big rooms first, then the tree over the rooms, each big room's cells joined by a random
 //               tree inside it
@@ -113,7 +117,53 @@ function generate(variant, ent, shapes) {
     const todo = [...shapes]; for (let i = todo.length - 1; i > 0; i--) { const j = ri(i + 1); [todo[i], todo[j]] = [todo[j], todo[i]]; }
     if (order === 'big') todo.sort((a, b) => ORIENT[b][0].length - ORIENT[a][0].length);
     let ok = true;
-    if (kind === 'cells') {
+    if (kind === 'grow') {
+      // the tree grown cell by cell from the entrance; a new free cell starts a big room (one of the shapes
+      // left, a placement over it whose other cells are free and not grown yet) with chance c * shapes left /
+      // free cells; a claimed cell is grown only from its own room's cells
+      // c<k>[p][d]: p = the shape and placement picked together (shapes with more placements over the cell more
+      // often), d = the room's cells grown at once, each from the one before where it can (a chain inside)
+      const mm = /^c([\d.]+)([a-z]*)$/.exec(order); const c = +mm[1], byPlace = mm[2].includes('p'), chain = mm[2].includes('d'), ust = mm[2].includes('u');
+      // u = each big room's cells joined inside by a random spanning tree, a cell grown only from its parent in it
+      const intPar = new Int32Array(N).fill(-1);
+      const q = rule.startsWith('bfs') ? (rule === 'bfs' ? 1 : +rule.slice(3)) : 0;
+      const pNew = rule.startsWith('grow') ? +rule.slice(4) : 0;
+      parent = new Int32Array(N).fill(-2); parent[ent] = -1;
+      const grown = [ent], left = [...todo];
+      const start = v => {
+        let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++;
+        if (!left.length || rnd() >= Math.min(1, c * left.length / Math.max(free, 1))) return;
+        const ok2 = Array.from({ length: N }, (_, t) => t !== ent && owner[t] === -1 && (t === v || parent[t] === -2));
+        const opts = left.map(s => placements(s, ok2).filter(ts => ts.includes(v)));
+        const can = left.map((_, i) => i).filter(i => opts[i].length);
+        if (!can.length) return;
+        let i, ts;
+        if (byPlace) { const all = []; for (const k of can) for (const p2 of opts[k]) all.push([k, p2]); [i, ts] = all[ri(all.length)]; }
+        else { i = can[ri(can.length)]; ts = opts[i][ri(opts[i].length)]; }
+        const id = next; for (const t of ts) owner[t] = id; shape.push(left[i]); next++; left.splice(i, 1);
+        if (ust) {
+          const es = internal(ts), m = ts.length - 1, trees = [];
+          (function pick(j, acc) { if (acc.length === m) { const uf = new Map(ts.map(x => [x, x])); const f = a => { while (uf.get(a) !== a) a = uf.get(a); return a; }; for (const k of acc) { const a = f((k / N) | 0), b = f(k % N); if (a === b) return; uf.set(a, b); } trees.push([...acc]); return; } if (j >= es.length) return; acc.push(es[j]); pick(j + 1, acc); acc.pop(); pick(j + 1, acc); })(0, []);
+          const adj = new Map(ts.map(x => [x, []])); for (const k of trees[ri(trees.length)]) { const a = (k / N) | 0, b = k % N; adj.get(a).push(b); adj.get(b).push(a); }
+          const q2 = [v], seen = new Set([v]); while (q2.length) { const a = q2.shift(); for (const b of adj.get(a)) if (!seen.has(b)) { seen.add(b); intPar[b] = a; q2.push(b); } }
+        }
+        if (chain) { let last = v; for (;;) { const nx = ts.filter(t => parent[t] === -2 && NB[last].includes(t)); const any = nx.length ? nx : ts.filter(t => parent[t] === -2 && NB[t].some(w => owner[w] === id && parent[w] !== -2));
+          if (!any.length) break; const t = any[ri(any.length)]; const from = nx.length ? last : NB[t].filter(w => owner[w] === id && parent[w] !== -2)[0]; parent[t] = from; grown.push(t); last = t; } }
+      };
+      const add = (v, u) => { parent[v] = u; grown.push(v); if (owner[v] === -1) start(v); };
+      add(NB[ent][ri(NB[ent].length)], ent);
+      let head = 1;
+      const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u] && (intPar[w] < 0 || intPar[w] === u)));
+      while (grown.length < N) {
+        let u = -1, v = -1;
+        if (q && rnd() < q) { while (head < grown.length) { const f = fr(grown[head]); if (f.length) { u = grown[head]; v = f[ri(f.length)]; break; } head++; } }
+        if (u < 0 && pNew && rnd() < pNew) { const last = grown[grown.length - 1]; const f = fr(last); if (f.length) { u = last; v = f[ri(f.length)]; } }
+        if (u < 0) { let cnt = 0; for (let i = 1; i < grown.length; i++) for (const w of fr(grown[i])) { cnt++; if (rnd() * cnt < 1) { u = grown[i]; v = w; } } }
+        if (u < 0) { ok = false; break; }
+        add(v, u);
+      }
+      if (left.length) ok = false;
+    } else if (kind === 'cells') {
       parent = tree(rule, N, NB, ent); if (!parent) continue;
       const te = new Set(); for (let t = 0; t < N; t++) if (parent[t] >= 0) te.add(key(t, parent[t]));
       const held = new Set(); if (reserve) { const cs = [...Array(N).keys()].filter(t => t !== ent); for (let i = 0; i < reserve; i++) { const j = i + ri(cs.length - i); [cs[i], cs[j]] = [cs[j], cs[i]]; held.add(cs[i]); } }
@@ -288,13 +338,14 @@ const Ls = complete();
 const variants = process.argv.slice(2).length ? process.argv.slice(2) : ['cells:prim:rnd', 'cells:ust:rnd', 'cells:kruskal:rnd', 'cells:dfs:rnd', 'cells:grow0.3:rnd', 'rooms:prim:rnd', 'rooms:ust:rnd'];
 const acc = {}, cnt = {};
 const accum = (m, o) => { acc[m] ||= {}; cnt[m] = (cnt[m] || 0) + 1; for (const k in o) acc[m][k] = (acc[m][k] || 0) + o[k]; };
-const fails = {};
+const fails = {}; const dumped = {};
 const maxMaps = +(process.env.MAPS || 600);
 for (const L of Ls.slice(0, maxMaps)) {
   const shapes = L.rooms.filter(r => r.shape !== 'OneByOne').map(r => r.shape);
   if (shapes.length !== 7) continue;
   const R = realAsGen(L); accum('real', stats(R, R.ent));
-  for (const v of variants) { const g = generate(v, R.ent, shapes); if (!g) { fails[v] = (fails[v] || 0) + 1; continue; } accum(v, stats(g, R.ent)); }
+  for (const v of variants) { const g = generate(v, R.ent, shapes); if (!g) { fails[v] = (fails[v] || 0) + 1; continue; } accum(v, stats(g, R.ent));
+    if (process.env.DUMP) (dumped[v] ||= []).push({ ent: R.ent, owner: [...g.owner], shape: g.shape }); }
 }
 for (const m in acc) for (const k of Object.keys(acc[m])) { const mm = /^2x2 blocks of 1x1s \| (dead=\d+)$/.exec(k); if (mm) acc[m][k] = acc[m][k] / (acc[m][`n | ${mm[1]}`] || 1) * cnt[m]; }
 for (const m in acc) { const a = acc[m]['2x2 on path, neighbouring entry/exit'] || 0; acc[m]['2x2 on path, goes around (share)'] = a ? (acc[m]['2x2 on path, goes around'] || 0) / a * cnt[m] : 0; }
@@ -310,5 +361,6 @@ for (const k of keys) {
   if (!process.env.QUIET) console.log(k.padEnd(34) + vals.map(v => v.toFixed(3).padStart(16)).join(''));
   const r = vals[0]; ms.forEach((m, i) => { score[m] += (vals[i] - r) ** 2 / (Math.abs(r) / cnt.real + 1e-4); });
 }
+if (process.env.DUMP) (await import('node:fs')).writeFileSync(process.env.DUMP, JSON.stringify(dumped));
 console.log('\nmismatch score (lower = closer to the real maps):');
 for (const m of ms.slice(1)) console.log('  ' + m.padEnd(22) + score[m].toFixed(0));
