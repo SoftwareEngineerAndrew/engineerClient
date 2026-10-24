@@ -9,9 +9,9 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
 import net.minecraft.client.Minecraft
-import net.minecraft.core.component.DataComponents
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.util.Mth
+import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.Vec3
@@ -26,15 +26,16 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Pose sharing with the party, for Pose POV: through undonecoffee.com's relay (adr/src/pose.js), one room per Hypixel server.
+ * Every game in a dungeon takes part (whether or not it has Pose POV on), but sends only while a party member is looking
+ * (the leap menu open, or a leap in hand, ready for it): where you stand and look (and what you hold, and your swings),
+ * the same for each teammate you can see who doesn't share for themselves (so one out of someone's range still shows if
+ * you can see them), and Odin's solution to the terminal you have open. The relay passes it only to party members who
+ * list you as you list them, each signed in through Mojang (your session token goes to Mojang alone, as when joining a
+ * server) once a game session; after that a pass from the relay, kept in memory, signs in again without asking Mojang.
  *
- * Sent every tick: where you stand and look (and what you hold, and your swings), the same for each teammate you can see
- * who doesn't share for themselves (so one out of someone's range still shows if you can see them), and the terminal you
- * have open with Odin's solution. The relay passes it only to party members who list you as you list them, each signed
- * in through Mojang (your session token goes to Mojang alone, as when joining a server).
- *
- * What arrives is never trusted past what it can show: names must be your own teammates, positions are clamped to the
- * dungeon, items are looked up by id (unknown ones are dropped), and a terminal is only drawn as one of Odin's six with
- * its own title; nothing a sender writes is ever shown as text.
+ * What arrives is never trusted past what it can show: names must be your own teammates, items are looked up by id (no
+ * names, no components), and a terminal is only its type and the cells to click, inside that terminal's own grid and
+ * no more of them than it can have; nothing a sender writes is ever shown as text.
  */
 object PoseShare {
     private const val SITE = "undonecoffee.com"
@@ -42,27 +43,51 @@ object PoseShare {
     /** How far behind the newest pose a shared player is drawn, to ride out uneven arrival. */
     const val BUFFER_NS = 70_000_000L
     private const val EXTRAPOLATE_NS = 100_000_000L
-    private const val STALE_NS = 600_000_000L
+    /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
+    private const val STALE_NS = 300_000_000L
     private const val GUI_STALE_NS = 3_000_000_000L
+    /** While still, your pose is sent this often rather than every tick (well inside [STALE_NS]). */
+    private const val STILL_NS = 100_000_000L
+    private const val PASS_MS = 11 * 3600_000L
+    private val LOBBY = Regex("[A-Za-z0-9]{1,24}")
+    private val STARTS_WITH = Regex("^What starts with: '([A-Za-z])'\\?$")
+    private val SELECT = Regex("^Select all the ([\\w ]+) items!$")
 
     private val mc get() = Minecraft.getInstance()
     private val http: HttpClient = HttpClient.newHttpClient()
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var ready = false
+    /** Whether a party member linked with you is watching: only then is anything sent. */
+    @Volatile private var wanted = false
     private var sending: CompletableFuture<*> = CompletableFuture.completedFuture(null)
-    private var connecting = false
+    @Volatile private var connecting = false
     private var room: String? = null
-    private var retryAt = 0L
+    @Volatile private var retryAt = 0L
     private var backoff = 2_000L
     private var seq = 0
-    private var sentParty: List<String> = emptyList()
-    private var partyAt = 0L
+    @Volatile private var sentParty: List<String> = emptyList()
+    @Volatile private var partyAt = 0L
     private var lastPing = 0L
     private var wasSwinging = false
-    private var guiHash = 0
+    private var guiFrame: ByteArray? = null
     private var guiAt = 0L
-    private var guiOpen = false
+    private var sentWatch = false
+    private var watchAt = 0L
+    private var lastSig: ByteArray? = null
+    private var prevFrame: ByteArray? = null
+    private var prevSent = false
+    private var selfAt = 0L
+    private var wasWanted = false
+
+    /** The relay's pass for signing in again without Mojang, for [passName], until [passUntil]; memory only. */
+    @Volatile private var pass: String? = null
+    @Volatile private var passName: String? = null
+    @Volatile private var passUntil = 0L
+    @Volatile private var usedPass = false
+
+    /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
+    @Volatile var watching = false
 
     /** slot -> name (lower case) of the members linked with you, and the relay's subject ids. */
     private val roster = ConcurrentHashMap<Int, String>()
@@ -72,6 +97,10 @@ object PoseShare {
     private val pings = ConcurrentHashMap<Int, Long>()
     /** Your round trip to the relay, smoothed (ms); -1 until measured. */
     @Volatile var rttMs = -1.0; private set
+
+    /** How many teammates are sharing with you right now, and whether you're connected (for the leap menu's dot). */
+    val sharingCount get() = roster.size
+    val connected get() = ready
 
     // ------------------------------------------------------------------ what's been heard
 
@@ -89,8 +118,26 @@ object PoseShare {
         fun at(s: Sample) = s.seq * TICK_NS + offset
     }
 
-    /** An open terminal as its holder sees it: Odin's type, the slots, and Odin's solution (slot numbers, in order). */
-    class Gui(val type: TerminalTypes, val size: Int, val items: Array<ItemStack>, val solution: IntArray, val at: Long)
+    /**
+     * An open terminal as its holder sees it: Odin's type, the letter (Starts With) or colour (Select), and Odin's solution
+     * (slot numbers, in order; Rubix repeats a slot once per click).
+     */
+    class Gui(val type: TerminalTypes, val extra: Int, val solution: IntArray, val at: Long)
+
+    /** Each terminal's grid of clickable cells (as Odin lays them out), and how many cells of it a solution may light. */
+    class Grid(val rows: Int, val cols: Int, val startRow: Int, val startCol: Int, val maxCells: Int) {
+        operator fun contains(slot: Int): Boolean { val r = slot / 9 - startRow; val c = slot % 9 - startCol; return r in 0 until rows && c in 0 until cols }
+    }
+
+    val GRIDS = mapOf(
+        TerminalTypes.PANES to Grid(3, 5, 1, 2, 15),
+        TerminalTypes.RUBIX to Grid(3, 3, 1, 3, 9),
+        TerminalTypes.NUMBERS to Grid(2, 7, 1, 1, 14),
+        // Few items ever match; a cap keeps a grid of lit cells from being drawn into a word.
+        TerminalTypes.STARTS_WITH to Grid(3, 7, 1, 1, 10),
+        TerminalTypes.SELECT to Grid(4, 7, 1, 1, 14),
+        TerminalTypes.MELODY to Grid(5, 9, 0, 0, 3),
+    )
 
     private val tracks = ConcurrentHashMap<String, Track>()
 
@@ -114,7 +161,7 @@ object PoseShare {
                 yaw = a.yaw + Mth.wrapDegrees(b.yaw - a.yaw) * k.toFloat()
                 pitch = Mth.lerp(k.toFloat().coerceAtMost(1f), a.pitch, b.pitch)
             }
-            val item = BuiltInRegistries.ITEM.byId(b.item).takeIf { b.item != 0 }?.let { ItemStack(it) } ?: ItemStack.EMPTY
+            val item = BuiltInRegistries.ITEM.byId(b.item).takeIf { b.item != 0 && it !== Items.AIR }?.let { ItemStack(it) } ?: ItemStack.EMPTY
             val delay = (BUFFER_NS / 1_000_000).toInt() + b.delayMs + (if (rttMs > 0) (rttMs / 2).toInt() else 0)
             return Pose(pos, yaw, pitch, item, t.swingAt, b.flags and 2 != 0, t.via, delay)
         }
@@ -124,12 +171,12 @@ object PoseShare {
 
     // ------------------------------------------------------------------ every tick
 
-    /** Connects while in a dungeon (and [on]), and sends this tick's poses and terminal. */
-    fun tick(on: Boolean) {
-        val lobby = LocationUtils.lobbyId?.takeIf { on && DungeonUtils.inDungeons && Regex("[A-Za-z0-9]{1,24}").matches(it) }
+    /** Connects while in a dungeon, and sends this tick's poses and terminal while someone is watching. */
+    fun tick() {
+        val lobby = LocationUtils.lobbyId?.takeIf { DungeonUtils.inDungeons && LOBBY.matches(it) }
         val me = mc.player
         teammates = DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name.lowercase() }
-        if (lobby == null || me == null) { close(); return }
+        if (lobby == null || me == null) { if (room != null || socket != null) close(); return }
         if (lobby != room) { close(); room = lobby }
         if (socket == null) {
             if (!connecting && System.currentTimeMillis() >= retryAt) connect(lobby)
@@ -137,60 +184,90 @@ object PoseShare {
         }
         if (!ready) return
         seq++
+        val nowMs = System.currentTimeMillis()
+        val now = System.nanoTime()
 
         // The party, whenever it changes (the relay takes one every 2 s).
         val party = DungeonUtils.dungeonTeammates.map { it.name.lowercase() }.filter { it != me.name.string.lowercase() }.take(6)
-        if (party != sentParty && System.currentTimeMillis() - partyAt > 2100) {
+        if (party != sentParty && nowMs - partyAt > 2100) {
             sendText(JsonObject().apply { addProperty("t", "p"); add("p", JsonArray().apply { party.forEach { add(it) } }) }.toString())
-            sentParty = party; partyAt = System.currentTimeMillis()
+            sentParty = party; partyAt = nowMs
         }
 
-        // Yourself.
+        // Whether you're watching: on at once, off only after a moment (so flicking the menu doesn't spam it).
+        if (watching) watchAt = nowMs
+        val watch = watching || nowMs - watchAt < 1500
+        if (watch != sentWatch) { sentWatch = watch; sendBinary(byteArrayOf(5, if (watch) 1 else 0)) }
+
+        // A ping every 2 s while poses flow (the round trip, for the delays shown), otherwise only to keep the socket open.
+        if (nowMs - lastPing > (if (wanted || watch) 2000 else 30_000)) {
+            lastPing = nowMs
+            val nonce = (nowMs and 0x7FFFFFFF).toInt()
+            pings[nonce] = now
+            sendBinary(ByteBuffer.allocate(5).put(0).putInt(nonce).array())
+        }
+
         val swinging = me.isSwinging
-        var flags = if (swinging && !wasSwinging) 1 else 0
+        val swung = swinging && !wasSwinging
         wasSwinging = swinging
+        if (!wanted) { wasWanted = false; if (guiFrame != null) { guiFrame = null; sendBinary(byteArrayOf(4)) }; return }
+        if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
+
+        // Yourself: every tick while moving, every [STILL_NS] while still, and the still pose again just before moving off
+        // (so the move starts from where it did, not drawn out across the gap).
+        var flags = if (swung) 1 else 0
         if (me.isShiftKeyDown) flags = flags or 2
-        sendBinary(pose(1, -1, 0, me.x, me.y, me.z, me.yRot, me.xRot, flags, me.mainHandItem))
+        val frame = pose(1, -1, 0, me.x, me.y, me.z, me.yRot, me.xRot, flags, me.mainHandItem)
+        val sig = frame.copyOfRange(3, 16) + frame.copyOfRange(17, 20)
+        val changed = !sig.contentEquals(lastSig)
+        if (changed && !prevSent) prevFrame?.let { sendBinary(it) }
+        prevSent = changed || now - selfAt > STILL_NS
+        if (prevSent) { sendBinary(frame); selfAt = now }
+        prevFrame = frame; lastSig = sig
 
         // Teammates you can see who don't share for themselves (each tagged by where they are in the party you sent).
         val sharing = roster.values.toSet()
-        val now = System.nanoTime()
-        for ((i, name) in sentParty.withIndex()) {
+        val level = mc.level
+        if (level != null) for ((i, name) in sentParty.withIndex()) {
             if (name in sharing) continue
-            val p = mc.level?.players()?.firstOrNull { it.name.string.equals(name, ignoreCase = true) } ?: continue
+            val p = level.players().firstOrNull { it.name.string.equals(name, ignoreCase = true) } ?: continue
             val f = if (PosePov.swungSince(p.id, now - TICK_NS)) 1 else 0
             sendBinary(pose(2, i, 0, p.x, p.y, p.z, p.yHeadRot, p.xRot, f, p.mainHandItem))
         }
 
-        // The terminal you have open, when it changes (and every second, for whoever joined since); closed once.
+        // The terminal you have open: its type and Odin's solution only, when it changes (and every second, for whoever
+        // started watching since); closed once.
         val term = TerminalUtils.currentTerm
-        val menu = me.containerMenu
-        if (term != null && menu !== me.inventoryMenu) {
-            val size = term.type.windowSize.coerceIn(0, 54).coerceAtMost(menu.slots.size)
-            val buf = ByteBuffer.allocate(4 + size * 4 + 1 + 120)
-            buf.put(3).put(term.type.ordinal.toByte()).put(size.toByte())
-            for (i in 0 until size) {
-                val s = menu.slots[i].item
-                buf.putShort(if (s.isEmpty) 0 else BuiltInRegistries.ITEM.getId(s.item).toShort())
-                buf.put(s.count.coerceIn(0, 127).toByte()).put(if (s.hasFoil()) 1 else 0)
+        val grid = term?.let { GRIDS[it.type] }
+        if (term != null && grid != null && me.containerMenu !== me.inventoryMenu) {
+            val title = mc.gui.screen()?.title?.string ?: ""
+            val extra = when (term.type) {
+                TerminalTypes.STARTS_WITH -> STARTS_WITH.find(title)?.groupValues?.get(1)?.uppercase()?.get(0)?.minus('A') ?: 0
+                TerminalTypes.SELECT -> SELECT.find(title)?.groupValues?.get(1)?.replace("SILVER", "LIGHT GRAY", ignoreCase = true)
+                    ?.let { c -> DyeColor.entries.find { it.name.replace("_", " ").equals(c, true) }?.ordinal } ?: 0
+                else -> 0
             }
-            val sol = term.solution.filter { it in 0 until size }.take(120)
-            buf.put(sol.size.toByte()); sol.forEach { buf.put(it.toByte()) }
-            buf.flip()
-            val hash = buf.hashCode()
-            if (hash != guiHash || System.currentTimeMillis() - guiAt > 1000) {
-                guiHash = hash; guiAt = System.currentTimeMillis(); guiOpen = true
-                sendBinary(ByteArray(buf.remaining()).also { buf.get(it) })
-            }
-        } else if (guiOpen) { guiOpen = false; guiHash = 0; sendBinary(byteArrayOf(4)) }
+            val sol = solutionFor(term.type, grid, term.solution)
+            val f = ByteArray(4 + sol.size)
+            f[0] = 3; f[1] = term.type.ordinal.toByte(); f[2] = extra.toByte(); f[3] = sol.size.toByte()
+            sol.forEachIndexed { i, s -> f[4 + i] = s.toByte() }
+            if (!f.contentEquals(guiFrame) || nowMs - guiAt > 1000) { guiFrame = f; guiAt = nowMs; sendBinary(f) }
+        } else if (guiFrame != null) { guiFrame = null; sendBinary(byteArrayOf(4)) }
+    }
 
-        // A ping every 2 s: the round trip, for the delays shown.
-        if (System.currentTimeMillis() - lastPing > 2000) {
-            lastPing = System.currentTimeMillis()
-            val nonce = (lastPing and 0x7FFFFFFF).toInt()
-            pings[nonce] = System.nanoTime()
-            sendBinary(ByteBuffer.allocate(5).put(0).putInt(nonce).array())
+    /** The solution as it may be sent: cells of the grid only, each once (Rubix: up to 4 times), within the grid's cap. */
+    private fun solutionFor(type: TerminalTypes, grid: Grid, solution: List<Int>): List<Int> {
+        val counts = HashMap<Int, Int>()
+        val out = ArrayList<Int>()
+        for (s in solution) {
+            if (s !in grid) continue
+            val n = (counts[s] ?: 0) + 1
+            if (n > (if (type == TerminalTypes.RUBIX) 4 else 1)) continue
+            if (n == 1 && counts.size >= grid.maxCells) continue
+            counts[s] = n; out += s
+            if (out.size >= 35) break
         }
+        return out
     }
 
     /** A pose frame: [kind]([party index][age])[seq u16][x y z: 24-bit, 1/256 block][yaw u16][pitch i16][flags][half rtt /2 ms][item u16]. */
@@ -220,30 +297,42 @@ object PoseShare {
 
     // ------------------------------------------------------------------ the socket
 
+    private val version by lazy {
+        net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("dev")
+            .replace(Regex("[^\\w.+-]"), "").take(64).ifEmpty { "dev" }
+    }
+
     private fun connect(lobby: String) {
         connecting = true
-        val v = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("dev").replace(Regex("[^\\w.+-]"), "").take(64).ifEmpty { "dev" }
         http.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10))
-            .buildAsync(URI.create("wss://$SITE/pose/api/$lobby?v=$v"), Listener())
+            .buildAsync(URI.create("wss://$SITE/pose/api/$lobby?v=$version"), Listener())
             .whenComplete { ws, err ->
                 connecting = false
                 if (err != null) { retryLater(); return@whenComplete }
                 sending = CompletableFuture.completedFuture(null)
-                ready = false; roster.clear(); subjects.clear(); sentParty = emptyList(); partyAt = 0L
+                ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
+                roster.clear(); subjects.clear(); sentParty = emptyList(); partyAt = 0L
                 socket = ws
             }
     }
 
-    /** The relay's challenge: Mojang's join with its serverId (off the game thread), then who we are and our party. */
+    /**
+     * The relay's challenge: our pass if we have one, otherwise Mojang's join with its serverId (off the game thread); then
+     * who we are and our party.
+     */
     private fun signIn(ws: WebSocket, serverId: String) {
         Thread.ofPlatform().name("devgineerclient-pose-signin").daemon(true).start {
             try {
                 val u = mc.user
-                mc.services().sessionService().joinServer(u.profileId, u.accessToken, serverId)
-                val party = DungeonUtils.dungeonTeammates.map { it.name.lowercase() }.filter { it != u.name.lowercase() }.take(6)
+                val name = u.name.lowercase()
+                val k = pass?.takeIf { passName == name && System.currentTimeMillis() < passUntil }
+                usedPass = k != null
+                if (k == null) mc.services().sessionService().joinServer(u.profileId, u.accessToken, serverId)
+                val party = DungeonUtils.dungeonTeammates.map { it.name.lowercase() }.filter { it != name }.take(6)
                 sentParty = party; partyAt = System.currentTimeMillis()
                 if (socket === ws) sendText(JsonObject().apply {
                     addProperty("t", "a"); addProperty("n", u.name); add("p", JsonArray().apply { party.forEach { add(it) } })
+                    if (k != null) addProperty("k", k)
                 }.toString())
             } catch (e: Exception) {
                 DevgineerClient.logger.warn("[pose share] sign-in failed: ${e.javaClass.simpleName}")
@@ -252,17 +341,18 @@ object PoseShare {
         }
     }
 
-    private fun retryLater() {
-        socket = null; ready = false
-        retryAt = System.currentTimeMillis() + backoff
+    private fun retryLater(minMs: Long = 0L) {
+        socket = null; ready = false; wanted = false
+        // Spread out, so a relay restart doesn't bring every game back in the same instant.
+        retryAt = System.currentTimeMillis() + maxOf(backoff, minMs) + (Math.random() * 1000).toLong()
         backoff = (backoff * 2).coerceAtMost(60_000L)
     }
 
     fun close() {
         val ws = socket
-        socket = null; ready = false; room = null
+        socket = null; ready = false; wanted = false; room = null
         roster.clear(); subjects.clear(); tracks.clear()
-        if (guiOpen) guiOpen = false
+        guiFrame = null; sentWatch = false
         runCatching { ws?.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }
     }
 
@@ -283,7 +373,11 @@ object PoseShare {
         val m = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return
         when (m["t"]?.asString) {
             "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { signIn(ws, it) }
-            "ok" -> { ready = true; backoff = 2_000L }
+            "ok" -> {
+                ready = true; backoff = 2_000L
+                m["k"]?.asString?.takeIf { it.length <= 100 }?.let { pass = it; passName = mc.user.name.lowercase(); passUntil = System.currentTimeMillis() + PASS_MS }
+            }
+            "w" -> wanted = m["w"]?.asInt == 1
             "r" -> {
                 roster.clear()
                 m["m"]?.asJsonArray?.forEach { e ->
@@ -332,7 +426,7 @@ object PoseShare {
         val flags = b.get().toInt() and 255
         val half = (b.get().toInt() and 255) * 2
         val item = b.short.toInt() and 0xFFFF
-        if (!x.isFinite() || y < -64 || y > 400) return
+        if (y < -64 || y > 400) return
         val t = tracks.getOrPut(name) { Track() }
         synchronized(t) {
             // One source at a time: another (someone else seeing them) takes over only once this one has gone quiet.
@@ -345,6 +439,8 @@ object PoseShare {
             // The sender's ticks, unwrapped (16 bits wrap after 55 minutes).
             val s = if (t.lastSeq < 0) rawSeq.toLong() else t.lastSeq + ((rawSeq - (t.lastSeq and 0xFFFF).toInt() + 0x8000) and 0xFFFF) - 0x8000
             if (t.lastSeq >= 0 && s <= t.lastSeq) return
+            // A gap (they were still, or nobody was watching): timing starts over from here.
+            if (t.samples.lastOrNull()?.let { now - it.arrived > STALE_NS } == true) { t.samples.clear(); t.offset = Long.MAX_VALUE }
             t.lastSeq = s
             val off = now - s * TICK_NS
             // Best latency so far, let drift upward slowly so a clock that runs a little apart doesn't strand it.
@@ -355,25 +451,28 @@ object PoseShare {
         }
     }
 
+    /** A terminal frame, kept only if it is one a real terminal could be: its grid's cells, no more than it has. */
     private fun gui(sender: String, b: ByteBuffer, now: Long) {
         if (b.remaining() < 3) return
         val type = TerminalTypes.entries.getOrNull(b.get().toInt() and 255) ?: return
-        val size = b.get().toInt() and 255
-        if (size > 54 || size != type.windowSize || b.remaining() < size * 4 + 1) return
-        val items = Array(size) {
-            val id = b.short.toInt() and 0xFFFF; val count = b.get().toInt().coerceIn(1, 64); val foil = b.get().toInt() == 1
-            if (id == 0) ItemStack.EMPTY
-            else BuiltInRegistries.ITEM.byId(id).takeIf { it !== Items.AIR }?.let { ItemStack(it, count).apply { if (foil) set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true) } } ?: ItemStack.EMPTY
+        val grid = GRIDS[type] ?: return
+        val extra = b.get().toInt() and 255
+        when (type) {
+            TerminalTypes.STARTS_WITH -> if (extra > 25) return
+            TerminalTypes.SELECT -> if (extra >= DyeColor.entries.size) return
+            else -> if (extra != 0) return
         }
         val n = b.get().toInt() and 255
-        if (n > 120 || b.remaining() < n) return
-        val sol = IntArray(n) { b.get().toInt() and 255 }.filter { it < size }.toIntArray()
-        tracks.getOrPut(sender) { Track() }.gui = Gui(type, size, items, sol, now)
+        if (n > 35 || b.remaining() != n) return
+        val sol = IntArray(n) { b.get().toInt() and 255 }
+        if (solutionFor(type, grid, sol.asList()).size != n) return
+        tracks.getOrPut(sender) { Track() }.gui = Gui(type, extra, sol, now)
     }
 
     private class Listener : WebSocket.Listener {
         private val text = StringBuilder()
         private var bin: ByteBuffer? = null
+        private var tooBig = false
 
         override fun onText(ws: WebSocket, data: CharSequence, last: Boolean): CompletionStage<*>? {
             if (text.length + data.length <= 4096) text.append(data)
@@ -383,18 +482,30 @@ object PoseShare {
         }
 
         override fun onBinary(ws: WebSocket, data: ByteBuffer, last: Boolean): CompletionStage<*>? {
-            // Frames are small; a part-frame is gathered (up to the relay's limit) before it's read.
-            val joined = bin?.let { prev -> if (prev.remaining() + data.remaining() > 512) null else ByteBuffer.allocate(prev.remaining() + data.remaining()).put(prev).put(data).flip() }
-                ?: if (bin == null) data else null
-            if (last) { bin = null; if (joined != null) DevgineerClient.safely("pose share") { onBinary(joined) } }
-            else bin = joined?.let { ByteBuffer.allocate(it.remaining()).put(it).flip() } ?: ByteBuffer.allocate(0)
+            // Frames are small: one in parts is gathered (to the relay's limit) before it's read, and a bigger one dropped.
+            val prev = bin
+            if (prev == null && last && !tooBig) DevgineerClient.safely("pose share") { onBinary(data) }
+            else if (!tooBig) {
+                if ((prev?.remaining() ?: 0) + data.remaining() > 64) tooBig = true
+                else bin = ByteBuffer.allocate((prev?.remaining() ?: 0) + data.remaining()).also { n -> prev?.let { n.put(it) }; n.put(data); n.flip() }
+                if (last && !tooBig) bin?.let { DevgineerClient.safely("pose share") { onBinary(it) } }
+            }
+            if (last) { bin = null; tooBig = false }
             ws.request(1)
             return null
         }
 
         override fun onClose(ws: WebSocket, statusCode: Int, reason: String): CompletionStage<*>? {
-            // Replaced by another game on this account: that one shares; this one waits a minute before trying again.
-            if (socket === ws) { retryLater(); if (statusCode == 4002) retryAt = System.currentTimeMillis() + 60_000L }
+            if (socket !== ws) return null
+            when (statusCode) {
+                // Replaced by another game on this account: that one shares; this one waits a while.
+                4002 -> retryLater(60_000L)
+                // A pass the relay no longer takes (its key changed): straight back, through Mojang.
+                4001 -> if (usedPass) { pass = null; retryLater() } else retryLater(10_000L)
+                // Mojang busy: well back off.
+                4005 -> retryLater(30_000L)
+                else -> retryLater()
+            }
             return null
         }
 

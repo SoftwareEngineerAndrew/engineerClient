@@ -29,6 +29,7 @@ import com.odtheking.odin.features.impl.dungeon.LeapMenu
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.equalsOneOf
+import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -129,7 +130,7 @@ object PosePov : Module(
     )
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
-    private val share by BooleanSetting("Share with party", true, desc = "Sends where you stand and look, teammates you can see, and the terminal you have open to party members who also share, through undonecoffee.com (signed in through Mojang, as when joining a server). Theirs show here when they are out of your range.")
+    private val hideTerminals by BooleanSetting("Hide terminal info", false, desc = "Leaves out the terminal a teammate has open (with its solution) over their view.")
 
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     private val projection = Projection()
@@ -147,8 +148,14 @@ object PosePov : Module(
         }
         ClientTickEvents.END_CLIENT_TICK.register {
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
+            // Swings are kept only as long as one lasts (the packet comes for every entity in sight).
+            DevgineerClient.safely("pose pov swings") { val now = System.nanoTime(); swings.values.removeIf { now - it > SWING_NS } }
             DevgineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) sampleLooks() }
-            DevgineerClient.safely("pose share") { PoseShare.tick(enabled && share) }
+            // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching.
+            DevgineerClient.safely("pose share") {
+                PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
+                PoseShare.tick()
+            }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
         }
         // This run's block changes, on top of the known rooms and arena (see KnownWorld).
@@ -170,7 +177,6 @@ object PosePov : Module(
 
     override fun onDisable() {
         super.onDisable()
-        PoseShare.close()
         releaseFeeds()
         BlockMesh.clear()
     }
@@ -212,7 +218,8 @@ object PosePov : Module(
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
             // Out of your range: where they (or a teammate who can see them) say they are, else the map's guess.
-            val s = if (p == null && !slot.isDead) PoseShare.pose(slot.name, now) else null
+            // In clear the map says roughly where they are: a shared pose far from their icon is someone lying, and isn't used.
+            val s = if (p == null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { DungeonUtils.inBoss || slot.mapPos.data == 0L || near(slot, it.pos) } else null
             val e = if (p != null) {
                 players[i] = p
                 val real = look(slot.name, p, pt, now)
@@ -223,7 +230,8 @@ object PosePov : Module(
                 val real = Eye(s.pos.add(0.0, if (s.sneaking) 1.27 else 1.62, 0.0), s.yaw, s.pitch, null)
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
-            } else if (!slot.isDead && slot.mapPos.data != 0L) ghostEye(level, slot, now) else null
+            // (In boss the map stops: its icon would put them back where they were in clear.)
+            } else if (!slot.isDead && slot.mapPos.data != 0L && !DungeonUtils.inBoss) ghostEye(level, slot, now) else null
             if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
             // An out-of-range teammate's body, in every feed: where they're shared at (but their own), or the guess (their
             // own included, seen from behind).
@@ -267,7 +275,7 @@ object PosePov : Module(
                 if (slot != null) {
                     val cx = (x0 + x1) / 2; val cy = (y0 + y1) / 2
                     gfx.text(slot.name, cx - mc.font.width(slot.name) / 2, cy - 10, Color(170, 170, 170), shadow = true)
-                    val label = if (slot.isDead) "dead" else "not on the map yet"
+                    val label = if (slot.isDead) "dead" else if (DungeonUtils.inBoss) "out of range" else "not on the map yet"
                     gfx.text(label, cx - mc.font.width(label) / 2, cy + 2, Color(120, 120, 120), shadow = true)
                 }
                 continue
@@ -316,8 +324,17 @@ object PosePov : Module(
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
             if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: "shared · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
-            slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
+            slot?.takeIf { !hideTerminals }?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
+        // Whether sharing is up, and how many teammates are sharing with you.
+        val n = PoseShare.sharingCount
+        val (dot, status) = when {
+            !PoseShare.connected -> 0xFF808080.toInt() to "sharing: offline"
+            n == 0 -> 0xFFE0C040.toInt() to "sharing: no one else"
+            else -> 0xFF50E070.toInt() to "sharing: $n"
+        }
+        gfx.fill(4, 5, 9, 10, dot)
+        gfx.text(status, 12, 4, Color(200, 200, 200), shadow = true)
     }
 
     private fun footLabel(gfx: GuiGraphicsExtractor, label: String, color: Color, x0: Int, x1: Int, y1: Int) {
@@ -327,36 +344,50 @@ object PosePov : Module(
     }
 
     /**
-     * A teammate's open terminal over their feed, as it looks to them, with Odin's solution: the next clicks lit (in order
-     * for Numbers, with the click count for Rubix). The title is the terminal's own name here, never text from them.
+     * A teammate's open terminal over their feed: its grid, as Odin lays it out, with Odin's solution lit (Numbers in order,
+     * Rubix with its click counts, Melody's pointer and its lane). Nothing of theirs is drawn but which cells: no items, no
+     * text (the title is the terminal's name here, with the letter or colour looked up here).
      */
     private fun terminal(gfx: GuiGraphicsExtractor, t: PoseShare.Gui, x0: Int, y0: Int, x1: Int, y1: Int) {
-        val rows = (t.size + 8) / 9
-        val gridW = 9 * 18; val gridH = rows * 18 + 12
-        val scale = minOf(1f, (x1 - x0 - 8f) / gridW, (y1 - y0 - 8f) / gridH)
-        if (scale <= 0.2f) return
+        val grid = PoseShare.GRIDS[t.type] ?: return
+        val cell = 14
+        val gridW = grid.cols * cell; val gridH = grid.rows * cell + 12
+        val boxW = maxOf(gridW, 120)
+        val scale = minOf(1.5f, (x1 - x0 - 8f) / boxW, (y1 - y0 - 8f) / gridH)
+        if (scale <= 0.3f) return
         gfx.fill(x0, y0, x1, y1, 0x80000000.toInt())
-        val left = (x0 + x1) / 2f - gridW * scale / 2; val top = (y0 + y1) / 2f - gridH * scale / 2
         val pose = gfx.pose()
         pose.pushMatrix()
-        pose.translate(left, top)
+        pose.translate((x0 + x1) / 2f - boxW * scale / 2, (y0 + y1) / 2f - gridH * scale / 2)
         pose.scale(scale, scale)
-        val title = t.type.termName
-        gfx.text(title, (gridW - mc.font.width(title)) / 2, 0, Color(255, 255, 255), shadow = true)
+        val left = t.solution.distinct().size
+        val title = when (t.type) {
+            TerminalTypes.PANES -> "Panes"
+            TerminalTypes.RUBIX -> "Rubix"
+            TerminalTypes.NUMBERS -> "Numbers"
+            TerminalTypes.STARTS_WITH -> "Starts With '${'A' + t.extra}'"
+            TerminalTypes.SELECT -> "Select " + net.minecraft.world.item.DyeColor.entries[t.extra].name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+            TerminalTypes.MELODY -> "Melody"
+        } + if (t.type == TerminalTypes.MELODY) "" else " · $left left"
+        gfx.text(title, (boxW - mc.font.width(title)) / 2, 0, Color(255, 255, 255), shadow = true)
         val clicks = HashMap<Int, Int>(); val order = HashMap<Int, Int>()
         t.solution.forEachIndexed { n, s -> clicks.merge(s, 1, Int::plus); order.putIfAbsent(s, n) }
-        for (i in 0 until t.size) {
-            val x = (i % 9) * 18; val y = 12 + (i / 9) * 18
-            val n = order[i]
-            val bg = when {
-                n == null -> 0x60303030
-                t.type == TerminalTypes.NUMBERS -> when (n) { 0 -> 0xE040D040.toInt(); 1 -> 0xC0D0C030.toInt(); 2 -> 0xA0D07020.toInt(); else -> 0x60303030 }
-                else -> 0xC040D040.toInt()
+        val gx = (boxW - gridW) / 2
+        for (r in 0 until grid.rows) for (c in 0 until grid.cols) {
+            val slot = (grid.startRow + r) * 9 + grid.startCol + c
+            val x = gx + c * cell; val y = 12 + r * cell
+            val n = order[slot]
+            val color = when (t.type) {
+                // Red: still to click; green: done.
+                TerminalTypes.PANES -> if (n != null) 0xE0D04040.toInt() else 0xE040B040.toInt()
+                TerminalTypes.NUMBERS -> when (n) { null -> 0x60303030; 0 -> 0xF040D040.toInt(); 1 -> 0xE0D0C030.toInt(); 2 -> 0xD0D07020.toInt(); else -> 0xC0A04040.toInt() }
+                // Melody's solution: the lane's green pane, the pointer, and the button when they line up.
+                TerminalTypes.MELODY -> when (n) { 0 -> 0xF040D040.toInt(); 1 -> 0xF0D040D0.toInt(); 2 -> 0xF080FF80.toInt(); else -> 0x40303030 }
+                else -> if (n != null) 0xE040D040.toInt() else 0x60303030
             }
-            gfx.fill(x, y, x + 17, y + 17, bg)
-            val stack = t.items[i]
-            if (!stack.isEmpty) { gfx.item(stack, x, y); gfx.itemDecorations(mc.font, stack, x, y) }
-            if (t.type == TerminalTypes.RUBIX) clicks[i]?.let { gfx.text("$it", x + 17 - mc.font.width("$it"), y + 9, Color(255, 255, 255), shadow = true) }
+            gfx.fill(x, y, x + cell - 1, y + cell - 1, color)
+            if (t.type == TerminalTypes.RUBIX) clicks[slot]?.let { gfx.text("$it", x + (cell - mc.font.width("$it")) / 2, y + 3, Color(255, 255, 255), shadow = true) }
+            if (t.type == TerminalTypes.NUMBERS && n != null && n < 3) gfx.text("${n + 1}", x + (cell - mc.font.width("${n + 1}")) / 2, y + 3, Color(255, 255, 255), shadow = true)
         }
         pose.popMatrix()
     }
@@ -585,6 +616,13 @@ object PosePov : Module(
             if (!best.isNaN()) return if (r == 0) Spot(x, z, best) else Spot(bx + bestX + 0.5, bz + bestZ + 0.5, best)
         }
         return Spot(x, z, if (eyeY.isNaN()) 69.0 else eyeY - 1.62)
+    }
+
+    /** Whether [pos] is within a room's width of where the map puts [slot] (the icon is only ever a block or two out). */
+    private fun near(slot: DungeonPlayer, pos: Vec3): Boolean {
+        val tx = ((slot.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
+        val tz = ((slot.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
+        return Math.hypot(pos.x - tx, pos.z - tz) < 24.0
     }
 
     /** The estimate's distance from you, coloured by how far, under their name. */
