@@ -136,11 +136,13 @@ object PosePov : Module(
     }
 
     private fun releaseFeeds() {
+        queued.clear()
         for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null }
     }
 
     private fun draw(gfx: GuiGraphicsExtractor) {
         val level = mc.level ?: return
+        queued.clear()
         val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false)
         val w = (mc.window.width / 2).coerceAtLeast(1)
         val h = (mc.window.height / 2).coerceAtLeast(1)
@@ -177,8 +179,7 @@ object PosePov : Module(
                 TextureTarget("dc:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
             }
             val eye = p.getEyePosition(pt); val yaw = p.getViewYRot(pt); val pitch = p.getViewXRot(pt)
-            FrameLog.feed(i, p, pt, eye, yaw, pitch)
-            renderFeed(target, eye, yaw, pitch, w, h)
+            queued += Job(target, eye, yaw, pitch, w, h)
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -209,7 +210,30 @@ object PosePov : Module(
         BlockMesh.pump(level, budgetNs, near, prerender && DungeonUtils.inDungeons)
     }
 
-    private fun renderFeed(target: TextureTarget, eye: Vec3, yaw: Float, pitch: Float, w: Int, h: Int) {
+    private class Job(val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val w: Int, val h: Int)
+
+    /** The feeds the menu asked for this frame: poses read while the screen is extracted, drawn in [renderQueued]. */
+    private val queued = ArrayList<Job>()
+
+    /**
+     * Draws this frame's feeds, from the end of the world render (PosePovRenderMixin): before the GUI that shows them, and in the
+     * render phase where the game's own passes run, not while the screen is being extracted.
+     */
+    fun renderQueued() {
+        if (queued.isEmpty()) return
+        DevgineerClient.safely("pose pov render") {
+            // One index buffer for every feed, asked for once at the largest size: growing it between feeds would replace it
+            // under the passes already recorded.
+            var most = 0
+            BlockMesh.forEachDrawable { m, _, _, _, _, _ -> if (m.indexCount > most) most = m.indexCount }
+            val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
+            val indices = if (most > 0) quadIndices.getBuffer(most) else null
+            for (job in queued) renderFeed(job.target, job.eye, job.yaw, job.pitch, job.w, job.h, quadIndices, indices)
+        }
+        queued.clear()
+    }
+
+    private fun renderFeed(target: TextureTarget, eye: Vec3, yaw: Float, pitch: Float, w: Int, h: Int, quadIndices: RenderSystem.AutoStorageIndexBuffer, indices: com.mojang.renderpearl.api.buffers.GpuBuffer?) {
         val colorView = target.colorTextureView ?: return
         val depthView = target.depthTextureView ?: return
         val fov = mc.options.fov().get().toFloat()
@@ -221,14 +245,12 @@ object PosePov : Module(
 
         // Every piece in range and in view, grouped by where it is drawn (a room's pieces are in its own box frame).
         val draws = HashMap<Long, MutableList<BlockMesh.Mesh>>()
-        var maxIndices = 0
         val far2 = (FAR + 28.0) * (FAR + 28.0)
         BlockMesh.forEachDrawable { m, x, y, z, ox, oz ->
             val dx = x + 8 - eye.x; val dy = y + 8 - eye.y; val dz = z + 8 - eye.z
             if (dx * dx + dy * dy + dz * dz > far2) return@forEachDrawable
             if (!frustum.testAab(x.toFloat(), y.toFloat(), z.toFloat(), x + 16f, y + 16f, z + 16f)) return@forEachDrawable
             draws.getOrPut((ox.toLong() shl 32) or (oz.toLong() and 0xFFFFFFFFL)) { ArrayList() } += m
-            if (m.indexCount > maxIndices) maxIndices = m.indexCount
         }
 
         projection.setupPerspective(NEAR, FAR, fov, w.toFloat(), h.toFloat())
@@ -240,9 +262,6 @@ object PosePov : Module(
             val transforms = draws.keys.associateWith { k ->
                 RenderSystem.getDynamicUniforms().writeTransform(Matrix4f(view).translate((k shr 32).toInt().toFloat(), 0f, k.toInt().toFloat()))
             }
-            FrameLog.slices(transforms.values.map { it.offset() })
-            val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
-            val indices = if (maxIndices > 0) quadIndices.getBuffer(maxIndices) else null
             RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 RenderPassDescriptor.builder { "devgineerclient pose pov" }
                     .withColorAttachment(colorView, Optional.of(skyColor))

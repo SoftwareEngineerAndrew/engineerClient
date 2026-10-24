@@ -29,6 +29,7 @@
     "MouseTapMixin",
     "MoveEntityPacketAccessor",
     "PacketApplyTapMixin",
+    "PosePovRenderMixin",
     "PacketDecoderTapMixin",
     "PacketEncoderTapMixin",
     "PacketProcessorDrainMixin",
