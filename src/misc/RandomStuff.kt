@@ -174,12 +174,13 @@ object RandomStuff : Module(
     fun logsHiddenChat(): Boolean = logHidden
 
     /**
-     * Whether text drawn at pose scale [scale] should be sampled smoothly (ClickGuiTextMixin): only in
+     * Whether text drawn with [pose] should be sampled smoothly (ClickGuiTextMixin): only in
      * Odin's menu, and only where a font pixel doesn't land on a whole number of screen pixels.
      */
-    fun smoothsGuiText(scale: Float): Boolean {
+    fun smoothsGuiText(pose: org.joml.Matrix3x2fc): Boolean {
+        // Asked for every glyph drawn, everywhere: the screen check goes before the scale maths.
         if (mc.gui.screen() !is com.odtheking.odin.clickgui.ClickGUI) return false
-        val px = scale * mc.window.guiScale
+        val px = Math.hypot(pose.m00().toDouble(), pose.m01().toDouble()).toFloat() * mc.window.guiScale
         return kotlin.math.abs(px - kotlin.math.round(px)) > 0.01f
     }
 

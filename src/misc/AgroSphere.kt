@@ -43,6 +43,21 @@ object AgroSphere : Module(
     private const val LAT_BANDS = 24
     private const val LON_BANDS = 48
 
+    /**
+     * The unit sphere's grid, (LAT_BANDS + 1) x (LON_BANDS + 1) points as x, y, z: the same every frame, so the trig is
+     * done once here and a frame only scales it by the radius.
+     */
+    private val UNIT_SPHERE = FloatArray((LAT_BANDS + 1) * (LON_BANDS + 1) * 3).also { v ->
+        for (lat in 0..LAT_BANDS) for (lon in 0..LON_BANDS) {
+            val theta = Math.PI * lat / LAT_BANDS          // 0 at the top, PI at the bottom
+            val phi = 2 * Math.PI * lon / LON_BANDS
+            val i = (lat * (LON_BANDS + 1) + lon) * 3
+            v[i] = (Math.sin(theta) * Math.cos(phi)).toFloat()
+            v[i + 1] = Math.cos(theta).toFloat()
+            v[i + 2] = (Math.sin(theta) * Math.sin(phi)).toFloat()
+        }
+    }
+
     private var boss: WitherBoss? = null
     /** The party members alive near the boss this tick. */
     private var players: List<Player> = emptyList()
@@ -141,20 +156,14 @@ object AgroSphere : Module(
         pose.translate(center.x - cam.x, center.y - cam.y, center.z - cam.z)
         val argb = color.rgba
         val r = radius.toFloat()
-        fun point(lat: Int, lon: Int): FloatArray {
-            val theta = Math.PI * lat / LAT_BANDS          // 0 at the top, PI at the bottom
-            val phi = 2 * Math.PI * lon / LON_BANDS
-            return floatArrayOf(
-                (r * Math.sin(theta) * Math.cos(phi)).toFloat(),
-                (r * Math.cos(theta)).toFloat(),
-                (r * Math.sin(theta) * Math.sin(phi)).toFloat(),
-            )
-        }
         collector.submitCustomGeometry(pose, RenderTypes.debugQuads()) { last, buffer ->
+            val v = UNIT_SPHERE
+            fun vertex(lat: Int, lon: Int) {
+                val i = (lat * (LON_BANDS + 1) + lon) * 3
+                buffer.addVertex(last, v[i] * r, v[i + 1] * r, v[i + 2] * r).setColor(argb)
+            }
             for (lat in 0 until LAT_BANDS) for (lon in 0 until LON_BANDS) {
-                for (v in arrayOf(point(lat, lon), point(lat + 1, lon), point(lat + 1, lon + 1), point(lat, lon + 1))) {
-                    buffer.addVertex(last, v[0], v[1], v[2]).setColor(argb)
-                }
+                vertex(lat, lon); vertex(lat + 1, lon); vertex(lat + 1, lon + 1); vertex(lat, lon + 1)
             }
         }
         pose.popPose()

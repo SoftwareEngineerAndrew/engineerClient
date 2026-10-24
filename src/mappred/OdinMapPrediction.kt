@@ -282,6 +282,25 @@ object OdinMapPrediction {
 
     private val SPECIALS = intArrayOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.BLOOD, Cls.FAIRY, Cls.RARE)
 
+    /** "0%".."100%", made once: every chance on the map is drawn every frame. */
+    private val PERCENTS = Array(101) { "$it%" }
+    private fun percent(chance: Float): String = (chance * 100).roundToInt().let { PERCENTS.getOrNull(it) ?: "$it%" }
+
+    /**
+     * [shown]'s splits by their door tile and its named rooms grouped by their tiles. The draw reads them every frame;
+     * a prediction is replaced (never changed) a few times a second, so they are worked out once per prediction.
+     */
+    private var lookupsOf: Prediction? = null
+    private var splitsByTile: Map<Int, Split> = emptyMap()
+    private var namedByTiles: Collection<List<NamedRoom>> = emptyList()
+
+    private fun lookups(p: Prediction) {
+        if (lookupsOf === p) return
+        splitsByTile = p.splits.associateBy { it.tile }
+        namedByTiles = p.namedRooms.groupBy { it.tiles.joinToString(",") }.values
+        lookupsOf = p
+    }
+
     /** Drawing in LCM Style's look (LcmStyle draws the map): its colours and guess tiles, chances where Odin puts a "?". */
     private var lcm = false
 
@@ -308,10 +327,11 @@ object OdinMapPrediction {
         // while a new prediction is still being worked out, the one shown is for the map before the last door:
         // every tile behind a door the map shows is drawn anyway, never left blank
         val hints = hintTiles(known)
-        val splits = p.splits.associateBy { it.tile }
+        lookups(p)
+        val splits = splitsByTile
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
         val exact = BooleanArray(W * W)
-        if (exactRooms.value) for ((_, names) in p.namedRooms.groupBy { it.tiles.joinToString(",") }) {
+        if (exactRooms.value) for (names in namedByTiles) {
             val tiles = names[0].tiles
             if (names.sumOf { it.chance.toDouble() } < EXACT || tiles.any { known[it] || exact[it] || it in blood }) continue
             for (t in tiles) exact[t] = true
@@ -339,7 +359,8 @@ object OdinMapPrediction {
                 if (split != null || t in hints) overlay(g, x, y, split, room.chance, true)
                 continue
             }
-            val shownCls = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3)
+            // the likeliest special types over the slider: only the "?" tile and Hidden Rooms draw them
+            fun shownCls() = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3)
             val split = splits[t]
             // dead end (puzzle, trap, yellow, rare), blood or fairy, or a normal 1x1: each on its own slider, the likeliest that passes
             val deadEnd = probs[Cls.PUZZLE] + probs[Cls.TRAP] + probs[Cls.YELLOW] + probs[Cls.RARE]
@@ -365,6 +386,7 @@ object OdinMapPrediction {
                 // the "?" tile: its chances as bands across it, the rest grey (a door the prediction doesn't know
                 // yet: the chances it gave the tile so far, no split label)
                 g.fill(x, y, x + ROOM, y + ROOM, if (lcm) LcmStyle.UNOPENED else DungeonMap.unknownRoomColor.rgba)
+                val shownCls = shownCls()
                 var at = x.toFloat()
                 for (c in shownCls) {
                     val wdt = probs[c] * ROOM
@@ -372,8 +394,8 @@ object OdinMapPrediction {
                     at += wdt
                 }
                 overlay(g, x, y, split, shownCls.firstOrNull()?.let { probs[it] }, true)
-            } else if (hidden.value && shownCls.isNotEmpty()) {
-                val c = shownCls[0]
+            } else if (hidden.value) {
+                val c = shownCls().firstOrNull() ?: continue
                 val a = (0.35f + 0.65f * probs[c]).coerceAtMost(1f)
                 val inset = 5
                 val color = if (lcm) (LcmStyle.darker(lcmColor(c)) and 0xFFFFFF) or ((a * 255).roundToInt() shl 24) else Color(colorOf(c).darker(0.6f).rgba, a).rgba
@@ -504,7 +526,7 @@ object OdinMapPrediction {
     private fun overlay(g: GuiGraphicsExtractor, x: Int, y: Int, split: Split?, chance: Float?, question: Boolean) {
         val label = split != null && splitText.value
         if (label) splitLabel(g, x, y, split!!) else if (question && !lcm) icon(g, x, y)
-        if (chance != null && (lcm || chances.value)) small(g, "${(chance * 100).roundToInt()}%", x + ROOM / 2, if (label || !lcm) y + 13 else y + 8, -1)
+        if (chance != null && (lcm || chances.value)) small(g, percent(chance), x + ROOM / 2, if (label || !lcm) y + 13 else y + 8, -1)
     }
 
     private fun icon(g: GuiGraphicsExtractor, x: Int, y: Int) {

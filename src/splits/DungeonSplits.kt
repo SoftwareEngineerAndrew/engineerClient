@@ -284,7 +284,7 @@ object DungeonSplits : Module(
             }
             // A terminal section's door: its ~228 barriers turn to air in the tick the section ends
             // (its last completion and its gate both in). Seen whatever chat cleaners hide.
-            if (open(SplitTracker.TERMS) && old.block == Blocks.BARRIER && updated.isAir) {
+            if (old.block == Blocks.BARRIER && updated.isAir && open(SplitTracker.TERMS)) {
                 val section = SECTION_DOORS.indexOfFirst { (x, z) -> pos.x in x && pos.z in z }
                 if (section >= 0) sectionDoor[section]++
             }
@@ -295,7 +295,7 @@ object DungeonSplits : Module(
                 }
             }
             // Maxor's beacon turning to bedrock is his kill.
-            if (open(SplitTracker.MAXOR) && pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK) {
+            if (pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK && open(SplitTracker.MAXOR)) {
                 subs.onMaxorKilled(now())
             }
         }
@@ -328,7 +328,7 @@ object DungeonSplits : Module(
             if (blood.active) for (e in level.entitiesForRendering()) {
                 if (e !is ArmorStand || e.id in keysSeen) continue
                 val name = e.customName?.string ?: continue
-                if (KEY.containsMatchIn(name)) {
+                if ("Wither Key" in name || "Blood Key" in name) {
                     keysSeen += e.id
                     blood.onKeySpawned(now(), distanceTo(e))
                 }
@@ -519,8 +519,13 @@ object DungeonSplits : Module(
 
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
     private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
-        val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { Witherborn.isBoss(it) }
-        val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
+        // One pass (this runs every tick of Storm's and Necron's splits): the boss withers, and the first tag naming him.
+        val withers = ArrayList<WitherBoss>(4)
+        var tag: net.minecraft.world.entity.Entity? = null
+        for (e in level.entitiesForRendering()) {
+            if (e is WitherBoss) { if (Witherborn.isBoss(e)) withers += e }
+            else if (tag == null && e is ArmorStand && e.customName?.string?.contains(name) == true) tag = e
+        }
         val anchor = tag ?: mc.player ?: return null
         return withers.minByOrNull { it.distanceToSqr(anchor) }
     }
@@ -552,7 +557,7 @@ object DungeonSplits : Module(
         }
     }
 
-    private fun open(label: String) = tracker.split(label)?.stop == null && tracker.split(label) != null
+    private fun open(label: String) = tracker.split(label)?.let { it.stop == null } == true
 
     private fun teamNames(): Set<String> =
         DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name }.also { set -> mc.player?.let { set += it.name.string } }
@@ -588,7 +593,6 @@ object DungeonSplits : Module(
     private const val GOLDOR_GO = 0.25
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val NECRON_LINE = "[BOSS] Necron: "
-    private val KEY = Regex("""(?:Wither|Blood) Key""")
 
     /** The Watcher: his id and where he was last tick. */
     private var watcherAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
@@ -640,7 +644,7 @@ object DungeonSplits : Module(
         val split = tracker.split(SplitTracker.STORM) ?: return emptyList()
         val now = now()
         val floor = DungeonUtils.floor?.name
-        val bests = bests(floor)
+        val bests = bestsView(floor)
         val steps = subs.forSplit(SplitTracker.STORM)
         val ids = subs.idsForSplit(SplitTracker.STORM)
         val graded = steps.mapIndexed { i, st ->
@@ -749,7 +753,7 @@ object DungeonSplits : Module(
     }
 
     /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
-    fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id], floor)
+    fun bestOf(floor: String, id: String): Long? = validBest(id, bestsView(floor)[id], floor)
 
     /**
      * Records a finished [value] of [id] as the best on [floor] when it is one. Never in a P3 Sim
@@ -757,8 +761,8 @@ object DungeonSplits : Module(
      */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
         if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value, floor)) return
-        val bests = bests(floor)
-        if (value < (validBest(id, bests[id], floor) ?: Long.MAX_VALUE)) { bests[id] = value; saveBests(floor, bests) }
+        // Read without a copy (this runs per row per frame); copied only when there is a new best to save.
+        if (value < (validBest(id, bestsView(floor)[id], floor) ?: Long.MAX_VALUE)) { val bests = bests(floor); bests[id] = value; saveBests(floor, bests) }
     }
 
     /** A kept best, unless it is under its step's floor (kept before the floor was raised): then none. */
@@ -813,8 +817,11 @@ object DungeonSplits : Module(
     }
     private var typicalCache: Pair<Map<String, List<SplitPace.Clocks>>, HashMap<String, SplitPace.Clocks?>> = emptyMap<String, List<SplitPace.Clocks>>() to HashMap()
 
-    private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
-        when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })
+    private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(bestsText(floor))
+
+    private fun bestsView(floor: String?): Map<String, Long> = SubSplitGrades.bestsView(bestsText(floor))
+
+    private fun bestsText(floor: String?) = when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" }
 
     private fun saveBests(floor: String?, bests: Map<String, Long>) {
         val text = SubSplitGrades.formatBests(bests)

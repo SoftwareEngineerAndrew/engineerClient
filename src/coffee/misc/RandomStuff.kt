@@ -42,6 +42,8 @@ object RandomStuff : Module(
     private val partyPing = PartyPing()
     private val muteP4 by BooleanSetting("Mute Sounds In P4", false, desc = "F7 only: mutes every sound in Necron's phase, from Goldor dying until the run ends.")
     private val necron = NecronMute()
+    /** Colour codes, for the chat handlers below (compiled once: they run on every system chat packet). */
+    private val CODES = Regex("§.")
 
     /**
      * Read by SoundVolumeMixin for every sound: in F7's boss (not M7), from Goldor's death or Necron's first line
@@ -138,7 +140,7 @@ object RandomStuff : Module(
         }
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay || !muteDing || !keepGateDing || DungeonUtils.getF7Phase() != M7Phases.P3) return@onReceive
-            if (content.string.replace(Regex("§."), "").trim() !in CompletionDing.KEPT) return@onReceive
+            if (content.string.replace(CODES, "").trim() !in CompletionDing.KEPT) return@onReceive
             val replay = ding.keptMessage(System.currentTimeMillis()) ?: return@onReceive
             // Odin's Terminal Sounds already plays its own for these while you're in a terminal.
             if (TerminalSounds.enabled && TerminalSounds.clickSounds && TerminalUtils.currentTerm != null) return@onReceive
@@ -152,12 +154,12 @@ object RandomStuff : Module(
         }
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            partyPing.chat(PartyPing.isPartyLine(content.string.replace(Regex("§."), "").trim()), System.currentTimeMillis())?.let(::replayPing)
+            partyPing.chat(PartyPing.isPartyLine(content.string.replace(CODES, "").trim()), System.currentTimeMillis())?.let(::replayPing)
         }
         ClientTickEvents.END_CLIENT_TICK.register { partyPing.expired(System.currentTimeMillis())?.let(::replayPing) }
         // Mute Sounds In P4: Necron's fight opens and closes on chat (see NecronMute).
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
-            if (!overlay) necron.chat(content.string.replace(Regex("§."), ""))
+            if (!overlay) necron.chat(content.string.replace(CODES, ""))
         }
 
         on<TickEvent.End> {

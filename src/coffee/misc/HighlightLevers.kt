@@ -34,6 +34,7 @@ object HighlightLevers : Module(
     )
     /** The lights device's 5x4 levers (x 58-62, y 133-136, z 142). */
     private val DEVICE_LEVERS = (58..62).flatMap { x -> (133..136).map { y -> BlockPos(x, y, 142) } }
+    private val ALL_LEVERS = SECTION_LEVERS + DEVICE_LEVERS
 
     init {
         on<RenderExtractEvent> { CoffeeClient.safely("highlight levers") { draw() } }
@@ -43,7 +44,7 @@ object HighlightLevers : Module(
         if (!com.engineerclient.p3sim.P3Sim.inSim && !(DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7)) return
         val level = mc.level ?: return
         val fill = leverColor.withAlpha(leverColor.alphaFloat * 0.2f)
-        for (pos in if (deviceLevers) SECTION_LEVERS + DEVICE_LEVERS else SECTION_LEVERS) {
+        for (pos in if (deviceLevers) ALL_LEVERS else SECTION_LEVERS) {
             val state = level.getBlockState(pos)
             if (state.block !is LeverBlock) continue
             val shape = state.getShape(level, pos)

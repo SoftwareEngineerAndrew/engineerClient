@@ -90,8 +90,25 @@ object ScoreboardLines {
     internal fun kindOf(text: String, previous: Kind?): Kind? {
         val t = text.trim()
         if (t.isEmpty()) return Kind.BLANK
-        KINDS.firstOrNull { it.second.matches(t) }?.let { return it.first }
+        matchedKind(t)?.let { return it }
         return if (previous == Kind.OBJECTIVE) Kind.OBJECTIVE_TASK else null
+    }
+
+    /**
+     * [KINDS]' verdict on each line text seen ([NO_KIND] for none). The sidebar is asked for its lines every
+     * frame but they change a few times a second, so each text goes through the patterns once. Lines that tick
+     * (the clock, Time Elapsed) keep adding texts; past [MATCH_CACHE_SIZE] the cache starts over.
+     */
+    private val matched = HashMap<String, Any>()
+    private val NO_KIND = Any()
+    private const val MATCH_CACHE_SIZE = 512
+
+    private fun matchedKind(t: String): Kind? {
+        val hit = matched[t] ?: run {
+            if (matched.size >= MATCH_CACHE_SIZE) matched.clear()
+            (KINDS.firstOrNull { it.second.matches(t) }?.first ?: NO_KIND).also { matched[t] = it }
+        }
+        return hit as? Kind
     }
 
     internal fun hidesKind(kind: Kind?): Boolean = when (kind) {
@@ -144,16 +161,18 @@ object ScoreboardLines {
             if (hidesKind(kind)) hidden += entry
             previous = kind
         }
-        return all.filter { it !in hidden }
+        return if (hidden.isEmpty()) all else all.filter { it !in hidden }
     }
 
     // --- text helpers --------------------------------------------------------------------------
 
     /** Codes stripped, ends trimmed: the form every pattern above is written against. */
-    internal fun plain(component: Component): String = component.string.replace(FORMATTING, "").trim()
+    internal fun plain(component: Component): String = stripFormatting(component.string).trim()
 
     /**
-     * Every § and the character after it, not just the legacy colour and format codes.
+     * Every § and the character after it, not just the legacy colour and format codes: what `Regex("§.")` removes
+     * (a § with no character after it, or a line break after it, stays), without a regex, as this runs per line
+     * per frame.
      *
      * A scoreboard cannot hold two identical lines, so Hypixel makes each one unique by salting it
      * with a § followed by some letter outside the legacy set — and it lands mid-word, so a real
@@ -161,5 +180,24 @@ object ScoreboardLines {
      * codes would leave that salt in place and every pattern here would miss. One line is nothing but salt,
      * "§j", which is how Hypixel draws a blank spacer.
      */
-    private val FORMATTING = Regex("§.")
+    internal fun stripFormatting(s: String): String {
+        var i = s.indexOf('§')
+        if (i < 0) return s
+        val out = StringBuilder(s.length)
+        out.append(s, 0, i)
+        while (i < s.length) {
+            val c = s[i]
+            if (c != '§' || i + 1 >= s.length || isLineBreak(s[i + 1])) {
+                out.append(c)
+                i++
+                continue
+            }
+            // `.` takes a whole code point, so a surrogate pair after the § goes with it.
+            i += if (Character.isHighSurrogate(s[i + 1]) && i + 2 < s.length && Character.isLowSurrogate(s[i + 2])) 3 else 2
+        }
+        return out.toString()
+    }
+
+    /** What `.` doesn't match outside DOTALL mode. */
+    private fun isLineBreak(c: Char) = c == '\n' || c == '\r' || c == '\u0085' || c == '\u2028' || c == '\u2029'
 }

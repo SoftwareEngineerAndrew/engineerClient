@@ -261,8 +261,10 @@ object OdinSplitsLook {
      * A floor 7 split's time colour (SubSplitGrades): bands from the recorded F7 runs, gold for a
      * best (kept with the sub splits' bests), on M7 gold only.
      */
+    private val CODES = Regex("§.")
+
     private fun grade(name: String, ms: Long, ticks: Long, over: Boolean, master: Boolean): String? {
-        val id = SubSplitGrades.MAIN_SPLITS[name.replace(Regex("§."), "").trim()] ?: return null
+        val id = SubSplitGrades.MAIN_SPLITS[name.replace(CODES, "").trim()] ?: return null
         val floor = if (master) "M7" else "F7"
         val value = SubSplitGrades.value(id, ms, ticks)
         DungeonSplits.recordBest(floor, id, value, over)

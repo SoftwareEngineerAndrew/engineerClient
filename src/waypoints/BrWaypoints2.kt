@@ -292,8 +292,9 @@ object BrWaypoints2 : Module(
         val level = mc.level ?: return
         for (tag in level.entitiesForRendering()) {
             if (tag !is ArmorStand || !tag.isAlive) continue
-            val name = tag.name.string
-            if (MOB_NAMES.none { it in name } || !STARRED.matches(name)) continue
+            // Runs every tick over every stand: only a named one can be a star tag, and [STARRED] needs its ✯.
+            val name = (tag.customName ?: continue).string
+            if ('✯' !in name || MOB_NAMES.none { it in name } || !STARRED.matches(name)) continue
             val mob = level.getEntities(tag, tag.boundingBox.move(0.0, -1.0, 0.0)) { isMob(it) }.firstOrNull() ?: continue
             val known = byId[mob.id]
             if (known != null) {
@@ -622,6 +623,9 @@ object BrWaypoints2 : Module(
      * roles, or with no plan for the door the rush came in by, every box purple with its number.
      */
     private fun drawn(): List<Drawn> {
+        // Asked every frame in a dungeon. With no room that can show boxes (all of boss, the gaps between rooms)
+        // there is nothing to draw: skip hashing every box and claiming every mob seen this run.
+        if (shownRooms().isEmpty()) return emptyList()
         val out = ArrayList<Drawn>()
         val live = shown()
         // With Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.

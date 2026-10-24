@@ -52,7 +52,9 @@ object EngineerLook {
     private const val LAG = "§8Lag"
 
     private val CODES = Regex("§.")
-    private fun strip(s: String) = s.replace(CODES, "").trim()
+    /** Odin's split names, stripped: the same dozen names are asked for dozens of times a frame. */
+    private val stripped = HashMap<String, String>()
+    private fun strip(s: String) = stripped.getOrPut(s) { s.replace(CODES, "").trim() }
 
     /** A split's label in this look: the short Engineer name in a dungeon, Odin's own elsewhere. */
     fun label(odinName: String, place: Place, master: Boolean): String {

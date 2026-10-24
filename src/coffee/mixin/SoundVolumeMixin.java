@@ -25,6 +25,8 @@ public class SoundVolumeMixin {
     private void cc$scaleVolume(SoundInstance sound, CallbackInfoReturnable<Float> cir) {
         // Mute Sounds In P4, for sounds already playing (only those that tick are asked again: loops, music).
         if (com.coffeeclient.misc.RandomStuff.INSTANCE.mutesSound()) { cir.setReturnValue(0f); return; }
+        // Asked for every sound started and again every tick for looping ones: no id string while Sound Editor is off.
+        if (!SoundEditor.INSTANCE.getEnabled()) return;
         float m = SoundEditor.multiplier(sound.getIdentifier().toString());
         if (m != 1f) cir.setReturnValue(cir.getReturnValueF() * m);
     }

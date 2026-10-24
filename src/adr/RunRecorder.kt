@@ -81,6 +81,8 @@ class RunRecorder(
     // Entity tracking: last written position/name per entity id, to only write changes.
     private class Tracked(var x: Double, var y: Double, var z: Double, var yaw: Float, var name: String, var headYaw: Float, var flight: Int = NO_FLIGHT) {
         val ballistic get() = flight != NO_FLIGHT
+        /** Its key in lastStacks/lastEquipment ("#id"), made once rather than every tick. */
+        var equipmentKey: String? = null
         // A flying projectile: where the viewer thinks it is and how fast it's going - the game's
         // physics from the last line written, run here too, so a line is only written when the
         // projectile strays from it. Wither skulls and fireballs also speed up along their way
@@ -515,7 +517,7 @@ class RunRecorder(
             val name = if (p.uuid.version() == 2) "${p.name.string}#${p.id}" else p.name.string
             seen += name
             if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
-            recordEquipment(p, "\"name\":${str(name)}", name)
+            recordEquipment(p, name) { "\"name\":${str(name)}" }
             recordHeldHead(p, name)
             // Exactly where it was, facing the same way, holding the same stack: the same line, not built again.
             val raw = playerRaw.getOrPut(name) { PlayerRaw() }
@@ -653,7 +655,8 @@ class RunRecorder(
             val name = named0.name
             // The name with its colours (§ codes), when it has any: "c" next to the plain "name".
             val colored = named0.colored
-            val c = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
+            // Only written on a spawn or a rename, so only built then (this loop is every entity, every tick).
+            fun c() = if (colored.isNotEmpty() && colored != name) ",\"c\":${str(colored)}" else ""
             val t = tracked[id]
             // Mobs turn their heads apart from their bodies (the way they look at you).
             val headYaw = if (e is LivingEntity) e.yHeadRot else e.yRot
@@ -689,7 +692,7 @@ class RunRecorder(
                 // Dropped items say what they are (secret items: Decoys, Spirit Leaps...).
                 val item = (e as? ItemEntity)?.item?.let { ",\"item\":" + str(it.hoverName.string.replace(FORMAT_CODES, "")) + ",\"itemId\":" + str(vanillaId(it)) } ?: ""
                 // (no name: no "name" - the viewer takes it as "")
-                val named = if (name.isEmpty()) "" else ",\"name\":${str(name)}$c"
+                val named = if (name.isEmpty()) "" else ",\"name\":${str(name)}${c()}"
                 emit("""{"k":"spawn","t":$tick,"id":$id,"type":${str(typeOf(e))}$named,"x":${n(e.x)},"y":${n(e.y)},"z":${n(e.z)},"yaw":${w(e.yRot)}${if (e is LivingEntity) ",\"headYaw\":" + w(headYaw) else ""}${if (e is LivingEntity && e.isBaby) ",\"baby\":1" else ""}$block$item}""")
                 if (e is ArmorStand) {
                     recordStand(e)
@@ -712,12 +715,12 @@ class RunRecorder(
                 }
                 t.flight = NO_FLIGHT
             }
-            if (e is LivingEntity) recordEquipment(e, "\"id\":$id", "#$id")
+            if (e is LivingEntity) recordEquipment(e, t.equipmentKey ?: "#$id".also { t.equipmentKey = it }) { "\"id\":$id" }
             if (e is ArmorStand) recordStand(e)
             if (e is ItemFrame) recordFrame(e)
             if (colored != t.name) {
                 t.name = colored
-                emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}$c}""")
+                emit("""{"k":"name","t":$tick,"id":$id,"name":${str(name)}${c()}}""")
             }
             // Mobs at 1/100 of a block and whole degrees (finer is invisible), and only when that
             // changes: a mob twitching less than that is not a move.
@@ -818,7 +821,7 @@ class RunRecorder(
         }
     }
 
-    private fun recordEquipment(e: LivingEntity, who: String, key: String) {
+    private inline fun recordEquipment(e: LivingEntity, key: String, who: () -> String) {
         // (the game swaps in new stacks when equipment changes: the same objects as last tick are no change -
         // building the line for every entity every tick would be most of the recorder's time)
         val was = lastStacks[key]
@@ -835,7 +838,7 @@ class RunRecorder(
         val same = body.replace(DYE, "")
         val previous = lastEquipment.put(key, same)
         if (previous == same || (previous == null && body == NO_EQUIPMENT)) return
-        emit("""{"k":"eq","t":$tick,$who,"eq":$body}""")
+        emit("""{"k":"eq","t":$tick,${who()},"eq":$body}""")
     }
 
     /** The game item id, plus "#rrggbb" for dyed items (leather armour) so the viewer can colour it. */
