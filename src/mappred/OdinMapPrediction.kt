@@ -168,7 +168,7 @@ object OdinMapPrediction {
             if (k != Edge.DOOR) pathDoors[pair(a, b)] = k
         }
         v.closeEdges { a, b -> pathDoors[pair(a, b)] ?: doors[pair(a, b)] }
-        return v
+        return v.connectedPart()
     }
 
     private fun pair(a: Int, b: Int) = minOf(a, b) * 64 + maxOf(a, b)
