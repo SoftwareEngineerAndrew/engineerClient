@@ -18,7 +18,10 @@
 //   tree  prim (a random door off the tree), bfs<q> (with chance q off the oldest room with a free neighbour,
 //         else prim), grow<p> (the newest room with chance p), dfs, ust (every spanning tree alike), kruskal
 //   order rnd or big (the big rooms in random order, or biggest first)
-//   res<k> k random cells kept free of big rooms while they're placed
+//   res<k> k random cells kept free of big rooms while they're placed; try<k> (cells) instead: up to k passes
+//         over the cells in random order, one try at each (a shape left, a placement over the cell inside the
+//         map, kept if free and joined by the tree); a tree rule ending in f: the first cell gets a door to
+//         every free neighbour at once
 //   blood uni (any candidate alike), far, w<a> (weight tiles from the entrance ^ a)
 // Every variant: blood a 1x1 dead end 9 or 10 tree steps out with a 1x1 four steps back (the fairy), and the
 // map tried again unless 4-7 1x1 dead ends besides entrance and blood (2-5 puzzles with trap and yellow).
@@ -46,9 +49,12 @@ const key = (a, b) => a < b ? a * N + b : b * N + a;
 // ---------------------------------------------------------------- spanning trees over a graph
 /** A spanning tree over nodes 0..n-1 with adjacency adj (arrays), rooted at r with exactly one child: parent[]. */
 function tree(rule, n, adj, r) {
+  // a trailing f: the first cell gets a door to every free neighbour at once
+  const flood = rule.endsWith('f'); if (flood) rule = rule.slice(0, -1);
   const parent = new Int32Array(n).fill(-2); parent[r] = -1;
   const first = adj[r][ri(adj[r].length)]; parent[first] = r;
   const inT = [first]; let count = 2;
+  if (flood) for (const w of adj[first]) if (parent[w] === -2) { parent[w] = first; inT.push(w); count++; }
   if (rule === 'ust' || rule === 'kruskal') {
     // over the graph without r, then r hung on 'first'
     if (rule === 'kruskal') {
@@ -128,7 +134,8 @@ function generate(variant, ent, shapes) {
       // free cells; a claimed cell is grown only from its own room's cells
       // c<k>[p][d]: p = the shape and placement picked together (shapes with more placements over the cell more
       // often), d = the room's cells grown at once, each from the one before where it can (a chain inside)
-      const mm = /^c([\d.]+)([a-z]*)$/.exec(order); const c = +mm[1], byPlace = mm[2].includes('p'), chain = mm[2].includes('d'), ust = mm[2].includes('u'), flood = mm[2].includes('f');
+      const mm = /^c([\d.]+)([a-z]*)$/.exec(order); const c = +mm[1], byPlace = mm[2].includes('p'), chain = mm[2].includes('d'), ust = mm[2].includes('u'), flood = mm[2].includes('f'), once = mm[2].includes('a') ? 1 : mm[2].includes('b') ? 2 : mm[2].includes('e') ? 3 : 0;
+      // a/b/e = 1/2/3 tries: a shape left and one of its placements over the cell inside the map, kept if it fits
       // f = the room behind the entrance finished at once, then a door from it to every free neighbouring cell
       // u = each big room's cells joined inside by a random spanning tree, a cell grown only from its parent in it
       const intPar = new Int32Array(N).fill(-1);
@@ -140,6 +147,16 @@ function generate(variant, ent, shapes) {
         let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++;
         if (!left.length || rnd() >= Math.min(1, c * left.length / Math.max(free, 1))) return;
         const ok2 = Array.from({ length: N }, (_, t) => t !== ent && owner[t] === -1 && (t === v || parent[t] === -2));
+        if (once) {
+          const all = []; left.forEach((s, k) => { for (const ts of placements(s, Array(N).fill(true))) if (ts.includes(v)) all.push([k, ts]); });
+          for (let tr = 0; tr < once; tr++) {
+            const sk = ri(left.length); const mine = all.filter(([k]) => k === sk); if (!mine.length) continue;
+            const [, ts] = mine[ri(mine.length)]; if (!ts.every(t => ok2[t])) continue;
+            const id = next; for (const t of ts) owner[t] = id; shape.push(left[sk]); next++; left.splice(sk, 1);
+            return;
+          }
+          return;
+        }
         const opts = left.map(s => placements(s, ok2).filter(ts => ts.includes(v)));
         const can = left.map((_, i) => i).filter(i => opts[i].length);
         if (!can.length) return;
@@ -193,7 +210,19 @@ function generate(variant, ent, shapes) {
       parent = tree(rule, N, NB, ent); if (!parent) continue;
       const te = new Set(); for (let t = 0; t < N; t++) if (parent[t] >= 0) te.add(key(t, parent[t]));
       const held = new Set(); if (reserve) { const cs = [...Array(N).keys()].filter(t => t !== ent); for (let i = 0; i < reserve; i++) { const j = i + ri(cs.length - i); [cs[i], cs[j]] = [cs[j], cs[i]]; held.add(cs[i]); } }
-      for (const s of todo) {
+      if (res?.startsWith('try')) {
+        // try<k>: passes over the cells in random order, at each free cell one try - a shape left at one of its
+        // placements over the cell inside the map, kept if its cells are free and the tree joins them; at most k
+        const passes = +res.slice(3) || 1, left = [...todo];
+        for (let pass = 0; pass < passes && left.length; pass++) for (const v of shuffleArr([...Array(N).keys()])) {
+          if (!left.length) break; if (v === ent || owner[v] !== -1) continue;
+          const sk = ri(left.length); const all = placements(left[sk], Array(N).fill(true)).filter(ts => ts.includes(v));
+          if (!all.length) continue; const ts = all[ri(all.length)];
+          if (!ts.every(t => t !== ent && owner[t] === -1) || internal(ts).filter(k => te.has(k)).length !== ts.length - 1) continue;
+          for (const t of ts) owner[t] = next; shape.push(left[sk]); next++; left.splice(sk, 1);
+        }
+        if (left.length) ok = false;
+      } else for (const s of todo) {
         const free = Array.from({ length: N }, (_, t) => owner[t] === -1 && !held.has(t));
         const c = placements(s, free).filter(ts => internal(ts).filter(k => te.has(k)).length === ts.length - 1);
         if (!c.length) { ok = false; break; }
