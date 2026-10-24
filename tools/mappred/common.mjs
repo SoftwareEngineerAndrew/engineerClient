@@ -33,7 +33,10 @@ export function complete(file = process.env.LAYOUTS || 'layouts.jsonl', floors =
     let spots = 0; for (const d of L.doors) if (d.bx < F.w && d.bz < F.h) spots++;
     if (spots < (F.w - 1) * F.h + F.w * (F.h - 1)) return false;
     const g = graph(L); let e = 0; for (const [, a] of g) e += a.length;
-    if (e / 2 !== L.rooms.length - 1) return false; // a tree, connected
+    if (e / 2 !== L.rooms.length - 1) return false; // a tree, connected: as many doors as that, and every room reached
+    const seenR = new Set([0]), q = [0];
+    while (q.length) for (const x of g.get(q.pop())) if (!seenR.has(x.to)) { seenR.add(x.to); q.push(x.to); }
+    if (seenR.size !== L.rooms.length) return false;
     // the same dungeon recorded twice (two groups): keep one
     const key = L.rooms.map(r => r.name + r.tiles.map(t => t.x + '' + t.z).join('')).sort().join('|');
     if (seen.has(key)) return false; seen.add(key);

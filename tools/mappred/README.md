@@ -55,6 +55,51 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
   equally often (yellow Default and New Trap twice the others): with the tab list's secret total that names the last
   rooms (`node gen-names.mjs` writes MapStats.NAMES).
 
+## How the maps are made (F7, reverse engineered from 2476 complete maps, Oct 2026)
+
+What the maps pin down, then what fits them as a generator (`generator.mjs` runs the candidates end to end
+and scores them against the real maps). Sure = a rule no map breaks or a test with one clear answer; likely =
+the best of the candidates tried, with what still doesn't fit.
+
+Sure:
+- The wither path is a walk over single cells of exactly 9 or 10 steps (9 when entrance and blood are an odd
+  number of tiles apart, else 10: 60/40), with the fairy exactly 4 steps before blood. Every one of the 71
+  maps whose shortest walk is 7 or 8 goes through a 2x2, and going round inside it makes exactly 9 or 10: the
+  generator counts steps over cells, and the cells of a 2x2 are joined inside by a tree, not all four sides.
+- Blood is any of the 1x1 dead ends 9 or 10 steps out that have a 1x1 four steps back (for the fairy), all
+  alike: against the other such dead ends of the same map it is no farther, no likelier on an edge or in a
+  corner (577 maps with a choice). 77% of maps have only one. So where blood lands (85% on the map's edge,
+  32% in a corner, mostly on the far side) comes from the door tree's shape.
+- Trap, yellow, the puzzles and rares go on the other 1x1 dead ends at random: each one's walk, nearness
+  rank and x-then-z rank among its map's dead ends are those of a random pick.
+- The dead ends are a target, not what's left: besides entrance and blood there are 4-7 (8 with a rare,
+  1-2%), i.e. 2-5 puzzles with trap and yellow; no free tree gives that range, so maps outside it are made again.
+- Big rooms are placed by their bounding box's top-left corner (no L without its north-west cell), any spot
+  that fits alike (the orientations come out as the free spots give them, not an orientation first).
+- The door tree is shallow: its deepest tile is 10.6 steps out on average (blood 9.4), the average tile 5.5;
+  in 54% of maps nothing is past blood, and what is is mostly a dead end 1-3 steps past. Doors run away from
+  the entrance (10.7 across its edge to 9.2 along it, whichever edge).
+- The entrance is on the north or south edge 3x as often as west or east, and next to a corner 2x as often as
+  mid-edge (13/6/7/12% along the top, 4/1/2/4% down the sides); one attempt from a mid-edge cell passes less
+  often, which gives some of the 2x but not the 3x.
+
+Likely (generator.mjs `cells:bfs0.2:rnd:res4`, the closest of the ~40 tried):
+1. a door tree over the 36 single cells from the entrance (one door), each new door off the oldest room
+   that still has a free neighbour 20% of the time, else off a random room of the tree;
+2. 4 random cells held back, the 7 big rooms (the shape mix) merged in random order, each anywhere its
+   cells are free and already joined by the tree;
+3. blood and the fairy as above; the dead-end range checked; the specials on the dead ends at random.
+That gets the tree's depth (deepest tile 10.5 steps out, real 10.6; average tile 5.9, real 5.6), blood (6.7
+tiles from the entrance, 87% on an edge, 34% in a corner; real 6.6, 86%, 32%), the path (7.8 rooms, 2.8 of
+them big; real 7.6, 2.7), the dead ends' spread, and most of the 1x1 bunching and how it falls with the
+puzzles (2x2 blocks of 1x1s 1.30 to 0.78 from 4 to 7 dead ends, real 1.60 to 0.87; 0.85 overall without the
+held cells, as the predictor). With a Prim tree it goes deeper (deepest 11.1, average 6.2; 12.4 with the
+rooms placed first); a depth-first tree leaves 2 dead ends, not 5.
+Still off: the fairy (4.0 tiles from the entrance, 14% on an edge; real 4.4, 28%: the real path runs straight
+out first and turns nearer blood), the 1x1s beside the entrance (dead ends 0.45 a map, real 0.76), the path
+going round inside a 2x2 (2% of the times it enters and leaves by neighbouring cells, real 11%), the rest of
+the bunching, and the entrance's edges.
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs

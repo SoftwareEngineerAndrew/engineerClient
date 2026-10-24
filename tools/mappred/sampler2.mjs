@@ -199,6 +199,10 @@ export function sample(obs, combos, opts) {
     okCombos[ci].counts.forEach((v, i) => { for (let k = knownBig[i]; k < v; k++) todo.push(SHAPES[i]); });
     todo.sort((a, b) => PLACEMENTS[b][0].length - PLACEMENTS[a][0].length || rnd() - 0.5);
     owner.fill(-1);
+    // opts.reserve: that many of the main grid's cells (scaled to the unknown ones) kept free of big rooms while
+    // they're placed, as the real layouts look
+    if (opts.reserve) { const k = Math.round(opts.reserve * unknown.length / (rules.w * H - 1)); const cs = [...unknown];
+      for (let i = 0; i < k && i < cs.length; i++) { const j = i + Math.floor(rnd() * (cs.length - i)); [cs[i], cs[j]] = [cs[j], cs[i]]; owner[cs[i]] = -3; } }
     const rooms = [];
     let fail = false;
     for (const shape of todo) {
@@ -211,7 +215,7 @@ export function sample(obs, combos, opts) {
           const x = x0 + dx, z = z0 + dz;
           if (x >= W || z >= H) { ok = false; break; }
           const t = z * W + x;
-          if (!isUnk[t] || owner[t] >= 0) { ok = false; break; }
+          if (!isUnk[t] || owner[t] !== -1) { ok = false; break; }
           if (entry.has(t)) ents++;
           tiles.push(t);
         }
@@ -229,6 +233,7 @@ export function sample(obs, combos, opts) {
       rooms.push({ tiles: pick, shape, orient: cAt[pk][0], anchor: cAt[pk][1] });
     }
     if (fail) continue;
+    for (const t of unknown) if (owner[t] === -3) owner[t] = -1;
     for (const t of unknown) if (owner[t] < 0) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne' }); }
     // opts.bunch: maps with more 2x2 blocks of 1x1 rooms weigh more (exp(bunch * blocks))
     let layoutWeight = 1;
@@ -258,9 +263,15 @@ export function sample(obs, combos, opts) {
     const order = [];
     for (const t of entries) { const r = owner[t]; parent[r] = -1; inTile[r] = t; root[r] = entryIndex.get(t); order.push(r); }
     const grow = opts.grow ?? 0.3;
+    // opts.oldest: with this chance the door comes off the oldest room that still has a free neighbour (the
+    // real trees are shallow: tools/mappred README, the generator)
+    const oldest = opts.oldest ?? 0; let head = 0;
     while (order.length < R) {
       let u = -1, v = -1;
-      if (rnd() < grow) {
+      if (oldest && rnd() < oldest) {
+        while (head < order.length) { const a = order[head]; const fr = [...slots[a].keys()].filter(w => parent[w] === -2); if (fr.length) { u = a; v = fr[Math.floor(rnd() * fr.length)]; break; } head++; }
+      }
+      if (u < 0 && rnd() < grow) {
         const last = order[order.length - 1];
         const fr = [...slots[last].keys()].filter(w => parent[w] === -2);
         if (fr.length) { u = last; v = fr[Math.floor(rnd() * fr.length)]; }

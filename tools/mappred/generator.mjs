@@ -1,0 +1,314 @@
+// Candidate Hypixel F7 generators, run end to end on the 6x6 grid, scored against the recorded maps on
+// statistics none of them were fitted to (the README's "How the maps are made" has what they showed).
+//   LAYOUTS=layouts.jsonl node generator.mjs [variant...]     (MAPS=n real maps, QUIET=1 scores only)
+//   ACCEPT=<variant> ATTEMPTS=1 TRIES=n node generator.mjs     how often one attempt passes, per entrance cell
+//
+// A variant is kind:tree:order[:res<k>[:blood]]:
+//   kind  cells: a door tree over all 36 single cells first (the entrance one door), then the big rooms merged
+//               onto it by their top-left corner, only where the tree already joins their cells
+//         rooms: the big rooms first, then the tree over the rooms, each big room's cells joined by a random
+//               tree inside it
+//   tree  prim (a random door off the tree), bfs<q> (with chance q off the oldest room with a free neighbour,
+//         else prim), grow<p> (the newest room with chance p), dfs, ust (every spanning tree alike), kruskal
+//   order rnd or big (the big rooms in random order, or biggest first)
+//   res<k> k random cells kept free of big rooms while they're placed
+//   blood uni (any candidate alike), far, w<a> (weight tiles from the entrance ^ a)
+// Every variant: blood a 1x1 dead end 9 or 10 tree steps out with a 1x1 four steps back (the fairy), and the
+// map tried again unless 4-7 1x1 dead ends besides entrance and blood (2-5 puzzles with trap and yellow).
+// Closest so far: cells:bfs0.2:rnd:res4.
+const T0 = './';
+const { complete } = await import(T0 + 'common.mjs');
+const { prep } = await import(T0 + 'sim.mjs');
+const { makeRng } = await import(T0 + 'mlp.mjs');
+const { walkFrom } = await import(T0 + 'walk.mjs');
+const W = 6, N = 36;
+const rnd = makeRng(+(process.env.SEED || 31));
+const ri = n => Math.floor(rnd() * n);
+const nb = t => { const x = t % W, z = (t / W) | 0, o = []; if (x + 1 < W) o.push(t + 1); if (x > 0) o.push(t - 1); if (z + 1 < W) o.push(t + W); if (z > 0) o.push(t - W); return o; };
+const NB = Array.from({ length: N }, (_, t) => nb(t));
+const SHAPES = ['TwoByOne', 'ThreeByOne', 'FourByOne', 'TwoByTwo', 'L'];
+const ORIENT = {
+  TwoByOne: [[[0, 0], [1, 0]], [[0, 0], [0, 1]]],
+  ThreeByOne: [[[0, 0], [1, 0], [2, 0]], [[0, 0], [0, 1], [0, 2]]],
+  FourByOne: [[[0, 0], [1, 0], [2, 0], [3, 0]], [[0, 0], [0, 1], [0, 2], [0, 3]]],
+  TwoByTwo: [[[0, 0], [1, 0], [0, 1], [1, 1]]],
+  L: [[[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 1]]],
+};
+const key = (a, b) => a < b ? a * N + b : b * N + a;
+
+// ---------------------------------------------------------------- spanning trees over a graph
+/** A spanning tree over nodes 0..n-1 with adjacency adj (arrays), rooted at r with exactly one child: parent[]. */
+function tree(rule, n, adj, r) {
+  const parent = new Int32Array(n).fill(-2); parent[r] = -1;
+  const first = adj[r][ri(adj[r].length)]; parent[first] = r;
+  const inT = [first]; let count = 2;
+  if (rule === 'ust' || rule === 'kruskal') {
+    // over the graph without r, then r hung on 'first'
+    if (rule === 'kruskal') {
+      const uf = Int32Array.from({ length: n }, (_, i) => i); const find = a => { while (uf[a] !== a) { uf[a] = uf[uf[a]]; a = uf[a]; } return a; };
+      const edges = []; for (let a = 0; a < n; a++) if (a !== r) for (const b of adj[a]) if (b > a && b !== r) edges.push([a, b]);
+      for (let i = edges.length - 1; i > 0; i--) { const j = ri(i + 1); [edges[i], edges[j]] = [edges[j], edges[i]]; }
+      const tadj = Array.from({ length: n }, () => []);
+      for (const [a, b] of edges) { const fa = find(a), fb = find(b); if (fa !== fb) { uf[fa] = fb; tadj[a].push(b); tadj[b].push(a); } }
+      const q = [first]; const seen = new Uint8Array(n); seen[first] = 1; seen[r] = 1;
+      while (q.length) { const u = q.pop(); for (const v of tadj[u]) if (!seen[v]) { seen[v] = 1; parent[v] = u; q.push(v); } }
+      return parent;
+    }
+    // Wilson's algorithm on the graph without r, rooted at first
+    const inTree = new Uint8Array(n); inTree[first] = 1; inTree[r] = 1; const next = new Int32Array(n).fill(-1);
+    for (let s = 0; s < n; s++) {
+      if (inTree[s]) continue;
+      let u = s; while (!inTree[u]) { const opts = adj[u].filter(v => v !== r); next[u] = opts[ri(opts.length)]; u = next[u]; }
+      u = s; while (!inTree[u]) { inTree[u] = 1; u = next[u]; }
+    }
+    // next[] points towards the root along the tree: that is the parent
+    for (let s = 0; s < n; s++) if (s !== r && s !== first) parent[s] = next[s];
+    return parent;
+  }
+  if (rule.startsWith('bfs')) {
+    // with chance q a door off the oldest room that still has a free neighbour, else a random door off the tree
+    const q = rule === 'bfs' ? 1 : +rule.slice(3); let head = 0;
+    while (count < n) {
+      let u = -1, v = -1;
+      if (rnd() < q) {
+        while (head < inT.length) { const a = inT[head]; const fr = adj[a].filter(w => parent[w] === -2); if (fr.length) { u = a; v = fr[ri(fr.length)]; break; } head++; }
+      }
+      if (u < 0) { let c = 0; for (const a of inT) for (const b of adj[a]) if (parent[b] === -2) { c++; if (rnd() * c < 1) { u = a; v = b; } } }
+      if (u < 0) return null;
+      parent[v] = u; inT.push(v); count++;
+    }
+    return parent;
+  }
+  const p = rule.startsWith('grow') ? +rule.slice(4) : rule === 'dfs' ? 1 : 0;
+  const stack = [first];
+  while (count < n) {
+    let u = -1, v = -1;
+    if (p > 0 && rnd() < p) {
+      while (stack.length) { const top = stack[stack.length - 1]; const fr = adj[top].filter(w => parent[w] === -2); if (fr.length) { u = top; v = fr[ri(fr.length)]; break; } if (rule === 'dfs') stack.pop(); else break; }
+    }
+    if (u < 0) { let c = 0; for (const a of inT) for (const b of adj[a]) if (parent[b] === -2) { c++; if (rnd() * c < 1) { u = a; v = b; } } }
+    if (u < 0) return null;
+    parent[v] = u; inT.push(v); stack.push(v); count++;
+  }
+  return parent;
+}
+
+// ---------------------------------------------------------------- big rooms
+function placements(shape, free) {
+  const out = [];
+  for (const o of ORIENT[shape]) for (let t = 0; t < N; t++) { const x0 = t % W, z0 = (t / W) | 0; const ts = []; let ok = true;
+    for (const [dx, dz] of o) { const x = x0 + dx, z = z0 + dz; if (x >= W || z >= W || !free[z * W + x]) { ok = false; break; } ts.push(z * W + x); }
+    if (ok) out.push(ts); }
+  return out;
+}
+const internal = ts => { const e = []; for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) if (NB[ts[i]].includes(ts[j])) e.push(key(ts[i], ts[j])); return e; };
+
+/** One generated map as rooms over cells: owner[], room shapes, the cell tree (parent, rooted at the entrance). */
+function generate(variant, ent, shapes) {
+  const [kind, rule, order, res, bloodRule = 'uni'] = variant.split(':');
+  const reserve = res?.startsWith('res') ? +res.slice(3) : 0;
+  for (let attempt = 0; attempt < (+process.env.ATTEMPTS || 400); attempt++) {
+    const owner = new Int32Array(N).fill(-1); owner[ent] = 0; const shape = ['OneByOne']; let next = 1;
+    let parent;
+    const todo = [...shapes]; for (let i = todo.length - 1; i > 0; i--) { const j = ri(i + 1); [todo[i], todo[j]] = [todo[j], todo[i]]; }
+    if (order === 'big') todo.sort((a, b) => ORIENT[b][0].length - ORIENT[a][0].length);
+    let ok = true;
+    if (kind === 'cells') {
+      parent = tree(rule, N, NB, ent); if (!parent) continue;
+      const te = new Set(); for (let t = 0; t < N; t++) if (parent[t] >= 0) te.add(key(t, parent[t]));
+      const held = new Set(); if (reserve) { const cs = [...Array(N).keys()].filter(t => t !== ent); for (let i = 0; i < reserve; i++) { const j = i + ri(cs.length - i); [cs[i], cs[j]] = [cs[j], cs[i]]; held.add(cs[i]); } }
+      for (const s of todo) {
+        const free = Array.from({ length: N }, (_, t) => owner[t] === -1 && !held.has(t));
+        const c = placements(s, free).filter(ts => internal(ts).filter(k => te.has(k)).length === ts.length - 1);
+        if (!c.length) { ok = false; break; }
+        for (const t of c[ri(c.length)]) owner[t] = next; shape.push(s); next++;
+      }
+    } else {
+      const held = new Set(); if (reserve) { const cs = [...Array(N).keys()].filter(t => t !== ent); for (let i = 0; i < reserve; i++) { const j = i + ri(cs.length - i); [cs[i], cs[j]] = [cs[j], cs[i]]; held.add(cs[i]); } }
+      for (const s of todo) {
+        const free = Array.from({ length: N }, (_, t) => owner[t] === -1 && !held.has(t));
+        const c = placements(s, free); if (!c.length) { ok = false; break; }
+        for (const t of c[ri(c.length)]) owner[t] = next; shape.push(s); next++;
+      }
+      if (ok) {
+        // inside each big room a random tree over its cells; then a tree over the rooms by the rule, its doors
+        // at random between touching cells; the cell tree is both together
+        for (let t = 0; t < N; t++) if (owner[t] === -1) { owner[t] = next++; shape.push('OneByOne'); }
+        const R = next, radj = Array.from({ length: R }, () => new Set());
+        for (let t = 0; t < N; t++) for (const u of NB[t]) if (owner[u] !== owner[t]) radj[owner[t]].add(owner[u]);
+        const rp = tree(rule, R, radj.map(s => [...s]), 0); if (!rp) continue;
+        const cadj = Array.from({ length: N }, () => []);
+        for (let r = 1; r < R; r++) {
+          const pr = rp[r]; const pairs = []; for (let t = 0; t < N; t++) if (owner[t] === r) for (const u of NB[t]) if (owner[u] === pr) pairs.push([t, u]);
+          const [a, b] = pairs[ri(pairs.length)]; cadj[a].push(b); cadj[b].push(a);
+        }
+        for (let r = 1; r < R; r++) { const cs = []; for (let t = 0; t < N; t++) if (owner[t] === r) cs.push(t); if (cs.length < 2) continue;
+          // a uniform random spanning tree of the room's own cells (enumerate: they are tiny)
+          const es = internal(cs); const trees = [];
+          const m = cs.length - 1; (function pick(i, acc) { if (acc.length === m) { const uf = new Map(cs.map(c => [c, c])); const f = a => { while (uf.get(a) !== a) a = uf.get(a); return a; }; let good = true; for (const k of acc) { const a = (k / N) | 0, b = k % N, fa = f(a), fb = f(b); if (fa === fb) { good = false; break; } uf.set(fa, fb); } if (good) trees.push([...acc]); return; } if (i >= es.length) return; acc.push(es[i]); pick(i + 1, acc); acc.pop(); pick(i + 1, acc); })(0, []);
+          for (const k of trees[ri(trees.length)]) { const a = (k / N) | 0, b = k % N; cadj[a].push(b); cadj[b].push(a); } }
+        parent = new Int32Array(N).fill(-2); parent[ent] = -1; const q = [ent];
+        while (q.length) { const u = q.pop(); for (const v of cadj[u]) if (parent[v] === -2) { parent[v] = u; q.push(v); } }
+      }
+    }
+    if (!ok) continue;
+    for (let t = 0; t < N; t++) if (owner[t] === -1) { owner[t] = next++; shape.push('OneByOne'); }
+    const R = next;
+    // room doors from the cell tree
+    const deg = new Int32Array(R), depth = new Int32Array(N).fill(-1);
+    for (let t = 0; t < N; t++) if (parent[t] >= 0 && owner[parent[t]] !== owner[t]) { deg[owner[t]]++; deg[owner[parent[t]]]++; }
+    depth[ent] = 0; const order2 = [ent]; for (let i = 0; i < order2.length; i++) for (let t = 0; t < N; t++) if (parent[t] === order2[i]) { depth[t] = depth[order2[i]] + 1; order2.push(t); }
+    // blood: a 1x1 dead end 9 or 10 tree steps out, the fairy (a 1x1) 4 steps before it
+    const cand = [];
+    for (let t = 0; t < N; t++) { const r = owner[t]; if (r === 0 || shape[r] !== 'OneByOne' || deg[r] !== 1 || (depth[t] !== 9 && depth[t] !== 10)) continue;
+      let f = t; for (let k = 0; k < 4; k++) f = parent[f]; if (shape[owner[f]] !== 'OneByOne' || owner[f] === 0) continue; cand.push([t, f]); }
+    if (!cand.length) continue;
+    // blood among the candidates: uni (any alike), far (the farthest in tiles from the entrance), w<a> (weight tiles^a)
+    const mdE = t => Math.abs(t % W - ent % W) + Math.abs(((t / W) | 0) - ((ent / W) | 0));
+    let pick;
+    if (bloodRule === 'far') { const mx = Math.max(...cand.map(c => mdE(c[0]))); const top = cand.filter(c => mdE(c[0]) === mx); pick = top[ri(top.length)]; }
+    else if (bloodRule.startsWith('w')) { const a = +bloodRule.slice(1); const ws = cand.map(c => mdE(c[0]) ** a); let r = rnd() * ws.reduce((x, y) => x + y, 0), k = 0; while (r > ws[k] && k < ws.length - 1) r -= ws[k++]; pick = cand[k]; }
+    else pick = cand[ri(cand.length)];
+    const [blood, fairy] = pick;
+    let dead = 0; for (let r = 1; r < R; r++) if (shape[r] === 'OneByOne' && deg[r] === 1 && r !== owner[blood]) dead++;
+    // the game's dead-end range: 2-5 puzzles besides trap and yellow (8, a rare room, hardly ever)
+    if (dead < 4 || dead > 7) continue;
+    // the path as cells, blood back to the entrance
+    const pathCells = []; for (let t = blood; t >= 0; t = parent[t]) pathCells.unshift(t);
+    const doors = []; for (let t = 0; t < N; t++) if (parent[t] >= 0 && owner[parent[t]] !== owner[t]) doors.push([t, parent[t]]);
+    return { owner, shape, parent, blood, fairy, dead, R, deg, depth, pathCells, doors };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- the same statistics on real and generated maps
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const doorTiles = (L, a, b) => { for (const d of L.doors) { if (d.what === '-') continue; if (d.a === a && d.b === b) return [[d.ax, d.az], [d.bx, d.bz]]; if (d.a === b && d.b === a) return [[d.bx, d.bz], [d.ax, d.az]]; } return null; };
+function inRoomWalks(tiles, s, t) {
+  const set = new Set(tiles.map(q => q.x + ',' + q.z)), out = [], seen = new Set();
+  (function dfs(x, z, acc) { const k = x + ',' + z; acc.push([x, z]); if (x === t[0] && z === t[1]) { out.push([...acc]); acc.pop(); return; } seen.add(k);
+    for (const [dx, dz] of DIRS) { const n = (x + dx) + ',' + (z + dz); if (set.has(n) && !seen.has(n)) dfs(x + dx, z + dz, acc); } seen.delete(k); acc.pop(); })(s[0], s[1], []);
+  return out;
+}
+/** The real path as cells: the shortest walk inside rooms, around a 2x2 where that makes the 9-10 steps. */
+function realPath(L) {
+  const { E, path } = prep(L);
+  let walks = [[[E.tiles[0].x, E.tiles[0].z]]], at = walks[0][0];
+  for (let i = 0; i + 1 < path.length; i++) {
+    const [out, inn] = doorTiles(L, path[i], path[i + 1]); const opts = inRoomWalks(L.rooms[path[i]].tiles, at, out);
+    const next = []; for (const w of walks) for (const o of opts) next.push([...w, ...o.slice(1), inn]); walks = next; at = inn;
+  }
+  const ok = walks.filter(w => w.length - 1 === 9 || w.length - 1 === 10);
+  return (ok.length ? ok : walks).sort((a, b) => a.length - b.length)[0].map(([x, z]) => z * W + x);
+}
+function realAsGen(L) {
+  const owner = new Int32Array(N).fill(-1); const shape = [];
+  const E = L.rooms.find(r => r.type === 'ENTRANCE');
+  const idx = new Map(); idx.set(E.i, 0); shape[0] = 'OneByOne'; let k = 1;
+  for (const r of L.rooms) if (r !== E) { idx.set(r.i, k); shape[k] = r.shape; k++; }
+  for (const r of L.rooms) for (const t of r.tiles) owner[t.z * W + t.x] = idx.get(r.i);
+  const deg = new Int32Array(k); for (const r of L.rooms) deg[idx.get(r.i)] = L.g.get(r.i).length;
+  const B = L.rooms.find(r => r.type === 'BLOOD'), F = L.rooms.find(r => r.type === 'FAIRY');
+  const dead = L.rooms.filter(r => r.shape === 'OneByOne' && r.type !== 'ENTRANCE' && r.type !== 'BLOOD' && L.g.get(r.i).length === 1).length;
+  const wf = walkFrom(L, E.i); const depth = new Int32Array(N).fill(-1);
+  for (const r of L.rooms) { const { dist, at } = wf.get(r.i); for (const t of r.tiles) depth[t.z * W + t.x] = dist + Math.abs(t.x - at[0]) + Math.abs(t.z - at[1]); }
+  const doors = L.doors.filter(d => d.what !== '-' && d.a >= 0 && d.b >= 0 && d.a !== d.b).map(d => [d.az * W + d.ax, d.bz * W + d.bx]);
+  return { owner, shape, blood: B.tiles[0].z * W + B.tiles[0].x, fairy: F.tiles[0].z * W + F.tiles[0].x, dead, R: k, deg, ent: E.tiles[0].z * W + E.tiles[0].x, L, pathCells: realPath(L), depth, doors };
+}
+function stats(M, ent) {
+  const o = {}; const add = (k, v = 1) => { o[k] = (o[k] || 0) + v; };
+  if (M.pathCells) {
+    const pc = M.pathCells, n = pc.length - 1;
+    add(`path ${n} steps`);
+    const rooms = []; for (const t of pc) if (rooms[rooms.length - 1] !== M.owner[t]) rooms.push(M.owner[t]);
+    add('path: big rooms on it', rooms.filter(r => M.shape[r] !== 'OneByOne').length);
+    add('path: rooms on it', rooms.length);
+    // 2x2s entered and left by neighbouring cells: does the path go around?
+    let i = 0; while (i < pc.length) { const r = M.owner[pc[i]]; let j = i; while (j + 1 < pc.length && M.owner[pc[j + 1]] === r) j++;
+      if (M.shape[r] === 'TwoByTwo') { const a = pc[i], b = pc[j]; const d = Math.abs(a % W - b % W) + Math.abs(((a / W) | 0) - ((b / W) | 0)); if (d === 1) { add('2x2 on path, neighbouring entry/exit'); if (j - i === 3) add('2x2 on path, goes around'); } }
+      i = j + 1; }
+  }
+  const md = (a, b) => Math.abs(a % W - b % W) + Math.abs(((a / W) | 0) - ((b / W) | 0));
+  const bx = M.blood % W, bz = (M.blood / W) | 0;
+  add('blood: tiles from entrance', md(ent, M.blood));
+  add('blood on the edge', +(bx === 0 || bz === 0 || bx === 5 || bz === 5));
+  add('blood in a corner', +((bx === 0 || bx === 5) && (bz === 0 || bz === 5)));
+  add('fairy: tiles from entrance', md(ent, M.fairy));
+  add('fairy: tiles to blood', md(M.fairy, M.blood));
+  add('fairy on the edge', +(M.fairy % W === 0 || M.fairy < W || M.fairy % W === 5 || M.fairy >= 30));
+  add('dead ends (not entrance, blood)', M.dead);
+  // doors by where they are: along the map's edge (both cells on the same border line), from inside to a border cell, inside
+  if (M.doors) for (const [a, b] of M.doors) {
+    const ax = a % W, az = (a / W) | 0, bx = b % W, bz = (b / W) | 0;
+    const onB = (x, z) => x === 0 || z === 0 || x === 5 || z === 5;
+    const along = (az === bz && (az === 0 || az === 5)) || (ax === bx && (ax === 0 || ax === 5));
+    add(along ? 'doors: along the edge' : onB(ax, az) || onB(bx, bz) ? 'doors: inside to edge cell' : 'doors: inside');
+    add(az === bz ? 'doors: east-west' : 'doors: north-south');
+  }
+  // the entrance's surroundings: the two cells beside it on its edge, and the room behind it
+  { const ex = ent % W, ez = (ent / W) | 0; const along = ez === 0 || ez === 5 ? [[ex - 1, ez], [ex + 1, ez]] : [[ex, ez - 1], [ex, ez + 1]];
+    for (const [x, z] of along) { if (x < 0 || z < 0 || x >= W || z >= W) continue; const r = M.owner[z * W + x];
+      add(M.shape[r] !== 'OneByOne' ? 'beside entrance: big room' : M.deg[r] === 1 ? 'beside entrance: 1x1 dead end' : 'beside entrance: 1x1 with 2+ doors'); }
+    const inward = ez === 0 ? ent + W : ez === 5 ? ent - W : ex === 0 ? ent + 1 : ent - 1;
+    add(`behind entrance: ${M.shape[M.owner[inward]]}`); }
+  add(`dead ends = ${M.dead}`);
+  const one = t => M.shape[M.owner[t]] === 'OneByOne';
+  let q = 0; for (let z = 0; z < 5; z++) for (let x = 0; x < 5; x++) { const t = z * W + x; if (one(t) && one(t + 1) && one(t + W) && one(t + W + 1)) q++; }
+  add('2x2 blocks of 1x1s', q);
+  if (M.depth) {
+    let mx = 0, sumD = 0, nD = 0, str = 0, far = 0;
+    for (let t = 0; t < N; t++) mx = Math.max(mx, M.depth[t]);
+    for (let r = 1; r < M.R; r++) if (M.shape[r] === 'OneByOne' && M.deg[r] === 1) { let t = 0; while (M.owner[t] !== r) t++; const d = M.depth[t]; sumD += d; nD++; if (d >= 11) far++; if (d > 0) str += md(ent, t) / d; add(`dead end walk ${Math.min(d, 14)}`); }
+    add('tree: deepest tile (walk)', mx); add('tree: dead ends mean walk', sumD / Math.max(nD, 1)); add('tree: dead ends straightness (tiles/walk)', str / Math.max(nD, 1)); add('tree: dead ends at walk 11+', far);
+    let all = 0; for (let t = 0; t < N; t++) all += M.depth[t]; add('tree: mean walk of all tiles', all / N);
+  }
+  if (M.pathCells) {
+    const onP = new Set(M.pathCells.map(t => M.owner[t]));
+    for (let z = 0; z < 5; z++) for (let x = 0; x < 5; x++) { const t = z * W + x; const ts = [t, t + 1, t + W, t + W + 1]; if (!ts.every(one)) continue;
+      for (const u of ts) { const r = M.owner[u]; add(onP.has(r) ? 'in blocks: path 1x1' : M.deg[r] === 1 ? 'in blocks: dead end' : 'in blocks: other 1x1'); } }
+    let pOne = 0; for (const r of onP) if (M.shape[r] === 'OneByOne') pOne++; add('path: 1x1 rooms on it', pOne);
+  }
+  add(`2x2 blocks of 1x1s | dead=${M.dead}`, q); add(`n | dead=${M.dead}`);
+  for (let r = 1; r < M.R; r++) { const s = M.shape[r]; if (s === 'OneByOne') { add(`1x1 doors=${Math.min(M.deg[r], 4)}`); continue; } add(`${s} doors=${Math.min(M.deg[r], 4)}`); add(`${s} n`); }
+  return o;
+}
+
+if (process.env.ACCEPT) {
+  // one attempt per try: how often a map from each entrance cell passes, with a typical shape mix
+  const shapes = ['TwoByOne', 'TwoByOne', 'ThreeByOne', 'ThreeByOne', 'FourByOne', 'TwoByTwo', 'L'];
+  const v = process.env.ACCEPT, tries = +(process.env.TRIES || 400);
+  console.log(`${v}: share of single attempts that make a valid map, by entrance cell`);
+  const rate = new Float64Array(36);
+  for (let t = 0; t < 36; t++) { const x = t % W, z = (t / W) | 0; const edge = x === 0 || z === 0 || x === 5 || z === 5, corner = (x === 0 || x === 5) && (z === 0 || z === 5); if (!edge || corner) continue;
+    let ok = 0; for (let k = 0; k < tries; k++) if (generate(v, t, shapes)) ok++; rate[t] = ok / tries; }
+  for (let z = 0; z < 6; z++) console.log([0, 1, 2, 3, 4, 5].map(x => rate[z * W + x] ? (rate[z * W + x] * 100).toFixed(1).padStart(6) : '     .').join(''));
+  process.exit(0);
+}
+const Ls = complete();
+const variants = process.argv.slice(2).length ? process.argv.slice(2) : ['cells:prim:rnd', 'cells:ust:rnd', 'cells:kruskal:rnd', 'cells:dfs:rnd', 'cells:grow0.3:rnd', 'rooms:prim:rnd', 'rooms:ust:rnd'];
+const acc = {}, cnt = {};
+const accum = (m, o) => { acc[m] ||= {}; cnt[m] = (cnt[m] || 0) + 1; for (const k in o) acc[m][k] = (acc[m][k] || 0) + o[k]; };
+const fails = {};
+const maxMaps = +(process.env.MAPS || 600);
+for (const L of Ls.slice(0, maxMaps)) {
+  const shapes = L.rooms.filter(r => r.shape !== 'OneByOne').map(r => r.shape);
+  if (shapes.length !== 7) continue;
+  const R = realAsGen(L); accum('real', stats(R, R.ent));
+  for (const v of variants) { const g = generate(v, R.ent, shapes); if (!g) { fails[v] = (fails[v] || 0) + 1; continue; } accum(v, stats(g, R.ent)); }
+}
+for (const m in acc) for (const k of Object.keys(acc[m])) { const mm = /^2x2 blocks of 1x1s \| (dead=\d+)$/.exec(k); if (mm) acc[m][k] = acc[m][k] / (acc[m][`n | ${mm[1]}`] || 1) * cnt[m]; }
+for (const m in acc) { const a = acc[m]['2x2 on path, neighbouring entry/exit'] || 0; acc[m]['2x2 on path, goes around (share)'] = a ? (acc[m]['2x2 on path, goes around'] || 0) / a * cnt[m] : 0; }
+// per-shape door counts become shares of that shape
+for (const m in acc) for (const k of Object.keys(acc[m])) { const mm = /^(\w+) doors=/.exec(k); if (mm && mm[1] !== '1x1') acc[m][k] = acc[m][k] / (acc[m][`${mm[1]} n`] || 1) * cnt[m]; }
+const ms = Object.keys(acc);
+const keys = Object.keys(acc.real).filter(k => !k.endsWith(' n') && !k.startsWith('n |') && !/dead=[0-38-9]/.test(k) && !/goes around$|neighbouring entry\/exit$/.test(k)).sort();
+console.log(`${cnt.real} real maps; generated per variant: ` + variants.map(v => `${v} ${cnt[v] || 0} (${fails[v] || 0} gave up)`).join(', '));
+console.log('stat'.padEnd(34) + ms.map(m => m.slice(0, 15).padStart(16)).join(''));
+let score = Object.fromEntries(ms.map(m => [m, 0]));
+for (const k of keys) {
+  const vals = ms.map(m => (acc[m][k] || 0) / (cnt[m] || 1));
+  if (!process.env.QUIET) console.log(k.padEnd(34) + vals.map(v => v.toFixed(3).padStart(16)).join(''));
+  const r = vals[0]; ms.forEach((m, i) => { score[m] += (vals[i] - r) ** 2 / (Math.abs(r) / cnt.real + 1e-4); });
+}
+console.log('\nmismatch score (lower = closer to the real maps):');
+for (const m of ms.slice(1)) console.log('  ' + m.padEnd(22) + score[m].toFixed(0));
