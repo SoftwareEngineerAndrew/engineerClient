@@ -124,7 +124,11 @@ blobs). Making the big rooms while the tree grows (`grow`) leaves the 1x1s in bl
 cells grown once the shapes have run out, or where none fits): c2 gets every pull above roughly right, but
 too many 1x1s with 3+ doors (2.1 a map, real 1.6) and 1x4 dead ends; c4 gets those and the bunching (1.32,
 real 1.24) but puts the big rooms too near the entrance. So the rooms are likely made during the growth, by
-a rule not yet found between those two.
+a rule not yet found between those two. Growing the wither path first (generator.mjs `pgrow`, blood the end
+of a 9-10 step walk) is ruled out: blood comes out 55% on an edge and 9% in a corner (real 86%, 33%) and
+the tree too deep (deepest tile 12.6, real 10.6) - blood is picked from the grown tree, as the within-map
+test says. Still unexplained: more big rooms entered at walk 2 than any of these make (real 0.88 a map,
+0.54-0.73), fewer at 5 (0.72, grow 0.87).
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 

@@ -5,7 +5,9 @@
 //   DUMP=file.json: the generated layouts, for placefit.mjs GEN=file.json
 //
 // A variant is kind:tree:order[:res<k>[:blood]]:
-//   kind  grow: the tree grown cell by cell, a new free cell starting a big room with chance c * shapes left /
+//   kind  pgrow: as grow, but the wither path (9 or 10 steps, each off the cell just added) grown first, blood
+//               its end: ruled out (blood 55% on an edge, 9% in a corner, real 86%, 33%; the tree too deep)
+//         grow: the tree grown cell by cell, a new free cell starting a big room with chance c * shapes left /
 //               free cells (order field c<k>[p][d][u]: p shape and placement picked together, d the room's
 //               cells grown at once in a chain, u its cells joined by a random spanning tree inside)
 //         cells: a door tree over all 36 single cells first (the entrance one door), then the big rooms merged
@@ -116,8 +118,8 @@ function generate(variant, ent, shapes) {
     let parent;
     const todo = [...shapes]; for (let i = todo.length - 1; i > 0; i--) { const j = ri(i + 1); [todo[i], todo[j]] = [todo[j], todo[i]]; }
     if (order === 'big') todo.sort((a, b) => ORIENT[b][0].length - ORIENT[a][0].length);
-    let ok = true;
-    if (kind === 'grow') {
+    let ok = true, fixed = null;
+    if (kind === 'grow' || kind === 'pgrow') {
       // the tree grown cell by cell from the entrance; a new free cell starts a big room (one of the shapes
       // left, a placement over it whose other cells are free and not grown yet) with chance c * shapes left /
       // free cells; a claimed cell is grown only from its own room's cells
@@ -150,11 +152,25 @@ function generate(variant, ent, shapes) {
         if (chain) { let last = v; for (;;) { const nx = ts.filter(t => parent[t] === -2 && NB[last].includes(t)); const any = nx.length ? nx : ts.filter(t => parent[t] === -2 && NB[t].some(w => owner[w] === id && parent[w] !== -2));
           if (!any.length) break; const t = any[ri(any.length)]; const from = nx.length ? last : NB[t].filter(w => owner[w] === id && parent[w] !== -2)[0]; parent[t] = from; grown.push(t); last = t; } }
       };
-      const add = (v, u) => { parent[v] = u; grown.push(v); if (owner[v] === -1) start(v); };
+      const add = (v, u, noRoom) => { parent[v] = u; grown.push(v); if (owner[v] === -1 && !noRoom) start(v); };
+      let bloodCell = -1;
+      const fr = u => u === bloodCell ? [] : NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u] && (intPar[w] < 0 || intPar[w] === u)));
       add(NB[ent][ri(NB[ent].length)], ent);
+      if (kind === 'pgrow') {
+        // the wither path first: 9 or 10 steps, each from the cell just added (rooms can start on it), the
+        // fairy (4 before the end) and blood (the end) kept 1x1; nothing grows off blood
+        const G = rnd() < 0.6 ? 9 : 10; let cur = grown[1], fairyCell = -1;
+        for (let k = 2; k <= G && ok; k++) {
+          const keep = k === G - 4 || k === G;
+          const f = fr(cur).filter(w => !keep || owner[w] === -1);
+          if (!f.length) { ok = false; break; }
+          const v = f[ri(f.length)]; add(v, cur, keep); cur = v;
+          if (k === G - 4) fairyCell = v;
+        }
+        if (ok) { bloodCell = cur; fixed = [cur, fairyCell]; }
+      }
       let head = 1;
-      const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u] && (intPar[w] < 0 || intPar[w] === u)));
-      while (grown.length < N) {
+      while (ok && grown.length < N) {
         let u = -1, v = -1;
         if (q && rnd() < q) { while (head < grown.length) { const f = fr(grown[head]); if (f.length) { u = grown[head]; v = f[ri(f.length)]; break; } head++; } }
         if (u < 0 && pNew && rnd() < pNew) { const last = grown[grown.length - 1]; const f = fr(last); if (f.length) { u = last; v = f[ri(f.length)]; } }
@@ -212,6 +228,7 @@ function generate(variant, ent, shapes) {
     const cand = [];
     for (let t = 0; t < N; t++) { const r = owner[t]; if (r === 0 || shape[r] !== 'OneByOne' || deg[r] !== 1 || (depth[t] !== 9 && depth[t] !== 10)) continue;
       let f = t; for (let k = 0; k < 4; k++) f = parent[f]; if (shape[owner[f]] !== 'OneByOne' || owner[f] === 0) continue; cand.push([t, f]); }
+    if (fixed) { const [b, f] = fixed; if (shape[owner[b]] !== 'OneByOne' || deg[owner[b]] !== 1 || shape[owner[f]] !== 'OneByOne') continue; cand.length = 0; cand.push(fixed); }
     if (!cand.length) continue;
     // blood among the candidates: uni (any alike), far (the farthest in tiles from the entrance), w<a> (weight tiles^a)
     const mdE = t => Math.abs(t % W - ent % W) + Math.abs(((t / W) | 0) - ((ent / W) | 0));
