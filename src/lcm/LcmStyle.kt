@@ -20,6 +20,7 @@ import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonTile
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.IVec2
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -250,11 +251,15 @@ object LcmStyle {
      * like Odin, the special column's guess on every tile of a known 1x1 nobody has opened that isn't behind a door yet.
      */
     private fun drawUnopened(g: GuiGraphicsExtractor, hints: Collection<DungeonTile>) {
+        guesses.fill(null)
+        // the hint tiles, which the known 1x1s below skip
+        var hinted = 0L
         for ((position, room) in hints) {
+            hinted = hinted or bit(position)
             if (room?.walkedInto == true) continue
             val colors = when {
                 room?.type == RoomType.BLOOD -> intArrayOf(darker(BLOOD))
-                !DungeonMap.disablePred && room?.isKnown1x1 == true -> specialGuess(position.x)
+                !DungeonMap.disablePred && room?.isKnown1x1 == true -> guess(position.x)
                 else -> intArrayOf(UNOPENED)
             }
             guessTile(g, position.x * TILE, position.z * TILE, colors)
@@ -263,10 +268,21 @@ object LcmStyle {
         for (room in DungeonScan.rooms) {
             if (!room.isKnown1x1 || room.isViewable) continue
             for (position in room.tiles) {
-                if (hints.any { it.position == position }) continue
-                guessTile(g, position.x * TILE, position.z * TILE, specialGuess(position.x))
+                if (hinted and bit(position) != 0L) continue
+                guessTile(g, position.x * TILE, position.z * TILE, guess(position.x))
             }
         }
+    }
+
+    /** A tile's bit in a mask of Odin's 6x6 grid, which every hint and room tile is on. */
+    private fun bit(position: IVec2): Long = 1L shl (position.z * 6 + position.x)
+
+    /** [specialGuess] by column for the frame [drawUnopened] draws: the same for every tile in a column, so once a frame, not per tile. */
+    private val guesses = arrayOfNulls<IntArray>(6)
+
+    private fun guess(column: Int): IntArray {
+        if (column !in guesses.indices) return specialGuess(column)
+        return guesses[column] ?: specialGuess(column).also { guesses[column] = it }
     }
 
     /** Odin's special column guess for a tile in this column, in these colours and dtMap's order, darkened. */
@@ -323,13 +339,12 @@ object LcmStyle {
 
     private fun doorColor(door: DungeonDoor, a: DungeonRoom?, b: DungeonRoom?): Int {
         val noInfo = !opened(a) || !opened(b)
-        val rooms = listOfNotNull(a, b)
         return when (door.type) {
             DoorType.Blood -> if (noInfo) darker(BLOOD) else BLOOD
             DoorType.Wither -> WITHER
             // an unlocked fairy door: black until the room behind it is open (as dtMap shows it)
-            DoorType.Fairy -> if (noInfo) WITHER else if (rooms.firstOrNull { it.type != RoomType.NORMAL }?.type == RoomType.FAIRY) FAIRY else NORMAL
-            else -> if (noInfo) UNOPENED else when (rooms.firstOrNull { it.type != RoomType.NORMAL && it.type != RoomType.FAIRY }?.type) {
+            DoorType.Fairy -> if (noInfo) WITHER else if (firstType(a, b) { it != RoomType.NORMAL } == RoomType.FAIRY) FAIRY else NORMAL
+            else -> if (noInfo) UNOPENED else when (firstType(a, b) { it != RoomType.NORMAL && it != RoomType.FAIRY }) {
                 RoomType.ENTRANCE -> ENTRANCE
                 RoomType.BLOOD -> BLOOD
                 RoomType.CHAMPION -> CHAMPION
@@ -340,6 +355,10 @@ object LcmStyle {
             }
         }
     }
+
+    /** The type of the first of [a] and [b] (whichever are there) whose type passes [test], without a list per door per frame. */
+    private inline fun firstType(a: DungeonRoom?, b: DungeonRoom?, test: (RoomType) -> Boolean): RoomType? =
+        a?.type?.takeIf(test) ?: b?.type?.takeIf(test)
 
     private fun drawName(g: GuiGraphicsExtractor, room: DungeonRoom) {
         if (!opened(room) || room.type == RoomType.ENTRANCE || room.type == RoomType.BLOOD || room.type == RoomType.FAIRY || room.type == RoomType.UNDISCOVERED) return
@@ -366,7 +385,7 @@ object LcmStyle {
         // dtMap's layout: one word a line, the block centred on the room
         val scale = DungeonMap.textScaling
         val lineH = mc.font.lineHeight * scale
-        val words = name.split(" ")
+        val words = wordsOf(name)
         val top = ROOM / 2 - lineH / 2f - ((words.size - 1) / 2.0 * lineH).toInt()
         for ((i, word) in words.withIndex()) {
             g.pose().pushMatrix()
@@ -375,6 +394,18 @@ object LcmStyle {
             g.centeredText(mc.font, word, 0, 0, color)
             g.pose().popMatrix()
         }
+    }
+
+    /**
+     * Each room name's words, split once: every name on the map is drawn every frame. Names are Odin's room data's
+     * (140 of them); past [WORDS_CACHE_SIZE] the cache starts over.
+     */
+    private val nameWords = HashMap<String, List<String>>()
+    private const val WORDS_CACHE_SIZE = 256
+
+    private fun wordsOf(name: String): List<String> = nameWords[name] ?: name.split(" ").also {
+        if (nameWords.size >= WORDS_CACHE_SIZE) nameWords.clear()
+        nameWords[name] = it
     }
 
     private fun drawPlayers(g: GuiGraphicsExtractor) {

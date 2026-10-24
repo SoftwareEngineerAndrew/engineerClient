@@ -78,7 +78,7 @@ object LcmMapInfo {
         if (!example && (!DungeonUtils.inDungeons || (disableInBoss() && DungeonUtils.inBoss))) return 0 to 0
         return try {
             if (example) centred(g, listOf("§b10§7-§e49§7-§c55     §a300", "§7D: §c1  §7M: §c✖  §7P: §c✖  §7B: §c✖  §c0§7/§a5"), 2)
-            else centred(g, lines(), 0)
+            else lines().let { centred(g, it.lines, 0, it.width) }
         } catch (t: Throwable) {
             if (!failed) {
                 failed = true
@@ -90,12 +90,19 @@ object LcmMapInfo {
 
     private fun disableInBoss(): Boolean = (MapInfo.settings["Disable in boss"] as? BooleanSetting)?.value ?: true
 
+    /**
+     * The score text as last laid out, and what from. The Full Hud is drawn every frame but its stats change a few
+     * times a second, so the font only measures it again when the text or the map's width changes, or on the next
+     * tick (a resource pack or Force Unicode Font changes the widths without changing the text).
+     */
+    private class Layout(val secrets: String, val score: String, val line2: String, val mapWidth: Int, val tick: Long, val lines: List<String>, val width: Int)
+    private var layout: Layout? = null
+
     /** dtMap's score text (its Score.actualRender): one line if it's narrower than the map, else two. */
-    private fun lines(): List<String> {
+    private fun lines(): Layout {
         val score = calculateScore()
         val secrets = "§b${DungeonUtils.secretCount}§7-§e${calculateMinimumSecrets()}§7-§c${calculateTotalSecrets()}"
         val scoreText = "§${if (score < 270) "c" else if (score < 300) "e" else "a"}$score"
-        val line1 = "$secrets   $scoreText"
         val line2 = buildString {
             if (DungeonUtils.deathCount > 0) append("§7D: §c${DungeonUtils.deathCount}   ")
             if (!DungeonUtils.mimicKilled && floorNumber() >= 6) append("§7M: §c✖   ")
@@ -106,13 +113,16 @@ object LcmMapInfo {
         // as wide as dtMap's map: its rooms down, 16 each and 4 between, and its 5 of background either side
         val rows = LcmStyle.mapSize(false).second
         val mapWidth = rows * 16 + (rows - 1) * 4 + 10
-        return if (mc.font.width("$line1   $line2") < mapWidth) listOf("$secrets   ${if (line2.isNotEmpty()) "$line2   " else ""}$scoreText")
+        val tick = mc.level?.gameTime ?: 0L
+        layout?.let { if (it.secrets == secrets && it.score == scoreText && it.line2 == line2 && it.mapWidth == mapWidth && it.tick == tick) return it }
+        val line1 = "$secrets   $scoreText"
+        val lines = if (mc.font.width("$line1   $line2") < mapWidth) listOf("$secrets   ${if (line2.isNotEmpty()) "$line2   " else ""}$scoreText")
             else listOf(line1, line2)
+        return Layout(secrets, scoreText, line2, mapWidth, tick, lines, lines.maxOf { mc.font.width(it) }).also { layout = it }
     }
 
-    /** The lines centred on each other, [gap] between them (dtMap's: none, 2 on its example). */
-    private fun centred(g: GuiGraphicsExtractor, lines: List<String>, gap: Int): Pair<Int, Int> {
-        val width = lines.maxOf { mc.font.width(it) }
+    /** The lines centred on each other, [gap] between them (dtMap's: none, 2 on its example); [width] is the widest line's. */
+    private fun centred(g: GuiGraphicsExtractor, lines: List<String>, gap: Int, width: Int = lines.maxOf { mc.font.width(it) }): Pair<Int, Int> {
         for ((i, line) in lines.withIndex()) g.centeredText(mc.font, line, width / 2, i * (mc.font.lineHeight + gap), -1)
         return width to lines.size * (mc.font.lineHeight + gap) - gap
     }
