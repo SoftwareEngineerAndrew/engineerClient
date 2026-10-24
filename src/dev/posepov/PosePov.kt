@@ -32,6 +32,7 @@ import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
@@ -128,6 +129,7 @@ object PosePov : Module(
     )
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
+    private val share by BooleanSetting("Share with party", true, desc = "Sends where you stand and look, teammates you can see, and the terminal you have open to party members who also share, through undonecoffee.com (signed in through Mojang, as when joining a server). Theirs show here when they are out of your range.")
 
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     private val projection = Projection()
@@ -146,6 +148,7 @@ object PosePov : Module(
         ClientTickEvents.END_CLIENT_TICK.register {
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
             DevgineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) sampleLooks() }
+            DevgineerClient.safely("pose share") { PoseShare.tick(enabled && share) }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
         }
         // This run's block changes, on top of the known rooms and arena (see KnownWorld).
@@ -167,6 +170,7 @@ object PosePov : Module(
 
     override fun onDisable() {
         super.onDisable()
+        PoseShare.close()
         releaseFeeds()
         BlockMesh.clear()
     }
@@ -203,20 +207,30 @@ object PosePov : Module(
         val eyes = arrayOfNulls<Eye>(FEEDS)
         val players = arrayOfNulls<Player>(FEEDS)
         val bodies = ArrayList<Body>()
+        val shared = arrayOfNulls<PoseShare.Pose>(FEEDS)
         for (i in 0 until FEEDS) {
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
+            // Out of your range: where they (or a teammate who can see them) say they are, else the map's guess.
+            val s = if (p == null && !slot.isDead) PoseShare.pose(slot.name, now) else null
             val e = if (p != null) {
                 players[i] = p
                 val real = look(slot.name, p, pt, now)
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
+            } else if (s != null) {
+                shared[i] = s
+                val real = Eye(s.pos.add(0.0, if (s.sneaking) 1.27 else 1.62, 0.0), s.yaw, s.pitch, null)
+                ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
+                real
             } else if (!slot.isDead && slot.mapPos.data != 0L) ghostEye(level, slot, now) else null
             if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
-            // An out-of-range teammate's guessed body, in every feed (their own included, seen from behind).
+            // An out-of-range teammate's body, in every feed: where they're shared at (but their own), or the guess (their
+            // own included, seen from behind).
             val g = ghosts[slot.name]
             val guess = e?.subject
-            if (p == null && guess != null && g != null) slot.playerSkin?.let { bodies += Body(guess.subtract(0.0, 1.62, 0.0), g.yaw, g.walkPos, g.walkSpeed, it) }
+            if (s != null && g != null) slot.playerSkin?.let { bodies += Body(s.pos, s.yaw, g.walkPos, g.walkSpeed, it, i) }
+            else if (p == null && guess != null && g != null) slot.playerSkin?.let { bodies += Body(guess.subtract(0.0, 1.62, 0.0), g.yaw, g.walkPos, g.walkSpeed, it, -1) }
         }
 
         // Every entity near any eye, extracted once for all the feeds: full bright like the blocks, without outlines.
@@ -266,11 +280,15 @@ object PosePov : Module(
             val item = handItems[i].also { it.clear() }
             val right = p?.mainArm != HumanoidArm.LEFT
             if (p != null && !p.mainHandItem.isEmpty) mc.itemModelResolver.updateForLiving(item, p.mainHandItem, if (right) ItemDisplayContext.FIRST_PERSON_RIGHT_HAND else ItemDisplayContext.FIRST_PERSON_LEFT_HAND, p)
+            val sh = shared[i]
+            val me = mc.player
+            if (sh != null && me != null && !sh.item.isEmpty) mc.itemModelResolver.updateForLiving(item, sh.item, ItemDisplayContext.FIRST_PERSON_RIGHT_HAND, me)
             val subject = e.subject
             val ghost = slot?.let { ghosts[it.name] }
-            // Everything around them but themselves (their view is from inside their head).
+            // Everything around them but themselves (their view is from inside their head), and every body but a shared one's own.
             val seen = entities.filter { (en, _) -> en !== p && en.position().distanceToSqr(e.pos) < range2 }.map { it.second }
-            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, p?.let { swingOf(it.id, now) } ?: 0f, seen, bodies)
+            val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + PoseShare.BUFFER_NS, now) } ?: 0f
+            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, swing, seen, bodies.filter { it.slot != i })
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -297,7 +315,50 @@ object PosePov : Module(
                 }
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
+            if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: "shared · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
+            slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
+    }
+
+    private fun footLabel(gfx: GuiGraphicsExtractor, label: String, color: Color, x0: Int, x1: Int, y1: Int) {
+        val cx = (x0 + x1) / 2; val half = mc.font.width(label) / 2
+        gfx.fill(cx - half - 3, y1 - 14, cx + half + 3, y1 - 2, 0x90000000.toInt())
+        gfx.text(label, cx - half, y1 - 12, color, shadow = true)
+    }
+
+    /**
+     * A teammate's open terminal over their feed, as it looks to them, with Odin's solution: the next clicks lit (in order
+     * for Numbers, with the click count for Rubix). The title is the terminal's own name here, never text from them.
+     */
+    private fun terminal(gfx: GuiGraphicsExtractor, t: PoseShare.Gui, x0: Int, y0: Int, x1: Int, y1: Int) {
+        val rows = (t.size + 8) / 9
+        val gridW = 9 * 18; val gridH = rows * 18 + 12
+        val scale = minOf(1f, (x1 - x0 - 8f) / gridW, (y1 - y0 - 8f) / gridH)
+        if (scale <= 0.2f) return
+        gfx.fill(x0, y0, x1, y1, 0x80000000.toInt())
+        val left = (x0 + x1) / 2f - gridW * scale / 2; val top = (y0 + y1) / 2f - gridH * scale / 2
+        val pose = gfx.pose()
+        pose.pushMatrix()
+        pose.translate(left, top)
+        pose.scale(scale, scale)
+        val title = t.type.termName
+        gfx.text(title, (gridW - mc.font.width(title)) / 2, 0, Color(255, 255, 255), shadow = true)
+        val clicks = HashMap<Int, Int>(); val order = HashMap<Int, Int>()
+        t.solution.forEachIndexed { n, s -> clicks.merge(s, 1, Int::plus); order.putIfAbsent(s, n) }
+        for (i in 0 until t.size) {
+            val x = (i % 9) * 18; val y = 12 + (i / 9) * 18
+            val n = order[i]
+            val bg = when {
+                n == null -> 0x60303030
+                t.type == TerminalTypes.NUMBERS -> when (n) { 0 -> 0xE040D040.toInt(); 1 -> 0xC0D0C030.toInt(); 2 -> 0xA0D07020.toInt(); else -> 0x60303030 }
+                else -> 0xC040D040.toInt()
+            }
+            gfx.fill(x, y, x + 17, y + 17, bg)
+            val stack = t.items[i]
+            if (!stack.isEmpty) { gfx.item(stack, x, y); gfx.itemDecorations(mc.font, stack, x, y) }
+            if (t.type == TerminalTypes.RUBIX) clicks[i]?.let { gfx.text("$it", x + 17 - mc.font.width("$it"), y + 9, Color(255, 255, 255), shadow = true) }
+        }
+        pose.popMatrix()
     }
 
     /**
@@ -358,6 +419,11 @@ object PosePov : Module(
 
         /** Their own view this frame: the estimate picks up from here when they go out of range. */
         fun seen(e: Eye, now: Long) {
+            // The walk, for their body when it is drawn from shared poses (the game's limb swing advances about 4 per block).
+            if (!x.isNaN() && at > 0L) {
+                val moved = Math.hypot(e.pos.x - x, e.pos.z - z); val dt = ((now - at) / 1e9).coerceIn(0.0, 0.25)
+                if (moved < 2.0) { walkPos += (moved * 4).toFloat(); if (dt > 0) walkSpeed += (((moved / dt) / 5).coerceAtMost(1.0).toFloat() - walkSpeed) * (1 - Math.exp(-dt * 6)).toFloat() }
+            }
             x = e.pos.x; z = e.pos.z; eyeY = e.pos.y; yaw = e.yaw; pitch = e.pitch; at = now
             trail.clear(); camDist = 0.0; camOff = 0f; camAim = 0f; camUp = BACK_UP
         }
@@ -556,7 +622,7 @@ object PosePov : Module(
     )
 
     /** The guessed body of an out-of-range teammate: where and which way it stands, its walk, and their skin. */
-    private class Body(val feet: Vec3, val yaw: Float, val walkPos: Float, val walkSpeed: Float, val skin: PlayerSkin)
+    private class Body(val feet: Vec3, val yaw: Float, val walkPos: Float, val walkSpeed: Float, val skin: PlayerSkin, val slot: Int)
 
     private val swings = java.util.concurrent.ConcurrentHashMap<Int, Long>()
 
@@ -567,6 +633,15 @@ object PosePov : Module(
         if (t >= 1f) { swings.remove(id); return 0f }
         return t
     }
+
+    /** How far through a swing that started at [at] the arm is (0 before it or once done). */
+    private fun swingFrom(at: Long, now: Long): Float {
+        val t = (now - at).toFloat() / SWING_NS
+        return if (t < 0f || t >= 1f) 0f else t
+    }
+
+    /** Whether the entity swung since [since] (for passing on a teammate's swings). */
+    fun swungSince(id: Int, since: Long) = (swings[id] ?: 0L) > since
 
     private val handItems = Array(FEEDS) { ItemStackRenderState() }
     private val handProjection = Projection()
