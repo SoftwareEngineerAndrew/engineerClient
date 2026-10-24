@@ -36,10 +36,28 @@ object SpeedHud : Module(
     private val hud by HUD("Speed", "Your SkyBlock speed stat.", true, 10, 40, 1.5f) { example ->
         val line = if (example) "§f✦500" + if (actual) " §7(28.0 b/s)" else "" else {
             if (mc.player == null) return@HUD 0 to 0
-            "§f✦${speed()}" + if (actual) " §7(${"%.1f".format(bps)} b/s)" else ""
+            speedLine(speed(), actual, bps)
         }
         text(line, 0, 0, Colors.WHITE, shadow = true)
         mc.font.width(line) to 10
+    }
+
+    /**
+     * The line for the speed, Show Actual and [bps] it was last made from: the HUD draws every frame, the speed changes
+     * now and then and [bps] once a tick. Measured every frame still: a font change (resource pack, Force Unicode Font)
+     * changes its width, not the line.
+     */
+    private var lineSpeed = 0
+    private var lineActual = false
+    private var lineBps = Double.NaN
+    private var lastLine = ""
+
+    private fun speedLine(speed: Int, actual: Boolean, bps: Double): String {
+        if (speed != lineSpeed || actual != lineActual || bps.toBits() != lineBps.toBits()) {
+            lastLine = "§f✦$speed" + if (actual) " §7(${"%.1f".format(bps)} b/s)" else ""
+            lineSpeed = speed; lineActual = actual; lineBps = bps
+        }
+        return lastLine
     }
 
     /** The speed stat, from what the server set (abilities or the attribute). */

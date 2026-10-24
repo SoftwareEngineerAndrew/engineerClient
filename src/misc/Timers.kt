@@ -58,9 +58,10 @@ object Timers : Module(
     // --- Clear Countdown ---------------------------------------------------------------------------
 
     private val clearHud by HUD("Clear Countdown", "From blood opening, counts down 54 s to the boss (50 s camp, 4 s portal): green, yellow under 30, red under 20. Hidden if blood isn't done by 50 s; set to 4 s when the portal spawns.", true, 420, 200, 2f) { example ->
-        val left = if (example) 41.3 else bossTicksLeft()?.let { it / 20.0 } ?: return@HUD 0 to 0
-        val colour = when { left > 30 -> "§a"; left > 20 -> "§e"; else -> "§c" }
-        draw(colour + String.format(java.util.Locale.ROOT, "%.1f", left))
+        if (example) return@HUD draw(clearText(41.3))
+        val ticks = bossTicksLeft() ?: return@HUD 0 to 0
+        if (ticks != clearTicks) { clearTicks = ticks; clearShown = clearText(ticks / 20.0) }
+        draw(clearShown)
     }
     private val portalHud by HUD("Portal Text", "\"PORTAL\" in pink on screen for 1.8 s when the portal spawns.", true, 400, 160, 4f) { example ->
         if (!example && (!enabled || DungeonUtils.inBoss || portalUntil - serverTicks <= 0)) return@HUD 0 to 0
@@ -151,6 +152,15 @@ object Timers : Module(
         if (!enabled || DungeonUtils.inBoss) return null
         val at = bossAt ?: return null
         return (at - serverTicks).takeIf { it > 0 }
+    }
+
+    /** The Clear Countdown's text for the ticks left it was last drawn at: up all of blood camp, a frame only formats it on a new tick. */
+    private var clearTicks = 0
+    private var clearShown = ""
+
+    private fun clearText(left: Double): String {
+        val colour = when { left > 30 -> "§a"; left > 20 -> "§e"; else -> "§c" }
+        return colour + String.format(java.util.Locale.ROOT, "%.1f", left)
     }
 
     /** Ticks left to [at] while it is up to [total] ahead; null once it has passed. */

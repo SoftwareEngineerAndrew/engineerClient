@@ -48,17 +48,17 @@ object Timers2 : Module(
     private val stormCheckHud by HUD("Storm Crush Check", "Counts down to Storm's next crush check, once a second through his phase.", true, 10, 130, 1.5f) { example ->
         val start = stormStart
         when {
-            example -> timer("Crush", 12, CRUSH_PERIOD, true)
+            example -> timer(crush, 12, true)
             start == null || stormDead -> 0 to 0
-            else -> timer("Crush", CRUSH_PERIOD - Math.floorMod(serverTicks - start, CRUSH_PERIOD), CRUSH_PERIOD)
+            else -> timer(crush, CRUSH_PERIOD - Math.floorMod(serverTicks - start, CRUSH_PERIOD))
         }
     }
     private val stormLightningHud by HUD("Storm Lightning", "Counts down to Storm's Giga Lightning striking, 26 s into his phase.", true, 10, 145, 1.5f) { example ->
         val at = strikeAt
         when {
-            example -> timer("Lightning", 300, LIGHTNING, true)
+            example -> timer(lightning, 300, true)
             stormDead || at == null -> 0 to 0
-            else -> (at - serverTicks).takeIf { it in 1..LIGHTNING }?.let { timer("Lightning", it, LIGHTNING) } ?: (0 to 0)
+            else -> (at - serverTicks).takeIf { it in 1..LIGHTNING }?.let { timer(lightning, it) } ?: (0 to 0)
         }
     }
     private val roleHud by HUD("Role Time", "Your class's P3 job, how long it took from Goldor's first line, in orange: Mage to EE2 and core to Goldor's first hit, Berserk to i4, Archer and Tank to their 2nd S1 term, Healer to SS.", true, 420, 270, 5f) { example ->
@@ -105,9 +105,27 @@ object Timers2 : Module(
         else -> "§c"
     }
 
-    /** The time left; [label] only in the HUD editor ([example]), to tell the timers apart there. */
-    private fun GuiGraphicsExtractor.timer(label: String, left: Int, total: Int, example: Boolean = false): Pair<Int, Int> {
-        val s = (if (example) "§7$label: " else "") + colour(left, total) + String.format(Locale.ROOT, "%.2fs", left / 20.0)
+    private fun timeLeft(left: Int, total: Int): String = colour(left, total) + String.format(Locale.ROOT, "%.2fs", left / 20.0)
+
+    /**
+     * A countdown HUD's label and length, and its text for the ticks left it was last drawn at: those change once a
+     * tick, the HUD draws every frame. One each, as the crush check and the lightning show together.
+     */
+    private class Countdown(val label: String, val total: Int) {
+        private var left = 0
+        private var text = ""
+
+        fun text(left: Int): String {
+            if (left != this.left) { text = timeLeft(left, total); this.left = left }
+            return text
+        }
+    }
+    private val crush = Countdown("Crush", CRUSH_PERIOD)
+    private val lightning = Countdown("Lightning", LIGHTNING)
+
+    /** The time left; the label only in the HUD editor ([example]), to tell the timers apart there. */
+    private fun GuiGraphicsExtractor.timer(countdown: Countdown, left: Int, example: Boolean = false): Pair<Int, Int> {
+        val s = if (example) "§7${countdown.label}: " + timeLeft(left, countdown.total) else countdown.text(left)
         text(s, 0, 0, Colors.WHITE, shadow = true)
         return mc.font.width(s) to 9
     }
