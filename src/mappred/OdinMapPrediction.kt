@@ -20,8 +20,10 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.darker
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.multiplayer.PlayerInfo
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.resources.Identifier
+import net.minecraft.world.level.GameType
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
@@ -155,6 +157,7 @@ object OdinMapPrediction {
         }
         if (v.kinds.none { it == Kind.ENTRANCE }) return null
         v.secretTotals = SecretNames.totals(DungeonUtils.secretCount, DungeonUtils.secretPercentage)
+        v.puzzleSlots = puzzleSlots()
         val doors = HashMap<Int, Byte>()
         for (door in DungeonScan.doors.values) {
             val p = door.position; val o = door.rotation.offset
@@ -169,6 +172,27 @@ object OdinMapPrediction {
     }
 
     private fun pair(a: Int, b: Int) = minOf(a, b) * 64 + maxOf(a, b)
+
+    /**
+     * The tab list's puzzle lines in the order it draws them (each a name, null for "???"). Odin's own list
+     * keeps only the named ones, in the order it learned them, but where a line is says where its puzzle is.
+     */
+    private fun puzzleSlots(): List<String?> {
+        val infos = mc.connection?.listedOnlinePlayers ?: return emptyList()
+        return infos.sortedWith(TAB_ORDER).mapNotNull { info ->
+            val line = info.tabListDisplayName?.string ?: return@mapNotNull null
+            PUZZLE_LINE.find(line)?.groupValues?.get(1)
+        }.map { if (it == "???") null else it }
+    }
+
+    /** The tab list's own order (PlayerTabOverlay's): list order, spectators last, then team, then profile name. */
+    private val TAB_ORDER = compareByDescending<PlayerInfo> { it.tabListOrder }
+        .thenBy { it.gameMode == GameType.SPECTATOR }
+        .thenBy { it.team?.name ?: "" }
+        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.profile.name() }
+
+    /** " Ice Fill: [✦]" or " ???: [✦]", as Odin reads them. */
+    private val PUZZLE_LINE = Regex("^ (\\w+(?: \\w+)*|\\?\\?\\?): \\[([✖✔✦])] ?(?:\\((\\w+)\\))?$")
 
     private fun update() {
         if (!on || !DungeonMap.enabled || !supported()) return

@@ -13,6 +13,7 @@ package com.engineerclient.mappred
  *  - the big rooms ([combos]); no trap room on F1-F2
  *  - the wither path walks 7 or 8 steps with the fairy 3 before blood on F1-F4, 9 or 10 and 4 on F5-F7
  *  - the lower floors don't have every room ([missingNames])
+ *  - the tab list's puzzles in their order on the map, column by column ([puzzleOrder]; F7 only so far)
  */
 class FloorRules(
     val floor: Int,
@@ -33,6 +34,8 @@ class FloorRules(
     /** Weight of a big room covering each tile, the map turned so the entrance is on the top row, left half (F7's 6x6 only). */
     val bigTile: FloatArray?,
     val missingNames: Set<String>,
+    /** The tab lists the puzzles in their order on the map (x, then z), so a named one fixes how many come before it. */
+    val puzzleOrder: Boolean = false,
 ) {
     /** The most big rooms a map of this floor has (the loosest fallback's cap). */
     val maxBig = combos.maxOf { c -> (0 until 5).sumOf { c[it] } }
@@ -51,7 +54,7 @@ class FloorRules(
         val F6 = FloorRules(6, 5, 6, true, 5, true, 4, FloorStats.COMBOS_5_6, MapStats.WALK,
             FloorStats.BLOOD_FROM_ENTRANCE_5_6, FloorStats.FAIRY_FROM_ENTRANCE_5_6, null, FloorStats.MISSING_6)
         val F7 = FloorRules(7, 6, 6, false, 0, true, MapStats.FAIRY_BEFORE_BLOOD, MapStats.COMBOS, MapStats.WALK,
-            MapStats.BLOOD_FROM_ENTRANCE, MapStats.FAIRY_FROM_ENTRANCE, MapStats.BIG_TILE, emptySet())
+            MapStats.BLOOD_FROM_ENTRANCE, MapStats.FAIRY_FROM_ENTRANCE, MapStats.BIG_TILE, emptySet(), puzzleOrder = true)
 
         /** The rules for floor [floor] (1-7, F or M); null for the entrance floor. */
         fun of(floor: Int): FloorRules? = when (floor) {

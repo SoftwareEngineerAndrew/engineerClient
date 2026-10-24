@@ -11,7 +11,9 @@ package com.engineerclient.mappred
  *  - walked tile by tile, the wither path is 9 or 10 steps from the entrance to blood (whichever
  *    the parity of their distance allows; 7/8 where a big room cuts a corner), and the fairy is a
  *    1x1 exactly 4 steps before blood
- *  - trap, yellow and puzzles are spread at random over the other 1x1 dead ends
+ *  - trap, yellow and puzzles are spread at random over the other 1x1 dead ends, but the tab list
+ *    lists the puzzles in their order on the map, column by column (x, then z), so each named one
+ *    says how many puzzles come before it ([FloorRules.puzzleOrder])
  *
  * The weights were fitted so that maps sampled from the first two rooms of a run come out like the
  * recorded ones (tools/mappred, which also re-checks every rule). The other floors follow the same rules
