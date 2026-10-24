@@ -132,7 +132,7 @@ export function prepare(obs, combos) {
     }
     return out;
   };
-  let head = -1, headDist = -1, fairyDist = -1, pathKnown = 0;
+  let head = -1, headDist = -1, fairyDist = -1, pathKnown = 0, headK = 0;
   if (entId >= 0) {
     const et = obs.rooms.get(entId).tiles[0];
     let cur = entId, at = et.z * W + et.x, dist = 0;
@@ -145,6 +145,8 @@ export function prepare(obs, combos) {
       if (!ds.length) break;
       const d = ds[0];
       const nd = dist + inRoom(roomTiles(cur), at, d.mine, W) + 1;
+      // a 2x2 entered and left by neighbouring cells: the game's walk may go round inside it (+2)
+      if (obs.rooms.get(cur).shape === 'TwoByTwo' && Math.abs(at % W - d.mine % W) + Math.abs(((at / W) | 0) - ((d.mine / W) | 0)) === 1) headK++;
       if (d.to < 0) { head = d.theirs; headDist = nd; break; }
       onPath.add(d.to); cur = d.to; at = d.theirs; dist = nd;
     }
@@ -166,7 +168,7 @@ export function prepare(obs, combos) {
   // the discovered tiles that are 1x1 rooms, the ones in big rooms, the entrance's
   const oneAt = new Uint8Array(W * H), bigAt = new Uint8Array(W * H); let entTile = -1;
   for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) { const i = tile[z][x]; if (i < 0) continue; const r = obs.rooms.get(i); if (r?.tiles.length === 1) oneAt[z * W + x] = 1; else if (r) bigAt[z * W + x] = 1; if (r?.type === 'ENTRANCE') entTile = z * W + x; }
-  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, oneAt, bigAt, entTile, puzzles: obs.puzzles };
+  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, oneAt, bigAt, entTile, headK, puzzles: obs.puzzles };
 }
 
 export function sample(obs, combos, opts) {
@@ -313,18 +315,25 @@ export function sample(obs, combos, opts) {
     if (!found.B) {
       const hb = entryIndex.get(head), hr = owner[head];
       // walk distance at each head-branch room's entry tile
-      const dist = new Int32Array(R).fill(-1);
+      const dist = new Int32Array(R).fill(-1), kk = new Int32Array(R);
+      const adj1 = (a, b) => Math.abs(a % W - b % W) + Math.abs(((a / W) | 0) - ((b / W) | 0)) === 1;
       for (const r of order) {
         if (root[r] !== hb) continue;
-        if (r === hr) dist[r] = headDist;
-        else dist[r] = dist[parent[r]] + inRoom(rooms[parent[r]].tiles, inTile[parent[r]], outTile[r], W) + 1;
+        if (r === hr) { dist[r] = headDist; kk[r] = P0.headK; }
+        else { const pr = parent[r]; dist[r] = dist[pr] + inRoom(rooms[pr].tiles, inTile[pr], outTile[r], W) + 1; kk[r] = kk[pr] + (rooms[pr].shape === 'TwoByTwo' && adj1(inTile[pr], outTile[r]) ? 1 : 0); }
       }
       const cands = [], ws = [], fairies = [];
       for (const b of dead) {
         if (root[b] !== hb || rooms[b].col) continue;
         if ((entry.get(head).kind === 'b') !== (b === hr)) continue;
         const D = dist[b];
-        let w = TB.WD[D] || 0; if (!w) continue;
+        // opts.detour (pi): the walk counted the game's way - each 2x2 on the way entered and left by neighbouring
+        // cells goes round (+2) with chance pi, and the walk has to come to 9 or 10 (the floor's two lengths)
+        let w;
+        if (opts.detour !== undefined) { const top = rules.fairy === 3 ? 7 : 9, pi = opts.detour, k = kk[b];
+          w = D === top || D === top + 1 ? (1 - pi) ** k : D === top - 2 || D === top - 1 ? k * pi * (1 - pi) ** Math.max(k - 1, 0) : 0; }
+        else w = TB.WD[D] || 0;
+        if (!w) continue;
         let fairy = -1;
         if (found.F) { if (D !== fairyDist + rules.fairy) continue; }
         else {

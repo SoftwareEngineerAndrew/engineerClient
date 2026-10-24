@@ -16,7 +16,12 @@ const snaps = snapshots(train.slice(0, +nMaps), 5, 1, [2]);
 const rules = snaps[0].L.rules, six = rules.w === 6 && rules.h === 6;
 console.log(snaps.length, 'snapshots of', [...new Set(snaps.map(s => s.L.floor))].join(' '));
 const rnd = makeRng(9);
+// OPTS (env, JSON): sampler options the tables are fitted under, e.g. {"reserve":5}
+const OPTS = process.env.OPTS ? JSON.parse(process.env.OPTS) : {};
+// FLAT (env, e.g. MW,FM): those tables held flat (1 from 1 tile on), not fitted
 const T = process.env.START ? JSON.parse((await import('node:fs')).readFileSync(process.env.START, 'utf8')) : defaultTables(rules);
+const FLAT = (process.env.FLAT || '').split(',').filter(Boolean);
+for (const k of FLAT) T[k] = T[k].map((_, m) => m >= 1 ? 1 : 0);
 const real = { MW: new Float64Array(16), FM: new Float64Array(16) };
 const realBig = new Float64Array(36), seenTile = new Float64Array(36);
 if (six) for (const s of snaps) { const fr = frameOf(s.obs); s.A.unknown.forEach(([x, z], i) => { const [a, b] = fr(x, z); seenTile[b * 6 + a]++; if (s.Y[i] === CLS.n) realBig[b * 6 + a]++; }); }
@@ -29,7 +34,7 @@ for (let it = 0; it < +iters; it++) {
   for (const s of snaps) {
     const W = s.obs.W;
     const fr = frameOf(s.obs);
-    const res = sample(s.obs, combos[s.L.floor[1]], { samples: +(process.env.SAMPLES || 30), rnd, tables: T, onSample: ({ rooms, type, ent, weight }) => {
+    const res = sample(s.obs, combos[s.L.floor[1]], { samples: +(process.env.SAMPLES || 30), rnd, tables: T, ...OPTS, onSample: ({ rooms, type, ent, weight }) => {
       const b = rooms[type.indexOf('B')].tiles[0], f = rooms[type.indexOf('F')].tiles[0];
       sim.MW[Math.abs(b % W - ent[0]) + Math.abs(((b / W) | 0) - ent[1])] += weight;
       sim.FM[Math.abs(f % W - ent[0]) + Math.abs(((f / W) | 0) - ent[1])] += weight;
@@ -44,6 +49,7 @@ for (let it = 0; it < +iters; it++) {
   }
   let err = 0;
   for (const k in sim) {
+    if (FLAT.includes(k)) continue;
     const t = sim[k].reduce((a, b) => a + b, 0);
     for (let i = 0; i < 16; i++) { const p = sim[k][i] / t; err += Math.abs(p - real[k][i]); if (p > 0 && T[k][i] > 0) T[k][i] *= Math.pow(Math.max(real[k][i], 1e-4) / p, 0.8); }
     const mx = Math.max(...T[k]); T[k] = T[k].map(v => v / mx);
