@@ -428,6 +428,13 @@ class MapPredictor(private val view: MapView) {
         }
         todo.shuffle(rnd); todo.sortByDescending { it.size }
         val owner = IntArray(n) { -1 }
+        // a few random unknown cells kept free of big rooms while they're placed ([FloorRules.reserve]), as
+        // the real maps' layouts look (HELD while placing, 1x1s after)
+        if (rules.reserve > 0) {
+            val k = minOf(unknown.size, Math.round(rules.reserve * unknown.size / (rules.w * rules.h - 1.0)).toInt())
+            val cs = unknown.copyOf()
+            for (i in 0 until k) { val j = i + rnd.nextInt(cs.size - i); val tmp = cs[i]; cs[i] = cs[j]; cs[j] = tmp; owner[cs[i]] = HELD }
+        }
         val rooms = ArrayList<IntArray>(); val roomShape = ArrayList<Shape>()
         val candTiles = ArrayList<IntArray>(); var cw = DoubleArray(64)
         for (shape in todo) {
@@ -441,7 +448,7 @@ class MapPredictor(private val view: MapView) {
                     val x = x0 + offs[c * 2]; val z = z0 + offs[c * 2 + 1]
                     if (x >= w || z >= h) { ok = false; break }
                     val t = z * w + x
-                    if (!isUnk[t] || owner[t] >= 0) { ok = false; break }
+                    if (!isUnk[t] || owner[t] != -1) { ok = false; break }
                     if (entryDoor[t] != 0.toByte()) ents++
                     tiles[c] = t
                 }
@@ -697,6 +704,9 @@ class MapPredictor(private val view: MapView) {
             var c = 1.0; for (i in 0 until k) c = c * (m - i) / (i + 1)
             return c
         }
+
+        /** A cell kept free of big rooms while they're placed. */
+        private const val HELD = -3
 
         /** Chance the newest room grows on rather than a random door from the tree (the real trees are a bit deeper than Prim's). */
         private const val GROW = 0.3
