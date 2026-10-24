@@ -230,11 +230,12 @@ export function sample(obs, combos, opts) {
     }
     if (fail) continue;
     for (const t of unknown) if (owner[t] < 0) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne' }); }
-    // opts.bunch: maps with more 2x2 blocks of 1x1 rooms kept more often (exp(bunch * blocks), by rejection)
+    // opts.bunch: maps with more 2x2 blocks of 1x1 rooms weigh more (exp(bunch * blocks))
+    let layoutWeight = 1;
     if (opts.bunch) {
       const one = t => isUnk[t] ? rooms[owner[t]].shape === 'OneByOne' : P0.oneAt[t];
       let q = 0; for (let z = 0; z + 1 < H; z++) for (let x = 0; x + 1 < rules.w; x++) { const t = z * W + x; if (one(t) && one(t + 1) && one(t + W) && one(t + W + 1)) q++; }
-      if (rnd() >= Math.exp(opts.bunch * (q - 9))) continue;
+      layoutWeight = Math.exp(opts.bunch * q);
     }
     // the puzzle column's rooms behind a door the map shows
     for (const t of column) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne', col: true }); }
@@ -287,7 +288,7 @@ export function sample(obs, combos, opts) {
     // 4. blood: a 1x1 dead end of the main grid in the wither door's branch at the floor's walk distance from
     //    the entrance, with a 1x1 fairy exactly the floor's steps before it
     const type = new Array(RM).fill(null);
-    let weight = 1; // how likely this map is next to the others: the summed weight of its blood spots
+    let weight = layoutWeight; // how likely this map is next to the others: the summed weight of its blood spots
     if (!found.B) {
       const hb = entryIndex.get(head), hr = owner[head];
       // walk distance at each head-branch room's entry tile
@@ -318,7 +319,7 @@ export function sample(obs, combos, opts) {
       }
       if (!cands.length) continue;
       const tot = ws.reduce((a, b) => a + b, 0);
-      weight = tot;
+      weight *= tot;
       let s2 = rnd() * tot, k = 0; while (s2 > ws[k] && k < cands.length - 1) s2 -= ws[k++];
       type[cands[k]] = 'B';
       if (!found.F) type[fairies[k]] = 'F';
