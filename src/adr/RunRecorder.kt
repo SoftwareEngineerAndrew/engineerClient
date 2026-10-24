@@ -12,6 +12,7 @@ import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.core.component.DataComponents
+import net.minecraft.locale.Language
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
@@ -19,6 +20,7 @@ import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.item.FallingBlockEntity
 import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.decoration.ItemFrame
+import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.entity.player.Player
 import com.engineerclient.mixin.ArrowInGroundInvoker
@@ -269,7 +271,7 @@ class RunRecorder(
     /** Your own container screens (terminals are GUIs with fixed titles): exact open/close times. */
     fun onGuiClose() {
         flushMouse()
-        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
+        lastSlots.clear(); lastSlotStacks.clear(); lastCarried = null; lastMouseX = Float.NaN
         emit("""{"k":"guiclose","t":$tick}""")
     }
 
@@ -280,21 +282,34 @@ class RunRecorder(
 
     /** A container screen opened: its menu type ("inventory" for your own), size and slot positions. */
     fun onContainerOpen(title: String, menu: String, w: Int, h: Int, slots: List<IntArray>) {
-        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
+        lastSlots.clear(); lastSlotStacks.clear(); lastCarried = null; lastMouseX = Float.NaN
         val sb = StringBuilder()
         slots.forEachIndexed { i, p -> if (i > 0) sb.append(','); sb.append('[').append(p[0]).append(',').append(p[1]).append(']') }
         emit("""{"k":"gui","t":$tick,"title":${str(title)},"menu":${str(menu)},"w":$w,"h":$h,"slots":[$sb]}""")
     }
 
     private val lastSlots = HashMap<Int, String>()
+    /**
+     * Each slot's stack as its entry was last built, copied: an entry is the stack's item, count and
+     * components, so a stack that still matches its copy builds the same one (most slots, most ticks).
+     * A copy, not the stack: clicks grow and shrink a slot's stack in place, and Odin's terminal
+     * simulator lights the glint on the clicked pane's own stack.
+     */
+    private val lastSlotStacks = HashMap<Int, ItemStack>()
+    /** The language those were built in: a resource reload can rename a vanilla item under the same stack. */
+    private var slotLanguage: Language? = null
     private var lastCarried: String? = null
 
     /** Each tick while a container is open: slots that changed since the last line, and the cursor's item. */
-    fun onContainerTick(items: List<ItemStack>, carried: ItemStack) {
+    fun onContainerTick(slots: List<Slot>, carried: ItemStack) {
+        if (Language.getInstance() !== slotLanguage) { slotLanguage = Language.getInstance(); lastSlotStacks.clear() }
         val sb = StringBuilder()
-        items.forEachIndexed { i, stack ->
+        for (i in slots.indices) {
+            val stack = slots[i].item
+            if (lastSlotStacks[i]?.let { ItemStack.matches(it, stack) } == true) continue
             val entry = slotEntry(i, stack)
-            if (lastSlots.put(i, entry) == entry) return@forEachIndexed
+            lastSlotStacks[i] = stack.copy()
+            if (lastSlots.put(i, entry) == entry) continue
             if (sb.isNotEmpty()) sb.append(',')
             sb.append(entry)
         }

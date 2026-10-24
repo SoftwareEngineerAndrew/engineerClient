@@ -127,7 +127,7 @@ object ADR : Module(
             val s = session ?: return@on
             EngineerClient.safely("adr tick") { s.onTick(level) }
             (EngineerClient.mc.gui.screen() as? AbstractContainerScreen<*>)?.let { screen ->
-                EngineerClient.safely("adr gui tick") { s.onContainerTick(screen.menu.slots.map { it.item }, screen.menu.carried) }
+                EngineerClient.safely("adr gui tick") { s.onContainerTick(screen.menu.slots, screen.menu.carried) }
             }
             if (s.abandoned) session = null
         }
@@ -215,7 +215,7 @@ object ADR : Module(
                 // Your own inventory's menu has no registered type.
                 val type = if (menu is InventoryMenu) "inventory" else runCatching { BuiltInRegistries.MENU.getKey(menu.type)?.toString() }.getOrNull() ?: "unknown"
                 s.onContainerOpen(screen.title.string, type, box.adrImageWidth(), box.adrImageHeight(), menu.slots.map { intArrayOf(it.x, it.y) })
-                s.onContainerTick(menu.slots.map { it.item }, menu.carried)
+                s.onContainerTick(menu.slots, menu.carried)
             }
             ScreenMouseEvents.afterMouseClick(screen).register { _, click, _ ->
                 EngineerClient.safely("adr gui click") {
