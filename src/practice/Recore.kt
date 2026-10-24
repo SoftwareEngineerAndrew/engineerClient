@@ -17,6 +17,7 @@ import com.odtheking.odin.utils.render.roundedRect
 import com.odtheking.odin.utils.render.roundedRectOutlined
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -154,15 +155,21 @@ object Recore : Module(
 
     private fun watchingCore() = coreWatch || simS4()
 
-    /** Keeps [inCoreSince] up to date: teammates in the core box, by when they were first seen there. */
+    /**
+     * Keeps [inCoreSince] up to date: teammates in the core box, by when they were first seen there. Once a client
+     * tick, at its end: everyone moves in the tick (a server teleport in between is caught by the next one), so the
+     * frames in between draw what the last one found.
+     */
     private fun trackCore() {
         if (!enabled || !coreLeap || !watchingCore()) { inCoreSince.clear(); return }
         val level = mc.level ?: return
         if (mc.player?.let { inCore(it) && !inFlight(it) } == true) selfBeenInCore = true
         val now = System.currentTimeMillis()
+        var bots: Map<String, Entity>? = null
         for (m in DungeonUtils.leapTeammates) {
             if (m.name == "Empty") continue
-            val p = m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == m.name } ?: simBot(level, m.name)
+            val p = m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == m.name }
+                ?: (bots ?: simBots(level).also { bots = it })[m.name]
             // Unseen (out of render distance) keeps its place; dead or out of the box loses it. Passing
             // through on a leap's drag is neither: not in, and whatever was known stays.
             if (p == null) continue
@@ -171,10 +178,15 @@ object Recore : Module(
         }
     }
 
-    /** In the P3 sim, a bot teammate: its Mannequin, by the name over it. */
-    private fun simBot(level: net.minecraft.client.multiplayer.ClientLevel, name: String): Entity? {
-        if (!com.engineerclient.p3sim.P3Sim.inSim) return null
-        return level.entitiesForRendering().firstOrNull { it is net.minecraft.world.entity.decoration.Mannequin && !it.isRemoved && it.customName?.string?.replace(CONTROL_CODES, "") == name }
+    /** In the P3 sim, the bot teammates: their Mannequins, by the name over them (the first one, if two carry it). */
+    private fun simBots(level: net.minecraft.client.multiplayer.ClientLevel): Map<String, Entity> {
+        if (!com.engineerclient.p3sim.P3Sim.inSim) return emptyMap()
+        val bots = HashMap<String, Entity>()
+        for (e in level.entitiesForRendering()) {
+            if (e !is net.minecraft.world.entity.decoration.Mannequin || e.isRemoved) continue
+            e.customName?.let { bots.putIfAbsent(it.string.replace(CONTROL_CODES, ""), e) }
+        }
+        return bots
     }
 
     private fun isLeapScreen(screen: net.minecraft.client.gui.screens.Screen) =
@@ -378,9 +390,12 @@ object Recore : Module(
 
     init {
         on<LevelEvent.Load> { reset() }
+        // The client's own tick: Odin's TickEvent comes only with the module on and the level ticking (not paused),
+        // and this still empties [inCoreSince] with the module or the highlight off.
+        ClientTickEvents.END_CLIENT_TICK.register { com.engineerclient.EngineerClient.safely("recore tracking") { trackCore() } }
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "recore")) { gfx, _ ->
             // The HUD is drawn under any open screen too, so this is also the behind-the-terminal draw.
-            com.engineerclient.EngineerClient.safely("recore") { trackCore(); drawRecore(gfx) }
+            com.engineerclient.EngineerClient.safely("recore") { drawRecore(gfx) }
         }
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
