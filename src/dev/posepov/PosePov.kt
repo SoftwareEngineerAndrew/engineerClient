@@ -196,7 +196,9 @@ object PosePov : Module(
         RenderSystem.backupProjectionMatrix()
         try {
             RenderSystem.setProjectionMatrix(projectionBuffer.getBuffer(projection), ProjectionType.PERSPECTIVE)
-            val transforms = RenderSystem.getDynamicUniforms().writeTransform(view)
+            // A copy: the uniform storage keeps the matrix by reference and skips a write equal to the last one, so
+            // handing it the reused [view] made every feed match the previous write and draw with a stale slice.
+            val transforms = RenderSystem.getDynamicUniforms().writeTransform(Matrix4f(view))
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = if (maxIndices > 0) quadIndices.getBuffer(maxIndices) else null
             RenderSystem.getDevice().createCommandEncoder().createRenderPass(
