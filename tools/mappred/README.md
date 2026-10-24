@@ -34,6 +34,11 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
   its corners, 1x2s keep off them, and not alike top and bottom (the map's own directions): `calib-aw.mjs`
   fits a weight per shape, orientation and top-left tile (`FloorRules.anchorWeights`, sampler2 `tables.AW`; none
   set yet).
+- None of the last three moves held-out predictions measurably (Oct 2026, 1000 snapshots of 200 held-out maps,
+  300 samples each): per-tile log-likelihood -1.0499 before the L fix, -1.0476 with it, -1.0482 with bunch 0.25
+  too, -1.0491 with AW, -1.0499 with both; the L fix alone again on another seed -1.0499. The seed moves it
+  by about 0.002, as much as any of them. The L fix stays (it only drops placements no map has); bunch and AW
+  stay off until something shows they help.
 - Every special room (entrance, blood, trap, yellow, puzzles, rares) is a 1x1 dead end, and a normal 1x1 is
   never a dead end: the 1x1 dead ends besides entrance and blood are exactly puzzles + trap + yellow + rares.
   Rares only on 5-puzzle maps (the dead ends past the 5th puzzle).
