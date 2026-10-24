@@ -33,7 +33,8 @@ class MapPredictorTest {
         return assertNotNull(p.prediction())
     }
 
-    private fun total(p: Prediction, c: Int) = p.probs.sumOf { (it?.get(c) ?: 0f).toDouble() }
+    /** Over the samples themselves (the calibrated chances drawn on the map don't keep these exact). */
+    private fun total(p: Prediction, c: Int) = p.raw.sumOf { (it?.get(c) ?: 0f).toDouble() }
     private fun dist(a: Int, b: Int) = abs(a % 6 - b % 6) + abs(a / 6 - b / 6)
 
     @Test fun shapesFromTiles() {
@@ -78,6 +79,18 @@ class MapPredictorTest {
         assertTrue(whole.connectedPart() === whole)
     }
 
+    @Test fun theCalibrationKeepsWhatTheMapRulesOutAtNothing() {
+        val p = predict(opening())
+        var changed = false
+        for (t in 0 until 36) {
+            val raw = p.raw[t] ?: continue; val q = assertNotNull(p.probs[t])
+            for (c in raw.indices) if (raw[c] == 0f) assertEquals(0f, q[c])
+            assertEquals(raw.sum(), q.sum(), 1e-4f)
+            if (raw.indices.any { abs(raw[it] - q[it]) > 1e-3f }) changed = true
+        }
+        assertTrue(changed)
+    }
+
     @Test fun heldCellsKeepEveryMapWhole() {
         val f7 = FloorRules.F7
         val held = FloorRules(7, 6, 6, false, 0, true, f7.fairyBeforeBlood, f7.combos, f7.walk, f7.bloodFromEntrance,
@@ -112,7 +125,7 @@ class MapPredictorTest {
         assertEquals(0, p.level)
         var seen = 0.0
         for (t in 0 until 36) {
-            val b = p.probs[t]?.get(Cls.BLOOD) ?: continue
+            val b = p.raw[t]?.get(Cls.BLOOD) ?: continue
             if (b <= 0f) continue
             seen += b
             assertTrue(dist(t, 26) == 2 || dist(t, 26) == 4, "blood at $t, ${dist(t, 26)} from the fairy")
@@ -277,7 +290,7 @@ class MapPredictorTest {
     /** The tab's order: column by column (x, then z). */
     private fun before(t: Int, of: Int) = t % 6 * 6 + t / 6 < of % 6 * 6 + of / 6
 
-    private fun puzzlesWhere(p: Prediction, where: (Int) -> Boolean) = (0 until 36).filter(where).sumOf { (p.probs[it]?.get(Cls.PUZZLE) ?: 0f).toDouble() }
+    private fun puzzlesWhere(p: Prediction, where: (Int) -> Boolean) = (0 until 36).filter(where).sumOf { (p.raw[it]?.get(Cls.PUZZLE) ?: 0f).toDouble() }
 
     @Test fun theTabsFirstPuzzleHasNoneBeforeIt() {
         val p = predict(quizEast(listOf("Quiz", null, null)))

@@ -64,6 +64,17 @@ object MapStats {
     )
 
     /** Fairy steps before blood on the wither path. */
+    /**
+     * The calibration of the tiles' chances (tools/mappred calfit.mjs, KEEPZERO, on 300 training maps' snapshots
+     * with the held cells): per Cls (big, 1x1, puzzle, trap, yellow, blood, fairy, rare) the sharpness a, the
+     * offset b and the change d per 3 rooms known. Held-out per-tile log-likelihood -1.0417 to -1.0393.
+     */
+    val CALIBRATION = arrayOf(
+        doubleArrayOf(0.8835, 0.8623, 0.8383, 0.8911, 0.8757, 0.9302, 0.9268, 0.9375),
+        doubleArrayOf(0.1616, -0.0055, -0.0908, -0.1025, -0.1381, 0.0736, 0.0567, 0.0450),
+        doubleArrayOf(-0.0212, -0.0107, 0.0095, 0.0098, 0.0148, 0.0206, -0.0228, 0.0000),
+    )
+
     const val FAIRY_BEFORE_BLOOD = 4
 
     /** Chance a sample with dead ends past the puzzles (5-puzzle maps only) keeps them as rare rooms. */

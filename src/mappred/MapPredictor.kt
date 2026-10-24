@@ -2,6 +2,7 @@ package com.engineerclient.mappred
 
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.ln
 import kotlin.random.Random
 
 /** A room's kind, from its colour on the map. */
@@ -167,7 +168,9 @@ class NamedRoom(val tiles: IntArray, val name: RoomName, val chance: Float)
  */
 class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val splits: List<Split>, val samples: Int, val level: Int,
                  val bigRooms: List<BigRoom> = emptyList(), val namedRooms: List<NamedRoom> = emptyList(),
-                 val doors: List<PredictedDoor> = emptyList())
+                 val doors: List<PredictedDoor> = emptyList(),
+                 /** The chances as the samples give them, before [FloorRules.calibration] (what [probs] draws from). */
+                 val raw: Array<FloatArray?> = probs)
 
 /**
  * Room predictions for a partly discovered map: many complete maps are drawn that fit what the map
@@ -696,6 +699,21 @@ class MapPredictor(private val view: MapView) {
         return true
     }
 
+    /**
+     * The tile's chances through [FloorRules.calibration] (tools/mappred calfit.mjs): q ∝ (p + 0.001)^a * e^(b + d *
+     * (rooms known - 6) / 3) per class, what no sample had kept at 0. The samples are a little too sure of
+     * themselves; this is fitted on training maps and better on held-out ones.
+     */
+    private fun calibrated(p: FloatArray): FloatArray {
+        val cal = rules.calibration ?: return p
+        val k = (view.kinds.size - 6) / 3.0
+        val s = DoubleArray(p.size); var z = 0.0
+        for (c in p.indices) if (p[c] > 0f) { s[c] = exp(cal[0][c] * ln(p[c] + 0.001) + cal[1][c] + cal[2][c] * k); z += s[c] }
+        if (z <= 0) return p
+        val total = p.sum()  // a puzzle column tile's chances add up to the chance of a room there
+        return FloatArray(p.size) { (s[it] / z * total).toFloat() }
+    }
+
     /** Tile [t] is a 1x1 room: discovered, or in this sample. */
     private fun isOne(t: Int, owner: IntArray, roomShape: List<Shape>): Boolean {
         val k = view.roomAt[t]
@@ -708,11 +726,12 @@ class MapPredictor(private val view: MapView) {
     fun prediction(): Prediction? {
         if (accepted == 0 || weight <= 0) return null
         // over every sample: a puzzle column tile's chances add up to the chance of a room there
-        val probs = arrayOfNulls<FloatArray>(n)
+        val raw = arrayOfNulls<FloatArray>(n)
         cells.forEachIndexed { i, t ->
             val c = counts[i]
-            if (c.sum() > 0) probs[t] = FloatArray(Cls.COUNT) { (c[it] / weight).toFloat() }
+            if (c.sum() > 0) raw[t] = FloatArray(Cls.COUNT) { (c[it] / weight).toFloat() }
         }
+        val probs = Array(n) { raw[it]?.let(::calibrated) }
         val splits = entries.mapIndexed { i, t ->
             Split(t, entryDoor[t], (splitRooms[i] / weight).toFloat(), (splitTiles[i] / weight).toFloat(), FloatArray(Cls.COUNT) { (splitCls[i][it] / weight).toFloat() })
         }
@@ -724,7 +743,7 @@ class MapPredictor(private val view: MapView) {
         val doors = doorCounts.entries.filter { it.value[0] / weight >= 0.05 }.sortedByDescending { it.value[0] }.map { (key, d) ->
             PredictedDoor(key / n, key % n, (d[0] / weight).toFloat(), (d[1] / weight).toFloat(), (d[2] / weight).toFloat(), (d[3] / weight).toFloat())
         }
-        return Prediction(w, h, probs, splits, accepted, level, big, named, doors)
+        return Prediction(w, h, probs, splits, accepted, level, big, named, doors, raw)
     }
 
     companion object {
