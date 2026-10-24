@@ -11,6 +11,7 @@ import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
 import net.minecraft.world.phys.AABB
+import java.util.UUID
 
 /**
  * Secrets this client sees happen, the way ADR records them: an item picked up (the packet names
@@ -30,7 +31,7 @@ object Sightings {
     private const val CLICK_MS = 1000L
     /** Chunks around you searched for essence skulls, as ADR's skull scan (a twentieth each tick). */
     private const val SKULL_CHUNKS = 12
-    private const val WITHER_ESSENCE_ID = "2865274b-3097-394e-8149-ec629c72d850"
+    private val WITHER_ESSENCE_ID: UUID = UUID.fromString("2865274b-3097-394e-8149-ec629c72d850")
     /** Odin's list of the items dungeon secrets drop (EventDispatcher.dungeonItemDrops, private there). */
     private val SECRET_ITEMS = listOf(
         "Health Potion VIII Splash Potion", "Healing Potion 8 Splash Potion", "Healing Potion VIII Splash Potion", "Healing VIII Splash Potion", "Healing 8 Splash Potion",
@@ -96,7 +97,7 @@ object Sightings {
             val chunk = level.chunkSource.getChunk(x, z, ChunkStatus.FULL, false) ?: continue
             for (be in chunk.blockEntities.values) {
                 if (be !is SkullBlockEntity) continue
-                if (be.ownerProfile?.partialProfile()?.id?.toString() == WITHER_ESSENCE_ID) essence += be.blockPos.immutable()
+                if (be.ownerProfile?.partialProfile()?.id == WITHER_ESSENCE_ID) essence += be.blockPos.immutable()
             }
         }
     }

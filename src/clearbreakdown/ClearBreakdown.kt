@@ -97,10 +97,21 @@ object ClearBreakdown : Module(
     /** Where this client last told the party it sees each player (room key, "" for no room). */
     private val toldSeen = HashMap<String, String>()
     private var relayTick = 0
+    /**
+     * Each room's [roomKey] and how many tiles it was made from: it is asked for every player every
+     * tick, and Odin only ever adds tiles to a room (as more of the map is scanned), so the same
+     * count is the same tiles. Checkmarks ask from the network thread.
+     */
+    private val roomKeys = ConcurrentHashMap<DungeonRoom, RoomKey>()
+    private class RoomKey(val tiles: Int, val key: String)
 
     val me: String get() = mc.user.name
 
-    fun roomKey(room: DungeonRoom): String = room.tiles.map { it.data }.sorted().joinToString(",")
+    fun roomKey(room: DungeonRoom): String {
+        roomKeys[room]?.let { if (it.tiles == room.tiles.size) return it.key }
+        val data = room.tiles.map { it.data }
+        return data.sorted().joinToString(",").also { roomKeys[room] = RoomKey(data.size, it) }
+    }
 
     fun roomName(room: DungeonRoom): String = room.name ?: room.type.name
 
@@ -194,6 +205,7 @@ object ClearBreakdown : Module(
         clears = ClearCredit(); secrets = SecretCredit()
         active = false; gate.reset()
         roster.clear(); before = ConcurrentHashMap(); latest = ConcurrentHashMap(); nextPollMs = 0L; relayed.clear(); toldSeen.clear()
+        roomKeys.clear()
         Sightings.reset()
     }
 
