@@ -1,6 +1,7 @@
 package com.engineerclient.splits
 
 import java.util.Locale
+import kotlin.math.abs
 
 /*
  * The run's splits as this mod times them (the phases that sub splits, bests and Pace hang off):
@@ -33,15 +34,31 @@ data class Split(val label: String, val start: Stamp, val stop: Stamp?)
 
 object SplitFormat {
 
-    /** Plain seconds to two places: `14.00s`. */
-    fun seconds(ms: Long): String = String.format(Locale.ROOT, "%.2f", ms / 1000.0) + "s"
+    /** The most ms that are 15 digits: up to it, `ms / 1000.0` prints back as exactly ms / 1000. */
+    private const val EXACT = 999_999_999_999_999L
+
+    /**
+     * Plain seconds to two places: `14.00s`. The text `%.2f` of `ms / 1000.0` gives, without a
+     * Formatter per row per frame: up to [EXACT] that double's [Double.toString] digits, which `%.2f`
+     * rounds half up, are ms / 1000 itself, so it is the nearest hundredth, a tie away from zero (a
+     * small negative stays `-0.00s`).
+     */
+    fun seconds(ms: Long): String {
+        if (ms !in -EXACT..EXACT) return String.format(Locale.ROOT, "%.2f", ms / 1000.0) + "s"
+        val hundredths = (abs(ms) + 5) / 10
+        return "${sign(ms)}${hundredths / 100}.${hundredths / 10 % 10}${hundredths % 10}s"
+    }
 
     /** Minutes and seconds to one place, for Pace and Enter: `3m 8.2s`. */
     fun minutes(ms: Long): String {
         // Rounded to the tenth before splitting, so 119.97 s carries to 2m 0.0s, not 1m 60.0s.
         val tenths = Math.round(ms / 100.0)
-        return "${tenths / 600}m " + String.format(Locale.ROOT, "%.1f", tenths % 600 / 10.0) + "s"
+        // Under 600 tenths either way, so as %.1f printed it: one place, nothing to round.
+        val rest = tenths % 600
+        return "${tenths / 600}m ${sign(rest)}${abs(rest) / 10}.${abs(rest) % 10}s"
     }
+
+    private fun sign(n: Long) = if (n < 0) "-" else ""
 }
 
 /**
