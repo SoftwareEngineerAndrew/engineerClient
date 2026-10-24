@@ -1,0 +1,72 @@
+// Held-out F7/M7 snapshots: per-tile log-likelihood (all classes), the big-room tile log loss, and how often the
+// big rooms the prediction is sure of (>= 70%) are right.   LAYOUTS=... node evalbig.mjs nTest N variant...
+const T0 = './';
+const { split, snapshots } = await import(T0 + 'evalcore.mjs');
+const { sample, combosFor, OUT } = await import(T0 + 'sampler2.mjs');
+const { makeRng } = await import(T0 + 'mlp.mjs');
+const { CLS } = await import(T0 + 'sim.mjs');
+const { readFileSync } = await import('node:fs');
+const [nTest = '150', N = '300', ...variants] = process.argv.slice(2);
+const tables = JSON.parse(readFileSync(process.env.TABLES || 'tables-current.json', 'utf8'));
+const { train, test } = split();
+const combos = combosFor(train);
+let snaps;
+if (process.env.REAL) {
+  // REAL=<timelines.jsonl>: the order rooms showed on the map in real runs (tools/mappred tl.mjs), held-out maps only
+  const { loadTimelines } = await import(T0 + 'tl.mjs');
+  const { observe, CLS: C2, classOf } = await import(T0 + 'sim.mjs');
+  const { analyse } = await import(T0 + 'features.mjs');
+  const pool = process.env.TLALL ? [...train, ...test] : test;  // TLALL=1: every timeline with a complete layout (train ones too)
+  const held = new Map(pool.map(L => [L.id, L])); const byKey = new Map();
+  const keyOf = L => L.rooms.map(r => r.name + r.tiles.map(t => t.x + '' + t.z).join('')).sort().join('|');
+  for (const L of pool) byKey.set(keyOf(L), L);
+  snaps = [];
+  for (const t of loadTimelines(process.env.REAL)) {
+    if (t.start === null) continue;
+    const L = held.get(t.id) || byKey.get(keyOf(t)); if (!L) continue;
+    // the timeline's rooms by their tiles onto the held-out layout's rooms
+    const tileRoom = (i) => { const r = t.rooms[i]; const tt = r.tiles[0]; return L.grid[tt.z]?.[tt.x]; };
+    const order = [...t.seen.entries()].sort((a, b) => a[1] - b[1]).map(([i]) => tileRoom(i)).filter(i => i !== undefined && i >= 0);
+    for (const k of [2, 4, 6, 9, 12]) {
+      if (k >= order.length) continue;
+      const known = new Set(order.slice(0, k));
+      const obs = observe(L, known); const A = analyse(obs);
+      snaps.push({ L, k, known, obs, A, Y: A.unknown.map(([x, z]) => C2[classOf(L.rooms[L.grid[z][x]])]) });
+    }
+  }
+} else snaps = snapshots((process.env.SET === 'train' ? train : test).slice(0, +nTest), 99, 1, [2, 4, 6, 9, 12]);  // SET=train: training maps (to fit a correction on)
+console.log(`${snaps.length} snapshots from ${process.env.REAL ? 'real discovery order on' : Math.min(+nTest, test.length)} held-out maps (${train.length} train)`);
+const VAR = { old: { fourL: true }, lfix: {}, ...Object.fromEntries([0.15, 0.25, 0.35].map(b => [`lfix+bunch${b}`, { bunch: b }])) };
+Object.assign(VAR, { prim: { grow: 0 }, 'oldest0.3': { grow: 0, oldest: 0.3 }, 'oldest0.5': { grow: 0, oldest: 0.5 }, 'oldest0.3+res5': { grow: 0, oldest: 0.3, reserve: 5 }, 'res5': { reserve: 5 }, 'res3': { reserve: 3 }, 'res7': { reserve: 7 } });
+const PLACE = [0.23, 0.14, 0.60, -0.066];
+Object.assign(VAR, { 'res5+detour0.1': { reserve: 5, detour: 0.1 }, 'res5+detour0.25': { reserve: 5, detour: 0.25 }, 'res5+detour0.4': { reserve: 5, detour: 0.4 } });
+Object.assign(VAR, { place: { place: PLACE }, 'place-noBW': { place: PLACE, noBW: true }, 'place+res3': { place: PLACE, reserve: 3 } });
+const dumpRows = [];  // DUMPP=<file>: per tile [rooms known, true class, class chances...]
+for (const v of variants.length ? variants : Object.keys(VAR)) {
+  const rnd = makeRng(+(process.env.SEED || 5));
+  const by = {};
+  for (const s of snaps) {
+    const r = sample(s.obs, combos['7'], { samples: +N, rnd, tables: VAR[v].noBW ? { ...tables, BW: new Array(36).fill(1) } : tables, ...VAR[v] });
+    const W = s.obs.W, byTile = new Map(r.unknown.map((t, i) => [t, r.probs[i]]));
+    const st = by[s.k] ||= { ll: 0, bigLL: 0, tiles: 0, sure: 0, sureRight: 0, snaps: 0, empty: 0 };
+    st.snaps++; if (!r.accepted) st.empty++;
+    s.A.unknown.forEach(([x, z], i) => {
+      const p = byTile.get(z * W + x); const y = s.Y[i];
+      const pb = p ? Math.min(Math.max(p[CLS.n], 1e-3), 1 - 1e-3) : 0.6;
+      st.ll += Math.log(Math.max(p ? p[y] : 1 / OUT.length, 1e-4));
+      st.bigLL += y === CLS.n ? Math.log(pb) : Math.log(1 - pb);
+      st.tiles++;
+      if (process.env.DUMPP && p) dumpRows.push([s.k, y, ...Array.from(p, v => +v.toFixed(4))]);
+      if (p && p[CLS.n] >= 0.7) { st.sure++; if (y === CLS.n) st.sureRight++; }
+    });
+  }
+  console.log(`\n== ${v}`);
+  console.log('known  ll/tile  big-tile ll  sure-big tiles (right)');
+  let tot = { ll: 0, bigLL: 0, tiles: 0 };
+  for (const [k, st] of Object.entries(by)) {
+    console.log(`${String(k).padStart(4)}   ${(st.ll / st.tiles).toFixed(4)}   ${(st.bigLL / st.tiles).toFixed(4)}     ${(st.sure / st.snaps).toFixed(2)} (${(st.sureRight / Math.max(st.sure, 1) * 100).toFixed(1)}%)${st.empty ? `  ${st.empty} empty` : ''}`);
+    tot.ll += st.ll; tot.bigLL += st.bigLL; tot.tiles += st.tiles;
+  }
+  console.log(` all   ${(tot.ll / tot.tiles).toFixed(4)}   ${(tot.bigLL / tot.tiles).toFixed(4)}`);
+}
+if (process.env.DUMPP) (await import('node:fs')).writeFileSync(process.env.DUMPP, JSON.stringify(dumpRows));
