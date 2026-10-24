@@ -1,4 +1,4 @@
-package com.engineerclient.posepov
+package com.devgineerclient.posepov
 
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.BufferBuilder
@@ -122,7 +122,7 @@ object BlockMesh {
             }
             val data = bb.build() ?: return Section(null, 0)
             data.use {
-                return Section(RenderSystem.getDevice().createBuffer({ "engineerclient pose pov section" }, GpuBuffer.USAGE_VERTEX, it.vertexBuffer()), it.drawState().indexCount())
+                return Section(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov section" }, GpuBuffer.USAGE_VERTEX, it.vertexBuffer()), it.drawState().indexCount())
             }
         }
     }

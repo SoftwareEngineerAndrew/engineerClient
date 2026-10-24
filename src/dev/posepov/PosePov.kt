@@ -1,6 +1,6 @@
-package com.engineerclient.posepov
+package com.devgineerclient.posepov
 
-import com.engineerclient.EngineerClient
+import com.devgineerclient.DevgineerClient
 import com.mojang.blaze3d.ProjectionType
 import com.mojang.blaze3d.pipeline.TextureTarget
 import com.mojang.blaze3d.systems.RenderSystem
@@ -53,7 +53,7 @@ import java.util.OptionalDouble
  */
 object PosePov : Module(
     name = "Pose POV",
-    category = Category.custom("Engineer Client", 860, 10),
+    category = Category.custom("Devgineer Client", 860, 10),
     description = "Minimal teammate views in the leap menu: their position, look and held item over flat-coloured blocks.",
     key = null,
 ) {
@@ -66,7 +66,7 @@ object PosePov : Module(
 
     private val PIPELINE: RenderPipeline = RenderPipelines.register(
         RenderPipeline.builder(RenderPipelines.DEBUG_FILLED_SNIPPET)
-            .withLocation(Identifier.fromNamespaceAndPath("engineerclient", "pipeline/pose_pov"))
+            .withLocation(Identifier.fromNamespaceAndPath("devgineerclient", "pipeline/pose_pov"))
             .withCull(false)
             // Reversed Z: depth is cleared to 0 and nearer is greater.
             .withDepthStencilState(DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, true))
@@ -75,7 +75,7 @@ object PosePov : Module(
 
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     private val projection = Projection()
-    private val projectionBuffer by lazy { ProjectionMatrixBuffer("engineerclient pose pov") }
+    private val projectionBuffer by lazy { ProjectionMatrixBuffer("devgineerclient pose pov") }
     private val view = Matrix4f()
     private val cull = Matrix4f()
     private val frustum = FrustumIntersection()
@@ -83,10 +83,10 @@ object PosePov : Module(
 
     init {
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
-            EngineerClient.safely("pose pov") { if (wants()) draw(guiGraphics) }
+            DevgineerClient.safely("pose pov") { if (wants()) draw(guiGraphics) }
         }
         ClientTickEvents.END_CLIENT_TICK.register {
-            EngineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
+            DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
         }
         onReceive<ClientboundBlockUpdatePacket> { BlockMesh.dirty(pos) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, _ -> BlockMesh.dirty(pos) } }
@@ -149,7 +149,7 @@ object PosePov : Module(
             if (p == null) { gfx.fill(x0, y0, x1, y1, 0xFF101010.toInt()); continue }
             val target = feeds[i]?.takeIf { it.width == w && it.height == h } ?: run {
                 feeds[i]?.destroyBuffers()
-                TextureTarget("ec:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
+                TextureTarget("dc:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
             }
             renderFeed(target, p.getEyePosition(pt), p.getViewYRot(pt), p.getViewXRot(pt), w, h)
             val colorView = target.colorTextureView ?: continue
@@ -200,7 +200,7 @@ object PosePov : Module(
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = if (maxIndices > 0) quadIndices.getBuffer(maxIndices) else null
             RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                RenderPassDescriptor.builder { "engineerclient pose pov" }
+                RenderPassDescriptor.builder { "devgineerclient pose pov" }
                     .withColorAttachment(colorView, Optional.of(skyColor))
                     .withDepthAttachment(depthView, OptionalDouble.of(0.0))
                     .build()
