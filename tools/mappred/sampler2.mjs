@@ -265,11 +265,11 @@ export function sample(obs, combos, opts) {
     const grow = opts.grow ?? 0.3;
     // opts.oldest: with this chance the door comes off the oldest room that still has a free neighbour (the
     // real trees are shallow: tools/mappred README, the generator)
-    const oldest = opts.oldest ?? 0; let head = 0;
+    const oldest = opts.oldest ?? 0; let oldHead = 0;
     while (order.length < R) {
       let u = -1, v = -1;
       if (oldest && rnd() < oldest) {
-        while (head < order.length) { const a = order[head]; const fr = [...slots[a].keys()].filter(w => parent[w] === -2); if (fr.length) { u = a; v = fr[Math.floor(rnd() * fr.length)]; break; } head++; }
+        while (oldHead < order.length) { const a = order[oldHead]; const fr = [...slots[a].keys()].filter(w => parent[w] === -2); if (fr.length) { u = a; v = fr[Math.floor(rnd() * fr.length)]; break; } oldHead++; }
       }
       if (u < 0 && rnd() < grow) {
         const last = order[order.length - 1];
