@@ -59,6 +59,11 @@ import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
+import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket
+import net.minecraft.world.InteractionHand
+import net.minecraft.world.entity.Entity
+import net.minecraft.client.renderer.entity.state.EntityRenderState
+import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.resources.Identifier
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.phys.Vec3
@@ -73,7 +78,7 @@ import java.util.OptionalDouble
 /**
  * Each teammate's view in their quarter of Odin's leap menu, from nothing but where they stand,
  * where they look and what they hold: the blocks are our own flat-coloured meshes ([BlockMesh]),
- * drawn from their eye. No entities, no world render.
+ * drawn from their eye, with the entities around them. No world render.
  */
 object PosePov : Module(
     name = "Pose POV",
@@ -90,7 +95,8 @@ object PosePov : Module(
     private const val RADIUS_Y = 3
     private const val FLOOR_LOW = 55
     private const val LOOK_EASE_S = 0.035
-    private const val BOX_ALPHA = 0x50
+    private const val ENTITY_RANGE = 64.0
+    private const val SWING_NS = 300_000_000L
     private const val FACE_HIDDEN = 0.3f
     private const val TRAIL_NS = 800_000_000L
     private const val BACK_OFF = 3.5
@@ -152,6 +158,8 @@ object PosePov : Module(
             val level = mc.level ?: return@onReceive
             BlockMesh.dirtyColumn(pos.minBlockX shr 4, pos.minBlockZ shr 4, level.minSectionY, level.maxSectionY)
         }
+        // Arm swings, timed from the packet: the game's own swing state sticks for some remote players, as their head yaw does.
+        onReceive<ClientboundSwingAnimationPacket> { if (hand() == InteractionHand.MAIN_HAND) swings[entityId()] = System.nanoTime() }
         on<LevelEvent.Load> { KnownWorld.reset(); BlockMesh.newRun() }
     }
 
@@ -168,7 +176,6 @@ object PosePov : Module(
     }
 
     private fun releaseFeeds() {
-        if (!captured) menuFrames = 0
         queued.clear()
         for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null }
     }
@@ -187,8 +194,7 @@ object PosePov : Module(
         val now = System.nanoTime()
         val eyes = arrayOfNulls<Eye>(FEEDS)
         val players = arrayOfNulls<Player>(FEEDS)
-        val figures = arrayOfNulls<Figure>(FEEDS)
-        val raw = arrayOfNulls<String>(FEEDS)
+        val bodies = ArrayList<Body>()
         for (i in 0 until FEEDS) {
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
@@ -199,13 +205,22 @@ object PosePov : Module(
                 real
             } else if (!slot.isDead && slot.mapPos.data != 0L) ghostEye(level, slot, now) else null
             if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
-            // Where they stand, for the boxes in everyone else's feed.
-            val at = p?.getPosition(pt) ?: e?.subject?.subtract(0.0, 1.62, 0.0)
-            if (at != null) figures[i] = Figure(at, (BOX_ALPHA shl 24) or (slot.clazz.color.rgba and 0xFFFFFF))
-            raw[i] = if (p != null) String.format(java.util.Locale.ROOT, "real pt=%.3f eye=%.3f,%.3f,%.3f headO=%.2f head=%.2f yRotO=%.2f yRot=%.2f pitch=%.2f",
-                pt, p.getEyePosition(pt).x, p.getEyePosition(pt).y, p.getEyePosition(pt).z, p.yHeadRotO, p.yHeadRot, p.yRotO, p.yRot, p.getViewXRot(pt)) else "estimate"
+            // An out-of-range teammate's guessed body, in every feed (their own included, seen from behind).
+            val g = ghosts[slot.name]
+            val guess = e?.subject
+            if (p == null && guess != null && g != null) slot.playerSkin?.let { bodies += Body(guess.subtract(0.0, 1.62, 0.0), g.yaw, g.walkPos, g.walkSpeed, it) }
         }
-        val self = mc.player?.let { Figure(it.getPosition(pt), (BOX_ALPHA shl 24) or 0xFFFFFF) }
+
+        // Every entity near any eye, extracted once for all the feeds: full bright like the blocks, without outlines.
+        val entities = ArrayList<Pair<Entity, EntityRenderState>>()
+        val near = eyes.filterNotNull()
+        val range2 = ENTITY_RANGE * ENTITY_RANGE
+        for (en in level.entitiesForRendering()) {
+            if (near.none { it.pos.distanceToSqr(en.position()) < range2 }) continue
+            val s = runCatching { mc.entityRenderDispatcher.extractEntity(en, pt) }.getOrNull() ?: continue
+            s.lightCoords = LightCoordsUtil.FULL_BRIGHT; s.outlineColor = 0
+            entities += en to s
+        }
 
         // The sections around every eye, nearest first, built (within budget) before anything is drawn.
         val wanted = LinkedHashSet<Long>()
@@ -243,16 +258,11 @@ object PosePov : Module(
             val item = handItems[i].also { it.clear() }
             val right = p?.mainArm != HumanoidArm.LEFT
             if (p != null && !p.mainHandItem.isEmpty) mc.itemModelResolver.updateForLiving(item, p.mainHandItem, if (right) ItemDisplayContext.FIRST_PERSON_RIGHT_HAND else ItemDisplayContext.FIRST_PERSON_LEFT_HAND, p)
-            val others = ArrayList<Figure>(FEEDS)
-            for (j in 0 until FEEDS) if (j != i) figures[j]?.let { others += it }
-            self?.let { others += it }
             val subject = e.subject
             val ghost = slot?.let { ghosts[it.name] }
-            val body = if (subject != null && ghost != null) slot.playerSkin?.let { skin ->
-                Body(subject.subtract(0.0, 1.62, 0.0), ghost.yaw, ghost.walkPos, ghost.walkSpeed, skin)
-            } else null
-            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, p?.getSwingAnimation(pt) ?: 0f, others, body,
-                "${slot?.name} cam=${String.format(java.util.Locale.ROOT, "%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f", e.pos.x, e.pos.y, e.pos.z, e.yaw, e.pitch)} ${raw[i]}")
+            // Everything around them but themselves (their view is from inside their head).
+            val seen = entities.filter { (en, _) -> en !== p && en.position().distanceToSqr(e.pos) < range2 }.map { it.second }
+            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, p?.let { swingOf(it.id, now) } ?: 0f, seen, bodies)
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -534,14 +544,21 @@ object PosePov : Module(
     private class Job(
         val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val w: Int, val h: Int,
         val item: ItemStackRenderState, val side: Float, val swing: Float,
-        val figures: List<Figure>, val body: Body?, val debug: String,
+        val entities: List<EntityRenderState>, val bodies: List<Body>,
     )
-
-    /** A teammate in someone else's feed: where they stand, and their class colour (with the box's alpha). */
-    private class Figure(val feet: Vec3, val argb: Int)
 
     /** The guessed body of an out-of-range teammate: where and which way it stands, its walk, and their skin. */
     private class Body(val feet: Vec3, val yaw: Float, val walkPos: Float, val walkSpeed: Float, val skin: PlayerSkin)
+
+    private val swings = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+
+    /** How far through its swing the entity's arm is (0 when not swinging), from when the swing arrived. */
+    private fun swingOf(id: Int, now: Long): Float {
+        val at = swings[id] ?: return 0f
+        val t = (now - at).toFloat() / SWING_NS
+        if (t >= 1f) { swings.remove(id); return 0f }
+        return t
+    }
 
     private val handItems = Array(FEEDS) { ItemStackRenderState() }
     private val handProjection = Projection()
@@ -569,7 +586,6 @@ object PosePov : Module(
                 renderFigures(job)
                 renderHand(job)
             }
-            capture()
         }
         queued.clear()
     }
@@ -637,32 +653,37 @@ object PosePov : Module(
     }
 
     /**
-     * Over the feed's blocks, tested against their depth: the other teammates as see-through boxes in their class colour, and
-     * for an estimate, the guessed body (their skin, walking when the icon moves).
+     * Over the feed's blocks, tested against their depth: every entity around them as the game draws it, and the guessed
+     * bodies of teammates out of range (their skin, walking when the icon moves). Positions are relative to the eye, as the
+     * game's own entity pass does it.
      */
     private fun renderFigures(job: Job) {
-        if (job.figures.isEmpty() && job.body == null) return
+        if (job.entities.isEmpty() && job.bodies.isEmpty()) return
         val colorView = job.target.colorTextureView ?: return
         val depthView = job.target.depthTextureView ?: return
+        val orientation = Quaternionf().rotationYXZ(Math.PI.toFloat() - Math.toRadians(job.yaw.toDouble()).toFloat(), -Math.toRadians(job.pitch.toDouble()).toFloat(), 0f)
         val poses = PoseStack()
-        poses.mulPose(Matrix4f().rotation(Quaternionf().rotationYXZ(Math.PI.toFloat() - Math.toRadians(job.yaw.toDouble()).toFloat(), -Math.toRadians(job.pitch.toDouble()).toFloat(), 0f).conjugate()))
-        poses.translate(-job.eye.x, -job.eye.y, -job.eye.z)
+        poses.mulPose(Matrix4f().rotation(Quaternionf(orientation).conjugate()))
+        val camera = CameraRenderState().apply {
+            pos = job.eye; blockPos = net.minecraft.core.BlockPos.containing(job.eye); xRot = job.pitch; yRot = job.yaw
+            this.orientation = orientation; initialized = true; isFirstPerson = false
+        }
 
-        job.body?.let { b ->
+        for (s in job.entities) runCatching {
+            mc.entityRenderDispatcher.submit(s, camera, s.x - job.eye.x, s.y - job.eye.y, s.z - job.eye.z, poses, handSubmits)
+        }
+        for (b in job.bodies) {
             val model = if (b.skin.model() == PlayerModelType.SLIM) slimModel else wideModel
             bodyState.skin = b.skin; bodyState.bodyRot = b.yaw; bodyState.yRot = 0f; bodyState.xRot = 0f
             bodyState.walkAnimationPos = b.walkPos; bodyState.walkAnimationSpeed = b.walkSpeed
             poses.pushPose()
-            poses.translate(b.feet.x, b.feet.y, b.feet.z)
+            poses.translate(b.feet.x - job.eye.x, b.feet.y - job.eye.y, b.feet.z - job.eye.z)
             poses.rotateDegrees(Axis.YP, 180f - b.yaw)
             // The living renderer's flip, and a player's 15/16 scale.
             poses.scale(-0.9375f, -0.9375f, 0.9375f)
             poses.translate(0f, -1.501f, 0f)
             handSubmits.submitModel(model, bodyState, poses, b.skin.body().texturePath(), LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, 0)
             poses.popPose()
-        }
-        if (job.figures.isNotEmpty()) handSubmits.submitCustomGeometry(poses, RenderTypes.debugQuads()) { pose, vc ->
-            for (f in job.figures) box(pose, vc, f.feet.x - 0.3, f.feet.y, f.feet.z - 0.3, f.feet.x + 0.3, f.feet.y + 1.8, f.feet.z + 0.3, f.argb)
         }
 
         figureProjection.setupPerspective(NEAR, FAR, mc.options.fov().get().toFloat(), job.w.toFloat(), job.h.toFloat())
@@ -688,42 +709,6 @@ object PosePov : Module(
         }
     }
 
-    private fun box(pose: PoseStack.Pose, vc: com.mojang.blaze3d.vertex.VertexConsumer, x0: Double, y0: Double, z0: Double, x1: Double, y1: Double, z1: Double, c: Int) {
-        val a = x0.toFloat(); val b = y0.toFloat(); val d = z0.toFloat(); val A = x1.toFloat(); val B = y1.toFloat(); val D = z1.toFloat()
-        fun v(x: Float, y: Float, z: Float) { vc.addVertex(pose, x, y, z).setColor(c) }
-        v(a, b, d); v(A, b, d); v(A, b, D); v(a, b, D)
-        v(a, B, d); v(a, B, D); v(A, B, D); v(A, B, d)
-        v(a, b, d); v(a, B, d); v(A, B, d); v(A, b, d)
-        v(a, b, D); v(A, b, D); v(A, B, D); v(a, B, D)
-        v(a, b, d); v(a, b, D); v(a, B, D); v(a, B, d)
-        v(A, b, d); v(A, B, d); v(A, B, D); v(A, b, D)
-    }
-
-    // TEMPORARY, for the shaking: frames 30-89 of the first leap menu each session, every feed's image and the numbers it was
-    // drawn from, into config/devgineerclient/posepov-shots (images every 3rd frame, numbers every frame).
-    private var menuFrames = 0
-    private var captured = false
-    private val captureLog = StringBuilder()
-
-    private fun capture() {
-        if (captured) return
-        val frame = menuFrames++
-        if (frame < 30) return
-        val dir = net.fabricmc.loader.api.FabricLoader.getInstance().configDir.resolve("devgineerclient").resolve("posepov-shots")
-        if (frame > 89) {
-            captured = true
-            runCatching { java.nio.file.Files.createDirectories(dir); java.nio.file.Files.writeString(dir.resolve("frames.txt"), captureLog) }
-            return
-        }
-        captureLog.append("f").append(frame).append(" t=").append(System.nanoTime() / 1_000_000).append('\n')
-        for ((i, job) in queued.withIndex()) captureLog.append("  feed").append(i).append(' ').append(job.debug).append('\n')
-        if (frame % 3 != 0) return
-        java.nio.file.Files.createDirectories(dir)
-        for ((i, job) in queued.withIndex()) {
-            val file = dir.resolve(String.format(java.util.Locale.ROOT, "f%02d-feed%d.png", frame, i))
-            net.minecraft.client.Screenshot.takeScreenshot(job.target, 2) { img -> img.use { runCatching { it.writeToFile(file) } } }
-        }
-    }
 
     /**
      * Their held item over the feed, where the game holds yours: the first-person arm pose (with the swing) at the hand's
