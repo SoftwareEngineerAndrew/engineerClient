@@ -143,6 +143,24 @@ real 1.25). Still wrong: its big rooms sit too near the entrance and against eac
 +0.23, real -0.20 and -0.05): they start too early in the growth, and starting them later (c2) brings too
 many 1x1s with 3+ doors - what decides when a room starts is still open.
 
+What a room's start depends on (startrule.mjs: every room entry, the rooms at a shallower walk taken as
+placed, a logistic fit of "big"; grow's own rule shows what the reconstruction does by itself):
+
+    starts a big room, per unit         real   grow c3f   one try (c9a)   tree first, one try (try1)
+    log placements that fit there      +0.62     +0.28        +1.06              +0.82
+    entry cell on the map's edge       +0.38     +0.08        +0.65              +0.46
+    log shapes left                    +1.32     +1.62        +0.79                -
+    log free cells                     -2.28     -2.49        -2.43                -
+
+The real start leans on the room there is for a shape, and on edge cells, far more than "start one if any
+fits" does: like a try at one placement that may not fit (a random one over the cell, inside the map), a
+little less (2-3 tries overshoot as well). Rooms aren't anchored at the cell they're entered by (top-left
+entry 27% for a 2x2, 47% for a 1x2: as their size gives). Tries during the growth (c9a) fix how the big
+rooms sit against each other (-0.08, real -0.05) but every grow variant still puts them too near the
+entrance (-0.47 to -0.93, real -0.20), the quota running out close to it; the tree first with one try per
+cell in a random pass (try1) gets the entrance and edge pulls (-0.24, +0.21) but neither the packing
+(-0.26) nor the 1x1 blobs (-0.03, real +0.12). No single one of these is the generator yet.
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
