@@ -163,10 +163,10 @@ export function prepare(obs, combos) {
     if (rules.w === 6 && rules.h === 6) for (const g of SYM) { const [x, z] = g(ent[0], ent[1]); if (z === 0 && x <= 2) { f = g; break; } }
     for (let t = 0; t < W * H; t++) { const [x, z] = f(t % W, (t / W) | 0); frame[t] = z * W + x; }
   }
-  // the discovered tiles that are 1x1 rooms
-  const oneAt = new Uint8Array(W * H);
-  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) { const i = tile[z][x]; if (i >= 0 && obs.rooms.get(i)?.tiles.length === 1) oneAt[z * W + x] = 1; }
-  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, oneAt, puzzles: obs.puzzles };
+  // the discovered tiles that are 1x1 rooms, the ones in big rooms, the entrance's
+  const oneAt = new Uint8Array(W * H), bigAt = new Uint8Array(W * H); let entTile = -1;
+  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) { const i = tile[z][x]; if (i < 0) continue; const r = obs.rooms.get(i); if (r?.tiles.length === 1) oneAt[z * W + x] = 1; else if (r) bigAt[z * W + x] = 1; if (r?.type === 'ENTRANCE') entTile = z * W + x; }
+  return { W, H, rules, unknown, column, open, cells, isUnk, entry, bad, found, knownBig, head, headDist, fairyDist, pathKnown, remP, needDead, topUp, okCombos, ent, frame, oneAt, bigAt, entTile, puzzles: obs.puzzles };
 }
 
 export function sample(obs, combos, opts) {
@@ -221,6 +221,16 @@ export function sample(obs, combos, opts) {
         }
         if (ok && ents <= 1) {
           let w = 1; for (const t of tiles) w *= TB.BW[frame[t]] ?? 1;
+          // opts.place [edge, big, entrance, distance]: e^(b . features) of the spot, from the rooms so far
+          // (each tile side on the map's edge, each side on a big room, touching the entrance, tiles from it)
+          if (opts.place) {
+            const set = new Set(tiles); let edgeS = 0, bigS = 0, entT = 0, cx = 0, cz = 0;
+            for (const t of tiles) { const x = t % W, z = (t / W) | 0; cx += x; cz += z;
+              for (const [dx, dz] of DIRS) { const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= rules.w || nz >= H) { edgeS++; continue; } const u = nz * W + nx; if (set.has(u)) continue;
+                if (isUnk[u] ? owner[u] >= 0 : P0.bigAt[u]) bigS++; if (u === P0.entTile) entT = 1; } }
+            const d = ent ? Math.abs(cx / tiles.length - ent[0]) + Math.abs(cz / tiles.length - ent[1]) : 0;
+            const b = opts.place; w *= Math.exp(b[0] * edgeS + b[1] * bigS + b[2] * entT + b[3] * d);
+          }
           // AW: each shape's own weight per orientation and top-left tile, in the map's own directions
           if (AW?.[oi]) w *= AW[oi][t0] ?? 1;
           cands.push(tiles); cw2.push(w); cAt.push([oi, t0]); cwT += w;
