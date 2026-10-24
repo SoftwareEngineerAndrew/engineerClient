@@ -4,6 +4,8 @@ import com.devgineerclient.DevgineerClient
 import com.mojang.blaze3d.ProjectionType
 import com.mojang.blaze3d.pipeline.TextureTarget
 import com.mojang.blaze3d.systems.RenderSystem
+import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.math.Axis
 import com.mojang.renderpearl.api.GpuFormat
 import com.mojang.renderpearl.api.commands.RenderPassDescriptor
 import com.mojang.renderpearl.api.pipeline.ColorTargetState
@@ -24,7 +26,11 @@ import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.LeapMenu
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.equalsOneOf
+import com.odtheking.odin.utils.render.text
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -33,6 +39,12 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.renderer.Projection
 import net.minecraft.client.renderer.ProjectionMatrixBuffer
 import net.minecraft.client.renderer.RenderPipelines
+import net.minecraft.client.renderer.SubmitNodeStorage
+import net.minecraft.client.renderer.item.ItemStackRenderState
+import net.minecraft.client.renderer.texture.OverlayTexture
+import net.minecraft.util.LightCoordsUtil
+import net.minecraft.world.entity.HumanoidArm
+import net.minecraft.world.item.ItemDisplayContext
 import net.minecraft.client.renderer.state.gui.BlitRenderState
 import net.minecraft.core.SectionPos
 import net.minecraft.util.Mth
@@ -136,7 +148,6 @@ object PosePov : Module(
     }
 
     private fun releaseFeeds() {
-        if (!captured) menuFrames = 0
         queued.clear()
         for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null }
     }
@@ -174,13 +185,22 @@ object PosePov : Module(
             val x0 = if (col == 0) 0 else gw / 2; val x1 = if (col == 0) gw / 2 else gw
             val y0 = if (row == 0) 0 else gh / 2; val y1 = if (row == 0) gh / 2 else gh
             val p = players[i]
-            if (p == null) { gfx.fill(x0, y0, x1, y1, 0xFF101010.toInt()); continue }
+            if (p == null) {
+                gfx.fill(x0, y0, x1, y1, 0xFF101010.toInt())
+                DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" }?.let { distanceLabel(gfx, it, x0, y0, x1, y1) }
+                continue
+            }
             val target = feeds[i]?.takeIf { it.width == w && it.height == h } ?: run {
                 feeds[i]?.destroyBuffers()
                 TextureTarget("dc:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
             }
-            val eye = p.getEyePosition(pt); val yaw = p.getViewYRot(pt); val pitch = p.getViewXRot(pt)
-            queued += Job(target, eye, yaw, pitch, w, h)
+            // Head yaw through the shortest turn: a plain lerp across the ±180 wrap swings the view through every angle
+            // between the two, a different one each frame.
+            val eye = p.getEyePosition(pt); val yaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot); val pitch = p.getViewXRot(pt)
+            val right = p.mainArm == HumanoidArm.RIGHT
+            val item = handItems[i].also { it.clear() }
+            if (!p.mainHandItem.isEmpty) mc.itemModelResolver.updateForLiving(item, p.mainHandItem, if (right) ItemDisplayContext.FIRST_PERSON_RIGHT_HAND else ItemDisplayContext.FIRST_PERSON_LEFT_HAND, p)
+            queued += Job(target, eye, yaw, pitch, w, h, item, if (right) 1f else -1f, p.getSwingAnimation(pt))
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -194,9 +214,33 @@ object PosePov : Module(
                     null,
                 )
             )
-            val held = p.mainHandItem
-            if (!held.isEmpty) gfx.item(held, x0 + 4, y1 - 20)
         }
+    }
+
+    /**
+     * A teammate too far away to be loaded: roughly how far, from their icon on the dungeon map (where Odin's map draws it),
+     * coloured by how far that is.
+     */
+    private fun distanceLabel(gfx: GuiGraphicsExtractor, slot: DungeonPlayer, x0: Int, y0: Int, x1: Int, y1: Int) {
+        val me = mc.player ?: return
+        val cx = (x0 + x1) / 2; val cy = (y0 + y1) / 2
+        gfx.text(slot.name, cx - mc.font.width(slot.name) / 2, cy - 10, Color(170, 170, 170), shadow = true)
+        val (label, color) = when {
+            slot.isDead -> "dead" to Color(120, 120, 120)
+            slot.mapPos.data == 0L -> "out of range" to Color(120, 120, 120)
+            else -> {
+                val x = ((slot.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
+                val z = ((slot.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
+                val d = Math.hypot(x - me.x, z - me.z).toInt()
+                "~$d blocks" to when {
+                    d < 48 -> Color(90, 235, 120)
+                    d < 80 -> Color(240, 220, 70)
+                    d < 112 -> Color(255, 150, 50)
+                    else -> Color(255, 70, 70)
+                }
+            }
+        }
+        gfx.text(label, cx - mc.font.width(label) / 2, cy + 2, color, shadow = true)
     }
 
     /** Places what Odin has newly identified, then builds geometry for [budgetNs]: [near] first, then the whole dungeon if prerendering. */
@@ -211,7 +255,15 @@ object PosePov : Module(
         BlockMesh.pump(level, budgetNs, near, prerender && DungeonUtils.inDungeons)
     }
 
-    private class Job(val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val w: Int, val h: Int)
+    private class Job(
+        val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val w: Int, val h: Int,
+        val item: ItemStackRenderState, val side: Float, val swing: Float,
+    )
+
+    private val handItems = Array(FEEDS) { ItemStackRenderState() }
+    private val handProjection = Projection()
+    private val handProjectionBuffer by lazy { ProjectionMatrixBuffer("devgineerclient pose pov hand") }
+    private val handSubmits = SubmitNodeStorage()
 
     /** The feeds the menu asked for this frame: poses read while the screen is extracted, drawn in [renderQueued]. */
     private val queued = ArrayList<Job>()
@@ -229,28 +281,12 @@ object PosePov : Module(
             BlockMesh.forEachDrawable { m, _, _, _, _, _ -> if (m.indexCount > most) most = m.indexCount }
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = if (most > 0) quadIndices.getBuffer(most) else null
-            for (job in queued) renderFeed(job.target, job.eye, job.yaw, job.pitch, job.w, job.h, quadIndices, indices)
-            capture()
+            for (job in queued) {
+                renderFeed(job.target, job.eye, job.yaw, job.pitch, job.w, job.h, quadIndices, indices)
+                renderHand(job)
+            }
         }
         queued.clear()
-    }
-
-    // TEMPORARY, for the shaking: frames 30-41 of the first leap menu each session, every feed as drawn, read back from the GPU
-    // into config/devgineerclient/posepov-shots.
-    private var menuFrames = 0
-    private var captured = false
-
-    private fun capture() {
-        if (captured) return
-        val frame = menuFrames++
-        if (frame < 30) return
-        if (frame > 41) { captured = true; return }
-        val dir = net.fabricmc.loader.api.FabricLoader.getInstance().configDir.resolve("devgineerclient").resolve("posepov-shots")
-        java.nio.file.Files.createDirectories(dir)
-        for ((i, job) in queued.withIndex()) {
-            val file = dir.resolve(String.format(java.util.Locale.ROOT, "f%02d-feed%d.png", frame, i))
-            net.minecraft.client.Screenshot.takeScreenshot(job.target, 2) { img -> img.use { runCatching { it.writeToFile(file) } } }
-        }
     }
 
     private fun renderFeed(target: TextureTarget, eye: Vec3, yaw: Float, pitch: Float, w: Int, h: Int, quadIndices: RenderSystem.AutoStorageIndexBuffer, indices: com.mojang.renderpearl.api.buffers.GpuBuffer?) {
@@ -303,6 +339,51 @@ object PosePov : Module(
                 }
             }
         } finally {
+            RenderSystem.restoreProjectionMatrix()
+        }
+    }
+
+    /**
+     * Their held item over the feed, where the game holds yours: the first-person arm pose (with the swing) at the hand's
+     * own field of view, on a cleared depth so the world never cuts into it.
+     */
+    private fun sinf(x: Float) = kotlin.math.sin(x)
+    private fun sqrtf(x: Float) = kotlin.math.sqrt(x)
+
+    private fun renderHand(job: Job) {
+        if (job.item.isEmpty) return
+        val colorView = job.target.colorTextureView ?: return
+        val depthView = job.target.depthTextureView ?: return
+        val s = job.side; val a = job.swing
+        val poses = PoseStack()
+        poses.translate(s * -0.4f * sinf(sqrtf(a) * Mth.PI), 0.2f * sinf(sqrtf(a) * Mth.TWO_PI), -0.2f * sinf(a * Mth.PI))
+        poses.translate(s * 0.56f, -0.52f, -0.72f)
+        val sa = sinf(a * a * Mth.PI); val sb = sinf(sqrtf(a) * Mth.PI)
+        poses.rotateDegrees(Axis.YP, s * (45f + sa * -20f))
+        poses.rotateDegrees(Axis.ZP, s * sb * -20f)
+        poses.rotateDegrees(Axis.XP, sb * -80f)
+        poses.rotateDegrees(Axis.YP, s * -45f)
+        job.item.submit(poses, handSubmits, LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, 0)
+
+        handProjection.setupPerspective(NEAR, FAR, 70f, job.w.toFloat(), job.h.toFloat())
+        RenderSystem.backupProjectionMatrix()
+        val modelView = RenderSystem.getModelViewStack()
+        modelView.pushMatrix().identity()
+        try {
+            RenderSystem.setProjectionMatrix(handProjectionBuffer.getBuffer(handProjection), ProjectionType.PERSPECTIVE)
+            mc.gameRenderer.featureRenderDispatcher().prepareFrame(handSubmits).use { frame ->
+                RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                    RenderPassDescriptor.builder { "devgineerclient pose pov hand" }
+                        .withColorAttachment(colorView, Optional.empty())
+                        .withDepthAttachment(depthView, OptionalDouble.of(0.0))
+                        .build()
+                ).use { pass ->
+                    RenderSystem.bindDefaultUniforms(pass)
+                    net.minecraft.client.renderer.feature.FeatureRenderDispatcher.renderAllFeatures(pass, frame)
+                }
+            }
+        } finally {
+            modelView.popMatrix()
             RenderSystem.restoreProjectionMatrix()
         }
     }
