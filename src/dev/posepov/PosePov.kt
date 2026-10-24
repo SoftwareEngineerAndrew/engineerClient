@@ -89,11 +89,15 @@ object PosePov : Module(
     private const val RADIUS_XZ = 5
     private const val RADIUS_Y = 3
     private const val FLOOR_LOW = 55
+    private const val LOOK_EASE_S = 0.035
     private const val BOX_ALPHA = 0x50
     private const val FACE_HIDDEN = 0.3f
     private const val TRAIL_NS = 800_000_000L
     private const val BACK_OFF = 3.5
     private const val BACK_UP = 1.2
+    private const val BACK_UP_HIGH = 2.4
+    private const val MIN_CAM = 2.0
+    private val CAM_OFFSETS = floatArrayOf(0f, 30f, -30f, 60f, -60f, 90f, -90f, 130f, -130f, 180f)
     private const val BLEND_NS = 350_000_000L
     private const val FLOOR_HIGH = 140
     private const val SKY = 0xFF78A7FF.toInt()
@@ -133,6 +137,7 @@ object PosePov : Module(
         }
         ClientTickEvents.END_CLIENT_TICK.register {
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
+            DevgineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) sampleLooks() }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
         }
         // This run's block changes, on top of the known rooms and arena (see KnownWorld).
@@ -189,9 +194,7 @@ object PosePov : Module(
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
             val e = if (p != null) {
                 players[i] = p
-                // Head yaw through the shortest turn: a plain lerp across the ±180 wrap swings the view through every angle
-                // between the two, a different one each frame.
-                val real = Eye(p.getEyePosition(pt), Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot), p.getViewXRot(pt), null)
+                val real = look(slot.name, p, pt, now)
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
             } else if (!slot.isDead && slot.mapPos.data != 0L) ghostEye(level, slot, now) else null
@@ -279,6 +282,47 @@ object PosePov : Module(
         }
     }
 
+    /**
+     * Each teammate's head yaw and pitch at the end of the last two ticks. The game's own "previous" head yaw isn't kept
+     * up for every remote player (one stayed 85° stale for several ticks), and lerping from it swung the view across that
+     * gap within each tick; these are sampled here, every tick, instead.
+     */
+    private class Look(var yawO: Float, var yaw: Float, var pitchO: Float, var pitch: Float, var tick: Long,
+                       var outYaw: Float = yaw, var outPitch: Float = pitch, var outAt: Long = 0L)
+    private val looks = HashMap<String, Look>()
+    private var ticks = 0L
+
+    private fun sampleLooks() {
+        val level = mc.level ?: return
+        ticks++
+        val names = DungeonUtils.leapTeammates.mapTo(HashSet()) { it.name }
+        looks.keys.retainAll(names)
+        for (p in level.players()) {
+            val name = p.name.string
+            if (name !in names) continue
+            val l = looks[name]
+            // A gap (they were out of range) starts over rather than turning across it.
+            if (l == null || l.tick != ticks - 1) looks[name] = Look(p.yHeadRot, p.yHeadRot, p.xRot, p.xRot, ticks)
+            else { l.yawO = l.yaw; l.yaw = p.yHeadRot; l.pitchO = l.pitch; l.pitch = p.xRot; l.tick = ticks }
+        }
+    }
+
+    /**
+     * A loaded teammate's eye: their position, and their look between the last two samples (through the shortest turn),
+     * lightly eased so a flick over the 20 updates a second reads as a quick turn rather than a jump.
+     */
+    private fun look(name: String, p: Player, pt: Float, now: Long): Eye {
+        val l = looks[name] ?: return Eye(p.getEyePosition(pt), p.yHeadRot, p.xRot, null)
+        val yaw = Mth.rotLerp(pt, l.yawO, l.yaw); val pitch = Mth.lerp(pt, l.pitchO, l.pitch)
+        val dt = ((now - l.outAt) / 1e9); l.outAt = now
+        if (dt > 0.25) { l.outYaw = yaw; l.outPitch = pitch }
+        else {
+            val k = (1 - Math.exp(-dt / LOOK_EASE_S)).toFloat()
+            l.outYaw += Mth.wrapDegrees(yaw - l.outYaw) * k; l.outPitch += (pitch - l.outPitch) * k
+        }
+        return Eye(p.getEyePosition(pt), l.outYaw, l.outPitch, null)
+    }
+
     /** A camera: where it is and looks, and for an estimate, the spot the teammate is thought to stand (eye height). */
     private class Eye(val pos: Vec3, val yaw: Float, val pitch: Float, val subject: Vec3?)
 
@@ -290,13 +334,14 @@ object PosePov : Module(
     private class Ghost {
         var x = Double.NaN; var z = Double.NaN; var eyeY = Double.NaN; var yaw = 0f; var pitch = 0f
         var camDist = BACK_OFF; var at = 0L
+        var camOff = 0f; var camAim = 0f; var camUp = BACK_UP; var camChecked = 0L
         val trail = ArrayDeque<DoubleArray>(); var walkPos = 0f; var walkSpeed = 0f; var faceAlpha = 1f; var faceAt = 0L
         var last: Eye? = null; var lastAt = 0L; var from: Eye? = null; var fromAt = 0L
 
         /** Their own view this frame: the estimate picks up from here when they go out of range. */
         fun seen(e: Eye, now: Long) {
             x = e.pos.x; z = e.pos.z; eyeY = e.pos.y; yaw = e.yaw; pitch = e.pitch; at = now
-            trail.clear(); camDist = 0.0
+            trail.clear(); camDist = 0.0; camOff = 0f; camAim = 0f; camUp = BACK_UP
         }
 
         /** [e], or on its way to [e] from the other kind of camera for [BLEND_NS] after a switch. */
@@ -339,28 +384,62 @@ object PosePov : Module(
         val moving = fresh && span > 1.5 && span / ((last[0] - first[0]) / 1e9).coerceAtLeast(0.1) > 1.5
         val heading = if (moving) Math.toDegrees(Math.atan2(-(last[1] - first[1]), last[2] - first[2])).toFloat() else slot.yaw
 
+        // Where they'd stand: the icon's spot if there's room for a player there, else the nearest column with room.
+        val spot = spotAt(level, tx, tz, g.eyeY)
         val k = 1 - Math.exp(-dt * 6)
         val px = g.x; val pz = g.z
-        g.x += (tx - g.x) * k; g.z += (tz - g.z) * k
+        g.x += (spot.x - g.x) * k; g.z += (spot.z - g.z) * k
         g.yaw += Mth.wrapDegrees(heading - g.yaw) * (1 - Math.exp(-dt * 3)).toFloat()
         // The guessed body's walk: the game's limb swing advances about 4 per block walked.
         val moved = Math.hypot(g.x - px, g.z - pz)
         g.walkPos += (moved * 4).toFloat()
         val speed = if (dt > 0) moved / dt else 0.0
         g.walkSpeed += ((speed / 5).coerceAtMost(1.0).toFloat() - g.walkSpeed) * (1 - Math.exp(-dt * 6)).toFloat()
-        val feet = floorAt(level, g.x, g.z, g.eyeY)
-        g.eyeY = if (g.eyeY.isNaN() || Math.abs(feet + 1.62 - g.eyeY) > 6) feet + 1.62 else g.eyeY + (feet + 1.62 - g.eyeY) * (1 - Math.exp(-dt * 10))
+        g.eyeY = if (g.eyeY.isNaN() || Math.abs(spot.y + 1.62 - g.eyeY) > 6) spot.y + 1.62 else g.eyeY + (spot.y + 1.62 - g.eyeY) * (1 - Math.exp(-dt * 10))
+        // A body is 0.6 wide: kept that far off the walls beside it, so it never sinks into one.
+        val feetY = Mth.floor(g.eyeY - 1.62 + 0.01)
+        val cx = Mth.floor(g.x); val cz = Mth.floor(g.z)
+        fun wall(x: Int, z: Int) = KnownWorld.stateAt(level, scratch, x, feetY, z).isSolid || KnownWorld.stateAt(level, scratch, x, feetY + 1, z).isSolid
+        if (!wall(cx, cz)) {
+            if (wall(cx - 1, cz)) g.x = maxOf(g.x, cx + 0.3); if (wall(cx + 1, cz)) g.x = minOf(g.x, cx + 0.7)
+            if (wall(cx, cz - 1)) g.z = maxOf(g.z, cz + 0.3); if (wall(cx, cz + 1)) g.z = minOf(g.z, cz + 0.7)
+        }
         val subject = Vec3(g.x, g.eyeY, g.z)
 
-        // Back along the heading and up, stopped short of the first block in the way; eased so walls don't pop it in and out.
-        val yr = Math.toRadians(g.yaw.toDouble())
-        val back = Vec3(Math.sin(yr) * BACK_OFF, BACK_UP, -Math.cos(yr) * BACK_OFF)
-        val room = clearance(level, subject, back)
-        g.camDist += (room - g.camDist) * (if (room < g.camDist) 1.0 else 1 - Math.exp(-dt * 3))
+        // The camera: behind them if there's room, otherwise round to the side with the most (never staying squeezed
+        // under [MIN_CAM] when another angle is open), raised when every angle is tight. It keeps its angle until
+        // another is clearly better, swings there smoothly, and comes in at once for a wall but backs out slowly.
+        fun room(off: Float, up: Double) = clearance(level, subject, backOf(g.yaw + off, up))
+        val held = room(g.camOff, g.camUp)
+        if (held < MIN_CAM || now - g.camChecked > 250_000_000L) {
+            g.camChecked = now
+            var best = g.camOff; var bestUp = g.camUp; var bestScore = held - Math.abs(Mth.wrapDegrees(g.camOff)) / 120.0
+            for (up in doubleArrayOf(BACK_UP, BACK_UP_HIGH)) for (off in CAM_OFFSETS) {
+                val r = room(off, up)
+                val score = r - Math.abs(off) / 120.0 - (if (up > BACK_UP) 0.4 else 0.0)
+                if (score > bestScore + (if (held < MIN_CAM) 0.0 else 0.75)) { best = off; bestUp = up; bestScore = score }
+            }
+            g.camAim = best; g.camUp = bestUp
+        }
+        g.camOff += Mth.wrapDegrees(g.camAim - g.camOff) * (1 - Math.exp(-dt * 4)).toFloat()
+        val back = backOf(g.yaw + g.camOff, g.camUp)
+        val r = clearance(level, subject, back)
+        g.camDist += (r - g.camDist) * (if (r < g.camDist) 1.0 else 1 - Math.exp(-dt * 3))
         val cam = subject.add(back.scale(g.camDist / BACK_OFF))
+        // Looking at their chest from wherever the camera ended up.
         val look = subject.add(0.0, -0.4, 0.0).subtract(cam)
-        val pitch = Math.toDegrees(Math.atan2(-look.y, Math.hypot(look.x, look.z))).toFloat()
-        return Eye(cam, g.yaw, pitch, subject)
+        val flat = Math.hypot(look.x, look.z)
+        val yaw = if (flat < 0.2) g.yaw else Math.toDegrees(Math.atan2(-look.x, look.z)).toFloat()
+        val pitch = Math.toDegrees(Math.atan2(-look.y, flat)).toFloat()
+        return Eye(cam, yaw, pitch, subject)
+    }
+
+    private val scratch = net.minecraft.core.BlockPos.MutableBlockPos()
+
+    /** From the subject back along [yaw] (the way they'd face) and [up], [BACK_OFF] long. */
+    private fun backOf(yaw: Float, up: Double): Vec3 {
+        val yr = Math.toRadians(yaw.toDouble())
+        return Vec3(Math.sin(yr) * BACK_OFF, up, -Math.cos(yr) * BACK_OFF)
     }
 
     /** How far along [dir] (in units of [BACK_OFF] of it) one can go from [from] before a block, less [margin]; [BACK_OFF] when clear. */
@@ -387,17 +466,19 @@ object PosePov : Module(
         return (x0 + (nx * 0.5f + 0.5f) * (x1 - x0)).toInt() to (y0 + (0.5f - ny * 0.5f) * (y1 - y0)).toInt()
     }
 
+    private class Spot(val x: Double, val z: Double, val y: Double)
+
     /**
-     * The floor to stand on near (x, z): the nearest column within three blocks with room for a player under a ceiling (so
-     * never the top of a wall or the roof), at the standing height closest to [eyeY] (the lowest when unknown). Falls back
-     * to where they were last, or the usual dungeon floor.
+     * Where to stand near (x, z): there when its column has room for a player under a ceiling (so never the top of a wall
+     * or the roof), else the middle of the nearest column within three blocks that does; at the standing height closest to
+     * [eyeY] (the lowest when unknown). Falls back to (x, z) at where they were last, or the usual dungeon floor.
      */
-    private fun floorAt(level: net.minecraft.client.multiplayer.ClientLevel, x: Double, z: Double, eyeY: Double): Double {
+    private fun spotAt(level: net.minecraft.client.multiplayer.ClientLevel, x: Double, z: Double, eyeY: Double): Spot {
         val pos = net.minecraft.core.BlockPos.MutableBlockPos()
         val bx = Mth.floor(x); val bz = Mth.floor(z)
         val spots = ArrayList<Int>()
         for (r in 0..3) {
-            var best = Double.NaN
+            var best = Double.NaN; var bestX = 0; var bestZ = 0
             for (dx in -r..r) for (dz in -r..r) {
                 if (maxOf(Math.abs(dx), Math.abs(dz)) != r) continue
                 spots.clear()
@@ -412,13 +493,14 @@ object PosePov : Module(
                 }
                 for (y in spots) {
                     if (y >= top) continue
-                    if (eyeY.isNaN()) { if (best.isNaN() || y < best) best = y.toDouble() }
-                    else if (best.isNaN() || Math.abs(y + 1.62 - eyeY) < Math.abs(best + 1.62 - eyeY)) best = y.toDouble()
+                    val better = if (eyeY.isNaN()) best.isNaN() || y < best
+                        else best.isNaN() || Math.abs(y + 1.62 - eyeY) < Math.abs(best + 1.62 - eyeY)
+                    if (better) { best = y.toDouble(); bestX = dx; bestZ = dz }
                 }
             }
-            if (!best.isNaN()) return best
+            if (!best.isNaN()) return if (r == 0) Spot(x, z, best) else Spot(bx + bestX + 0.5, bz + bestZ + 0.5, best)
         }
-        return if (eyeY.isNaN()) 69.0 else eyeY - 1.62
+        return Spot(x, z, if (eyeY.isNaN()) 69.0 else eyeY - 1.62)
     }
 
     /** The estimate's distance from you, coloured by how far, under their name. */
