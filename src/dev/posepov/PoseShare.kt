@@ -88,6 +88,12 @@ object PoseShare {
 
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
+    /** "Peer-to-peer sharing": straight to teammates who have it on too, over UDP (see [PeerLink]); set by [PosePov]. */
+    @Volatile var p2p = false
+    @Volatile private var mySlot = 0
+    @Volatile private var v6 = false
+    private var sentPort = 0
+    private var portAt = 0L
 
     /** slot -> name (lower case) of the members linked with you, and the relay's subject ids. */
     private val roster = ConcurrentHashMap<Int, String>()
@@ -104,7 +110,7 @@ object PoseShare {
 
     // ------------------------------------------------------------------ what's been heard
 
-    class Sample(val seq: Long, val arrived: Long, val pos: Vec3, val yaw: Float, val pitch: Float, val flags: Int, val item: Int, val delayMs: Int)
+    class Sample(val seq: Long, val arrived: Long, val pos: Vec3, val yaw: Float, val pitch: Float, val flags: Int, val item: Int, val delayMs: Int, val direct: Boolean)
 
     class Track {
         val samples = ArrayDeque<Sample>()
@@ -142,7 +148,7 @@ object PoseShare {
     private val tracks = ConcurrentHashMap<String, Track>()
 
     /** A shared teammate's pose for drawing now: [via] is who relayed it (null when they share it themselves). */
-    class Pose(val pos: Vec3, val yaw: Float, val pitch: Float, val item: ItemStack, val swingAt: Long, val sneaking: Boolean, val via: String?, val delayMs: Int)
+    class Pose(val pos: Vec3, val yaw: Float, val pitch: Float, val item: ItemStack, val swingAt: Long, val sneaking: Boolean, val via: String?, val direct: Boolean, val delayMs: Int)
 
     fun pose(name: String, now: Long): Pose? {
         val t = tracks[name.lowercase()] ?: return null
@@ -162,8 +168,8 @@ object PoseShare {
                 pitch = Mth.lerp(k.toFloat().coerceAtMost(1f), a.pitch, b.pitch)
             }
             val item = BuiltInRegistries.ITEM.byId(b.item).takeIf { b.item != 0 && it !== Items.AIR }?.let { ItemStack(it) } ?: ItemStack.EMPTY
-            val delay = (BUFFER_NS / 1_000_000).toInt() + b.delayMs + (if (rttMs > 0) (rttMs / 2).toInt() else 0)
-            return Pose(pos, yaw, pitch, item, t.swingAt, b.flags and 2 != 0, t.via, delay)
+            val delay = (BUFFER_NS / 1_000_000).toInt() + b.delayMs + (if (!b.direct && rttMs > 0) (rttMs / 2).toInt() else 0)
+            return Pose(pos, yaw, pitch, item, t.swingAt, b.flags and 2 != 0, t.via, b.direct, delay)
         }
     }
 
@@ -199,6 +205,12 @@ object PoseShare {
         val watch = watching || nowMs - watchAt < 1500
         if (watch != sentWatch) { sentWatch = watch; sendBinary(byteArrayOf(5, if (watch) 1 else 0)) }
 
+        // Peer-to-peer: the socket while it's on, and our public port to the relay whenever it changes (0: off).
+        if (p2p && !PeerLink.running) PeerLink.start(mySlot, v6)
+        if (!p2p && PeerLink.running) PeerLink.stop()
+        PeerLink.tick { reportPort(it) }
+        if (!p2p) reportPort(0)
+
         // A ping every 2 s while poses flow (the round trip, for the delays shown), otherwise only to keep the socket open.
         if (nowMs - lastPing > (if (wanted || watch) 2000 else 30_000)) {
             lastPing = nowMs
@@ -210,7 +222,7 @@ object PoseShare {
         val swinging = me.isSwinging
         val swung = swinging && !wasSwinging
         wasSwinging = swinging
-        if (!wanted) { wasWanted = false; if (guiFrame != null) { guiFrame = null; sendBinary(byteArrayOf(4)) }; return }
+        if (!wanted) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
         if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
 
         // Yourself: every tick while moving, every [STILL_NS] while still, and the still pose again just before moving off
@@ -220,9 +232,9 @@ object PoseShare {
         val frame = pose(1, -1, 0, me.x, me.y, me.z, me.yRot, me.xRot, flags, me.mainHandItem)
         val sig = frame.copyOfRange(3, 16) + frame.copyOfRange(17, 20)
         val changed = !sig.contentEquals(lastSig)
-        if (changed && !prevSent) prevFrame?.let { sendBinary(it) }
+        if (changed && !prevSent) prevFrame?.let { share(it) }
         prevSent = changed || now - selfAt > STILL_NS
-        if (prevSent) { sendBinary(frame); selfAt = now }
+        if (prevSent) { share(frame); selfAt = now }
         prevFrame = frame; lastSig = sig
 
         // Teammates you can see who don't share for themselves (each tagged by where they are in the party you sent).
@@ -251,8 +263,20 @@ object PoseShare {
             val f = ByteArray(4 + sol.size)
             f[0] = 3; f[1] = term.type.ordinal.toByte(); f[2] = extra.toByte(); f[3] = sol.size.toByte()
             sol.forEachIndexed { i, s -> f[4 + i] = s.toByte() }
-            if (!f.contentEquals(guiFrame) || nowMs - guiAt > 1000) { guiFrame = f; guiAt = nowMs; sendBinary(f) }
-        } else if (guiFrame != null) { guiFrame = null; sendBinary(byteArrayOf(4)) }
+            if (!f.contentEquals(guiFrame) || nowMs - guiAt > 1000) { guiFrame = f; guiAt = nowMs; share(f) }
+        } else if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }
+    }
+
+    /** Your own frame: straight to each live peer, and through the relay unless that reached every linked teammate. */
+    private fun share(frame: ByteArray) {
+        val direct = if (p2p) PeerLink.broadcast(frame) else emptySet()
+        if (direct.isEmpty() || !direct.containsAll(roster.keys)) sendBinary(frame)
+    }
+
+    private fun reportPort(port: Int) {
+        if (port == sentPort || System.currentTimeMillis() - portAt < 3100) return
+        sentPort = port; portAt = System.currentTimeMillis()
+        sendText(JsonObject().apply { addProperty("t", "e"); addProperty("p", port) }.toString())
     }
 
     /** The solution as it may be sent: cells of the grid only, each once (Rubix: up to 4 times), within the grid's cap. */
@@ -311,6 +335,7 @@ object PoseShare {
                 if (err != null) { retryLater(); return@whenComplete }
                 sending = CompletableFuture.completedFuture(null)
                 ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
+                PeerLink.stop(); sentPort = 0
                 roster.clear(); subjects.clear(); sentParty = emptyList(); partyAt = 0L
                 socket = ws
             }
@@ -353,6 +378,7 @@ object PoseShare {
         socket = null; ready = false; wanted = false; room = null
         roster.clear(); subjects.clear(); tracks.clear()
         guiFrame = null; sentWatch = false
+        PeerLink.stop(); sentPort = 0
         runCatching { ws?.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }
     }
 
@@ -375,9 +401,15 @@ object PoseShare {
             "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { signIn(ws, it) }
             "ok" -> {
                 ready = true; backoff = 2_000L
+                mySlot = m["slot"]?.asInt ?: 0; v6 = m["v6"]?.asBoolean == true
                 m["k"]?.asString?.takeIf { it.length <= 100 }?.let { pass = it; passName = mc.user.name.lowercase(); passUntil = System.currentTimeMillis() + PASS_MS }
             }
             "w" -> wanted = m["w"]?.asInt == 1
+            "pe" -> {
+                val s = m["s"]?.asInt ?: return
+                if (p2p && roster.containsKey(s)) PeerLink.add(s, m["a"]?.asString ?: return, m["k"]?.asString ?: return)
+            }
+            "px" -> m["s"]?.asInt?.let { PeerLink.remove(it) }
             "r" -> {
                 roster.clear()
                 m["m"]?.asJsonArray?.forEach { e ->
@@ -385,6 +417,7 @@ object PoseShare {
                     val slot = a[0].asInt; val name = a[1].asString.lowercase()
                     if (slot in 1..255 && name in teammates) roster[slot] = name
                 }
+                PeerLink.retain(roster.keys)
             }
             "s" -> {
                 val i = m["i"]?.asInt ?: return; val n = m["n"]?.asString?.lowercase() ?: return
@@ -405,19 +438,31 @@ object PoseShare {
         val from = data.get().toInt() and 255
         val sender = roster[from] ?: return
         when (data.get().toInt()) {
-            1 -> if (data.remaining() == 19) heard(sender, null, from, data, 0, now)
+            1 -> if (data.remaining() == 19) heard(sender, null, from, data, 0, now, false)
             2 -> if (data.remaining() == 21) {
                 val subject = subjects[data.get().toInt() and 255] ?: return
                 val age = data.get().toInt() and 255
                 if (subject == mc.user.name.lowercase()) return
-                heard(subject, sender, from, data, age * 4, now)
+                heard(subject, sender, from, data, age * 4, now, false)
             }
             3 -> gui(sender, data, now)
             4 -> tracks[sender]?.gui = null
         }
     }
 
-    private fun heard(name: String, via: String?, source: Int, b: ByteBuffer, ageMs: Int, now: Long) {
+    /** A frame straight from a peer ([PeerLink]): its own pose, or its terminal (relayed teammates only come by the relay). */
+    fun direct(slot: Int, frame: ByteArray) {
+        val sender = roster[slot] ?: return
+        val now = System.nanoTime()
+        val b = ByteBuffer.wrap(frame, 1, frame.size - 1).slice()
+        when (frame[0].toInt()) {
+            1 -> if (frame.size == 20) heard(sender, null, slot, b, 0, now, true)
+            3 -> gui(sender, b, now)
+            4 -> if (frame.size == 1) tracks[sender]?.gui = null
+        }
+    }
+
+    private fun heard(name: String, via: String?, source: Int, b: ByteBuffer, ageMs: Int, now: Long, direct: Boolean) {
         if (name !in teammates) return
         val rawSeq = b.short.toInt() and 0xFFFF
         val x = get24(b); val y = get24(b); val z = get24(b)
@@ -445,7 +490,7 @@ object PoseShare {
             val off = now - s * TICK_NS
             // Best latency so far, let drift upward slowly so a clock that runs a little apart doesn't strand it.
             t.offset = if (t.offset == Long.MAX_VALUE) off else minOf(off, t.offset + 200_000L)
-            t.samples.addLast(Sample(s, now, Vec3(x, y, z), yaw, pitch.coerceIn(-90f, 90f), flags, item, half + ageMs))
+            t.samples.addLast(Sample(s, now, Vec3(x, y, z), yaw, pitch.coerceIn(-90f, 90f), flags, item, if (direct) PeerLink.rttMs(source).let { if (it > 0) (it / 2).toInt() else 0 } else half + ageMs, direct))
             while (t.samples.size > 16) t.samples.removeFirst()
             if (flags and 1 != 0) t.swingAt = now
         }
