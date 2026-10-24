@@ -11,6 +11,7 @@ import com.mojang.renderpearl.api.pipeline.DepthStencilState
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology
 import com.mojang.renderpearl.api.pipeline.RenderPipeline
 import com.mojang.renderpearl.api.textures.FilterMode
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.ScreenEvent
 import com.odtheking.odin.events.core.EventPriority
@@ -59,7 +60,9 @@ object PosePov : Module(
 ) {
     private const val FEEDS = 4
     private const val NEAR = 0.05f
-    private const val FAR = 96f
+    private const val FAR = 128f
+    private const val DRAW_BUDGET_NS = 4_000_000L
+    private const val PRERENDER_BUDGET_NS = 3_000_000L
     private const val RADIUS_XZ = 5
     private const val RADIUS_Y = 3
     private const val SKY = 0xFF78A7FF.toInt()
@@ -72,6 +75,8 @@ object PosePov : Module(
             .withDepthStencilState(DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, true))
             .build()
     )
+
+    private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
 
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     private val projection = Projection()
@@ -87,10 +92,11 @@ object PosePov : Module(
         }
         ClientTickEvents.END_CLIENT_TICK.register {
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
+            DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
         }
         // This run's block changes, on top of the known rooms and arena (see KnownWorld).
-        onReceive<ClientboundBlockUpdatePacket> { KnownWorld.change(pos, blockState); BlockMesh.dirty(pos) }
-        onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, state -> KnownWorld.change(pos, state); BlockMesh.dirty(pos) } }
+        onReceive<ClientboundBlockUpdatePacket> { KnownWorld.change(pos, blockState) }
+        onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, state -> KnownWorld.change(pos, state) } }
         onReceive<ClientboundLevelChunkWithLightPacket> {
             val level = mc.level ?: return@onReceive
             BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY)
@@ -100,7 +106,7 @@ object PosePov : Module(
             val level = mc.level ?: return@onReceive
             BlockMesh.dirtyColumn(pos.minBlockX shr 4, pos.minBlockZ shr 4, level.minSectionY, level.maxSectionY)
         }
-        on<LevelEvent.Load> { KnownWorld.reset(); BlockMesh.clear() }
+        on<LevelEvent.Load> { KnownWorld.reset(); BlockMesh.newRun() }
     }
 
     override fun onDisable() {
@@ -144,9 +150,7 @@ object PosePov : Module(
             around.sortBy { k -> val a = SectionPos.x(k) - cx; val b = SectionPos.y(k) - cy; val c = SectionPos.z(k) - cz; a * a + b * b + c * c }
             wanted += around
         }
-        KnownWorld.load { mc.execute { BlockMesh.clear() } }
-        KnownWorld.refresh(level) { x0, z0, x1, z1 -> BlockMesh.dirtyBox(x0, z0, x1, z1, level.minSectionY, level.maxSectionY) }
-        BlockMesh.update(level, wanted.toList())
+        build(DRAW_BUDGET_NS, wanted.toList())
 
         for (i in 0 until FEEDS) {
             val col = i % 2; val row = i / 2
@@ -177,6 +181,18 @@ object PosePov : Module(
         }
     }
 
+    /** Places what Odin has newly identified, then builds geometry for [budgetNs]: [near] first, then the whole dungeon if prerendering. */
+    private fun build(budgetNs: Long, near: List<Long>) {
+        val level = mc.level ?: return
+        // On arrival the world sections are built again with the rooms and the arena in them.
+        KnownWorld.load { mc.execute { BlockMesh.newRun(); KnownWorld.requeueChanges() } }
+        KnownWorld.refresh(level) { r ->
+            // The world sections under a room just placed lose those cells to the room's own pieces.
+            for (cx in (r.x0 shr 4)..(r.x1 shr 4)) for (cz in (r.z0 shr 4)..(r.z1 shr 4)) BlockMesh.dirtyColumn(cx, cz, level.minSectionY, level.maxSectionY)
+        }
+        BlockMesh.pump(level, budgetNs, near, prerender && DungeonUtils.inDungeons)
+    }
+
     private fun renderFeed(target: TextureTarget, eye: Vec3, yaw: Float, pitch: Float, w: Int, h: Int) {
         val colorView = target.colorTextureView ?: return
         val depthView = target.depthTextureView ?: return
@@ -187,25 +203,27 @@ object PosePov : Module(
         cull.setPerspective(Math.toRadians(fov.toDouble()).toFloat(), w.toFloat() / h, NEAR, FAR).mul(view)
         frustum.set(cull)
 
-        val draws = ArrayList<BlockMesh.Section>()
+        // Every piece in range and in view, grouped by where it is drawn (a room's pieces are in its own box frame).
+        val draws = HashMap<Long, MutableList<BlockMesh.Mesh>>()
         var maxIndices = 0
-        val cx = SectionPos.blockToSectionCoord(Mth.floor(eye.x)); val cy = SectionPos.blockToSectionCoord(Mth.floor(eye.y)); val cz = SectionPos.blockToSectionCoord(Mth.floor(eye.z))
-        for (dx in -RADIUS_XZ..RADIUS_XZ) for (dy in -RADIUS_Y..RADIUS_Y) for (dz in -RADIUS_XZ..RADIUS_XZ) {
-            val sx = cx + dx; val sy = cy + dy; val sz = cz + dz
-            val s = BlockMesh.get(SectionPos.asLong(sx, sy, sz)) ?: continue
-            if (s.buffer == null || s.indexCount == 0) continue
-            if (!frustum.testAab(sx * 16f, sy * 16f, sz * 16f, sx * 16f + 16f, sy * 16f + 16f, sz * 16f + 16f)) continue
-            draws += s
-            if (s.indexCount > maxIndices) maxIndices = s.indexCount
+        val far2 = (FAR + 28.0) * (FAR + 28.0)
+        BlockMesh.forEachDrawable { m, x, y, z, ox, oz ->
+            val dx = x + 8 - eye.x; val dy = y + 8 - eye.y; val dz = z + 8 - eye.z
+            if (dx * dx + dy * dy + dz * dz > far2) return@forEachDrawable
+            if (!frustum.testAab(x.toFloat(), y.toFloat(), z.toFloat(), x + 16f, y + 16f, z + 16f)) return@forEachDrawable
+            draws.getOrPut((ox.toLong() shl 32) or (oz.toLong() and 0xFFFFFFFFL)) { ArrayList() } += m
+            if (m.indexCount > maxIndices) maxIndices = m.indexCount
         }
 
         projection.setupPerspective(NEAR, FAR, fov, w.toFloat(), h.toFloat())
         RenderSystem.backupProjectionMatrix()
         try {
             RenderSystem.setProjectionMatrix(projectionBuffer.getBuffer(projection), ProjectionType.PERSPECTIVE)
-            // A copy: the uniform storage keeps the matrix by reference and skips a write equal to the last one, so
+            // Fresh matrices: the uniform storage keeps the matrix by reference and skips a write equal to the last one, so
             // handing it the reused [view] made every feed match the previous write and draw with a stale slice.
-            val transforms = RenderSystem.getDynamicUniforms().writeTransform(Matrix4f(view))
+            val transforms = draws.keys.associateWith { k ->
+                RenderSystem.getDynamicUniforms().writeTransform(Matrix4f(view).translate((k shr 32).toInt().toFloat(), 0f, k.toInt().toFloat()))
+            }
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = if (maxIndices > 0) quadIndices.getBuffer(maxIndices) else null
             RenderSystem.getDevice().createCommandEncoder().createRenderPass(
@@ -217,11 +235,13 @@ object PosePov : Module(
                 if (indices == null) return@use
                 RenderSystem.bindDefaultUniforms(pass)
                 pass.setPipeline(RenderSystem.getCompiledPipeline(PIPELINE))
-                pass.setUniform("DynamicTransforms", transforms)
                 pass.setIndexBuffer(indices, quadIndices.type())
-                for (s in draws) {
-                    pass.setVertexBuffer(0, s.buffer!!.slice())
-                    pass.drawIndexed(s.indexCount, 1, 0, 0, 0)
+                for ((k, meshes) in draws) {
+                    pass.setUniform("DynamicTransforms", transforms.getValue(k))
+                    for (m in meshes) {
+                        pass.setVertexBuffer(0, m.buffer.slice())
+                        pass.drawIndexed(m.indexCount, 1, 0, 0, 0)
+                    }
                 }
             }
         } finally {
