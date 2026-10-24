@@ -33,6 +33,7 @@ object EcLog {
     private const val KEEP = 15
     private val stamp = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
     private var out: PrintWriter? = null
+    private var flushedAt = 0L
 
     var path: Path? = null
         private set
@@ -45,7 +46,7 @@ object EcLog {
             val dir = gameDir.resolve("logs").resolve("engineerclient")
             Files.createDirectories(dir)
             val file = dir.resolve("ec-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".log")
-            out = PrintWriter(Files.newBufferedWriter(file), true)
+            out = PrintWriter(Files.newBufferedWriter(file), false)
             path = file
             header.forEach { log("SESSION", it) }
             prune(dir)
@@ -58,6 +59,10 @@ object EcLog {
     fun log(tag: String, message: String) {
         synchronized(this) {
             out?.println(LocalTime.now().format(stamp) + "\t" + tag + "\t" + message.replace('\n', ' '))
+            // Written through at most once a second (a flush a line cost the game thread a disk write per chat line), and at once
+            // for anything that went wrong.
+            val now = System.currentTimeMillis()
+            if (now - flushedAt > 1000 || tag == "WARN" || tag == "ERROR" || tag == "MARK") { out?.flush(); flushedAt = now }
         }
     }
 

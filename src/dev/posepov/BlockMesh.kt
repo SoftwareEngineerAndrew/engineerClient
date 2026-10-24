@@ -50,8 +50,8 @@ object BlockMesh {
     private val DY = intArrayOf(-1, 1, 0, 0, 0, 0)
     private val DZ = intArrayOf(0, 0, -1, 1, 0, 0)
 
-    private fun roomKey(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int) = "${r.key}/$lx/$ly/$lz"
-    private fun designKey(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int) = "${r.designKey}/$lx/$ly/$lz"
+    private fun roomKey(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int) = r.pieceKeys(lx, ly, lz)[0]
+    private fun designKey(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int) = r.pieceKeys(lx, ly, lz)[1]
     private fun inArena(sx: Int, sz: Int) = sx in KnownWorld.ARENA_SX && sz in KnownWorld.ARENA_SZ && KnownWorld.bossFloor()
 
     // --- what changed ---------------------------------------------------------------------------------------------------

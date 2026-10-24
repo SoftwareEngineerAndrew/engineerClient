@@ -266,7 +266,8 @@ object P3Rotation : Module(
     private var clientTicks = 0L
 
     /** Odin's event message: the component text with legacy section codes removed. */
-    private fun odinPlain(text: String): String = text.replace(Regex("§."), "")
+    private val CODES = Regex("§.")
+    private fun odinPlain(text: String): String = text.replace(CODES, "")
 
     private fun redeliverable(text: String): Boolean =
         P3ChatParser.completion(text) != null || P3ChatParser.isGateDestroyed(text) ||

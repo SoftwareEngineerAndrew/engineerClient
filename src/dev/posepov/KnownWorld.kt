@@ -53,6 +53,10 @@ object KnownWorld {
         val p = inst.placement
         val v = inst.volume
         val designKey = "${inst.design.id}|${(key.substringAfterLast('|'))}|${p.rot}"
+        private val keyCache = java.util.concurrent.ConcurrentHashMap<Int, Array<String>>()
+        /** This room's own and its design's key for the piece at section (lx, ly, lz) of it, made once. */
+        fun pieceKeys(lx: Int, ly: Int, lz: Int): Array<String> =
+            keyCache.getOrPut((lx shl 16) or ((ly and 0xFF) shl 8) or lz) { arrayOf("$key/$lx/$ly/$lz", "$designKey/$lx/$ly/$lz") }
         val states: Array<BlockState> = Array(v.palette.size) { i ->
             val s = v.palette[i]
             if (i == 0 || s == "minecraft:air") AIR else BlockStates.rotated(s, p.quarterTurns)
@@ -77,7 +81,9 @@ object KnownWorld {
     private val changedSections = ConcurrentHashMap.newKeySet<Long>()
     /** The placed room on each of the 6x6 tiles. */
     private val tiles = arrayOfNulls<Room>(36)
-    val rooms: List<Room> get() = tiles.filterNotNull().distinct()
+    // Worked out again only when a room is placed (it was asked for several times a frame).
+    @Volatile private var roomList: List<Room>? = null
+    val rooms: List<Room> get() = roomList ?: tiles.filterNotNull().distinct().also { roomList = it }
     private var doorsKey = ""
     @Volatile private var pack: RoomPack? = null
     @Volatile private var arenaReady = false
@@ -95,7 +101,7 @@ object KnownWorld {
 
     fun reset() {
         changed.clear(); changedSections.clear(); touchedCells.clear()
-        tiles.fill(null); edits = emptyMap(); editSections = emptySet(); doorsKey = ""
+        tiles.fill(null); roomList = null; edits = emptyMap(); editSections = emptySet(); doorsKey = ""
     }
 
     /** Starts reading the room pack and the arena off-thread the first time they're wanted; [onReady] runs on arrival. */
@@ -140,6 +146,7 @@ object KnownWorld {
                 Room(key, RoomInstance(design, pack.volumeFor(design, variant) ?: continue, p))
             } catch (e: Exception) { continue }
             for (t in ts) tiles[t.z * 6 + t.x] = r
+            roomList = null
             placed(r)
             // Changes from before it was placed now land on its pieces.
             for (k in changed.keys) if (r.covers(BlockPos.getX(k), BlockPos.getZ(k))) touchedCells.add(k)

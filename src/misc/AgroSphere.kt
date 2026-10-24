@@ -141,22 +141,23 @@ object AgroSphere : Module(
         pose.translate(center.x - cam.x, center.y - cam.y, center.z - cam.z)
         val argb = color.rgba
         val r = radius.toFloat()
-        fun point(lat: Int, lon: Int): FloatArray {
-            val theta = Math.PI * lat / LAT_BANDS          // 0 at the top, PI at the bottom
-            val phi = 2 * Math.PI * lon / LON_BANDS
-            return floatArrayOf(
-                (r * Math.sin(theta) * Math.cos(phi)).toFloat(),
-                (r * Math.cos(theta)).toFloat(),
-                (r * Math.sin(theta) * Math.sin(phi)).toFloat(),
-            )
-        }
+        val u = unitSphere
         collector.submitCustomGeometry(pose, RenderTypes.debugQuads()) { last, buffer ->
+            fun v(lat: Int, lon: Int) { val i = (lat * (LON_BANDS + 1) + lon) * 3; buffer.addVertex(last, u[i] * r, u[i + 1] * r, u[i + 2] * r).setColor(argb) }
             for (lat in 0 until LAT_BANDS) for (lon in 0 until LON_BANDS) {
-                for (v in arrayOf(point(lat, lon), point(lat + 1, lon), point(lat + 1, lon + 1), point(lat, lon + 1))) {
-                    buffer.addVertex(last, v[0], v[1], v[2]).setColor(argb)
-                }
+                v(lat, lon); v(lat + 1, lon); v(lat + 1, lon + 1); v(lat, lon + 1)
             }
         }
         pose.popPose()
+    }
+
+    /** The sphere's points at radius 1, worked out once (theta 0 at the top, PI at the bottom). */
+    private val unitSphere = FloatArray((LAT_BANDS + 1) * (LON_BANDS + 1) * 3).also { a ->
+        for (lat in 0..LAT_BANDS) for (lon in 0..LON_BANDS) {
+            val theta = Math.PI * lat / LAT_BANDS
+            val phi = 2 * Math.PI * lon / LON_BANDS
+            val i = (lat * (LON_BANDS + 1) + lon) * 3
+            a[i] = (Math.sin(theta) * Math.cos(phi)).toFloat(); a[i + 1] = Math.cos(theta).toFloat(); a[i + 2] = (Math.sin(theta) * Math.sin(phi)).toFloat()
+        }
     }
 }
