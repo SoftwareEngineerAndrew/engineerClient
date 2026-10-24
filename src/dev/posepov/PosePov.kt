@@ -81,6 +81,8 @@ object PosePov : Module(
     private const val PRERENDER_BUDGET_NS = 3_000_000L
     private const val RADIUS_XZ = 5
     private const val RADIUS_Y = 3
+    private const val FLOOR_LOW = 55
+    private const val FLOOR_HIGH = 140
     private const val SKY = 0xFF78A7FF.toInt()
 
     private val PIPELINE: RenderPipeline = RenderPipelines.register(
@@ -162,17 +164,29 @@ object PosePov : Module(
         val pose = Matrix3x2f(gfx.pose())
         val sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR)
 
-        val players = ArrayList<Player?>(FEEDS)
+        // Each slot's eye: the teammate's own when they're loaded, otherwise an estimate from their map icon.
+        val now = System.nanoTime()
+        val eyes = arrayOfNulls<Eye>(FEEDS)
+        val players = arrayOfNulls<Player>(FEEDS)
         for (i in 0 until FEEDS) {
-            val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" }
-            players += slot?.let { s -> (s.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == s.name }) }
+            val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
+            val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
+            if (p != null) {
+                // Head yaw through the shortest turn: a plain lerp across the ±180 wrap swings the view through every angle
+                // between the two, a different one each frame.
+                val e = Eye(p.getEyePosition(pt), Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot), p.getViewXRot(pt), false)
+                players[i] = p; eyes[i] = e
+                ghosts[slot.name] = Ghost(e.pos.x, e.pos.y, e.pos.z, e.yaw, e.pitch, now)
+            } else if (!slot.isDead && slot.mapPos.data != 0L) {
+                eyes[i] = ghostEye(level, slot, now)
+            }
         }
 
         // The sections around every eye, nearest first, built (within budget) before anything is drawn.
         val wanted = LinkedHashSet<Long>()
-        players.filterNotNull().sortedBy { it.distanceToSqr(mc.player ?: it) }.forEach { p ->
-            val e = p.getEyePosition(pt)
-            val cx = SectionPos.blockToSectionCoord(Mth.floor(e.x)); val cy = SectionPos.blockToSectionCoord(Mth.floor(e.y)); val cz = SectionPos.blockToSectionCoord(Mth.floor(e.z))
+        val me = mc.player?.position()
+        eyes.filterNotNull().sortedBy { if (me == null) 0.0 else it.pos.distanceToSqr(me) }.forEach { e ->
+            val cx = SectionPos.blockToSectionCoord(Mth.floor(e.pos.x)); val cy = SectionPos.blockToSectionCoord(Mth.floor(e.pos.y)); val cz = SectionPos.blockToSectionCoord(Mth.floor(e.pos.z))
             val around = ArrayList<Long>()
             for (dx in -RADIUS_XZ..RADIUS_XZ) for (dy in -RADIUS_Y..RADIUS_Y) for (dz in -RADIUS_XZ..RADIUS_XZ) around += SectionPos.asLong(cx + dx, cy + dy, cz + dz)
             around.sortBy { k -> val a = SectionPos.x(k) - cx; val b = SectionPos.y(k) - cy; val c = SectionPos.z(k) - cz; a * a + b * b + c * c }
@@ -184,23 +198,27 @@ object PosePov : Module(
             val col = i % 2; val row = i / 2
             val x0 = if (col == 0) 0 else gw / 2; val x1 = if (col == 0) gw / 2 else gw
             val y0 = if (row == 0) 0 else gh / 2; val y1 = if (row == 0) gh / 2 else gh
-            val p = players[i]
-            if (p == null) {
+            val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" }
+            val e = eyes[i]
+            if (e == null) {
                 gfx.fill(x0, y0, x1, y1, 0xFF101010.toInt())
-                DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" }?.let { distanceLabel(gfx, it, x0, y0, x1, y1) }
+                if (slot != null) {
+                    val cx = (x0 + x1) / 2; val cy = (y0 + y1) / 2
+                    gfx.text(slot.name, cx - mc.font.width(slot.name) / 2, cy - 10, Color(170, 170, 170), shadow = true)
+                    val label = if (slot.isDead) "dead" else "not on the map yet"
+                    gfx.text(label, cx - mc.font.width(label) / 2, cy + 2, Color(120, 120, 120), shadow = true)
+                }
                 continue
             }
             val target = feeds[i]?.takeIf { it.width == w && it.height == h } ?: run {
                 feeds[i]?.destroyBuffers()
                 TextureTarget("dc:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
             }
-            // Head yaw through the shortest turn: a plain lerp across the ±180 wrap swings the view through every angle
-            // between the two, a different one each frame.
-            val eye = p.getEyePosition(pt); val yaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot); val pitch = p.getViewXRot(pt)
-            val right = p.mainArm == HumanoidArm.RIGHT
+            val p = players[i]
             val item = handItems[i].also { it.clear() }
-            if (!p.mainHandItem.isEmpty) mc.itemModelResolver.updateForLiving(item, p.mainHandItem, if (right) ItemDisplayContext.FIRST_PERSON_RIGHT_HAND else ItemDisplayContext.FIRST_PERSON_LEFT_HAND, p)
-            queued += Job(target, eye, yaw, pitch, w, h, item, if (right) 1f else -1f, p.getSwingAnimation(pt))
+            val right = p?.mainArm != HumanoidArm.LEFT
+            if (p != null && !p.mainHandItem.isEmpty) mc.itemModelResolver.updateForLiving(item, p.mainHandItem, if (right) ItemDisplayContext.FIRST_PERSON_RIGHT_HAND else ItemDisplayContext.FIRST_PERSON_LEFT_HAND, p)
+            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, p?.getSwingAnimation(pt) ?: 0f)
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -214,33 +232,80 @@ object PosePov : Module(
                     null,
                 )
             )
+            if (e.estimated && slot != null) distanceLabel(gfx, slot.name, e.pos, x0, y0, x1, y1)
         }
     }
 
+    private class Eye(val pos: Vec3, val yaw: Float, val pitch: Float, val estimated: Boolean)
+
+    /** Where a teammate was last drawn from, eased towards their map icon while they're out of range. */
+    private class Ghost(var x: Double, var y: Double, var z: Double, var yaw: Float, var pitch: Float, var at: Long)
+    private val ghosts = HashMap<String, Ghost>()
+
     /**
-     * A teammate too far away to be loaded: roughly how far, from their icon on the dungeon map (where Odin's map draws it),
-     * coloured by how far that is.
+     * An out-of-range teammate's eye from their map icon: the icon only moves in steps of about a block and turns in
+     * 22.5° steps, so position and yaw ease towards it; the height is the floor under them in the known blocks
+     * (the level nearest where they were last seen), and the pitch settles to level.
      */
-    private fun distanceLabel(gfx: GuiGraphicsExtractor, slot: DungeonPlayer, x0: Int, y0: Int, x1: Int, y1: Int) {
-        val me = mc.player ?: return
-        val cx = (x0 + x1) / 2; val cy = (y0 + y1) / 2
-        gfx.text(slot.name, cx - mc.font.width(slot.name) / 2, cy - 10, Color(170, 170, 170), shadow = true)
-        val (label, color) = when {
-            slot.isDead -> "dead" to Color(120, 120, 120)
-            slot.mapPos.data == 0L -> "out of range" to Color(120, 120, 120)
-            else -> {
-                val x = ((slot.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
-                val z = ((slot.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
-                val d = Math.hypot(x - me.x, z - me.z).toInt()
-                "~$d blocks" to when {
-                    d < 48 -> Color(90, 235, 120)
-                    d < 80 -> Color(240, 220, 70)
-                    d < 112 -> Color(255, 150, 50)
-                    else -> Color(255, 70, 70)
+    private fun ghostEye(level: net.minecraft.client.multiplayer.ClientLevel, slot: DungeonPlayer, now: Long): Eye {
+        val tx = ((slot.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
+        val tz = ((slot.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
+        val g = ghosts[slot.name]
+        val ghost = if (g == null || Math.hypot(tx - g.x, tz - g.z) > 24.0) {
+            // First sight, or a leap / teleport: no gliding across the map.
+            Ghost(tx, g?.y ?: Double.NaN, tz, slot.yaw, 0f, now).also { ghosts[slot.name] = it }
+        } else g
+        val dt = ((now - ghost.at) / 1e9).coerceIn(0.0, 0.25); ghost.at = now
+        val k = 1 - Math.exp(-dt * 6)
+        ghost.x += (tx - ghost.x) * k; ghost.z += (tz - ghost.z) * k
+        ghost.yaw += Mth.wrapDegrees(slot.yaw - ghost.yaw) * k.toFloat()
+        ghost.pitch += (0f - ghost.pitch) * (1 - Math.exp(-dt * 2)).toFloat()
+        val feet = floorAt(level, ghost.x, ghost.z, ghost.y)
+        ghost.y = if (ghost.y.isNaN() || Math.abs(feet + 1.62 - ghost.y) > 6) feet + 1.62 else ghost.y + (feet + 1.62 - ghost.y) * (1 - Math.exp(-dt * 10))
+        return Eye(Vec3(ghost.x, ghost.y, ghost.z), ghost.yaw, ghost.pitch, true)
+    }
+
+    /**
+     * The floor to stand on near (x, z): the nearest column within two blocks with room for a player, at the standing
+     * height closest to [eyeY] (the lowest when unknown). Falls back to the usual dungeon floor.
+     */
+    private fun floorAt(level: net.minecraft.client.multiplayer.ClientLevel, x: Double, z: Double, eyeY: Double): Double {
+        val pos = net.minecraft.core.BlockPos.MutableBlockPos()
+        val bx = Mth.floor(x); val bz = Mth.floor(z)
+        for (r in 0..2) {
+            var best = Double.NaN
+            for (dx in -r..r) for (dz in -r..r) {
+                if (maxOf(Math.abs(dx), Math.abs(dz)) != r) continue
+                var below = KnownWorld.stateAt(level, pos, bx + dx, FLOOR_LOW - 1, bz + dz).isSolid
+                var at = KnownWorld.stateAt(level, pos, bx + dx, FLOOR_LOW, bz + dz).isSolid
+                for (y in FLOOR_LOW..FLOOR_HIGH) {
+                    val above = KnownWorld.stateAt(level, pos, bx + dx, y + 1, bz + dz).isSolid
+                    if (below && !at && !above) {
+                        if (eyeY.isNaN()) { if (best.isNaN()) best = y.toDouble() }
+                        else if (best.isNaN() || Math.abs(y + 1.62 - eyeY) < Math.abs(best + 1.62 - eyeY)) best = y.toDouble()
+                    }
+                    below = at; at = above
                 }
             }
+            if (!best.isNaN()) return best
         }
-        gfx.text(label, cx - mc.font.width(label) / 2, cy + 2, color, shadow = true)
+        return if (eyeY.isNaN()) 69.0 else eyeY - 1.62
+    }
+
+    /** The estimate's distance from you, coloured by how far, under their name. */
+    private fun distanceLabel(gfx: GuiGraphicsExtractor, name: String, at: Vec3, x0: Int, y0: Int, x1: Int, y1: Int) {
+        val me = mc.player ?: return
+        val d = Math.hypot(at.x - me.x, at.z - me.z).toInt()
+        val color = when {
+            d < 48 -> Color(90, 235, 120)
+            d < 80 -> Color(240, 220, 70)
+            d < 112 -> Color(255, 150, 50)
+            else -> Color(255, 70, 70)
+        }
+        val label = "~$d blocks · from map"
+        val cx = (x0 + x1) / 2
+        gfx.fill(cx - mc.font.width(label) / 2 - 3, y1 - 14, cx + mc.font.width(label) / 2 + 3, y1 - 2, 0x90000000.toInt())
+        gfx.text(label, cx - mc.font.width(label) / 2, y1 - 12, color, shadow = true)
     }
 
     /** Places what Odin has newly identified, then builds geometry for [budgetNs]: [near] first, then the whole dungeon if prerendering. */
