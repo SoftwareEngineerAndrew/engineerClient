@@ -306,6 +306,8 @@ function stats(M, ent) {
   let q = 0; for (let z = 0; z < 5; z++) for (let x = 0; x < 5; x++) { const t = z * W + x; if (one(t) && one(t + 1) && one(t + W) && one(t + W + 1)) q++; }
   add('2x2 blocks of 1x1s', q);
   if (M.depth) {
+    // the walk to the tile each big room is entered by, and what share of the tiles at that walk are big
+    for (let r = 1; r < M.R; r++) { if (M.shape[r] === 'OneByOne') continue; let d = 99; for (let t = 0; t < N; t++) if (M.owner[t] === r) d = Math.min(d, M.depth[t]); add(`big room entered at walk ${Math.min(d, 9)}`); }
     let mx = 0, sumD = 0, nD = 0, str = 0, far = 0;
     for (let t = 0; t < N; t++) mx = Math.max(mx, M.depth[t]);
     for (let r = 1; r < M.R; r++) if (M.shape[r] === 'OneByOne' && M.deg[r] === 1) { let t = 0; while (M.owner[t] !== r) t++; const d = M.depth[t]; sumD += d; nD++; if (d >= 11) far++; if (d > 0) str += md(ent, t) / d; add(`dead end walk ${Math.min(d, 14)}`); }
