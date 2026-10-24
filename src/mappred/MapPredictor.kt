@@ -35,7 +35,7 @@ object Edge {
 
 /**
  * The discovered part of a [w] x [h] dungeon map: the rooms the map shows (tile = z * w + x), the
- * edges between tiles, and the tab list's puzzle count. Only what the map shows goes in. [rules] are the
+ * edges between tiles, and the tab list's puzzles. Only what the map shows goes in. [rules] are the
  * floor's; tiles outside its grid are no part of the dungeon.
  */
 class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = FloorRules.F7) {
@@ -47,6 +47,8 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
     val names = ArrayList<String?>()
     /** The dungeon's secret totals the tab list allows ([SecretNames.totals]); empty when unknown. */
     var secretTotals = IntArray(0)
+    /** The tab list's puzzle lines in its order: each puzzle's name, null while it's "???" (nobody has been in it); empty when unread. */
+    var puzzleSlots: List<String?> = emptyList()
     private val edges = ByteArray(w * h * 2)
 
     /** Adds a discovered room; null when its tiles aren't one of the room shapes. */
@@ -87,6 +89,7 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
         append(w).append('x').append(h).append(':').append(rules.floor).append(':').append(puzzles).append(':')
         for (i in kinds.indices) append(kinds[i].ordinal).append(roomTiles[i].joinToString(",")).append(names[i] ?: "").append(';')
         append(secretTotals.joinToString(",")).append(':')
+        append(puzzleSlots.joinToString(",") { it ?: "?" }).append(':')
         append(edges.joinToString(""))
     }
 
@@ -168,6 +171,12 @@ class MapPredictor(private val view: MapView) {
     /** The puzzle column can top the dead ends up: the tab list's puzzles, trap and yellow don't go past its target. */
     private val topUp: Boolean
     private val combos: List<IntArray>
+    /**
+     * The tab's named puzzles found on the map ([FloorRules.puzzleOrder]): each one's place in the tab's order
+     * ([orderKey]), sorted, and how many of the puzzles still to come sit before it. Empty when none is pinned.
+     */
+    private val pinKeys: IntArray
+    private val pinBefore: IntArray
     private val frame = IntArray(n) { it }
 
     private val counts: Array<DoubleArray>
@@ -228,6 +237,8 @@ class MapPredictor(private val view: MapView) {
         needDead = remP + (if (!rules.trap || found[Cls.TRAP] > 0) 0 else 1) + (if (found[Cls.YELLOW] > 0) 0 else 1) + (if (found[Cls.BLOOD] > 0) 0 else 1)
         topUp = rules.puzzleColumn && view.puzzles + (if (rules.trap) 1 else 0) + 1 <= rules.deadEndTarget
         combos = rules.combos.filter { c -> (0 until 5).all { c[it] >= knownBig[it] } }
+        val pins = pinPuzzles()
+        pinKeys = IntArray(pins.size) { pins[it][0] }; pinBefore = IntArray(pins.size) { pins[it][1] }
         setUpSecrets()
         if (rules.bigTile != null && w == 6 && h == 6 && entTile >= 0) {
             val ex = entTile % w; val ez = entTile / w
@@ -259,6 +270,32 @@ class MapPredictor(private val view: MapView) {
         if (targets.isEmpty()) return
         secrets = SecretNames(used, targets, rules.missingNames); secretsOn = true
     }
+
+    /**
+     * The tab lists the puzzles by their place on the map, column by column (x, then z): a named one's line
+     * says how many puzzles come before it. Each named puzzle the map shows, as (its [orderKey], how many
+     * puzzles still to come are before it); none when the tab doesn't fit the map (a read mid-update).
+     */
+    private fun pinPuzzles(): List<IntArray> {
+        val slots = view.puzzleSlots
+        if (!rules.puzzleOrder || slots.size != view.puzzles) return emptyList()
+        val puzzles = view.kinds.indices.filter { view.kinds[it] == Kind.PUZZLE }
+        val keys = puzzles.map { orderKey(view.roomTiles[it][0]) }
+        val pins = ArrayList<IntArray>()
+        slots.forEachIndexed { rank, name ->
+            if (name == null) return@forEachIndexed
+            val i = puzzles.indexOfFirst { isTabPuzzle(view.names[it], name) }
+            if (i < 0) return@forEachIndexed
+            pins += intArrayOf(keys[i], rank - keys.count { it < keys[i] })
+        }
+        pins.sortBy { it[0] }
+        // further along the order, never fewer before it, and never more than are still to come
+        for (j in pins.indices) if (pins[j][1] !in 0..remP || j > 0 && pins[j][1] < pins[j - 1][1]) return emptyList()
+        return pins
+    }
+
+    /** A tile's place in the tab's puzzle order: column by column, west to east, each north to south. */
+    private fun orderKey(t: Int): Int = (t % w) * h + t / w
 
     private fun fixedName(k: Kind): String? = when (k) { Kind.ENTRANCE -> "Entrance"; Kind.BLOOD -> "Blood"; Kind.FAIRY -> "Fairy"; else -> null }
 
@@ -540,10 +577,28 @@ class MapPredictor(private val view: MapView) {
         // 6. trap, yellow, puzzles, rares on the other dead ends, at random; the puzzle column's last
         val rest = dead.filter { type[it] < 0 && it < firstColumn }.toMutableList(); rest.shuffle(rnd)
         columnRooms.shuffle(rnd); rest += columnRooms
+        // the tab's named puzzles: between two of them go exactly as many puzzles as the tab lists between
+        // them, at random within that stretch of the order; the sample weighs the share of puzzle placements
+        // that fit (what drawing them at random over every dead end and dropping the rest would keep)
+        var placed = false
+        if (pinKeys.isNotEmpty() && level < 2 && columnRooms.isEmpty() && rest.size >= remP) {
+            val stretch = Array(pinKeys.size + 1) { ArrayList<Int>() }
+            for (o in rest) { val k = orderKey(rooms[o][0]); var g = 0; while (g < pinKeys.size && pinKeys[g] < k) g++; stretch[g] += o }
+            var before = 0; var ways = 1.0
+            for (g in stretch.indices) {
+                val c = (if (g < pinKeys.size) pinBefore[g] else remP) - before
+                if (c > stretch[g].size) return false
+                ways *= choose(stretch[g].size, c)
+                for (o in stretch[g].take(c)) { type[o] = Cls.PUZZLE; rest.remove(o) }
+                before += c
+            }
+            wgt *= ways / choose(rest.size + remP, remP)
+            placed = true
+        }
         var ri = 0
         if (rules.trap && found[Cls.TRAP] == 0 && ri < rest.size) type[rest[ri++]] = Cls.TRAP
         if (found[Cls.YELLOW] == 0 && ri < rest.size) type[rest[ri++]] = Cls.YELLOW
-        repeat(remP) { if (ri < rest.size) type[rest[ri++]] = Cls.PUZZLE }
+        if (!placed) repeat(remP) { if (ri < rest.size) type[rest[ri++]] = Cls.PUZZLE }
         while (ri < rest.size) type[rest[ri++]] = Cls.RARE
 
         // 7. the secret total: the unnamed rooms' names have to add up to what the named ones leave
@@ -613,6 +668,15 @@ class MapPredictor(private val view: MapView) {
     }
 
     companion object {
+        /** A puzzle room's name (Odin's map) is the tab's puzzle [tab]: the same, but both blaze rooms are "Higher Or Lower". */
+        fun isTabPuzzle(room: String?, tab: String): Boolean = room != null && (room == tab || tab == "Higher Or Lower" && room.endsWith(" Blaze"))
+
+        private fun choose(m: Int, k: Int): Double {
+            if (k < 0 || k > m) return 0.0
+            var c = 1.0; for (i in 0 until k) c = c * (m - i) / (i + 1)
+            return c
+        }
+
         /** Chance the newest room grows on rather than a random door from the tree (the real trees are a bit deeper than Prim's). */
         private const val GROW = 0.3
         /** Tries at one level, with nothing kept, before the next looser one. */

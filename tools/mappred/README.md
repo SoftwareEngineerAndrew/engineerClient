@@ -27,6 +27,10 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
 - Walked tile by tile, that path is 9 or 10 steps (96.6%; the parity of the entrance-blood distance decides
   which; 7/8 where a big room is crossed corner to corner), and the fairy is exactly 4 steps before blood.
 - Trap, yellow and the puzzles are spread uniformly at random over the remaining 1x1 dead ends.
+- The tab list's puzzle lines are in the puzzles' order on the map, column by column (x west to east, each
+  column north to south). A puzzle's name replaces "???" once someone has been in it, so its line says how
+  many puzzles come before it: the predictor keeps only puzzle placements that fit (F7 so far; ADR records
+  no tab list, so this one isn't checked on its maps).
 - No two maps were the same: it is generated fresh each run, so predictions are chances, not lookups.
 - A room name comes up at most once a map, always with the same secrets, and within its pool (shape or type) about
   equally often (yellow Default and New Trap twice the others): with the tab list's secret total that names the last
