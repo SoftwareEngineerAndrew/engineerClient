@@ -137,10 +137,13 @@ function generate(variant, ent, shapes) {
     let ok = true, fixed = null;
     if (kind === 'u') {
       // the unified generator: u:mode=grow|post/q=/p=/f=0|1/c=/k=/m=/r= (see the header)
-      const P = Object.fromEntries(rule.split('/').map(kv => kv.split('=')).map(([k, v]) => [k, k === 'mode' ? v : +v]));
+      const P = Object.fromEntries(rule.split('/').map(kv => kv.split('=')).filter(([k]) => k !== 'w').map(([k, v]) => [k, k === 'mode' ? v : +v]));
       // b=<tiles>: the shapes not given but picked as the rooms start, at most two of one, each keeping the budget
       // (7 rooms making exactly b tiles) reachable; al: the start chance c * rooms left^al / free cells
       const budget = P.b || 0, al = P.al ?? 1;
+      // w (comma list, in SHAPES order) and s: a shape's weight in the budget's picks, s times that for a second copy
+      const SW = rule.match(/(?:^|\/)w=([\d.,]+)/)?.[1].split(',').map(Number) || [1, 1, 1, 1, 1], S2 = P.s ?? 1;
+      const pickW = list => { const ws = list.map(nm => { const i = SHAPES.indexOf(nm); return SW[i] * (cnt[i] ? S2 : 1); }); let r = rnd() * ws.reduce((a, b) => a + b, 0), j = 0; while (r > ws[j] && j < ws.length - 1) r -= ws[j++]; return j; };
       const cnt = [0, 0, 0, 0, 0]; let tilesSoFar = 0;
       const feas = (roomsLeft, need) => { if (roomsLeft === 0) return need === 0; for (let i = 0; i < 5; i++) if (cnt[i] < 2 && SIZE[i] <= need) { cnt[i]++; const f = feas(roomsLeft - 1, need - SIZE[i]); cnt[i]--; if (f) return true; } return false; };
       const K = P.k || 0, held = new Set();
@@ -158,10 +161,10 @@ function generate(variant, ent, shapes) {
           // any fitting placement over the cell, a shape among those that have one
           const opts = left.map(s2 => placements(s2, Array.from({ length: N }, (_, t) => freeOk(t, v))).filter(ts => ts.includes(v) && joined(ts)));
           const can = left.map((_, i) => i).filter(i => opts[i].length); if (!can.length) return;
-          const i = can[ri(can.length)]; place(i, opts[i][ri(opts[i].length)]); return;
+          const i = can[pickW(can.map(j => left[j]))]; place(i, opts[i][ri(opts[i].length)]); return;
         }
         for (let tr = 0; tr < K; tr++) {
-          const sk = ri(left.length); const all = placements(left[sk], Array(N).fill(true)).filter(ts => ts.includes(v)); if (!all.length) continue;
+          const sk = pickW(left); const all = placements(left[sk], Array(N).fill(true)).filter(ts => ts.includes(v)); if (!all.length) continue;
           const ts = all[ri(all.length)]; if (ts.every(t => freeOk(t, v)) && joined(ts)) { place(sk, ts); return; }
         }
       };
@@ -488,4 +491,4 @@ for (const k of keys) {
 }
 if (process.env.DUMP) (await import('node:fs')).writeFileSync(process.env.DUMP, JSON.stringify(dumped));
 console.log('\nmismatch score (lower = closer to the real maps):');
-for (const m of ms.slice(1)) console.log('  ' + m.padEnd(22) + score[m].toFixed(0));
+for (const m of ms.slice(1)) console.log('  ' + m.padEnd(22) + ' ' + score[m].toFixed(0));
