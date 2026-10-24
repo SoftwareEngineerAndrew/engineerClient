@@ -39,6 +39,11 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
   too, -1.0491 with AW, -1.0499 with both; the L fix alone again on another seed -1.0499. The seed moves it
   by about 0.002, as much as any of them. The L fix stays (it only drops placements no map has); bunch and AW
   stay off until something shows they help.
+- What does: 5 cells held back while the big rooms are placed (sampler2 `opts.reserve`, `FloorRules.reserve`,
+  on for F7): -1.0427 and -1.0436 on two seeds against -1.0476 and -1.0499 (big-room tiles -0.5923/-0.5924 against
+  -0.5963/-0.5967); 3 held -1.0468, 7 held -1.0530. Growing the predictor's tree oldest-first, as the game's is,
+  does worse (-1.086 at 0.3, -1.130 at 0.5; Prim alone -1.057): it grows only the unknown part, from the doors
+  the map shows, so oldest-first there spreads evenly from every door, not out from the entrance.
 - Every special room (entrance, blood, trap, yellow, puzzles, rares) is a 1x1 dead end, and a normal 1x1 is
   never a dead end: the 1x1 dead ends besides entrance and blood are exactly puzzles + trap + yellow + rares.
   Rares only on 5-puzzle maps (the dead ends past the 5th puzzle).
