@@ -53,13 +53,17 @@ import org.joml.Vector4f
  *                            re-submit the "keep on top" HUDs above them
  *        CustomGUIImpl -> Odin's leap boxes, EC's ring   (submitted after us -> on top)
  * GameRenderer.render
- *   -> renderLevel  HEAD   [beforeLevelRender]   Skip Own View: run the passes, cancel the main one
- *                   RETURN [afterLevelRender]    otherwise: run the passes after the main one
- *   -> guiRenderer.render                        the blits above are drawn HERE, in submit order
+ *   -> renderLevel                  [replaceMainPass]   Skip Own View: run the passes instead of the main one
+ *   -> blitEntityOutline, post effects
+ *   -> before fogRenderer.endFrame  [afterMainPass]     otherwise: run the passes after the main frame
+ *   -> guiRenderer.render                               the blits above are drawn HERE, in submit order
  * ```
  * The blit is *submitted* before the feeds are rendered and *drawn* after, so it always shows the
  * current frame — but it also means the feed targets must not be recreated between the two. They
  * are only ever allocated or freed in [onScreenExtract].
+ *
+ * Every pass is a `renderLevel` called from `GameRenderer.render`, beside the main one, never from
+ * inside it; and a pass leaves out what Vulkan can't run more than a few times a frame ([renderFeed]).
  *
  * ## Layering, and why it is submit order rather than z
  * `GuiRenderState.findAppropriateNode` pushes any element that overlaps an earlier one into a
@@ -109,9 +113,12 @@ object PovCapture {
     private var feedWidth = 0
     private var feedHeight = 0
 
-    /** The nested `renderLevel` fires our own injectors again; the terrain guard mixins read it too. */
+    /** A preview pass is running; the terrain guard mixins read it. */
     var capturing = false
         private set
+
+    /** This frame reached the main `renderLevel` call (`GameRenderer.render` skips it when there is no level to draw). */
+    private var levelFrame = false
 
     private var nextFeed = 0
     private var freeRequested = false
@@ -142,7 +149,7 @@ object PovCapture {
     )
 
     /**
-     * Skip Own View: the terrain upkeep the main extract handed its (cancelled) render. A level
+     * Skip Own View: the terrain upkeep the main extract handed its (skipped) render. A level
      * extract consumes it - chunk load/unload sets, dirty sections - so the first preview pass takes
      * it over and its render does that work instead.
      */
@@ -285,20 +292,17 @@ object PovCapture {
     // --------------------------------------------------------------- render phase
 
     /**
-     * HEAD of `GameRenderer.renderLevel`. Returns true when the caller should cancel the main
-     * world render: with "Skip Own View" on the four previews tile the screen, so drawing your own
-     * view underneath them is work nobody sees. Resuming costs nothing — there is no state to
-     * rebuild, the next frame simply does not take this path.
+     * The main `renderLevel` call in `GameRenderer.render`. Returns true when the caller should
+     * skip the main world render: with "Skip Own View" on the four previews tile the screen, so
+     * drawing your own view underneath them is work nobody sees. Resuming costs nothing — there is
+     * no state to rebuild, the next frame simply does not take this path.
      */
-    fun beforeLevelRender(deltaTracker: DeltaTracker): Boolean {
-        // The nested preview renders come back through here; let them straight through.
-        if (capturing || disabledForSession) return false
-        // This is the one outer `renderLevel` of the frame, so it is also where the flag that
-        // tells the RETURN injector "the passes already ran" is cleared. Doing it here rather
-        // than in `afterLevelRender` matters because a cancelled call may never reach RETURN.
+    fun replaceMainPass(deltaTracker: DeltaTracker): Boolean {
+        levelFrame = true
         skippedMainPass = false
+        if (disabledForSession) return false
         if (!PovPreviews.skipOwnView || PovPreviews.opacity < 1f || !canCapture()) return false
-        // Only when every quadrant has an image to show: otherwise cancelling would leave bare
+        // Only when every quadrant has an image to show: otherwise skipping it would leave bare
         // black where a quadrant has no teammate.
         if (blitsSubmitted < FEEDS) return false
         carried = Carried(EngineerClient.mc.gameRenderer.gameRenderState().levelRenderState)
@@ -325,17 +329,19 @@ object PovCapture {
     }
 
     /**
-     * RETURN of `GameRenderer.renderLevel`: the main image exists and the GUI has not been drawn.
-     * This is the path when "Skip Own View" is off, or when it declined the frame.
+     * Just before `FogRenderer.endFrame` in `GameRenderer.render`: the main image is finished
+     * (entity outline blitted, post effects applied) and the GUI has not been drawn. This is the
+     * path when "Skip Own View" is off, or when it declined the frame.
      */
-    fun afterLevelRender(deltaTracker: DeltaTracker) {
-        if (capturing || disabledForSession) return
+    fun afterMainPass(deltaTracker: DeltaTracker) {
+        if (!levelFrame) return
+        levelFrame = false
         if (skippedMainPass) {
-            // The HEAD injector cancelled this call; the passes already ran.
+            // [replaceMainPass] ran the passes in the main pass's place.
             skippedMainPass = false
             return
         }
-        if (blitsSubmitted == 0 || !canCapture()) return
+        if (disabledForSession || blitsSubmitted == 0 || !canCapture()) return
         blitsSubmitted = 0
         runPasses(deltaTracker)
     }
@@ -458,8 +464,16 @@ object PovCapture {
             invoker.`ec$extractOptions`()
             invoker.`ec$extractCamera`(deltaTracker, worldPartialTicks)
             mc.levelExtractor.extract(deltaTracker, camera, worldPartialTicks)
-            carried?.into(gameRenderer.gameRenderState().levelRenderState)
+            val levelState = gameRenderer.gameRenderState().levelRenderState
+            carried?.into(levelState)
             carried = null
+            // Two things no feed shows, which a pass must not run: their uniforms are 3-slot rings, and on
+            // Vulkan a ring that has turned 3 times in one frame throws on its next use ("Cannot wait on a
+            // fence for the current submit"). The glow-outline post chain turns its ring on every use (and the
+            // outline was never blitted into a feed); the clouds rebuild their mesh and turn theirs whenever
+            // the camera changes cloud cell, which a pass from someone else's eyes nearly always does.
+            levelState.shouldShowEntityOutlines = false
+            levelState.cloudColor = 0
 
             gameRenderer.renderLevel()
         } finally {
