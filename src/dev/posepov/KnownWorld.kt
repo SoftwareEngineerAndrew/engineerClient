@@ -26,7 +26,6 @@ import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
 import net.minecraft.core.SectionPos
-import net.minecraft.world.level.LightLayer
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunk
@@ -82,9 +81,6 @@ object KnownWorld {
     private var doorsKey = ""
     @Volatile private var pack: RoomPack? = null
     @Volatile private var arenaReady = false
-    @Volatile private var arenaLight: LightGrid? = null
-    /** Each room design's light, kept across runs like its geometry. */
-    private val roomLights = HashMap<String, LightGrid>()
     private var loading = false
 
     /** Every change this run, again: for pieces that now stand where they landed (the arena, once it is read). */
@@ -112,8 +108,7 @@ object KnownWorld {
                 val source = PackSource.resolve(dir, BundledPacks.JAR, PackFiles.cacheRootFor(dir), PackReport(), listOf(PackFiles.ROOMS_INDEX, PackFiles.ROOMS_BLOCKS))
                 RoomPack.load(source)
             }
-            val a = Arena.data
-            arenaLight = LightGrid.of(a.w, a.h, a.d) { x, y, z -> a.get(a.x0 + x, a.y0 + y, a.z0 + z) }
+            Arena.data
             arenaReady = true
         }.whenComplete { _, _ -> onReady() }
     }
@@ -213,27 +208,6 @@ object KnownWorld {
 
     /** Whether the cell's column is drawn by a room's own mesh or the arena's, not the world sections. */
     fun coveredByRoom(x: Int, z: Int) = roomAt(x, z) != null
-
-    fun lightOf(r: Room): LightGrid = roomLights.getOrPut(r.designKey) {
-        LightGrid.of(r.x1 - r.x0 + 1, r.y1 - r.y0 + 1, r.z1 - r.z0 + 1) { x, y, z -> r.designAt(x, y + r.y0, z) }
-    }
-
-    fun arenaLight(x: Int, y: Int, z: Int): Int {
-        val a = Arena.data
-        return arenaLight?.get(x - a.x0, y - a.y0, z - a.z0) ?: 15
-    }
-
-    /**
-     * The light at a world cell: worked out from the known blocks in the arena and the rooms (so prerendered pieces are lit
-     * without their chunks), the game's own where the chunk is loaded, and open sky anywhere else.
-     */
-    fun lightAt(level: ClientLevel, pos: BlockPos.MutableBlockPos, x: Int, y: Int, z: Int): Int {
-        if (arena(x, z)) return arenaLight(x, y, z)
-        roomAt(x, z)?.let { r -> return lightOf(r).get(x - r.x0, y - r.y0, z - r.z0) }
-        if (!level.hasChunk(x shr 4, z shr 4)) return 15
-        pos.set(x, y, z)
-        return maxOf(level.getBrightness(LightLayer.SKY, pos), level.getBrightness(LightLayer.BLOCK, pos))
-    }
 
     /** The block at a cell, everything known and this run's changes included. */
     fun stateAt(level: ClientLevel, pos: BlockPos.MutableBlockPos, x: Int, y: Int, z: Int): BlockState {
