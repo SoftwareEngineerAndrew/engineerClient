@@ -21,7 +21,8 @@
     "TermGuiButtonMixin",
     "LcmStyleMixin",
     "LcmMapInfoMixin",
-    "MapPathHintsMixin"
+    "MapPathHintsMixin",
+    "TpMazeRenderMixin"
   ],
   "injectors": {
     "defaultRequire": 0

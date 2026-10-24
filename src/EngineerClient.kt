@@ -111,6 +111,8 @@ object EngineerClient : ClientModInitializer {
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
         safely("lcm map info") { com.engineerclient.lcm.LcmMapInfo.install() }
         safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
+        // Team TP Maze: settings on Odin's Puzzle Solvers (its TP Maze), the party's shared maze map over Odin's websocket.
+        safely("team tp maze") { com.engineerclient.tpmaze.TeamTpMaze.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }

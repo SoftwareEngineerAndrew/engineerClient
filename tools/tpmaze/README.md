@@ -38,3 +38,5 @@ not used for pairs). A landing whose yaw looks at nothing is Hypixel putting the
 
 The model in `src/p3sim/clear/puzzles/hard/TpMazeModel.kt` predates this: its landings look at a way on in their own cell and its
 wrong pads send you anywhere, not to their twin.
+
+These rules drive Team TP Maze (`src/tpmaze/`, on Odin's Puzzle Solvers): the party's shared maze map over Odin's websocket.
