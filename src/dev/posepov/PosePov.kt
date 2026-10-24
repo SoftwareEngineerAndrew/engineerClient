@@ -34,6 +34,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.client.gui.render.TextureSetup
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.renderer.Projection
@@ -82,6 +83,9 @@ object PosePov : Module(
     private const val RADIUS_XZ = 5
     private const val RADIUS_Y = 3
     private const val FLOOR_LOW = 55
+    private const val BACK_OFF = 3.5
+    private const val BACK_UP = 1.2
+    private const val BLEND_NS = 350_000_000L
     private const val FLOOR_HIGH = 140
     private const val SKY = 0xFF78A7FF.toInt()
 
@@ -164,22 +168,22 @@ object PosePov : Module(
         val pose = Matrix3x2f(gfx.pose())
         val sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR)
 
-        // Each slot's eye: the teammate's own when they're loaded, otherwise an estimate from their map icon.
+        // Each slot's eye: the teammate's own when they're loaded, otherwise a camera behind where their map icon puts them.
         val now = System.nanoTime()
         val eyes = arrayOfNulls<Eye>(FEEDS)
         val players = arrayOfNulls<Player>(FEEDS)
         for (i in 0 until FEEDS) {
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
-            if (p != null) {
+            val e = if (p != null) {
+                players[i] = p
                 // Head yaw through the shortest turn: a plain lerp across the ±180 wrap swings the view through every angle
                 // between the two, a different one each frame.
-                val e = Eye(p.getEyePosition(pt), Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot), p.getViewXRot(pt), false)
-                players[i] = p; eyes[i] = e
-                ghosts[slot.name] = Ghost(e.pos.x, e.pos.y, e.pos.z, e.yaw, e.pitch, now)
-            } else if (!slot.isDead && slot.mapPos.data != 0L) {
-                eyes[i] = ghostEye(level, slot, now)
-            }
+                val real = Eye(p.getEyePosition(pt), Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot), p.getViewXRot(pt), null)
+                ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
+                real
+            } else if (!slot.isDead && slot.mapPos.data != 0L) ghostEye(level, slot, now) else null
+            if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
         }
 
         // The sections around every eye, nearest first, built (within budget) before anything is drawn.
@@ -232,37 +236,117 @@ object PosePov : Module(
                     null,
                 )
             )
-            if (e.estimated && slot != null) distanceLabel(gfx, slot.name, e.pos, x0, y0, x1, y1)
+            val subject = e.subject
+            if (subject != null && slot != null) {
+                // Their face where the estimate puts them, then how far that is.
+                project(e, subject, w, h, x0, y0, x1, y1)?.let { (fx, fy) ->
+                    slot.playerSkin?.let { PlayerFaceExtractor.extractRenderState(gfx, it, fx - 6, fy - 6, 12) } ?: gfx.fill(fx - 3, fy - 3, fx + 3, fy + 3, -1)
+                }
+                distanceLabel(gfx, subject, x0, y0, x1, y1)
+            }
         }
     }
 
-    private class Eye(val pos: Vec3, val yaw: Float, val pitch: Float, val estimated: Boolean)
+    /** A camera: where it is and looks, and for an estimate, the spot the teammate is thought to stand (eye height). */
+    private class Eye(val pos: Vec3, val yaw: Float, val pitch: Float, val subject: Vec3?)
 
-    /** Where a teammate was last drawn from, eased towards their map icon while they're out of range. */
-    private class Ghost(var x: Double, var y: Double, var z: Double, var yaw: Float, var pitch: Float, var at: Long)
+    /**
+     * What's known of one teammate across frames: the estimate eased towards their map icon (position, heading, floor and
+     * camera distance), how the icon has been moving, and the last camera drawn, so switching between their own view and
+     * the estimate blends instead of cutting.
+     */
+    private class Ghost {
+        var x = Double.NaN; var z = Double.NaN; var eyeY = Double.NaN; var yaw = 0f; var pitch = 0f
+        var camDist = BACK_OFF; var at = 0L
+        var iconX = Double.NaN; var iconZ = Double.NaN; var iconAt = 0L; var vx = 0.0; var vz = 0.0
+        var last: Eye? = null; var lastAt = 0L; var from: Eye? = null; var fromAt = 0L
+
+        /** Their own view this frame: the estimate picks up from here when they go out of range. */
+        fun seen(e: Eye, now: Long) {
+            x = e.pos.x; z = e.pos.z; eyeY = e.pos.y; yaw = e.yaw; pitch = e.pitch; at = now
+            iconX = Double.NaN; vx = 0.0; vz = 0.0; camDist = 0.0
+        }
+
+        /** [e], or on its way to [e] from the other kind of camera for [BLEND_NS] after a switch. */
+        fun blended(e: Eye, now: Long): Eye {
+            // Only from a camera drawn just now: reopening the menu starts clean.
+            val prev = last?.takeIf { now - lastAt < 200_000_000L }
+            if (prev != null && (prev.subject == null) != (e.subject == null)) { from = prev; fromAt = now }
+            val f = from
+            val out = if (f == null || now - fromAt >= BLEND_NS) e.also { from = null } else {
+                val t = (now - fromAt).toDouble() / BLEND_NS; val s = t * t * (3 - 2 * t)
+                Eye(f.pos.lerp(e.pos, s), Mth.rotLerp(s.toFloat(), f.yaw, e.yaw), Mth.lerp(s.toFloat(), f.pitch, e.pitch), e.subject)
+            }
+            last = out; lastAt = now
+            return out
+        }
+    }
     private val ghosts = HashMap<String, Ghost>()
 
     /**
-     * An out-of-range teammate's eye from their map icon: the icon only moves in steps of about a block and turns in
-     * 22.5° steps, so position and yaw ease towards it; the height is the floor under them in the known blocks
-     * (the level nearest where they were last seen), and the pitch settles to level.
+     * An out-of-range teammate from their map icon, seen from behind and above. The icon moves in steps of about a block and
+     * turns in 22.5° steps, so the spot eases towards it, and while it's moving the heading follows the way it goes rather
+     * than the arrow. They stand on the floor under that spot in the known blocks (the level nearest where they were last
+     * seen); the camera backs off along their heading only as far as the blocks allow, and looks down at them.
      */
     private fun ghostEye(level: net.minecraft.client.multiplayer.ClientLevel, slot: DungeonPlayer, now: Long): Eye {
         val tx = ((slot.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
         val tz = ((slot.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
-        val g = ghosts[slot.name]
-        val ghost = if (g == null || Math.hypot(tx - g.x, tz - g.z) > 24.0) {
-            // First sight, or a leap / teleport: no gliding across the map.
-            Ghost(tx, g?.y ?: Double.NaN, tz, slot.yaw, 0f, now).also { ghosts[slot.name] = it }
-        } else g
-        val dt = ((now - ghost.at) / 1e9).coerceIn(0.0, 0.25); ghost.at = now
+        val g = ghosts.getOrPut(slot.name) { Ghost() }
+        // First sight, or a leap / teleport: no gliding across the map.
+        if (g.x.isNaN() || Math.hypot(tx - g.x, tz - g.z) > 24.0) { g.x = tx; g.z = tz; g.yaw = slot.yaw; g.iconX = Double.NaN; g.at = now }
+        val dt = ((now - g.at) / 1e9).coerceIn(0.0, 0.25); g.at = now
+
+        // The icon's velocity, from its steps; still after a while without one.
+        if (g.iconX.isNaN()) { g.iconX = tx; g.iconZ = tz; g.iconAt = now; g.vx = 0.0; g.vz = 0.0 }
+        else if (tx != g.iconX || tz != g.iconZ) {
+            val sec = ((now - g.iconAt) / 1e9).coerceAtLeast(0.05)
+            g.vx = (tx - g.iconX) / sec; g.vz = (tz - g.iconZ) / sec
+            g.iconX = tx; g.iconZ = tz; g.iconAt = now
+        } else if (now - g.iconAt > 700_000_000L) { g.vx = 0.0; g.vz = 0.0 }
+        val moving = Math.hypot(g.vx, g.vz) > 1.5
+        val heading = if (moving) Math.toDegrees(Math.atan2(-g.vx, g.vz)).toFloat() else slot.yaw
+
         val k = 1 - Math.exp(-dt * 6)
-        ghost.x += (tx - ghost.x) * k; ghost.z += (tz - ghost.z) * k
-        ghost.yaw += Mth.wrapDegrees(slot.yaw - ghost.yaw) * k.toFloat()
-        ghost.pitch += (0f - ghost.pitch) * (1 - Math.exp(-dt * 2)).toFloat()
-        val feet = floorAt(level, ghost.x, ghost.z, ghost.y)
-        ghost.y = if (ghost.y.isNaN() || Math.abs(feet + 1.62 - ghost.y) > 6) feet + 1.62 else ghost.y + (feet + 1.62 - ghost.y) * (1 - Math.exp(-dt * 10))
-        return Eye(Vec3(ghost.x, ghost.y, ghost.z), ghost.yaw, ghost.pitch, true)
+        g.x += (tx - g.x) * k; g.z += (tz - g.z) * k
+        g.yaw += Mth.wrapDegrees(heading - g.yaw) * (1 - Math.exp(-dt * 4)).toFloat()
+        val feet = floorAt(level, g.x, g.z, g.eyeY)
+        g.eyeY = if (g.eyeY.isNaN() || Math.abs(feet + 1.62 - g.eyeY) > 6) feet + 1.62 else g.eyeY + (feet + 1.62 - g.eyeY) * (1 - Math.exp(-dt * 10))
+        val subject = Vec3(g.x, g.eyeY, g.z)
+
+        // Back along the heading and up, stopped short of the first block in the way; eased so walls don't pop it in and out.
+        val yr = Math.toRadians(g.yaw.toDouble())
+        val back = Vec3(Math.sin(yr) * BACK_OFF, BACK_UP, -Math.cos(yr) * BACK_OFF)
+        val room = clearance(level, subject, back)
+        g.camDist += (room - g.camDist) * (if (room < g.camDist) 1.0 else 1 - Math.exp(-dt * 3))
+        val cam = subject.add(back.scale(g.camDist / BACK_OFF))
+        val look = subject.add(0.0, -0.4, 0.0).subtract(cam)
+        val pitch = Math.toDegrees(Math.atan2(-look.y, Math.hypot(look.x, look.z))).toFloat()
+        return Eye(cam, g.yaw, pitch, subject)
+    }
+
+    /** How far (in units of [BACK_OFF]) the camera can go from [from] along [dir] before a block, less a margin. */
+    private fun clearance(level: net.minecraft.client.multiplayer.ClientLevel, from: Vec3, dir: Vec3): Double {
+        val pos = net.minecraft.core.BlockPos.MutableBlockPos()
+        val len = dir.length(); val steps = (len / 0.2).toInt()
+        for (s in 1..steps) {
+            val p = from.add(dir.scale(s / steps.toDouble()))
+            if (KnownWorld.stateAt(level, pos, Mth.floor(p.x), Mth.floor(p.y), Mth.floor(p.z)).isSolid)
+                return (BACK_OFF * (s - 1) / steps - 0.3).coerceAtLeast(0.0)
+        }
+        return BACK_OFF
+    }
+
+    /** Where a world point lands in a feed's panel, or null when it's behind the camera or off the panel. */
+    private fun project(e: Eye, at: Vec3, w: Int, h: Int, x0: Int, y0: Int, x1: Int, y1: Int): Pair<Int, Int>? {
+        val m = Matrix4f().setPerspective(Math.toRadians(mc.options.fov().get().toDouble()).toFloat(), w.toFloat() / h, NEAR, FAR)
+            .rotate(Quaternionf().rotationYXZ(Math.PI.toFloat() - Math.toRadians(e.yaw.toDouble()).toFloat(), -Math.toRadians(e.pitch.toDouble()).toFloat(), 0f).conjugate())
+            .translate(-e.pos.x.toFloat(), -e.pos.y.toFloat(), -e.pos.z.toFloat())
+        val v = Vector4f(at.x.toFloat(), at.y.toFloat(), at.z.toFloat(), 1f).mul(m)
+        if (v.w <= 0.01f) return null
+        val nx = v.x / v.w; val ny = v.y / v.w
+        if (nx !in -1f..1f || ny !in -1f..1f) return null
+        return (x0 + (nx * 0.5f + 0.5f) * (x1 - x0)).toInt() to (y0 + (0.5f - ny * 0.5f) * (y1 - y0)).toInt()
     }
 
     /**
@@ -293,7 +377,7 @@ object PosePov : Module(
     }
 
     /** The estimate's distance from you, coloured by how far, under their name. */
-    private fun distanceLabel(gfx: GuiGraphicsExtractor, name: String, at: Vec3, x0: Int, y0: Int, x1: Int, y1: Int) {
+    private fun distanceLabel(gfx: GuiGraphicsExtractor, at: Vec3, x0: Int, y0: Int, x1: Int, y1: Int) {
         val me = mc.player ?: return
         val d = Math.hypot(at.x - me.x, at.z - me.z).toInt()
         val color = when {
