@@ -163,13 +163,14 @@ object BlockMesh {
             else { x, y, z -> if (x < 0 || z < 0 || x > r.x1 - r.x0 || z > r.z1 - r.z0) KnownWorld.AIR else r.designAt(x, y, z) }
         val skip: (Int, Int, Int) -> Boolean =
             if (own) { x, _, z -> KnownWorld.roomAt(r.x0 + x, r.z0 + z) !== r } else { _, _, _ -> false }
-        return mesh(level, bx0..bx1, y0..y1, bz0..bz1, r.x0, r.z0, at, skip)
+        val light = KnownWorld.lightOf(r)
+        return mesh(level, bx0..bx1, y0..y1, bz0..bz1, r.x0, r.z0, at, skip) { x, y, z -> light.get(x, y - r.y0, z) }
     }
 
     private fun buildArena(level: ClientLevel, sx: Int, sy: Int, sz: Int): Mesh? {
         val a = com.engineerclient.p3sim.Arena.data
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
-        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false })
+        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false }) { x, y, z -> KnownWorld.arenaLight(x, y, z) }
     }
 
     private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int): Mesh? {
@@ -179,14 +180,15 @@ object BlockMesh {
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
         return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0,
             { x, y, z -> KnownWorld.stateAt(level, pos, x, y, z) },
-            { x, _, z -> KnownWorld.coveredByRoom(x, z) })
+            { x, _, z -> KnownWorld.coveredByRoom(x, z) }) { x, y, z -> KnownWorld.lightAt(level, lit, x, y, z) }
     }
 
     /** The faces of the cells in the box, in [at]'s frame, whose origin is world ([ox], 0, [oz]) (for map colours). */
     private inline fun mesh(
         level: ClientLevel, xs: IntRange, ys: IntRange, zs: IntRange, ox: Int, oz: Int,
-        at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean,
+        at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean, light: (Int, Int, Int) -> Int,
     ): Mesh? {
+        brightness()
         if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) return null
         val format = DefaultVertexFormat.POSITION_TEX_COLOR
         val world = BlockPos.MutableBlockPos()
@@ -198,6 +200,8 @@ object BlockMesh {
                 if (state.isAir) continue
                 world.set(x + ox, y, z + oz)
                 for (f in 0..5) hidden[f] = at(x + DX[f], y + DY[f], z + DZ[f]).isSolidRender
+                for (f in 0..5) lights[f] = light(x + DX[f], y + DY[f], z + DZ[f])
+                lights[6] = light(x, y, z)
                 block(bb, level, state, world, x.toFloat(), y.toFloat(), z.toFloat())
             }
             val data = bb.build() ?: return null
@@ -255,6 +259,21 @@ object BlockMesh {
     private val parts = ArrayList<BlockStateModelPart>()
     private val random = RandomSource.create()
     private val DIRS = Direction.entries.toTypedArray()
+    /** The light (0-15) on each side of the cell being meshed, Direction order, then the cell's own; set per cell by [mesh]. */
+    private val lights = IntArray(7)
+    private val lit = BlockPos.MutableBlockPos()
+    /** How bright each light level draws: the game's curve with your Brightness setting, as its lightmap works it out in daylight. */
+    private val BRIGHT = FloatArray(16)
+
+    private fun brightness() {
+        val gamma = mc().options.gamma().get().toFloat().coerceIn(0f, 1f)
+        for (l in 0..15) {
+            val f = l / 15f
+            val b = f / (4f - 3f * f)
+            val notGamma = 1f - (1f - b).let { it * it * it * it }
+            BRIGHT[l] = ((b + (notGamma - b) * gamma) * 0.96f + 0.04f * 0.75f).coerceIn(0f, 1f)
+        }
+    }
 
     /**
      * The block's own baked model at ([x], [y], [z]): every quad with its texture from the block atlas and its tint (grass,
@@ -265,7 +284,7 @@ object BlockMesh {
         if (state.block is LiquidBlock) {
             val sprite = mc().modelManager.blockStateModelSet.getParticleMaterial(state).sprite()
             val tint = tint(level, state, world, 0)
-            for (f in 0..5) if (!hidden[f]) cube(bb, f, x, y, z, sprite, mul(tint, SHADE[f]))
+            for (f in 0..5) if (!hidden[f]) cube(bb, f, x, y, z, sprite, mul(tint, SHADE[f] * BRIGHT[lights[f]]))
             return
         }
         if (state.renderShape == RenderShape.INVISIBLE) return
@@ -273,15 +292,15 @@ object BlockMesh {
         random.setSeed(state.getSeed(world))
         mc().modelManager.blockStateModelSet.get(state).collectParts(random, parts)
         for (part in parts) {
-            for (d in DIRS) if (!hidden[d.ordinal]) for (q in part.getQuads(d)) quad(bb, level, state, world, q, x, y, z)
-            for (q in part.getQuads(null)) quad(bb, level, state, world, q, x, y, z)
+            for (d in DIRS) if (!hidden[d.ordinal]) for (q in part.getQuads(d)) quad(bb, level, state, world, q, x, y, z, lights[d.ordinal])
+            for (q in part.getQuads(null)) quad(bb, level, state, world, q, x, y, z, maxOf(lights[6], lights[q.direction().ordinal]))
         }
     }
 
-    private fun quad(bb: BufferBuilder, level: ClientLevel, state: BlockState, world: BlockPos, q: BakedQuad, x: Float, y: Float, z: Float) {
+    private fun quad(bb: BufferBuilder, level: ClientLevel, state: BlockState, world: BlockPos, q: BakedQuad, x: Float, y: Float, z: Float, light: Int) {
         val info = q.materialInfo()
         val tint = if (info.isTinted) tint(level, state, world, info.tintIndex()) else -1
-        val c = mul(tint, SHADE[q.direction().ordinal])
+        val c = mul(tint, SHADE[q.direction().ordinal] * BRIGHT[light])
         for (k in 0..3) {
             val p = q.position(k); val uv = q.packedUV(k)
             bb.addVertex(x + p.x(), y + p.y(), z + p.z()).setUv(UVPair.unpackU(uv), UVPair.unpackV(uv)).setColor(c)
