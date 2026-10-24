@@ -40,6 +40,12 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.renderer.Projection
 import net.minecraft.client.renderer.ProjectionMatrixBuffer
 import net.minecraft.client.renderer.RenderPipelines
+import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.client.renderer.entity.state.AvatarRenderState
+import net.minecraft.client.model.player.PlayerModel
+import net.minecraft.client.model.geom.ModelLayers
+import net.minecraft.world.entity.player.PlayerSkin
+import net.minecraft.world.entity.player.PlayerModelType
 import net.minecraft.client.renderer.SubmitNodeStorage
 import net.minecraft.client.renderer.item.ItemStackRenderState
 import net.minecraft.client.renderer.texture.OverlayTexture
@@ -83,6 +89,9 @@ object PosePov : Module(
     private const val RADIUS_XZ = 5
     private const val RADIUS_Y = 3
     private const val FLOOR_LOW = 55
+    private const val BOX_ALPHA = 0x50
+    private const val FACE_HIDDEN = 0.3f
+    private const val TRAIL_NS = 800_000_000L
     private const val BACK_OFF = 3.5
     private const val BACK_UP = 1.2
     private const val BLEND_NS = 350_000_000L
@@ -154,6 +163,7 @@ object PosePov : Module(
     }
 
     private fun releaseFeeds() {
+        if (!captured) menuFrames = 0
         queued.clear()
         for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null }
     }
@@ -172,6 +182,8 @@ object PosePov : Module(
         val now = System.nanoTime()
         val eyes = arrayOfNulls<Eye>(FEEDS)
         val players = arrayOfNulls<Player>(FEEDS)
+        val figures = arrayOfNulls<Figure>(FEEDS)
+        val raw = arrayOfNulls<String>(FEEDS)
         for (i in 0 until FEEDS) {
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
@@ -184,7 +196,13 @@ object PosePov : Module(
                 real
             } else if (!slot.isDead && slot.mapPos.data != 0L) ghostEye(level, slot, now) else null
             if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
+            // Where they stand, for the boxes in everyone else's feed.
+            val at = p?.getPosition(pt) ?: e?.subject?.subtract(0.0, 1.62, 0.0)
+            if (at != null) figures[i] = Figure(at, (BOX_ALPHA shl 24) or (slot.clazz.color.rgba and 0xFFFFFF))
+            raw[i] = if (p != null) String.format(java.util.Locale.ROOT, "real pt=%.3f eye=%.3f,%.3f,%.3f headO=%.2f head=%.2f yRotO=%.2f yRot=%.2f pitch=%.2f",
+                pt, p.getEyePosition(pt).x, p.getEyePosition(pt).y, p.getEyePosition(pt).z, p.yHeadRotO, p.yHeadRot, p.yRotO, p.yRot, p.getViewXRot(pt)) else "estimate"
         }
+        val self = mc.player?.let { Figure(it.getPosition(pt), (BOX_ALPHA shl 24) or 0xFFFFFF) }
 
         // The sections around every eye, nearest first, built (within budget) before anything is drawn.
         val wanted = LinkedHashSet<Long>()
@@ -222,7 +240,16 @@ object PosePov : Module(
             val item = handItems[i].also { it.clear() }
             val right = p?.mainArm != HumanoidArm.LEFT
             if (p != null && !p.mainHandItem.isEmpty) mc.itemModelResolver.updateForLiving(item, p.mainHandItem, if (right) ItemDisplayContext.FIRST_PERSON_RIGHT_HAND else ItemDisplayContext.FIRST_PERSON_LEFT_HAND, p)
-            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, p?.getSwingAnimation(pt) ?: 0f)
+            val others = ArrayList<Figure>(FEEDS)
+            for (j in 0 until FEEDS) if (j != i) figures[j]?.let { others += it }
+            self?.let { others += it }
+            val subject = e.subject
+            val ghost = slot?.let { ghosts[it.name] }
+            val body = if (subject != null && ghost != null) slot.playerSkin?.let { skin ->
+                Body(subject.subtract(0.0, 1.62, 0.0), ghost.yaw, ghost.walkPos, ghost.walkSpeed, skin)
+            } else null
+            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, p?.getSwingAnimation(pt) ?: 0f, others, body,
+                "${slot?.name} cam=${String.format(java.util.Locale.ROOT, "%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f", e.pos.x, e.pos.y, e.pos.z, e.yaw, e.pitch)} ${raw[i]}")
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
                 BlitRenderState(
@@ -236,11 +263,16 @@ object PosePov : Module(
                     null,
                 )
             )
-            val subject = e.subject
-            if (subject != null && slot != null) {
-                // Their face where the estimate puts them, then how far that is.
-                project(e, subject, w, h, x0, y0, x1, y1)?.let { (fx, fy) ->
-                    slot.playerSkin?.let { PlayerFaceExtractor.extractRenderState(gfx, it, fx - 6, fy - 6, 12) } ?: gfx.fill(fx - 3, fy - 3, fx + 3, fy + 3, -1)
+            if (subject != null && slot != null && ghost != null) {
+                // Their face over the guessed body's head, faded while blocks are in the way, then how far that is.
+                val head = subject.add(0.0, 0.75, 0.0)
+                val seen = clearance(level, e.pos, head.subtract(e.pos), 0.0) >= BACK_OFF
+                val dt = ((now - ghost.faceAt) / 1e9).coerceIn(0.0, 0.25); ghost.faceAt = now
+                ghost.faceAlpha += ((if (seen) 1f else FACE_HIDDEN) - ghost.faceAlpha) * (1 - Math.exp(-dt * 8)).toFloat()
+                val a = (ghost.faceAlpha * 255).toInt().coerceIn(0, 255)
+                project(e, head, w, h, x0, y0, x1, y1)?.let { (fx, fy) ->
+                    slot.playerSkin?.let { PlayerFaceExtractor.extractRenderState(gfx, it, fx - 6, fy - 6, 12, (a shl 24) or 0xFFFFFF) }
+                        ?: gfx.fill(fx - 3, fy - 3, fx + 3, fy + 3, (a shl 24) or 0xFFFFFF)
                 }
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
@@ -258,13 +290,13 @@ object PosePov : Module(
     private class Ghost {
         var x = Double.NaN; var z = Double.NaN; var eyeY = Double.NaN; var yaw = 0f; var pitch = 0f
         var camDist = BACK_OFF; var at = 0L
-        var iconX = Double.NaN; var iconZ = Double.NaN; var iconAt = 0L; var vx = 0.0; var vz = 0.0
+        val trail = ArrayDeque<DoubleArray>(); var walkPos = 0f; var walkSpeed = 0f; var faceAlpha = 1f; var faceAt = 0L
         var last: Eye? = null; var lastAt = 0L; var from: Eye? = null; var fromAt = 0L
 
         /** Their own view this frame: the estimate picks up from here when they go out of range. */
         fun seen(e: Eye, now: Long) {
             x = e.pos.x; z = e.pos.z; eyeY = e.pos.y; yaw = e.yaw; pitch = e.pitch; at = now
-            iconX = Double.NaN; vx = 0.0; vz = 0.0; camDist = 0.0
+            trail.clear(); camDist = 0.0
         }
 
         /** [e], or on its way to [e] from the other kind of camera for [BLEND_NS] after a switch. */
@@ -294,22 +326,28 @@ object PosePov : Module(
         val tz = ((slot.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
         val g = ghosts.getOrPut(slot.name) { Ghost() }
         // First sight, or a leap / teleport: no gliding across the map.
-        if (g.x.isNaN() || Math.hypot(tx - g.x, tz - g.z) > 24.0) { g.x = tx; g.z = tz; g.yaw = slot.yaw; g.iconX = Double.NaN; g.at = now }
+        if (g.x.isNaN() || Math.hypot(tx - g.x, tz - g.z) > 24.0) { g.x = tx; g.z = tz; g.yaw = slot.yaw; g.trail.clear(); g.at = now }
         val dt = ((now - g.at) / 1e9).coerceIn(0.0, 0.25); g.at = now
 
-        // The icon's velocity, from its steps; still after a while without one.
-        if (g.iconX.isNaN()) { g.iconX = tx; g.iconZ = tz; g.iconAt = now; g.vx = 0.0; g.vz = 0.0 }
-        else if (tx != g.iconX || tz != g.iconZ) {
-            val sec = ((now - g.iconAt) / 1e9).coerceAtLeast(0.05)
-            g.vx = (tx - g.iconX) / sec; g.vz = (tz - g.iconZ) / sec
-            g.iconX = tx; g.iconZ = tz; g.iconAt = now
-        } else if (now - g.iconAt > 700_000_000L) { g.vx = 0.0; g.vz = 0.0 }
-        val moving = Math.hypot(g.vx, g.vz) > 1.5
-        val heading = if (moving) Math.toDegrees(Math.atan2(-g.vx, g.vz)).toFloat() else slot.yaw
+        // Which way the icon is going, over the last [TRAIL_NS]: a single step on the map's grid only says x or z, so a
+        // diagonal walk would swing between the two.
+        if (g.trail.isEmpty() || g.trail.last()[1] != tx || g.trail.last()[2] != tz) g.trail.addLast(doubleArrayOf(now.toDouble(), tx, tz))
+        while (g.trail.size > 2 && now - g.trail.first()[0] > TRAIL_NS) g.trail.removeFirst()
+        val first = g.trail.first(); val last = g.trail.last()
+        val fresh = now - last[0] < 700_000_000L
+        val span = Math.hypot(last[1] - first[1], last[2] - first[2])
+        val moving = fresh && span > 1.5 && span / ((last[0] - first[0]) / 1e9).coerceAtLeast(0.1) > 1.5
+        val heading = if (moving) Math.toDegrees(Math.atan2(-(last[1] - first[1]), last[2] - first[2])).toFloat() else slot.yaw
 
         val k = 1 - Math.exp(-dt * 6)
+        val px = g.x; val pz = g.z
         g.x += (tx - g.x) * k; g.z += (tz - g.z) * k
-        g.yaw += Mth.wrapDegrees(heading - g.yaw) * (1 - Math.exp(-dt * 4)).toFloat()
+        g.yaw += Mth.wrapDegrees(heading - g.yaw) * (1 - Math.exp(-dt * 3)).toFloat()
+        // The guessed body's walk: the game's limb swing advances about 4 per block walked.
+        val moved = Math.hypot(g.x - px, g.z - pz)
+        g.walkPos += (moved * 4).toFloat()
+        val speed = if (dt > 0) moved / dt else 0.0
+        g.walkSpeed += ((speed / 5).coerceAtMost(1.0).toFloat() - g.walkSpeed) * (1 - Math.exp(-dt * 6)).toFloat()
         val feet = floorAt(level, g.x, g.z, g.eyeY)
         g.eyeY = if (g.eyeY.isNaN() || Math.abs(feet + 1.62 - g.eyeY) > 6) feet + 1.62 else g.eyeY + (feet + 1.62 - g.eyeY) * (1 - Math.exp(-dt * 10))
         val subject = Vec3(g.x, g.eyeY, g.z)
@@ -325,14 +363,14 @@ object PosePov : Module(
         return Eye(cam, g.yaw, pitch, subject)
     }
 
-    /** How far (in units of [BACK_OFF]) the camera can go from [from] along [dir] before a block, less a margin. */
-    private fun clearance(level: net.minecraft.client.multiplayer.ClientLevel, from: Vec3, dir: Vec3): Double {
+    /** How far along [dir] (in units of [BACK_OFF] of it) one can go from [from] before a block, less [margin]; [BACK_OFF] when clear. */
+    private fun clearance(level: net.minecraft.client.multiplayer.ClientLevel, from: Vec3, dir: Vec3, margin: Double = 0.3): Double {
         val pos = net.minecraft.core.BlockPos.MutableBlockPos()
         val len = dir.length(); val steps = (len / 0.2).toInt()
         for (s in 1..steps) {
             val p = from.add(dir.scale(s / steps.toDouble()))
             if (KnownWorld.stateAt(level, pos, Mth.floor(p.x), Mth.floor(p.y), Mth.floor(p.z)).isSolid)
-                return (BACK_OFF * (s - 1) / steps - 0.3).coerceAtLeast(0.0)
+                return (BACK_OFF * (s - 1) / steps - margin).coerceAtLeast(0.0)
         }
         return BACK_OFF
     }
@@ -350,25 +388,32 @@ object PosePov : Module(
     }
 
     /**
-     * The floor to stand on near (x, z): the nearest column within two blocks with room for a player, at the standing
-     * height closest to [eyeY] (the lowest when unknown). Falls back to the usual dungeon floor.
+     * The floor to stand on near (x, z): the nearest column within three blocks with room for a player under a ceiling (so
+     * never the top of a wall or the roof), at the standing height closest to [eyeY] (the lowest when unknown). Falls back
+     * to where they were last, or the usual dungeon floor.
      */
     private fun floorAt(level: net.minecraft.client.multiplayer.ClientLevel, x: Double, z: Double, eyeY: Double): Double {
         val pos = net.minecraft.core.BlockPos.MutableBlockPos()
         val bx = Mth.floor(x); val bz = Mth.floor(z)
-        for (r in 0..2) {
+        val spots = ArrayList<Int>()
+        for (r in 0..3) {
             var best = Double.NaN
             for (dx in -r..r) for (dz in -r..r) {
                 if (maxOf(Math.abs(dx), Math.abs(dz)) != r) continue
+                spots.clear()
+                var top = Int.MIN_VALUE
                 var below = KnownWorld.stateAt(level, pos, bx + dx, FLOOR_LOW - 1, bz + dz).isSolid
                 var at = KnownWorld.stateAt(level, pos, bx + dx, FLOOR_LOW, bz + dz).isSolid
                 for (y in FLOOR_LOW..FLOOR_HIGH) {
                     val above = KnownWorld.stateAt(level, pos, bx + dx, y + 1, bz + dz).isSolid
-                    if (below && !at && !above) {
-                        if (eyeY.isNaN()) { if (best.isNaN()) best = y.toDouble() }
-                        else if (best.isNaN() || Math.abs(y + 1.62 - eyeY) < Math.abs(best + 1.62 - eyeY)) best = y.toDouble()
-                    }
+                    if (at) top = y
+                    if (below && !at && !above) spots += y
                     below = at; at = above
+                }
+                for (y in spots) {
+                    if (y >= top) continue
+                    if (eyeY.isNaN()) { if (best.isNaN() || y < best) best = y.toDouble() }
+                    else if (best.isNaN() || Math.abs(y + 1.62 - eyeY) < Math.abs(best + 1.62 - eyeY)) best = y.toDouble()
                 }
             }
             if (!best.isNaN()) return best
@@ -407,7 +452,14 @@ object PosePov : Module(
     private class Job(
         val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val w: Int, val h: Int,
         val item: ItemStackRenderState, val side: Float, val swing: Float,
+        val figures: List<Figure>, val body: Body?, val debug: String,
     )
+
+    /** A teammate in someone else's feed: where they stand, and their class colour (with the box's alpha). */
+    private class Figure(val feet: Vec3, val argb: Int)
+
+    /** The guessed body of an out-of-range teammate: where and which way it stands, its walk, and their skin. */
+    private class Body(val feet: Vec3, val yaw: Float, val walkPos: Float, val walkSpeed: Float, val skin: PlayerSkin)
 
     private val handItems = Array(FEEDS) { ItemStackRenderState() }
     private val handProjection = Projection()
@@ -432,8 +484,10 @@ object PosePov : Module(
             val indices = if (most > 0) quadIndices.getBuffer(most) else null
             for (job in queued) {
                 renderFeed(job.target, job.eye, job.yaw, job.pitch, job.w, job.h, quadIndices, indices)
+                renderFigures(job)
                 renderHand(job)
             }
+            capture()
         }
         queued.clear()
     }
@@ -489,6 +543,103 @@ object PosePov : Module(
             }
         } finally {
             RenderSystem.restoreProjectionMatrix()
+        }
+    }
+
+    private val figureProjection = Projection()
+    private val figureProjectionBuffer by lazy { ProjectionMatrixBuffer("devgineerclient pose pov figures") }
+    private val wideModel by lazy { PlayerModel(mc.entityModels.bakeLayer(ModelLayers.PLAYER), false) }
+    private val slimModel by lazy { PlayerModel(mc.entityModels.bakeLayer(ModelLayers.PLAYER_SLIM), true) }
+    private val bodyState = AvatarRenderState().apply {
+        showHat = true; showJacket = true; showLeftPants = true; showRightPants = true; showLeftSleeve = true; showRightSleeve = true
+    }
+
+    /**
+     * Over the feed's blocks, tested against their depth: the other teammates as see-through boxes in their class colour, and
+     * for an estimate, the guessed body (their skin, walking when the icon moves).
+     */
+    private fun renderFigures(job: Job) {
+        if (job.figures.isEmpty() && job.body == null) return
+        val colorView = job.target.colorTextureView ?: return
+        val depthView = job.target.depthTextureView ?: return
+        val poses = PoseStack()
+        poses.mulPose(Matrix4f().rotation(Quaternionf().rotationYXZ(Math.PI.toFloat() - Math.toRadians(job.yaw.toDouble()).toFloat(), -Math.toRadians(job.pitch.toDouble()).toFloat(), 0f).conjugate()))
+        poses.translate(-job.eye.x, -job.eye.y, -job.eye.z)
+
+        job.body?.let { b ->
+            val model = if (b.skin.model() == PlayerModelType.SLIM) slimModel else wideModel
+            bodyState.skin = b.skin; bodyState.bodyRot = b.yaw; bodyState.yRot = 0f; bodyState.xRot = 0f
+            bodyState.walkAnimationPos = b.walkPos; bodyState.walkAnimationSpeed = b.walkSpeed
+            poses.pushPose()
+            poses.translate(b.feet.x, b.feet.y, b.feet.z)
+            poses.rotateDegrees(Axis.YP, 180f - b.yaw)
+            // The living renderer's flip, and a player's 15/16 scale.
+            poses.scale(-0.9375f, -0.9375f, 0.9375f)
+            poses.translate(0f, -1.501f, 0f)
+            handSubmits.submitModel(model, bodyState, poses, b.skin.body().texturePath(), LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, 0)
+            poses.popPose()
+        }
+        if (job.figures.isNotEmpty()) handSubmits.submitCustomGeometry(poses, RenderTypes.debugQuads()) { pose, vc ->
+            for (f in job.figures) box(pose, vc, f.feet.x - 0.3, f.feet.y, f.feet.z - 0.3, f.feet.x + 0.3, f.feet.y + 1.8, f.feet.z + 0.3, f.argb)
+        }
+
+        figureProjection.setupPerspective(NEAR, FAR, mc.options.fov().get().toFloat(), job.w.toFloat(), job.h.toFloat())
+        RenderSystem.backupProjectionMatrix()
+        val modelView = RenderSystem.getModelViewStack()
+        modelView.pushMatrix().identity()
+        try {
+            RenderSystem.setProjectionMatrix(figureProjectionBuffer.getBuffer(figureProjection), ProjectionType.PERSPECTIVE)
+            mc.gameRenderer.featureRenderDispatcher().prepareFrame(handSubmits).use { frame ->
+                RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                    RenderPassDescriptor.builder { "devgineerclient pose pov figures" }
+                        .withColorAttachment(colorView, Optional.empty())
+                        .withDepthAttachment(depthView, OptionalDouble.empty())
+                        .build()
+                ).use { pass ->
+                    RenderSystem.bindDefaultUniforms(pass)
+                    net.minecraft.client.renderer.feature.FeatureRenderDispatcher.renderAllFeatures(pass, frame)
+                }
+            }
+        } finally {
+            modelView.popMatrix()
+            RenderSystem.restoreProjectionMatrix()
+        }
+    }
+
+    private fun box(pose: PoseStack.Pose, vc: com.mojang.blaze3d.vertex.VertexConsumer, x0: Double, y0: Double, z0: Double, x1: Double, y1: Double, z1: Double, c: Int) {
+        val a = x0.toFloat(); val b = y0.toFloat(); val d = z0.toFloat(); val A = x1.toFloat(); val B = y1.toFloat(); val D = z1.toFloat()
+        fun v(x: Float, y: Float, z: Float) { vc.addVertex(pose, x, y, z).setColor(c) }
+        v(a, b, d); v(A, b, d); v(A, b, D); v(a, b, D)
+        v(a, B, d); v(a, B, D); v(A, B, D); v(A, B, d)
+        v(a, b, d); v(a, B, d); v(A, B, d); v(A, b, d)
+        v(a, b, D); v(A, b, D); v(A, B, D); v(a, B, D)
+        v(a, b, d); v(a, b, D); v(a, B, D); v(a, B, d)
+        v(A, b, d); v(A, B, d); v(A, B, D); v(A, b, D)
+    }
+
+    // TEMPORARY, for the shaking: frames 30-89 of the first leap menu each session, every feed's image and the numbers it was
+    // drawn from, into config/devgineerclient/posepov-shots (images every 3rd frame, numbers every frame).
+    private var menuFrames = 0
+    private var captured = false
+    private val captureLog = StringBuilder()
+
+    private fun capture() {
+        if (captured) return
+        val frame = menuFrames++
+        if (frame < 30) return
+        val dir = net.fabricmc.loader.api.FabricLoader.getInstance().configDir.resolve("devgineerclient").resolve("posepov-shots")
+        if (frame > 89) {
+            captured = true
+            runCatching { java.nio.file.Files.createDirectories(dir); java.nio.file.Files.writeString(dir.resolve("frames.txt"), captureLog) }
+            return
+        }
+        captureLog.append("f").append(frame).append(" t=").append(System.nanoTime() / 1_000_000).append('\n')
+        for ((i, job) in queued.withIndex()) captureLog.append("  feed").append(i).append(' ').append(job.debug).append('\n')
+        if (frame % 3 != 0) return
+        java.nio.file.Files.createDirectories(dir)
+        for ((i, job) in queued.withIndex()) {
+            val file = dir.resolve(String.format(java.util.Locale.ROOT, "f%02d-feed%d.png", frame, i))
+            net.minecraft.client.Screenshot.takeScreenshot(job.target, 2) { img -> img.use { runCatching { it.writeToFile(file) } } }
         }
     }
 
