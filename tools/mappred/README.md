@@ -130,6 +130,19 @@ the tree too deep (deepest tile 12.6, real 10.6) - blood is picked from the grow
 test says. Still unexplained: more big rooms entered at walk 2 than any of these make (real 0.88 a map,
 0.54-0.73), fewer at 5 (0.72, grow 0.87).
 
+The room behind the entrance (first-room.mjs): it has a door to nearly every neighbour - a 1x1 there has all
+4 doors in 34% of maps (the generators 10-18%), a big one 4+ in 80% (51-58%), 3.04 rooms off it (2.3-2.6),
+0.47 of them 1x1 dead ends (0.27). That is the extra rooms at walks 2-4 and the 1x1 dead ends beside the
+entrance (hazard.mjs: the share of the rooms entered at each walk that are big is as the generators give,
+there are just more rooms there; the dip at walk 5 shows on a constant rate too, it is the geometry). So:
+the first room is finished at once and given a door to every free neighbouring cell (generator.mjs `f`).
+With that, `grow:bfs0.1:c3f` (a cell tree 10% oldest-first, big rooms started as it grows, chance 3 x shapes
+left / free cells) is the closest yet with nothing held back (mismatch 1684 against 2474 for the held-cell
+cell tree, 1500 maps): the tree, blood, the path, the dead ends, the first room, most of the bunching (1.09,
+real 1.25). Still wrong: its big rooms sit too near the entrance and against each other (placefit -0.63 and
++0.23, real -0.20 and -0.05): they start too early in the growth, and starting them later (c2) brings too
+many 1x1s with 3+ doors - what decides when a room starts is still open.
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
