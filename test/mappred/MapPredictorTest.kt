@@ -57,6 +57,16 @@ class MapPredictorTest {
         assertEquals(3.0, total(p, Cls.PUZZLE), 1e-4)
     }
 
+    @Test fun heldCellsKeepEveryMapWhole() {
+        val f7 = FloorRules.F7
+        val held = FloorRules(7, 6, 6, false, 0, true, f7.fairyBeforeBlood, f7.combos, f7.walk, f7.bloodFromEntrance,
+            f7.fairyFromEntrance, f7.bigTile, emptySet(), puzzleOrder = true, reserve = 5)
+        val p = predict(opening(rules = held))
+        assertEquals(0, p.level)
+        for (c in intArrayOf(Cls.TRAP, Cls.YELLOW, Cls.BLOOD, Cls.FAIRY)) assertEquals(1.0, total(p, c), 1e-4)
+        assertEquals(3.0, total(p, Cls.PUZZLE), 1e-4)
+    }
+
     @Test fun bloodAndFairyAreBehindTheWitherDoor() {
         val p = predict(opening())
         val wither = p.splits.single { it.door == Edge.WITHER }

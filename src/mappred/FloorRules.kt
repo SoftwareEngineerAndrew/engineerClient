@@ -43,6 +43,11 @@ class FloorRules(
      * (z * 6 + x, the map's own directions, not turned to the entrance), on top of [bigTile] (F7's 6x6 only).
      */
     val anchorWeights: Array<Array<FloatArray>>? = null,
+    /**
+     * How many of the main grid's cells (scaled to the unknown ones) are kept free of big rooms while they're
+     * placed, then become 1x1s: the real layouts look like that (tools/mappred README, "How the maps are made").
+     */
+    val reserve: Int = 0,
 ) {
     /** The most big rooms a map of this floor has (the loosest fallback's cap). */
     val maxBig = combos.maxOf { c -> (0 until 5).sumOf { c[it] } }
