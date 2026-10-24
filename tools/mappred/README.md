@@ -44,6 +44,15 @@ writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out
   -0.5963/-0.5967); 3 held -1.0468, 7 held -1.0530. Growing the predictor's tree oldest-first, as the game's is,
   does worse (-1.086 at 0.3, -1.130 at 0.5; Prim alone -1.057): it grows only the unknown part, from the doors
   the map shows, so oldest-first there spreads evenly from every door, not out from the entrance.
+- On real discovery order (evalbig REAL=timelines.jsonl TLALL=1, 740 snapshots of 220 recorded runs): the held
+  cells -1.0738 against -1.0823 without them; refitting the tables (calib2 OPTS) -1.0810, the blood/fairy tables
+  flat (FLAT=MW,FM) -1.0815, the 2x2 walk counted the game's way (opts.detour 0.25) -1.0815: none of those kept
+  (on simulated order they were within the noise too). 7 snapshots had no sample at all: a room on the map
+  before the room it's reached through (18 of 235 runs, 3 s at the median, up to 51 s); the predictor now
+  leaves those out until they join (MapView.connectedPart): -1.0669 with nothing left without a prediction.
+- The calibration layer (calfit.mjs, KEEPZERO): the samples are a little too sure (a = 0.84-0.94 per class);
+  fitted on 300 training maps, held-out -1.0417 to -1.0393 on the same samples (big-room tiles -0.5922 to
+  -0.5912, tiles 70%+ big right 76.5% to 77.6%). In the predictor for F7 (FloorRules.calibration).
 - Every special room (entrance, blood, trap, yellow, puzzles, rares) is a 1x1 dead end, and a normal 1x1 is
   never a dead end: the 1x1 dead ends besides entrance and blood are exactly puzzles + trap + yellow + rares.
   Rares only on 5-puzzle maps (the dead ends past the 5th puzzle).

@@ -6,12 +6,13 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const [trainFile, testFile, out] = process.argv.slice(2);
 const load = f => JSON.parse(readFileSync(f, 'utf8'));
 const tr = load(trainFile), te = load(testFile);
-const C = tr[0].length - 2, EPS = 1e-3;
+const C = tr[0].length - 2, EPS = 1e-3, KEEPZERO = !!process.env.KEEPZERO;
 const OUT = ['n', 'o', 'P', 'T', 'Y', 'B', 'F', 'R', 'x'].slice(0, C);
 function apply(row, a, b, d) {
   const k = (row[0] - 6) / 3; const s = new Float64Array(C);
   for (let c = 0; c < C; c++) s[c] = a[c] * Math.log(row[2 + c] + EPS) + b[c] + d[c] * k;
-  const m = Math.max(...s); let Z = 0; for (let c = 0; c < C; c++) { s[c] = Math.exp(s[c] - m); Z += s[c]; }
+  // KEEPZERO=1: what no sample had stays at 0 (nothing the map rules out gets a chance)
+  const m = Math.max(...s); let Z = 0; for (let c = 0; c < C; c++) { s[c] = KEEPZERO && row[2 + c] === 0 ? 0 : Math.exp(s[c] - m); Z += s[c]; }
   for (let c = 0; c < C; c++) s[c] /= Z; return s;
 }
 function score(rows, a, b, d) {

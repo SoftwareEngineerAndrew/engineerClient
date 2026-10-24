@@ -48,6 +48,8 @@ class FloorRules(
      * placed, then become 1x1s: the real layouts look like that (tools/mappred README, "How the maps are made").
      */
     val reserve: Int = 0,
+    /** a, b, d per [Cls] for the tiles' chances (MapPredictor.calibrated); null leaves them as the samples give them. */
+    val calibration: Array<DoubleArray>? = null,
 ) {
     /** The most big rooms a map of this floor has (the loosest fallback's cap). */
     val maxBig = combos.maxOf { c -> (0 until 5).sumOf { c[it] } }
@@ -66,7 +68,8 @@ class FloorRules(
         val F6 = FloorRules(6, 5, 6, true, 5, true, 4, FloorStats.COMBOS_5_6, MapStats.WALK,
             FloorStats.BLOOD_FROM_ENTRANCE_5_6, FloorStats.FAIRY_FROM_ENTRANCE_5_6, null, FloorStats.MISSING_6)
         val F7 = FloorRules(7, 6, 6, false, 0, true, MapStats.FAIRY_BEFORE_BLOOD, MapStats.COMBOS, MapStats.WALK,
-            MapStats.BLOOD_FROM_ENTRANCE, MapStats.FAIRY_FROM_ENTRANCE, MapStats.BIG_TILE, emptySet(), puzzleOrder = true, reserve = 5)
+            MapStats.BLOOD_FROM_ENTRANCE, MapStats.FAIRY_FROM_ENTRANCE, MapStats.BIG_TILE, emptySet(), puzzleOrder = true, reserve = 5,
+            calibration = MapStats.CALIBRATION)
 
         /** The rules for floor [floor] (1-7, F or M); null for the entrance floor. */
         fun of(floor: Int): FloorRules? = when (floor) {
