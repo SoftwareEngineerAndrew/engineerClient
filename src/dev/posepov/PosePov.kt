@@ -130,7 +130,7 @@ object PosePov : Module(
     )
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
-    private val hideTerminals by BooleanSetting("Hide terminal info", false, desc = "Leaves out the terminal a teammate has open (with its solution) over their view.")
+    private val peerToPeer by BooleanSetting("Peer-to-peer sharing", false, desc = "A little less secure but updates much faster.")
 
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     private val projection = Projection()
@@ -154,6 +154,7 @@ object PosePov : Module(
             // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching.
             DevgineerClient.safely("pose share") {
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
+                PoseShare.p2p = peerToPeer
                 PoseShare.tick()
             }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
@@ -323,8 +324,8 @@ object PosePov : Module(
                 }
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
-            if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: "shared · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
-            slot?.takeIf { !hideTerminals }?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
+            if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: if (sh.direct) "direct · " else "shared · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
+            slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
         // Whether sharing is up, and how many teammates are sharing with you.
         val n = PoseShare.sharingCount
