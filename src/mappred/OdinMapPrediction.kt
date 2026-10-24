@@ -287,17 +287,21 @@ object OdinMapPrediction {
     private fun percent(chance: Float): String = (chance * 100).roundToInt().let { PERCENTS.getOrNull(it) ?: "$it%" }
 
     /**
-     * [shown]'s splits by their door tile and its named rooms grouped by their tiles. The draw reads them every frame;
-     * a prediction is replaced (never changed) a few times a second, so they are worked out once per prediction.
+     * [shown]'s splits by their door tile and their labels, and its exact last rooms (named rooms on the same tiles
+     * that every sample has). The draw reads them every frame; a prediction is replaced (never changed) a few times
+     * a second, so they are worked out once per prediction.
      */
     private var lookupsOf: Prediction? = null
     private var splitsByTile: Map<Int, Split> = emptyMap()
-    private var namedByTiles: Collection<List<NamedRoom>> = emptyList()
+    private val splitLabels = HashMap<Split, Pair<String, String>>()
+    private var lastRooms: List<ExactRoom> = emptyList()
 
     private fun lookups(p: Prediction) {
         if (lookupsOf === p) return
         splitsByTile = p.splits.associateBy { it.tile }
-        namedByTiles = p.namedRooms.groupBy { it.tiles.joinToString(",") }.values
+        splitLabels.clear()
+        lastRooms = p.namedRooms.groupBy { it.tiles.joinToString(",") }.values
+            .filterNot { names -> names.sumOf { it.chance.toDouble() } < EXACT }.map { ExactRoom(it) }
         lookupsOf = p
     }
 
@@ -331,11 +335,10 @@ object OdinMapPrediction {
         val splits = splitsByTile
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
         val exact = BooleanArray(W * W)
-        if (exactRooms.value) for (names in namedByTiles) {
-            val tiles = names[0].tiles
-            if (names.sumOf { it.chance.toDouble() } < EXACT || tiles.any { known[it] || exact[it] || it in blood }) continue
-            for (t in tiles) exact[t] = true
-            exactRoom(g, tiles, names)
+        if (exactRooms.value) for (room in lastRooms) {
+            if (room.tiles.any { known[it] || exact[it] || it in blood }) continue
+            for (t in room.tiles) exact[t] = true
+            exactRoom(g, room)
         }
         // the big rooms it's sure of, greyed out at their whole size (likeliest first, never two on one tile)
         val inBig = arrayOfNulls<BigRoom>(W * W)
@@ -441,8 +444,28 @@ object OdinMapPrediction {
      * Odin's name text - its name when only one fits, else "?" (nothing in LCM Style, which draws no "?") with
      * the secrets if every name that fits has the same count.
      */
-    private fun exactRoom(g: GuiGraphicsExtractor, tiles: IntArray, names: List<NamedRoom>) {
-        val best = names.maxBy { it.chance }
+    private fun exactRoom(g: GuiGraphicsExtractor, room: ExactRoom) {
+        val type = room.type
+        val color = if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (0xBF shl 24)
+            else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, 0.75f).rgba
+        fillTiles(g, room.tiles, color)
+        val lines = if (lcm) room.lcmLines else room.lines
+        val fontH = mc.font.lineHeight
+        val scale = DungeonMap.textScaling
+        val totalH = (lines.size - 1) * fontH * scale
+        for ((i, line) in lines.withIndex()) {
+            g.pose().pushMatrix()
+            g.pose().translate(room.cx, room.cz - totalH / 2f + i * fontH * scale)
+            g.pose().scale(scale)
+            g.centeredText(mc.font, line, 0, -fontH / 2, 0xFFB4B4B4.toInt())
+            g.pose().popMatrix()
+        }
+    }
+
+    /** Named rooms every sample puts on the same tiles ([lastRooms]): what [exactRoom] draws for them but the colour. */
+    private class ExactRoom(names: List<NamedRoom>) {
+        val tiles = names[0].tiles
+        private val best = names.maxBy { it.chance }
         val type = when (best.name.pool) {
             MapStats.POOL_PUZZLE -> Cls.PUZZLE
             MapStats.POOL_TRAP -> Cls.TRAP
@@ -451,24 +474,16 @@ object OdinMapPrediction {
             MapStats.POOL_FAIRY -> Cls.FAIRY
             else -> -1
         }
-        val color = if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (0xBF shl 24)
-            else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, 0.75f).rgba
-        fillTiles(g, tiles, color)
         val cx = tiles.map { (it % W) * TILE + ROOM / 2f }.average().toFloat()
         val cz = tiles.map { (it / W) * TILE + ROOM / 2f }.average().toFloat()
-        val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
-        val name = if (best.chance >= EXACT) best.name.name else if (lcm) "" else "?"
-        val text = name + if (secrets != null && secrets > 0) " 0/$secrets" else ""
-        val lines = text.trim().split(" ").filter { it.isNotEmpty() }
-        val fontH = mc.font.lineHeight
-        val scale = DungeonMap.textScaling
-        val totalH = (lines.size - 1) * fontH * scale
-        for ((i, line) in lines.withIndex()) {
-            g.pose().pushMatrix()
-            g.pose().translate(cx, cz - totalH / 2f + i * fontH * scale)
-            g.pose().scale(scale)
-            g.centeredText(mc.font, line, 0, -fontH / 2, 0xFFB4B4B4.toInt())
-            g.pose().popMatrix()
+        private val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
+        /** The text's lines in Odin's look, and in LCM Style's (no "?"). */
+        val lines = linesOf(if (best.chance >= EXACT) best.name.name else "?")
+        val lcmLines = linesOf(if (best.chance >= EXACT) best.name.name else "")
+
+        private fun linesOf(name: String): List<String> {
+            val text = name + if (secrets != null && secrets > 0) " 0/$secrets" else ""
+            return text.trim().split(" ").filter { it.isNotEmpty() }
         }
     }
 
@@ -476,16 +491,21 @@ object OdinMapPrediction {
     private fun greyRoom(g: GuiGraphicsExtractor, tiles: IntArray) = fillTiles(g, tiles, BIG_GREY.rgba)
 
     private fun fillTiles(g: GuiGraphicsExtractor, tiles: IntArray, c: Int) {
-        val set = tiles.toHashSet()
         for (t in tiles) {
             val x = (t % W) * TILE; val y = (t / W) * TILE
-            val right = t % W + 1 < W && t + 1 in set; val down = t + W in set
+            val right = t % W + 1 < W && t + 1 in tiles; val down = t + W in tiles
             g.fill(x, y, x + ROOM, y + ROOM, c)
             if (right) g.fill(x + ROOM, y, x + TILE, y + ROOM, c)
             if (down) g.fill(x, y + ROOM, x + ROOM, y + TILE, c)
-            if (right && down && t + W + 1 in set) g.fill(x + ROOM, y + ROOM, x + TILE, y + TILE, c)
+            if (right && down && t + W + 1 in tiles) g.fill(x + ROOM, y + ROOM, x + TILE, y + TILE, c)
         }
     }
+
+    /** The types a dead end can be, in Odin's order and in dtMap's (puzzle on the outside, trap, yellow in the middle). */
+    private val DEAD_ENDS = intArrayOf(Cls.YELLOW, Cls.TRAP, Cls.PUZZLE, Cls.RARE)
+    private val LCM_DEAD_ENDS = intArrayOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE)
+    /** A guess tile's types by how many there are, refilled for each tile (the map is only drawn on the render thread). */
+    private val guesses = Array(4) { IntArray(it) }
 
     /**
      * A dead end's guess tile: Odin's (its renderGuess: one type in its colour, or two or three side by side
@@ -494,26 +514,30 @@ object OdinMapPrediction {
      * of the dead end's chance, the likeliest three.
      */
     private fun deadEndGuess(g: GuiGraphicsExtractor, x: Int, y: Int, probs: FloatArray, deadEnd: Float) {
-        val types = intArrayOf(Cls.YELLOW, Cls.TRAP, Cls.PUZZLE, Cls.RARE).filter { probs[it] >= 0.05f * deadEnd }
-        val keep = types.sortedByDescending { probs[it] }.take(3).toSet()
+        val at = 0.05f * deadEnd
+        // all four over 5%: the least likely is left out (of equals the last in Odin's order, as in a stable sort)
+        var n = 0; var least = -1
+        for (c in DEAD_ENDS) if (probs[c] >= at) { n++; if (least < 0 || probs[c] <= probs[least]) least = c }
+        val guess = guesses[minOf(n, 3)]
+        var i = 0
+        for (c in if (lcm) LCM_DEAD_ENDS else DEAD_ENDS) if (probs[c] >= at && (n < 4 || c != least)) guess[i++] = c
         if (lcm) {
-            // dtMap's order: puzzle on the outside, trap, yellow in the middle
-            LcmStyle.guessTile(g, x, y, intArrayOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE).filter { it in keep }.map { dim(it) }.toIntArray())
+            for (k in guess.indices) guess[k] = dim(guess[k])
+            LcmStyle.guessTile(g, x, y, guess)
             return
         }
-        val colors = types.filter { it in keep }.map { colorOf(it) }
-        when (colors.size) {
-            1 -> g.fill(x, y, x + ROOM, y + ROOM, colors[0].rgba)
+        when (guess.size) {
+            1 -> g.fill(x, y, x + ROOM, y + ROOM, colorOf(guess[0]).rgba)
             2 -> {
                 val half = ROOM / 2
-                g.fill(x, y, x + half, y + ROOM, colors[0].darker(0.5f).rgba)
-                g.fill(x + half, y, x + ROOM, y + ROOM, colors[1].darker(0.5f).rgba)
+                g.fill(x, y, x + half, y + ROOM, colorOf(guess[0]).darker(0.5f).rgba)
+                g.fill(x + half, y, x + ROOM, y + ROOM, colorOf(guess[1]).darker(0.5f).rgba)
             }
             else -> {
                 val third = ROOM / 3
-                g.fill(x, y, x + third, y + ROOM, colors[0].darker(0.5f).rgba)
-                g.fill(x + third, y, x + third * 2, y + ROOM, colors[1].darker(0.5f).rgba)
-                g.fill(x + third * 2, y, x + ROOM, y + ROOM, colors[2].darker(0.5f).rgba)
+                g.fill(x, y, x + third, y + ROOM, colorOf(guess[0]).darker(0.5f).rgba)
+                g.fill(x + third, y, x + third * 2, y + ROOM, colorOf(guess[1]).darker(0.5f).rgba)
+                g.fill(x + third * 2, y, x + ROOM, y + ROOM, colorOf(guess[2]).darker(0.5f).rgba)
             }
         }
     }
@@ -536,23 +560,29 @@ object OdinMapPrediction {
 
     /** "2P T Y B" (what's more likely there than not, puzzles by their expected count) over "~6" rooms. */
     private fun splitLabel(g: GuiGraphicsExtractor, x: Int, y: Int, s: Split) {
+        val (top, rooms) = splitLabels.getOrPut(s) { label(s) }
+        small(g, top, x + ROOM / 2, y + 3, -1)
+        small(g, rooms, x + ROOM / 2, y + 8, -1)
+    }
+
+    private fun label(s: Split): Pair<String, String> {
         val parts = ArrayList<String>()
         val pz = s.expect[Cls.PUZZLE].roundToInt()
         if (pz > 0) parts += "§d${if (pz > 1) pz else ""}P"
         if (s.expect[Cls.TRAP] >= 0.5f) parts += "§6T"
         if (s.expect[Cls.YELLOW] >= 0.5f) parts += "§eY"
         if (s.expect[Cls.BLOOD] >= 0.5f) parts += "§cB"
-        val top = parts.joinToString(" ").ifEmpty { "§7-" }
-        small(g, top, x + ROOM / 2, y + 3, -1)
-        small(g, "§f~${s.rooms.roundToInt()}", x + ROOM / 2, y + 8, -1)
+        return parts.joinToString(" ").ifEmpty { "§7-" } to "§f~${s.rooms.roundToInt()}"
     }
 
     private fun small(g: GuiGraphicsExtractor, text: String, cx: Int, cy: Int, color: Int) {
-        val scale = minOf(0.45f, (ROOM - 1f) / maxOf(1, mc.font.width(text)))
+        val width = mc.font.width(text)
+        val scale = minOf(0.45f, (ROOM - 1f) / maxOf(1, width))
         g.pose().pushMatrix()
         g.pose().translate(cx.toFloat(), cy.toFloat())
         g.pose().scale(scale)
-        g.centeredText(mc.font, text, 0, -mc.font.lineHeight / 2, color)
+        // centred as centeredText does, without measuring the text a second time
+        g.text(mc.font, text, -width / 2, -mc.font.lineHeight / 2, color)
         g.pose().popMatrix()
     }
 }
