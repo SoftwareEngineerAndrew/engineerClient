@@ -20,28 +20,43 @@ import net.minecraft.world.level.block.LiquidBlock
 import net.minecraft.world.level.block.RenderShape
 import net.minecraft.world.level.block.state.BlockState
 import java.util.concurrent.ConcurrentHashMap
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
- * Pose POV's geometry: flat-coloured faces (a block's map colour, shaded by face; a face only where the next block doesn't hide
- * it), in 16³ pieces of three kinds:
- *  - a room design's: built once from the room pack in the room's own box frame and kept across runs, drawn at every room that
- *    has that design, variant and turn; a piece where this run differs (a door edit, a block change) is built for the room alone.
- *  - the boss arena's: built once from the shipped arena, kept across runs; a section this run changed is built as a world one.
- *  - the world's: everything else, from [KnownWorld.stateAt] (the cells a room draws itself left out), this run only.
+ * Pose POV's geometry, made ahead and kept, so a frame only picks what to draw:
+ *  - a room design's: all its 16³ pieces in one buffer (built once from the room pack in the room's own box frame, kept on disk
+ *    across runs), one draw for every room with that design, variant and turn. A piece where this run differs (a door edit, a
+ *    block change) is built for the room alone and drawn in place of its range.
+ *  - the boss arena's: 2x2x2 sections to a buffer (a cluster), likewise kept; a section this run changed is drawn as a world one.
+ *  - the world's: everything else, from [KnownWorld.stateAt] (the cells a room draws itself left out), a section at a time,
+ *    this run only.
+ * Faces are textured and shaded when built (by side, and at each corner by the blocks around it), so drawing is a lookup.
  * Render thread only, except [dirty] (packets).
  */
 object BlockMesh {
     class Mesh(val buffer: GpuBuffer, val indexCount: Int)
+    /** Pieces in one buffer, in order: piece i is [counts] indices from vertex [starts]. */
+    class Merged(val buffer: GpuBuffer, val starts: IntArray, val counts: IntArray) { val indexCount = counts.sum() }
 
-    private val designs = HashMap<String, Mesh?>()
-    private val arena = HashMap<Long, Mesh?>()
+    /** Room designs (by [KnownWorld.Room.designKey]) and arena clusters (by [cluster] key) made so far; null when empty. */
+    private val rooms = HashMap<String, Merged?>()
+    private val clusters = HashMap<Long, Merged?>()
+    /** The pieces of one still being made (index count, vertex bytes), by its disk key: a little each frame, within budget. */
+    private val making = HashMap<String, Array<Pair<Int, ByteArray?>?>>()
     private val world = HashMap<Long, Mesh?>()
     private val roomOwn = HashMap<String, Mesh?>()
     private val touchedRoom = HashSet<String>()
+    private val touchedRooms = HashSet<String>()
     private val touchedArena = HashSet<Long>()
+    private val touchedClusters = HashSet<Long>()
     /** World sections to rebuild, and since when: [DIRTY_DELAY_MS] later, once the packet has been applied. */
     private val dirtyAt = ConcurrentHashMap<Long, Long>()
     private val dirtyRoom = HashMap<String, Long>()
+    /** The most indices one draw needs (the shared quad index buffer is asked for this many). */
+    var mostIndices = 0; private set
+    // The last [pump]'s near list, finished: the same again (and nothing dirty) has nothing to look at.
+    private var nearDone: List<Long>? = null
 
     private const val DIRTY_DELAY_MS = 100L
 
@@ -51,8 +66,17 @@ object BlockMesh {
     private val DZ = intArrayOf(0, 0, -1, 1, 0, 0)
 
     private fun roomKey(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int) = r.pieceKeys(lx, ly, lz)[0]
-    private fun designKey(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int) = r.pieceKeys(lx, ly, lz)[1]
     private fun inArena(sx: Int, sz: Int) = sx in KnownWorld.ARENA_SX && sz in KnownWorld.ARENA_SZ && KnownWorld.bossFloor()
+    /** The arena cluster a section is in: sections over 2 each way. */
+    fun cluster(sectionKey: Long) = SectionPos.asLong(SectionPos.x(sectionKey) shr 1, SectionPos.y(sectionKey) shr 1, SectionPos.z(sectionKey) shr 1)
+
+    /** A room's pieces (section coordinates in its box frame), in the order its buffer holds them. */
+    private val pieceLists = HashMap<String, Array<IntArray>>()
+    private fun pieces(r: KnownWorld.Room): Array<IntArray> = pieceLists.getOrPut(r.key) {
+        val out = ArrayList<IntArray>()
+        for (lx in 0..((r.x1 - r.x0) shr 4)) for (lz in 0..((r.z1 - r.z0) shr 4)) for (ly in (r.y0 shr 4)..(r.y1 shr 4)) out += intArrayOf(lx, ly, lz)
+        out.toTypedArray()
+    }
 
     // --- what changed ---------------------------------------------------------------------------------------------------
 
@@ -78,21 +102,25 @@ object BlockMesh {
             val k = KnownWorld.touchedCells.poll() ?: break
             val x = BlockPos.getX(k); val y = BlockPos.getY(k); val z = BlockPos.getZ(k)
             dirty(x, y, z)
-            if (inArena(x shr 4, z shr 4)) touchedArena += SectionPos.asLong(x shr 4, y shr 4, z shr 4)
+            if (inArena(x shr 4, z shr 4)) {
+                val s = SectionPos.asLong(x shr 4, y shr 4, z shr 4)
+                touchedArena += s; touchedClusters += cluster(s)
+            }
             val r = KnownWorld.roomAt(x, z) ?: continue
             val bx = x - r.x0; val bz = z - r.z0
             for (dx in edge(bx)) for (dy in edge(y)) for (dz in edge(bz)) {
                 val key = roomKey(r, (bx shr 4) + dx, (y shr 4) + dy, (bz shr 4) + dz)
                 touchedRoom += key; dirtyRoom[key] = now
             }
+            touchedRooms += r.key
         }
     }
 
     // --- building -------------------------------------------------------------------------------------------------------
 
     /**
-     * Builds for at most [budgetNs]: rebuilds first, then the rooms, then [near] (world sections by the eyes, nearest first), then
-     * with [everything] the rest of the dungeon and the arena.
+     * Builds for at most [budgetNs]: rebuilds first, then the rooms, then [near] (world sections and arena clusters by the eyes,
+     * nearest first), then with [everything] the rest of the dungeon and the arena.
      */
     fun pump(level: ClientLevel, budgetNs: Long, near: List<Long>, everything: Boolean) {
         pumpStart = System.nanoTime(); pumpBudget = budgetNs
@@ -109,58 +137,114 @@ object BlockMesh {
         for ((key, at) in dirtyAt.entries.toList()) {
             if (now - at < DIRTY_DELAY_MS) continue
             dirtyAt.remove(key)
+            nearDone = null; allDone = false
             if (key in world) { world.remove(key)?.buffer?.close() }
         }
+        if (!MeshDisk.ready) return
 
-        val rooms = KnownWorld.rooms
-        for (r in rooms) forEachPiece(r) { lx, ly, lz ->
-            val own = roomKey(r, lx, ly, lz)
-            if (own in touchedRoom) {
-                if (own !in roomOwn && dirtyRoom[own] == null) roomOwn[own] = buildRoom(level, r, lx, ly, lz, true)
-            } else {
-                val dk = designKey(r, lx, ly, lz)
-                if (dk !in designs) { if (!MeshDisk.ready) return@forEachPiece true; designs[dk] = fromDisk("d/$dk") { buildRoom(level, r, lx, ly, lz, false, "d/$dk") } }
+        for (r in KnownWorld.rooms) {
+            if (r.designKey !in rooms) {
+                val ps = pieces(r)
+                val (done, m) = assemble("m/${r.designKey}", ps.size) { i -> val p = ps[i]; buildRoom(level, r, p[0], p[1], p[2], false) }
+                if (!done) return
+                rooms[r.designKey] = m
             }
-            !overBudget()
+            if (r.key in touchedRooms) for (p in pieces(r)) {
+                val own = roomKey(r, p[0], p[1], p[2])
+                if (own in touchedRoom && own !in roomOwn && dirtyRoom[own] == null) {
+                    roomOwn[own] = upload(buildRoom(level, r, p[0], p[1], p[2], true))
+                    if (overBudget()) return
+                }
+            }
+            if (overBudget()) return
         }
-        if (overBudget()) return
-        for (key in near) { if (!want(level, key)) return }
+        if (near !== nearDone) {
+            for (key in near) if (!want(level, key)) return
+            nearDone = near
+        }
         if (!everything) return
         val minSy = level.minSectionY; val maxSy = level.maxSectionY
         val d0 = DungeonFrame.ORIGIN shr 4; val d1 = DungeonFrame.DUNGEON_MAX shr 4
-        for (sx in d0..d1) for (sz in d0..d1) for (sy in minSy..maxSy) if (!want(level, SectionPos.asLong(sx, sy, sz))) return
-        if (KnownWorld.bossFloor()) for (sx in KnownWorld.ARENA_SX) for (sz in KnownWorld.ARENA_SZ) for (sy in minSy..maxSy) {
-            if (!want(level, SectionPos.asLong(sx, sy, sz))) return
+        if (!allDone) {
+            for (sx in d0..d1) for (sz in d0..d1) for (sy in minSy..maxSy) if (!want(level, SectionPos.asLong(sx, sy, sz))) return
+            if (KnownWorld.bossFloor()) for (sx in KnownWorld.ARENA_SX) for (sz in KnownWorld.ARENA_SZ) for (sy in minSy..maxSy) {
+                if (!want(level, SectionPos.asLong(sx, sy, sz))) return
+            }
+            allDone = true
         }
     }
 
-    /** Builds the section [key] if it's missing (the shared arena piece, or this run's world one); false once the budget is spent. */
+    /** The whole dungeon and arena were looked over with nothing left to build (until something changes). */
+    private var allDone = false
+
+    /** Makes sure section [key] has its geometry (its arena cluster, or this run's world section); false once the budget is spent. */
     private fun want(level: ClientLevel, key: Long): Boolean {
         val sx = SectionPos.x(key); val sy = SectionPos.y(key); val sz = SectionPos.z(key)
         if (inArena(sx, sz) && key !in touchedArena) {
-            if (key !in arena) { if (!MeshDisk.ready) return true; arena[key] = fromDisk("a/$key") { buildArena(level, sx, sy, sz, "a/$key") }; return !overBudget() }
-            return true
+            val c = cluster(key)
+            if (c in clusters) return true
+            val cx = SectionPos.x(c); val cy = SectionPos.y(c); val cz = SectionPos.z(c)
+            val (done, m) = assemble("c/$c", 8) { i ->
+                val px = (cx shl 1) + (i and 1); val py = (cy shl 1) + ((i shr 1) and 1); val pz = (cz shl 1) + (i shr 2)
+                if (inArena(px, pz) && py in level.minSectionY..level.maxSectionY) buildArena(level, px, py, pz) else 0 to null
+            }
+            if (!done) return false
+            clusters[c] = m
+            return !overBudget()
         }
         if (key in world || dirtyAt[key]?.let { System.currentTimeMillis() - it < DIRTY_DELAY_MS } == true) return true
-        world[key] = buildWorld(level, sx, sy, sz)
+        allDone = false
+        world[key] = upload(buildWorld(level, sx, sy, sz))
         return !overBudget()
     }
 
-    /** A shared piece from disk when it was built in an earlier session (null for an empty one), else [build] (which keeps it there). */
-    private inline fun fromDisk(key: String, build: () -> Mesh?): Mesh? {
-        val (count, bytes) = MeshDisk.read(key) ?: return build()
-        return bytes?.let { Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, it), count) }
+    /**
+     * One buffer of [n] pieces, from disk when made in an earlier session, otherwise [piece] by piece within the budget (kept in
+     * [making] meanwhile) and then kept on disk: (done, the buffer or null when it's all empty).
+     */
+    private inline fun assemble(key: String, n: Int, piece: (Int) -> Pair<Int, ByteArray?>): Pair<Boolean, Merged?> {
+        val disk = MeshDisk.read(key)
+        val ranges = MeshDisk.read("$key#")
+        if (disk != null && ranges != null && ranges.first == n) {
+            val counts = IntArray(n); ranges.second?.let { b -> b.order(ByteOrder.BIG_ENDIAN); for (i in 0 until n) counts[i] = b.getInt(i * 4) }
+            return true to disk.second?.let { merged(it, counts) }
+        }
+        val parts = making.getOrPut(key) { arrayOfNulls(n) }
+        for (i in 0 until n) if (parts[i] == null) { parts[i] = piece(i); if (overBudget() && parts.any { it == null }) return false to null }
+        making.remove(key)
+        val counts = IntArray(n) { parts[it]!!.first }
+        val total = parts.sumOf { it!!.second?.size ?: 0 }
+        val rangeBytes = ByteBuffer.allocate(n * 4).order(ByteOrder.BIG_ENDIAN).also { b -> counts.forEach { b.putInt(it) } }.flip()
+        if (total == 0) { MeshDisk.write(key, 0, null); MeshDisk.write("$key#", n, rangeBytes); return true to null }
+        val all = ByteBuffer.allocateDirect(total)
+        for (p in parts) p!!.second?.let { all.put(it) }
+        all.flip()
+        MeshDisk.write(key, counts.sum(), all)
+        MeshDisk.write("$key#", n, rangeBytes)
+        return true to merged(all, counts)
+    }
+
+    private fun merged(vertices: ByteBuffer, counts: IntArray): Merged {
+        val starts = IntArray(counts.size)
+        var v = 0
+        for (i in counts.indices) { starts[i] = v; v += counts[i] / 6 * 4 }
+        val m = Merged(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, vertices), starts, counts)
+        if (m.indexCount > mostIndices) mostIndices = m.indexCount
+        return m
+    }
+
+    private fun upload(built: Pair<Int, ByteArray?>): Mesh? {
+        val bytes = built.second ?: return null
+        val buf = ByteBuffer.allocateDirect(bytes.size).put(bytes).flip()
+        if (built.first > mostIndices) mostIndices = built.first
+        return Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, buf), built.first)
     }
 
     private var pumpStart = 0L
     private var pumpBudget = 0L
     private fun overBudget() = System.nanoTime() - pumpStart > pumpBudget
 
-    private inline fun forEachPiece(r: KnownWorld.Room, f: (Int, Int, Int) -> Boolean) {
-        for (lx in 0..((r.x1 - r.x0) shr 4)) for (lz in 0..((r.z1 - r.z0) shr 4)) for (ly in (r.y0 shr 4)..(r.y1 shr 4)) if (!f(lx, ly, lz)) return
-    }
-
-    private fun buildRoom(level: ClientLevel, r: KnownWorld.Room, lx: Int, ly: Int, lz: Int, own: Boolean, cacheKey: String? = null): Mesh? {
+    private fun buildRoom(level: ClientLevel, r: KnownWorld.Room, lx: Int, ly: Int, lz: Int, own: Boolean): Pair<Int, ByteArray?> {
         val pos = BlockPos.MutableBlockPos()
         val bx0 = lx shl 4; val bz0 = lz shl 4
         val bx1 = minOf(bx0 + 15, r.x1 - r.x0); val bz1 = minOf(bz0 + 15, r.z1 - r.z0)
@@ -171,18 +255,18 @@ object BlockMesh {
             else { x, y, z -> if (x < 0 || z < 0 || x > r.x1 - r.x0 || z > r.z1 - r.z0) KnownWorld.AIR else r.designAt(x, y, z) }
         val skip: (Int, Int, Int) -> Boolean =
             if (own) { x, _, z -> KnownWorld.roomAt(r.x0 + x, r.z0 + z) !== r } else { _, _, _ -> false }
-        return mesh(level, bx0..bx1, y0..y1, bz0..bz1, r.x0, r.z0, at, skip, cacheKey)
+        return mesh(level, bx0..bx1, y0..y1, bz0..bz1, r.x0, r.z0, at, skip)
     }
 
-    private fun buildArena(level: ClientLevel, sx: Int, sy: Int, sz: Int, cacheKey: String): Mesh? {
+    private fun buildArena(level: ClientLevel, sx: Int, sy: Int, sz: Int): Pair<Int, ByteArray?> {
         val a = com.engineerclient.p3sim.Arena.data
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
-        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false }, cacheKey)
+        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false })
     }
 
-    private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int): Mesh? {
-        if (sy < level.minSectionY || sy > level.maxSectionY) return null
-        if (!KnownWorld.mayHaveBlocks(level, sx, sy, sz)) return null
+    private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int): Pair<Int, ByteArray?> {
+        if (sy < level.minSectionY || sy > level.maxSectionY) return 0 to null
+        if (!KnownWorld.mayHaveBlocks(level, sx, sy, sz)) return 0 to null
         val pos = BlockPos.MutableBlockPos()
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
         return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0,
@@ -190,12 +274,12 @@ object BlockMesh {
             { x, _, z -> KnownWorld.coveredByRoom(x, z) })
     }
 
-    /** The faces of the cells in the box, in [at]'s frame, whose origin is world ([ox], 0, [oz]) (for tints and model variants). */
+    /** The faces of the cells in the box, in [at]'s frame, whose origin is world ([ox], 0, [oz]): (index count, vertex bytes). */
     private inline fun mesh(
         level: ClientLevel, xs: IntRange, ys: IntRange, zs: IntRange, ox: Int, oz: Int,
-        noinline at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean, cacheKey: String? = null,
-    ): Mesh? {
-        if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) { cacheKey?.let { MeshDisk.write(it, 0, null) }; return null }
+        noinline at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean,
+    ): Pair<Int, ByteArray?> {
+        if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) return 0 to null
         cellAt = at
         val format = DefaultVertexFormat.POSITION_TEX_COLOR
         val world = BlockPos.MutableBlockPos()
@@ -209,10 +293,10 @@ object BlockMesh {
                 for (f in 0..5) hidden[f] = at(x + DX[f], y + DY[f], z + DZ[f]).isSolidRender
                 block(bb, level, state, world, x, y, z)
             }
-            val data = bb.build() ?: run { cacheKey?.let { MeshDisk.write(it, 0, null) }; return null }
+            val data = bb.build() ?: return 0 to null
             data.use {
-                cacheKey?.let { k -> MeshDisk.write(k, it.drawState().indexCount(), it.vertexBuffer()) }
-                return Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, it.vertexBuffer()), it.drawState().indexCount())
+                val v = it.vertexBuffer()
+                return it.drawState().indexCount() to ByteArray(v.remaining()).also { a -> v.duplicate().get(a) }
             }
         }
     }
@@ -220,28 +304,72 @@ object BlockMesh {
     // --- drawing --------------------------------------------------------------------------------------------------------
 
     /**
-     * Every piece built, with its world box, for [draw] to cull: (mesh, box min x, y, z, its draw offset x, z). Shared pieces stand
-     * in for a room's own until that is built.
+     * What a feed draws: every room [room] lets through and the frustum ([inView], a world box) has, every arena cluster
+     * [clusterSeen] lets through and is in view, and the world sections in view, each as (buffer, first vertex, index count, the
+     * frame's x, z offset). A room this run changed in places draws its own pieces there and its design's ranges around them.
      */
-    inline fun forEachDrawable(draw: (Mesh, Int, Int, Int, Int, Int) -> Unit) {
-        for (r in KnownWorld.rooms) for (lx in 0..((r.x1 - r.x0) shr 4)) for (lz in 0..((r.z1 - r.z0) shr 4)) for (ly in (r.y0 shr 4)..(r.y1 shr 4)) {
-            val m = roomPiece(r, lx, ly, lz) ?: continue
-            draw(m, r.x0 + (lx shl 4), ly shl 4, r.z0 + (lz shl 4), r.x0, r.z0)
+    inline fun forEachDraw(
+        room: (KnownWorld.Room) -> Boolean, clusterSeen: (Long) -> Boolean,
+        inView: (Float, Float, Float, Float, Float, Float) -> Boolean,
+        crossinline draw: (GpuBuffer, Int, Int, Int, Int) -> Unit,
+    ) {
+        for (r in KnownWorld.rooms) {
+            if (!room(r)) continue
+            if (!inView(r.x0.toFloat(), r.y0.toFloat(), r.z0.toFloat(), r.x1 + 1f, r.y1 + 1f, r.z1 + 1f)) continue
+            val m = roomBuffer(r)
+            if (!roomChanged(r)) { if (m != null) draw(m.buffer, 0, m.indexCount, r.x0, r.z0); continue }
+            forEachRoomRange(r, m) { buf, first, count -> draw(buf, first, count, r.x0, r.z0) }
         }
-        for ((k, m) in worldPieces()) draw(m, SectionPos.x(k) shl 4, SectionPos.y(k) shl 4, SectionPos.z(k) shl 4, 0, 0)
+        forEachCluster { key, m ->
+            if (!clusterSeen(key)) return@forEachCluster
+            val x = SectionPos.x(key) shl 5; val y = SectionPos.y(key) shl 5; val z = SectionPos.z(key) shl 5
+            if (!inView(x.toFloat(), y.toFloat(), z.toFloat(), x + 32f, y + 32f, z + 32f)) return@forEachCluster
+            if (!clusterChanged(key)) draw(m.buffer, 0, m.indexCount, 0, 0)
+            else forEachClusterRange(key, m) { first, count -> draw(m.buffer, first, count, 0, 0) }
+        }
+        forEachWorld { k, m ->
+            val x = SectionPos.x(k) shl 4; val y = SectionPos.y(k) shl 4; val z = SectionPos.z(k) shl 4
+            if (inView(x.toFloat(), y.toFloat(), z.toFloat(), x + 16f, y + 16f, z + 16f)) draw(m.buffer, 0, m.indexCount, 0, 0)
+        }
     }
 
-    fun roomPiece(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int): Mesh? {
-        val own = roomKey(r, lx, ly, lz)
-        if (own in touchedRoom) roomOwn[own]?.let { return it }
-        return designs[designKey(r, lx, ly, lz)]
+    fun roomBuffer(r: KnownWorld.Room): Merged? = rooms[r.designKey]
+    fun roomChanged(r: KnownWorld.Room) = r.key in touchedRooms
+    fun clusterChanged(key: Long) = key in touchedClusters
+
+    /** A changed room: its own pieces where built, its design's ranges (runs of them as one) everywhere else. */
+    fun forEachRoomRange(r: KnownWorld.Room, m: Merged?, draw: (GpuBuffer, Int, Int) -> Unit) {
+        val ps = pieces(r)
+        var runStart = -1; var runCount = 0
+        fun flush() { if (m != null && runCount > 0) draw(m.buffer, m.starts[runStart], runCount); runStart = -1; runCount = 0 }
+        for (i in ps.indices) {
+            val own = roomKey(r, ps[i][0], ps[i][1], ps[i][2])
+            val mine = if (own in touchedRoom && own in roomOwn) roomOwn[own] else null
+            if (own in touchedRoom && own in roomOwn) { flush(); if (mine != null) draw(mine.buffer, 0, mine.indexCount); continue }
+            if (m == null) continue
+            if (runStart < 0) runStart = i
+            runCount += m.counts[i]
+        }
+        flush()
     }
 
-    /** The world sections and, on a boss floor, the arena's untouched ones. */
-    fun worldPieces(): Sequence<Pair<Long, Mesh>> = sequence {
-        for ((k, m) in world) if (m != null) yield(k to m)
-        if (KnownWorld.bossFloor()) for ((k, m) in arena) if (m != null && k !in touchedArena) yield(k to m)
+    /** A changed cluster: the ranges of its sections this run hasn't touched (those are world sections now). */
+    fun forEachClusterRange(key: Long, m: Merged, draw: (Int, Int) -> Unit) {
+        val cx = SectionPos.x(key); val cy = SectionPos.y(key); val cz = SectionPos.z(key)
+        var runStart = -1; var runCount = 0
+        for (i in 0 until 8) {
+            val s = SectionPos.asLong((cx shl 1) + (i and 1), (cy shl 1) + ((i shr 1) and 1), (cz shl 1) + (i shr 2))
+            if (s in touchedArena) { if (runCount > 0) draw(m.starts[runStart], runCount); runStart = -1; runCount = 0; continue }
+            if (runStart < 0) runStart = i
+            runCount += m.counts[i]
+        }
+        if (runCount > 0) draw(m.starts[runStart], runCount)
     }
+
+    inline fun forEachCluster(f: (Long, Merged) -> Unit) { if (KnownWorld.bossFloor()) for ((k, m) in clusterMap()) if (m != null) f(k, m) }
+    inline fun forEachWorld(f: (Long, Mesh) -> Unit) { for ((k, m) in worldMap()) if (m != null) f(k, m) }
+    fun clusterMap(): Map<Long, Merged?> = clusters
+    fun worldMap(): Map<Long, Mesh?> = world
 
     // --- lifetime -------------------------------------------------------------------------------------------------------
 
@@ -249,7 +377,8 @@ object BlockMesh {
     fun newRun() {
         world.values.forEach { it?.buffer?.close() }; world.clear()
         roomOwn.values.forEach { it?.buffer?.close() }; roomOwn.clear()
-        touchedRoom.clear(); touchedArena.clear(); dirtyAt.clear(); dirtyRoom.clear()
+        touchedRoom.clear(); touchedRooms.clear(); touchedArena.clear(); touchedClusters.clear(); dirtyAt.clear(); dirtyRoom.clear()
+        pieceLists.clear(); nearDone = null; allDone = false
     }
 
     fun clear() {
@@ -258,8 +387,9 @@ object BlockMesh {
     }
 
     private fun dropShared() {
-        designs.values.forEach { it?.buffer?.close() }; designs.clear()
-        arena.values.forEach { it?.buffer?.close() }; arena.clear()
+        rooms.values.forEach { it?.buffer?.close() }; rooms.clear()
+        clusters.values.forEach { it?.buffer?.close() }; clusters.clear()
+        making.clear(); nearDone = null; allDone = false
     }
 
     // --- one block ------------------------------------------------------------------------------------------------------
