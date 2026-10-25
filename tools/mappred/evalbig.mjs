@@ -6,7 +6,8 @@ const { sample: sample2, combosFor, OUT } = await import(T0 + 'sampler2.mjs');
 const { sample: sample3 } = await import(T0 + 'sampler3.mjs');
 // variants with game: true run sampler3 (the game's own steps); ZMIX=file (placelik MIXRATE) for its mix weights
 const zmix = process.env.ZMIX ? JSON.parse((await import('node:fs')).readFileSync(process.env.ZMIX, 'utf8')) : {};
-const sample = (obs, c, o) => o.game ? sample3(obs, c, { ...o, zmix }) : sample2(obs, c, o);
+// PARTICLES=n: sampler3's batch size
+const sample = (obs, c, o) => o.game ? sample3(obs, c, { ...o, zmix, particles: +(process.env.PARTICLES || 200) }) : sample2(obs, c, o);
 const { makeRng } = await import(T0 + 'mlp.mjs');
 const { CLS } = await import(T0 + 'sim.mjs');
 const { readFileSync } = await import('node:fs');
@@ -38,7 +39,7 @@ if (process.env.REAL) {
       snaps.push({ L, k, known, obs, A, Y: A.unknown.map(([x, z]) => C2[classOf(L.rooms[L.grid[z][x]])]) });
     }
   }
-} else snaps = snapshots((process.env.SET === 'train' ? train : test).slice(0, +nTest), 99, 1, [2, 4, 6, 9, 12]);  // SET=train: training maps (to fit a correction on)
+} else snaps = snapshots((process.env.SET === 'train' ? train : test).slice(0, +nTest), 99, 1, (process.env.STAGES || '2,4,6,9,12').split(',').map(Number));  // STAGES=9,12: only those  // SET=train: training maps (to fit a correction on)
 console.log(`${snaps.length} snapshots from ${process.env.REAL ? 'real discovery order on' : Math.min(+nTest, test.length)} held-out maps (${train.length} train)`);
 const VAR = { old: { fourL: true }, lfix: {}, ...Object.fromEntries([0.15, 0.25, 0.35].map(b => [`lfix+bunch${b}`, { bunch: b }])) };
 Object.assign(VAR, { prim: { grow: 0 }, 'oldest0.3': { grow: 0, oldest: 0.3 }, 'oldest0.5': { grow: 0, oldest: 0.5 }, 'oldest0.3+res5': { grow: 0, oldest: 0.3, reserve: 5 }, 'res5': { reserve: 5 }, 'res3': { reserve: 3 }, 'res7': { reserve: 7 } });
