@@ -28,7 +28,8 @@
 //   u:mode=grow|post/q=/p=/f=/c=/k=/m=/r= one generator with the open questions as parameters: the rooms made
 //         while the tree grows (grow, chance c * shapes left / free cells) or after it (post, the cells in the
 //         growth order shuffled by m, each tried with chance c); k tries at a random placement over the cell
-//         (0 = any that fits); q, p oldest-/newest-first; f the first room's doors to all its neighbours; r held cells
+//         (0 = any that fits); q, p oldest-/newest-first; f the first room's doors to all its neighbours; r held cells;
+//         i=1 the entrance's door inward (every real map's is)
 // Closest so far: grow:bfs0.1:c3f (nothing held back); cells:bfs0.2:rnd:res4 before it.
 const T0 = './';
 const { complete } = await import(T0 + 'common.mjs');
@@ -174,7 +175,9 @@ function generate(variant, ent, shapes) {
       };
       const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u]));
       const add = v => { grown.push(v); if (P.mode === 'grow' && owner[v] === -1) { let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++; if (rnd() < Math.min(1, P.c * Math.pow(Math.max(7 - placed(), 0), al) / Math.max(free, 1))) tryStart(v); } };
-      const first = NB[ent][ri(NB[ent].length)]; parent[first] = ent; add(first);
+      // i=1: the entrance's door inward, as on every real map (else to a random neighbour, mostly along the edge)
+      const inward = ent < W ? ent + W : ent >= N - W ? ent - W : ent % W === 0 ? ent + 1 : ent - 1;
+      const first = P.i ? inward : NB[ent][ri(NB[ent].length)]; parent[first] = ent; add(first);
       if (P.f === 2) {
         // f=2: only the cell behind the entrance gets a door to each free neighbour (claimed cells only from their room)
         for (const w of shuffleArr(fr(first))) if (parent[w] === -2) { parent[w] = first; add(w); }
