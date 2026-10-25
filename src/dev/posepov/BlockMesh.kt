@@ -204,7 +204,7 @@ object BlockMesh {
      */
     private inline fun assemble(key: String, n: Int, piece: (Int) -> Pair<Int, ByteArray?>): Pair<Boolean, Merged?> {
         val disk = MeshDisk.read(key)
-        val ranges = MeshDisk.read("$key#")
+        val ranges = MeshDisk.read("$key#", raw = true)
         if (disk != null && ranges != null && ranges.first == n) {
             val counts = IntArray(n); ranges.second?.let { b -> b.order(ByteOrder.BIG_ENDIAN); for (i in 0 until n) counts[i] = b.getInt(i * 4) }
             return true to disk.second?.let { merged(it, counts) }
@@ -215,12 +215,12 @@ object BlockMesh {
         val counts = IntArray(n) { parts[it]!!.first }
         val total = parts.sumOf { it!!.second?.size ?: 0 }
         val rangeBytes = ByteBuffer.allocate(n * 4).order(ByteOrder.BIG_ENDIAN).also { b -> counts.forEach { b.putInt(it) } }.flip()
-        if (total == 0) { MeshDisk.write(key, 0, null); MeshDisk.write("$key#", n, rangeBytes); return true to null }
+        if (total == 0) { MeshDisk.write(key, 0, null); MeshDisk.write("$key#", n, rangeBytes, raw = true); return true to null }
         val all = ByteBuffer.allocateDirect(total)
         for (p in parts) p!!.second?.let { all.put(it) }
         all.flip()
         MeshDisk.write(key, counts.sum(), all)
-        MeshDisk.write("$key#", n, rangeBytes)
+        MeshDisk.write("$key#", n, rangeBytes, raw = true)
         return true to merged(all, counts)
     }
 

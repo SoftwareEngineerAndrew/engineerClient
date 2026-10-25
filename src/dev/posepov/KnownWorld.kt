@@ -51,9 +51,9 @@ object KnownWorld {
     /** One placed room. [designKey] names its geometry, the same for every run that has this design, variant and turn. */
     /**
      * One placed room. [tiles] are its grid tiles, [core] the core hash it was named by (when known: what teammates are told),
-     * [shared] whether a teammate's game named it rather than this one.
+     * [shared] whether a teammate's game named it rather than this one, [guessed] whether only its edge columns did (RoomEdges).
      */
-    class Room(val key: String, val inst: RoomInstance, val tiles: List<Tile>, val core: Int? = null, val shared: Boolean = false) {
+    class Room(val key: String, val inst: RoomInstance, val tiles: List<Tile>, val core: Int? = null, val shared: Boolean = false, val guessed: Boolean = false) {
         val p = inst.placement
         val v = inst.volume
         val designKey = "${inst.design.id}|${(key.substringAfterLast('|'))}|${p.rot}"
@@ -121,7 +121,7 @@ object KnownWorld {
     }
 
     fun reset() {
-        sharedBy.clear()
+        sharedBy.clear(); RoomEdges.reset()
         changed.clear(); changedSections.clear(); touchedCells.clear()
         tiles.fill(null); roomList = null; edits = emptyMap(); editSections = emptySet(); doorsKey = ""
     }
@@ -148,7 +148,7 @@ object KnownWorld {
      * Places every room Odin has named with a rotation it is sure of, and lays the doors between them out again when the rooms
      * or Odin's doors change. [placed] is called for each room new this time. Render thread; cheap when nothing changed.
      */
-    fun refresh(level: ClientLevel, placed: (Room) -> Unit) {
+    fun refresh(level: ClientLevel, edges: Boolean, placed: (Room) -> Unit) {
         val pack = pack ?: return
         var changedRooms = false
         for (room in DungeonScan.rooms) {
@@ -177,13 +177,23 @@ object KnownWorld {
         // only as the room pack has it (its core names the design and variant, which must take that turn and that many tiles).
         for (list in sharedBy.values) for (s in list) {
             val idx = s.tiles.map { it.z * 6 + it.x }
-            if (idx.any { tiles[it] != null }) continue
+            if (idx.any { tiles[it]?.guessed == false }) continue
             val entry = pack.designByCore(s.core) ?: continue
             val design = pack.design(entry.design) ?: continue
             if (s.rot !in design.rotations || s.tiles.size != design.tiles.size) continue
             val r = try {
-                Room("${design.id}|${s.rot}|${s.tiles}|${entry.variant}|shared", RoomInstance(design, pack.volumeFor(design, entry.variant) ?: continue, design.place(s.rot, s.tiles)), s.tiles, s.core, true)
+                Room("${design.id}|${s.rot}|${s.tiles}|shared|${entry.variant}", RoomInstance(design, pack.volumeFor(design, entry.variant) ?: continue, design.place(s.rot, s.tiles)), s.tiles, s.core, true)
             } catch (e: Exception) { continue }
+            put(r)
+            placed(r)
+            for (k in changed.keys) if (r.covers(BlockPos.getX(k), BlockPos.getZ(k))) touchedCells.add(k)
+            changedRooms = true
+        }
+        // Rooms nobody has named yet, from their edge columns (until Odin or a teammate does).
+        if (edges) RoomEdges.step(level, pack) { tiles[it] != null }?.let { f ->
+            val r = try {
+                Room("${f.design.id}|${f.rot}|${f.tiles}|guess|null", RoomInstance(f.design, pack.volume(f.design) ?: return@let, f.design.place(f.rot, f.tiles)), f.tiles, guessed = true)
+            } catch (e: Exception) { return@let }
             put(r)
             placed(r)
             for (k in changed.keys) if (r.covers(BlockPos.getX(k), BlockPos.getZ(k))) touchedCells.add(k)

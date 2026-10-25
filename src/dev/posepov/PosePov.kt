@@ -171,6 +171,7 @@ object PosePov : Module(
         onReceive<ClientboundLevelChunkWithLightPacket> {
             val level = mc.level ?: return@onReceive
             BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY)
+            RoomEdges.chunk(x, z)
         }
         // An unloaded chunk falls back to what is known about it (or nothing).
         onReceive<ClientboundForgetLevelChunkPacket> {
@@ -696,7 +697,7 @@ object PosePov : Module(
         val level = mc.level ?: return
         // On arrival the world sections are built again with the rooms and the arena in them.
         KnownWorld.load { mc.execute { BlockMesh.newRun(); KnownWorld.requeueChanges() } }
-        KnownWorld.refresh(level) { r ->
+        KnownWorld.refresh(level, DungeonUtils.inDungeons && !DungeonUtils.inBoss) { r ->
             // The world sections under a room just placed lose those cells to the room's own pieces.
             for (cx in (r.x0 shr 4)..(r.x1 shr 4)) for (cz in (r.z0 shr 4)..(r.z1 shr 4)) BlockMesh.dirtyColumn(cx, cz, level.minSectionY, level.maxSectionY)
         }
