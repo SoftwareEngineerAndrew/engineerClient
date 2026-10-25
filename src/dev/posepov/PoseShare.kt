@@ -99,6 +99,8 @@ object PoseShare {
     @Volatile var p2p = false
     @Volatile private var mySlot = 0
     @Volatile private var v6 = false
+    /** Frame kinds past the pose relay's own that it says it passes on (its sign-in's "x"); [shareExtra]'s go peer-to-peer only otherwise. */
+    @Volatile private var relayExtras: Set<Int> = emptySet()
     private var sentPort = 0
     private var portAt = 0L
 
@@ -316,6 +318,23 @@ object PoseShare {
         if (direct.isEmpty() || !direct.containsAll(roster.keys)) sendBinary(frame)
     }
 
+    /**
+     * One of [com.devgineerclient.party.PartyProgress]'s frames (kind 7 or 8): to each live peer, and through the relay only once
+     * it says it takes that kind (one that doesn't would close the socket on it). Sent whether or not anyone is watching.
+     */
+    fun shareExtra(frame: ByteArray): Int {
+        if (!ready || roster.isEmpty()) return 0
+        val direct = if (p2p) PeerLink.broadcast(frame) else emptySet()
+        if (relayTakes(frame[0].toInt() and 255) && !direct.containsAll(roster.keys)) sendBinary(frame)
+        return direct.size
+    }
+
+    /** Whether the relay passes on frames of [kind] (see [shareExtra]). */
+    fun relayTakes(kind: Int) = kind in relayExtras
+
+    /** How many party members are linked with you right now (sharing with you, by the relay or peer-to-peer). */
+    val linkedCount get() = roster.size
+
     private fun reportPort(port: Int) {
         if (port == sentPort || System.currentTimeMillis() - portAt < 3100) return
         sentPort = port; portAt = System.currentTimeMillis()
@@ -480,6 +499,7 @@ object PoseShare {
                 lastProblem = null
                 DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt})")
                 mySlot = m["slot"]?.asInt ?: 0; v6 = m["v6"]?.asBoolean == true
+                relayExtras = m["x"]?.takeIf { it.isJsonArray }?.asJsonArray?.mapNotNull { e -> runCatching { e.asInt }.getOrNull() }?.toSet() ?: emptySet()
             }
             "w" -> wanted = m["w"]?.asInt == 1
             "pe" -> {
@@ -514,7 +534,7 @@ object PoseShare {
         if (data.remaining() < 2) return
         val from = data.get().toInt() and 255
         val sender = roster[from] ?: return
-        when (data.get().toInt()) {
+        when (val kind = data.get().toInt()) {
             1 -> if (data.remaining() == 19) heard(sender, null, from, data, 0, now, false)
             2 -> if (data.remaining() == 21) {
                 val subject = subjects[data.get().toInt() and 255] ?: return
@@ -524,6 +544,7 @@ object PoseShare {
             }
             3 -> gui(sender, data, now)
             4 -> tracks[sender]?.gui = null
+            7, 8 -> com.devgineerclient.party.PartyProgress.heard(sender, kind, data)
         }
     }
 
@@ -537,6 +558,7 @@ object PoseShare {
             6 -> if (frame.size == 22) heard(sender, null, slot, b, 0, now, true, timed = true)
             3 -> gui(sender, b, now)
             4 -> if (frame.size == 1) tracks[sender]?.gui = null
+            7, 8 -> com.devgineerclient.party.PartyProgress.heard(sender, frame[0].toInt(), b)
         }
     }
 
