@@ -138,13 +138,15 @@ object PosePov : Module(
     )
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
-    private val peerToPeer by BooleanSetting("Peer-to-peer sharing", false, desc = "A little less secure but updates much faster.")
+    // Named for what it does: a new name, so anyone who had the old "Peer-to-peer sharing" on starts off again and has to choose it.
+    private val peerToPeer by BooleanSetting("Peer-to-peer (SHARES YOUR IP)", false, desc = "§cShows your IP address to every teammate who also has this on.§r Your view goes straight to them instead of through undonecoffee.com, a little faster. Off, nobody ever sees your IP.")
     private val shareFps by NumberSetting("Peer-to-peer FPS", 60, 20..240, 1, desc = "How many times a second your view goes to teammates connected peer-to-peer. Higher is smoother for them.").withDependency { peerToPeer }
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
 
     /** Whether the device draws many ranges in one call (glMultiDrawElementsBaseVertex and the like). */
     private var multiFailed = false
     private val multiDraw by lazy { runCatching { RenderSystem.getDevice().deviceInfo.features().multiDrawDirectSeparate() }.getOrDefault(false) }
+    private var p2pWarned = false
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     /** What each feed last drew, when that was only blocks and its own hand (see [draw]). */
     private data class FeedSig(val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val swing: Float, val held: Int, val world: Long)
@@ -171,6 +173,12 @@ object PosePov : Module(
             DevgineerClient.safely("pose share") {
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
                 PoseShare.p2p = peerToPeer
+                // On: said in chat, red, at every game start and every time it's turned on, so it's never on unnoticed.
+                if (peerToPeer && !p2pWarned && mc.player != null) {
+                    p2pWarned = true
+                    DevgineerClient.chat("§c§l[Pose POV] Peer-to-peer is ON: teammates who also have it on can see your IP address. §7Turn off \"Peer-to-peer (SHARES YOUR IP)\" in Pose POV to keep it private.")
+                }
+                if (!peerToPeer) p2pWarned = false
                 PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
                 PoseShare.tick()
             }
