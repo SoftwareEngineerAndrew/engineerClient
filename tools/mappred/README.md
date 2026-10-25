@@ -222,6 +222,53 @@ predictor. Tuning the predictor's own settings on the score (grow, reserve, bunc
 maps, the best confirmed on held-out ones) found nothing better than what it has: the training maps' best
 (grow 0.2, reserve 4, bunch 0.1) was worse held-out (-1.0477, real order -1.0707; now -1.0427, -1.0669).
 
+### What the game's code could be doing (Oct 2026)
+
+Every candidate tried, and what it showed:
+
+- Scanning the grid (rows, columns, a corner first): no. `asym.mjs`: turned so the entrance is on the top row,
+  maps that needed a mirror and maps that didn't have the same big rooms and dead ends cell by cell (sum of
+  z^2 22.8 and 31.6 over 36 cells, about 36 if alike), and so do north/south-entrance maps against east/west
+  ones (40.3, 43.2; dead ends, puzzles, blood, the mix and the tree's depth all within 1.5 s.e.). 1x4s run
+  north-south more (1632 to 1353) only because they run across the entrance's edge (59% and 57% on either
+  kind of map). The one thing that isn't the same every way round is where the entrance goes (north/south 3x
+  as often, next to a corner 2x) - it's in the code that picks the entrance, not anything after it.
+- The entrance's door always goes inward (2476 of 2476).
+- How the big rooms are placed (`placelik.mjs`): the exact chance of each map's 7 big rooms under a
+  procedure, summed over every order (a DP over the rooms placed so far), over the runs that succeed and
+  whose door tree is kept (dead ends as the map's, blood 9-10 steps out with a 1x1 fairy 4 before it; each
+  success rate worked out once per entrance kind, mix and dead-end count from 3000 runs - from a few runs per
+  map the log of a noisy small rate favours the procedures that fail most). Self-checked on maps it made
+  itself (`GEN`): it picks the procedure they were made with, 5 held cells from 0, one try from many. On the
+  2451 real maps (mean log chance, higher better; a door tree newest-first 0.3):
+
+      biggest first, any spot alike (the predictor without held cells)    -17.02
+      biggest first, 5 held cells (the predictor)                         -16.86
+      random order, any spot                                              -16.91
+      random order, 5 held cells                                          -16.65
+      one random spot per room, the whole run again if any clashes        -16.64   (every complete layout alike)
+      random order, 2 tries per room, 7 held                              -16.61
+      a room and a spot drawn together; a top-left cell first; a cell first, then a room: no better
+
+  The same order with the tree oldest-first or plain Prim (-16.07/-15.90/-15.89, -16.65/-16.45/-16.48 for
+  biggest first + 5 held / random + 5 held / one try). So the layouts look like random order with the hard
+  spots discounted - most simply one random spot per room and start again on a clash - not biggest first.
+- But it doesn't predict better (evalbig, 200 held-out maps, 300 samples): one try -1.0572, two -1.0542,
+  random order -1.0532, random order + 2 tries -1.0606, against -1.0427 for biggest first + 5 held (-1.0476
+  without). Without the tile weights (fitted under biggest first) too: one try -1.0634, 5 held -1.0477,
+  nothing -1.0607. Not the weights, not the samples (one try keeps 149 of 300 effective, held 205): the
+  held cells do something for a part-known map the layout chance alone doesn't see.
+- Special rooms put down first (puzzles, trap, yellow on random cells, big rooms round them, the tree never
+  going on from them - 5 held cells is about the 5.2 such rooms a map has): no. sampler2 `opts.special`:
+  -1.1224 against -1.0917 on 60 held-out maps; it also passes 10x less often.
+- The room mix (`mixrule.mjs`): 7 rooms, 22-24 tiles, never 20-21, never 8 rooms, and 6 rooms only with 22
+  (the most 6 can make). Making the map again on every failure, mix and all, doesn't give the 22s by itself
+  (placelik MIXRATE: 29-32% of draws at 22 against 88%). Of the rules tried, "random shapes until 22 tiles,
+  more than 7 rooms and draw again" is closest (-2.46 per map with the one-try success rates, the best
+  possible -2.415; 4-tile shapes drawn less, a second copy x0.7), but it still gives 23 tiles 15-17% (real
+  11%); "7 rooms, again unless 22+" -2.62; "put back a shape that would pass 22" -2.57 (it makes 8-room maps).
+- Merging cells into rooms: no - an L made that way would miss its north-west cell a quarter of the time.
+
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
     node <tools>/floors.mjs                                  # every rule above, floor by floor, and what differs
