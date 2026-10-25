@@ -40,7 +40,7 @@ git -C "$TEAM" archive HEAD | tar x -C "$PUB"
 rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
-  "$PUB/src/resources/rotation"
+  "$PUB/src/resources/rotation" "$PUB/tools/partyskill"
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \

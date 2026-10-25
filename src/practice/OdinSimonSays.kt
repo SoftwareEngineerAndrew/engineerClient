@@ -40,6 +40,10 @@ object OdinSimonSays {
     fun active(): Boolean = SimonSays.enabled && better.value
 
     private val solver = SimonSaysSolver<BlockPos>()
+
+    /** The round showing or being put in, as its lights so far (0 between rounds), and how many of it are pressed: how far it has got. */
+    val shownRound: Int get() = solver.answer.size
+    val pressedInRound: Int get() = solver.next
     @Volatile private var tick = 0L
     /**
      * Each lamp as its packets left it, in the order they arrived. The world can't say what a lamp was before a
