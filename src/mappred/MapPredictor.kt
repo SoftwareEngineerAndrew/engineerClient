@@ -215,6 +215,9 @@ class MapPredictor(private val view: MapView) {
         }
         entries = ents.toIntArray()
         entries.forEachIndexed { i, t -> entryIndex[t] = i }
+        // Unknown tiles but no door known into any of them (a run just started): no tree to grow from, so nothing to
+        // predict until the map shows one (tryOne's door tree starts from these and read order[-1] without any).
+        if (entries.isEmpty() && unknown.isNotEmpty()) bad = true
 
         var entId = -1
         for (i in view.kinds.indices) {

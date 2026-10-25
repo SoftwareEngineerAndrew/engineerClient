@@ -47,6 +47,13 @@ class MapPredictorTest {
         assertNull(MapView.shapeOf(intArrayOf(0, 1, 7, 8, 9), 6))
     }
 
+    @Test fun noDoorIntoTheUnknownPredictsNothingRatherThanThrowing() {
+        // A run just started: the entrance and no door from it known yet. No tree to grow, so no samples (it read
+        // order[-1] of an empty list: "Index -1 out of bounds for length 0" in a teammate's log).
+        val p = MapPredictor(map(listOf(Kind.ENTRANCE to intArrayOf(1)), emptyList()))
+        assertEquals(0, p.run(50, 5_000, Random(42)))
+    }
+
     @Test fun everyMapHasItsSpecialRoomsOnce() {
         val p = predict(opening())
         assertEquals(0, p.level)
