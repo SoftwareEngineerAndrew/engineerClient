@@ -96,7 +96,7 @@ object PovVisibility {
         val s = SectionPos.asLong(Math.floor(eye.x).toInt() shr 4, Math.floor(eye.y).toInt() shr 4, Math.floor(eye.z).toInt() shr 4)
         known[s]?.let { return it }
         if (asked.add(s)) {
-            val disk = if (MeshDisk.ready) MeshDisk.read("v/$s") else null
+            val disk = if (MeshDisk.ready) MeshDisk.read("v/$s", raw = true) else null
             if (disk != null) disk.second?.let { known[s] = BitSet.valueOf(it) } ?: known.put(s, BitSet())
             else worker.execute { runCatching { work(s) }.onFailure { asked.remove(s) } }
         }
@@ -146,7 +146,7 @@ object PovVisibility {
             i = seen.nextSetBit(i + 1)
         }
         known[s] = wide
-        MeshDisk.write("v/$s", CLUSTERS, ByteBuffer.wrap(wide.toByteArray()))
+        MeshDisk.write("v/$s", CLUSTERS, ByteBuffer.wrap(wide.toByteArray()), raw = true)
     }
 
     private fun opaque(g: BitSet, x: Int, y: Int, z: Int): Boolean {

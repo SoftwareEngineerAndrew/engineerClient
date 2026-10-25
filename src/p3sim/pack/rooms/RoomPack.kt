@@ -176,6 +176,14 @@ class RoomPack internal constructor(
         }
     }
 
+    /** The design's base volume, decoded afresh and not kept (for one pass over every design); null when unavailable. */
+    fun volumeOnce(design: RoomDesign): RoomVolume? {
+        volumes[design.id]?.let { return it }
+        val ref = design.vol ?: return null
+        val source = blobs ?: return null
+        return runCatching { RoomBlobs.decodeVolume(source.read(ref.off, ref.len)) }.getOrNull()
+    }
+
     /**
      * The volume a room is built from: the variant [variantId] of [design] when given and found, else the base volume (with a
      * warning in the report when a named variant is missing). Variants are not cached; the base is. Null when unavailable.
