@@ -213,7 +213,7 @@ object EngineerClient : ClientModInitializer {
             // /adr online: ADR Online in your browser, signed in.
             for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
                 .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
-            // /edt: the party a hashtag.
+            // /edt: #EndDungeonsToxicity in party chat.
             dispatcher.register(literal("edt").executes { mc.schedule { com.odtheking.odin.utils.sendCommand("pc #EndDungeonsToxicity") }; 1 })
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
