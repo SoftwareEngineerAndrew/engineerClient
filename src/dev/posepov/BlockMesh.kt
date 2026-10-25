@@ -294,6 +294,23 @@ object BlockMesh {
     private var exportTotal = 0
     private val exportDir get() = FabricLoader.getInstance().gameDir.resolve("devgineerclient").resolve("posepov-export").resolve(MeshBundles.version)
 
+    /**
+     * Every bundle onto disk in the background ([MeshBundles.prefetch]), once: the arena first on a floor that has it, then
+     * the designs, smallest first (the common one-tile rooms), then the variants. Any thread; needs the room pack (render thread: the disk is opened here).
+     */
+    fun prefetchAll(floor7: Boolean) {
+        val pack = KnownWorld.roomPack ?: return
+        if (!MeshDisk.ready) { MeshDisk.check(); return }
+        MeshBundles.version = "$BUNDLE_FORMAT-${pack.version}"
+        val names = ArrayList<String>()
+        if (floor7) names += ARENA
+        val designs = pack.designs.sortedBy { it.w.toLong() * it.d * it.h }
+        for (d in designs) names += d.id
+        for (d in designs) for (v in d.variants) names += "${d.id}@${v.id}"
+        if (!floor7) names += ARENA
+        MeshBundles.prefetch(names)
+    }
+
     /** Starts building every bundle (the arena, each design, each variant) to files; the number queued, or -1 without the pack. */
     fun startExport(): Int {
         val pack = KnownWorld.roomPack ?: return -1

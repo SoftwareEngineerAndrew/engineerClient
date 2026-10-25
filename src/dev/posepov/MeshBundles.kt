@@ -107,17 +107,47 @@ object MeshBundles {
             val disk = MeshDisk.read(key(name))?.second?.let { b -> runCatching { parse(name, b) }.getOrNull() }
             if (disk != null) { loaded[name] = disk; state.remove(name); return@execute }
             if (offline) { state[name] = BUILD; return@execute }
-            val got = runCatching {
-                val url = SITE + version + "/" + URLEncoder.encode(name, Charsets.UTF_8).replace("+", "%20")
-                val res = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).GET().build(), HttpResponse.BodyHandlers.ofInputStream())
-                if (res.statusCode() != 200) { res.body().close(); null }
-                else res.body().use { s -> s.readNBytes(MAX_BYTES + 1) }.takeIf { it.size <= MAX_BYTES }
-            }.getOrNull()
+            val got = runCatching { download(name) }.getOrNull()
             val b = got?.let { runCatching { parse(name, it) }.getOrNull() }
             if (b != null) { MeshDisk.write(key(name), 0, got); loaded[name] = b; state.remove(name) }
             else state[name] = BUILD
         }
         return null
+    }
+
+    private const val PREFETCH_BYTES_PER_S = 4_000_000L
+    private val prefetcher = Executors.newSingleThreadExecutor { r -> Thread(r, "pose pov prefetch").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
+    @Volatile private var prefetched = ""
+
+    /**
+     * Every bundle in [names] onto disk ahead of need, one at a time and no faster than [PREFETCH_BYTES_PER_S] (never a
+     * dent in the game's connection): after a player's first dungeon, every room is on disk before it's ever seen. Only
+     * to disk; memory takes a bundle when a room is placed. Once per version.
+     */
+    fun prefetch(names: List<String>) {
+        if (version.isEmpty() || offline || prefetched == version) return
+        prefetched = version
+        val v = version
+        prefetcher.execute {
+            for (name in names) {
+                if (version != v || offline) return@execute
+                if (loaded.containsKey(name) || MeshDisk.has(key(name)) || state.putIfAbsent(name, FETCHING) != null) continue
+                val t0 = System.nanoTime()
+                val got = runCatching { download(name) }.getOrNull()
+                if (got != null && runCatching { parse(name, got) }.isSuccess) MeshDisk.write(key(name), 0, got)
+                state.remove(name)
+                // Paced: as long as these bytes take at the cap.
+                val wait = (got?.size ?: 0) * 1000L / PREFETCH_BYTES_PER_S - (System.nanoTime() - t0) / 1_000_000
+                if (wait > 0) Thread.sleep(wait)
+            }
+        }
+    }
+
+    private fun download(name: String): ByteArray? {
+        val url = SITE + version + "/" + URLEncoder.encode(name, Charsets.UTF_8).replace("+", "%20")
+        val res = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build(), HttpResponse.BodyHandlers.ofInputStream())
+        if (res.statusCode() != 200) { res.body().close(); return null }
+        return res.body().use { s -> s.readNBytes(MAX_BYTES + 1) }.takeIf { it.size <= MAX_BYTES }
     }
 
     /** Whether this bundle has to be built here (not on disk, not to be had from the site). */
