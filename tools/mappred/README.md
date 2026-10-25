@@ -268,6 +268,48 @@ Every candidate tried, and what it showed:
   possible -2.415; 4-tile shapes drawn less, a second copy x0.7), but it still gives 23 tiles 15-17% (real
   11%); "7 rooms, again unless 22+" -2.62; "put back a shape that would pass 22" -2.57 (it makes 8-room maps).
 - Merging cells into rooms: no - an L made that way would miss its north-west cell a quarter of the time.
+- The door tree's rule (treelik.mjs: the chance a tree3.mjs rule makes each real map's doors and blood given
+  its layout; a 2x2's inside is now summed over, not drawn - with a drawn one every particle could end on the
+  wrong inside, which scored some maps at the floor with peaked rules). Two things the growing-tree rules missed:
+  - the door to a room sits near where its parent was entered (treelik STATS=1, with GEN= for a rule's own
+    trees): into a big room with two shared sides the one nearer the parent's entry cell 67% (room/node/0.15/0.1
+    51%, the rule below 65%), with three 70% (37%, 52%). Into a 1x1 in an L's notch it doesn't (51%; 46%, 70%),
+    and children per big-room cell into 1x1s don't fall off with the distance (they do into big rooms), but as
+    a likelihood the pull on every side is best: each free side weighs exp(-beta x its cell's steps from the
+    room's entry cell, over the room's cells), beta 0.5 - something about doors into big rooms not yet found;
+  - a room of the tree is picked by the square root of its free sides (alpha 0.5; alike, room/node, and by
+    them, room/side, both worse), and a side the nearer its new cell is to the entrance the likelier
+    (exp(-0.2 x grid steps), mu). Newest/oldest first (p, q) then make no difference.
+  On the first 300 maps of layouts-snap2 (NP=2000): room/node/0/0/alpha=0.5/beta=0.5/mu=0.2 -14.87 a map,
+  room/node/0/0/alpha=0.5/beta=0.5 -14.96, room/node/0/0/beta=0.5 -15.00, room/node/0.15/0.1 -15.36,
+  room/side/0.15/0.1 -15.41 (the best +0.49 over room/node/0.15/0.1, s.e. 0.08; on 300 maps that aren't
+  evalbig's held-out ones, IDS=, +0.50, s.e. 0.08). Tried and no better (NP=500-1000, paired): beta only into
+  big rooms or only within a room pair (bb, b1, pw: -0.1 to -0.3), a node's doors so far (delta), its depth
+  (gamma), its size (eta), a cell of it first (wc, cw), the room behind the entrance weighted (f1), a random
+  direction tried per room (alpha=1/eta=-1: -0.5), sides waiting longer (ag, ae: +0.02 to +0.05, within the
+  noise), a cell-level tree with a room's own sides weighted (lam=3 as good as beta, the rest worse), the walk
+  from the entrance (kappa), the growth starting in a random room (start=room: trees far too deep). mu came from
+  scorediag.mjs (RULE=: how much the mean log chance would rise per unit weight on each of 22 side features,
+  over the growth orders the real tree could have had, less the same over kept free runs): the new cell's grid
+  steps from the entrance stood out (z -8); of the others (z 2-5) those tried (kappa, gamma, delta, eta, f1)
+  came to little.
+- In sampler3 the rule matters at the late stages only with enough samples, and samples were what it lacked:
+  a batch of particles all descended from one or two layouts could fill the 300 samples alone (snapshots with
+  4-5 layouts in their samples and the truth in none, -1.8 to -2.3 a tile). It now goes on until 20 batches'
+  worth of weight ((sum w)^2 / sum w^2 over the batches), sums blood, the fairy and the specials over a 2x2's
+  insides, the blood spots and the shuffle instead of drawing them, and lets 5-puzzle maps have 7 to 10 dead
+  ends besides blood (9 in 7 of 294 recorded maps, 10 in 2; at most 8 left those snapshots with no sample).
+  Dropping trees as soon as their dead-end count is out of reach (deadkill=1) does worse: the batches collapse
+  sooner; so do 5 trees per layout resampled only among themselves. evalbig, paired against sampler3 as it was
+  (game:room/side/0.15/0.1/inside=draw/types=draw/batches=0/dmax=8):
+  held-out maps 0-99 at 9 and 12 rooms known (300 samples) - as it was -0.9340 a tile (another run of the old
+  code -0.9249), res5 -0.8878 (+0.046, s.e. 0.013), room/side/0.15/0.1 with the new sampling -0.8839 (+0.050,
+  s.e. 0.011), room/node/0/0/alpha=0.5/beta=0.5/mu=0.2 with it -0.8708 (+0.063, s.e. 0.011; +0.017 over res5,
+  +0.013 over the old rule at the same sampling, s.e. 0.007; at batches of 100, room/node/0.15/0.1 -0.020
+  against it, s.e. 0.007, and without mu -0.001).
+  On held-out maps 100-199 (OFFSET=100, all stages): as it was -1.0466, res5 -1.0471, now -1.0307 (+0.016 over
+  both, s.e. 0.004 / 0.005; stages 2/4/6/9/12: -1.128/-1.103/-1.038/-0.923/-0.779 against res5's
+  -1.141/-1.116/-1.054/-0.951/-0.796), with about the same time as before (29 min against 25 for 500 snapshots).
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
