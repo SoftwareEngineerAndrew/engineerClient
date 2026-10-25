@@ -20,13 +20,18 @@ import javax.crypto.spec.SecretKeySpec
  * (the one it sees them connect from, with the port they learned from STUN) and a fresh key, so only teammates who are
  * linked with you and have it on ever learn your address, and nobody without the key can send you anything that's read.
  *
- * Each packet: ['P'][sender slot][counter u64][AES-GCM of the frame, tag 16], the header as associated data and the slot
- * plus counter as the nonce (so the two directions never share one). A counter not past the last one is dropped (replays).
+ * Each packet, as small as it goes (a look frame is 18 bytes inside UDP): [sender slot << 4 | kind][counter, low 24 bits]
+ * [AES-GCM of the body, tag 8 bytes]. The header is the associated data; the nonce is the slot plus the whole counter (worked
+ * out from its low bits and the last one heard), so the two directions never share one. A counter not past the last one heard
+ * is dropped (replays). Kinds: [PING], [PONG], and PoseShare's (its D_ ones).
  * Two NATs are opened to each other by both sides sending first (hole punching); when that fails the relay is all there is.
  */
 object PeerLink {
-    private const val MAGIC = 0x50
-    private const val MAX_PACKET = 128
+    const val PING = 0
+    const val PONG = 1
+    private const val HEAD = 4
+    private const val TAG = 8
+    private const val MAX_PACKET = 96
     private const val PUNCH_MS = 200L
     private const val KEEP_MS = 1000L
     /** A peer heard from within this is live: frames go to it directly. */
@@ -117,28 +122,30 @@ object PeerLink {
             val nonce = random.nextInt()
             p.pings[nonce] = System.nanoTime()
             if (p.pings.size > 8) p.pings.keys.firstOrNull()?.let { p.pings.remove(it) }
-            send(p, ByteBuffer.allocate(5).put(0x10).putInt(nonce).array())
+            send(p, PING, ByteBuffer.allocate(4).putInt(nonce).array())
         }
     }
 
-    /** A frame to every live peer; the slots it went to (so the relay can be skipped when it reached everyone). */
-    fun broadcast(frame: ByteArray): Set<Int> {
+    /** A [kind] of frame to every live peer; the slots it went to (so the relay can be skipped when it reached everyone). */
+    fun broadcast(kind: Int, body: ByteArray): Set<Int> {
         val now = System.currentTimeMillis()
         val out = HashSet<Int>()
-        for (p in peers.values) if (p.live(now)) { send(p, frame); out += p.slot }
+        for (p in peers.values) if (p.live(now)) { send(p, kind, body); out += p.slot }
         return out
     }
 
-    private fun send(p: Peer, frame: ByteArray) {
+    private fun send(p: Peer, kind: Int, body: ByteArray) {
         val s = socket ?: return
         runCatching {
             val ctr = ++p.sent
-            val head = ByteBuffer.allocate(10).put(MAGIC.toByte()).put(mySlot.toByte()).putLong(ctr).array()
+            val out = ByteArray(HEAD + body.size + TAG)
+            out[0] = ((mySlot shl 4) or kind).toByte()
+            out[1] = (ctr shr 16).toByte(); out[2] = (ctr shr 8).toByte(); out[3] = ctr.toByte()
             val c = ciphers.get()
-            c.init(Cipher.ENCRYPT_MODE, p.key, GCMParameterSpec(128, nonce(mySlot, ctr)))
-            c.updateAAD(head)
-            val body = c.doFinal(frame)
-            s.send(DatagramPacket(head + body, 10 + body.size, p.addr))
+            c.init(Cipher.ENCRYPT_MODE, p.key, GCMParameterSpec(TAG * 8, nonce(mySlot, ctr)))
+            c.updateAAD(out, 0, HEAD)
+            c.doFinal(body, 0, body.size, out, HEAD)
+            s.send(DatagramPacket(out, out.size, p.addr))
         }
     }
 
@@ -158,29 +165,34 @@ object PeerLink {
         if (now / 1000 != window) { window = now / 1000; count = 0 }
         if (++count > 1500) return
         val d = pk.data; val len = pk.length
-        if (len >= 20 && d[0].toInt() == 0x01 && d[1].toInt() == 0x01) { stunReply(d, len); return }
-        if (len < 10 + 16 + 1 || len > MAX_PACKET || d[0].toInt() != MAGIC) return
-        val slot = d[1].toInt() and 255
+        // STUN's answer: a binding success, with the magic cookie where it puts it.
+        if (len >= 20 && d[0].toInt() == 0x01 && d[1].toInt() == 0x01 && ByteBuffer.wrap(d, 4, 4).int == COOKIE) { stunReply(d, len); return }
+        if (len < HEAD + TAG || len > MAX_PACKET) return
+        val slot = (d[0].toInt() and 255) ushr 4
+        val kind = d[0].toInt() and 15
         val p = peers[slot] ?: return
-        val ctr = ByteBuffer.wrap(d, 2, 8).long
+        // The whole counter: the low 24 bits sent, the rest from the last one heard (the nearest that fits).
+        val low = ((d[1].toLong() and 255) shl 16) or ((d[2].toLong() and 255) shl 8) or (d[3].toLong() and 255)
+        var ctr = (p.heard and 0xFFFFFFL.inv()) or low
+        if (ctr < p.heard - 0x800000) ctr += 0x1000000 else if (ctr > p.heard + 0x800000 && ctr >= 0x1000000) ctr -= 0x1000000
         if (ctr <= p.heard) return
         val frame = runCatching {
             val c = ciphers.get()
-            c.init(Cipher.DECRYPT_MODE, p.key, GCMParameterSpec(128, nonce(slot, ctr)))
-            c.updateAAD(d, 0, 10)
-            c.doFinal(d, 10, len - 10)
+            c.init(Cipher.DECRYPT_MODE, p.key, GCMParameterSpec(TAG * 8, nonce(slot, ctr)))
+            c.updateAAD(d, 0, HEAD)
+            c.doFinal(d, HEAD, len - HEAD)
         }.getOrNull() ?: return
         p.heard = ctr; p.heardAt = now
         // Wherever it really comes from (a NAT may map it differently than STUN said), that's where to answer.
         p.addr = pk.socketAddress as InetSocketAddress
-        when (frame[0].toInt()) {
-            0x10 -> if (frame.size == 5) send(p, frame.copyOf().also { it[0] = 0x11 })
-            0x11 -> if (frame.size == 5) {
-                val sent = p.pings.remove(ByteBuffer.wrap(frame, 1, 4).int) ?: return
+        when (kind) {
+            PING -> if (frame.size == 4) send(p, PONG, frame)
+            PONG -> if (frame.size == 4) {
+                val sent = p.pings.remove(ByteBuffer.wrap(frame).int) ?: return
                 val ms = (System.nanoTime() - sent) / 1e6
                 p.rttMs = if (p.rttMs < 0) ms else p.rttMs * 0.7 + ms * 0.3
             }
-            else -> PoseShare.direct(slot, frame)
+            else -> PoseShare.direct(slot, kind, frame)
         }
     }
 
