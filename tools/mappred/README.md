@@ -1,5 +1,7 @@
 # Map Prediction analysis
 
+The current model of how Hypixel makes an F7 map, step by step (sure and likely), is in [MODEL.md](MODEL.md).
+
 How `src/mappred` (Room Prediction on Odin's Dungeon Map) was worked out from the runs on ADR, and how to
 redo it if Hypixel's dungeon generation changes. Node 20+, `xz` and `gzip` on the PATH. Run the scripts
 from an empty data folder (they read and write their data in the current folder):
