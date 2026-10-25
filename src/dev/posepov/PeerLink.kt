@@ -56,6 +56,8 @@ object PeerLink {
     /** Packets read this second, for dropping a flood (only a teammate who has your address could send one). */
     private var window = 0L
     private var count = 0
+    /** One cipher per thread (the game's sends, the reader's answers): made once, not per packet. */
+    private val ciphers = ThreadLocal.withInitial { Cipher.getInstance("AES/GCM/NoPadding") }
 
     val running get() = socket != null
 
@@ -132,7 +134,7 @@ object PeerLink {
         runCatching {
             val ctr = ++p.sent
             val head = ByteBuffer.allocate(10).put(MAGIC.toByte()).put(mySlot.toByte()).putLong(ctr).array()
-            val c = Cipher.getInstance("AES/GCM/NoPadding")
+            val c = ciphers.get()
             c.init(Cipher.ENCRYPT_MODE, p.key, GCMParameterSpec(128, nonce(mySlot, ctr)))
             c.updateAAD(head)
             val body = c.doFinal(frame)
@@ -154,7 +156,7 @@ object PeerLink {
     private fun packet(pk: DatagramPacket) {
         val now = System.currentTimeMillis()
         if (now / 1000 != window) { window = now / 1000; count = 0 }
-        if (++count > 400) return
+        if (++count > 1500) return
         val d = pk.data; val len = pk.length
         if (len >= 20 && d[0].toInt() == 0x01 && d[1].toInt() == 0x01) { stunReply(d, len); return }
         if (len < 10 + 16 + 1 || len > MAX_PACKET || d[0].toInt() != MAGIC) return
@@ -163,7 +165,7 @@ object PeerLink {
         val ctr = ByteBuffer.wrap(d, 2, 8).long
         if (ctr <= p.heard) return
         val frame = runCatching {
-            val c = Cipher.getInstance("AES/GCM/NoPadding")
+            val c = ciphers.get()
             c.init(Cipher.DECRYPT_MODE, p.key, GCMParameterSpec(128, nonce(slot, ctr)))
             c.updateAAD(d, 0, 10)
             c.doFinal(d, 10, len - 10)

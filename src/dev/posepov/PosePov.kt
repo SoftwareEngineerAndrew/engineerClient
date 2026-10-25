@@ -296,7 +296,7 @@ object PosePov : Module(
             val ghost = slot?.let { ghosts[it.name] }
             // Everything around them but themselves (their view is from inside their head), and every body but a shared one's own.
             val seen = entities.filter { (en, _) -> en !== p && en.position().distanceToSqr(e.pos) < range2 }.map { it.second }
-            val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + PoseShare.BUFFER_NS, now) } ?: 0f
+            val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + it.bufferNs, now) } ?: 0f
             queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, swing, seen, bodies.filter { it.slot != i })
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
