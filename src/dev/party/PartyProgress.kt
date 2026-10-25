@@ -122,8 +122,8 @@ object PartyProgress : Module(
 
     private fun report() {
         val heard = heardFrom.entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value} from ${it.key}" }.ifEmpty { "nothing" }
-        val relay = if (PoseShare.relayTakes(7)) "the relay takes them too" else "the relay doesn't take them yet, peer-to-peer only"
-        DevgineerClient.logger.info("[party progress] P3: $framesOut frames out, peer-to-peer reached up to $mostDirect of up to $mostLinked linked teammates ($relay); heard $heard")
+        val relay = if (PoseShare.relayTakes(7)) "the relay takes them too" else "the relay doesn't take them yet, TURN only"
+        DevgineerClient.logger.info("[party progress] P3: $framesOut frames out, TURN reached up to $mostDirect of up to $mostLinked linked teammates ($relay); heard $heard")
     }
 
     private fun tick() {

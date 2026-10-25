@@ -138,15 +138,14 @@ object PosePov : Module(
     )
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
-    // Named for what it does: a new name, so anyone who had the old "Peer-to-peer sharing" on starts off again and has to choose it.
-    private val peerToPeer by BooleanSetting("Peer-to-peer (SHARES YOUR IP)", false, desc = "§cShows your IP address to every teammate who also has this on.§r Your view goes straight to them instead of through undonecoffee.com, a little faster. Off, nobody ever sees your IP.")
-    private val shareFps by NumberSetting("Peer-to-peer FPS", 60, 20..240, 1, desc = "How many times a second your view goes to teammates connected peer-to-peer. Higher is smoother for them.").withDependency { peerToPeer }
+    private val optimizeLocation by BooleanSetting("Optimize server location", true, desc = "Times each teammate's two ways separately (Cloudflare's nearest location to each of you, or undonecoffee.com's relay) and sends your view to them by whichever is quicker right now. Off: Cloudflare's whenever it's up. Nobody ever sees your IP either way.")
+    private val shareFps by NumberSetting("Sharing FPS", 60, 20..240, 1, desc = "How many times a second your look goes to teammates. Higher is smoother for them.")
+    private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses, buffering, and the render's timings. Also written to the log every 10 seconds.")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
 
     /** Whether the device draws many ranges in one call (glMultiDrawElementsBaseVertex and the like). */
     private var multiFailed = false
     private val multiDraw by lazy { runCatching { RenderSystem.getDevice().deviceInfo.features().multiDrawDirectSeparate() }.getOrDefault(false) }
-    private var p2pWarned = false
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     /** What each feed last drew, when that was only blocks and its own hand (see [draw]). */
     private data class FeedSig(val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val swing: Float, val held: Int, val world: Long)
@@ -172,13 +171,8 @@ object PosePov : Module(
             // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching.
             DevgineerClient.safely("pose share") {
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
-                PoseShare.p2p = peerToPeer
-                // On: said in chat, red, at every game start and every time it's turned on, so it's never on unnoticed.
-                if (peerToPeer && !p2pWarned && mc.player != null) {
-                    p2pWarned = true
-                    DevgineerClient.chat("§c§l[Pose POV] Peer-to-peer is ON: teammates who also have it on can see your IP address. §7Turn off \"Peer-to-peer (SHARES YOUR IP)\" in Pose POV to keep it private.")
-                }
-                if (!peerToPeer) p2pWarned = false
+                PoseShare.optimize = optimizeLocation
+                PoseShare.debug = enabled && debugInfo
                 PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
                 PoseShare.tick()
             }
@@ -237,12 +231,21 @@ object PosePov : Module(
     private var perfReused = 0L
     private var perfAt = 0L
     private var perfFrameNs = 0L
+    /** Smoothed prepare and draw times (ns), and the last frame's draws and entities, for the debug info. */
+    private var dbgPrep = 0.0
+    private var dbgDraw = 0.0
+    private var dbgDraws = 0
+    private var dbgEntities = 0
+    private var dbgDrawsMark = 0L
+    private var dbgEntitiesMark = 0L
     private inline fun timed(prep: Boolean, f: () -> Unit) {
         val t0 = System.nanoTime()
         f()
         val dt = System.nanoTime() - t0
         if (prep) { perfPrep += dt; perfFrameNs = dt; return }
         perfRender += dt; perfFrames++; perfWorst = maxOf(perfWorst, perfFrameNs + dt)
+        dbgPrep = dbgPrep * 0.95 + perfFrameNs * 0.05; dbgDraw = dbgDraw * 0.95 + dt * 0.05
+        dbgDraws = (perfDraws - dbgDrawsMark).toInt(); dbgEntities = (perfEntities - dbgEntitiesMark).toInt(); dbgDrawsMark = perfDraws; dbgEntitiesMark = perfEntities
         val now = System.currentTimeMillis()
         if (perfAt == 0L) perfAt = now
         if (now - perfAt < 10_000) return
@@ -250,6 +253,7 @@ object PosePov : Module(
         DevgineerClient.logger.info("[pose pov] {} frames: prepare {} ms, draw {} ms a frame (worst {} ms), {} draws and {} entities a frame, {} views reused, {} piece buffers",
             n, "%.2f".format(perfPrep / 1e6 / n), "%.2f".format(perfRender / 1e6 / n), "%.1f".format(perfWorst / 1e6), perfDraws / n, perfEntities / n, perfReused, PiecePool.poolCount)
         perfFrames = 0; perfPrep = 0; perfRender = 0; perfWorst = 0; perfDraws = 0; perfEntities = 0; perfReused = 0; perfAt = now
+        dbgDrawsMark = 0; dbgEntitiesMark = 0
     }
 
     fun drawUnderGui(gfx: GuiGraphicsExtractor) {
@@ -422,7 +426,7 @@ object PosePov : Module(
                 }
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
-            if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: if (sh.direct) "direct · " else "shared · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
+            if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: if (sh.direct) "fast · " else "relay · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
             slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
         // Whether sharing is up, and how many teammates are sharing with you.
@@ -434,6 +438,18 @@ object PosePov : Module(
         }
         gfx.fill(4, 5, 9, 10, dot)
         gfx.text(status, 12, 4, Color(200, 200, 200), shadow = true)
+        if (debugInfo) debugOverlay(gfx)
+    }
+
+    /** "Debug info": sharing's lines (PoseShare.debugLines), then the render's, top left over the views. */
+    private fun debugOverlay(gfx: GuiGraphicsExtractor) {
+        val lines = PoseShare.debugLines().toMutableList()
+        lines += "render: prepare %.2f ms · draw %.2f ms · %d draws · %d entities · %d piece buffers · %d bundles loaded%s".format(
+            dbgPrep / 1e6, dbgDraw / 1e6, dbgDraws, dbgEntities, PiecePool.poolCount, MeshBundles.count, if (multiDraw && !multiFailed) " · multidraw" else "") to 0xFFB0B0B0.toInt()
+        var y = 16
+        val w = lines.maxOf { mc.font.width(it.first) }
+        gfx.fill(2, y - 2, 8 + w, y + lines.size * 10, 0xA0000000.toInt())
+        for ((text, color) in lines) { gfx.text(text, 5, y, Color((color shr 16) and 255, (color shr 8) and 255, color and 255), shadow = true); y += 10 }
     }
 
     private fun footLabel(gfx: GuiGraphicsExtractor, label: String, color: Color, x0: Int, x1: Int, y1: Int) {
