@@ -30,8 +30,9 @@ import java.util.concurrent.ConcurrentHashMap
  * (the leap menu open, or a leap in hand, ready for it): where you stand and look (and what you hold, and your swings),
  * the same for each teammate you can see who doesn't share for themselves (so one out of someone's range still shows if
  * you can see them), and Odin's solution to the terminal you have open. The relay passes it only to party members who
- * list you as you list them, each signed in through Mojang (your session token goes to Mojang alone, as when joining a
- * server) once a game session; after that a pass from the relay, kept in memory, signs in again without asking Mojang.
+ * list you as you list them, each signed in with their account's Mojang-signed profile key (the key the game signs chat
+ * with; nothing secret leaves the game) once a game session; after that a pass from the relay, kept in memory, signs in
+ * again. The relay knows accounts by UUID; each game matches them to its own teammates through the player list.
  *
  * What arrives is never trusted past what it can show: names must be your own teammates, items are looked up by id (no
  * names, no components), and a terminal is only its type and the cells to click, inside that terminal's own grid and
@@ -182,6 +183,7 @@ object PoseShare {
         val lobby = LocationUtils.lobbyId?.takeIf { DungeonUtils.inDungeons && LOBBY.matches(it) }
         val me = mc.player
         teammates = DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name.lowercase() }
+        ids = idsNow()
         if (lobby == null || me == null) { if (room != null || socket != null) close(); return }
         if (lobby != room) { close(); room = lobby }
         if (socket == null) {
@@ -194,10 +196,10 @@ object PoseShare {
         val now = System.nanoTime()
 
         // The party, whenever it changes (the relay takes one every 2 s).
-        val party = DungeonUtils.dungeonTeammates.map { it.name.lowercase() }.filter { it != me.name.string.lowercase() }.take(6)
-        if (party != sentParty && nowMs - partyAt > 2100) {
-            sendText(JsonObject().apply { addProperty("t", "p"); add("p", JsonArray().apply { party.forEach { add(it) } }) }.toString())
-            sentParty = party; partyAt = nowMs
+        val party = partyNow()
+        if (party.map { it.first } != sentParty && nowMs - partyAt > 2100) {
+            sendText(JsonObject().apply { addProperty("t", "p"); add("p", JsonArray().apply { party.forEach { add(it.second) } }) }.toString())
+            sentParty = party.map { it.first }; partyAt = nowMs
         }
 
         // Whether you're watching: on at once, off only after a moment (so flicking the menu doesn't spam it).
@@ -360,24 +362,58 @@ object PoseShare {
         DevgineerClient.logger.warn("[pose share] $what")
     }
 
+    /** An account as the relay knows it: its UUID, 32 hex without dashes. */
+    private fun id(u: java.util.UUID) = u.toString().replace("-", "")
+
+    /** UUID -> name (lower case) of your teammates, from the player list (as Odin finds them): what the relay names. */
+    @Volatile private var ids: Map<String, String> = emptyMap()
+
+    private fun idsNow(): Map<String, String> {
+        val c = mc.connection ?: return emptyMap()
+        return DungeonUtils.dungeonTeammates.mapNotNull { t -> c.getPlayerInfo(t.name)?.profile?.id?.let { id(it) to t.name.lowercase() } }.toMap()
+    }
+
+    /** Your teammates but you (name, UUID), in the order sent: kind 2 frames point into it. */
+    private fun partyNow(): List<Pair<String, String>> {
+        val c = mc.connection ?: return emptyList()
+        val me = mc.user.name.lowercase()
+        return DungeonUtils.dungeonTeammates.mapNotNull { t ->
+            val n = t.name.lowercase()
+            if (n == me) null else c.getPlayerInfo(t.name)?.profile?.id?.let { n to id(it) }
+        }.take(6)
+    }
+
     /**
-     * The relay's challenge: our pass if we have one, otherwise Mojang's join with its serverId (off the game thread); then
-     * who we are and our party.
+     * The relay's challenge: our pass if we have one, otherwise signed with the account's profile key (the one the game
+     * signs chat with, Mojang-signed; off the game thread). Then who we are and our party.
      */
     private fun signIn(ws: WebSocket, serverId: String) {
         Thread.ofPlatform().name("devgineerclient-pose-signin").daemon(true).start {
             try {
                 val u = mc.user
-                val name = u.name.lowercase()
-                val k = pass?.takeIf { passName == name && System.currentTimeMillis() < passUntil }
+                val me = id(u.profileId)
+                val k = pass?.takeIf { passName == me && System.currentTimeMillis() < passUntil }
                 usedPass = k != null
-                if (k == null) mc.services().sessionService().joinServer(u.profileId, u.accessToken, serverId)
-                val party = DungeonUtils.dungeonTeammates.map { it.name.lowercase() }.filter { it != name }.take(6)
-                sentParty = party; partyAt = System.currentTimeMillis()
-                if (socket === ws) sendText(JsonObject().apply {
-                    addProperty("t", "a"); addProperty("n", u.name); add("p", JsonArray().apply { party.forEach { add(it) } })
-                    if (k != null) addProperty("k", k)
-                }.toString())
+                val party = partyNow()
+                sentParty = party.map { it.first }; partyAt = System.currentTimeMillis()
+                val msg = JsonObject().apply {
+                    addProperty("t", "a"); addProperty("u", me); add("p", JsonArray().apply { party.forEach { add(it.second) } })
+                }
+                if (k != null) msg.addProperty("k", k)
+                else {
+                    val pair = mc.profileKeyPairManager.prepareKeyPair().get(15, java.util.concurrent.TimeUnit.SECONDS).orElse(null)
+                    if (pair == null) { problem("no profile key (chat signing) for this account"); retryLater(60_000L); return@start }
+                    val data = pair.publicKey().data()
+                    val b64 = java.util.Base64.getEncoder()
+                    val sig = java.security.Signature.getInstance("SHA256withRSA").apply {
+                        initSign(pair.privateKey()); update("pose1|$serverId".toByteArray())
+                    }.sign()
+                    msg.addProperty("key", b64.encodeToString(data.key().encoded))
+                    msg.addProperty("exp", data.expiresAt().toEpochMilli())
+                    msg.addProperty("ks", b64.encodeToString(data.keySignature()))
+                    msg.addProperty("sig", b64.encodeToString(sig))
+                }
+                if (socket === ws) sendText(msg.toString())
             } catch (e: Exception) {
                 problem("sign-in failed: ${e.javaClass.simpleName}")
                 if (socket === ws) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; retryLater() }
@@ -423,7 +459,7 @@ object PoseShare {
                 lastProblem = null
                 DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt}${if (usedPass) ", with a pass" else ""})")
                 mySlot = m["slot"]?.asInt ?: 0; v6 = m["v6"]?.asBoolean == true
-                m["k"]?.asString?.takeIf { it.length <= 100 }?.let { pass = it; passName = mc.user.name.lowercase(); passUntil = System.currentTimeMillis() + PASS_MS }
+                m["k"]?.asString?.takeIf { it.length <= 100 }?.let { pass = it; passName = id(mc.user.profileId); passUntil = System.currentTimeMillis() + PASS_MS }
             }
             "w" -> wanted = m["w"]?.asInt == 1
             "pe" -> {
@@ -435,13 +471,13 @@ object PoseShare {
                 roster.clear()
                 m["m"]?.asJsonArray?.forEach { e ->
                     val a = e.asJsonArray
-                    val slot = a[0].asInt; val name = a[1].asString.lowercase()
+                    val slot = a[0].asInt; val name = ids[a[1].asString] ?: return@forEach
                     if (slot in 1..255 && name in teammates) roster[slot] = name
                 }
                 PeerLink.retain(roster.keys)
             }
             "s" -> {
-                val i = m["i"]?.asInt ?: return; val n = m["n"]?.asString?.lowercase() ?: return
+                val i = m["i"]?.asInt ?: return; val n = m["n"]?.asString?.let { ids[it] } ?: return
                 if (i in 1..255 && n in teammates) subjects[i] = n
             }
         }
