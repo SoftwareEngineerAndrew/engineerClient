@@ -117,6 +117,11 @@ object PoseShare {
      * measured for each one (otherwise TURN whenever it's up); set by [PosePov].
      */
     @Volatile var optimize = true
+    /** "Skip tiny look changes": looks under 0.05° from the last sent aren't sent; set by [PosePov]. */
+    @Volatile var skipTiny = true
+    /** Look frames sent and skipped as tiny (for the debug info). */
+    @Volatile private var looksSent = 0L
+    @Volatile private var looksSkipped = 0L
     /** "Debug info": the numbers behind [debugLines] are kept up; set by [PosePov]. */
     @Volatile var debug = false
     @Volatile private var mySlot = 0
@@ -366,12 +371,22 @@ object PoseShare {
         val yaw = (Mth.wrapDegrees(me.yRot) / 360f * 65536f).toInt() and 0xFFFF
         val pitch = (me.xRot.coerceIn(-90f, 90f) / 90f * 32767f).toInt() and 0xFFFF
         val look = (yaw.toLong() shl 16) or pitch.toLong()
-        val changed = look != lastLook
+        // "Skip tiny look changes": one under 0.05° either way from the last sent isn't sent (the next tick's exact look follows).
+        val changed = look != lastLook && !(skipTiny && lastLook >= 0 && tiny(look, lastLook))
+        if (changed) looksSent++ else if (look != lastLook) looksSkipped++
         // The look before a turn, again, with its own time: otherwise the turn is drawn spread across the still stretch before it.
         if (changed && !lookChanged && lastLook >= 0) turn.broadcast(D_LOOK, lookBody(lastLookMs, lastLook), fast)
         if (changed) turn.broadcast(D_LOOK, lookBody(msNow(), look), fast)
         lookChanged = changed
-        lastLook = look; lastLookMs = msNow()
+        if (changed) lastLook = look
+        lastLookMs = msNow()
+    }
+
+    /** Within 0.05° of [b] in yaw and pitch (yaw 65536 to the turn, pitch 32767 to 90°). */
+    private fun tiny(a: Long, b: Long): Boolean {
+        val dy = (((a shr 16) - (b shr 16) + 32768) and 0xFFFF) - 32768
+        val dp = (a and 0xFFFF).toInt().toShort() - (b and 0xFFFF).toInt().toShort()
+        return kotlin.math.abs(dy) < 0.05 / 360 * 65536 && kotlin.math.abs(dp) < 0.05 / 90 * 32767
     }
 
     private var lastLookMs = 0
@@ -873,8 +888,8 @@ object PoseShare {
 
     private var dbgAt = 0L
     private var dbgLogAt = 0L
-    private val dbgCounts = LongArray(3)
-    private val dbgRates = DoubleArray(3)
+    private val dbgCounts = LongArray(5)
+    private val dbgRates = DoubleArray(5)
     private val dbgArrivals = HashMap<String, Long>()
     private val dbgPoseRate = HashMap<String, Double>()
     private val dbgTurnIn = HashMap<Int, Pair<Long, Long>>()
@@ -885,8 +900,8 @@ object PoseShare {
         if (nowMs - dbgAt < 1000) return
         val dt = if (dbgAt == 0L) 1.0 else (nowMs - dbgAt) / 1000.0
         dbgAt = nowMs
-        val counts = longArrayOf(turn.framesOut.get(), turn.bytesOut.get(), turn.bytesIn.get())
-        for (i in 0 until 3) { dbgRates[i] = (counts[i] - dbgCounts[i]) / dt; dbgCounts[i] = counts[i] }
+        val counts = longArrayOf(turn.framesOut.get(), turn.bytesOut.get(), turn.bytesIn.get(), looksSent, looksSkipped)
+        for (i in 0 until 5) { dbgRates[i] = (counts[i] - dbgCounts[i]) / dt; dbgCounts[i] = counts[i] }
         for ((name, t) in tracks) {
             val n = synchronized(t) { t.arrivals }
             dbgPoseRate[name] = (n - (dbgArrivals[name] ?: n)) / dt
@@ -926,7 +941,8 @@ object PoseShare {
                 .format(dbgRates[0], dbgRates[1] / 1000, dbgRates[2] / 1000) to green
             else -> "TURN: off" to grey
         }
-        out += "optimize server location: ${if (optimize) "on" else "off"} · looks at ${1_000_000_000L / frameNs} fps over TURN" to grey
+        out += ("optimize server location: ${if (optimize) "on" else "off"} · looks up to ${1_000_000_000L / frameNs} fps over TURN: %.0f/s sent, %.0f/s skipped as tiny" +
+            if (skipTiny) "" else " (skipping off)").format(dbgRates[3], dbgRates[4]) to grey
         val me = mc.user.name.lowercase()
         for (name in teammates.sorted()) {
             if (name == me) continue

@@ -140,6 +140,7 @@ object PosePov : Module(
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
     private val optimizeLocation by BooleanSetting("Optimize server location", true, desc = "Times each teammate's two ways separately (Cloudflare's nearest location to each of you, or undonecoffee.com's relay) and sends your view to them by whichever is quicker right now. Off: Cloudflare's whenever it's up. Nobody ever sees your IP either way.")
     private val shareFps by NumberSetting("Sharing FPS", 60, 20..240, 1, desc = "How many times a second your look goes to teammates. Higher is smoother for them.")
+    private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
     private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses, buffering, and the render's timings. Also written to the log every 10 seconds.")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
 
@@ -172,6 +173,7 @@ object PosePov : Module(
             DevgineerClient.safely("pose share") {
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
                 PoseShare.optimize = optimizeLocation
+                PoseShare.skipTiny = skipTiny
                 PoseShare.debug = enabled && debugInfo
                 PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
                 PoseShare.tick()
