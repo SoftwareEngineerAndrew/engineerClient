@@ -199,14 +199,22 @@ export function sample(obs, combos, opts) {
     let s = rnd() * cwSum, ci = 0; while (s > cw[ci] && ci < okCombos.length - 1) s -= cw[ci++];
     const todo = [];
     okCombos[ci].counts.forEach((v, i) => { for (let k = knownBig[i]; k < v; k++) todo.push(SHAPES[i]); });
-    todo.sort((a, b) => PLACEMENTS[b][0].length - PLACEMENTS[a][0].length || rnd() - 0.5);
+    // opts.order 'rnd': the big rooms in random order (else biggest first, ties random)
+    if (opts.order === 'rnd') for (let i = todo.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [todo[i], todo[j]] = [todo[j], todo[i]]; }
+    else todo.sort((a, b) => PLACEMENTS[b][0].length - PLACEMENTS[a][0].length || rnd() - 0.5);
     owner.fill(-1);
     // opts.reserve: that many of the main grid's cells (scaled to the unknown ones) kept free of big rooms while
     // they're placed, as the real layouts look
     if (opts.reserve) { const k = Math.round(opts.reserve * unknown.length / (rules.w * H - 1)); const cs = [...unknown];
       for (let i = 0; i < k && i < cs.length; i++) { const j = i + Math.floor(rnd() * (cs.length - i)); [cs[i], cs[j]] = [cs[j], cs[i]]; owner[cs[i]] = -3; } }
+    // opts.special: the special rooms still to come (puzzles, trap, yellow) put down first on random cells, the
+    // big rooms placed round them, and the door tree never going on from one (each a dead end); blood is then
+    // the one other dead end
+    const nSpecial = opts.special ? remP + (rules.trap && !found.T ? 1 : 0) + (found.Y ? 0 : 1) : 0;
+    if (nSpecial) { const cs = unknown.filter(t => owner[t] === -1); if (cs.length < nSpecial) continue;
+      for (let i = 0; i < nSpecial; i++) { const j = i + Math.floor(rnd() * (cs.length - i)); [cs[i], cs[j]] = [cs[j], cs[i]]; owner[cs[i]] = -4; } }
     const rooms = [];
-    let fail = false;
+    let fail = false, tryW = 1;
     for (const shape of todo) {
       const cands = [], cw2 = [], cAt = []; let cwT = 0;
       const AW = TB.AW?.[shape];
@@ -239,6 +247,10 @@ export function sample(obs, combos, opts) {
         }
       } });
       if (!cands.length) { fail = true; break; }
+      // opts.tries K: the game tries K random spots inside the map and starts over if none fits, so this sample
+      // counts as likely as K tries finding a spot (K = 1: every complete layout alike)
+      if (opts.tries) { let T = 0; for (const o of PLACEMENTS[shape]) { const w2 = Math.max(...o.map(c => c[0])) + 1, h2 = Math.max(...o.map(c => c[1])) + 1; T += Math.max(0, rules.w - w2 + 1) * Math.max(0, H - h2 + 1); }
+        tryW *= 1 - (1 - Math.min(1, cands.length / T)) ** opts.tries; }
       let s4 = rnd() * cwT, pk = 0; while (s4 > cw2[pk] && pk < cands.length - 1) s4 -= cw2[pk++];
       const pick = cands[pk];
       for (const t of pick) owner[t] = rooms.length;
@@ -246,9 +258,9 @@ export function sample(obs, combos, opts) {
     }
     if (fail) continue;
     for (const t of unknown) if (owner[t] === -3) owner[t] = -1;
-    for (const t of unknown) if (owner[t] < 0) { owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne' }); }
+    for (const t of unknown) if (owner[t] < 0) { const sp = owner[t] === -4; owner[t] = rooms.length; rooms.push({ tiles: [t], shape: 'OneByOne', special: sp }); }
     // opts.bunch: maps with more 2x2 blocks of 1x1 rooms weigh more (exp(bunch * blocks))
-    let layoutWeight = 1;
+    let layoutWeight = tryW;
     if (opts.bunch) {
       const one = t => isUnk[t] ? rooms[owner[t]].shape === 'OneByOne' : P0.oneAt[t];
       let q = 0; for (let z = 0; z + 1 < H; z++) for (let x = 0; x + 1 < rules.w; x++) { const t = z * W + x; if (one(t) && one(t + 1) && one(t + W) && one(t + W + 1)) q++; }
@@ -281,16 +293,16 @@ export function sample(obs, combos, opts) {
     while (order.length < R) {
       let u = -1, v = -1;
       if (oldest && rnd() < oldest) {
-        while (oldHead < order.length) { const a = order[oldHead]; const fr = [...slots[a].keys()].filter(w => parent[w] === -2); if (fr.length) { u = a; v = fr[Math.floor(rnd() * fr.length)]; break; } oldHead++; }
+        while (oldHead < order.length) { const a = order[oldHead]; const fr = rooms[a]?.special ? [] : [...slots[a].keys()].filter(w => parent[w] === -2); if (fr.length) { u = a; v = fr[Math.floor(rnd() * fr.length)]; break; } oldHead++; }
       }
       if (u < 0 && rnd() < grow) {
         const last = order[order.length - 1];
-        const fr = [...slots[last].keys()].filter(w => parent[w] === -2);
+        const fr = rooms[last]?.special ? [] : [...slots[last].keys()].filter(w => parent[w] === -2);
         if (fr.length) { u = last; v = fr[Math.floor(rnd() * fr.length)]; }
       }
       if (u < 0) {
         let cnt = 0;
-        for (const a of order) for (const b of slots[a].keys()) if (parent[b] === -2) { cnt++; if (rnd() * cnt < 1) { u = a; v = b; } }
+        for (const a of order) if (!rooms[a]?.special) for (const b of slots[a].keys()) if (parent[b] === -2) { cnt++; if (rnd() * cnt < 1) { u = a; v = b; } }
       }
       if (u < 0) break; // a pocket no entry reaches
       const sl = slots[u].get(v); const [tu, tv] = sl[Math.floor(rnd() * sl.length)];
@@ -324,7 +336,7 @@ export function sample(obs, combos, opts) {
       }
       const cands = [], ws = [], fairies = [];
       for (const b of dead) {
-        if (root[b] !== hb || rooms[b].col) continue;
+        if (root[b] !== hb || rooms[b].col || rooms[b].special) continue;
         if ((entry.get(head).kind === 'b') !== (b === hr)) continue;
         const D = dist[b];
         // opts.detour (pi): the walk counted the game's way - each 2x2 on the way entered and left by neighbouring
