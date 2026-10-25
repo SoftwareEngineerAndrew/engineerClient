@@ -882,7 +882,11 @@ object PosePov : Module(
                             for (m in cmds) { offsets.put(0L); counts.put(m.count); bases.put(m.first) }
                             offsets.flip(); counts.flip(); bases.flip()
                             try { pass.multiDrawIndexed(offsets, counts, bases, cmds.size) }
-                            catch (e: Exception) { multiFailed = true; for (m in cmds) pass.drawIndexed(m.count, 1, 0, m.first, 0) }
+                            catch (e: Exception) {
+                                multiFailed = true
+                                DevgineerClient.logger.warn("[pose pov] multi-draw failed, drawing ranges one by one from now on", e)
+                                for (m in cmds) pass.drawIndexed(m.count, 1, 0, m.first, 0)
+                            }
                         }
                     }
                 }
