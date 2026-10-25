@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap
 object BlockMesh {
     class Mesh(val buffer: GpuBuffer, val indexCount: Int)
 
-    private const val BUNDLE_FORMAT = 1
+    private const val BUNDLE_FORMAT = 2
     const val ARENA = "arena"
 
     private val world = HashMap<Long, Mesh?>()
