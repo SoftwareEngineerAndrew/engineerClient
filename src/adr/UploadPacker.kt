@@ -29,11 +29,17 @@ import org.slf4j.LoggerFactory
  *    The site stores it as it comes; the viewer tells the two apart by their first bytes.
  *
  *  - When someone else in the party already uploaded their recording of the same run ([sibling]),
- *    the mobs that recording has at least as much of are left out. The viewer takes each mob
- *    (entity id - the server's, the same on every client) from the one recording with the most
- *    data for it, never mixing two, so this changes nothing it shows: only mobs this recording
- *    saw more of are kept. Players are always kept (the viewer fills gaps in one recording's view
- *    of a player from another's).
+ *    a mob's life is left out only where that recording has the same one: the same entity id
+ *    (the server's, the same on every client) and type, alive over all of it ([LIFE_MARGIN]),
+ *    and nearly everywhere this recording saw it, within [AGREE_DIST] blocks of where that one
+ *    says ([covered]). The viewer takes each life from one recording and fills in lives only the
+ *    others have, so nothing it shows changes - and a made-up or edited upload, which doesn't
+ *    agree, makes this one keep everything.
+ *
+ *  - Mobs as little as the viewer needs ([MobPlan], [MobWriter]): moves thinned to where it can't
+ *    draw them from the ones either side (it slides between them, [MobPlan.LERP_GAP]), rounded;
+ *    gone, a spawn's stand look and its name folded into the spawn; a mob coming back as it went
+ *    marked so instead of sent again; nothing the viewer couldn't show (stands never seen).
  *
  *  - Everything the viewer builds the world from comes first (after the meta line), with the
  *    whole room layout as a "roomsAll" line: those lines are written as the run goes, but none of
@@ -42,8 +48,9 @@ import org.slf4j.LoggerFactory
  *    has to be built again once the rest is in. The rest keeps its order.
  *
  *  - A projectile's whole life - its spawn and flight, new flights, where it stuck, when it was
- *    gone - is one "proj" line where it spawned (most arrows are shot point-blank into a wall and
- *    stick a tick later: three lines and a move, for one arrow).
+ *    gone - is one "pj" line where it spawned: the few points the viewer needs to fly it from
+ *    one to the next ([ProjPack]; most arrows are shot point-blank into a wall and stick a tick
+ *    later: three lines and a move, for one arrow).
  *
  *  - Mob moves ("e") and player lines ("p") as columns ("cols"): each 30 s, every mob's (player's)
  *    values one after another, as differences from the last - mostly 0, 1 and -1, which pack to a
@@ -55,8 +62,8 @@ import org.slf4j.LoggerFactory
  *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (under a pixel), never
  *    leaving more than [CAM_GAP] ticks between two (more than 2 is "not rendering" to the viewer).
  *
- *  - Other players a party member's upload already has ([sibling]): their lines are left out
- *    while that recording has them, with a margin either side: the two recordings' ticks are
+ *  - Other players a party member's upload already has ([sibling]), and where it has them
+ *    where this one does: their lines are left out while that recording has them, with a margin either side: the two recordings' ticks are
  *    lined up the way the viewer does it (the same block changes in both), [ALIGNED_MARGIN]; if
  *    they can't be, by start time, [COVER_MARGIN]. The viewer fills a player from any
  *    recording that has them at that tick, so nothing it shows changes. If that recording is the
@@ -300,8 +307,78 @@ object UploadPacker {
         return keep.toList()
     }
 
-    /** A party member's upload, as far as leaving things out goes: whose it is, each mob's event count, when it had each player, its block changes. */
-    private class Sibling(val self: String, val startMs: Long, val counts: Map<Int, Int>, val players: Map<String, List<LongRange>>, val blocks: List<Pair<Long, String>>)
+/** A party member's upload, as far as leaving things out goes: whose it is, each mob's event count, when it had each player, its block changes, where it had each mob and player. */
+    private class Sibling(
+        val self: String, val startMs: Long, val counts: Map<Int, Int>, val players: Map<String, List<LongRange>>, val blocks: List<Pair<Long, String>>,
+        val mobs: Map<Int, Track>, val lives: Map<Int, List<SibLife>>, val playerAt: Map<String, Track>,
+        /** Ticks apart the viewer slides its mobs between rows (0: it holds them till the next). */
+        val lerp: Int,
+    ) {
+        /** Where it had mob [id] at its tick [t] in life [life]. */
+        fun mobAt(id: Int, life: SibLife, t: Long): DoubleArray? {
+            val r = mobs[id]?.at(t, lerp)
+            return if (r == null || r[0] < life.from) doubleArrayOf(t.toDouble(), life.x, life.y, life.z) else r
+        }
+    }
+
+    /** A mob's life in a party member's upload, in its ticks: from its spawn to its gone, where it spawned and as what. */
+    private class SibLife(val from: Long, var to: Long, val x: Double, val y: Double, val z: Double, val type: String?)
+
+    /** One mob's or player's rows in a recording (t, x, y, z), in order. */
+    private class Track {
+        private var t = LongArray(8); private var p = DoubleArray(24); var n = 0; private set
+        fun add(tick: Long, x: Double, y: Double, z: Double) {
+            if (n == t.size) { t = t.copyOf(n * 2); p = p.copyOf(n * 6) }
+            t[n] = tick; p[3 * n] = x; p[3 * n + 1] = y; p[3 * n + 2] = z; n++
+        }
+        fun sort() {
+            if ((1 until n).all { t[it - 1] <= t[it] }) return
+            val order = (0 until n).sortedBy { t[it] }
+            val t2 = LongArray(t.size); val p2 = DoubleArray(p.size)
+            order.forEachIndexed { k, i -> t2[k] = t[i]; for (c in 0..2) p2[3 * k + c] = p[3 * i + c] }
+            t = t2; p = p2
+        }
+        /** [t, x, y, z] at tick [at]: its last row, or slid toward the next one up to [lerp] ticks on (the viewer's way); null before the first. */
+        fun at(at: Long, lerp: Int): DoubleArray? {
+            var lo = 0; var hi = n - 1
+            if (n == 0 || t[0] > at) return null
+            while (lo < hi) { val m = (lo + hi + 1) / 2; if (t[m] <= at) lo = m else hi = m - 1 }
+            val i = lo
+            if (lerp > 0 && i + 1 < n && t[i + 1] - t[i] in 2..lerp.toLong()) {
+                val f = (at - t[i]).toDouble() / (t[i + 1] - t[i])
+                return doubleArrayOf(t[i].toDouble(), p[3 * i] + (p[3 * i + 3] - p[3 * i]) * f, p[3 * i + 1] + (p[3 * i + 4] - p[3 * i + 1]) * f, p[3 * i + 2] + (p[3 * i + 5] - p[3 * i + 2]) * f)
+            }
+            return doubleArrayOf(t[i].toDouble(), p[3 * i], p[3 * i + 1], p[3 * i + 2])
+        }
+    }
+
+    private const val LIFE_MARGIN = 10
+    /** How far apart two recordings' views of a mob or player can be and still be the same (theirs are at a tenth of a block, slid). */
+    private const val AGREE_DIST = 1.5
+    private const val AGREE_SAMPLES = 30
+
+    private fun dist(a: DoubleArray, b: DoubleArray) = Math.sqrt((a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]) + (a[3] - b[3]) * (a[3] - b[3]))
+
+    /** Up to [AGREE_SAMPLES] of [rows], spread out. */
+    private fun sample(rows: List<DoubleArray>) = if (rows.size <= AGREE_SAMPLES) rows else List(AGREE_SAMPLES) { rows[it * rows.size / AGREE_SAMPLES] }
+
+    /**
+     * Whether the party member's upload has this life of a mob - all of it (but a few ticks at its
+     * ends), and where this recording saw it: nine in ten of its moves within [AGREE_DIST]. An
+     * upload that has it somewhere else (or made up) has nothing left out for it.
+     */
+    private fun covered(life: MobPlan.Life, sib: Sibling, offset: Long, ticks: Int): Boolean {
+        if (life.proj) return false
+        val theirs = sib.lives[life.id] ?: return false
+        val s = life.spawn.toLong(); val g = (life.gone ?: ticks).toLong()
+        var from = s + LIFE_MARGIN; var to = g - LIFE_MARGIN
+        if (from > to) { from = (s + g) / 2; to = from }
+        val sl = theirs.firstOrNull { it.from + offset <= from && it.to + offset >= to } ?: return false
+        if (sl.type != null && sl.type != life.type) return false
+        val pts = sample(life.rows.filter { it[0] >= from && it[0] <= to }).ifEmpty { listOf(doubleArrayOf(from.toDouble(), life.at[0], life.at[1], life.at[2])) }
+        val ok = pts.count { q -> sib.mobAt(life.id, sl, q[0].toLong() - offset)?.let { dist(it, q) <= AGREE_DIST } == true }
+        return ok * 10 >= pts.size * 9
+    }
 
     /** A recording's block changes with their palette's states, as (tick, "x,y,z,state"). */
     private class BlockReader {
@@ -378,36 +455,43 @@ object UploadPacker {
         val aligned = sibling?.let { lineUp(scan, it) }
         val sib = sibling?.takeIf { aligned?.second == ALIGNED_MARGIN }
         if (sibling != null && sib == null) log.info("[ec] adr: a party member's upload doesn't line up with this one, nothing left out")
-        val drop = sib?.let { s -> scan.counts.filter { (id, n) -> (s.counts[id] ?: 0) >= n }.keys } ?: emptySet()
-        val players = sib?.let { Players(scan, it, aligned!!) }
+        val plan = lines(Files.newInputStream(file)).use { r -> MobPlan.read(r.lineSequence()) { scan.fold(it) != null } }
+        // Mob lives the party member's upload has, the same (checked against this one's): left out.
+        val ticks = scan.summary["ticks"]?.asInt ?: 0
+        val left = sib?.let { s -> plan.lives.values.flatten().filter { covered(it, s, aligned!!.first, ticks) }.toHashSet() } ?: emptySet()
+        val players = sib?.let { Players(scan, it, aligned!!, plan.players) }
         val out = Files.createTempFile("adr-upload-", ".jsonl.xz")
         try {
-            writeTo(file, scan, out, drop, players, hideParty)
+            writeTo(file, scan, out, plan, left, players, hideParty)
         } catch (t: Throwable) {
             Files.deleteIfExists(out)
             throw t
         }
-        return out to drop.size
+        return out to left.size
     }
 
-    private fun writeTo(file: Path, scan: Scan, out: Path, drop: Set<Int>, players: Players?, hideParty: Boolean) {
+    private fun writeTo(file: Path, scan: Scan, out: Path, plan: MobPlan, left: Set<MobPlan.Life>, players: Players?, hideParty: Boolean) {
         var camLine = 0
         val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             val cols = Stretch(w)
+            val mobs = MobWriter(plan) { it in left }
+            val timeline: (String) -> Unit = { l -> if (players == null) cols.put(l) else players.put(l, cols::put) }
             fun put(line: String, timed: Boolean = true) {
-                var kept = (if (drop.isEmpty()) line else keep(line, drop) ?: return).let { fold(it, scan) ?: return }
+                var kept = fold(line, scan) ?: return
                 if (kept.startsWith("{\"k\":\"cam\"")) kept = thin(kept, scan.camKeep.getOrNull(camLine++)) ?: return
                 // (the world's lines carry ticks, but aren't in the timeline: none of them start a stretch)
                 if (!timed) { if (players?.keepsWorld(kept) != false) { w.write(kept); w.write(NL) }; return }
-                if (players == null) cols.put(kept) else players.put(kept, cols::put)
+                mobs.put(kept, timeline)
             }
             // The first line (meta), the layout and the world's lines; then everything else.
             lines(Files.newInputStream(file)).use { r ->
                 var first = true
                 for (line in r.lineSequence()) {
                     if (first) {
-                        first = false; put(line, timed = false); scan.layout?.let { w.write(it); w.write(NL) }
+                        // (the viewer fills mobs' moves in between the rows, up to this many ticks apart: MobPlan)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP) }.toString() }.getOrDefault(line), timed = false)
+                        scan.layout?.let { w.write(it); w.write(NL) }
                         for (l in scan.world) put(l, timed = false)
                         continue
                     }
@@ -418,44 +502,9 @@ object UploadPacker {
                     if (kind !in WORLD) put(line)
                 }
             }
+            mobs.end(timeline)
             cols.end()
         }
-    }
-
-    /** A line with the dropped mobs taken out, or null if nothing of it is left. */
-    private fun keep(line: String, drop: Set<Int>): String? {
-        val kind = kindOf(line) ?: return line
-        if (kind == "e") {
-            val l = JsonParser.parseString(line).asJsonObject
-            val d = l.getAsJsonArray("d")
-            val left = JsonArray()
-            for (e in d) if (e.asJsonArray[0].asInt !in drop) left.add(e)
-            if (left.size() == 0) return null
-            if (left.size() == d.size()) return line
-            l.add("d", left)
-            return l.toString()
-        }
-        if (kind in ENTITY_KINDS || (kind == "eq" && line.contains("\"id\":"))) {
-            val id = ID.find(line)?.groupValues?.get(1)?.toInt() ?: return line
-            return if (id in drop) null else line
-        }
-        return line
-    }
-
-    /**
-     * A projectile's new flights with each one that is the same as the one before it (the spawn's,
-     * first) as just its [dt]: a client that hasn't moved a projectile yet has it launched again
-     * where it was, tick after tick.
-     */
-    private fun sameAgain(spawn: JsonObject, arcs: JsonArray): JsonArray {
-        var prev: List<JsonElement>? = spawn["v"]?.takeIf { it is JsonArray }?.let { v -> listOfNotNull(spawn["x"], spawn["y"], spawn["z"]) + v.asJsonArray.toList() }
-        val out = JsonArray()
-        for (a in arcs) {
-            val flight = a.asJsonArray.toList().drop(1)
-            out.add(if (flight == prev) JsonArray().apply { add(a.asJsonArray[0]) } else a)
-            prev = flight
-        }
-        return out
     }
 
     /** A line as it goes up: a projectile's spawn becomes its "proj" line, the rest of its lines go (null). */
@@ -466,15 +515,7 @@ object UploadPacker {
                 val id = ID.find(line)?.groupValues?.get(1)?.toInt() ?: return line
                 val p = scan.fold(id) ?: return line
                 if (kind != "spawn") return null
-                val s = p.spawn
-                val o = JsonObject()
-                o.addProperty("k", "proj"); o.add("t", s["t"]); o.add("id", s["id"])
-                s["type"]?.takeIf { it.asString != "minecraft:arrow" }?.let { o.add("type", it) }
-                for (k in listOf("x", "y", "z", "v", "a", "i")) s[k]?.let { o.add(k, it) }
-                if (p.arcs.size() > 0) o.add("arcs", sameAgain(s, p.arcs))
-                p.stuck?.let { o.add("s", it) }
-                p.gone?.let { o.addProperty("g", it - p.t0) }
-                return o.toString()
+                return ProjPack.line(p).toString()
             }
             "e" -> {
                 if (ROW_ID.findAll(line).none { scan.fold(it.groupValues[1].toInt()) != null }) return line
@@ -661,7 +702,7 @@ object UploadPacker {
             private val CAM_KEYS = setOf("k", "t", "d")
             /** Kinds that go in "grp" lines; the first ones go ahead of the moves, the rest after. */
             private val BEFORE_MOVES = listOf("spawn", "tag", "stand", "frame", "eq", "name")
-            private val GROUPED = BEFORE_MOVES.toSet() + setOf("gone", "st", "mp", "sw")
+            private val GROUPED = BEFORE_MOVES.toSet() + setOf("gone", "st", "mp", "sw", "pj")
             /** A number with at most 2 decimals, in hundredths (exactly), else null. */
             fun hundredths(e: JsonElement): Long? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.let { p ->
                 runCatching { BigDecimal(p.asString).movePointRight(2).longValueExact() }.getOrNull()
@@ -686,11 +727,19 @@ object UploadPacker {
      * lines; when that starts, a "pgone" so this recording's view of them doesn't hold still on the
      * last row it had; when it ends, the row they're at then, as the recording would have had it.
      */
-    private class Players(private val scan: Scan, private val sib: Sibling, private val aligned: Pair<Long, Int>) {
-        /** Ticks (this recording's) the sibling surely has each player. */
-        private val covered = sib.players.mapValues { (_, list) ->
+    private class Players(private val scan: Scan, private val sib: Sibling, private val aligned: Pair<Long, Int>, private val ours: Map<String, List<DoubleArray>>) {
+        /** Ticks (this recording's) the sibling surely has each player, where it has them as this one does. */
+        private val covered = sib.players.mapValues { (name, list) ->
             val (offset, margin) = aligned
-            list.mapNotNull { r -> val a = r.first + offset + margin; val b = r.last + offset - margin; if (a <= b) a..b else null }
+            list.mapNotNull { r -> val a = r.first + offset + margin; val b = r.last + offset - margin; if (a <= b && same(name, a, b, offset)) a..b else null }
+        }
+
+        /** Whether the sibling has [name] where this recording does, from tick [a] to [b] (nine in ten of its rows). */
+        private fun same(name: String, a: Long, b: Long, offset: Long): Boolean {
+            val pts = sample(ours[name]?.filter { it[0] >= a && it[0] <= b } ?: return true)
+            val track = sib.playerAt[name] ?: return false
+            val ok = pts.count { q -> track.at(q[0].toLong() - offset, 0)?.let { dist(it, q) <= AGREE_DIST } == true }
+            return ok * 10 >= pts.size * 9
         }
         private val dropping = HashMap<String, Long>() // name -> the end of the stretch it's left out in
         private val last = HashMap<String, JsonElement?>() // the row each one left out is at
@@ -759,6 +808,14 @@ object UploadPacker {
         var rows = 0
         val seen = HashMap<String, MutableList<Long>>() // name -> ticks it had a row at, and pgone ticks as -(t + 1)
         val blocks = BlockReader()
+        val mobs = HashMap<Int, Track>()
+        val playerAt = HashMap<String, Track>()
+        val spawns = HashMap<Int, MutableList<DoubleArray>>() // id -> [t, life (or -1), x, y, z, back], and their types
+        val types = HashMap<Long, String>() // (id shl 32 | spawn tick) -> type
+        val gones = HashMap<Int, MutableList<Long>>()
+        var lerp = 0
+        fun mob(id: Int, t: Long, x: Double?, y: Double?, z: Double?) { if (x == null || y == null || z == null) return; if (++rows > SIB_MAX_ROWS) throw Malformed("too many rows"); mobs.getOrPut(id) { Track() }.add(t, x, y, z) }
+        fun player(name: String, t: Long, x: Double?, y: Double?, z: Double?) { if (x == null || y == null || z == null) return; playerAt.getOrPut(name) { Track() }.add(t, x, y, z) }
         fun tick(t: Long): Long { if (t !in 0..SIB_MAX_TICK) throw Malformed("tick $t"); if (t < minT) minT = t; if (t > maxT) maxT = t; return t }
         fun row(name: String, t: Long) { if (++rows > SIB_MAX_ROWS) throw Malformed("too many player rows"); seen.getOrPut(name) { ArrayList() } += t }
         fun count(id: Int, n: Int) {
@@ -774,10 +831,11 @@ object UploadPacker {
                     "meta" -> obj(line).let { m ->
                         self = runCatching { str(m["self"]) }.getOrDefault("").takeIf { it.length <= 16 } ?: ""
                         startMs = runCatching { long(m["startMs"]) }.getOrDefault(0L)
+                        lerp = runCatching { int(m["lerp"]) }.getOrDefault(0).coerceIn(0, 200)
                     }
-                    "p" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) row(str(at(arr(x), 0)), t) }
+                    "p" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) { val r = arr(x); val name = str(at(r, 0)); row(name, t); if (r.size() >= 4) player(name, t, num(r[1]), num(r[2]), num(r[3])) } }
+                    "e" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) { val r = arr(x); val id = int(at(r, 0)); count(id, 1); if (r.size() >= 4) mob(id, t, num(r[1]), num(r[2]), num(r[3])) } }
                     "pgone" -> { val l = obj(line); row(str(l["name"]), -(tick(long(l["t"])) + 1)) }
-                    "e" -> for (m in ROW_ID.findAll(line)) count(m.groupValues[1].toIntOrNull() ?: throw Malformed("id"), 1)
                     "cols" -> {
                         val l = obj(line)
                         var acc = 0L
@@ -796,9 +854,21 @@ object UploadPacker {
                         }
                         val byId = l.has("kd")
                         var id = 0L
+                        // Each one's first three columns (x, y, z: every row has them).
+                        fun xyz(a: JsonArray, n: Int): List<List<Double?>> { val cols = arr(at(a, 3)); return (0..2).map { c -> if (c < cols.size()) nums(cols[c], n) else emptyList() } }
                         when (l["of"]?.let(::str)) {
-                            "e" -> for (t in arr(l["tr"])) arr(t).let { id = if (byId) id + long(at(it, 0)) else long(at(it, 0)); count(id.toInt().takeIf { i -> i.toLong() == id } ?: throw Malformed("id"), inLines(it).size) }
-                            "p" -> for (tr in arr(l["tr"])) { val a = arr(tr); val name = str(at(a, 0)); for (li in inLines(a)) row(name, ticks[li]) }
+                            "e" -> for (t in arr(l["tr"])) arr(t).let {
+                                id = if (byId) id + long(at(it, 0)) else long(at(it, 0))
+                                val mid = id.toInt().takeIf { i -> i.toLong() == id } ?: throw Malformed("id")
+                                val lis = inLines(it); count(mid, lis.size)
+                                val (xs, ys, zs) = xyz(it, lis.size)
+                                lis.forEachIndexed { k, li -> mob(mid, ticks[li], xs.getOrNull(k), ys.getOrNull(k), zs.getOrNull(k)) }
+                            }
+                            "p" -> for (tr in arr(l["tr"])) {
+                                val a = arr(tr); val name = str(at(a, 0)); val lis = inLines(a)
+                                val (xs, ys, zs) = xyz(a, lis.size)
+                                lis.forEachIndexed { k, li -> row(name, ticks[li]); player(name, ticks[li], xs.getOrNull(k), ys.getOrNull(k), zs.getOrNull(k)) }
+                            }
                         }
                     }
                     "grp" -> {
@@ -809,6 +879,22 @@ object UploadPacker {
                         val c = l["c"] as? JsonObject ?: throw Malformed("columns")
                         c["t"]?.let { col -> for (t in longs(col, n)) tick(t) }
                         if (of in ENTITY_KINDS || of == "eq") c["id"]?.let { col -> for (id in longs(col, n)) count(id.toInt().takeIf { it.toLong() == id } ?: throw Malformed("id"), 1) }
+                        // Lives: spawns (and how long, "life") and gone.
+                        if (of == "spawn" || of == "gone") {
+                            val ts = nums(c["t"] ?: throw Malformed("t"), n); val ids = nums(c["id"] ?: throw Malformed("id"), n)
+                            if (of == "gone") ts.indices.forEach { k -> val t = ts[k]?.toLong() ?: return@forEach; val i = ids.getOrNull(k)?.toInt() ?: return@forEach; gones.getOrPut(i) { ArrayList() } += t }
+                            else {
+                                val life = c["life"]?.let { nums(it, n) }; val back = c["b"]?.let { nums(it, n) }; val v = c["v"]?.let { present(it, n) }
+                                val xs = c["x"]?.let { nums(it, n) }; val ys = c["y"]?.let { nums(it, n) }; val zs = c["z"]?.let { nums(it, n) }; val ty = c["type"]?.let { strs(it, n) }
+                                for (k in ts.indices) {
+                                    val t = ts[k] ?: continue; val i = ids.getOrNull(k)?.toInt() ?: continue
+                                    if (v?.getOrNull(k) == true) continue // (a projectile)
+                                    spawns.getOrPut(i) { ArrayList() } += doubleArrayOf(t, life?.getOrNull(k) ?: -1.0, xs?.getOrNull(k) ?: Double.NaN, ys?.getOrNull(k) ?: Double.NaN, zs?.getOrNull(k) ?: Double.NaN, back?.getOrNull(k) ?: 0.0)
+                                    ty?.getOrNull(k)?.let { types[(i.toLong() shl 32) or t.toLong()] = it }
+                                    if (spawns.size > SIB_MAX_IDS) throw Malformed("too many mobs")
+                                }
+                            }
+                        }
                     }
                     "proj" -> {
                         val l = obj(line)
@@ -836,7 +922,70 @@ object UploadPacker {
             from?.let { ranges += it..maxT }
             ranges
         }
-        return Sibling(self, startMs, counts, players, blocks.changes())
+        // Each mob's lives: from a spawn till its "life" ran out, its gone or the next spawn.
+        val lives = HashMap<Int, List<SibLife>>()
+        for ((id, list) in spawns) {
+            val gs = gones[id]?.sorted() ?: emptyList()
+            var type: String? = null
+            lives[id] = list.sortedBy { it[0] }.let { ss -> ss.mapIndexed { k, s ->
+                val t = s[0].toLong()
+                type = types[(id.toLong() shl 32) or t] ?: if (s[5] > 0) type else null
+                val next = ss.getOrNull(k + 1)?.get(0)?.toLong() ?: Long.MAX_VALUE
+                val end = if (s[1] > 0) t + s[1].toLong() - 1 else gs.firstOrNull { it >= t && it <= next } ?: minOf(next, maxT)
+                SibLife(t, end, s[2], s[3], s[4], type)
+            } }
+        }
+        for (tr in mobs.values) tr.sort()
+        for (tr in playerAt.values) tr.sort()
+        return Sibling(self, startMs, counts, players, blocks.changes(), mobs, lives, playerAt, lerp)
+    }
+
+    /** A number, or null. */
+    private fun num(e: JsonElement?): Double? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.asDouble
+
+    /** A column (Stretch.column) as numbers, at most [n]: null where a row hasn't one. */
+    private fun nums(col: JsonElement, n: Int): List<Double?> {
+        val out = ArrayList<Double?>()
+        if (col is JsonArray) {
+            if (col.size() == 0) return out
+            val dec = long(col[0]).also { if (it !in 0..8) throw Malformed("decimals") }
+            val scale = Math.pow(10.0, dec.toDouble())
+            var q = 0L
+            for (i in 1 until col.size()) { if (out.size >= n) break; q += long(col[i]); out += q / scale }
+            return out
+        }
+        val r = arr((col as? JsonObject ?: throw Malformed("column"))["r"])
+        var i = 0
+        while (i + 1 < r.size() && out.size < n) {
+            val v = num(r[i]); val k = long(r[i + 1])
+            if (k < 0) throw Malformed("run")
+            repeat(minOf(k, (n - out.size).toLong()).toInt()) { out += v }
+            i += 2
+        }
+        return out
+    }
+
+    /** Which rows of a run-length column have a value. */
+    private fun present(col: JsonElement, n: Int): List<Boolean> {
+        val out = ArrayList<Boolean>()
+        val r = (col as? JsonObject)?.get("r") as? JsonArray ?: return List(n) { false }
+        var i = 0
+        while (i + 1 < r.size() && out.size < n) { val k = long(r[i + 1]); if (k < 0) throw Malformed("run"); repeat(minOf(k, (n - out.size).toLong()).toInt()) { out += r[i] !is JsonNull }; i += 2 }
+        return out
+    }
+
+    /** A run-length column as strings, at most [n]: null where a row hasn't one (or it isn't a string). */
+    private fun strs(col: JsonElement, n: Int): List<String?> {
+        val out = ArrayList<String?>()
+        val r = (col as? JsonObject)?.get("r") as? JsonArray ?: return List(n) { null }
+        var i = 0
+        while (i + 1 < r.size() && out.size < n) {
+            val v = (r[i] as? JsonPrimitive)?.takeIf { it.isString }?.asString?.take(64); val k = long(r[i + 1])
+            if (k < 0) throw Malformed("run")
+            repeat(minOf(k, (n - out.size).toLong()).toInt()) { out += v }
+            i += 2
+        }
+        return out
     }
 
     /** A whole-number column (Stretch.column) as its values, at most [n]; null (a line without the field) left out. */
