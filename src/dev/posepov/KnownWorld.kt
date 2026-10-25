@@ -48,7 +48,6 @@ object KnownWorld {
     val ARENA_SX = 0..8
     val ARENA_SZ = 0..9
 
-    /** One placed room. [designKey] names its geometry, the same for every run that has this design, variant and turn. */
     /**
      * One placed room. [tiles] are its grid tiles, [core] the core hash it was named by (when known: what teammates are told),
      * [shared] whether a teammate's game named it rather than this one, [guessed] whether only its edge columns did (RoomEdges).
@@ -56,11 +55,11 @@ object KnownWorld {
     class Room(val key: String, val inst: RoomInstance, val tiles: List<Tile>, val core: Int? = null, val shared: Boolean = false, val guessed: Boolean = false) {
         val p = inst.placement
         val v = inst.volume
-        val designKey = "${inst.design.id}|${(key.substringAfterLast('|'))}|${p.rot}"
-        private val keyCache = java.util.concurrent.ConcurrentHashMap<Int, Array<String>>()
-        /** This room's own and its design's key for the piece at section (lx, ly, lz) of it, made once. */
-        fun pieceKeys(lx: Int, ly: Int, lz: Int): Array<String> =
-            keyCache.getOrPut((lx shl 16) or ((ly and 0xFF) shl 8) or lz) { arrayOf("$key/$lx/$ly/$lz", "$designKey/$lx/$ly/$lz") }
+        /** The pack variant it was built from, when not the design's base. */
+        val variant: String? = key.substringAfterLast('|').takeIf { it != "null" }
+        private val keyCache = java.util.concurrent.ConcurrentHashMap<Int, String>()
+        /** This room's own key for the piece at (lx, ly, lz) of its unturned box (16-block steps), made once. */
+        fun pieceKey(lx: Int, ly: Int, lz: Int): String = keyCache.getOrPut((lx shl 16) or ((ly and 0xFF) shl 8) or lz) { "$key/$lx/$ly/$lz" }
         val states: Array<BlockState> = Array(v.palette.size) { i ->
             val s = v.palette[i]
             if (i == 0 || s == "minecraft:air") AIR else BlockStates.rotated(s, p.quarterTurns)
@@ -90,6 +89,7 @@ object KnownWorld {
     val rooms: List<Room> get() = roomList ?: tiles.filterNotNull().distinct().also { roomList = it }
     private var doorsKey = ""
     @Volatile private var pack: RoomPack? = null
+    val roomPack: RoomPack? get() = pack
     @Volatile private var arenaReady = false
     private var loading = false
 

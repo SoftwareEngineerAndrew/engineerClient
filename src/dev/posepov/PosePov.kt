@@ -36,6 +36,8 @@ import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
@@ -164,6 +166,19 @@ object PosePov : Module(
                 PoseShare.tick()
             }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
+            DevgineerClient.safely("pose pov export") { exportTick() }
+        }
+        // `/posepov export`: every room, variant and the arena built here and written out, for undonecoffee.com to hand out.
+        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            dispatcher.register(literal("posepov").then(literal("export").executes {
+                mc.execute {
+                    KnownWorld.load {}
+                    val n = BlockMesh.startExport()
+                    DevgineerClient.chat(if (n < 0) "§cPose POV: the room pack is still loading, try again in a moment." else "§aPose POV: building $n bundles...")
+                    exportShown = 0
+                }
+                1
+            }))
         }
         // This run's block changes, on top of the known rooms and arena (see KnownWorld).
         onReceive<ClientboundBlockUpdatePacket> { KnownWorld.change(pos, blockState) }
@@ -704,8 +719,19 @@ object PosePov : Module(
         BlockMesh.pump(level, budgetNs, near, prerender && DungeonUtils.inDungeons)
     }
 
+    private const val EXPORT_BUDGET_NS = 40_000_000L
+    private var exportShown = 0
+
+    private fun exportTick() {
+        val level = mc.level ?: return
+        val (done, of) = BlockMesh.exportStep(level, EXPORT_BUDGET_NS) ?: return
+        if (done == of) { DevgineerClient.chat("§aPose POV: all $of bundles written to ${BlockMesh.exportFolder}"); return }
+        val tenth = done * 10 / of
+        if (tenth > exportShown) { exportShown = tenth; DevgineerClient.chat("§7Pose POV export: $done / $of") }
+    }
+
     /** One draw: [count] indices of [buffer] from vertex [first]. */
-    private class Cmd(val buffer: com.mojang.renderpearl.api.buffers.GpuBuffer, val first: Int, val count: Int)
+    private class Cmd(val buffer: com.mojang.renderpearl.api.buffers.GpuBuffer, val first: Int, var count: Int)
 
     private class Job(
         val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val w: Int, val h: Int,
@@ -786,17 +812,21 @@ object PosePov : Module(
         frustum.set(cull)
 
         // What could show from here (worked out ahead: PovVisibility) and is in view, grouped by where it is drawn (a room's
-        // pieces are in its own box frame): a room or an arena cluster is one draw.
+        // pieces are in its own box frame); pieces not on the GPU yet are asked for.
         val draws = HashMap<Long, MutableList<Cmd>>()
         val rooms = PovVisibility.rooms(eye)
         val clusters = PovVisibility.clusters(eye)
         BlockMesh.forEachDraw(
+            eye.x, eye.y, eye.z,
             { r -> rooms == null || r in rooms },
             { k -> clusters == null || PovVisibility.index(k).let { it < 0 || clusters[it] } },
             { x0, y0, z0, x1, y1, z1 -> frustum.testAab(x0, y0, z0, x1, y1, z1) },
         ) { buffer, first, count, ox, oz ->
-            draws.getOrPut((ox.toLong() shl 32) or (oz.toLong() and 0xFFFFFFFFL)) { ArrayList() } += Cmd(buffer, first, count)
-            perfDraws++
+            val list = draws.getOrPut((ox.toLong() shl 32) or (oz.toLong() and 0xFFFFFFFFL)) { ArrayList() }
+            // Runs that sit one after another in the same buffer are one draw.
+            val last = list.lastOrNull()
+            if (last != null && last.buffer === buffer && last.first + last.count / 6 * 4 == first) last.count += count
+            else { list += Cmd(buffer, first, count); perfDraws++ }
         }
 
         projection.setupPerspective(NEAR, FAR, fov, w.toFloat(), h.toFloat())
