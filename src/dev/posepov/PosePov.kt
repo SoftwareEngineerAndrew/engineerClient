@@ -18,6 +18,8 @@ import com.mojang.renderpearl.api.pipeline.PrimitiveTopology
 import com.mojang.renderpearl.api.pipeline.RenderPipeline
 import com.mojang.renderpearl.api.textures.FilterMode
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.ScreenEvent
 import com.odtheking.odin.events.core.EventPriority
@@ -131,6 +133,7 @@ object PosePov : Module(
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
     private val peerToPeer by BooleanSetting("Peer-to-peer sharing", false, desc = "A little less secure but updates much faster.")
+    private val shareFps by NumberSetting("Peer-to-peer FPS", 60, 20..240, 1, desc = "How many times a second your view goes to teammates connected peer-to-peer. Higher is smoother for them.").withDependency { peerToPeer }
 
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
     private val projection = Projection()
@@ -155,6 +158,7 @@ object PosePov : Module(
             DevgineerClient.safely("pose share") {
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
                 PoseShare.p2p = peerToPeer
+                PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
                 PoseShare.tick()
             }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
@@ -220,14 +224,18 @@ object PosePov : Module(
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
             // Out of your range: where they (or a teammate who can see them) say they are, else the map's guess.
             // In clear the map says roughly where they are: a shared pose far from their icon is someone lying, and isn't used.
-            val s = if (p == null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { DungeonUtils.inBoss || slot.mapPos.data == 0L || near(slot, it.pos) } else null
-            val e = if (p != null) {
+            // Peer-to-peer, they're drawn from their own frames even in range (smoother than the game's 20 a second), while
+            // those put them where the server does (a few blocks' lead for the delay).
+            val d = if (p != null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { it.direct && it.pos.distanceToSqr(p.position()) < 16.0 } else null
+            val s = d ?: if (p == null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { DungeonUtils.inBoss || slot.mapPos.data == 0L || near(slot, it.pos) } else null
+            val e = if (p != null && d == null) {
                 players[i] = p
                 val real = look(slot.name, p, pt, now)
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
             } else if (s != null) {
                 shared[i] = s
+                if (p != null) players[i] = p
                 val real = Eye(s.pos.add(0.0, if (s.sneaking) 1.27 else 1.62, 0.0), s.yaw, s.pitch, null)
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
@@ -238,7 +246,7 @@ object PosePov : Module(
             // own included, seen from behind).
             val g = ghosts[slot.name]
             val guess = e?.subject
-            if (s != null && g != null) slot.playerSkin?.let { bodies += Body(s.pos, s.yaw, g.walkPos, g.walkSpeed, it, i) }
+            if (s != null && p == null && g != null) slot.playerSkin?.let { bodies += Body(s.pos, s.yaw, g.walkPos, g.walkSpeed, it, i) }
             else if (p == null && guess != null && g != null) slot.playerSkin?.let { bodies += Body(guess.subtract(0.0, 1.62, 0.0), g.yaw, g.walkPos, g.walkSpeed, it, -1) }
         }
 

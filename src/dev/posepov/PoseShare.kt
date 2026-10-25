@@ -45,8 +45,8 @@ object PoseShare {
      *  and how evenly its poses come, within these. */
     private const val BUFFER_MIN_NS = 6_000_000L
     private const val BUFFER_MAX_NS = 90_000_000L
-    /** Peer-to-peer frames: at most this often (125 a second), each with the frame's look rather than the tick's. */
-    private const val FRAME_NS = 8_000_000L
+    /** Peer-to-peer frames: one a frame at most, as often as this (the "Peer-to-peer FPS" setting; 60 a second), each with the frame's look rather than the tick's. */
+    @Volatile var frameNs = 16_666_666L
     private const val EXTRAPOLATE_NS = 100_000_000L
     /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
     private const val STALE_NS = 300_000_000L
@@ -285,7 +285,7 @@ object PoseShare {
 
     /**
      * Every frame (from the GUI's start, so with the HUD hidden too), peer-to-peer only: your pose to each live peer with the
-     * look you have this frame, timed in ms, up to [FRAME_NS] apart. A tick pose holds the look still for 50 ms, so a teammate
+     * look you have this frame, timed in ms, [frameNs] apart at most. A tick pose holds the look still for 50 ms, so a teammate
      * drawing it has to stay a whole tick behind; these let them draw only a few ms behind. The position is the last tick's
      * carried on by its move into the frame (where you are by now; the next tick corrects it).
      */
@@ -295,7 +295,7 @@ object PoseShare {
         if (!p2p || !ready || !wanted || !PeerLink.running) return
         val me = mc.player ?: return
         val now = System.nanoTime()
-        if (now - frameAt < FRAME_NS) return
+        if (now - frameAt < frameNs - 1_000_000L) return
         frameAt = now
         val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false).toDouble()
         var flags = if (swingPending) 1 else 0
@@ -563,7 +563,7 @@ object PoseShare {
             if (t.timed != timed) {
                 if (!timed && fresh) return
                 t.timed = timed; t.samples.clear(); t.offset = Long.MAX_VALUE; t.lastSeq = -1
-                t.gap = if (timed) FRAME_NS.toDouble() else TICK_NS.toDouble()
+                t.gap = if (timed) 16_000_000.0 else TICK_NS.toDouble()
             }
             t.via = via
             // Ms as sent; ticks unwrapped (16 bits wrap after 55 minutes).
