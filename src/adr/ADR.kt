@@ -388,10 +388,13 @@ object ADR : Module(
     }
 
     private fun sendPacked(file: Path, summary: JsonObject): String {
-        // The site checks it, and takes a limited number an hour (more for solo runs).
+        // The site checks it, and takes a limited number an hour (more for solo runs). Signed in as
+        // its recorder ([ADRAuth]) when that can be done, marking it verified; without, if not.
+        val auth = summary["self"]?.asString?.let(ADRAuth::headerFor)
         val req = HttpRequest.newBuilder(URI.create(RUNS_URL))
             .header("X-Run-Summary", summary.toString())
             .header("X-Run-Owner", token())
+            .apply { if (auth != null) header("X-ADR-Auth", auth) }
             .header("Content-Type", "application/octet-stream")
             .timeout(Duration.ofMinutes(5))
             .POST(HttpRequest.BodyPublishers.ofFile(file))

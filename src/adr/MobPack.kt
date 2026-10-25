@@ -28,7 +28,7 @@ import java.util.TreeMap
  *  - Gear, stand and name lines that change nothing go.
  *  - A stand's look in the tick it spawns is on the spawn ("f", "pose").
  *  - "name" only where it isn't the coloured name ("c") without its § codes.
- *  - Spawns at a hundredth of a block and whole degrees.
+ *  - Spawns at a tenth of a block (armor stands wearing something a hundredth) and whole degrees.
  *
  * Lives a party member's upload already has, the same, can be left out (see [UploadPacker]): the
  * viewer takes each life of a mob from whichever recording has it.
@@ -41,6 +41,8 @@ internal class MobPlan private constructor(
     private val farHalf: Boolean,
     /** Other players' rows (t, x, y, z) by name, for checking a party member's upload has them the same. */
     val players: Map<String, List<DoubleArray>>,
+    /** Stands that ever wear or hold something (their spawns stay at a hundredth: see MobWriter). */
+    val worn: Set<Int>,
 ) {
     class Life(val id: Int, val index: Int, val spawn: Int, var gone: Int?, val type: String, val proj: Boolean) {
         /** Its moves: t, x, y, z, yaw, head (NaN: none). */
@@ -120,7 +122,7 @@ internal class MobPlan private constructor(
         const val ANG_TOL = 20.0
         /** The viewer slides a mob between two rows up to this many ticks apart (its LERP_GAP). */
         const val LERP_GAP = 60
-        private const val STAND = "minecraft:armor_stand"
+        const val STAND = "minecraft:armor_stand"
         private const val INVISIBLE = 2
 
         fun turn(d: Double) = ((d % 360) + 540) % 360 - 180
@@ -140,6 +142,7 @@ internal class MobPlan private constructor(
             val spawnTicks = HashMap<Int, MutableSet<Int>>() // id -> ticks it spawned at
             val stands = HashMap<Int, Boolean>() // stand id -> invisible in every stand line so far
             val shows = HashSet<Int>() // has had a name, gear or a visible look
+            val wornIds = HashSet<Int>()
             val kindRe = Regex(""""k":"(\w+)"""")
             for (line in lines) {
                 val kind = kindRe.find(line.take(24))?.groupValues?.get(1) ?: continue
@@ -184,7 +187,7 @@ internal class MobPlan private constructor(
                     "eq" -> {
                         val id = l["id"]?.takeIf { !it.isJsonNull }?.asInt ?: continue
                         val worn = l.getAsJsonArray("eq")?.any { it is JsonPrimitive && it.asString.isNotEmpty() } == true
-                        if (worn || !l["headTex"]?.takeIf { !it.isJsonNull }?.asString.isNullOrEmpty()) shows += id
+                        if (worn || !l["headTex"]?.takeIf { !it.isJsonNull }?.asString.isNullOrEmpty()) { shows += id; wornIds += id }
                     }
                     "name" -> {
                         val id = l["id"]?.asInt ?: continue
@@ -197,7 +200,7 @@ internal class MobPlan private constructor(
                 life.folded = !life.proj && spawnTicks[life.id]?.contains(g) != true
             }
             val nothing = lives.filter { (id, list) -> list.all { it.type == STAND } && stands[id] == true && id !in shows }.keys
-            return MobPlan(nothing, lives, farHalf, players)
+            return MobPlan(nothing, lives, farHalf, players, wornIds)
         }
     }
 }
@@ -305,7 +308,9 @@ internal class MobWriter(private val plan: MobPlan, private val dropped: (MobPla
         val back = before != null && before.spawn == fields && before.name == key
         if (back) o.addProperty("b", 1)
         else for ((k, v) in l.entrySet()) if (k !in PLACE) o.add(k, v)
-        for (k in listOf("x", "y", "z")) l[k]?.takeIf { it.isJsonPrimitive }?.let { o.add(k, MobPlan.hundredth(it.asDouble)) }
+        // (stands wearing something at a hundredth - a head on one is placed by its spawn -, the rest at a tenth, as moves)
+        val fine = life.type == MobPlan.STAND && id in plan.worn
+        for (k in listOf("x", "y", "z")) l[k]?.takeIf { it.isJsonPrimitive }?.let { o.add(k, if (fine) MobPlan.hundredth(it.asDouble) else MobPlan.tenth(it.asDouble)) }
         for (k in listOf("yaw", "headYaw")) l[k]?.takeIf { it.isJsonPrimitive }?.let { o.addProperty(k, Math.round(it.asDouble).toInt()) }
         if (life.folded) o.addProperty("life", life.gone!! - life.spawn + 1)
         if (!back) plainName(o)
