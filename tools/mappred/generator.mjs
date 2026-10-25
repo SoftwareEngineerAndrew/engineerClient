@@ -175,7 +175,10 @@ function generate(variant, ent, shapes) {
       const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u]));
       const add = v => { grown.push(v); if (P.mode === 'grow' && owner[v] === -1) { let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++; if (rnd() < Math.min(1, P.c * Math.pow(Math.max(7 - placed(), 0), al) / Math.max(free, 1))) tryStart(v); } };
       const first = NB[ent][ri(NB[ent].length)]; parent[first] = ent; add(first);
-      if (P.f) { const r1 = owner[first]; let more = r1 >= 0; while (more) { more = false; for (const u of [...grown]) if (owner[u] === r1) for (const w of fr(u)) if (owner[w] === r1) { parent[w] = u; grown.push(w); more = true; } }
+      if (P.f === 2) {
+        // f=2: only the cell behind the entrance gets a door to each free neighbour (claimed cells only from their room)
+        for (const w of shuffleArr(fr(first))) if (parent[w] === -2) { parent[w] = first; add(w); }
+      } else if (P.f) { const r1 = owner[first]; let more = r1 >= 0; while (more) { more = false; for (const u of [...grown]) if (owner[u] === r1) for (const w of fr(u)) if (owner[w] === r1) { parent[w] = u; grown.push(w); more = true; } }
         for (const u of grown.filter(t => t !== ent && (r1 < 0 ? t === first : owner[t] === r1))) for (const w of shuffleArr(fr(u))) if (parent[w] === -2 && owner[w] === -1) { parent[w] = u; add(w); } }
       let head = 1;
       while (grown.length < N) {
