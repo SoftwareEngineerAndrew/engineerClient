@@ -38,6 +38,17 @@ jobs:
           MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)
           echo "MC=$MC" >> "$GITHUB_ENV"
           echo "CHANNEL=$MC" >> "$GITHUB_ENV"
+      # The last build's compiler state, so a push recompiles only what it touched (Kotlin's incremental compile needs the
+      # earlier outputs and Gradle's record of them; a miss just compiles everything, as without it).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .gradle
+            build/kotlin
+            build/classes
+            build/tmp
+          key: ec-compile-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: ec-compile-${{ github.ref_name }}-
       # The tests run in their own job alongside (below): the release doesn't wait for them.
       - run: gradle build -x test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G
       - name: Publish
