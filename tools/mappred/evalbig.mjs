@@ -2,7 +2,11 @@
 // big rooms the prediction is sure of (>= 70%) are right.   LAYOUTS=... node evalbig.mjs nTest N variant...
 const T0 = './';
 const { split, snapshots } = await import(T0 + 'evalcore.mjs');
-const { sample, combosFor, OUT } = await import(T0 + 'sampler2.mjs');
+const { sample: sample2, combosFor, OUT } = await import(T0 + 'sampler2.mjs');
+const { sample: sample3 } = await import(T0 + 'sampler3.mjs');
+// variants with game: true run sampler3 (the game's own steps); ZMIX=file (placelik MIXRATE) for its mix weights
+const zmix = process.env.ZMIX ? JSON.parse((await import('node:fs')).readFileSync(process.env.ZMIX, 'utf8')) : {};
+const sample = (obs, c, o) => o.game ? sample3(obs, c, { ...o, zmix }) : sample2(obs, c, o);
 const { makeRng } = await import(T0 + 'mlp.mjs');
 const { CLS } = await import(T0 + 'sim.mjs');
 const { readFileSync } = await import('node:fs');
@@ -40,6 +44,7 @@ const VAR = { old: { fourL: true }, lfix: {}, ...Object.fromEntries([0.15, 0.25,
 Object.assign(VAR, { prim: { grow: 0 }, 'oldest0.3': { grow: 0, oldest: 0.3 }, 'oldest0.5': { grow: 0, oldest: 0.5 }, 'oldest0.3+res5': { grow: 0, oldest: 0.3, reserve: 5 }, 'res5': { reserve: 5 }, 'res3': { reserve: 3 }, 'res7': { reserve: 7 } });
 const PLACE = [0.23, 0.14, 0.60, -0.066];
 Object.assign(VAR, { 'res5+detour0.1': { reserve: 5, detour: 0.1 }, 'res5+detour0.25': { reserve: 5, detour: 0.25 }, 'res5+detour0.4': { reserve: 5, detour: 0.4 } });
+for (const pn of [0, 0.15, 0.3]) for (const qn of [0, 0.1]) VAR[`game-p${pn}-q${qn}`] = { game: true, newest: pn, oldest: qn };
 Object.assign(VAR, { 'lfix-noBW': { noBW: true }, 'res5-noBW': { reserve: 5, noBW: true }, 'try1-noBW': { tries: 1, noBW: true }, 'try2-noBW': { tries: 2, noBW: true }, 'rnd+res5-noBW': { order: 'rnd', reserve: 5, noBW: true }, 'rnd+try2-noBW': { order: 'rnd', tries: 2, noBW: true }, 'rnd+try2': { order: 'rnd', tries: 2 } });
 Object.assign(VAR, { try1: { tries: 1 }, try2: { tries: 2 }, try4: { tries: 4 }, 'try1+res5': { tries: 1, reserve: 5 }, 'try1+res3': { tries: 1, reserve: 3 } });
 Object.assign(VAR, { rnd: { order: 'rnd' }, 'rnd+res5': { order: 'rnd', reserve: 5 }, special: { special: true, maxTries: 1e6 }, 'special+rnd': { special: true, order: 'rnd', maxTries: 1e6 }, 'special+res2': { special: true, reserve: 2, maxTries: 1e6 } });

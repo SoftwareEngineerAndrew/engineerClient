@@ -55,11 +55,11 @@ const key = (a, b) => a < b ? a * N + b : b * N + a;
 
 // ---------------------------------------------------------------- spanning trees over a graph
 /** A spanning tree over nodes 0..n-1 with adjacency adj (arrays), rooted at r with exactly one child: parent[]. */
-function tree(rule, n, adj, r) {
+function tree(rule, n, adj, r, firstNode) {
   // a trailing f: the first cell gets a door to every free neighbour at once
   const flood = rule.endsWith('f'); if (flood) rule = rule.slice(0, -1);
   const parent = new Int32Array(n).fill(-2); parent[r] = -1;
-  const first = adj[r][ri(adj[r].length)]; parent[first] = r;
+  const first = firstNode ?? adj[r][ri(adj[r].length)]; parent[first] = r;
   const inT = [first]; let count = 2;
   if (flood) for (const w of adj[first]) if (parent[w] === -2) { parent[w] = first; inT.push(w); count++; }
   if (rule === 'ust' || rule === 'kruskal') {
@@ -83,6 +83,20 @@ function tree(rule, n, adj, r) {
     }
     // next[] points towards the root along the tree: that is the parent
     for (let s = 0; s < n; s++) if (s !== r && s !== first) parent[s] = next[s];
+    return parent;
+  }
+  if (rule.startsWith('mix')) {
+    // mix<q>,<p>: off the oldest node with a free neighbour with chance q, else off the newest with chance p,
+    // else a random door off the tree (r, the entrance, never gets a second)
+    const [q, p] = rule.slice(3).split(',').map(Number); let head = 0;
+    while (count < n) {
+      let u = -1, v = -1; const fr = a => a === r ? [] : adj[a].filter(w => parent[w] === -2);
+      if (q && rnd() < q) while (head < inT.length) { const f = fr(inT[head]); if (f.length) { u = inT[head]; v = f[ri(f.length)]; break; } head++; }
+      if (u < 0 && p && rnd() < p) { const last = inT[inT.length - 1]; const f = fr(last); if (f.length) { u = last; v = f[ri(f.length)]; } }
+      if (u < 0) { let c = 0; for (const a of inT) for (const b of fr(a)) { c++; if (rnd() * c < 1) { u = a; v = b; } } }
+      if (u < 0) return null;
+      parent[v] = u; inT.push(v); count++;
+    }
     return parent;
   }
   if (rule.startsWith('bfs')) {
@@ -174,8 +188,17 @@ function generate(variant, ent, shapes) {
           const ts = all[ri(all.length)]; if (ts.every(t => freeOk(t, v)) && joined(ts)) { place(sk, ts); return; }
         }
       };
-      const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u]));
-      const add = v => { grown.push(v); if (P.mode === 'grow' && owner[v] === -1) { let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++; if (rnd() < Math.min(1, P.c * Math.pow(Math.max(7 - placed(), 0), al) / Math.max(free, 1))) tryStart(v); } };
+      // mode=pre: the big rooms placed first (one random spot each, all again on a clash), then the cell tree
+      // grown over them - a big room entered once, its other cells only from its own
+      const entered = new Uint8Array(16);
+      if (P.mode === 'pre') {
+        const ALL = Object.fromEntries(SHAPES.map(s2 => [s2, placements(s2, Array(N).fill(true))])); let done = false;
+        for (let a = 0; a < 20000 && !done; a++) { owner.fill(-1); owner[ent] = 0; shape.length = 1; next = 1; done = true;
+          for (const s2 of todo) { const ts = ALL[s2][ri(ALL[s2].length)]; if (ts.some(t => owner[t] !== -1)) { done = false; break; } for (const t of ts) owner[t] = next; shape.push(s2); next++; } }
+        if (!done) { ok = false; } left.length = 0;
+      }
+      const fr = u => NB[u].filter(w => parent[w] === -2 && (owner[w] === -1 || owner[w] === owner[u] || P.mode === 'pre' && owner[w] > 0 && !entered[owner[w]]));
+      const add = v => { grown.push(v); if (owner[v] > 0) entered[owner[v]] = 1; if (P.mode === 'grow' && owner[v] === -1) { let free = 0; for (let t = 0; t < N; t++) if (owner[t] === -1 && parent[t] === -2) free++; if (rnd() < Math.min(1, P.c * Math.pow(Math.max(7 - placed(), 0), al) / Math.max(free, 1))) tryStart(v); } };
       // i=1: the entrance's door inward, as on every real map (else to a random neighbour, mostly along the edge)
       const inward = ent < W ? ent + W : ent >= N - W ? ent - W : ent % W === 0 ? ent + 1 : ent - 1;
       const first = P.i ? inward : NB[ent][ri(NB[ent].length)]; parent[first] = ent; add(first);
@@ -303,6 +326,17 @@ function generate(variant, ent, shapes) {
       }
     } else {
       const held = new Set(); if (reserve) { const cs = [...Array(N).keys()].filter(t => t !== ent); for (let i = 0; i < reserve; i++) { const j = i + ri(cs.length - i); [cs[i], cs[j]] = [cs[j], cs[i]]; held.add(cs[i]); } }
+      if (res === 'try1') {
+        // one random spot inside the map per room, the whole placement again if any clashes (every complete
+        // layout alike)
+        const ALL = Object.fromEntries(SHAPES.map(s2 => [s2, placements(s2, Array(N).fill(true))]));
+        let placed = false;
+        for (let a = 0; a < 20000 && !placed; a++) {
+          owner.fill(-1); owner[ent] = 0; shape.length = 1; next = 1; placed = true;
+          for (const s2 of todo) { const ts = ALL[s2][ri(ALL[s2].length)]; if (ts.some(t => owner[t] !== -1)) { placed = false; break; } for (const t of ts) owner[t] = next; shape.push(s2); next++; }
+        }
+        if (!placed) ok = false;
+      } else
       for (const s of todo) {
         const free = Array.from({ length: N }, (_, t) => owner[t] === -1 && !held.has(t));
         const c = placements(s, free); if (!c.length) { ok = false; break; }
@@ -314,11 +348,17 @@ function generate(variant, ent, shapes) {
         for (let t = 0; t < N; t++) if (owner[t] === -1) { owner[t] = next++; shape.push('OneByOne'); }
         const R = next, radj = Array.from({ length: R }, () => new Set());
         for (let t = 0; t < N; t++) for (const u of NB[t]) if (owner[u] !== owner[t]) radj[owner[t]].add(owner[u]);
-        const rp = tree(rule, R, radj.map(s => [...s]), 0); if (!rp) continue;
+        // EDGEW=1: each neighbour once per cell side shared - a random door off the tree is then a random cell
+        // side, so big rooms (longer borders) get more of them
+        const radjL = process.env.EDGEW ? Array.from({ length: R }, () => []) : null;
+        if (radjL) for (let t = 0; t < N; t++) for (const u of NB[t]) if (owner[u] !== owner[t]) radjL[owner[t]].push(owner[u]);
+        // INWARD=1: the entrance's one door to the room behind it (every real map's)
+        const inward = ent < W ? ent + W : ent >= N - W ? ent - W : ent % W === 0 ? ent + 1 : ent - 1;
+        const rp = tree(rule, R, radjL || radj.map(s => [...s]), 0, process.env.INWARD ? owner[inward] : undefined); if (!rp) continue;
         const cadj = Array.from({ length: N }, () => []);
         for (let r = 1; r < R; r++) {
           const pr = rp[r]; const pairs = []; for (let t = 0; t < N; t++) if (owner[t] === r) for (const u of NB[t]) if (owner[u] === pr) pairs.push([t, u]);
-          const [a, b] = pairs[ri(pairs.length)]; cadj[a].push(b); cadj[b].push(a);
+          const [a, b] = r === owner[inward] && pr === 0 && process.env.INWARD ? [inward, ent] : pairs[ri(pairs.length)]; cadj[a].push(b); cadj[b].push(a);
         }
         for (let r = 1; r < R; r++) { const cs = []; for (let t = 0; t < N; t++) if (owner[t] === r) cs.push(t); if (cs.length < 2) continue;
           // a uniform random spanning tree of the room's own cells (enumerate: they are tiny)
