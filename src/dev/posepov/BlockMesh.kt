@@ -57,6 +57,8 @@ object BlockMesh {
     private val dirtyAt = ConcurrentHashMap<Long, Long>()
     private val dirtyRoom = HashMap<String, Long>()
     private var ownMost = 0
+    /** Bumped whenever this run's own geometry changes (world sections, a room's own pieces). */
+    var changes = 0L; private set
     /** The most indices one draw needs (the shared quad index buffer is asked for this many). */
     val mostIndices: Int get() = maxOf(ownMost, PiecePool.mostIndices)
     // The last [pump]'s near list, finished: the same again (and nothing dirty) has nothing to look at.
@@ -74,20 +76,11 @@ object BlockMesh {
     /** The arena cluster a section is in: sections over 2 each way. */
     fun cluster(sectionKey: Long) = SectionPos.asLong(SectionPos.x(sectionKey) shr 1, SectionPos.y(sectionKey) shr 1, SectionPos.z(sectionKey) shr 1)
 
-    /** A design's unturned box in 16³ pieces: piece i is at ([lx], [ly], [lz]). */
-    class Grid(val w: Int, val d: Int, val y0: Int, val h: Int) {
-        val nx = (w + 15) shr 4; val nz = (d + 15) shr 4; val ly0 = y0 shr 4; val ny = ((y0 + h - 1) shr 4) - ly0 + 1
-        val size = nx * ny * nz
-        fun lx(i: Int) = i / (ny * nz)
-        fun lz(i: Int) = (i / ny) % nz
-        fun ly(i: Int) = ly0 + i % ny
-        fun index(lx: Int, ly: Int, lz: Int) = if (lx !in 0 until nx || lz !in 0 until nz || ly - ly0 !in 0 until ny) -1 else (lx * nz + lz) * ny + (ly - ly0)
-    }
-    private val grids = HashMap<String, Grid>()
-    fun grid(r: KnownWorld.Room): Grid = r.inst.design.let { d -> grids.getOrPut(d.id) { Grid(d.w, d.d, d.y0, d.h) } }
+    private val grids = HashMap<String, PieceGrid>()
+    fun grid(r: KnownWorld.Room): PieceGrid = r.inst.design.let { d -> grids.getOrPut(d.id) { PieceGrid(d.w, d.d, d.y0, d.h) } }
 
     /** Piece ([lx], [ly], [lz]) of [r]'s unturned box as cells of its placed box, into [out]: x0 y0 z0 x1 y1 z1, inclusive. */
-    fun pieceBox(r: KnownWorld.Room, g: Grid, lx: Int, ly: Int, lz: Int, out: IntArray) {
+    fun pieceBox(r: KnownWorld.Room, g: PieceGrid, lx: Int, ly: Int, lz: Int, out: IntArray) {
         val a0 = lx shl 4; val a1 = minOf(a0 + 15, g.w - 1); val b0 = lz shl 4; val b1 = minOf(b0 + 15, g.d - 1)
         out[1] = maxOf(ly shl 4, g.y0); out[4] = minOf((ly shl 4) + 15, g.y0 + g.h - 1)
         val w = g.w; val d = g.d
@@ -158,12 +151,14 @@ object BlockMesh {
             if (now - at < DIRTY_DELAY_MS) continue
             dirtyRoom.remove(key)
             roomOwn.remove(key)?.buffer?.close()
+            changes++
         }
         for ((key, at) in dirtyAt.entries.toList()) {
             if (now - at < DIRTY_DELAY_MS) continue
             dirtyAt.remove(key)
             nearDone = null; allDone = false
             if (key in world) { world.remove(key)?.buffer?.close() }
+            changes++
         }
         if (!MeshDisk.ready) return
 
@@ -212,8 +207,9 @@ object BlockMesh {
     }
 
     /** A bundle being built here, a piece at a time within the budget. */
-    private class Making(val places: IntArray, val piece: (Int, MutableMap<String, Int>) -> ByteArray) {
+    private class Making(val places: IntArray, val sight: ((Int) -> ByteArray)? = null, val piece: (Int, MutableMap<String, Int>) -> ByteArray) {
         val parts = arrayOfNulls<ByteArray>(places.size)
+        val sights = arrayOfNulls<ByteArray>(places.size)
         val names = LinkedHashMap<String, Int>()
     }
     private val making = HashMap<String, Making>()
@@ -223,10 +219,11 @@ object BlockMesh {
         val m = making.getOrPut(name) { spec(level, name) ?: return true }
         for (i in m.parts.indices) if (m.parts[i] == null) {
             m.parts[i] = m.piece(i, m.names)
+            m.sight?.let { m.sights[i] = it(i) }
             if (overBudget()) return false
         }
         making.remove(name)
-        val bytes = MeshBundles.serialize(m.names, m.places, Array(m.parts.size) { m.parts[it]!! })
+        val bytes = MeshBundles.serialize(m.names, m.places, Array(m.parts.size) { m.parts[it]!! }, m.sight?.let { Array(m.sights.size) { m.sights[it]!! } })
         MeshBundles.built(name, bytes)
         exported(name, bytes)
         return !overBudget()
@@ -252,11 +249,18 @@ object BlockMesh {
         val design = pack.design(if (at < 0) name else name.substring(0, at)) ?: return null
         val base = pack.volume(design) ?: return null
         val v = if (at < 0) base else design.variants.firstOrNull { it.id == name.substring(at + 1) }?.let { pack.variantVolume(design, it) } ?: return null
-        val g = Grid(design.w, design.d, design.y0, design.h)
+        val g = PieceGrid(design.w, design.d, design.y0, design.h)
         val places = (if (at < 0) IntArray(g.size) { it } else changedPieces(base, v, g)).map { MeshBundles.place(g.lx(it), g.ly(it), g.lz(it)) }.toIntArray()
         val states = Array(v.palette.size) { i -> val s = v.palette[i]; if (i == 0 || s == "minecraft:air") KnownWorld.AIR else BlockStates.rotated(s, 0) }
         val cell: (Int, Int, Int) -> BlockState = { x, y, z -> if (v.contains(x, y, z)) states[v.paletteIndexAt(x, y, z)] else KnownWorld.AIR }
-        return Making(places) { i, names ->
+        // What each piece can see, for a design's own bundle (a variant's pieces go by it: they change little, and it's widened).
+        val sight: ((Int) -> ByteArray)? = if (at >= 0) null else run {
+            val solid = java.util.BitSet(v.w * v.d * v.h)
+            for (y in 0 until v.h) for (z in 0 until v.d) for (x in 0 until v.w) if (states[v.paletteIndexAt(x, y + v.y0, z)].isSolidRender) solid.set((y * v.d + z) * v.w + x)
+            val opaque: (Int, Int, Int) -> Boolean = { x, y, z -> solid.get(((y - v.y0) * v.d + z) * v.w + x) }
+            ({ i: Int -> RoomSight.from(g, i, opaque, name.hashCode() * 31L + i) })
+        }
+        return Making(places, sight) { i, names ->
             val p = places[i]
             val x0 = MeshBundles.placeX(p) shl 4; val z0 = MeshBundles.placeZ(p) shl 4; val ly = MeshBundles.placeY(p)
             val ys = maxOf(ly shl 4, g.y0)..minOf((ly shl 4) + 15, g.y0 + g.h - 1)
@@ -266,7 +270,7 @@ object BlockMesh {
     }
 
     /** The pieces a variant changes: any within 2 cells of a cell it changes (a face and its corner shading look that far). */
-    private fun changedPieces(base: RoomVolume, v: RoomVolume, g: Grid): IntArray {
+    private fun changedPieces(base: RoomVolume, v: RoomVolume, g: PieceGrid): IntArray {
         val same = IntArray(v.palette.size) { base.palette.indexOf(v.palette[it]) }
         val hit = BooleanArray(g.size)
         for (y in v.y0 until v.y0 + v.h) for (z in 0 until v.d) for (x in 0 until v.w) {
@@ -327,6 +331,7 @@ object BlockMesh {
     }
 
     private fun upload(built: Pair<Int, ByteArray?>): Mesh? {
+        changes++
         val bytes = built.second ?: return null
         val buf = ByteBuffer.allocateDirect(bytes.size).put(bytes).flip()
         if (built.first > ownMost) ownMost = built.first
@@ -338,7 +343,7 @@ object BlockMesh {
     private fun overBudget() = System.nanoTime() - pumpStart > pumpBudget
 
     /** This run's own piece of [r]: the world as it is now over that piece's cells, in the room's placed box frame. */
-    private fun buildOwn(level: ClientLevel, r: KnownWorld.Room, g: Grid, lx: Int, ly: Int, lz: Int): Pair<Int, ByteArray?> {
+    private fun buildOwn(level: ClientLevel, r: KnownWorld.Room, g: PieceGrid, lx: Int, ly: Int, lz: Int): Pair<Int, ByteArray?> {
         val pos = BlockPos.MutableBlockPos()
         val b = IntArray(6)
         pieceBox(r, g, lx, ly, lz, b)
@@ -352,9 +357,12 @@ object BlockMesh {
         if (!KnownWorld.mayHaveBlocks(level, sx, sy, sz)) return 0 to null
         val pos = BlockPos.MutableBlockPos()
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
+        // Which columns a room draws, looked up once per column rather than per cell; all of them, nothing to do here.
+        val covered = BooleanArray(256) { KnownWorld.coveredByRoom(x0 + (it and 15), z0 + (it shr 4)) }
+        if (covered.all { it }) return 0 to null
         return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0,
             { x, y, z -> KnownWorld.stateAt(level, pos, x, y, z) },
-            { x, _, z -> KnownWorld.coveredByRoom(x, z) })
+            { x, _, z -> covered[((z - z0) shl 4) or (x - x0)] })
     }
 
     /** The side each quad of the last [mesh] was shaded for (Direction order), quad by quad. */
@@ -417,7 +425,10 @@ object BlockMesh {
             if (base == null) continue
             val rx = ex - r.x0; val rz = ez - r.z0
             val changed = r.key in touchedRooms
+            // The piece the eye is in, when it's in this room: only what can be seen from there (RoomSight).
+            val from = if (base.hasSight) r.p.toCanonical(Math.floor(ex).toInt(), Math.floor(ez).toInt())?.let { (cx, cz) -> g.of(cx, Math.floor(ey).toInt(), cz) } ?: -1 else -1
             for (i in 0 until g.size) {
+                if (from >= 0 && !base.sees(from, i)) continue
                 val lx = g.lx(i); val ly = g.ly(i); val lz = g.lz(i)
                 pieceBox(r, g, lx, ly, lz, b)
                 val seen = roomInView && inView(r.x0 + b[0].toFloat(), b[1].toFloat(), r.z0 + b[2].toFloat(), r.x0 + b[3] + 1f, b[4] + 1f, r.z0 + b[5] + 1f)
@@ -483,6 +494,7 @@ object BlockMesh {
 
     /** This run's pieces; the shared design and arena ones stay for the next run. */
     fun newRun() {
+        changes++
         world.values.forEach { it?.buffer?.close() }; world.clear()
         roomOwn.values.forEach { it?.buffer?.close() }; roomOwn.clear()
         touchedRoom.clear(); touchedRooms.clear(); touchedArena.clear(); dirtyAt.clear(); dirtyRoom.clear()

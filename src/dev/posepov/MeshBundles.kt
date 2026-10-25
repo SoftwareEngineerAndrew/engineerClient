@@ -25,14 +25,19 @@ import java.util.concurrent.Executors
  * here ([BlockMesh]) and kept. A design's bundle has every piece of its unturned box; a variant's only the pieces it changes.
  *
  * File: magic, the texture names (u16 count, UTF each), the pieces (int count; each its place lx ly lz in a packed int and
- * its byte length), then the pieces' bytes one after another.
+ * its byte length), what each piece can see (int bytes per piece, then a bitset per piece over the pieces, or 0), then the
+ * pieces' bytes one after another.
  */
 object MeshBundles {
-    private const val MAGIC = 0x50505631
+    private const val MAGIC = 0x50505632
     private const val SITE = "https://undonecoffee.com/adr/mesh/"
     private const val MAX_BYTES = 48 shl 20
 
-    class Bundle(val name: String, val names: Array<String>, val places: IntArray, val offs: IntArray, val lens: IntArray, val data: ByteArray) {
+    class Bundle(val name: String, val names: Array<String>, val places: IntArray, val offs: IntArray, val lens: IntArray, val data: ByteArray, private val visAt: Int, private val visLen: Int) {
+        /** Whether piece [to] can be seen from anywhere in piece [from] (pieces in the design's grid order); true when not worked out. */
+        fun sees(from: Int, to: Int): Boolean =
+            visLen == 0 || from !in places.indices || to < 0 || to >= visLen * 8 || ((data[visAt + from * visLen + (to shr 3)].toInt() shr (to and 7)) and 1) != 0
+        val hasSight get() = visLen > 0
         private val byPlace = HashMap<Int, Int>(places.size * 2).also { m -> places.forEachIndexed { i, p -> m[p] = i } }
         fun find(lx: Int, ly: Int, lz: Int): Int = byPlace[place(lx, ly, lz)] ?: -1
         @Volatile var sprites: Array<TextureAtlasSprite>? = null
@@ -44,7 +49,7 @@ object MeshBundles {
     fun placeY(p: Int) = (p shr 8).toByte().toInt()
     fun placeZ(p: Int) = p and 0xFF
 
-    fun serialize(names: Map<String, Int>, places: IntArray, pieces: Array<ByteArray>): ByteArray {
+    fun serialize(names: Map<String, Int>, places: IntArray, pieces: Array<ByteArray>, sight: Array<ByteArray>?): ByteArray {
         val out = ByteArrayOutputStream(pieces.sumOf { it.size } + 4096)
         DataOutputStream(out).use { d ->
             d.writeInt(MAGIC)
@@ -52,6 +57,9 @@ object MeshBundles {
             d.writeShort(ordered.size); for (e in ordered) d.writeUTF(e.key)
             d.writeInt(places.size)
             for (i in places.indices) { d.writeInt(places[i]); d.writeInt(pieces[i].size) }
+            val visLen = sight?.firstOrNull()?.size ?: 0
+            d.writeInt(visLen)
+            if (visLen > 0) for (s in sight!!) { require(s.size == visLen); d.write(s) }
             for (p in pieces) d.write(p)
         }
         return out.toByteArray()
@@ -65,12 +73,15 @@ object MeshBundles {
         require(n in 0..100_000)
         val places = IntArray(n); val lens = IntArray(n)
         for (i in 0 until n) { places[i] = d.readInt(); lens[i] = d.readInt(); require(lens[i] >= 0) }
-        val start = bytes.size - d.available()
+        val visLen = d.readInt()
+        require(visLen in 0..4096)
+        val visAt = bytes.size - d.available()
+        val start = visAt + visLen * n
         val offs = IntArray(n)
         var at = start
         for (i in 0 until n) { offs[i] = at; at += lens[i] }
         require(at == bytes.size) { "bundle length" }
-        return Bundle(name, names, places, offs, lens, bytes)
+        return Bundle(name, names, places, offs, lens, bytes, visAt, visLen)
     }
 
     // --- where a bundle comes from ----------------------------------------------------------------------------------------
@@ -123,6 +134,9 @@ object MeshBundles {
     /** The texture lookups are for the old atlas. */
     fun atlasChanged() { for (b in loaded.values) b.sprites = null }
 
+    /** How many bundles are in memory (one more arriving changes what a feed draws). */
+    val count get() = loaded.size
+
     fun cached(name: String): ByteArray? = MeshDisk.read(key(name))?.second
 }
 
@@ -144,6 +158,8 @@ object PiecePool {
     private val empty = HashSet<String>()
     private val wanted = HashMap<String, Want>()
     private var scratch: ByteBuffer = ByteBuffer.allocateDirect(1 shl 20).order(ByteOrder.nativeOrder())
+    /** Bumped whenever what's on the GPU changes (for feeds that would otherwise look the same as last frame). */
+    var uploads = 0L; private set
     /** The most indices one draw can need: a whole pool. */
     var mostIndices = 0; private set
 
@@ -189,6 +205,7 @@ object PiecePool {
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(pool.buffer.slice(first.toLong() * MeshCodec.VERTEX, bytes.toLong()), scratch)
         pool.used += vertices
         resident[k] = Resident(pool.buffer, first, counts, IntArray(MeshCodec.GROUPS) { MeshCodec.turn(it, w.rot) })
+        uploads++
     }
 
     private fun newPool(atLeast: Int): Pool? {
@@ -203,6 +220,7 @@ object PiecePool {
     fun clear() {
         for (p in pools) p.buffer.close()
         pools.clear(); resident.clear(); empty.clear(); wanted.clear()
+        uploads++
     }
 
     val poolCount get() = pools.size

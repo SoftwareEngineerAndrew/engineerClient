@@ -76,6 +76,7 @@ import net.minecraft.resources.Identifier
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.phys.Vec3
 import org.joml.FrustumIntersection
+import org.lwjgl.system.MemoryStack
 import org.joml.Matrix3x2f
 import org.joml.Matrix4f
 import org.joml.Quaternionf
@@ -138,8 +139,15 @@ object PosePov : Module(
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
     private val peerToPeer by BooleanSetting("Peer-to-peer sharing", false, desc = "A little less secure but updates much faster.")
     private val shareFps by NumberSetting("Peer-to-peer FPS", 60, 20..240, 1, desc = "How many times a second your view goes to teammates connected peer-to-peer. Higher is smoother for them.").withDependency { peerToPeer }
+    private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
 
+    /** Whether the device draws many ranges in one call (glMultiDrawElementsBaseVertex and the like). */
+    private var multiFailed = false
+    private val multiDraw by lazy { runCatching { RenderSystem.getDevice().deviceInfo.features().multiDrawDirectSeparate() }.getOrDefault(false) }
     private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
+    /** What each feed last drew, when that was only blocks and its own hand (see [draw]). */
+    private data class FeedSig(val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val swing: Float, val held: Int, val world: Long)
+    private val lastSig = arrayOfNulls<FeedSig>(FEEDS)
     private val projection = Projection()
     private val projectionBuffer by lazy { ProjectionMatrixBuffer("devgineerclient pose pov") }
     private val view = Matrix4f()
@@ -213,6 +221,7 @@ object PosePov : Module(
     private var perfWorst = 0L
     private var perfDraws = 0L
     private var perfEntities = 0L
+    private var perfReused = 0L
     private var perfAt = 0L
     private var perfFrameNs = 0L
     private inline fun timed(prep: Boolean, f: () -> Unit) {
@@ -225,9 +234,9 @@ object PosePov : Module(
         if (perfAt == 0L) perfAt = now
         if (now - perfAt < 10_000) return
         val n = perfFrames.coerceAtLeast(1)
-        DevgineerClient.logger.info("[pose pov] {} frames: prepare {} ms, draw {} ms a frame (worst {} ms), {} draws and {} entities a frame",
-            n, "%.2f".format(perfPrep / 1e6 / n), "%.2f".format(perfRender / 1e6 / n), "%.1f".format(perfWorst / 1e6), perfDraws / n, perfEntities / n)
-        perfFrames = 0; perfPrep = 0; perfRender = 0; perfWorst = 0; perfDraws = 0; perfEntities = 0; perfAt = now
+        DevgineerClient.logger.info("[pose pov] {} frames: prepare {} ms, draw {} ms a frame (worst {} ms), {} draws and {} entities a frame, {} views reused, {} piece buffers",
+            n, "%.2f".format(perfPrep / 1e6 / n), "%.2f".format(perfRender / 1e6 / n), "%.1f".format(perfWorst / 1e6), perfDraws / n, perfEntities / n, perfReused, PiecePool.poolCount)
+        perfFrames = 0; perfPrep = 0; perfRender = 0; perfWorst = 0; perfDraws = 0; perfEntities = 0; perfReused = 0; perfAt = now
     }
 
     fun drawUnderGui(gfx: GuiGraphicsExtractor) {
@@ -243,15 +252,15 @@ object PosePov : Module(
 
     private fun releaseFeeds() {
         queued.clear()
-        for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null }
+        for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null; lastSig[i] = null }
     }
 
     private fun draw(gfx: GuiGraphicsExtractor) {
         val level = mc.level ?: return
         queued.clear()
         val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false)
-        val w = (mc.window.width / 2).coerceAtLeast(1)
-        val h = (mc.window.height / 2).coerceAtLeast(1)
+        val w = (mc.window.width / 2 * resolution.toInt() / 100).coerceAtLeast(1)
+        val h = (mc.window.height / 2 * resolution.toInt() / 100).coerceAtLeast(1)
         val gw = gfx.guiWidth(); val gh = gfx.guiHeight()
         val pose = Matrix3x2f(gfx.pose())
         val sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR)
@@ -356,12 +365,23 @@ object PosePov : Module(
             val ghost = slot?.let { ghosts[it.name] }
             // Everything around them but themselves (their view is from inside their head), and every body but a shared one's own.
             val ef = entityFrustum(e, w, h)
+            // Not in a room or an arena cluster that can't be seen from here (PovVisibility), as the blocks.
+            val roomsSeen = PovVisibility.rooms(e.pos)
+            val clustersSeen = PovVisibility.clusters(e.pos)
             val seen = entities.filter { (en, _) ->
                 val b = en.boundingBox
-                en !== p && en.position().distanceToSqr(e.pos) < range2 && ef.testAab(b.minX.toFloat() - 1, b.minY.toFloat() - 1, b.minZ.toFloat() - 1, b.maxX.toFloat() + 1, b.maxY.toFloat() + 1, b.maxZ.toFloat() + 1)
+                en !== p && en.position().distanceToSqr(e.pos) < range2 && ef.testAab(b.minX.toFloat() - 1, b.minY.toFloat() - 1, b.minZ.toFloat() - 1, b.maxX.toFloat() + 1, b.maxY.toFloat() + 1, b.maxZ.toFloat() + 1) &&
+                    (roomsSeen == null || KnownWorld.roomAt(Mth.floor(en.x), Mth.floor(en.z)).let { it == null || it in roomsSeen }) &&
+                    (clustersSeen == null || PovVisibility.index(BlockMesh.cluster(SectionPos.asLong(Mth.floor(en.x) shr 4, Mth.floor(en.y) shr 4, Mth.floor(en.z) shr 4))).let { it < 0 || clustersSeen[it] })
             }.map { it.second }
             val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + it.bufferNs, now) } ?: 0f
-            queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, swing, seen, bodies.filter { it.slot != i })
+            val others = bodies.filter { it.slot != i }
+            // Nothing in it moved and nothing new to draw (a teammate standing still): last frame's picture stays.
+            val held = (sh?.item ?: p?.mainHandItem)?.let { System.identityHashCode(it) * 31 + it.count } ?: 0
+            val sig = if (seen.isEmpty() && others.isEmpty()) FeedSig(target, e.pos, e.yaw, e.pitch, swing, held, BlockMesh.changes + PiecePool.uploads + MeshBundles.count * 1_000_003L + System.identityHashCode(KnownWorld.rooms) * 7L + PovVisibility.knownCount * 131L) else null
+            if (sig == null || sig != lastSig[i]) queued += Job(target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, swing, seen, others)
+            else perfReused++
+            lastSig[i] = sig
             perfEntities += seen.size
             val colorView = target.colorTextureView ?: continue
             gfx.guiRenderState.addGuiElement(
@@ -850,11 +870,20 @@ object PosePov : Module(
                 val atlas = mc.textureManager.getTexture(TextureAtlas.LOCATION_BLOCKS)
                 pass.setUniform("Sampler0", atlas.textureView, atlas.sampler)
                 pass.setIndexBuffer(indices, quadIndices.type())
+                // Per place and buffer, every range in one call where the device can (most do); one by one otherwise.
+                val multi = multiDraw && !multiFailed
                 for ((k, meshes) in draws) {
                     pass.setUniform("DynamicTransforms", transforms.getValue(k))
-                    for (m in meshes) {
-                        pass.setVertexBuffer(0, m.buffer.slice())
-                        pass.drawIndexed(m.count, 1, 0, m.first, 0)
+                    for ((buffer, cmds) in meshes.groupBy { it.buffer }) {
+                        pass.setVertexBuffer(0, buffer.slice())
+                        if (!multi || cmds.size == 1) { for (m in cmds) pass.drawIndexed(m.count, 1, 0, m.first, 0); continue }
+                        MemoryStack.stackPush().use { stack ->
+                            val offsets = stack.mallocPointer(cmds.size); val counts = stack.mallocInt(cmds.size); val bases = stack.mallocInt(cmds.size)
+                            for (m in cmds) { offsets.put(0L); counts.put(m.count); bases.put(m.first) }
+                            offsets.flip(); counts.flip(); bases.flip()
+                            try { pass.multiDrawIndexed(offsets, counts, bases, cmds.size) }
+                            catch (e: Exception) { multiFailed = true; for (m in cmds) pass.drawIndexed(m.count, 1, 0, m.first, 0) }
+                        }
                     }
                 }
             }

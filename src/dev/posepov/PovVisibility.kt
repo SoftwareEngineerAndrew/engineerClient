@@ -86,6 +86,8 @@ object PovVisibility {
     // --- boss -------------------------------------------------------------------------------------------------------------
 
     private val known = ConcurrentHashMap<Long, BitSet>()
+    /** How many sections' visibility is known (one more changes what a feed there draws). */
+    val knownCount get() = known.size
     private val asked = ConcurrentHashMap.newKeySet<Long>()
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "pose pov visibility").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     @Volatile private var solid: BitSet? = null
