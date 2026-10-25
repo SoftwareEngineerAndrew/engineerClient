@@ -328,17 +328,36 @@ object PoseShare {
 
     private fun connect(lobby: String) {
         connecting = true
+        // URL-encoded: a dev build's version has a '+', which a query string would read as a space.
+        val v = java.net.URLEncoder.encode(version, Charsets.UTF_8)
         http.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10))
-            .buildAsync(URI.create("wss://$SITE/pose/api/$lobby?v=$version"), Listener())
-            .whenComplete { ws, err ->
+            .buildAsync(URI.create("wss://$SITE/pose/api/$lobby?v=$v"), Listener(lobby))
+            .whenComplete { _, err ->
                 connecting = false
-                if (err != null) { retryLater(); return@whenComplete }
-                sending = CompletableFuture.completedFuture(null)
-                ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
-                PeerLink.stop(); sentPort = 0
-                roster.clear(); subjects.clear(); sentParty = emptyList(); partyAt = 0L
-                socket = ws
+                if (err != null) { problem("couldn't connect: ${err.cause?.message ?: err.message}"); retryLater() }
             }
+    }
+
+    /**
+     * The socket is open: it's ours from here, before anything on it is read (the relay's challenge comes at once, and
+     * signing in with a pass answers it straight away). One for a dungeon left meanwhile is closed again.
+     */
+    private fun opened(ws: WebSocket, lobby: String) {
+        if (room != lobby) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; return }
+        sending = CompletableFuture.completedFuture(null)
+        ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
+        PeerLink.stop(); sentPort = 0
+        roster.clear(); subjects.clear(); sentParty = emptyList(); partyAt = 0L
+        socket = ws
+    }
+
+    private var lastProblem: String? = null
+
+    /** Into the log, once for each different thing that went wrong (a socket that keeps failing the same way says it once). */
+    private fun problem(what: String) {
+        if (what == lastProblem) return
+        lastProblem = what
+        DevgineerClient.logger.warn("[pose share] $what")
     }
 
     /**
@@ -360,7 +379,7 @@ object PoseShare {
                     if (k != null) addProperty("k", k)
                 }.toString())
             } catch (e: Exception) {
-                DevgineerClient.logger.warn("[pose share] sign-in failed: ${e.javaClass.simpleName}")
+                problem("sign-in failed: ${e.javaClass.simpleName}")
                 if (socket === ws) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; retryLater() }
             }
         }
@@ -401,6 +420,8 @@ object PoseShare {
             "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { signIn(ws, it) }
             "ok" -> {
                 ready = true; backoff = 2_000L
+                lastProblem = null
+                DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt}${if (usedPass) ", with a pass" else ""})")
                 mySlot = m["slot"]?.asInt ?: 0; v6 = m["v6"]?.asBoolean == true
                 m["k"]?.asString?.takeIf { it.length <= 100 }?.let { pass = it; passName = mc.user.name.lowercase(); passUntil = System.currentTimeMillis() + PASS_MS }
             }
@@ -514,10 +535,15 @@ object PoseShare {
         tracks.getOrPut(sender) { Track() }.gui = Gui(type, extra, sol, now)
     }
 
-    private class Listener : WebSocket.Listener {
+    private class Listener(private val lobby: String) : WebSocket.Listener {
         private val text = StringBuilder()
         private var bin: ByteBuffer? = null
         private var tooBig = false
+
+        override fun onOpen(ws: WebSocket) {
+            DevgineerClient.safely("pose share") { opened(ws, lobby) }
+            ws.request(1)
+        }
 
         override fun onText(ws: WebSocket, data: CharSequence, last: Boolean): CompletionStage<*>? {
             if (text.length + data.length <= 4096) text.append(data)
@@ -542,6 +568,7 @@ object PoseShare {
 
         override fun onClose(ws: WebSocket, statusCode: Int, reason: String): CompletionStage<*>? {
             if (socket !== ws) return null
+            if (statusCode != WebSocket.NORMAL_CLOSURE) problem("closed by the relay: $statusCode")
             when (statusCode) {
                 // Replaced by another game on this account: that one shares; this one waits a while.
                 4002 -> retryLater(60_000L)
@@ -554,6 +581,6 @@ object PoseShare {
             return null
         }
 
-        override fun onError(ws: WebSocket, error: Throwable) { if (socket === ws) retryLater() }
+        override fun onError(ws: WebSocket, error: Throwable) { if (socket === ws) { problem("socket error: ${error.message}"); retryLater() } }
     }
 }
