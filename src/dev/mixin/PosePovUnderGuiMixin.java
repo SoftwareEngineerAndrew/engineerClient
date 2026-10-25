@@ -1,6 +1,7 @@
 package com.devgineerclient.mixin;
 
 import com.devgineerclient.posepov.PosePov;
+import com.devgineerclient.posepov.PoseShare;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.Minecraft;
@@ -12,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Pose POV's feeds go in first, as soon as the frame's GUI is started: the HUD, the screen and every mod's GUI are drawn over
- * them. (Here rather than at the HUD call, which is skipped while the HUD is hidden.)
+ * them, and peer-to-peer sharing sends this frame's pose (PoseShare.frame). (Here rather than at the HUD call, which is skipped while the HUD is hidden.)
  */
 @Mixin(Gui.class)
 public class PosePovUnderGuiMixin {
@@ -23,6 +24,7 @@ public class PosePovUnderGuiMixin {
     )
     private GuiGraphicsExtractor dc$posePovUnderGui(Minecraft mc, GuiRenderState state, int mouseX, int mouseY, Operation<GuiGraphicsExtractor> original) {
         GuiGraphicsExtractor gfx = original.call(mc, state, mouseX, mouseY);
+        PoseShare.INSTANCE.frameSafely();
         PosePov.INSTANCE.drawUnderGui(gfx);
         return gfx;
     }
