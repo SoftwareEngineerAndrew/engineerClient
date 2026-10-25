@@ -5,6 +5,7 @@
 //   pick  'side': every free side off the tree alike (randomised Prim on the sides)
 //         'node':  a node of the tree with a free side alike (a cell, or a room with level 'room'), then one of
 //                  its free sides - the "growing tree" maze algorithm
+//         'nbr':   a node alike, then one of the rooms it could open into alike, then one of the sides they share
 //   p     the newest node's free sides with this chance (if it has any), q the oldest's (q first)
 // The entrance has one door, inward, and nothing else grows off it.
 export const W = 6, N = 36;
@@ -50,12 +51,17 @@ export function growStep(st, rule, allowed) {
   const q = rule.q || 0, p = rule.p || 0, nNodes = per.size;
   const cand = [], ps = []; let C = 0;
   for (const [nd, s] of per) {
-    // the chance the game picks this node's side k: oldest with q, newest with p, else by the pick rule
-    const base = rule.pick === 'node' ? 1 / nNodes / s.length : 1 / total;
-    const pq = nd === old ? q / s.length : 0, rest = 1 - q;
-    const pn = per.has(last) ? (nd === last ? p / s.length : 0) : 0, restN = per.has(last) ? 1 - p : 1;
-    const pr = pq + rest * (pn + restN * base);
-    for (const [u, v] of s) { if (allowed && !allowed(st, u, v)) continue; cand.push([u, v]); ps.push(pr); C += pr; }
+    // within the node: each side alike, or (nbr) each room it opens into alike, then its sides
+    let inNode;
+    if (rule.pick === 'nbr') { const cnt = new Map(); for (const [, v] of s) cnt.set(st.owner[v], (cnt.get(st.owner[v]) || 0) + 1); inNode = ([, v]) => 1 / cnt.size / cnt.get(st.owner[v]); }
+    else inNode = () => 1 / s.length;
+    // the chance the game picks this side: oldest with q, newest with p, else by the pick rule
+    const rest = 1 - q, hasLast = per.has(last), restN = hasLast ? 1 - p : 1;
+    for (const e of s) {
+      const wi = inNode(e), base = rule.pick === 'side' ? 1 / total : wi / nNodes;
+      const pr = (nd === old ? q * wi : 0) + rest * ((hasLast && nd === last ? p * wi : 0) + restN * base);
+      if (allowed && !allowed(st, e[0], e[1])) continue; cand.push(e); ps.push(pr); C += pr;
+    }
   }
   if (C <= 0) { st.w = 0; return false; }
   st.w *= C; let r = st.rnd() * C, k = 0; while (r > ps[k] && k < ps.length - 1) r -= ps[k++];
