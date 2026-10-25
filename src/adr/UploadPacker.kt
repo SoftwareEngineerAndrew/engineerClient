@@ -47,6 +47,9 @@ import org.slf4j.LoggerFactory
  *    downloads; this way that first minute already has every room and door, and the world never
  *    has to be built again once the rest is in. The rest keeps its order.
  *
+ *  - Other players the same way ([PlayerPlan]): rows thinned to where the viewer can't slide
+ *    between them, rounded; the recording player's own as they are.
+ *
  *  - A projectile's whole life - its spawn and flight, new flights, where it stuck, when it was
  *    gone - is one "pj" line where it spawned: the few points the viewer needs to fly it from
  *    one to the next ([ProjPack]; most arrows are shot point-blank into a wall and stick a tick
@@ -59,7 +62,7 @@ import org.slf4j.LoggerFactory
  *    the lines they were.
  *
  *  - The recording player's camera frames thinned: one is left out where the frames either side of it, as the
- *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (under a pixel), never
+ *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (a pixel or so), never
  *    leaving more than [CAM_GAP] ticks between two (more than 2 is "not rendering" to the viewer).
  *
  *  - Other players a party member's upload already has ([sibling]), and where it has them
@@ -98,7 +101,7 @@ object UploadPacker {
     private const val COLS_TICKS = 600
     private const val COLS_MAX = 100_000 // (the site takes lines up to 128 KB)
     private const val NL = "\n" // never newLine(): on Windows that is "\r\n"
-    private const val CAM_TOLERANCE = 0.05
+    private const val CAM_TOLERANCE = 0.1
     private const val CAM_GAP = 1.95
     private const val COVER_MARGIN = 600
     private const val ALIGNED_MARGIN = 40
@@ -460,9 +463,10 @@ object UploadPacker {
         val ticks = scan.summary["ticks"]?.asInt ?: 0
         val left = sib?.let { s -> plan.lives.values.flatten().filter { covered(it, s, aligned!!.first, ticks) }.toHashSet() } ?: emptySet()
         val players = sib?.let { Players(scan, it, aligned!!, plan.players) }
+        val others = lines(Files.newInputStream(file)).use { r -> PlayerPlan.read(r.lineSequence(), scan.self) }
         val out = Files.createTempFile("adr-upload-", ".jsonl.xz")
         try {
-            writeTo(file, scan, out, plan, left, players, hideParty)
+            writeTo(file, scan, out, plan, others, left, players, hideParty)
         } catch (t: Throwable) {
             Files.deleteIfExists(out)
             throw t
@@ -470,7 +474,7 @@ object UploadPacker {
         return out to left.size
     }
 
-    private fun writeTo(file: Path, scan: Scan, out: Path, plan: MobPlan, left: Set<MobPlan.Life>, players: Players?, hideParty: Boolean) {
+    private fun writeTo(file: Path, scan: Scan, out: Path, plan: MobPlan, others: PlayerPlan, left: Set<MobPlan.Life>, players: Players?, hideParty: Boolean) {
         var camLine = 0
         val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
@@ -482,15 +486,15 @@ object UploadPacker {
                 if (kept.startsWith("{\"k\":\"cam\"")) kept = thin(kept, scan.camKeep.getOrNull(camLine++)) ?: return
                 // (the world's lines carry ticks, but aren't in the timeline: none of them start a stretch)
                 if (!timed) { if (players?.keepsWorld(kept) != false) { w.write(kept); w.write(NL) }; return }
-                mobs.put(kept, timeline)
+                others.put(kept) { mobs.put(it, timeline) }
             }
             // The first line (meta), the layout and the world's lines; then everything else.
             lines(Files.newInputStream(file)).use { r ->
                 var first = true
                 for (line in r.lineSequence()) {
                     if (first) {
-                        // (the viewer fills mobs' moves in between the rows, up to this many ticks apart: MobPlan)
-                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP) }.toString() }.getOrDefault(line), timed = false)
+                        // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
                         for (l in scan.world) put(l, timed = false)
                         continue
@@ -502,6 +506,7 @@ object UploadPacker {
                     if (kind !in WORLD) put(line)
                 }
             }
+            others.end { mobs.put(it, timeline) }
             mobs.end(timeline)
             cols.end()
         }
@@ -539,7 +544,7 @@ object UploadPacker {
      *    lines as "grp": per kind, a column per field the same way;
      *  - block changes as "blocks": each tick's sorted by place, every one a difference from the one
      *    before;
-     *  - camera frames as "cams": columns of hundredths, the turns as differences.
+     *  - camera frames as "cams": columns of hundredths (the turns tenths, as differences).
      * The order they come in keeps each tick's events in the order the viewer needs them (a mob's
      * spawn before its moves, its tag before them, gone after).
      */
@@ -663,11 +668,12 @@ object UploadPacker {
                 for (f in d) {
                     val a = f.asJsonArray
                     pt.add(hundredths(a[0])!!)
-                    val y = hundredths(a[1])!!; val p = hundredths(a[2])!!
+                    // (turns in tenths of a degree: "s")
+                    val y = Math.round(a[1].asDouble * 10); val p = Math.round(a[2].asDouble * 10)
                     yaw.add(y - pY); pitch.add(p - pP); pY = y; pP = p
                 }
             }
-            return JsonObject().apply { addProperty("k", "cams"); add("t", t); add("n", n); add("pt", pt); add("yaw", yaw); add("pitch", pitch) }.toString()
+            return JsonObject().apply { addProperty("k", "cams"); addProperty("s", 10); add("t", t); add("n", n); add("pt", pt); add("yaw", yaw); add("pitch", pitch) }.toString()
         }
 
         private fun deltas(v: List<Long>) = JsonArray().apply { var prev = 0L; for (x in v) { add(x - prev); prev = x } }
