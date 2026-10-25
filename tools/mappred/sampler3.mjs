@@ -13,6 +13,7 @@
 // No fitted tables: what the samples agree on is the prediction.
 import { edgeId } from './features.mjs';
 import { SHAPES, PLACEMENTS, OUT } from './sampler2.mjs';
+import { startTree, addCell as treeAdd, growStep, cloneTree } from './tree3.mjs';
 const W = 6, H = 6, N = 36;
 const OI = Object.fromEntries(OUT.map((c, i) => [c, i]));
 const NB = Array.from({ length: N }, (_, t) => { const x = t % W, z = (t / W) | 0, o = []; if (x + 1 < W) o.push(t + 1); if (x > 0) o.push(t - 1); if (z + 1 < H) o.push(t + W); if (z > 0) o.push(t - W); return o; });
@@ -22,7 +23,9 @@ const TYPE_CLS = { PUZZLE: 'P', TRAP: 'T', CHAMPION: 'Y', BLOOD: 'B', FAIRY: 'F'
 const fact = n => { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; };
 
 export function sample(obs, combos, opts) {
-  const rnd = opts.rnd, NS = opts.samples || 300, maxTries = opts.maxTries || NS * 400, p = opts.newest ?? 0.15, q = opts.oldest ?? 0;
+  const rnd = opts.rnd, NS = opts.samples || 300, maxTries = opts.maxTries || NS * 400;
+  // the door tree's rule (tree3.mjs): treelik.mjs's best on the real maps
+  const rule = opts.rule || { level: 'room', pick: 'node', p: 0.15, q: 0.1 };
   const { tile, edge } = obs;
   // what each cell side shows: 'door' (with its kind), 'wall', or null (nobody has seen it); inside a room: 'same'
   const side = new Map(); const kindOf = new Map();
@@ -72,9 +75,8 @@ export function sample(obs, combos, opts) {
       for (const t of cs) owner[t] = rooms.length; rooms.push({ cells: cs, big: true, known: false });
     }
     for (const t of unknown) if (owner[t] === -1) { owner[t] = rooms.length; rooms.push({ cells: [t], big: false, known: false }); }
-    const pt = { owner, rooms, w, inT: new Uint8Array(N), parent: new Int32Array(N).fill(-1), depth: new Int32Array(N), entered: new Uint8Array(rooms.length), grown: [], head: 1 };
-    const addCell = (u, v) => { pt.inT[v] = 1; pt.parent[v] = u; pt.depth[v] = u >= 0 ? pt.depth[u] + 1 : 0; pt.entered[owner[v]] = 1; pt.grown.push(v); };
-    addCell(-1, entCell); if (!mapOk(pt, entCell, inward)) return null; addCell(entCell, inward);
+    const pt = startTree(owner, rooms, entCell); pt.rnd = rnd; pt.w = w;
+    if (!mapOk(pt, entCell, inward)) return null; treeAdd(pt, rule, entCell, inward);
     return pt;
   };
   // the map allows the step u -> v: not through a wall; a room entered once, with no other door the map shows
@@ -87,32 +89,13 @@ export function sample(obs, combos, opts) {
     for (const c of rooms[S].cells) for (const x of NB[c]) { const Rx = owner[x]; if (Rx === S || !entered[Rx]) continue; if (c === v && x === u) continue; if (side.get(sk(c, x)) === 'door') return false; }
     return true;
   }
-  /** 2. one step of the tree: the game's chance of each free side, only the ones the map allows taken; the
-   *  particle's weight times their share. false when no step is left (the tree done) */
-  const step = pt => {
-    const { owner, inT, entered, grown } = pt;
-    const gameOk = (u, v) => !inT[v] && (owner[v] === owner[u] || !entered[owner[v]]);
-    const all = []; for (let i = 1; i < grown.length; i++) { const u = grown[i]; for (const v of NB[u]) if (gameOk(u, v)) all.push(u * N + v); }
-    if (!all.length) { pt.w = 0; return; }
-    const last = grown[grown.length - 1]; let nl = 0; for (const v of NB[last]) if (gameOk(last, v)) nl++;
-    while (pt.head < grown.length && !NB[grown[pt.head]].some(v => gameOk(grown[pt.head], v))) pt.head++;
-    const old = pt.head < grown.length ? grown[pt.head] : -1; let no = 0; if (old >= 0) for (const v of NB[old]) if (gameOk(old, v)) no++;
-    const qq = no ? q : 0, pp = nl ? p : 0;
-    let C = 0; const ps = new Float64Array(all.length);
-    for (let k = 0; k < all.length; k++) { const u = (all[k] / N) | 0, v = all[k] % N; if (!mapOk(pt, u, v)) continue;
-      ps[k] = qq * (u === old ? 1 / no : 0) + (1 - qq) * (pp * (u === last ? 1 / nl : 0) + (1 - pp) / all.length); C += ps[k]; }
-    if (C <= 0) { pt.w = 0; return; }
-    pt.w *= C; let r = rnd() * C, k = 0; while (r > ps[k] && k < ps.length - 1) r -= ps[k++];
-    const u = (all[k] / N) | 0, v = all[k] % N;
-    inT[v] = 1; pt.parent[v] = u; pt.depth[v] = pt.depth[u] + 1; entered[owner[v]] = 1; grown.push(v);
-  };
   /** 3. the finished tree: the map's doors all used, the dead ends the puzzles want, blood and the fairy, the
    *  wither doors, the specials; the weight times the chance of what the map shows of them, or 0 */
   const finishTree = pt => {
-    const { owner, rooms, parent, depth, grown } = pt; const R = rooms.length;
+    const { owner, rooms, parent, depth } = pt; const R = rooms.length;
     for (const [key, st] of side) { if (st !== 'door') continue; const a = (key / N) | 0, b = key % N; if (parent[a] !== b && parent[b] !== a) return null; }
     const deg = new Int32Array(R), rParent = new Int32Array(R).fill(-1), rEntry = new Int32Array(R).fill(-1);
-    for (const v of grown) { const u = parent[v]; if (u < 0) { rEntry[owner[v]] = v; continue; } if (owner[u] !== owner[v]) { deg[owner[u]]++; deg[owner[v]]++; rParent[owner[v]] = owner[u]; rEntry[owner[v]] = v; } }
+    for (let v = 0; v < N; v++) { const u = parent[v]; if (u < 0) { rEntry[owner[v]] = v; continue; } if (owner[u] !== owner[v]) { deg[owner[u]]++; deg[owner[v]]++; rParent[owner[v]] = owner[u]; rEntry[owner[v]] = v; } }
     const entR = owner[entCell];
     const dead = []; for (let r = 0; r < R; r++) if (r !== entR && !rooms[r].big && deg[r] === 1) dead.push(r);
     const D = dead.length - 1;  // besides blood
@@ -143,7 +126,7 @@ export function sample(obs, combos, opts) {
   const ess = ps => { let a = 0, b = 0; for (const x of ps) { a += x.w; b += x.w * x.w; } return b ? a * a / b : 0; };
   const resample = ps => { const tot = ps.reduce((a, x) => a + x.w, 0); if (!tot) return ps; const n = ps.length, mean = tot / n, out = []; let u = rnd() * tot / n, c = 0, i = 0;
     for (let k = 0; k < n; k++) { const target = u + k * tot / n; while (c + ps[i].w < target && i < n - 1) { c += ps[i].w; i++; } out.push(clone(ps[i], mean)); } return out; };
-  const clone = (pt, w) => ({ owner: pt.owner, rooms: pt.rooms, w, inT: Uint8Array.from(pt.inT), parent: Int32Array.from(pt.parent), depth: Int32Array.from(pt.depth), entered: Uint8Array.from(pt.entered), grown: [...pt.grown], head: pt.head });
+  const clone = cloneTree;
 
   // sequential Monte Carlo: batches of particles grown together, resampled when their weights spread out
   const NP = opts.particles || 200;
@@ -153,12 +136,12 @@ export function sample(obs, combos, opts) {
     while (ps.length < NP) ps.push(clone(ps[Math.floor(rnd() * ps.length)], 0));  // keep the batch size; zero-weight fillers drop at the next resample
     if (ess(ps) < NP / 2) ps = resample(ps);
     for (let s2 = 0; s2 < N - 2; s2++) {
-      for (const pt of ps) if (pt.w > 0 && pt.grown.length < N) step(pt);
+      for (const pt of ps) if (pt.w > 0 && !pt.done) growStep(pt, rule, mapOk);
       if (!ps.some(x => x.w > 0)) break;
       if (ess(ps) < NP / 2) ps = resample(ps);
     }
     for (const pt of ps) {
-      if (!(pt.w > 0) || pt.grown.length < N) continue;
+      if (!(pt.w > 0) || pt.inT.some(x => !x)) continue;
       const fin = finishTree(pt); if (!fin) continue;
       const wgt = pt.w * fin.f; if (!(wgt > 0)) continue;
       result.accepted++; result.weight += wgt;
