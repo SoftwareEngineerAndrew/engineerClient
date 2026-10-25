@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
  */
 object MeshDisk {
     /** Bumped whenever what a piece looks like changes, so old files are never read. */
-    private const val FORMAT = 1
+    private const val FORMAT = 2
 
     class Entry(val offset: Long, val indexCount: Int, val length: Int)
 

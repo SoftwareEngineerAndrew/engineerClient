@@ -276,6 +276,10 @@ object PoseShare {
         val swinging = me.isSwinging
         val swung = swinging && !wasSwinging
         wasSwinging = swinging
+        // The rooms this game has named, for teammates (their views need the rooms where they are, which their games may not
+        // have reached): when they change or someone new links. Whether or not anyone is watching.
+        if (seq % 10 == 0) shareRooms(nowMs)
+
         if (!wanted) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
         if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
 
@@ -616,6 +620,7 @@ object PoseShare {
                 heardRelayed(subject, sender, from, data, age * 4, now)
             }
             3 -> gui(sender, data, now)
+            9 -> rooms(sender, data)
             4 -> tracks[sender]?.gui = null
             7, 8 -> com.devgineerclient.party.PartyProgress.heard(sender, kind, data)
         }
@@ -643,6 +648,7 @@ object PoseShare {
                 heard(sender, null, slot, now, true, true, ms, null, yaw, pitch, 0, -1, 0)
             }
             3 -> gui(sender, b, now)
+            9 -> rooms(sender, b)
             4 -> if (body.isEmpty()) tracks[sender]?.gui = null
             7, 8 -> com.devgineerclient.party.PartyProgress.heard(sender, kind, b)
         }
@@ -789,5 +795,53 @@ object PoseShare {
         }
 
         override fun onError(ws: WebSocket, error: Throwable) { if (socket === ws) { problem("socket error: ${error.message}"); retryLater() } }
+    }
+
+    // --- rooms -------------------------------------------------------------------------------------------------------------
+
+    private var roomsSig = ""
+    private var roomsRoster: Set<Int> = emptySet()
+    private var roomsAt = 0L
+
+    /** [9][count]([core i32][turn][tile count][tiles: z * 6 + x])*: this game's named rooms, to every linked teammate. */
+    private fun shareRooms(nowMs: Long) {
+        if (!ready || roster.isEmpty() || nowMs - roomsAt < 1100) return
+        val mine = KnownWorld.mine().filter { it.tiles.size in 1..4 }
+        val sig = mine.joinToString(";") { "${it.core},${it.rot.ordinal},${it.tiles}" }
+        val linked = roster.keys.toSet()
+        if (mine.isEmpty() || (sig == roomsSig && linked == roomsRoster)) return
+        roomsSig = sig; roomsRoster = linked; roomsAt = nowMs
+        val b = ByteBuffer.allocate(256)
+        b.put(9).put(0)
+        var n = 0
+        for (r in mine) {
+            if (b.remaining() < 6 + r.tiles.size || n >= 36) break
+            b.putInt(r.core).put(r.rot.ordinal.toByte()).put(r.tiles.size.toByte())
+            for (t in r.tiles) b.put((t.z * 6 + t.x).toByte())
+            n++
+        }
+        b.put(1, n.toByte())
+        shareExtra(b.array().copyOf(b.position()))
+    }
+
+    /** A teammate's rooms, as far as they read as rooms (the room pack checks the rest when they're placed: KnownWorld). */
+    private fun rooms(sender: String, b: ByteBuffer) {
+        if (sender !in teammates || !b.hasRemaining()) return
+        val n = b.get().toInt() and 255
+        if (n > 36) return
+        val out = ArrayList<KnownWorld.SharedRoom>()
+        val used = HashSet<Int>()
+        repeat(n) {
+            if (b.remaining() < 6) return
+            val core = b.int
+            val rot = com.engineerclient.p3sim.pack.Rot.entries.getOrNull(b.get().toInt() and 255) ?: return
+            val count = b.get().toInt() and 255
+            if (count !in 1..4 || b.remaining() < count) return
+            val tiles = List(count) { b.get().toInt() and 255 }
+            if (tiles.any { it !in 0 until 36 || !used.add(it) }) return
+            out += KnownWorld.SharedRoom(core, rot, tiles.map { com.engineerclient.p3sim.pack.Tile(it % 6, it / 6) })
+        }
+        if (b.hasRemaining()) return
+        KnownWorld.shared(sender, out)
     }
 }

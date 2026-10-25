@@ -49,7 +49,11 @@ object KnownWorld {
     val ARENA_SZ = 0..9
 
     /** One placed room. [designKey] names its geometry, the same for every run that has this design, variant and turn. */
-    class Room(val key: String, val inst: RoomInstance) {
+    /**
+     * One placed room. [tiles] are its grid tiles, [core] the core hash it was named by (when known: what teammates are told),
+     * [shared] whether a teammate's game named it rather than this one.
+     */
+    class Room(val key: String, val inst: RoomInstance, val tiles: List<Tile>, val core: Int? = null, val shared: Boolean = false) {
         val p = inst.placement
         val v = inst.volume
         val designKey = "${inst.design.id}|${(key.substringAfterLast('|'))}|${p.rot}"
@@ -99,7 +103,25 @@ object KnownWorld {
         touchedCells.add(k)
     }
 
+    /** A room as a teammate's game named it: its core hash (which names design and variant in the pack), turn and tiles. */
+    class SharedRoom(val core: Int, val rot: Rot, val tiles: List<Tile>)
+
+    /** Each linked teammate's rooms, the latest they sent (any thread). */
+    private val sharedBy = ConcurrentHashMap<String, List<SharedRoom>>()
+    fun shared(from: String, rooms: List<SharedRoom>) { sharedBy[from] = rooms }
+
+    /** The rooms this game named itself, with their cores: for teammates. */
+    fun mine(): List<SharedRoom> = rooms.filter { !it.shared && it.core != null }.map { SharedRoom(it.core!!, it.p.rot, it.tiles) }
+
+    /** [r] on its tiles; whatever was on any of them before is gone from all of its own. */
+    private fun put(r: Room) {
+        for (t in r.tiles) tiles[t.z * 6 + t.x]?.takeIf { it !== r }?.let { old -> for (i in tiles.indices) if (tiles[i] === old) tiles[i] = null }
+        for (t in r.tiles) tiles[t.z * 6 + t.x] = r
+        roomList = null
+    }
+
     fun reset() {
+        sharedBy.clear()
         changed.clear(); changedSections.clear(); touchedCells.clear()
         tiles.fill(null); roomList = null; edits = emptyMap(); editSections = emptySet(); doorsKey = ""
     }
@@ -143,12 +165,27 @@ object KnownWorld {
             if (tiles[ts[0].z * 6 + ts[0].x]?.key == key) continue
             val r = try {
                 val p = design.place(rot, ts)
-                Room(key, RoomInstance(design, pack.volumeFor(design, variant) ?: continue, p))
+                Room(key, RoomInstance(design, pack.volumeFor(design, variant) ?: continue, p), ts, entry?.takeIf { it.design == design.id }?.let { core })
             } catch (e: Exception) { continue }
-            for (t in ts) tiles[t.z * 6 + t.x] = r
-            roomList = null
+            put(r)
             placed(r)
             // Changes from before it was placed now land on its pieces.
+            for (k in changed.keys) if (r.covers(BlockPos.getX(k), BlockPos.getZ(k))) touchedCells.add(k)
+            changedRooms = true
+        }
+        // Teammates' rooms, where this game hasn't named one (yours win; between teammates, the first placed stays): each
+        // only as the room pack has it (its core names the design and variant, which must take that turn and that many tiles).
+        for (list in sharedBy.values) for (s in list) {
+            val idx = s.tiles.map { it.z * 6 + it.x }
+            if (idx.any { tiles[it] != null }) continue
+            val entry = pack.designByCore(s.core) ?: continue
+            val design = pack.design(entry.design) ?: continue
+            if (s.rot !in design.rotations || s.tiles.size != design.tiles.size) continue
+            val r = try {
+                Room("${design.id}|${s.rot}|${s.tiles}|${entry.variant}|shared", RoomInstance(design, pack.volumeFor(design, entry.variant) ?: continue, design.place(s.rot, s.tiles)), s.tiles, s.core, true)
+            } catch (e: Exception) { continue }
+            put(r)
+            placed(r)
             for (k in changed.keys) if (r.covers(BlockPos.getX(k), BlockPos.getZ(k))) touchedCells.add(k)
             changedRooms = true
         }
@@ -185,12 +222,14 @@ object KnownWorld {
         return out
     }
 
-    /** Odin's core of the room's first tile (it names the variant), once that chunk is loaded. */
+    /** Odin's core of the first of the room's tiles whose chunk is loaded and has one of its cores (it names the variant). */
     private fun core(level: ClientLevel, room: DungeonRoom): Int? {
-        val t = room.tiles.first()
-        val cx = (t.x - 6) * 2; val cz = (t.z - 6) * 2
-        val chunk = level.chunkSource.getChunk(cx, cz, ChunkStatus.FULL, false) as? LevelChunk ?: return null
-        return WorldScan.getRoomCore(chunk, IVec2(cx * 16 + 7, cz * 16 + 7)).first.takeIf { room.data?.cores?.contains(it) == true }
+        for (t in room.tiles) {
+            val cx = (t.x - 6) * 2; val cz = (t.z - 6) * 2
+            val chunk = level.chunkSource.getChunk(cx, cz, ChunkStatus.FULL, false) as? LevelChunk ?: continue
+            WorldScan.getRoomCore(chunk, IVec2(cx * 16 + 7, cz * 16 + 7)).first.takeIf { room.data?.cores?.contains(it) == true }?.let { return it }
+        }
+        return null
     }
 
     private fun arena(x: Int, z: Int) = x >= 0 && z >= 0 && bossFloor()
