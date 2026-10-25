@@ -34,6 +34,9 @@ import java.util.concurrent.ConcurrentHashMap
  * to games in the run, so neither a stream of it nor knowing the server lets anyone pose as a teammate. No Mojang, no
  * accounts, nothing about you but that.
  *
+ * Frames go to each teammate over Cloudflare's TURN when it's up ([TurnLink]: in at your nearest Cloudflare location, out at
+ * theirs, nobody but Cloudflare seeing anyone's address), else through the relay.
+ *
  * What arrives is never trusted past what it can show: names must be your own teammates, items are looked up by id (no
  * names, no components), and a terminal is only its type and the cells to click, inside that terminal's own grid and
  * no more of them than it can have; nothing a sender writes is ever shown as text.
@@ -45,13 +48,13 @@ object PoseShare {
      *  and how evenly its poses come, within these. */
     private const val BUFFER_MIN_NS = 6_000_000L
     private const val BUFFER_MAX_NS = 90_000_000L
-    /** Peer-to-peer frames: one a frame at most, as often as this (the "Peer-to-peer FPS" setting; 60 a second), each with the frame's look rather than the tick's. */
+    /** Look frames over TURN: one a frame at most, as often as this (the "Sharing FPS" setting; 60 a second), each with the frame's look rather than the tick's. */
     @Volatile var frameNs = 16_666_666L
     private const val EXTRAPOLATE_NS = 100_000_000L
     /** How far past a peer's newest tick its position is carried on by that tick's move. */
     private const val CARRY_NS = 60_000_000L
     /**
-     * Peer-to-peer kinds ([PeerLink]'s header): the relay's own numbers for the frames both carry (3 terminal, 4 closed, 7 and 8
+     * TURN kinds ([TurnLink]'s header): the relay's own numbers for the frames both carry (3 terminal, 4 closed, 7 and 8
      * PartyProgress), and two of its own. [D_TICK]: [time u16, ms][x y z: 24-bit][yaw u16][pitch i16][flags]([item u16] when
      * flag 0x80), a tick at a time (where you are only changes then). [D_LOOK]: [time u16][yaw u16][pitch i16], every frame the
      * look changes in.
@@ -93,7 +96,7 @@ object PoseShare {
     private var prevFrame: ByteArray? = null
     private var prevSent = false
     private var selfAt = 0L
-    // Peer-to-peer: the last tick's body and whether it was a change (a change is followed by one more, the settled pose, so
+    // TURN: the last tick's body and whether it was a change (a change is followed by one more, the settled pose, so
     // nobody carries on a move that has stopped), when it last went, and the item last sent with one.
     private var lastTick: ByteArray? = null
     private var tickChanged = false
@@ -109,14 +112,30 @@ object PoseShare {
 
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
-    /** "Peer-to-peer sharing": straight to teammates who have it on too, over UDP (see [PeerLink]); set by [PosePov]. */
-    @Volatile var p2p = false
+    /**
+     * "Optimize server location": each teammate's frames go whichever way is quicker to them right now, TURN or the relay,
+     * measured for each one (otherwise TURN whenever it's up); set by [PosePov].
+     */
+    @Volatile var optimize = true
+    /** "Debug info": the numbers behind [debugLines] are kept up; set by [PosePov]. */
+    @Volatile var debug = false
     @Volatile private var mySlot = 0
-    @Volatile private var v6 = false
-    /** Frame kinds past the pose relay's own that it says it passes on (its sign-in's "x"); [shareExtra]'s go peer-to-peer only otherwise. */
+    /** Frame kinds past the pose relay's own that it says it passes on (its sign-in's "x"); [shareExtra]'s go over TURN only otherwise. */
     @Volatile private var relayExtras: Set<Int> = emptySet()
-    private var sentPort = 0
-    private var portAt = 0L
+
+    private val turn = TurnLink({ slot, kind, body -> DevgineerClient.safely("pose turn") { direct(slot, kind, body) } }, { DevgineerClient.logger.info("[pose share] $it") })
+    /** Whether the relay hands out TURN credentials (it has a key), and the ones it gave. */
+    @Volatile private var turnOffered = false
+    @Volatile private var creds: Pair<String, String>? = null
+    private var credsAskedAt = 0L
+    // Our TURN relayed address: the newest, and the last told to the relay (it takes one every 3 s).
+    private var turnAddr = ""
+    private var sentAddr = ""
+    private var addrAt = 0L
+    /** The Cloudflare location this game reached the relay through (its sign-in's "colo"). */
+    @Volatile private var colo = ""
+    /** Linked slot -> whether its frames go over TURN (else the relay), as last decided ([routes]). */
+    private val viaTurn = ConcurrentHashMap<Int, Boolean>()
 
     /** slot -> name (lower case) of the members linked with you, and the relay's subject ids. */
     private val roster = ConcurrentHashMap<Int, String>()
@@ -141,7 +160,7 @@ object PoseShare {
         var offset = Long.MAX_VALUE
         var lastSeq = -1L
         /**
-         * Its poses come peer-to-peer, timed in ms: [samples] are then looks only (from every frame and tick), and [ticks] the
+         * Its poses come over TURN, timed in ms: [samples] are then looks only (from every frame and tick), and [ticks] the
          * positions (time, where), with the held item and sneaking from the newest tick.
          */
         var timed = false
@@ -156,6 +175,8 @@ object PoseShare {
         var source = 0
         var via: String? = null
         var swingAt = 0L
+        /** Poses heard (for the debug info's rate). */
+        var arrivals = 0L
         @Volatile var gui: Gui? = null
         fun at(s: Sample) = s.time + offset
     }
@@ -246,6 +267,7 @@ object PoseShare {
         seq++
         val nowMs = System.currentTimeMillis()
         val now = System.nanoTime()
+        if (debug && nowMs - dbgLogAt > 10_000) debugLines()
 
         // The party, whenever it changes (the relay takes one every 2 s).
         val party = partyNow()
@@ -259,11 +281,7 @@ object PoseShare {
         val watch = watching || nowMs - watchAt < 1500
         if (watch != sentWatch) { sentWatch = watch; sendBinary(byteArrayOf(5, if (watch) 1 else 0)) }
 
-        // Peer-to-peer: the socket while it's on, and our public port to the relay whenever it changes (0: off).
-        if (p2p && !PeerLink.running) PeerLink.start(mySlot, v6)
-        if (!p2p && PeerLink.running) PeerLink.stop()
-        PeerLink.tick { reportPort(it) }
-        if (!p2p) reportPort(0)
+        turnTick(nowMs)
 
         // A ping every 2 s while poses flow (the round trip, for the delays shown), otherwise only to keep the socket open.
         if (nowMs - lastPing > (if (wanted || watch) 2000 else 30_000)) {
@@ -290,9 +308,10 @@ object PoseShare {
         val frame = pose(1, -1, 0, me.x, me.y, me.z, me.yRot, me.xRot, flags, me.mainHandItem)
         val sig = frame.copyOfRange(3, 16) + frame.copyOfRange(17, 20)
         val changed = !sig.contentEquals(lastSig)
-        // Peer-to-peer has its own (below); the relay is for whoever that didn't reach.
-        val direct = if (p2p) tickDirect(me, flags, now) else emptySet()
-        val relay = direct.isEmpty() || !direct.containsAll(roster.keys)
+        // TURN has its own (below); the relay is for whoever that doesn't go to.
+        val fast = turnSlots()
+        val direct = if (fast.isNotEmpty()) tickDirect(me, flags, now, fast) else emptySet()
+        val relay = !direct.containsAll(roster.keys)
         if (changed && !prevSent && relay) prevFrame?.let { sendBinary(it) }
         prevSent = changed || now - selfAt > STILL_NS
         if (prevSent) { if (relay) sendBinary(frame); selfAt = now }
@@ -329,15 +348,17 @@ object PoseShare {
     }
 
     /**
-     * Every frame (from the GUI's start, so with the HUD hidden too), peer-to-peer only: your look ([D_LOOK]) to each live
-     * peer when it changed, timed in ms, [frameNs] apart at most. A tick pose holds the look still for 50 ms, so a teammate
+     * Every frame (from the GUI's start, so with the HUD hidden too), over TURN only: your look ([D_LOOK]) to each teammate it
+     * goes to when it changed, timed in ms, [frameNs] apart at most. A tick pose holds the look still for 50 ms, so a teammate
      * drawing it has to stay a whole tick behind; these let them draw only a few ms behind. Where you are only changes a tick at
      * a time, so that goes with the ticks ([D_TICK]), and they carry it on by its move between them.
      */
     fun frameSafely() = DevgineerClient.safely("pose share frame") { frame() }
 
     fun frame() {
-        if (!p2p || !ready || !wanted || !PeerLink.running) return
+        if (!ready || !wanted || !turn.ready) return
+        val fast = turnSlots()
+        if (fast.isEmpty()) return
         val me = mc.player ?: return
         val now = System.nanoTime()
         if (now - frameAt < frameNs - 1_000_000L) return
@@ -347,8 +368,8 @@ object PoseShare {
         val look = (yaw.toLong() shl 16) or pitch.toLong()
         val changed = look != lastLook
         // The look before a turn, again, with its own time: otherwise the turn is drawn spread across the still stretch before it.
-        if (changed && !lookChanged && lastLook >= 0) PeerLink.broadcast(D_LOOK, lookBody(lastLookMs, lastLook))
-        if (changed) PeerLink.broadcast(D_LOOK, lookBody(msNow(), look))
+        if (changed && !lookChanged && lastLook >= 0) turn.broadcast(D_LOOK, lookBody(lastLookMs, lastLook), fast)
+        if (changed) turn.broadcast(D_LOOK, lookBody(msNow(), look), fast)
         lookChanged = changed
         lastLook = look; lastLookMs = msNow()
     }
@@ -359,12 +380,12 @@ object PoseShare {
         byteArrayOf((ms shr 8).toByte(), ms.toByte(), (look shr 24).toByte(), (look shr 16).toByte(), (look shr 8).toByte(), look.toByte())
 
     /**
-     * This tick's [D_TICK] to each live peer: when it changed, once more when it stops changing (the settled pose), every
+     * This tick's [D_TICK] to each teammate in [to]: when it changed, once more when it stops changing (the settled pose), every
      * [STILL_NS] otherwise, and the pose before a change, again, first. The held item rides along when it changes, and once a
      * second. The peers it reached.
      */
-    private fun tickDirect(me: net.minecraft.client.player.LocalPlayer, flags: Int, now: Long): Set<Int> {
-        if (!PeerLink.running) return emptySet()
+    private fun tickDirect(me: net.minecraft.client.player.LocalPlayer, flags: Int, now: Long, to: Set<Int>): Set<Int> {
+        if (!turn.ready) return emptySet()
         val item = if (me.mainHandItem.isEmpty) 0 else BuiltInRegistries.ITEM.getId(me.mainHandItem.item)
         val withItem = item != tickItem || now - tickItemAt > 1_000_000_000L
         val b = ByteBuffer.allocate(if (withItem) 18 else 16)
@@ -382,26 +403,27 @@ object PoseShare {
         val send = changed || tickChanged || now - tickSentAt > STILL_NS
         val wasChanged = tickChanged
         tickChanged = changed
-        if (!send) return emptySet()
-        if (changed && !wasChanged && prev != null && now - tickSentAt > TICK_NS + 5_000_000L) PeerLink.broadcast(D_TICK, prev)
+        // Not due: it still counts as reaching them (they have it; the relay isn't needed for it).
+        if (!send) return to
+        if (changed && !wasChanged && prev != null && now - tickSentAt > TICK_NS + 5_000_000L) turn.broadcast(D_TICK, prev, to)
         tickSentAt = now
         if (withItem) { tickItem = item; tickItemAt = now }
-        return PeerLink.broadcast(D_TICK, body)
+        return turn.broadcast(D_TICK, body, to)
     }
 
-    /** Your own frame: straight to each live peer, and through the relay unless that reached every linked teammate. */
+    /** Your own frame: over TURN to each teammate it goes to that way, and through the relay unless that was all of them. */
     private fun share(frame: ByteArray) {
-        val direct = if (p2p) PeerLink.broadcast(frame[0].toInt(), frame.copyOfRange(1, frame.size)) else emptySet()
-        if (direct.isEmpty() || !direct.containsAll(roster.keys)) sendBinary(frame)
+        val direct = turn.broadcast(frame[0].toInt(), frame.copyOfRange(1, frame.size), turnSlots())
+        if (!direct.containsAll(roster.keys)) sendBinary(frame)
     }
 
     /**
-     * One of [com.devgineerclient.party.PartyProgress]'s frames (kind 7 or 8): to each live peer, and through the relay only once
+     * One of [com.devgineerclient.party.PartyProgress]'s frames (kind 7 or 8): over TURN as [share], and through the relay only once
      * it says it takes that kind (one that doesn't would close the socket on it). Sent whether or not anyone is watching.
      */
     fun shareExtra(frame: ByteArray): Int {
         if (!ready || roster.isEmpty()) return 0
-        val direct = if (p2p) PeerLink.broadcast(frame[0].toInt(), frame.copyOfRange(1, frame.size)) else emptySet()
+        val direct = turn.broadcast(frame[0].toInt(), frame.copyOfRange(1, frame.size), turnSlots())
         if (relayTakes(frame[0].toInt() and 255) && !direct.containsAll(roster.keys)) sendBinary(frame)
         return direct.size
     }
@@ -409,14 +431,53 @@ object PoseShare {
     /** Whether the relay passes on frames of [kind] (see [shareExtra]). */
     fun relayTakes(kind: Int) = kind in relayExtras
 
-    /** How many party members are linked with you right now (sharing with you, by the relay or peer-to-peer). */
+    /** How many party members are linked with you right now (sharing with you, by the relay or TURN). */
     val linkedCount get() = roster.size
 
-    private fun reportPort(port: Int) {
-        if (port == sentPort || System.currentTimeMillis() - portAt < 3100) return
-        sentPort = port; portAt = System.currentTimeMillis()
-        sendText(JsonObject().apply { addProperty("t", "e"); addProperty("p", port) }.toString())
+    /**
+     * TURN, every tick: credentials once linked with someone (and again if they're turned down; the relay gives a socket one
+     * every 5 minutes), the allocation while there are any, our relayed address to the relay whenever it changes, and
+     * which way each teammate's frames go.
+     */
+    private fun turnTick(nowMs: Long) {
+        turn.myRelayMs = if (rttMs > 0) (rttMs / 2).toInt() else -1
+        val c = creds
+        if (turnOffered && roster.isNotEmpty() && (c == null || turn.needsCredentials) && nowMs - credsAskedAt > 301_000L) {
+            credsAskedAt = nowMs
+            sendText("""{"t":"tc"}""")
+        }
+        if (c != null && !turn.needsCredentials) turn.start(c.first, c.second, mySlot)
+        turn.tick { turnAddr = it }
+        if (turnAddr != sentAddr && nowMs - addrAt > 3100) {
+            sentAddr = turnAddr; addrAt = nowMs
+            sendText(JsonObject().apply { addProperty("t", "e"); addProperty("a", turnAddr) }.toString())
+        }
+        routes()
     }
+
+    /**
+     * Which way each linked teammate's frames go: TURN while it's live to them, the relay otherwise. With "Optimize server
+     * location", whichever is quicker to that teammate: half TURN's round trip against your way to the relay plus theirs
+     * from it (each measured), switching only for a clear 5 ms so it doesn't flap.
+     */
+    private fun routes() {
+        val now = System.currentTimeMillis()
+        for (slot in roster.keys) {
+            val p = turn.peer(slot)
+            var fast = p != null && p.bound && p.live(now)
+            if (fast && optimize) {
+                val turnMs = p!!.rttMs / 2
+                val relayMs = relayPathMs(p)
+                if (turnMs > 0 && relayMs > 0) fast = if (viaTurn[slot] != false) turnMs <= relayMs + 5 else turnMs + 5 < relayMs
+            }
+            viaTurn[slot] = fast
+        }
+        viaTurn.keys.retainAll(roster.keys)
+    }
+
+    private fun relayPathMs(p: TurnLink.Peer) = if (rttMs > 0 && p.theirRelayMs >= 0) rttMs / 2 + p.theirRelayMs else -1.0
+
+    private fun turnSlots(): Set<Int> = viaTurn.filterValues { it }.keys
 
     /** The solution as it may be sent: cells of the grid only, each once (Rubix: up to 4 times), within the grid's cap. */
     private fun solutionFor(type: TerminalTypes, grid: Grid, solution: List<Int>): List<Int> {
@@ -485,7 +546,7 @@ object PoseShare {
         if (room != lobby) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; return }
         sending = CompletableFuture.completedFuture(null)
         ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
-        PeerLink.stop(); sentPort = 0
+        stopTurn()
         roster.clear(); subjects.clear(); sentParty = emptyList(); sentEntries = emptyList(); partyAt = 0L
         socket = ws
     }
@@ -550,8 +611,12 @@ object PoseShare {
         socket = null; ready = false; wanted = false; room = null
         roster.clear(); subjects.clear(); tracks.clear()
         guiFrame = null; sentWatch = false
-        PeerLink.stop(); sentPort = 0
+        stopTurn()
         runCatching { ws?.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }
+    }
+
+    private fun stopTurn() {
+        turn.stop(); creds = null; credsAskedAt = 0L; turnAddr = ""; sentAddr = ""; viaTurn.clear()
     }
 
     // The JDK socket takes one frame at a time; each waits for the one before it.
@@ -575,15 +640,21 @@ object PoseShare {
                 ready = true; backoff = 2_000L
                 lastProblem = null
                 DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt})")
-                mySlot = m["slot"]?.asInt ?: 0; v6 = m["v6"]?.asBoolean == true
+                mySlot = m["slot"]?.asInt ?: 0
+                turnOffered = m["turn"]?.asBoolean == true
+                colo = m["colo"]?.asString?.filter { it in 'A'..'Z' }?.take(8) ?: ""
                 relayExtras = m["x"]?.takeIf { it.isJsonArray }?.asJsonArray?.mapNotNull { e -> runCatching { e.asInt }.getOrNull() }?.toSet() ?: emptySet()
             }
             "w" -> wanted = m["w"]?.asInt == 1
+            "tc" -> {
+                val u = m["u"]?.asString ?: return; val p = m["p"]?.asString ?: return
+                if (u.length in 1..512 && p.length in 1..512) creds = u to p
+            }
             "pe" -> {
                 val s = m["s"]?.asInt ?: return
-                if (p2p && roster.containsKey(s)) PeerLink.add(s, m["a"]?.asString ?: return, m["k"]?.asString ?: return)
+                if (roster.containsKey(s)) turn.add(s, m["a"]?.asString ?: return, m["k"]?.asString ?: return)
             }
-            "px" -> m["s"]?.asInt?.let { PeerLink.remove(it) }
+            "px" -> m["s"]?.asInt?.let { turn.remove(it) }
             "r" -> {
                 roster.clear()
                 m["m"]?.asJsonArray?.forEach { e ->
@@ -591,7 +662,7 @@ object PoseShare {
                     val slot = a[0].asInt; val name = ids[a[1].asString] ?: return@forEach
                     if (slot in 1..255 && name in teammates) roster[slot] = name
                 }
-                PeerLink.retain(roster.keys)
+                turn.retain(roster.keys)
             }
             "s" -> {
                 val i = m["i"]?.asInt ?: return; val n = m["n"]?.asString?.let { ids[it] } ?: return
@@ -626,7 +697,7 @@ object PoseShare {
         }
     }
 
-    /** A frame straight from a peer ([PeerLink]): its own pose, or its terminal (relayed teammates only come by the relay). */
+    /** A frame over TURN ([TurnLink]): its own pose, or its terminal (relayed teammates only come by the relay). */
     fun direct(slot: Int, kind: Int, body: ByteArray) {
         val sender = roster[slot] ?: return
         val now = System.nanoTime()
@@ -667,7 +738,7 @@ object PoseShare {
     }
 
     /**
-     * A pose heard: [raw] the sender's tick (relayed) or its ms (peer-to-peer, [timed]), both 16 bits; [pos] null for a look
+     * A pose heard: [raw] the sender's tick (relayed) or its ms (over TURN, [timed]), both 16 bits; [pos] null for a look
      * alone; [item] -1 when it didn't come.
      */
     private fun heard(name: String, via: String?, source: Int, now: Long, direct: Boolean, timed: Boolean, raw: Long, pos: Vec3?, yaw: Float, pitch: Float, flags: Int, item: Int, delayMs: Int) {
@@ -681,7 +752,7 @@ object PoseShare {
                 if (fresh) return
                 t.source = source; reset(t)
             }
-            // Peer-to-peer over the relay's ticks: while it comes, the same pose a tick at a time (relayed for others) is
+            // TURN over the relay's ticks: while it comes, the same pose a tick at a time (relayed for others) is
             // skipped; it starting (or ticks after it stopped) starts the timing over.
             if (t.timed != timed) {
                 if (!timed && fresh) return
@@ -691,7 +762,7 @@ object PoseShare {
             t.via = via
             // 16 bits unwrapped against the newest (ticks wrap after 55 minutes, ms after 65 s).
             val s = if (t.lastSeq < 0) raw else t.lastSeq + ((raw - (t.lastSeq and 0xFFFF) + 0x8000) and 0xFFFF) - 0x8000
-            // Relayed ticks only ever move on; peer-to-peer, a pose sent again from before a move comes after later looks.
+            // Relayed ticks only ever move on; over TURN, a pose sent again from before a move comes after later looks.
             if (!timed && t.lastSeq >= 0 && s <= t.lastSeq) return
             if (timed && t.lastSeq >= 0 && s < t.lastSeq - 1000) return
             val time = if (timed) s * 1_000_000L else s * TICK_NS
@@ -711,7 +782,7 @@ object PoseShare {
             t.lastArrived = now
             val target = (t.gap + 2 * t.jitter + 2_000_000).toLong().coerceIn(BUFFER_MIN_NS, BUFFER_MAX_NS)
             t.buffer = (t.buffer * 0.95 + target * 0.05).toLong()
-            val delay = if (direct) PeerLink.rttMs(source).let { if (it > 0) (it / 2).toInt() else 0 } else delayMs
+            val delay = if (direct) turn.rttMs(source).let { if (it > 0) (it / 2).toInt() else 0 } else delayMs
             // Kept in time order (a pose from before a move can come after it).
             val sample = Sample(s, time, now, pos ?: Vec3.ZERO, yaw, pitch.coerceIn(-90f, 90f), flags, maxOf(item, 0), delay, direct)
             var i = t.samples.size
@@ -726,6 +797,7 @@ object PoseShare {
                 if (j >= t.ticks.size - 1) { if (item >= 0) t.item = item; t.sneaking = flags and 2 != 0 }
             }
             if (flags and 1 != 0) t.swingAt = now
+            t.arrivals++
         }
     }
 
@@ -795,6 +867,99 @@ object PoseShare {
         }
 
         override fun onError(ws: WebSocket, error: Throwable) { if (socket === ws) { problem("socket error: ${error.message}"); retryLater() } }
+    }
+
+    // --- debug info --------------------------------------------------------------------------------------------------------
+
+    private var dbgAt = 0L
+    private var dbgLogAt = 0L
+    private val dbgCounts = LongArray(3)
+    private val dbgRates = DoubleArray(3)
+    private val dbgArrivals = HashMap<String, Long>()
+    private val dbgPoseRate = HashMap<String, Double>()
+    private val dbgTurnIn = HashMap<Int, Pair<Long, Long>>()
+    private val dbgLoss = HashMap<Int, Double>()
+
+    /** The rates behind [debugLines], a second at a time. */
+    private fun debugRates(nowMs: Long) {
+        if (nowMs - dbgAt < 1000) return
+        val dt = if (dbgAt == 0L) 1.0 else (nowMs - dbgAt) / 1000.0
+        dbgAt = nowMs
+        val counts = longArrayOf(turn.framesOut.get(), turn.bytesOut.get(), turn.bytesIn.get())
+        for (i in 0 until 3) { dbgRates[i] = (counts[i] - dbgCounts[i]) / dt; dbgCounts[i] = counts[i] }
+        for ((name, t) in tracks) {
+            val n = synchronized(t) { t.arrivals }
+            dbgPoseRate[name] = (n - (dbgArrivals[name] ?: n)) / dt
+            dbgArrivals[name] = n
+        }
+        for (slot in roster.keys) {
+            val p = turn.peer(slot) ?: continue
+            val (inBefore, lostBefore) = dbgTurnIn[slot] ?: (p.framesIn to p.lost)
+            val got = p.framesIn - inBefore; val lost = p.lost - lostBefore
+            dbgLoss[slot] = if (got + lost > 0) lost * 100.0 / (got + lost) else 0.0
+            dbgTurnIn[slot] = p.framesIn to p.lost
+        }
+    }
+
+    private fun ms(v: Double) = if (v < 0) "?" else "%.0f ms".format(v)
+
+    /** "Debug info": how sharing is going, a line each (text, colour): the relay, TURN, and each teammate. */
+    fun debugLines(): List<Pair<String, Int>> {
+        val nowMs = System.currentTimeMillis()
+        val now = System.nanoTime()
+        debugRates(nowMs)
+        val grey = 0xFFB0B0B0.toInt(); val green = 0xFF60E080.toInt(); val yellow = 0xFFE0C040.toInt(); val red = 0xFFFF6060.toInt()
+        val out = ArrayList<Pair<String, Int>>()
+        out += when {
+            socket == null -> "relay: offline" + (lastProblem?.let { " ($it)" } ?: "") to red
+            !ready -> "relay: signing in" to yellow
+            else -> "relay: connected" + (if (colo.isNotEmpty()) " via $colo" else "") + " · slot $mySlot · round trip ${ms(rttMs)} · ${roster.size} linked · " +
+                (if (wanted) "a teammate is watching" else "nobody watching") to green
+        }
+        out += when {
+            !ready -> "TURN: waiting for the relay" to grey
+            !turnOffered -> "TURN: the relay has no TURN key yet (relay only)" to yellow
+            creds == null -> (if (roster.isEmpty()) "TURN: waiting for a linked teammate" else "TURN: asking for credentials") to grey
+            turn.state == TurnLink.State.ALLOCATING -> "TURN: allocating at turn.cloudflare.com" to yellow
+            turn.state == TurnLink.State.FAILED -> "TURN: failed (${turn.problem ?: "?"})" + (if (turn.needsCredentials) ", asking for new credentials" else ", retrying") to red
+            turn.ready -> "TURN: ready · server ${ms(turn.serverRttMs)} round trip · allocation ${turn.lifetimeS}s · out %.0f frames/s · up %.1f kB/s · down %.1f kB/s"
+                .format(dbgRates[0], dbgRates[1] / 1000, dbgRates[2] / 1000) to green
+            else -> "TURN: off" to grey
+        }
+        out += "optimize server location: ${if (optimize) "on" else "off"} · looks at ${1_000_000_000L / frameNs} fps over TURN" to grey
+        val me = mc.user.name.lowercase()
+        for (name in teammates.sorted()) {
+            if (name == me) continue
+            val slot = roster.entries.firstOrNull { it.value == name }?.key
+            val t = tracks[name]
+            val sb = StringBuilder(name).append(": ")
+            var color = grey
+            if (slot == null) sb.append("not linked (no mod, or not in sight yet)")
+            else {
+                val p = turn.peer(slot)
+                val fast = viaTurn[slot] == true
+                color = if (fast) green else yellow
+                sb.append(if (fast) "TURN" else "relay")
+                if (p != null) {
+                    sb.append(" · TURN ").append(if (p.bound) ms(if (p.rttMs < 0) -1.0 else p.rttMs / 2) + " one way" else "binding")
+                    sb.append(" · relay ").append(ms(relayPathMs(p))).append(" one way")
+                    sb.append(" · lost %.1f%%".format(dbgLoss[slot] ?: 0.0))
+                } else sb.append(if (turn.ready) " · no TURN address from them yet" else " · no TURN")
+            }
+            if (t != null) synchronized(t) {
+                val last = t.samples.lastOrNull()
+                if (last != null) {
+                    t.via?.let { sb.append(" · relayed by ").append(it) }
+                    sb.append(" · %.0f poses/s · buffer %.0f ms · jitter %.1f ms · %s · heard %d ms ago".format(
+                        dbgPoseRate[name] ?: 0.0, t.buffer / 1e6, t.jitter / 1e6, if (t.timed) "timed" else "ticks", (now - last.arrived) / 1_000_000))
+                    if (now - last.arrived > STALE_NS) color = red
+                }
+                if (t.gui != null) sb.append(" · terminal open")
+            }
+            out += sb.toString() to color
+        }
+        if (debug && nowMs - dbgLogAt > 10_000) { dbgLogAt = nowMs; DevgineerClient.logger.info("[pose share] debug: " + out.joinToString(" | ") { it.first }) }
+        return out
     }
 
     // --- rooms -------------------------------------------------------------------------------------------------------------
