@@ -30,9 +30,9 @@ import java.util.concurrent.ConcurrentHashMap
  * (the leap menu open, or a leap in hand, ready for it): where you stand and look (and what you hold, and your swings),
  * the same for each teammate you can see who doesn't share for themselves (so one out of someone's range still shows if
  * you can see them), and Odin's solution to the terminal you have open. The relay passes it only to party members who
- * list you as you list them, each signed in with their account's Mojang-signed profile key (the key the game signs chat
- * with; nothing secret leaves the game) once a game session; after that a pass from the relay, kept in memory, signs in
- * again. The relay knows accounts by UUID; each game matches them to its own teammates through the player list.
+ * list you as you list them, by name and by the entity id Hypixel gave each in this run: never on screen and known only
+ * to games in the run, so neither a stream of it nor knowing the server lets anyone pose as a teammate. No Mojang, no
+ * accounts, nothing about you but that.
  *
  * What arrives is never trusted past what it can show: names must be your own teammates, items are looked up by id (no
  * names, no components), and a terminal is only its type and the cells to click, inside that terminal's own grid and
@@ -49,7 +49,6 @@ object PoseShare {
     private const val GUI_STALE_NS = 3_000_000_000L
     /** While still, your pose is sent this often rather than every tick (well inside [STALE_NS]). */
     private const val STILL_NS = 100_000_000L
-    private const val PASS_MS = 11 * 3600_000L
     private val LOBBY = Regex("[A-Za-z0-9]{1,24}")
     private val STARTS_WITH = Regex("^What starts with: '([A-Za-z])'\\?$")
     private val SELECT = Regex("^Select all the ([\\w ]+) items!$")
@@ -68,6 +67,7 @@ object PoseShare {
     private var backoff = 2_000L
     private var seq = 0
     @Volatile private var sentParty: List<String> = emptyList()
+    private var sentEntries: List<String> = emptyList()
     @Volatile private var partyAt = 0L
     private var lastPing = 0L
     private var wasSwinging = false
@@ -81,11 +81,6 @@ object PoseShare {
     private var selfAt = 0L
     private var wasWanted = false
 
-    /** The relay's pass for signing in again without Mojang, for [passName], until [passUntil]; memory only. */
-    @Volatile private var pass: String? = null
-    @Volatile private var passName: String? = null
-    @Volatile private var passUntil = 0L
-    @Volatile private var usedPass = false
 
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
@@ -197,9 +192,9 @@ object PoseShare {
 
         // The party, whenever it changes (the relay takes one every 2 s).
         val party = partyNow()
-        if (party.map { it.first } != sentParty && nowMs - partyAt > 2100) {
+        if (party.map { it.second } != sentEntries && nowMs - partyAt > 2100) {
             sendText(JsonObject().apply { addProperty("t", "p"); add("p", JsonArray().apply { party.forEach { add(it.second) } }) }.toString())
-            sentParty = party.map { it.first }; partyAt = nowMs
+            sentParty = party.map { it.first }; sentEntries = party.map { it.second }; partyAt = nowMs
         }
 
         // Whether you're watching: on at once, off only after a moment (so flicking the menu doesn't spam it).
@@ -342,14 +337,14 @@ object PoseShare {
 
     /**
      * The socket is open: it's ours from here, before anything on it is read (the relay's challenge comes at once, and
-     * signing in with a pass answers it straight away). One for a dungeon left meanwhile is closed again.
+     * signing in answers it straight away). One for a dungeon left meanwhile is closed again.
      */
     private fun opened(ws: WebSocket, lobby: String) {
         if (room != lobby) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; return }
         sending = CompletableFuture.completedFuture(null)
         ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
         PeerLink.stop(); sentPort = 0
-        roster.clear(); subjects.clear(); sentParty = emptyList(); partyAt = 0L
+        roster.clear(); subjects.clear(); sentParty = emptyList(); sentEntries = emptyList(); partyAt = 0L
         socket = ws
     }
 
@@ -362,63 +357,42 @@ object PoseShare {
         DevgineerClient.logger.warn("[pose share] $what")
     }
 
-    /** An account as the relay knows it: its UUID, 32 hex without dashes. */
-    private fun id(u: java.util.UUID) = u.toString().replace("-", "")
+    /**
+     * Each teammate's entity id this run (lower-case name -> id), from when they were last in sight: with the name, it is
+     * how the relay knows a player (see adr/src/pose.js). It is never on screen and only games in the run have it, so a
+     * stream of the run, or knowing the server, isn't enough to pose as anyone.
+     */
+    private val eids = HashMap<String, Int>()
 
-    /** UUID -> name (lower case) of your teammates, from the player list (as Odin finds them): what the relay names. */
+    /** "name:entity id" -> name (lower case) of your teammates: what the relay names, matched to who they are here. */
     @Volatile private var ids: Map<String, String> = emptyMap()
 
     private fun idsNow(): Map<String, String> {
-        val c = mc.connection ?: return emptyMap()
-        return DungeonUtils.dungeonTeammates.mapNotNull { t -> c.getPlayerInfo(t.name)?.profile?.id?.let { id(it) to t.name.lowercase() } }.toMap()
+        val level = mc.level ?: return emptyMap()
+        val names = DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name.lowercase() }
+        eids.keys.retainAll(names)
+        for (p in level.players()) { val n = p.name.string.lowercase(); if (n in names) eids[n] = p.id }
+        return eids.entries.associate { (n, id) -> "$n:$id" to n }
     }
 
-    /** Your teammates but you (name, UUID), in the order sent: kind 2 frames point into it. */
+    /** Your teammates but you (name, "name:entity id"), in the order sent: kind 2 frames point into it. */
     private fun partyNow(): List<Pair<String, String>> {
-        val c = mc.connection ?: return emptyList()
         val me = mc.user.name.lowercase()
         return DungeonUtils.dungeonTeammates.mapNotNull { t ->
             val n = t.name.lowercase()
-            if (n == me) null else c.getPlayerInfo(t.name)?.profile?.id?.let { n to id(it) }
+            if (n == me) null else eids[n]?.let { n to "$n:$it" }
         }.take(6)
     }
 
-    /**
-     * The relay's challenge: our pass if we have one, otherwise signed with the account's profile key (the one the game
-     * signs chat with, Mojang-signed; off the game thread). Then who we are and our party.
-     */
-    private fun signIn(ws: WebSocket, serverId: String) {
-        Thread.ofPlatform().name("devgineerclient-pose-signin").daemon(true).start {
-            try {
-                val u = mc.user
-                val me = id(u.profileId)
-                val k = pass?.takeIf { passName == me && System.currentTimeMillis() < passUntil }
-                usedPass = k != null
-                val party = partyNow()
-                sentParty = party.map { it.first }; partyAt = System.currentTimeMillis()
-                val msg = JsonObject().apply {
-                    addProperty("t", "a"); addProperty("u", me); add("p", JsonArray().apply { party.forEach { add(it.second) } })
-                }
-                if (k != null) msg.addProperty("k", k)
-                else {
-                    val pair = mc.profileKeyPairManager.prepareKeyPair().get(15, java.util.concurrent.TimeUnit.SECONDS).orElse(null)
-                    if (pair == null) { problem("no profile key (chat signing) for this account"); retryLater(60_000L); return@start }
-                    val data = pair.publicKey().data()
-                    val b64 = java.util.Base64.getEncoder()
-                    val sig = java.security.Signature.getInstance("SHA256withRSA").apply {
-                        initSign(pair.privateKey()); update("pose1|$serverId".toByteArray())
-                    }.sign()
-                    msg.addProperty("key", b64.encodeToString(data.key().encoded))
-                    msg.addProperty("exp", data.expiresAt().toEpochMilli())
-                    msg.addProperty("ks", b64.encodeToString(data.keySignature()))
-                    msg.addProperty("sig", b64.encodeToString(sig))
-                }
-                if (socket === ws) sendText(msg.toString())
-            } catch (e: Exception) {
-                problem("sign-in failed: ${e.javaClass.simpleName}")
-                if (socket === ws) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; retryLater() }
-            }
-        }
+    /** The relay's challenge: who we are ("name:entity id") and our party, the same. */
+    private fun signIn(ws: WebSocket, @Suppress("UNUSED_PARAMETER") challenge: String) {
+        val me = mc.player ?: return
+        val party = partyNow()
+        sentParty = party.map { it.first }; sentEntries = party.map { it.second }; partyAt = System.currentTimeMillis()
+        if (socket === ws) sendText(JsonObject().apply {
+            addProperty("t", "a"); addProperty("u", "${me.name.string.lowercase()}:${me.id}")
+            add("p", JsonArray().apply { party.forEach { add(it.second) } })
+        }.toString())
     }
 
     private fun retryLater(minMs: Long = 0L) {
@@ -430,6 +404,7 @@ object PoseShare {
 
     fun close() {
         val ws = socket
+        eids.clear()
         socket = null; ready = false; wanted = false; room = null
         roster.clear(); subjects.clear(); tracks.clear()
         guiFrame = null; sentWatch = false
@@ -453,13 +428,12 @@ object PoseShare {
     private fun onText(ws: WebSocket, text: String) {
         val m = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return
         when (m["t"]?.asString) {
-            "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { signIn(ws, it) }
+            "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { s -> mc.execute { DevgineerClient.safely("pose share") { signIn(ws, s) } } }
             "ok" -> {
                 ready = true; backoff = 2_000L
                 lastProblem = null
-                DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt}${if (usedPass) ", with a pass" else ""})")
+                DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt})")
                 mySlot = m["slot"]?.asInt ?: 0; v6 = m["v6"]?.asBoolean == true
-                m["k"]?.asString?.takeIf { it.length <= 100 }?.let { pass = it; passName = id(mc.user.profileId); passUntil = System.currentTimeMillis() + PASS_MS }
             }
             "w" -> wanted = m["w"]?.asInt == 1
             "pe" -> {
@@ -608,8 +582,7 @@ object PoseShare {
             when (statusCode) {
                 // Replaced by another game on this account: that one shares; this one waits a while.
                 4002 -> retryLater(60_000L)
-                // A pass the relay no longer takes (its key changed): straight back, through Mojang.
-                4001 -> if (usedPass) { pass = null; retryLater() } else retryLater(10_000L)
+                4001 -> retryLater(10_000L)
                 // Mojang busy: well back off.
                 4005 -> retryLater(30_000L)
                 else -> retryLater()
