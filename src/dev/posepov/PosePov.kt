@@ -35,6 +35,7 @@ import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
@@ -175,6 +176,10 @@ object PosePov : Module(
             }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
             DevgineerClient.safely("pose pov export") { exportTick() }
+            // In a dungeon, every room's geometry onto disk in the background (once; paced), so none is ever built or waited for.
+            DevgineerClient.safely("pose pov prefetch") {
+                if (enabled && DungeonUtils.inDungeons) { KnownWorld.load {}; BlockMesh.prefetchAll(DungeonUtils.floor.let { it == Floor.F7 || it == Floor.M7 }) }
+            }
         }
         // `/posepov export`: every room, variant and the arena built here and written out, for undonecoffee.com to hand out.
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
