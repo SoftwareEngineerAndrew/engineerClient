@@ -30,7 +30,8 @@
 //         growth order shuffled by m, each tried with chance c); k tries at a random placement over the cell
 //         (0 = any that fits); q, p oldest-/newest-first; f the first room's doors to all its neighbours; r held cells;
 //         i=1 the entrance's door inward (every real map's is)
-// Closest so far: grow:bfs0.1:c3f (nothing held back); cells:bfs0.2:rnd:res4 before it.
+// Closest so far: u:mode=grow/k=3/b=22/w=0.39,1,0.83,1,1/s=0.73/f=0/i=1/q=0/p=0.3/c=8/r=5 (the entrance's door
+// inward), tied with u:mode=grow/q=0.05/f=1/c=8/k=3/r=4/b=22/w=0.39,1,0.83,1,1/s=0.73 (its door anywhere).
 const T0 = './';
 const { complete } = await import(T0 + 'common.mjs');
 const { prep } = await import(T0 + 'sim.mjs');

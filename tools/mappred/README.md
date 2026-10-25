@@ -197,7 +197,23 @@ all its neighbours, 4 cells held back. The first room's doors are needed most (m
 1000-1250 with), 2-3 tries beat 1 and "any that fits", held cells still help (1500 maps: 1449 with 4, 3038
 without): in a generator that makes the rooms as the tree grows they keep the big rooms off the entrance
 (placefit -0.34, without -0.77, real -0.20) and apart (7.08 pairs touching, without 7.90, real 6.86) - they
-stand in for something that holds the big rooms back early, not found. Still off: going round inside a 2x2
+stand in for something that holds the big rooms back early, not found.
+
+The entrance's door always leads inward (2476 of 2476 real maps); the generator above sent it to a random
+neighbour, along the edge 79% of the time (`i=1` fixes it). With the door inward the "bump" at walk 2 (real
+0.89 big rooms entered there) comes by itself (0.83-0.95; along the edge 0.64), and so do the room behind the
+entrance's doors (a 1x1 there with 4 doors: real 34%, inward 21-28%, along the edge 14%): no doors-first rule
+is needed, the walk-2 cells are simply the room behind the entrance's three free sides. The closest inward
+setting is `u:mode=grow/k=3/b=22/w=0.39,1,0.83,1,1/s=0.73/f=0/i=1/q=0/p=0.3/c=8/r=5` (newest-first 0.3, the
+predictor's own grow; no first-room flood): 1372 on 1200 maps against 1270 for the old one, 777 against 941 on
+600 (a tie within the noise). Held cells are still needed there: without them the room behind the entrance is
+big 98% of the time (real 71%; r=5 79%, r=7 72%). Still off: the two cells beside the entrance along the edge
+(real 1.04 big rooms, 0.75 dead ends; inward 0.73, 0.99), which a generator that places the big rooms before
+the tree reaches - another sign the rooms come first.
+
+In the predictor (big rooms placed first, uniformly) the held cells are mostly smoothing: calibrated, the
+no-held version scores -1.0405 held-out against -1.0393 with 5 held (raw -1.0460 against -1.0417), so about
+70% of their gain is the calibration's (the sampler too sure of big tiles: sharpness 0.75 without, 0.88 with). Still off: going round inside a 2x2
 (0.2%, real 11%), the fairy (14-21% on an edge, real 28%), the entrance's pull (-0.34).
 
 Predicting with it (MCMC on a part-known map) needs the chance of a whole map under the generator, a sum over
