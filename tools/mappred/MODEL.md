@@ -127,8 +127,19 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
 `sampler3.mjs` with the rule above, on held-out maps (independently checked on fresh maps and a new seed): +0.037
 ll/tile over its first version at 9-12 rooms known, and ahead of the mod's current predictor at every stage
 (+0.020 at 9-12 rooms known, +0.022 at 2-4); with 1500 samples per snapshot, on 150 maps it was never tuned
-on, -1.0737 against the current predictor's -1.0847 at 2-6 rooms known (+0.011, s.e. 0.0045). Being ported into
-the mod (`src/mappred`) for F7.
+on, -1.0737 against the current predictor's -1.0847 at 2-6 rooms known (+0.011, s.e. 0.0045). In the mod
+(`src/mappred/GameSampler.kt`) it is the F7 predictor.
+
+In the mod, run as its worker runs it (2000 samples, with its calibration), against the classic sampler on 247
+held-out maps (1235 snapshots at 2/4/6/9/12 rooms known; `targets.mjs`, paired, s.e. clustered by map), it is ahead
+on each thing the map is read for and never behind by more than noise at any stage or in any set:
+- blood: log chance at blood's tile +0.051 (s.e. 0.015); top-1 51.9% / 50.5%, top-3 73.7% / 73.1% (ties);
+- puzzles: per-tile log loss of puzzle or not +0.0052 (s.e. 0.0012); of the r likeliest tiles 40.9% / 39.3% right;
+- big rooms: per-tile log loss of big or not +0.0091 (s.e. 0.0022); tiles at 70%+ big that are right, 4.51 / 4.11
+  a snapshot (s.e. 0.05);
+- all classes: +0.0184 ll/tile (s.e. 0.0028).
+Its lead is the same size on the three (at most 1.0 s.e. apart), so the mod has one F7 predictor rather than one
+per target.
 
 Sampler switches measured at 1500 samples on fresh maps, late stages (9-12 known; all off by default, none
 helps clearly so far): rarew (each rare past the 7th dead end x0.5) +0.002 (s.e. 0.002), move (shifting
