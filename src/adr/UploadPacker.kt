@@ -1563,13 +1563,16 @@ object UploadPacker {
     /** A run-length column of a field that goes by number (Stretch.tables, "tab2") as strings, at most [n]; [table] the run's list so far, [cat] the catalogue's. */
     private fun tabled(col: JsonElement, n: Int, table: MutableList<String?>, cat: List<JsonElement>?): List<String?> {
         val out = ArrayList<String?>()
+        fun numbered(q: Long) = if (q >= 0) table.getOrNull(q.toInt()) else cat?.getOrNull((-1 - q).toInt())?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.asString }
+        // (every row a number: written as numbers, not runs)
+        if (col is JsonArray) return nums(col, n).map { q -> q?.takeIf { it == Math.floor(it) }?.let { numbered(it.toLong()) } }
         val r = (col as? JsonObject)?.get("r") as? JsonArray ?: throw Malformed("column")
         var i = 0
         while (i + 1 < r.size() && out.size < n) {
             val v = r[i]; val k = long(r[i + 1])
             if (k < 0) throw Malformed("run")
             for (j in 0 until minOf(k, (n - out.size).toLong())) out += when {
-                v is JsonPrimitive && v.isNumber -> { val q = long(v); if (q >= 0) table.getOrNull(q.toInt()) else cat?.getOrNull((-1 - q).toInt())?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.asString } }
+                v is JsonPrimitive && v.isNumber -> numbered(long(v))
                 v is JsonPrimitive && v.isString -> v.asString.take(64).also { if (it.isNotEmpty() && table.size < SIB_MAX_IDS) table += it } // ("" isn't numbered)
                 else -> null
             }
