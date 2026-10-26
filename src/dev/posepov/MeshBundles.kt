@@ -3,7 +3,6 @@ package com.devgineerclient.posepov
 import com.engineerclient.p3sim.pack.Rot
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.renderpearl.api.buffers.GpuBuffer
-import net.minecraft.client.renderer.texture.TextureAtlasSprite
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -13,8 +12,6 @@ import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -40,9 +37,21 @@ object MeshBundles {
         val hasSight get() = visLen > 0
         private val byPlace = HashMap<Int, Int>(places.size * 2).also { m -> places.forEachIndexed { i, p -> m[p] = i } }
         fun find(lx: Int, ly: Int, lz: Int): Int = byPlace[place(lx, ly, lz)] ?: -1
-        @Volatile var sprites: Array<TextureAtlasSprite>? = null
-        fun sprites(): Array<TextureAtlasSprite>? = sprites ?: MeshCodec.sprites()?.let { sp -> Array(names.size) { sp.named(names[it]) } }?.also { sprites = it }
+        /** A number of its own, for the GPU pool's keys. */
+        val id = ids.incrementAndGet()
+        @Volatile private var spriteIdx: IntArray? = null
+        @Volatile private var spriteGen = -1
+        /** Its textures as numbers in the sprite table (any thread, once the table is made); null until then. */
+        fun spriteIndices(): IntArray? {
+            val gen = CompactMesh.SpriteTable.generation
+            spriteIdx?.takeIf { spriteGen == gen }?.let { return it }
+            if (!CompactMesh.SpriteTable.ready) return null
+            val sp = MeshCodec.sprites() ?: return null
+            return IntArray(names.size) { CompactMesh.SpriteTable.of(sp.named(names[it])) }.also { spriteIdx = it; spriteGen = gen }
+        }
     }
+
+    private val ids = java.util.concurrent.atomic.AtomicInteger()
 
     fun place(lx: Int, ly: Int, lz: Int) = ((lx and 0xFF) shl 16) or ((ly and 0xFF) shl 8) or (lz and 0xFF)
     fun placeX(p: Int) = (p shr 16) and 0xFF
@@ -161,97 +170,170 @@ object MeshBundles {
         return b
     }
 
-    /** The texture lookups are for the old atlas. */
-    fun atlasChanged() { for (b in loaded.values) b.sprites = null }
-
     /** How many bundles are in memory (one more arriving changes what a feed draws). */
     val count get() = loaded.size
 
     fun cached(name: String): ByteArray? = MeshDisk.read(key(name))?.second
 }
 
+
 /**
- * The pieces on the GPU: decoded only when a feed could show them, into shared pools (one buffer holding many pieces), each
- * piece's groups (by the way they face) one after another. Render thread.
+ * The pieces on the GPU, in [CompactMesh]'s form: decoded and merged on worker threads only when a feed could show them, then
+ * put into shared pools (one buffer holding many pieces, each piece's groups one after another). A piece nothing has drawn
+ * for [IDLE_MS] gives its room back, and when the pools are at [MAX_POOLS] the ones unused longest go first, so the memory
+ * stays under the cap however long the game runs. Render thread, except the decoding.
  */
 object PiecePool {
     private const val POOL_VERTICES = 1 shl 19
-    private const val MAX_POOLS = 16
+    /** 32 pools of 8 MB: 256 MB at most. */
+    private const val MAX_POOLS = 32
+    private const val IDLE_MS = 60_000L
+    /** When the pools are full, pieces unused this long make room. */
+    private const val CROWDED_IDLE_MS = 2_000L
+    private const val IN_FLIGHT = 64
 
-    class Resident(val buffer: GpuBuffer, val first: Int, val quads: IntArray, val dirs: IntArray)
-    private class Pool(val buffer: GpuBuffer, val vertices: Int) { var used = 0 }
+    class Resident internal constructor(val buffer: GpuBuffer, val first: Int, val counts: IntArray, internal val pool: Pool, internal val vertices: Int) {
+        internal var usedAt = 0L
+    }
+    internal class Pool(val buffer: GpuBuffer, val vertices: Int) {
+        /** Free runs: first vertex to length. */
+        val free = java.util.TreeMap<Int, Int>().apply { put(0, vertices) }
+        var used = 0
+
+        fun alloc(n: Int): Int {
+            for ((at, len) in free) if (len >= n) {
+                free.remove(at)
+                if (len > n) free[at + n] = len - n
+                used += n
+                return at
+            }
+            return -1
+        }
+
+        fun release(at: Int, n: Int) {
+            used -= n
+            var start = at; var len = n
+            free.floorEntry(at)?.let { (s, l) -> if (s + l == at) { free.remove(s); start = s; len += l } }
+            free[start + len]?.let { l -> free.remove(start + len); len += l }
+            free[start] = len
+        }
+    }
     private class Want(val bundle: MeshBundles.Bundle, val piece: Int, val rot: Rot, val w: Int, val d: Int, var priority: Double)
+    private class Done(val key: Long, val epoch: Int, val packed: CompactMesh.Packed?)
 
     private val pools = ArrayList<Pool>()
-    private val resident = HashMap<String, Resident>()
+    private val resident = HashMap<Long, Resident>()
     /** Pieces with nothing in them (never take room). */
-    private val empty = HashSet<String>()
-    private val wanted = HashMap<String, Want>()
-    private var scratch: ByteBuffer = ByteBuffer.allocateDirect(1 shl 20).order(ByteOrder.nativeOrder())
-    /** Bumped whenever what's on the GPU changes (for feeds that would otherwise look the same as last frame). */
-    var uploads = 0L; private set
+    private val empty = HashSet<Long>()
+    private val wanted = HashMap<Long, Want>()
+    private val inFlight = HashSet<Long>()
+    private val done = java.util.concurrent.ConcurrentLinkedQueue<Done>()
+    private var epoch = 0
+    private val workers = Executors.newFixedThreadPool(2) { r -> Thread(r, "pose pov decode").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
+    private val quads = ThreadLocal.withInitial { CompactMesh.Quads(1024) }
+    private var now = 0L
+    private var idleCheckAt = 0L
+    /** Bumped whenever what's on the GPU changes (a piece arrives or goes): what a feed resolved to draw is stale. */
+    var version = 0L; private set
     /** The most indices one draw can need: a whole pool. */
     var mostIndices = 0; private set
+    var evictions = 0L; private set
+    /** Bumped for every ask for a piece that isn't on the GPU yet (one that is never: nothing is missing). */
+    var asked = 0L; private set
 
-    fun key(bundle: MeshBundles.Bundle, piece: Int, rot: Rot) = "${bundle.name}|${rot.ordinal}|$piece"
+    fun key(bundle: MeshBundles.Bundle, piece: Int, rot: Rot): Long = (bundle.id.toLong() shl 32) or (rot.ordinal.toLong() shl 28) or piece.toLong()
 
-    /** The piece when it's on the GPU; otherwise asked for (nearest first: lower [priority]) and null. */
+    /** The piece when it's on the GPU (and now in use); otherwise asked for (nearest first: lower [priority]) and null. */
     fun get(bundle: MeshBundles.Bundle, piece: Int, rot: Rot, w: Int, d: Int, priority: Double): Resident? {
         val k = key(bundle, piece, rot)
-        resident[k]?.let { return it }
+        resident[k]?.let { it.usedAt = now; return it }
         if (k in empty || bundle.lens[piece] == 0) return null
+        asked++
+        if (k in inFlight) return null
         val prev = wanted[k]
         if (prev == null) wanted[k] = Want(bundle, piece, rot, w, d, priority) else if (priority < prev.priority) prev.priority = priority
         return null
     }
 
-    /** Decodes and uploads what was asked for, nearest first, for at most [budgetNs]. */
+    /** Uploads what the workers finished for at most [budgetNs], then hands them what was asked for since, nearest first. */
     fun load(budgetNs: Long) {
-        if (wanted.isEmpty()) return
+        now = System.currentTimeMillis()
+        if (!CompactMesh.SpriteTable.ensure()) return
         val start = System.nanoTime()
-        val order = wanted.entries.sortedBy { it.value.priority }
-        for ((k, w) in order) {
-            if (System.nanoTime() - start > budgetNs) break
-            wanted.remove(k)
-            runCatching { upload(k, w) }.onFailure { empty += k }
+        while (System.nanoTime() - start < budgetNs) {
+            val d = done.poll() ?: break
+            if (d.epoch != epoch) continue
+            inFlight.remove(d.key)
+            val p = d.packed
+            if (p == null || p.quads == 0) { empty += d.key; continue }
+            upload(d.key, p)
         }
-        // What wasn't reached is asked for again by the next frame that still wants it.
+        if (now - idleCheckAt > 1000) { idleCheckAt = now; evict(IDLE_MS, Int.MAX_VALUE) }
+        if (wanted.isEmpty()) return
+        val room = IN_FLIGHT - inFlight.size
+        if (room > 0) for ((k, w) in wanted.entries.sortedBy { it.value.priority }.take(room)) {
+            inFlight += k
+            val e = epoch
+            workers.execute {
+                val packed = runCatching {
+                    val b = w.bundle
+                    val sprites = b.spriteIndices() ?: return@runCatching null
+                    val q = quads.get()
+                    MeshCodec.decode(b.data, b.offs[w.piece], b.lens[w.piece], sprites, w.rot, w.w, w.d, q)
+                    CompactMesh.pack(q)
+                }.getOrNull()
+                done += Done(k, e, packed)
+            }
+        }
+        // What wasn't handed out is asked for again by the next frame that still wants it.
         wanted.clear()
     }
 
-    private fun upload(k: String, w: Want) {
-        val b = w.bundle
-        val sprites = b.sprites() ?: return
-        val quads = MeshCodec.counts(b.data, b.offs[w.piece], b.lens[w.piece]).sum()
-        if (quads == 0) { empty += k; return }
-        val bytes = quads * 4 * MeshCodec.VERTEX
-        if (scratch.capacity() < bytes) scratch = ByteBuffer.allocateDirect(Integer.highestOneBit(bytes) shl 1).order(ByteOrder.nativeOrder())
-        scratch.clear()
-        val counts = MeshCodec.decode(b.data, b.offs[w.piece], b.lens[w.piece], sprites, w.rot, w.w, w.d, scratch)
-        scratch.flip()
-        val vertices = quads * 4
-        val pool = pools.firstOrNull { it.vertices - it.used >= vertices } ?: newPool(vertices) ?: return
-        val first = pool.used
-        RenderSystem.getDevice().createCommandEncoder().writeToBuffer(pool.buffer.slice(first.toLong() * MeshCodec.VERTEX, bytes.toLong()), scratch)
-        pool.used += vertices
-        resident[k] = Resident(pool.buffer, first, counts, IntArray(MeshCodec.GROUPS) { MeshCodec.turn(it, w.rot) })
-        uploads++
+    private fun upload(k: Long, p: CompactMesh.Packed) {
+        val vertices = p.quads * 4
+        var pool: Pool? = null; var at = -1
+        fun tryAlloc(): Boolean { for (pl in pools) { val a = pl.alloc(vertices); if (a >= 0) { pool = pl; at = a; return true } }; return false }
+        if (!tryAlloc()) {
+            if (pools.size < MAX_POOLS) newPool(vertices)
+            else evict(CROWDED_IDLE_MS, vertices)
+            if (!tryAlloc()) return
+        }
+        val pl = pool!!
+        RenderSystem.getDevice().createCommandEncoder().writeToBuffer(pl.buffer.slice(at.toLong() * CompactMesh.VERTEX, p.bytes.remaining().toLong()), p.bytes)
+        resident[k] = Resident(pl.buffer, at, p.counts, pl, vertices).also { it.usedAt = now }
+        version++
     }
 
-    private fun newPool(atLeast: Int): Pool? {
-        if (pools.size >= MAX_POOLS) { clear(); return null }
+    /** Frees pieces unused for [idleMs], longest unused first, until a run of [need] vertices is free somewhere (or all of them). */
+    private fun evict(idleMs: Long, need: Int) {
+        val old = resident.entries.filter { now - it.value.usedAt > idleMs }.sortedBy { it.value.usedAt }
+        for ((k, r) in old) {
+            resident.remove(k); r.pool.release(r.first, r.vertices)
+            evictions++; version++
+            if (need != Int.MAX_VALUE && r.pool.free.values.any { it >= need }) return
+        }
+    }
+
+    private fun newPool(atLeast: Int) {
         val n = maxOf(POOL_VERTICES, atLeast)
-        val buf = RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov pieces" }, GpuBuffer.USAGE_VERTEX or GpuBuffer.USAGE_COPY_DST, n.toLong() * MeshCodec.VERTEX)
+        val buf = RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov pieces" }, GpuBuffer.USAGE_VERTEX or GpuBuffer.USAGE_COPY_DST, n.toLong() * CompactMesh.VERTEX)
         if (n / 4 * 6 > mostIndices) mostIndices = n / 4 * 6
-        return Pool(buf, n).also { pools += it }
+        pools += Pool(buf, n)
     }
 
-    /** Everything off the GPU (an atlas change, or the pools are full): pieces come back as they're wanted. */
+    /** Everything off the GPU (an atlas change): pieces come back as they're wanted. */
     fun clear() {
         for (p in pools) p.buffer.close()
-        pools.clear(); resident.clear(); empty.clear(); wanted.clear()
-        uploads++
+        pools.clear(); resident.clear(); empty.clear(); wanted.clear(); inFlight.clear(); done.clear()
+        epoch++; version++
     }
 
     val poolCount get() = pools.size
+    val residentCount get() = resident.size
+    /** Bytes the pieces take, and the pools hold. */
+    val usedBytes get() = pools.sumOf { it.used.toLong() } * CompactMesh.VERTEX
+    val poolBytes get() = pools.sumOf { it.vertices.toLong() } * CompactMesh.VERTEX
+    const val CAP_BYTES = MAX_POOLS.toLong() * POOL_VERTICES * CompactMesh.VERTEX
+    /** Pieces being decoded or waiting to go up. */
+    val queued get() = inFlight.size
 }

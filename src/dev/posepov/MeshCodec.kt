@@ -21,7 +21,7 @@ import java.util.zip.Inflater
  * the side it now faces (the game shades north and south 0.8, west and east 0.6).
  */
 object MeshCodec {
-    /** POSITION_TEX_COLOR: x y z u v as floats, then the colour's 4 bytes. */
+    /** POSITION_TEX_COLOR (what [encode] reads): x y z u v as floats, then the colour's 4 bytes. */
     const val VERTEX = 24
     const val GROUPS = 7
     private const val QUAD = 3 + 4 * 14
@@ -30,7 +30,7 @@ object MeshCodec {
     // --- the atlas --------------------------------------------------------------------------------------------------------
 
     /** The block atlas's sprites, found by atlas coordinates (a 512 x 512 grid of who covers each cell). */
-    class Sprites(list: List<TextureAtlasSprite>, private val atlas: TextureAtlas) {
+    class Sprites(val list: List<TextureAtlasSprite>, private val atlas: TextureAtlas) {
         private val grid = HashMap<Int, ArrayList<TextureAtlasSprite>>()
         init {
             for (s in list) for (gx in cell(s.u0)..cell(s.u1)) for (gy in cell(s.v0)..cell(s.v1)) grid.getOrPut(gx * 1024 + gy) { ArrayList(2) } += s
@@ -57,7 +57,7 @@ object MeshCodec {
     private fun local(f: Float, a: Float, b: Float) = if (b <= a) 0 else ((f - a) / (b - a) * 65535f + 0.5f).toInt().coerceIn(0, 65535)
 
     /** The way a quad faces by its corners (Direction order), or 6 when it isn't square to an axis (plants, rotated parts). */
-    private fun facing(b: ByteBuffer, at: Int): Int {
+    fun facing(b: ByteBuffer, at: Int): Int {
         fun c(k: Int, o: Int) = b.getFloat(at + k * VERTEX + o)
         val ax = c(1, 0) - c(0, 0); val ay = c(1, 4) - c(0, 4); val az = c(1, 8) - c(0, 8)
         val bx = c(2, 0) - c(0, 0); val by = c(2, 4) - c(0, 4); val bz = c(2, 8) - c(0, 8)
@@ -133,10 +133,12 @@ object MeshCodec {
     }
 
     /**
-     * A deflated piece back into atlas vertices in [out] (which must have room), turned [rot] in a box [w] x [d] (unturned
-     * size), with [names] the bundle's textures. Returns the quads per group, the groups in the order written.
+     * A deflated piece back into [out] (cleared first), turned [rot] in a box [w] x [d] (unturned size): per quad its texture
+     * as a number in the sprite table ([sprites], by the bundle's own texture numbers), the side it now faces, and per corner
+     * its turned position, u v across the texture and colour (its side's shade redone for the side it now faces).
      */
-    fun decode(packed: ByteArray, off: Int, len: Int, names: Array<TextureAtlasSprite>, rot: Rot, w: Int, d: Int, out: ByteBuffer): IntArray {
+    fun decode(packed: ByteArray, off: Int, len: Int, sprites: IntArray, rot: Rot, w: Int, d: Int, out: CompactMesh.Quads) {
+        out.clear()
         val inf = Inflater()
         val plain: ByteArray
         try {
@@ -149,24 +151,27 @@ object MeshCodec {
         val b = ByteBuffer.wrap(plain)
         val counts = IntArray(GROUPS) { b.getInt() }
         val total = counts.sum()
-        require(plain.size == 4 * GROUPS + total * QUAD && out.remaining() >= total * VERTEX * 4) { "bad piece" }
+        require(plain.size == 4 * GROUPS + total * QUAD) { "bad piece" }
         val ratio = FloatArray(6) { s -> SHADE[turn(s, rot)] / SHADE[s] }
+        var group = 0; var left = counts[0]
         for (qi in 0 until total) {
-            val s = names[b.getShort().toInt() and 0xFFFF]
+            while (left == 0) left = counts[++group]
+            left--
+            val name = b.getShort().toInt() and 0xFFFF
             val shade = b.get().toInt().coerceIn(0, 5)
             val k = ratio[shade]
+            val i = out.add(sprites.getOrElse(name) { 0 }, if (group < 6) turn(group, rot) else 6)
             for (c in 0 until 4) {
                 val x = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
                 val y = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
                 val z = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
-                out.putFloat(turnX(rot, x, z, w, d)).putFloat(y).putFloat(turnZ(rot, x, z, w, d))
-                out.putFloat(s.u0 + (b.getShort().toInt() and 0xFFFF) / 65535f * (s.u1 - s.u0))
-                out.putFloat(s.v0 + (b.getShort().toInt() and 0xFFFF) / 65535f * (s.v1 - s.v0))
+                out.pos[i * 12 + c * 3] = turnX(rot, x, z, w, d); out.pos[i * 12 + c * 3 + 1] = y; out.pos[i * 12 + c * 3 + 2] = turnZ(rot, x, z, w, d)
+                out.uv[i * 8 + c * 2] = (b.getShort().toInt() and 0xFFFF) / 65535f
+                out.uv[i * 8 + c * 2 + 1] = (b.getShort().toInt() and 0xFFFF) / 65535f
                 val col = b.getInt()
-                out.putInt(if (k == 1f) col else shaded(col, k))
+                out.col[i * 4 + c] = if (k == 1f) col else shaded(col, k)
             }
         }
-        return counts
     }
 
     /** The colour's red, green and blue times [k] (the int as the vertex buffer holds it: native order, alpha in its top byte). */
