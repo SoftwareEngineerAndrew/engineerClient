@@ -93,6 +93,11 @@ object KnownWorld {
     @Volatile private var arenaReady = false
     private var loading = false
 
+    /** The cells this run changed (any thread; a live view). */
+    val changedCells: Set<Long> get() = changed.keys
+    /** The room on tile [t] (z * 6 + x), placed. */
+    fun tile(t: Int): Room? = tiles[t]
+
     /** Every change this run, again: for pieces that now stand where they landed (the arena, once it is read). */
     fun requeueChanges() { touchedCells.addAll(changed.keys) }
 
