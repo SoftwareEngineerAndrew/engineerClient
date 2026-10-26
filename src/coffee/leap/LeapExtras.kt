@@ -51,6 +51,7 @@ object LeapExtras : Module(
     description = "Adds to Odin's Leap Menu: a click delay when it opens, an outline of where each person will be, and Map Leap (the dungeon map as the leap menu, in the clear).",
     toggled = true,
 ) {
+    private val instantOpen by BooleanSetting("Instant Open", true, desc = "The leap menu opens the moment you right-click a leap, drawn from what's already known of your party, and can be clicked straight away; the leap you pick is clicked in the real menu the instant it arrives.")
     private val clickDelay by NumberSetting("Click Delay", 1, 0..10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
 
     private val showIn by SelectorSetting("Show In", ShowIn.Option.EVERYWHERE, desc = "Where Click Delay and Leap Outline work. Blood rush is from the dungeon starting until the blood door opens.")
@@ -97,13 +98,17 @@ object LeapExtras : Module(
 
     private var openedAt = 0L
 
+    /** Instant Open is on ([InstantLeap]). */
+    fun instantOpenOn(): Boolean = enabled && instantOpen
+
     /** Within Click Delay of the leap menu opening. Read by the click mixins. */
     @JvmStatic
     fun inClickDelay(): Boolean = enabled && ShowIn.allows(showIn.ordinal) && System.currentTimeMillis() - openedAt < clickDelay * 50L
 
     init {
         on<ScreenEvent.Open> {
-            if (screen is AbstractContainerScreen<*> && screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")) {
+            // The real menu taking over from Instant Open's stand-in doesn't start it again (it started with the stand-in).
+            if (screen is AbstractContainerScreen<*> && screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player") && !InstantLeap.replacesPrediction(screen)) {
                 openedAt = System.currentTimeMillis()
             }
         }

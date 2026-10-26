@@ -24,6 +24,7 @@ import net.minecraft.util.RandomSource
 import net.minecraft.world.level.block.LiquidBlock
 import net.minecraft.world.level.block.RenderShape
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.chunk.PalettedContainer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -40,8 +41,9 @@ import java.util.concurrent.ConcurrentHashMap
  *    this run only.
  * A piece's faces are grouped by the way they face, and a frame leaves out the groups facing away from the eye.
  * Faces are textured and shaded when built (by side, and at each corner by the blocks around it), so drawing is a lookup.
- * Building runs on [builder]'s threads from a copy of the cells it needs ([Cells], taken on the game thread), so the game
- * thread only copies and uploads. Render thread only, except [dirty] (packets) and the building.
+ * Building runs on [builder]'s threads from a copy of the chunk sections it needs ([Snapshot]: the game thread only copies
+ * those, a few arrays, and uploads); a chunk that arrives again is checked there too. Render thread only, except [dirty]
+ * (packets) and the building.
  */
 object BlockMesh {
     /**
@@ -136,14 +138,11 @@ object BlockMesh {
     /** What the level held in each world section when it was last built ([levelHash]). */
     private val builtFrom = HashMap<Long, Int>()
 
-    /** The level's own blocks in section [key] as one number (1 when it's all air or not loaded). */
-    private fun levelHash(level: ClientLevel, key: Long): Int {
-        val sx = SectionPos.x(key); val sy = SectionPos.y(key); val sz = SectionPos.z(key)
-        if (sy < level.minSectionY || sy > level.maxSectionY || !level.hasChunk(sx, sz)) return 1
-        val section = level.getChunk(sx, sz).sections[level.getSectionIndexFromSectionY(sy)]
-        if (section.hasOnlyAir()) return 1
+    /** A section's own blocks as one number (1 when it's all air or not loaded: no copy). Any thread. */
+    private fun sectionHash(states: PalettedContainer<BlockState>?): Int {
+        if (states == null) return 1
         var h = 17
-        for (y in 0..15) for (z in 0..15) for (x in 0..15) h = h * 31 + System.identityHashCode(section.getBlockState(x, y, z))
+        for (y in 0..15) for (z in 0..15) for (x in 0..15) h = h * 31 + System.identityHashCode(states.get(x, y, z))
         return h
     }
 
@@ -155,14 +154,32 @@ object BlockMesh {
             val x = BlockPos.getX(k); val y = BlockPos.getY(k); val z = BlockPos.getZ(k)
             dirty(x, y, z)
             if (inArena(x shr 4, z shr 4)) touchedArena += SectionPos.asLong(x shr 4, y shr 4, z shr 4)
-            val r = KnownWorld.roomAt(x, z) ?: continue
-            val (cx, cz) = r.p.toCanonical(x, z) ?: continue
-            for (dx in edge(cx)) for (dy in edge(y)) for (dz in edge(cz)) {
-                val key = r.pieceKey((cx shr 4) + dx, (y shr 4) + dy, (cz shr 4) + dz)
-                touchedRoom += key; dirtyRoom[key] = now
+            // Its room's pieces around it, and a room's across the gap (its outer wall, left out of its pieces, can show
+            // through a hole here: RoomCut). Next to a sealed pocket, that room's pockets are drawn from now on.
+            var seen: KnownWorld.Room? = null
+            for (dx in NEAR_ROOMS) for (dz in NEAR_ROOMS) {
+                val r = KnownWorld.roomAt(x + dx, z + dz) ?: continue
+                if (r === seen || (dx != 0 || dz != 0) && r === KnownWorld.roomAt(x, z)) continue
+                seen = r
+                touchPieces(r, x + dx, y, z + dz, now)
+                if (r.cutPockets && (dx == 0 && dz == 0) && SIDES.any { (ax, ay, az) -> r.inPocket(x + ax, y + ay, z + az) }) { r.cutPockets = false; changes++ }
             }
-            touchedRooms += r.key
         }
+    }
+    private val NEAR_ROOMS = intArrayOf(0, -2, 2)
+
+    /** A room's pieces are read differently now ([KnownWorld.Room.cutPockets]): what's drawn is worked out again. */
+    fun roomChanged() { changes++ }
+    private val SIDES = listOf(Triple(0, 0, 0), Triple(1, 0, 0), Triple(-1, 0, 0), Triple(0, 1, 0), Triple(0, -1, 0), Triple(0, 0, 1), Triple(0, 0, -1))
+
+    /** [r]'s pieces around world cell ([x], [y], [z]) become this run's own (built from the world as it is now). */
+    private fun touchPieces(r: KnownWorld.Room, x: Int, y: Int, z: Int, now: Long) {
+        val (cx, cz) = r.p.toCanonical(x, z) ?: return
+        for (dx in edge(cx)) for (dy in edge(y)) for (dz in edge(cz)) {
+            val key = r.pieceKey((cx shr 4) + dx, (y shr 4) + dy, (cz shr 4) + dz)
+            touchedRoom += key; dirtyRoom[key] = now
+        }
+        touchedRooms += r.key
     }
 
     // --- building -------------------------------------------------------------------------------------------------------
@@ -192,11 +209,18 @@ object BlockMesh {
             ownPending.remove(key)
             changes++
         }
+        sectionCopies.clear()
         for ((key, at) in dirtyAt.entries.toList()) {
             if (now - at < DIRTY_DELAY_MS) continue
-            dirtyAt.remove(key)
-            // Its chunk came again with the same blocks: what's built stands.
-            if (chunkOnly.remove(key) && key in world && builtFrom[key] == PovPerf.time(PovPerf.CHUNK_CHECK) { levelHash(level, key) }) continue
+            // Its chunk came again: a builder checks it against what it was built from, and builds it again only if it differs
+            // (what's built stays drawn meanwhile).
+            if (chunkOnly.contains(key) && key in world && key !in worldPending && key !in stale) {
+                if (building >= IN_FLIGHT) break
+                dirtyAt.remove(key); chunkOnly.remove(key)
+                PovPerf.time(PovPerf.CHUNK_CHECK) { buildWorld(level, SectionPos.x(key), SectionPos.y(key), SectionPos.z(key), key, builtFrom[key]) }
+                continue
+            }
+            dirtyAt.remove(key); chunkOnly.remove(key)
             nearDone = null; allDone = false
             if (key in world) stale += key
             worldPending.remove(key)
@@ -225,6 +249,7 @@ object BlockMesh {
             nearDone = near
         }
         if (!everything) return
+        prebuildRooms()
         val minSy = level.minSectionY; val maxSy = level.maxSectionY
         val d0 = DungeonFrame.ORIGIN shr 4; val d1 = DungeonFrame.DUNGEON_MAX shr 4
         if (!allDone) {
@@ -238,6 +263,33 @@ object BlockMesh {
 
     /** The whole dungeon and arena were looked over with nothing left to build (until something changes). */
     private var allDone = false
+
+    private var prebuiltAt = 0L
+    /**
+     * Every placed room's pieces asked onto the GPU (after anything a view wants, nearest you first), and those already there
+     * kept from going idle: the whole dungeon is up before anyone opens the menu. Once a second, while the pools are under 70%
+     * (past that, only what views ask for).
+     */
+    private fun prebuildRooms() {
+        val now = System.currentTimeMillis()
+        if (now - prebuiltAt < 1000 || PiecePool.usedBytes > PiecePool.CAP_BYTES * 7 / 10) return
+        prebuiltAt = now
+        val me = mc().player ?: return
+        for (r in KnownWorld.rooms) {
+            val names = bundleNames(r)
+            val base = MeshBundles.get(names[0]) ?: continue
+            val variant = if (names.size > 1) MeshBundles.get(names[1]) else null
+            val g = grid(r)
+            val dx = me.x - (r.x0 + r.x1) / 2.0; val dz = me.z - (r.z0 + r.z1) / 2.0
+            val away = dx * dx + dz * dz
+            for (i in 0 until g.size) {
+                val vi = variant?.find(g.lx(i), g.ly(i), g.lz(i)) ?: -1
+                val bundle = if (vi >= 0) variant!! else base
+                val pi = if (vi >= 0) vi else base.find(g.lx(i), g.ly(i), g.lz(i))
+                if (pi >= 0) PiecePool.get(bundle, pi, r.p.rot, g.w, g.d, r, 1e10 + away)
+            }
+        }
+    }
 
     /** Makes sure world section [key] has its geometry (the arena's own come from its bundle); false once the budget is spent. */
     private fun want(level: ClientLevel, key: Long): Boolean {
@@ -254,10 +306,10 @@ object BlockMesh {
     // --- building, on the builders --------------------------------------------------------------------------------------
 
     /** Builds at most this many at once (each holds a copy of its cells); the rest wait for the next frames. */
-    private const val IN_FLIGHT = 8
+    private const val IN_FLIGHT = 32
     private val builder = java.util.concurrent.Executors.newFixedThreadPool(2) { r -> Thread(r, "pose pov build").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
     private val meshers = ThreadLocal.withInitial { Mesher() }
-    private class Built(val world: Long, val own: String?, val bundle: String?, val token: Int, val packed: CompactMesh.Packed?, val bytes: ByteArray?, val ox: Int, val oz: Int)
+    private class Built(val world: Long, val own: String?, val bundle: String?, val token: Int, val packed: CompactMesh.Packed?, val bytes: ByteArray?, val ox: Int, val oz: Int, val hash: Int = 0, val unchanged: Boolean = false)
     private val built = java.util.concurrent.ConcurrentLinkedQueue<Built>()
     private var building = 0
     private var tokens = 0
@@ -269,7 +321,39 @@ object BlockMesh {
     private val stale = HashSet<Long>()
     private val staleOwn = HashSet<String>()
 
-    /** The cells a build reads: a box of the world, copied on the game thread. */
+    /**
+     * The level's chunk sections around a build, copied on the game thread (null: all air, not loaded or out of the world); a
+     * build reads its cells through [KnownWorld.known] and these on a builder.
+     */
+    private class Snapshot(val sx0: Int, val sy0: Int, val sz0: Int, val nx: Int, val ny: Int, val nz: Int, val sections: Array<PalettedContainer<BlockState>?>) {
+        fun section(sx: Int, sy: Int, sz: Int): PalettedContainer<BlockState>? {
+            val i = sx - sx0; val j = sy - sy0; val k = sz - sz0
+            if (i !in 0 until nx || j !in 0 until ny || k !in 0 until nz) return null
+            return sections[(j * nz + k) * nx + i]
+        }
+        fun get(x: Int, y: Int, z: Int): BlockState =
+            KnownWorld.known(x, y, z) ?: section(x shr 4, y shr 4, z shr 4)?.get(x and 15, y and 15, z and 15) ?: KnownWorld.AIR
+    }
+
+    /** This pump's section copies, shared by its builds. */
+    private val sectionCopies = HashMap<Long, PalettedContainer<BlockState>?>()
+
+    /** The sections under world cells [xs] x [ys] x [zs], copied (game thread). */
+    private fun snapshot(level: ClientLevel, xs: IntRange, ys: IntRange, zs: IntRange): Snapshot {
+        val sx0 = xs.first shr 4; val sy0 = ys.first shr 4; val sz0 = zs.first shr 4
+        val nx = (xs.last shr 4) - sx0 + 1; val ny = (ys.last shr 4) - sy0 + 1; val nz = (zs.last shr 4) - sz0 + 1
+        val out = arrayOfNulls<PalettedContainer<BlockState>>(nx * ny * nz)
+        for (j in 0 until ny) for (k in 0 until nz) for (i in 0 until nx) {
+            val sx = sx0 + i; val sy = sy0 + j; val sz = sz0 + k
+            out[(j * nz + k) * nx + i] = sectionCopies.getOrPut(SectionPos.asLong(sx, sy, sz)) {
+                if (sy < level.minSectionY || sy > level.maxSectionY || !level.hasChunk(sx, sz)) null
+                else level.getChunk(sx, sz).sections[level.getSectionIndexFromSectionY(sy)].takeIf { !it.hasOnlyAir() }?.states?.copy()
+            }
+        }
+        return Snapshot(sx0, sy0, sz0, nx, ny, nz, out)
+    }
+
+    /** The cells a build reads: a box of the world, filled on the builder. */
     private class Cells(val x0: Int, val y0: Int, val z0: Int, val w: Int, val h: Int, val d: Int) {
         val states = arrayOfNulls<BlockState>(w * h * d)
         fun get(x: Int, y: Int, z: Int): BlockState {
@@ -315,6 +399,9 @@ object BlockMesh {
             } else {
                 if (worldPending[b.world] != b.token) continue
                 worldPending.remove(b.world); stale.remove(b.world)
+                builtFrom[b.world] = b.hash
+                // Checked and the same as it was built from: what's built stands.
+                if (b.unchanged) continue
                 world.remove(b.world)?.let { PiecePool.release(it.res) }
                 world[b.world] = put(b)
                 worldKeys = null
@@ -459,7 +546,10 @@ object BlockMesh {
         for (d in designs) for (v in d.variants) names += "${d.id}@${v.id}"
         if (!floor7) names += ARENA
         MeshBundles.prefetch(names)
+        prefetchStarted = true
     }
+    /** [prefetchAll] has handed its list over (for this launch). */
+    var prefetchStarted = false; private set
 
     /** Starts building every bundle (the arena, each design, each variant) to files; the number queued, or -1 without the pack. */
     fun startExport(): Int {
@@ -506,49 +596,57 @@ object BlockMesh {
      * here and built on a builder.
      */
     private fun buildOwn(level: ClientLevel, r: KnownWorld.Room, g: PieceGrid, lx: Int, ly: Int, lz: Int, own: String) {
-        val pos = BlockPos.MutableBlockPos()
         val b = IntArray(6)
         pieceBox(r, g, lx, ly, lz, b)
         val xs = b[0]..b[3]; val ys = b[1]..b[4]; val zs = b[2]..b[5]
-        val cells = cells(xs, ys, zs) { x, y, z -> KnownWorld.stateAt(level, pos, r.x0 + x, y, r.z0 + z) }
-        val w = xs.last - xs.first + 1
-        val others = BooleanArray(w * (zs.last - zs.first + 1)) { KnownWorld.roomAt(r.x0 + xs.first + it % w, r.z0 + zs.first + it / w) !== r }
+        val x0 = r.x0; val z0 = r.z0
+        val snap = snapshot(level, x0 + xs.first - 2..x0 + xs.last + 2, ys.first - 2..ys.last + 2, z0 + zs.first - 2..z0 + zs.last + 2)
         val token = ++tokens
         ownPending[own] = token
-        val x0 = r.x0; val z0 = r.z0
-        submit(Built(0, own, null, token, null, null, x0, z0)) {
+        // Drawn in the world's frame, like the room's own pieces.
+        submit(Built(0, own, null, token, null, null, 0, 0)) {
+            val cells = cells(xs, ys, zs) { x, y, z -> snap.get(x0 + x, y, z0 + z) }
+            val w = xs.last - xs.first + 1
+            val others = BooleanArray(w * (zs.last - zs.first + 1)) { KnownWorld.roomAt(x0 + xs.first + it % w, z0 + zs.first + it / w) !== r }
             val m = meshers.get()
             val built = m.mesh(level, xs, ys, zs, x0, z0, cells::get) { x, _, z -> others[(z - zs.first) * w + (x - xs.first)] }
-            Built(0, own, null, token, pack(built, 0, 0), null, x0, z0)
+            Built(0, own, null, token, pack(built, -x0, -z0), null, 0, 0)
         }
     }
 
     /**
-     * World section [key]'s cells copied here and built on a builder. Drawn in the shared frame at the world's corner when its
-     * corners fit the compact form's range from there (the dungeon and the arena do), else in its own.
+     * World section [key] built on a builder from a copy of the sections around it. Drawn in the shared frame at the world's
+     * corner when its corners fit the compact form's range from there (the dungeon and the arena do), else in its own. With
+     * [expect] (its chunk came again: the blocks it was built from), the builder first checks the section against that, and
+     * only builds it if it differs.
      */
-    private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int, key: Long) {
+    private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int, key: Long, expect: Int? = null) {
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
-        builtFrom[key] = levelHash(level, key)
-        // Which columns a room draws, looked up once per column rather than per cell; all of them, nothing to do here.
-        val covered = if (sy < level.minSectionY || sy > level.maxSectionY || !KnownWorld.mayHaveBlocks(level, sx, sy, sz)) null
-            else BooleanArray(256) { KnownWorld.coveredByRoom(x0 + (it and 15), z0 + (it shr 4)) }.takeIf { c -> !c.all { it } }
-        if (covered == null) {
-            stale.remove(key)
+        // Nothing in it to draw (the sky over the dungeon, unloaded): no build.
+        if (sy < level.minSectionY || sy > level.maxSectionY || !KnownWorld.mayHaveBlocks(level, sx, sy, sz)) {
+            stale.remove(key); worldPending.remove(key)
+            val had = world.containsKey(key)
+            builtFrom[key] = 1
+            if (expect == 1 && had) return
             world.remove(key)?.let { PiecePool.release(it.res) }
             world[key] = null; worldKeys = null; changes++
             return
         }
-        val pos = BlockPos.MutableBlockPos()
-        val cells = cells(x0..x0 + 15, y0..y0 + 15, z0..z0 + 15) { x, y, z -> KnownWorld.stateAt(level, pos, x, y, z) }
+        val snap = snapshot(level, x0 - 2..x0 + 17, y0 - 2..y0 + 17, z0 - 2..z0 + 17)
         val shared = x0 in -256..736 && z0 in -256..736
         val ox = if (shared) 0 else x0; val oz = if (shared) 0 else z0
         val token = ++tokens
         worldPending[key] = token
         submit(Built(key, null, null, token, null, null, ox, oz)) {
+            val hash = sectionHash(snap.section(sx, sy, sz))
+            if (expect != null && hash == expect) return@submit Built(key, null, null, token, null, null, ox, oz, hash, unchanged = true)
+            // Which columns a room draws, looked up once per column; all of them: nothing to build.
+            val covered = BooleanArray(256) { KnownWorld.coveredByRoom(x0 + (it and 15), z0 + (it shr 4)) }
+            if (covered.all { it }) return@submit Built(key, null, null, token, null, null, ox, oz, hash)
+            val cells = cells(x0..x0 + 15, y0..y0 + 15, z0..z0 + 15) { x, y, z -> snap.get(x, y, z) }
             val m = meshers.get()
             val built = m.mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, cells::get) { x, _, z -> covered[((z - z0) shl 4) or (x - x0)] }
-            Built(key, null, null, token, pack(built, ox, oz), null, ox, oz)
+            Built(key, null, null, token, pack(built, ox, oz), null, ox, oz, hash)
         }
     }
 
