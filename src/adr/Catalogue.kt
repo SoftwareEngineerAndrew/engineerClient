@@ -32,7 +32,7 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
 
     companion object {
         const val BLOCKS = 1
-        const val VALUES = 2
+        const val VALUES = 3
         const val SKULLS = 1
         private const val MAX_BYTES = 16 shl 20 // (packed; a catalogue is under a MB)
         private const val MAX_TEXT = 256L shl 20

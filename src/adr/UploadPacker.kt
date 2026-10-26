@@ -676,7 +676,7 @@ object UploadPacker {
                 for (line in r.lineSequence()) {
                     if (first) {
                         // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
-                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1); addProperty("tab2", 1); addProperty("eqfold", 1)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1); addProperty("tab2", 1); addProperty("eqfold", 1); addProperty("slots2", 1)
                             val catMeta = JsonObject().apply { blockTpl?.let { addProperty("blocks", it.cat.version) }; cat?.values?.let { addProperty("values", it.version) }; cat?.skulls?.let { addProperty("skulls", it.version) } }
                             if (catMeta.size() > 0) add("cat", catMeta) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
@@ -1056,7 +1056,7 @@ object UploadPacker {
          * then as its number in the order they first came ("eqtab"/"tab2" in the meta: the viewer keeps
          * the same lists), and one the site's catalogue has as -(its number there + 1) ([Catalogue.Values]).
          */
-        private val tables = TABLED_FIELDS.associateWith { Table() }
+        private val tables = (TABLED_FIELDS + "slot").associateWith { Table() }
         private class Table {
             val index = HashMap<String, Int>(); val order = ArrayList<String>()
             fun of(v: JsonElement, cat: Map<String, Int>?): JsonElement {
@@ -1075,8 +1075,33 @@ object UploadPacker {
             val fields = LinkedHashSet<String>()
             for (o in list) for (f in o.keySet()) if (f != "k") fields += f
             val c = JsonObject()
-            for (f in fields) c.add(f, column(list.map { o -> (o[f] ?: JsonNull.INSTANCE).let { v -> if (kind in TABLED) tables[f]?.of(v, values?.fields?.get(f)) ?: v else v } }))
+            for (f in fields) c.add(f, column(list.map { o -> (o[f] ?: JsonNull.INSTANCE).let { v ->
+                when {
+                    kind in TABLED -> tables[f]?.of(v, values?.fields?.get(f)) ?: v
+                    kind == "ui" && f == "s" && (o["of"] as? JsonPrimitive)?.asString == "slots" -> slots(v)
+                    else -> v
+                }
+            } }))
             return JsonObject().apply { addProperty("k", "grp"); addProperty("of", kind); addProperty("n", list.size); add("c", c) }.toString()
+        }
+
+        /**
+         * A window's slots ("slots2"): each [slot, item...] as how many slots on from the one before
+         * (0: the next), then the item - the whole of it the first time, then its number ([Table]; the
+         * values catalogue's "slot" as -(number + 1)). As they are where they aren't all [slot, ...].
+         */
+        private fun slots(v: JsonElement): JsonElement {
+            val s = v as? JsonArray ?: return v
+            if (s.any { e -> ((e as? JsonArray)?.takeIf { it.size() > 0 }?.get(0) as? JsonPrimitive)?.let { it.isNumber && it.asDouble == it.asInt.toDouble() } != true }) return v
+            val out = JsonArray()
+            var prev = -1
+            for (e in s) {
+                val a = e.asJsonArray
+                val slot = a[0].asInt
+                out.add(slot - prev - 1); prev = slot
+                out.add(tables.getValue("slot").of(JsonArray().apply { for (i in 1 until a.size()) add(a[i]) }, values?.fields?.get("slot")))
+            }
+            return out
         }
 
         /** A "blocks" line: [dt, dx, dy, dz, state] each, from the one before; a tick's changes by place (one block's in the order they came). */
