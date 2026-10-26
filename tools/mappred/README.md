@@ -332,7 +332,9 @@ Every candidate tried, and what it showed:
 - In the mod (src/mappred GameSampler.kt, F7's default; Room Prediction's Prediction Model setting picks Classic
   instead): sampler3 with the two rule fixes (the 6-room mixes, 1% of maps, and c!/(c-k)! for a mix with c rooms
   of a shape when the map shows k of them) and room/node/0/0/alpha=0.5/beta=0.5/mu=0.2, the mixes from gen-game.mjs;
-  the tab's puzzle order and the secret total's names weigh the specials' shuffle, nothing calibrated or held.
+  the tab's puzzle order and the secret total's names weigh the specials' shuffle, nothing held. Its tiles' chances
+  go through GameSampler.CALIBRATION (sampler3's cal=2, fitted on the mod's own run: MODEL.md "5-puzzle maps"), and
+  5-puzzle maps (rare rooms) are its too, not the classic sampler's.
   Checked against sampler3 on the same snapshots (layouts-snap, maps 0-39, all stages, both at 20 batches'
   worth): -1.0358 against -1.0390 (paired +0.003, s.e. 0.005), and per tile the average of 40 Kotlin runs is
   nearer each of two 100-batch sampler3 runs (total variation 0.018) than they are to each other (0.023).
@@ -364,6 +366,25 @@ Every candidate tried, and what it showed:
   maps. Known and left: the secret total's names weigh only the samples with 4 or fewer unnamed rooms, so near the end
   a layout with more big rooms gets that factor (at most 1) and one with 5 or more rooms gets 1, a small lean to more
   1x1s (the classic sampler does the same).
+- 5-puzzle maps in the mod (MODEL.md "5-puzzle maps"): the game process takes them too (MapPredictor no longer sends
+  `puzzles == 5` to the classic sampler: the -0.032 that did was 45 snapshots of 9 maps without a rare room), and its tiles'
+  chances go through GameSampler.CALIBRATION (= sampler3's CAL_MOD, `cal=2`). Run as the worker runs it (MapSnapshotsCheck:
+  2000 samples, 120 batches' worth, 400,000 particles), held out, 2/4/6/9/12 rooms known, differences paired by snapshot with
+  s.e. by map: 5 puzzles, 147 maps (the 38 of the test split and 109 recorded since; 735 snapshots) game -1.0350 against
+  the classic sampler's -1.0539, +0.0189 s.e. 0.0037 (the 38: +0.0180 s.e. 0.0067; the 109: +0.0192 s.e. 0.0045); 2-4
+  puzzles, the first 100 test maps (500 snapshots) -1.0192 against -1.0368, +0.0176 s.e. 0.0044. On the 117 5-puzzle maps
+  without a rare room +0.0131 s.e. 0.0041. With GameStats.kt made from layouts-snap only (none of the 109 in the mix table, as
+  in the classic sampler's tables) the 109 give -1.0391 against -1.0547, +0.0156 s.e. 0.0046. The classic sampler is
+  untouched (120 snapshots rerun, outputs identical). The calibration is worth +0.0019 on the 5-puzzle maps (-1.0369
+  without) and +0.0006 on the 2-4 puzzle ones; 2.1-2.4 s a snapshot as before, one of the 735 handed to the classic sampler.
+  Kotlin against sampler3 `cal=2` at the same budget (the mix table of GameStats.kt for both, own seeds): the 38 test
+  5-puzzle maps -1.0336 against -1.0337 (JS minus Kotlin -0.0001 s.e. 0.0015); 22 of the 109 other ones (every 5th, 110
+  snapshots) -1.0249 against -1.0261; those 60 maps together -1.0304 against -1.0309 (-0.0005 s.e. 0.0013; the classic
+  sampler -1.0509); 20 2-4 puzzle maps (every 5th of the 100) -1.0693 against -1.0707 (-0.0014 s.e. 0.0020). Per tile, on 15
+  of the 5-puzzle test snapshots, Kotlin is as near each of two sampler3 seeds (total variation 0.028, 0.029) as they are to
+  each other (0.030), with the same class totals (0.20-0.21 rare tiles a snapshot). A tile's
+  rounding residue (1 - 1.0 on a tile that is surely a puzzle) must not count as a chance of a normal 1x1, which the
+  calibration's + 0.001 would lift to 0.3%: sampler3 drops it (`o > 1e-12`) and so does GameSampler.add.
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 

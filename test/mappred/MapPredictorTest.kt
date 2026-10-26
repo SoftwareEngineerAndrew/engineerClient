@@ -103,7 +103,7 @@ class MapPredictorTest {
     }
 
     @Test fun theCalibrationKeepsWhatTheMapRulesOutAtNothing() {
-        // the classic sampler's (the game process's chances are its samples', nothing fitted)
+        // the classic sampler's (the game process's own calibration: GameSamplerTest)
         val p = predict(opening(), gameProcess = false)
         var changed = false
         for (t in 0 until 36) {

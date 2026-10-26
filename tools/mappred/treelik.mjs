@@ -10,9 +10,11 @@ import { N, NB, inwardOf, startTree, seedTree, growStep, cloneTree, parseRule, r
 const W = 6;
 const rnd = makeRng(+(process.env.SEED || 11));
 const NP = +(process.env.NP || 200), FREE = +(process.env.FREE || 200);
+// PUZ=n or a-b: only the maps with that many puzzles (5: the maps with rares); MAPS from OFFSET=k
 // IDS=<file>: only the maps with these ids (a JSON list), e.g. ones that aren't evalbig's held-out maps
 const only = process.env.IDS ? new Set(JSON.parse((await import('node:fs')).readFileSync(process.env.IDS, 'utf8'))) : null;
-const maps = complete().filter(L => L.rooms.filter(r => r.shape !== 'OneByOne').length === 7 && (!only || only.has(L.id))).slice(0, +(process.argv[2] || 600)).map(L => {
+const [puzLo, puzHi] = (process.env.PUZ || '0-99').split('-').map(Number); const puzOf = L => L.rooms.filter(r => r.type === 'PUZZLE').length;
+const maps = complete().filter(L => L.rooms.filter(r => r.shape !== 'OneByOne').length === 7 && (!only || only.has(L.id)) && puzOf(L) >= puzLo && puzOf(L) <= (puzHi ?? puzLo)).slice(+(process.env.OFFSET || 0), +(process.env.OFFSET || 0) + +(process.argv[2] || 600)).map(L => {
   const owner = new Int32Array(N).fill(-1); const rooms = L.rooms.map(r => ({ cells: r.tiles.map(t => t.z * W + t.x), big: r.shape !== 'OneByOne', type: r.type }));
   rooms.forEach((r, i) => { for (const c of r.cells) owner[c] = i; });
   const door = new Set(); for (const d of L.doors) if (d.what !== '-' && d.a >= 0 && d.b >= 0 && d.a !== d.b) { const a = d.az * W + d.ax, b = d.bz * W + d.bx; door.add(a < b ? a * N + b : b * N + a); }
