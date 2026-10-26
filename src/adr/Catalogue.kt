@@ -17,18 +17,19 @@ import java.nio.file.StandardCopyOption
  * here ([BLOCKS]); the viewer has every version. Each is fetched once into a folder and read from
  * there; one that can't be had (offline, a bad file) is left out, and the run goes up without it.
  */
-class Catalogue(val blocks: Blocks?) {
+class Catalogue(val blocks: Blocks?, val values: Values? = null) {
 
     /** Block change pieces ([Templates.pieces]): their keys, which ones each usually goes on to (most often first), the boss floors that go at once. */
     class Blocks(val version: Int, val pieces: List<String>, val next: List<IntArray>, val ends: List<Templates.End>) {
         val id = HashMap<String, Int>(pieces.size * 2).apply { pieces.forEachIndexed { i, k -> putIfAbsent(k, i) } }
     }
 
-    /** What goes in the upload's meta ("cat"): the sections it has numbers from and their versions. */
-    fun meta(): Map<String, Int> = buildMap { blocks?.let { put("blocks", it.version) } }
+    /** Values that come over and over (gear, head skins, names, poses, types), per field: each one's number, by [canon]. */
+    class Values(val version: Int, val fields: Map<String, Map<String, Int>>, val lists: Map<String, List<com.google.gson.JsonElement>> = emptyMap())
 
     companion object {
         const val BLOCKS = 1
+        const val VALUES = 1
         private const val MAX_BYTES = 16 shl 20 // (packed; a catalogue is under a MB)
         private const val MAX_TEXT = 256L shl 20
         private val log = LoggerFactory.getLogger("engineerclient")
@@ -39,9 +40,10 @@ class Catalogue(val blocks: Blocks?) {
          * site, or null). Kept while memory allows: an upload after a run reads it again otherwise.
          */
         @Synchronized fun load(dir: Path, fetch: (String) -> ByteArray?): Catalogue {
-            cached?.get()?.let { if (it.blocks != null) return it }
+            cached?.get()?.let { if (it.blocks != null && it.values != null) return it }
             val blocks = section(dir, "blocks-$BLOCKS.json.xz", fetch) { readBlocks(it, BLOCKS) }
-            return Catalogue(blocks).also { cached = SoftReference(it) }
+            val values = section(dir, "values-$VALUES.json.xz", fetch) { readValues(it, VALUES) }
+            return Catalogue(blocks, values).also { cached = SoftReference(it) }
         }
 
         private fun <T> section(dir: Path, name: String, fetch: (String) -> ByteArray?, read: (InputStream) -> T): T? {
@@ -82,6 +84,28 @@ class Catalogue(val blocks: Blocks?) {
             for (l in next) for (n in l) if (n !in pieces.indices) throw IllegalStateException("next $n of ${pieces.size}")
             while (next.size < pieces.size) next += IntArray(0)
             return Blocks(version, pieces, next, ends)
+        }
+
+        /** A values catalogue: {"fields": {field: [value...]}}. */
+        fun readValues(input: InputStream, version: Int): Values {
+            val o = com.google.gson.JsonParser.parseReader(InputStreamReader(Capped(input, MAX_TEXT), Charsets.UTF_8)).asJsonObject
+            val fields = HashMap<String, Map<String, Int>>()
+            val lists = HashMap<String, List<com.google.gson.JsonElement>>()
+            for ((f, list) in o.getAsJsonObject("fields").entrySet()) {
+                val m = HashMap<String, Int>()
+                list.asJsonArray.forEachIndexed { i, v -> m.putIfAbsent(canon(v), i) }
+                fields[f] = m; lists[f] = list.asJsonArray.toList()
+            }
+            if (fields.isEmpty()) throw IllegalStateException("no fields")
+            return Values(version, fields, lists)
+        }
+
+        /** A value as the same text whichever way it was written (-10.0 and -10 alike, as the viewer has them). */
+        fun canon(e: com.google.gson.JsonElement): String = when {
+            e is com.google.gson.JsonArray -> e.joinToString(",", "[", "]") { canon(it) }
+            e is com.google.gson.JsonPrimitive && e.isNumber -> runCatching { java.math.BigDecimal(e.asString).stripTrailingZeros().toPlainString() }.getOrDefault(e.asString).let { if (it == "-0") "0" else it }
+            e is com.google.gson.JsonObject -> e.entrySet().joinToString(",", "{", "}") { com.google.gson.JsonPrimitive(it.key).toString() + ":" + canon(it.value) }
+            else -> e.toString()
         }
 
         private fun readEnd(r: JsonReader): Templates.End {

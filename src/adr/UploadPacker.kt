@@ -608,7 +608,7 @@ object UploadPacker {
     fun pack(file: Path, scan: Scan, sibling: ByteArray?, hideParty: Boolean = false, cat: Catalogue? = null): Pair<Path, Int> {
         // Whatever is wrong with a party member's upload, this one goes up - whole, if need be.
         val sib = sibling?.let { b ->
-            runCatching { readSibling(b.inputStream(), cat?.blocks) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
+            runCatching { readSibling(b.inputStream(), cat?.blocks, cat?.values) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
         }
         if (sib != null) {
             try {
@@ -654,7 +654,7 @@ object UploadPacker {
         }
         val stream = XZOutputStream(Files.newOutputStream(out), xzOptions())
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
-            val cols = Stretch(w, blockTpl)
+            val cols = Stretch(w, blockTpl, cat?.values)
             val mobs = MobWriter(plan) { it in left }
             val timeline: (String) -> Unit = { l -> if (players == null) cols.put(l) else players.put(l, cols::put) }
             fun put(line: String, timed: Boolean = true) {
@@ -671,7 +671,9 @@ object UploadPacker {
                 for (line in r.lineSequence()) {
                     if (first) {
                         // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
-                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1); if (blockTpl != null) add("cat", JsonObject().apply { addProperty("blocks", blockTpl.cat.version) }) }.toString() }.getOrDefault(line), timed = false)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1); addProperty("tab2", 1); addProperty("eqfold", 1)
+                            val catMeta = JsonObject().apply { blockTpl?.let { addProperty("blocks", it.cat.version) }; cat?.values?.let { addProperty("values", it.version) } }
+                            if (catMeta.size() > 0) add("cat", catMeta) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
                         val skulls = ArrayList<String>()
                         for (l in scan.world) if (kindOf(l) == "skull") skulls += l else put(l, timed = false)
@@ -770,7 +772,7 @@ object UploadPacker {
      * The order they come in keeps each tick's events in the order the viewer needs them (a mob's
      * spawn before its moves, its tag before them, gone after).
      */
-    private class Stretch(private val w: BufferedWriter, private val blockTpl: BlockTemplates? = null) {
+    private class Stretch(private val w: BufferedWriter, private val blockTpl: BlockTemplates? = null, private val values: Catalogue.Values? = null) {
         private class Item(val t: Int, val rows: JsonArray)
         private var end = -1
         private val others = ArrayList<String>()
@@ -816,6 +818,8 @@ object UploadPacker {
         private fun flush() {
             stuckArrows()
             groups["pj"]?.let { groups["pj"] = projectiles(it) }
+            groups["eq"]?.let { groups["eq"] = gear(it) }
+            foldGear()
             for (kind in BEFORE_MOVES) groups[kind]?.let { write(it) { part -> group(kind, part) } }
             for ((kind, list) in items) if (list.isNotEmpty()) write(list) { encode(kind, it) }
             for ((kind, list) in groups) if (kind !in BEFORE_MOVES) write(list) { part -> group(kind, part) }
@@ -850,6 +854,76 @@ object UploadPacker {
             }
             write(sorted) { blockLine(it) }
         }
+
+        /**
+         * Gear lines as they go up:
+         *  - a cosmetic's animation left out: a change of only dye colours or the head's skin that the
+         *    same one's next change of gear comes within [COSMETIC_TICKS] of (animated helmets and
+         *    rainbow armour change every tick or two; a change of gear stays) - the look before stays;
+         *  - players' main hand left out ("" in its slot: the viewer has it from their "p" rows), and a
+         *    line that leaves them as they were.
+         */
+        private fun gear(list: List<JsonObject>): ArrayList<JsonObject> {
+            val byKey = LinkedHashMap<String, MutableList<Int>>()
+            list.forEachIndexed { i, o -> byKey.getOrPut((o["name"] ?: o["id"]).toString()) { ArrayList() } += i }
+            val drop = BooleanArray(list.size)
+            for (idx in byKey.values) {
+                var kept: JsonObject? = null
+                idx.forEachIndexed { n, i ->
+                    val o = list[i]
+                    val next = idx.getOrNull(n + 1)?.let { list[it] }
+                    val was = kept
+                    if (was != null && next != null && tick(next) - tick(o) < COSMETIC_TICKS && onlyCosmetic(o, was)) drop[i] = true else kept = o
+                }
+            }
+            val out = ArrayList<JsonObject>()
+            val last = HashMap<String, String>()
+            list.forEachIndexed { i, o ->
+                if (drop[i]) return@forEachIndexed
+                val name = (o["name"] as? JsonPrimitive)?.asString
+                if (name == null) { out += o; return@forEachIndexed }
+                val c = o.deepCopy()
+                (c["eq"] as? JsonArray)?.takeIf { it.size() > 0 }?.set(0, JsonPrimitive(""))
+                val look = c["eq"].toString() + "|" + c["headTex"]
+                if (last.put(name, look) != look) out += c
+            }
+            return out
+        }
+        private fun tick(o: JsonObject) = (o["t"] as? JsonPrimitive)?.asInt ?: 0
+        /** Whether gear line [a] is [b] but for dye colours and the head's skin. */
+        private fun onlyCosmetic(a: JsonObject, b: JsonObject): Boolean {
+            val x = a["eq"] as? JsonArray ?: return false
+            val y = b["eq"] as? JsonArray ?: return false
+            if (x.size() != y.size()) return false
+            for (i in 0 until x.size()) if ((x[i] as? JsonPrimitive)?.asString?.replace(DYE, "") != (y[i] as? JsonPrimitive)?.asString?.replace(DYE, "")) return false
+            return true
+        }
+
+        /**
+         * A mob's first gear, a tick after its spawn (nearly always): on its spawn row instead
+         * ("eq", "headTex"; "eqfold" in the meta: the viewer puts it back a tick after the spawn).
+         */
+        private fun foldGear() {
+            val spawns = groups["spawn"] ?: return
+            val eqs = groups["eq"] ?: return
+            class Life(val row: JsonObject, var first: Boolean = true)
+            val life = HashMap<Int, Life>()
+            val folded = HashSet<JsonObject>()
+            var s = 0
+            for (e in eqs) {
+                val t = tick(e)
+                while (s < spawns.size && tick(spawns[s]) <= t) { idOf(spawns[s])?.let { life[it] = Life(spawns[s]) }; s++ }
+                val id = idOf(e) ?: continue
+                val l = life[id] ?: continue
+                if (l.first && tick(l.row) + 1 == t && !l.row.has("eq") && !l.row.has("headTex") && e.has("eq")) {
+                    l.row.add("eq", e["eq"]); e["headTex"]?.let { l.row.add("headTex", it) }
+                    folded += e
+                }
+                l.first = false
+            }
+            if (folded.isNotEmpty()) groups["eq"] = ArrayList(eqs.filter { it !in folded })
+        }
+        private fun idOf(o: JsonObject) = (o["id"] as? JsonPrimitive)?.takeIf { it.isNumber }?.asInt
 
         /**
          * Arrows the server sent already stuck (a spawn with no flight) and nothing else is about but
@@ -957,17 +1031,18 @@ object UploadPacker {
             return column(values)
         }
 
-        /** A "grp" line: one kind's lines, a column per field ("n" of them; null where a line hasn't the field). */
         /**
-         * Gear ("eq") and head skins ("headTex") on gear lines: each value whole the first time, then
-         * as its number in the order they first came ("eqtab" in the meta: the viewer keeps the same
-         * lists) - a run has a few dozen of each, over a thousand times.
+         * Values that come over and over - gear ("eq"), head skins ("headTex"), names ("c"), stand poses,
+         * mob and item types - on gear, spawn, name and stand lines ([TABLED]): each the first time whole,
+         * then as its number in the order they first came ("eqtab"/"tab2" in the meta: the viewer keeps
+         * the same lists), and one the site's catalogue has as -(its number there + 1) ([Catalogue.Values]).
          */
-        private val tables = mapOf("eq" to Table(), "headTex" to Table())
+        private val tables = TABLED_FIELDS.associateWith { Table() }
         private class Table {
             val index = HashMap<String, Int>(); val order = ArrayList<String>()
-            fun of(v: JsonElement): JsonElement {
+            fun of(v: JsonElement, cat: Map<String, Int>?): JsonElement {
                 if (v.isJsonNull || (v is JsonPrimitive && v.isString && v.asString.isEmpty())) return v
+                cat?.get(Catalogue.canon(v))?.let { return JsonPrimitive(-1 - it) }
                 val key = v.toString()
                 index[key]?.let { return JsonPrimitive(it) }
                 index[key] = order.size; order += key
@@ -976,11 +1051,12 @@ object UploadPacker {
             fun reset(size: Int) { while (order.size > size) index.remove(order.removeAt(order.size - 1)) }
         }
 
+        /** A "grp" line: one kind's lines, a column per field ("n" of them; null where a line hasn't the field). */
         private fun group(kind: String, list: List<JsonObject>): String {
             val fields = LinkedHashSet<String>()
             for (o in list) for (f in o.keySet()) if (f != "k") fields += f
             val c = JsonObject()
-            for (f in fields) c.add(f, column(list.map { o -> (o[f] ?: JsonNull.INSTANCE).let { v -> if (kind == "eq") tables[f]?.of(v) ?: v else v } }))
+            for (f in fields) c.add(f, column(list.map { o -> (o[f] ?: JsonNull.INSTANCE).let { v -> if (kind in TABLED) tables[f]?.of(v, values?.fields?.get(f)) ?: v else v } }))
             return JsonObject().apply { addProperty("k", "grp"); addProperty("of", kind); addProperty("n", list.size); add("c", c) }.toString()
         }
 
@@ -1052,6 +1128,12 @@ object UploadPacker {
             private val SINGLES = setOf("mouse", "pgone", "use", "hotbar", "tp", "slotclick", "rooms", "held", "ether", "room")
             /** A window's lines, one "ui" group in their order. */
             private val UI = setOf("gui", "slots", "carried", "click", "guiclose")
+            /** The kinds whose values go by number ([tables]), and the fields. */
+            private val TABLED = setOf("eq", "spawn", "name", "stand")
+            private val TABLED_FIELDS = listOf("eq", "headTex", "c", "pose", "type", "item", "itemId")
+            /** A change of only colours and skins on gear followed this soon by another isn't sent (see gear). */
+            private const val COSMETIC_TICKS = 10
+            private val DYE = Regex("#[0-9a-f]{6}")
             /** A spawn that can be a "pj" row (see stuckArrows). */
             private val STUCK_KEYS = setOf("k", "t", "id", "type", "x", "y", "z", "yaw", "life")
             /** An arrow that went no further than this (tenths of a block) and was gone within [DUD_TICKS] isn't sent. */
@@ -1164,7 +1246,7 @@ object UploadPacker {
      * anything, so every field is checked and everything is limited (see [SIB_MAX_CHARS] and on);
      * anything off throws, and the run goes up as if there were no sibling.
      */
-    private fun readSibling(input: InputStream, cat: Catalogue.Blocks? = null): Sibling {
+    private fun readSibling(input: InputStream, cat: Catalogue.Blocks? = null, values: Catalogue.Values? = null): Sibling {
         val out = HashMap<Int, Int>()
         var self = ""
         var startMs = 0L
@@ -1180,6 +1262,9 @@ object UploadPacker {
         val gones = HashMap<Int, MutableList<Long>>()
         var lerp = 0
         var erel = false
+        var tab2 = false
+        var valuesOk = false
+        val typeTable = ArrayList<String?>() // ("tab2": spawn types by number, see Stretch.tables)
         val relative = ArrayList<DoubleArray>() // ("erel": mob rows from where the mob spawned) id, t, x, y, z, till the spawns are in
         fun mob(id: Int, t: Long, x: Double?, y: Double?, z: Double?) {
             if (x == null || y == null || z == null) return
@@ -1204,6 +1289,8 @@ object UploadPacker {
                         startMs = runCatching { long(m["startMs"]) }.getOrDefault(0L)
                         lerp = runCatching { int(m["lerp"]) }.getOrDefault(0).coerceIn(0, 200)
                         erel = runCatching { int(m["erel"]) }.getOrDefault(0) == 1
+                        tab2 = runCatching { int(m["tab2"]) }.getOrDefault(0) == 1
+                        valuesOk = values != null && runCatching { int((m["cat"] as? JsonObject)?.get("values")) == values.version }.getOrDefault(false)
                     }
                     "p" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) { val r = arr(x); val name = str(at(r, 0)); row(name, t); if (r.size() >= 4) player(name, t, num(r[1]), num(r[2]), num(r[3])) } }
                     "e" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) { val r = arr(x); val id = int(at(r, 0)); count(id, 1); if (r.size() >= 4) mob(id, t, num(r[1]), num(r[2]), num(r[3])) } }
@@ -1290,7 +1377,8 @@ object UploadPacker {
                             if (of == "gone") ts.indices.forEach { k -> val t = ts[k]?.toLong() ?: return@forEach; val i = ids.getOrNull(k)?.toInt() ?: return@forEach; gones.getOrPut(i) { ArrayList() } += t }
                             else {
                                 val life = c["life"]?.let { nums(it, n) }; val back = c["b"]?.let { nums(it, n) }; val v = c["v"]?.let { present(it, n) }
-                                val xs = c["x"]?.let { nums(it, n) }; val ys = c["y"]?.let { nums(it, n) }; val zs = c["z"]?.let { nums(it, n) }; val ty = c["type"]?.let { strs(it, n) }
+                                val xs = c["x"]?.let { nums(it, n) }; val ys = c["y"]?.let { nums(it, n) }; val zs = c["z"]?.let { nums(it, n) }
+                                val ty = c["type"]?.let { if (tab2) tabled(it, n, typeTable, if (valuesOk) values?.lists?.get("type") else null) else strs(it, n) }
                                 for (k in ts.indices) {
                                     val t = ts[k] ?: continue; val i = ids.getOrNull(k)?.toInt() ?: continue
                                     if (v?.getOrNull(k) == true) continue // (a projectile)
@@ -1356,6 +1444,24 @@ object UploadPacker {
 
     /** A number, or null. */
     private fun num(e: JsonElement?): Double? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.asDouble
+
+    /** A run-length column of a field that goes by number (Stretch.tables, "tab2") as strings, at most [n]; [table] the run's list so far, [cat] the catalogue's. */
+    private fun tabled(col: JsonElement, n: Int, table: MutableList<String?>, cat: List<JsonElement>?): List<String?> {
+        val out = ArrayList<String?>()
+        val r = (col as? JsonObject)?.get("r") as? JsonArray ?: throw Malformed("column")
+        var i = 0
+        while (i + 1 < r.size() && out.size < n) {
+            val v = r[i]; val k = long(r[i + 1])
+            if (k < 0) throw Malformed("run")
+            for (j in 0 until minOf(k, (n - out.size).toLong())) out += when {
+                v is JsonPrimitive && v.isNumber -> { val q = long(v); if (q >= 0) table.getOrNull(q.toInt()) else cat?.getOrNull((-1 - q).toInt())?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.asString } }
+                v is JsonPrimitive && v.isString -> v.asString.take(64).also { if (it.isNotEmpty() && table.size < SIB_MAX_IDS) table += it } // ("" isn't numbered)
+                else -> null
+            }
+            i += 2
+        }
+        return out
+    }
 
     /** A column (Stretch.column) as numbers, at most [n]: null where a row hasn't one. */
     private fun nums(col: JsonElement, n: Int): List<Double?> {
