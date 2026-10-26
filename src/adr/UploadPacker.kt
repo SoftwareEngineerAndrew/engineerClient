@@ -677,12 +677,13 @@ object UploadPacker {
                     if (first) {
                         // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
                         first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1); addProperty("tab2", 1); addProperty("eqfold", 1)
-                            val catMeta = JsonObject().apply { blockTpl?.let { addProperty("blocks", it.cat.version) }; cat?.values?.let { addProperty("values", it.version) } }
+                            val catMeta = JsonObject().apply { blockTpl?.let { addProperty("blocks", it.cat.version) }; cat?.values?.let { addProperty("values", it.version) }; cat?.skulls?.let { addProperty("skulls", it.version) } }
                             if (catMeta.size() > 0) add("cat", catMeta) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
                         val skulls = ArrayList<String>()
                         for (l in scan.world) if (kindOf(l) == "skull") skulls += l else put(l, timed = false)
-                        for (l in skullsLines(skulls)) { w.write(l); w.write(NL) }
+                        val frame = blockTpl?.frame ?: scan.layout?.let { runCatching { Templates.Frame(obj(it)["r"] as? JsonArray) }.getOrNull() }
+                        for (l in skullsLines(skulls, cat?.skulls?.takeIf { frame != null }, frame)) { w.write(l); w.write(NL) }
                         continue
                     }
                     // A line cut short (a crash part way through writing it) would get the whole run refused.
@@ -703,14 +704,27 @@ object UploadPacker {
      * The heads placed in the world as "skulls" lines (the viewer has no use for when each was
      * seen): by place, each [dx, dy, dz, texture] from the one before, the textures by number
      * ("tex"); [SKULLS_LINE] to a line at most (each line on its own: the site takes lines up to 128 KB).
+     * Those the site's skulls catalogue has (the same place in the same room, the same skin) go as
+     * its numbers instead ("cat": in order, each from the one before).
      */
-    private fun skullsLines(lines: List<String>): List<String> {
+    private fun skullsLines(lines: List<String>, cat: Catalogue.Skulls? = null, frame: Templates.Frame? = null): List<String> {
         val at = java.util.TreeMap<Triple<Int, Int, Int>, String>(compareBy<Triple<Int, Int, Int>>({ it.first }, { it.third }, { it.second }))
         for (line in lines) runCatching {
             val l = obj(line)
             at[Triple(int(l["x"]), int(l["y"]), int(l["z"]))] = (l["tex"] as JsonPrimitive).asString
         }
-        return at.entries.chunked(SKULLS_LINE).map { part ->
+        val ids = java.util.TreeSet<Int>()
+        if (cat != null && frame != null) at.entries.removeIf { (p, tex) ->
+            val f = frame.fwd(p.first, p.second, p.third, "") ?: return@removeIf false
+            val id = cat.id[Catalogue.skullKey(f.space, f.a, f.y, f.b, tex)] ?: return@removeIf false
+            // (only where the viewer gets the same place back)
+            if (frame.inv(f.space, f.a, f.y, f.b, "")?.first?.contentEquals(intArrayOf(p.first, p.second, p.third)) != true) return@removeIf false
+            ids += id; true
+        }
+        val catLines = ids.chunked(SKULLS_LINE * 10).map { part ->
+            JsonObject().apply { addProperty("k", "skulls"); addProperty("v", cat!!.version); add("cat", JsonArray().apply { var prev = 0; for (i in part) { add(i - prev); prev = i } }) }.toString()
+        }
+        return catLines + at.entries.chunked(SKULLS_LINE).map { part ->
             val tex = LinkedHashMap<String, Int>()
             val d = JsonArray()
             var p = Triple(0, 0, 0)

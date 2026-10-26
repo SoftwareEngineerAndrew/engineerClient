@@ -17,7 +17,7 @@ import java.nio.file.StandardCopyOption
  * here ([BLOCKS]); the viewer has every version. Each is fetched once into a folder and read from
  * there; one that can't be had (offline, a bad file) is left out, and the run goes up without it.
  */
-class Catalogue(val blocks: Blocks?, val values: Values? = null) {
+class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Skulls? = null) {
 
     /** Block change pieces ([Templates.pieces]): their keys, which ones each usually goes on to (most often first), the boss floors that go at once. */
     class Blocks(val version: Int, val pieces: List<String>, val next: List<IntArray>, val ends: List<Templates.End>) {
@@ -27,9 +27,13 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null) {
     /** Values that come over and over (gear, head skins, names, poses, types), per field: each one's number, by [canon]. */
     class Values(val version: Int, val fields: Map<String, Map<String, Int>>, val lists: Map<String, List<com.google.gson.JsonElement>> = emptyMap())
 
+    /** Heads placed in the world: each spot's number by "space|a,y,b|skin" (in its frame, [Templates.Frame]). */
+    class Skulls(val version: Int, val id: Map<String, Int>)
+
     companion object {
         const val BLOCKS = 1
         const val VALUES = 1
+        const val SKULLS = 1
         private const val MAX_BYTES = 16 shl 20 // (packed; a catalogue is under a MB)
         private const val MAX_TEXT = 256L shl 20
         private val log = LoggerFactory.getLogger("engineerclient")
@@ -40,10 +44,11 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null) {
          * site, or null). Kept while memory allows: an upload after a run reads it again otherwise.
          */
         @Synchronized fun load(dir: Path, fetch: (String) -> ByteArray?): Catalogue {
-            cached?.get()?.let { if (it.blocks != null && it.values != null) return it }
+            cached?.get()?.let { if (it.blocks != null && it.values != null && it.skulls != null) return it }
             val blocks = section(dir, "blocks-$BLOCKS.json.xz", fetch) { readBlocks(it, BLOCKS) }
             val values = section(dir, "values-$VALUES.json.xz", fetch) { readValues(it, VALUES) }
-            return Catalogue(blocks, values).also { cached = SoftReference(it) }
+            val skulls = section(dir, "skulls-$SKULLS.json.xz", fetch) { readSkulls(it, SKULLS) }
+            return Catalogue(blocks, values, skulls).also { cached = SoftReference(it) }
         }
 
         private fun <T> section(dir: Path, name: String, fetch: (String) -> ByteArray?, read: (InputStream) -> T): T? {
@@ -99,6 +104,20 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null) {
             if (fields.isEmpty()) throw IllegalStateException("no fields")
             return Values(version, fields, lists)
         }
+
+        /** A skulls catalogue: {"tex": [skin...], "spots": [[space, a, y, b, skin number]...]}. */
+        fun readSkulls(input: InputStream, version: Int): Skulls {
+            val o = com.google.gson.JsonParser.parseReader(InputStreamReader(Capped(input, MAX_TEXT), Charsets.UTF_8)).asJsonObject
+            val tex = o.getAsJsonArray("tex").map { it.asString }
+            val id = HashMap<String, Int>()
+            o.getAsJsonArray("spots").forEachIndexed { i, e ->
+                val a = e.asJsonArray
+                id.putIfAbsent(skullKey(a[0].asString, a[1].asInt, a[2].asInt, a[3].asInt, tex[a[4].asInt]), i)
+            }
+            if (id.isEmpty()) throw IllegalStateException("no spots")
+            return Skulls(version, id)
+        }
+        fun skullKey(space: String, a: Int, y: Int, b: Int, tex: String) = "$space|$a,$y,$b|$tex"
 
         /** A value as the same text whichever way it was written (-10.0 and -10 alike, as the viewer has them). */
         fun canon(e: com.google.gson.JsonElement): String = when {
