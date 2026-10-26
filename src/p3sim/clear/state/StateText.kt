@@ -104,5 +104,6 @@ object StateText {
     const val NO_KEY_LINE = "§cYou do not have the key for this door!"
 
     /** Strips `§x` colour and format codes: the text the clients' parsers see. */
-    fun plain(s: String): String = s.replace(Regex("§."), "")
+    private val CODES = Regex("§.")
+    fun plain(s: String): String = s.replace(CODES, "")
 }

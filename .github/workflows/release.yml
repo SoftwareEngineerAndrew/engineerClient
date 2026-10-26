@@ -12,6 +12,8 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref_name }}
+  # A newer push makes the build in progress pointless: it's cancelled and the newest goes out.
+  cancel-in-progress: true
 
 jobs:
   release:
@@ -36,7 +38,19 @@ jobs:
           MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)
           echo "MC=$MC" >> "$GITHUB_ENV"
           echo "CHANNEL=$MC" >> "$GITHUB_ENV"
-      - run: gradle build --console=plain -Dorg.gradle.jvmargs=-Xmx2G
+      # The last build's compiler state, so a push recompiles only what it touched (Kotlin's incremental compile needs the
+      # earlier outputs and Gradle's record of them; a miss just compiles everything, as without it).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .gradle
+            build/kotlin
+            build/classes
+            build/tmp
+          key: ec-compile-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: ec-compile-${{ github.ref_name }}-
+      # The tests run in their own job alongside (below): the release doesn't wait for them.
+      - run: gradle build -x test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -52,3 +66,23 @@ jobs:
           gh release create "release-$CHANNEL" "$jar" --target "$GITHUB_SHA" \
             --title "EngineerClient for Minecraft $MC" \
             --notes "$notes" $latest
+
+  # The headless tests, alongside the release rather than before it: a failure shows on the commit.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 9.6.1
+          cache-read-only: true
+      - name: Odin 0.3.7 (26.3 port, not released yet)
+        if: github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 37808382947 -R odtheking/OdinFabric -n Odin-0.3.7.jar -D libs/odin
+      - run: gradle test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G

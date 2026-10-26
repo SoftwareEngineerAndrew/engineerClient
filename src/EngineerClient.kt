@@ -81,6 +81,7 @@ object EngineerClient : ClientModInitializer {
             PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning,
+            com.engineerclient.practice.TerminalHitboxes,
         )
     }
 
@@ -105,14 +106,18 @@ object EngineerClient : ClientModInitializer {
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
+        safely("terminal hitboxes settings") { com.engineerclient.practice.TerminalHitboxes.adoptTermInfoSettings() }
         // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map, and Map Info's LCM Style
         // (from Ascent Client, same names, so saved values carry over); Odin's configs are read again so they apply
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
         safely("lcm map info") { com.engineerclient.lcm.LcmMapInfo.install() }
         safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
+        // Team TP Maze: settings on Odin's Puzzle Solvers (its TP Maze), the party's shared maze map over Odin's websocket.
+        safely("team tp maze") { com.engineerclient.tpmaze.TeamTpMaze.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
+        safely("click limit") { com.engineerclient.misc.OdinClickLimit.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
@@ -208,6 +213,8 @@ object EngineerClient : ClientModInitializer {
             // /adr online: ADR Online in your browser, signed in.
             for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
                 .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
+            // /edt: #EndDungeonsToxicity in party chat.
+            dispatcher.register(literal("edt").executes { mc.schedule { com.odtheking.odin.utils.sendCommand("pc #EndDungeonsToxicity") }; 1 })
             // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
             dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
             // /adm on its own: Odin's settings menu, as its /od opens it; /adm help lists the rest.

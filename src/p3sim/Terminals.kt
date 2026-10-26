@@ -372,8 +372,8 @@ object Terminals {
         private val opened = Fight.serverTick
         /** The server tick a click was answered on: its slot updates go out the tick after. */
         private var answeredAt = -1
-        /** Ticks of the clicks that counted, for the 5-per-10-ticks limit. */
-        private val counted = ArrayDeque<Int>()
+        /** When the clicks that counted were taken (System.nanoTime), for the 5-per-500-ms limit. */
+        private val counted = ArrayDeque<Long>()
         private var sync: net.minecraft.world.inventory.ContainerSynchronizer? = null
         private var refilled = false
 
@@ -426,11 +426,14 @@ object Terminals {
             Fight.afterPing("terminal click") {
                 if (player.containerMenu !== this || term.done) return@afterPing
                 val now = Fight.serverTick
-                // Past 5 in the last 10 ticks: dropped, no answer of any kind.
+                // Past 5 in the last 500 ms: dropped, no answer of any kind. Real time where the click is taken, as
+                // Hypixel counts (after a server freeze it takes the first 5 queued in one tick, however few ticks
+                // after the ones before); at 20 TPS the same as 10 ticks.
                 if (P3Sim.clickLimit) {
-                    while (counted.isNotEmpty() && counted.first() <= now - 10) counted.removeFirst()
+                    val at = System.nanoTime()
+                    while (counted.isNotEmpty() && counted.first() <= at - 500_000_000L) counted.removeFirst()
                     if (counted.size >= 5) return@afterPing
-                    counted.addLast(now)
+                    counted.addLast(at)
                 }
                 if (!term.click(slot, button, input)) return@afterPing
                 // A counted click: a pling at you at once, the slot change next tick.

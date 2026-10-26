@@ -87,6 +87,8 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
 
     /** Practice's start timer: you're placed, and nothing (stands, Goldor, credits) is up until it ends. */
     private var holding = false
+    /** The start timer is running: no section is live yet ([section] isn't [from] until [begin]; every terminal is refused). */
+    val isHolding get() = holding
     private var holdFor = 0
     private var held = false
 
