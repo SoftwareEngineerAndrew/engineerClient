@@ -26,6 +26,7 @@ import net.minecraft.world.entity.projectile.arrow.AbstractArrow
 import net.minecraft.world.entity.projectile.hurtingprojectile.AbstractHurtingProjectile
 import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull
 import net.minecraft.util.Mth
+import net.minecraft.world.level.block.AbstractSkullBlock
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
@@ -192,6 +193,7 @@ class RunRecorder(
     }
 
     fun onBlockUpdate(pos: BlockPos, state: BlockState) {
+        if (state.block is AbstractSkullBlock && freshSkulls.size < FRESH_SKULLS) freshSkulls.putIfAbsent(pos.immutable(), tick)
         emit("""{"k":"block","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"s":${paletteIndex(state)}}""")
     }
 
@@ -797,6 +799,9 @@ class RunRecorder(
     // Player heads placed as blocks (skulls on walls, floors, the boss arena): their skin, once per
     // position and again if it changes. The viewer would otherwise draw a default head.
     private val lastSkull = HashMap<BlockPos, String>()
+    // Heads just placed (and when): looked at the next ticks too, till their skin is in - the sweep
+    // below misses heads that are gone within a second (the boss arena's animated ones).
+    private val freshSkulls = HashMap<BlockPos, Int>()
 
     // Each chunk around you is looked at once a second, a twentieth of them each tick: all 625 in
     // one tick made that tick a spike.
@@ -804,6 +809,15 @@ class RunRecorder(
         val player = EngineerClient.mc.player ?: return
         val cx = player.blockPosition().x shr 4
         val cz = player.blockPosition().z shr 4
+        val fresh = freshSkulls.entries.iterator()
+        while (fresh.hasNext()) {
+            val (pos, at) = fresh.next()
+            val be = level.getBlockEntity(pos) as? SkullBlockEntity
+            val tex = be?.ownerProfile?.let { texturesOf(it.partialProfile().properties()) }
+            if (tex == null) { if (tick - at > FRESH_TICKS) fresh.remove(); continue }
+            fresh.remove()
+            if (lastSkull.put(pos, tex) != tex) emit("""{"k":"skull","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"tex":${str(tex)}}""")
+        }
         val slice = tick % 20
         for (x in cx - SKULL_CHUNKS..cx + SKULL_CHUNKS) for (z in cz - SKULL_CHUNKS..cz + SKULL_CHUNKS) {
             if (Math.floorMod(x * 7 + z, 20) != slice) continue
@@ -947,6 +961,8 @@ class RunRecorder(
         private val DYE = Regex("#[0-9a-f]{6}")
         // How far around you (in chunks) placed player heads are looked for, every second.
         const val SKULL_CHUNKS = 12
+        private const val FRESH_SKULLS = 4096
+        private const val FRESH_TICKS = 5
         val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
     }
 }

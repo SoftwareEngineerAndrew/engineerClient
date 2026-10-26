@@ -135,9 +135,10 @@ object MeshCodec {
     /**
      * A deflated piece back into [out] (cleared first), turned [rot] in a box [w] x [d] (unturned size): per quad its texture
      * as a number in the sprite table ([sprites], by the bundle's own texture numbers), the side it now faces, and per corner
-     * its turned position, u v across the texture and colour (its side's shade redone for the side it now faces).
+     * its turned position, u v across the texture and colour (its side's shade redone for the side it now faces). With [cut],
+     * the quads nobody can see are left out ([RoomCut.drops]; [pockets]: sealed pockets too).
      */
-    fun decode(packed: ByteArray, off: Int, len: Int, sprites: IntArray, rot: Rot, w: Int, d: Int, out: CompactMesh.Quads) {
+    fun decode(packed: ByteArray, off: Int, len: Int, sprites: IntArray, rot: Rot, w: Int, d: Int, out: CompactMesh.Quads, cut: RoomCut? = null, pockets: Boolean = false) {
         out.clear()
         val inf = Inflater()
         val plain: ByteArray
@@ -153,18 +154,28 @@ object MeshCodec {
         val total = counts.sum()
         require(plain.size == 4 * GROUPS + total * QUAD) { "bad piece" }
         val ratio = FloatArray(6) { s -> SHADE[turn(s, rot)] / SHADE[s] }
+        val at = corners.get()
         var group = 0; var left = counts[0]
         for (qi in 0 until total) {
             while (left == 0) left = counts[++group]
             left--
+            val start = b.position()
+            b.position(start + 3)
+            for (c in 0 until 4) {
+                at[c * 3] = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
+                at[c * 3 + 1] = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
+                at[c * 3 + 2] = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
+                b.position(b.position() + 8)
+            }
+            if (cut != null && cut.drops(group, at, pockets)) continue
+            b.position(start)
             val name = b.getShort().toInt() and 0xFFFF
             val shade = b.get().toInt().coerceIn(0, 5)
             val k = ratio[shade]
             val i = out.add(sprites.getOrElse(name) { 0 }, if (group < 6) turn(group, rot) else 6)
             for (c in 0 until 4) {
-                val x = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
-                val y = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
-                val z = (b.getShort().toInt() and 0xFFFF) / 128f - 64f
+                b.position(b.position() + 6)
+                val x = at[c * 3]; val y = at[c * 3 + 1]; val z = at[c * 3 + 2]
                 out.pos[i * 12 + c * 3] = turnX(rot, x, z, w, d); out.pos[i * 12 + c * 3 + 1] = y; out.pos[i * 12 + c * 3 + 2] = turnZ(rot, x, z, w, d)
                 out.uv[i * 8 + c * 2] = (b.getShort().toInt() and 0xFFFF) / 65535f
                 out.uv[i * 8 + c * 2 + 1] = (b.getShort().toInt() and 0xFFFF) / 65535f
@@ -173,6 +184,7 @@ object MeshCodec {
             }
         }
     }
+    private val corners = ThreadLocal.withInitial { FloatArray(12) }
 
     /** The colour's red, green and blue times [k] (the int as the vertex buffer holds it: native order, alpha in its top byte). */
     private fun shaded(c: Int, k: Float): Int {

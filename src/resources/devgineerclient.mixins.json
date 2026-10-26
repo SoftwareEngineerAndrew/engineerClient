@@ -21,6 +21,8 @@
     "EntitySnapTapMixin",
     "GameModeDestroyAccessor",
     "GameModeTapMixin",
+    "GamePerfMixin",
+    "GamePerfRenderMixin",
     "GuiTitleTapMixin",
     "InputTapMixin",
     "LookTapMixin",

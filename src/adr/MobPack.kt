@@ -506,6 +506,15 @@ internal object ProjPack {
             if (worst == null) break
             path += worst; path.sortBy { it[0] }
         }
+        // Moved after it stopped: a point where it was, but where it stays within a tenth of the one before.
+        if (path.size > 1) for (m in p.moves) {
+            val a = m.asJsonArray
+            if (a.size() < 4) continue
+            val q = doubleArrayOf(a[0].asDouble, a[1].asDouble, a[2].asDouble, a[3].asDouble)
+            val prev = path.last()
+            if (q[0] <= prev[0] || (1..3).all { Math.abs(Math.round((q[it] - path[0][it]) * 10) - Math.round((prev[it] - path[0][it]) * 10)) <= 1 }) continue
+            path += q
+        }
         val o = JsonObject()
         o.addProperty("k", "pj"); o.add("t", s["t"]); o.add("id", s["id"])
         if (type != "minecraft:arrow") o.addProperty("type", type)

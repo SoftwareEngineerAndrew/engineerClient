@@ -101,6 +101,7 @@ object ADR : Module(
     private var session: RunRecorder? = null
     private val simDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("sim")
     private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("runs")
+    private val catDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("catalogue")
 
     init {
         on<LevelEvent.Load> {
@@ -370,6 +371,12 @@ object ADR : Module(
         }.onFailure { EngineerClient.logger.warn("[ec] adr: sibling download failed", it) }.getOrNull()
     }
 
+    /** One of the site's catalogue files (Catalogue), or null. */
+    private fun catalogueBytes(name: String): ByteArray? = runCatching {
+        val got = http.send(HttpRequest.newBuilder(URI.create("https://$SITE/adr/cat/$name")).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofInputStream())
+        got.body().use { s -> if (got.statusCode() != 200) null else s.readNBytes(16 shl 20) }
+    }.onFailure { EngineerClient.logger.warn("[ec] adr: catalogue download failed", it) }.getOrNull()
+
     /** A party member's upload bigger than this (a real one is a few MB) is left alone. */
     private const val SIBLING_MAX = 16 shl 20
     private val RUN_ID = Regex("""[A-Za-z0-9_-]{1,64}""")
@@ -377,8 +384,10 @@ object ADR : Module(
     /** Sends one run, on the calling thread. Its id on the site. */
     private fun send(file: Path, scan: UploadPacker.Scan = UploadPacker.scan(file, privateRuns), siblingId: String? = askSibling(scan.summary)?.first): String {
         val summary = scan.summary
-        // Without the mobs a party member's recording already on the site has (UploadPacker), as xz.
-        val (packed, left) = UploadPacker.pack(file, scan, siblingId?.let(::siblingBytes), hideParty = hidePartyChat)
+        // Without the mobs a party member's recording already on the site has (UploadPacker), as xz;
+        // what the site's catalogues have as their numbers (Catalogue).
+        val cat = runCatching { Catalogue.load(catDir, ::catalogueBytes) }.onFailure { EngineerClient.logger.warn("[ec] adr: no catalogue", it) }.getOrNull()
+        val (packed, left) = UploadPacker.pack(file, scan, siblingId?.let(::siblingBytes), hideParty = hidePartyChat, cat = cat)
         if (left > 0) EngineerClient.logger.info("[ec] adr: $left mobs left out, already uploaded by a party member")
         try {
             return sendPacked(packed, summary)
