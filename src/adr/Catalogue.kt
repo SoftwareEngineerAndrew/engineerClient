@@ -17,7 +17,7 @@ import java.nio.file.StandardCopyOption
  * here ([BLOCKS]); the viewer has every version. Each is fetched once into a folder and read from
  * there; one that can't be had (offline, a bad file) is left out, and the run goes up without it.
  */
-class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Skulls? = null) {
+class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Skulls? = null, val dict: Dict? = null) {
 
     /** Block change pieces ([Templates.pieces]): their keys, which ones each usually goes on to (most often first), the boss floors that go at once. */
     class Blocks(val version: Int, val pieces: List<String>, val next: List<IntArray>, val ends: List<Templates.End>) {
@@ -30,7 +30,18 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
     /** Heads placed in the world: each spot's number by "space|a,y,b|skin" (in its frame, [Templates.Frame]). */
     class Skulls(val version: Int, val id: Map<String, Int>)
 
+    /**
+     * The shared dictionary: text like any upload's (from the site's own runs, no player in it) that an
+     * upload is packed after, so it can point back into it ([UploadPacker]). [packed] is what that
+     * text packs to - the part of the xz stream an upload leaves out, as the site and viewer have it.
+     */
+    class Dict(val version: Int, val text: ByteArray, val packed: ByteArray) {
+        /** Whether this build packs [text] to exactly [packed] (checked once, [UploadPacker]). */
+        @Volatile var usable: Boolean? = null
+    }
+
     companion object {
+        const val DICT = 1
         const val BLOCKS = 1
         const val VALUES = 3
         const val SKULLS = 1
@@ -44,17 +55,18 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
          * site, or null). Kept while memory allows: an upload after a run reads it again otherwise.
          */
         @Synchronized fun load(dir: Path, fetch: (String) -> ByteArray?): Catalogue {
-            cached?.get()?.let { if (it.blocks != null && it.values != null && it.skulls != null) return it }
+            cached?.get()?.let { if (it.blocks != null && it.values != null && it.skulls != null && it.dict != null) return it }
             val blocks = section(dir, "blocks-$BLOCKS.json.xz", fetch) { readBlocks(it, BLOCKS) }
             val values = section(dir, "values-$VALUES.json.xz", fetch) { readValues(it, VALUES) }
             val skulls = section(dir, "skulls-$SKULLS.json.xz", fetch) { readSkulls(it, SKULLS) }
             // (versions this build no longer sends numbers from)
-            val current = setOf("blocks-$BLOCKS.json.xz", "values-$VALUES.json.xz", "skulls-$SKULLS.json.xz")
-            runCatching { Files.list(dir).use { l -> l.filter { it.fileName.toString().let { n -> n.endsWith(".json.xz") && n !in current } }.toList() }.forEach(Files::deleteIfExists) }
-            return Catalogue(blocks, values, skulls).also { cached = SoftReference(it) }
+            val dict = section(dir, "dict-$DICT.bin", fetch, raw = true) { readDict(it, DICT) }
+            val current = setOf("blocks-$BLOCKS.json.xz", "values-$VALUES.json.xz", "skulls-$SKULLS.json.xz", "dict-$DICT.bin")
+            runCatching { Files.list(dir).use { l -> l.filter { it.fileName.toString().let { n -> (n.endsWith(".json.xz") || n.endsWith(".bin")) && n !in current } }.toList() }.forEach(Files::deleteIfExists) }
+            return Catalogue(blocks, values, skulls, dict).also { cached = SoftReference(it) }
         }
 
-        private fun <T> section(dir: Path, name: String, fetch: (String) -> ByteArray?, read: (InputStream) -> T): T? {
+        private fun <T> section(dir: Path, name: String, fetch: (String) -> ByteArray?, raw: Boolean = false, read: (InputStream) -> T): T? {
             val file = dir.resolve(name)
             try {
                 if (!Files.isRegularFile(file)) {
@@ -64,7 +76,7 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
                     Files.write(part, bytes)
                     Files.move(part, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
                 }
-                return Files.newInputStream(file).use { read(XZInputStream(it.buffered(), 32768)) }
+                return Files.newInputStream(file).use { read(if (raw) it.buffered() else XZInputStream(it.buffered(), 32768)) }
             } catch (e: Exception) {
                 // (a file that doesn't read is fetched again next time)
                 log.warn("[ec] adr: catalogue $name couldn't be had, uploading without it: $e")
@@ -107,6 +119,21 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
             if (fields.isEmpty()) throw IllegalStateException("no fields")
             return Values(version, fields, lists)
         }
+
+        /** A dictionary file: "ADRD", the text's length (4 bytes), then the LZMA2 chunks it packs to. */
+        fun readDict(input: InputStream, version: Int): Dict {
+            val all = Capped(input, MAX_BYTES.toLong()).readAllBytes()
+            if (all.size < 9 || String(all, 0, 4, Charsets.US_ASCII) != "ADRD") throw IllegalStateException("not a dictionary")
+            val len = java.nio.ByteBuffer.wrap(all, 4, 4).int
+            if (len !in 1..DICT_TEXT) throw IllegalStateException("dictionary of $len")
+            val packed = all.copyOfRange(8, all.size)
+            // (the chunks, then the end of them, read as LZMA2)
+            val text = org.tukaani.xz.LZMA2InputStream(java.io.ByteArrayInputStream(packed + 0.toByte()), DICT_WINDOW).use { Capped(it, len.toLong() + 1).readAllBytes() }
+            if (text.size != len) throw IllegalStateException("dictionary text ${text.size} of $len")
+            return Dict(version, text, packed)
+        }
+        private const val DICT_TEXT = 6 shl 20
+        const val DICT_WINDOW = 8 shl 20
 
         /** A skulls catalogue: {"tex": [skin...], "spots": [[space, a, y, b, skin number]...]}. */
         fun readSkulls(input: InputStream, version: Int): Skulls {
