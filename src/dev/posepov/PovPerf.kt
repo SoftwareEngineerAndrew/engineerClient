@@ -37,16 +37,18 @@ object PovPerf {
     // Inside the above: GPU uploads of pieces, and the room/section builds.
     const val UPLOAD = 17
     const val MAKE = 18
+    const val MAKE_WORLD = 19
+    const val MAKE_OWN = 20
     // Other threads.
-    const val DECODE = 19
-    const val CULL_AHEAD = 20
-    private const val N = 21
+    const val DECODE = 21
+    const val CULL_AHEAD = 22
+    private const val N = 23
 
     private val names = arrayOf(
         "eyes", "entities", "build", "per view", "labels",
         "cull (waited)", "resolve", "boxes", "blocks", "figures", "hand",
         "sharing", "warm up", "prerender", "prefetch", "looks", "packets",
-        "uploads", "builds",
+        "uploads", "room builds", "section builds", "changed-room builds",
         "decode", "cull ahead",
     )
 
@@ -186,7 +188,7 @@ object PovPerf {
         run {
             val sb = StringBuilder("ticks ms/s:")
             var total = 0L
-            for (i in SHARE..MAKE) {
+            for (i in SHARE..MAKE_OWN) {
                 total += shownSum[i]
                 if (shownCalls[i] == 0L) continue
                 sb.append(" · ").append(names[i]).append(' ').append("%.1f".format(shownSum[i] / 1e6))
@@ -201,12 +203,16 @@ object PovPerf {
         if (ts.isNotEmpty()) out += ("threads CPU: " + ts.joinToString(" · ") { "%s %.0f%%".format(it.first.removePrefix("pose pov ").removePrefix("devgineerclient-pose-"), it.second) }) to grey
         out += "memory: %d bundles in RAM (%.0f MB) · heap %d of %d MB".format(
             MeshBundles.count, MeshBundles.bytes / 1048576.0, Runtime.getRuntime().let { (it.totalMemory() - it.freeMemory()) shr 20 }, Runtime.getRuntime().maxMemory() shr 20) to grey
+        return out
+    }
+
+    /** The whole monitor ([lines] and the caller's own) into the log, every 10 seconds. */
+    fun log(all: List<Pair<String, Int>>) {
         val nowMs = System.currentTimeMillis()
         if (logLater && nowMs - loggedAt > 10_000) {
             loggedAt = nowMs
-            DevgineerClient.logger.info("[pose pov perf] " + out.joinToString(" | ") { it.first })
+            DevgineerClient.logger.info("[pose pov perf] " + all.joinToString(" | ") { it.first })
         }
         logLater = false
-        return out
     }
 }
