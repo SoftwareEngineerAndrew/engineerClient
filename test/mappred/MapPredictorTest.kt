@@ -27,10 +27,26 @@ class MapPredictorTest {
         puzzles, rules,
     )
 
-    private fun predict(v: MapView, samples: Int = 400): Prediction {
-        val p = MapPredictor(v)
-        p.run(samples, 400_000, Random(42))
+    /** [v]'s prediction as the map prediction worker gets it ([drive]); F7 by the game's own steps unless [gameProcess] is false. */
+    private fun predict(v: MapView, samples: Int = 400, gameProcess: Boolean = true): Prediction {
+        val p = MapPredictor(v, gameProcess)
+        drive(p, samples, Random(42))
         return assertNotNull(p.prediction())
+    }
+
+    /**
+     * As OdinMapPrediction's worker runs a predictor: a chunk at a time until [samples] are kept, or a chunk keeps none
+     * once some are (enough) or at level 3 (nothing fits). The number of chunks it took (it never spins on).
+     */
+    private fun drive(p: MapPredictor, samples: Int, rnd: Random): Int {
+        var calls = 0
+        while (p.accepted < samples) {
+            calls++
+            assertTrue(calls < 5_000, "still running after $calls chunks")
+            val kept = p.run(100, 40_000, rnd)
+            if (kept == 0 && (p.accepted > 0 || p.level > 2)) break
+        }
+        return calls
     }
 
     /** Over the samples themselves (the calibrated chances drawn on the map don't keep these exact). */
@@ -87,7 +103,8 @@ class MapPredictorTest {
     }
 
     @Test fun theCalibrationKeepsWhatTheMapRulesOutAtNothing() {
-        val p = predict(opening())
+        // the classic sampler's (the game process's chances are its samples', nothing fitted)
+        val p = predict(opening(), gameProcess = false)
         var changed = false
         for (t in 0 until 36) {
             val raw = p.raw[t] ?: continue; val q = assertNotNull(p.probs[t])

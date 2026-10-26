@@ -48,6 +48,8 @@ import kotlin.random.Random
  * leave only one way for the last rooms to be, they're drawn in full with their names. Everything
  * is worked out again on a background thread whenever the map shows more, so a wrong guess changes
  * as rooms open. Only what the map shows is used (never the world scan of rooms nobody has seen).
+ * Prediction Model picks F7's sampler: Game Process (the default; [GameSampler], the game's own steps) or
+ * Classic (the older one); the other floors always use Classic.
  *
  * Like the other Odin additions, the settings are registered into Odin's module and saved with it.
  * `MapPathHintsMixin` draws this instead of Odin's "?" tiles while it is on. With LCM Style on, LcmStyle
@@ -56,10 +58,13 @@ import kotlin.random.Random
 object OdinMapPrediction {
 
     private enum class Mode { ADM, ODIN }
+    private enum class Model(private val label: String) { GAME("Game Process"), CLASSIC("Classic"); override fun toString() = label }
 
     private val mode = SelectorSetting("Room Prediction", Mode.ADM,
         desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Odin: Odin's own guess. Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
+    private val model = SelectorSetting("Prediction Model", Model.GAME,
+        desc = "F7/M7: Game Process makes each guess the way the game makes its maps (big rooms one random spot each, the door tree grown from the entrance); Classic is the older sampler with its fitted tables. Other floors always use Classic.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val hidden = BooleanSetting("Hidden Tile Hints", true,
@@ -114,7 +119,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, splitText, hidden, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
+        for (s in listOf(mode, model, splitText, hidden, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
         EventBus.subscribe(this)
@@ -198,13 +203,14 @@ object OdinMapPrediction {
         if (!on || !DungeonMap.enabled || !supported()) return
         // Odin fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
-        val key = v.key()
+        val game = model.value == Model.GAME
+        val key = v.key() + if (game) ":game" else ":classic"
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
         worker.execute {
             EngineerClient.safely("map prediction worker") {
-                val predictor = MapPredictor(v)
+                val predictor = MapPredictor(v, gameProcess = game)
                 val rnd = Random(System.nanoTime())
                 // batches until enough samples agree, publishing as it goes; stops when the map changes
                 // again, when nothing fits even the loosest rules, or when no more fit

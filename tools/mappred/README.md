@@ -13,10 +13,12 @@ from an empty data folder (they read and write their data in the current folder)
     node <tools>/evaluate.mjs 150 400 prim 0.3 tables.json   # scores it on held-out maps (simulated discovery order)
     node <tools>/fetch-timelines.mjs list-all.json timelines.jsonl 400; node <tools>/exp6.mjs tables.json  # real order
     node <tools>/gen-kt.mjs                                  # the numbers for MapStats.kt (edit gen-kt for the tables file)
+    node <tools>/gen-game.mjs zmix.json > GameStats.kt       # F7's mixes and success rates for GameSampler.kt (placelik MIXRATE's zmix)
 
 The Kotlin predictor can be checked against the same maps: `node export-snaps.mjs` writes snaps.txt, then
 `ADS_MAP_SNAPSHOTS=<data>/snaps.txt gradle test --tests com.engineerclient.mappred.MapSnapshotsCheck --rerun`
-writes snaps.txt.out and `node score-kt.mjs` scores it. Keep the data folder out of the repo.
+writes snaps.txt.out and `node score-kt.mjs` scores it (each snapshot run as the game's worker runs it; F7 by
+the game process, `ADS_MAP_MODEL=classic` for the classic sampler). Keep the data folder out of the repo.
 
 ## What every recorded F7/M7 map does (4494 complete maps, Sep-Oct 2026)
 
@@ -326,6 +328,42 @@ Every candidate tried, and what it showed:
   finishTree would drop (opts.check: of 715537 marked finished trees on 100 snapshots, it kept none). Exact
   speedups always on: a bit-mask placement prefilter, each room's shown doors listed for mapOk, tree3 skipping
   nodes with no free side left, and no steps after every tree is done.
+
+- In the mod (src/mappred GameSampler.kt, F7's default; Room Prediction's Prediction Model setting picks Classic
+  instead): sampler3 with the two rule fixes (the 6-room mixes, 1% of maps, and c!/(c-k)! for a mix with c rooms
+  of a shape when the map shows k of them) and room/node/0/0/alpha=0.5/beta=0.5/mu=0.2, the mixes from gen-game.mjs;
+  the tab's puzzle order and the secret total's names weigh the specials' shuffle, nothing calibrated or held.
+  Checked against sampler3 on the same snapshots (layouts-snap, maps 0-39, all stages, both at 20 batches'
+  worth): -1.0358 against -1.0390 (paired +0.003, s.e. 0.005), and per tile the average of 40 Kotlin runs is
+  nearer each of two 100-batch sampler3 runs (total variation 0.018) than they are to each other (0.023).
+  It runs about 9x faster (0.3 s a snapshot),
+  so it goes on to 120 batches' worth, not 20. Driven as the game's worker drives it (MapSnapshotsCheck), against
+  the classic sampler with its calibration and 2000 samples: maps 100-199, 500 snapshots, -1.0221 against -1.0302
+  (+0.008, s.e. 0.003; 20 batches -1.0300, 60 -1.0261), 0.9 s a snapshot against 1.3 s (at most 2.6 s against
+  33); maps 0-39 -1.0278 against -1.0353 (+0.0075, s.e. 0.006). Most of the edge is at the later stages (12 rooms
+  known -0.777 against -0.795, -0.771 against -0.814); with 2 known they are level (-1.123/-1.126, -1.126/-1.123).
+  At sampler3's own 20 batches it only ties the classic sampler in the mod (+0.000, s.e. 0.0035): the gain
+  sampler3 showed was over the classic at evalbig's 300 samples, uncalibrated.
+  Review of that port (495 snapshots, maps 200-298, stages 2/4/6/9/12, the mix table made from the other maps only,
+  seed 5): the first stop rule (300 samples, 120 batches' worth, 120,000 particles) scored -1.0182 at 1.0 s, 0.007
+  over the classic sampler (-1.0251, 1.7 s; s.e. 0.004). Two hard snapshots (5 to 9 dead ends grown where the puzzles
+  want exactly 2 more, so most trees are thrown out) cost it 0.0037 of the 0.0047 to the same sampler at sampler3's
+  own stop rule (2000 samples, 800,000 particles; -1.0135): they ended with 15 and 21 samples, about two batches'
+  worth, and scored -33.3 and -36.8 against the classic sampler's -10.5 and -18.2. Now it goes to 400,000 particles,
+  shows nothing before 5 batches' worth (a prediction right after a door opens rested on as few as 1 sample) and hands
+  the map to the classic sampler when it ends with less (at 400,000 particles one of the two has 226 samples and
+  scores -8.8, the other has 53 and goes to the classic sampler: -18.4), and keeps 2000 samples and 120 batches' worth: -1.0115 (+0.0136 over the
+  classic sampler, s.e. 0.003), 2.3 s a snapshot, 6 to 8 s for the slowest tenth and about 10 s at most for the game's
+  own runs (more on a busy machine: the reviews' runs, with other jobs on the box, had 7.8-8.4 s and 9.7-10.4 s). The
+  2000 samples (against 300) are worth +0.0017 for 1.8 times the time. A map the game can't make (1 of 495) is the
+  classic sampler's time (51 s) after 0.5 s of the game's tries. The mix table from gen-game.mjs counts every map, the
+  held-out ones too (one of its 22 mixes is in only one map, a held-out one): with the table made from the training
+  maps only the first stop rule scored 0.003 lower than with it (-1.0182 against -1.0151, s.e. 0.0024, seed noise
+  included). The classic sampler's tables (gen-kt.mjs) are made from all maps as well, so that comparison is not
+  biased against it; make the table from the training maps (a LAYOUTS file of them) when scoring a change on held-out
+  maps. Known and left: the secret total's names weigh only the samples with 4 or fewer unnamed rooms, so near the end
+  a layout with more big rooms gets that factor (at most 1) and one with 5 or more rooms gets 1, a small lean to more
+  1x1s (the classic sampler does the same).
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 

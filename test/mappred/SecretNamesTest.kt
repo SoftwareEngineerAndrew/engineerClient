@@ -81,8 +81,15 @@ class SecretNamesTest {
     }
 
     private fun predict(v: MapView): Prediction {
+        // as the map prediction worker runs it (OdinMapPrediction): chunks until enough, or one keeps none once some are
+        // (the game-process sampler shows nothing before several batches back it, so a single call isn't enough)
         val p = MapPredictor(v)
-        p.run(300, 200_000, Random(3))
+        val rnd = Random(3)
+        var calls = 0
+        while (p.accepted < 300) {
+            assertTrue(++calls < 5_000, "still running after $calls chunks")
+            if (p.run(100, 40_000, rnd) == 0 && (p.accepted > 0 || p.level > 2)) break
+        }
         return assertNotNull(p.prediction())
     }
 

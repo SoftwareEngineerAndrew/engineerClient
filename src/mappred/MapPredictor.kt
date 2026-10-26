@@ -173,11 +173,59 @@ class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val spli
                  val raw: Array<FloatArray?> = probs)
 
 /**
+ * The samples' weights added up, whichever sampler drew them: per tile and class (over [cells]), per door into the
+ * unknown ([Split]s), per big room placement (its tiles as a bit mask), per room and name from the secret total, and
+ * per door between unknown tiles (lower tile * n + higher: as a door, a wither door, the blood door, a fairy door).
+ */
+internal class Tally(cells: Int, entries: Int) {
+    val counts = Array(cells) { DoubleArray(Cls.COUNT) }
+    val splitRooms = DoubleArray(entries)
+    val splitTiles = DoubleArray(entries)
+    val splitCls = Array(entries) { DoubleArray(Cls.COUNT) }
+    val bigCounts = HashMap<Long, Double>()
+    val nameCounts = HashMap<Long, Double>()
+    val doorCounts = HashMap<Int, DoubleArray>()
+    var weight = 0.0
+
+    /** What the samples agree on, each tile's chances through [calibrate] when there is one; null before any was kept. */
+    fun prediction(w: Int, h: Int, cells: IntArray, entries: IntArray, entryDoor: ByteArray, samples: Int, level: Int,
+                   calibrate: ((FloatArray) -> FloatArray)?): Prediction? {
+        if (samples == 0 || weight <= 0) return null
+        val n = w * h
+        // over every sample: a puzzle column tile's chances add up to the chance of a room there
+        val raw = arrayOfNulls<FloatArray>(n)
+        cells.forEachIndexed { i, t ->
+            val c = counts[i]
+            if (c.sum() > 0) raw[t] = FloatArray(Cls.COUNT) { (c[it] / weight).toFloat() }
+        }
+        val probs = if (calibrate == null) raw else Array(n) { raw[it]?.let(calibrate) }
+        val splits = entries.mapIndexed { i, t ->
+            Split(t, entryDoor[t], (splitRooms[i] / weight).toFloat(), (splitTiles[i] / weight).toFloat(), FloatArray(Cls.COUNT) { (splitCls[i][it] / weight).toFloat() })
+        }
+        val big = bigCounts.entries.filter { it.value / weight >= 0.05 }.sortedByDescending { it.value }
+            .map { (m, v) -> BigRoom((0 until n).filter { (m shr it) and 1L == 1L }.toIntArray(), (v / weight).toFloat()) }
+        val named = nameCounts.entries.filter { it.value / weight >= 0.001 }.sortedByDescending { it.value }.map { (key, v) ->
+            NamedRoom((0 until n).filter { ((key / 256) shr it) and 1L == 1L }.toIntArray(), MapStats.NAMES[(key % 256).toInt()], (v / weight).toFloat())
+        }
+        val doors = doorCounts.entries.filter { it.value[0] / weight >= 0.05 }.sortedByDescending { it.value[0] }.map { (key, d) ->
+            PredictedDoor(key / n, key % n, (d[0] / weight).toFloat(), (d[1] / weight).toFloat(), (d[2] / weight).toFloat(), (d[3] / weight).toFloat())
+        }
+        return Prediction(w, h, probs, splits, samples, level, big, named, doors, raw)
+    }
+}
+
+/**
  * Room predictions for a partly discovered map: many complete maps are drawn that fit what the map
  * shows and the rules every recorded map of its floor follows ([FloorRules]), and the prediction is what
  * they agree on. [run] can be called again to add samples (each call refines the same prediction).
+ *
+ * Two samplers: on floors with [FloorRules.game] (F7) the game's own steps ([GameSampler]: the big rooms one random
+ * spot each, the door tree grown from the entrance, nothing fitted), unless [gameProcess] is false; else, and for a
+ * map the game's steps can't fit (a misread one) or hardly fit (too few trees come out right in the time it gets:
+ * [GameSampler.failed]), the classic one below (big rooms biggest first with held cells, a tree grown from the doors
+ * into the unknown, fitted tables and calibration).
  */
-class MapPredictor(private val view: MapView) {
+class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.game) {
     private val w = view.w
     private val h = view.h
     private val n = w * h
@@ -215,23 +263,32 @@ class MapPredictor(private val view: MapView) {
     private val pinBefore: IntArray
     private val frame = IntArray(n) { it }
 
-    private val counts: Array<DoubleArray>
-    private val splitRooms: DoubleArray
-    private val splitTiles: DoubleArray
-    private val splitCls: Array<DoubleArray>
-    /** Weight of each big room placement (its tiles as a bit mask), over the samples. */
-    private val bigCounts = HashMap<Long, Double>()
-    /** Names from the secret total: the solver, the pools of discovered rooms nobody has named, and each (tiles, name)'s weight. */
+    /** The classic sampler's samples added up. */
+    private val tally: Tally
+    /** Names from the secret total: the solver, and the pools of discovered rooms nobody has named. */
     private var secrets: SecretNames? = null
     private var secretsOn = false
     private val unnamedKnown = ArrayList<Int>()
-    private val nameCounts = HashMap<Long, Double>()
-    /** Each edge between unknown tiles (lower tile * n + higher): weight as a door, as a wither door, the blood door, a fairy door. */
-    private val doorCounts = HashMap<Int, DoubleArray>()
-    private var weight = 0.0
-    var accepted = 0; private set
-    var level = 0; private set
+    private var classicAccepted = 0
+    private var classicLevel = 0
     private var levelTries = 0L
+    /** The game-process sampler while it draws this map's samples; null for the classic one (asked for, or taken over). */
+    private var gameSampler: GameSampler? = null
+
+    /** True while the samples come from the game's own steps ([GameSampler]), false from the classic sampler. */
+    val usesGameProcess: Boolean get() = gameSampler != null
+    /** The game-process sampler while it has the map (tests look inside; null once the classic one has taken over). */
+    internal val game: GameSampler? get() = gameSampler
+    /** What stopped the game-process sampler, if it threw: it is dropped and the classic sampler takes over (see [run]). */
+    internal var gameError: Exception? = null
+        private set
+
+    private fun dropGame(e: Exception) { gameError = e; gameSampler = null }
+
+    /** Samples kept so far (the game-process sampler's once it has enough, 0 while it goes on: [GameSampler.accepted]). */
+    val accepted: Int get() = gameSampler?.accepted ?: classicAccepted
+    /** 0 keeps every rule; 1-2 the classic sampler's looser fallbacks; 3 nothing fits (or nothing is left to predict). */
+    val level: Int get() = if (gameSampler != null) 0 else classicLevel
 
     init {
         // the floor's tiles: its main grid, and on F4-F6 the puzzle column east of it, whose rooms have one
@@ -284,9 +341,17 @@ class MapPredictor(private val view: MapView) {
             val f = SYM.firstOrNull { s -> val (x, z) = s(ex, ez); z == 0 && x <= 2 } ?: SYM[0]
             for (t in 0 until n) { val (x, z) = f(t % w, t / w); frame[t] = z * w + x }
         }
-        counts = Array(cells.size) { DoubleArray(Cls.COUNT) }
-        splitRooms = DoubleArray(entries.size); splitTiles = DoubleArray(entries.size)
-        splitCls = Array(entries.size) { DoubleArray(Cls.COUNT) }
+        tally = Tally(cells.size, entries.size)
+        // the game's own steps where the floor has them worked out (F7's grid, every tile of it a room); if setting it
+        // up throws, the classic sampler has the map from the start (as when it throws later: see [run]). Not on 5-puzzle
+        // maps yet: there the game process's rare rooms (the dead ends past the puzzles) make it score below the classic
+        // sampler (-0.032 a tile, s.e. 0.013, on 45 held-out snapshots), which the classic tables have fitted
+        if (gameProcess && rules.game && view.puzzles < 5 && !bad && w == rules.w && h == rules.h && !rules.puzzleColumn && cells.isNotEmpty()) {
+            try {
+                val g = GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, secrets, secretsOn, unnamedKnown.toIntArray())
+                if (g.possible) gameSampler = g
+            } catch (e: Exception) { gameError = e }
+        }
     }
 
     /**
@@ -355,17 +420,6 @@ class MapPredictor(private val view: MapView) {
         }
     }
 
-    private fun poolOfCls(c: Int, shape: Shape): Int = when (c) {
-        Cls.BIG -> shape.ordinal
-        Cls.NORMAL -> MapStats.POOL_1X1
-        Cls.PUZZLE -> MapStats.POOL_PUZZLE
-        Cls.TRAP -> MapStats.POOL_TRAP
-        Cls.YELLOW -> MapStats.POOL_YELLOW
-        Cls.BLOOD -> MapStats.POOL_BLOOD
-        Cls.FAIRY -> MapStats.POOL_FAIRY
-        else -> MapStats.POOL_RARE
-    }
-
     private fun neighbours(t: Int): IntArray {
         val x = t % w; val z = t / w
         val out = IntArray(4); var k = 0
@@ -422,14 +476,25 @@ class MapPredictor(private val view: MapView) {
         }
     }
 
-    /** Draws samples until [samples] more are kept or [maxTries] have been tried; falls back a level when a level keeps nothing. */
+    /**
+     * Draws samples until [samples] more are kept or [maxTries] have been tried; falls back a level when a level keeps
+     * nothing. The game-process sampler works in batches, a few a call ([GameSampler.run]), and returns 0 once it has
+     * enough; when it can't fit the map, or ends with too few samples to go on ([GameSampler.failed]), or throws, it is
+     * dropped (what it kept with it: 0 is returned) and the classic sampler takes over from the next call. Nothing to
+     * predict, or no way to: 0, at [level] 3.
+     */
     fun run(samples: Int, maxTries: Int, rnd: Random): Int {
-        if (bad || cells.isEmpty()) return 0
+        if (bad || cells.isEmpty()) { classicLevel = 3; return 0 }
+        gameSampler?.let { g ->
+            val kept = try { g.run(samples, maxTries, rnd) } catch (e: Exception) { dropGame(e); return 0 }
+            if (g.failed) { gameSampler = null; return 0 }
+            return kept
+        }
         var kept = 0; var tries = 0
-        while (kept < samples && tries < maxTries && level <= 2) {
+        while (kept < samples && tries < maxTries && classicLevel <= 2) {
             tries++; levelTries++
-            if (tryOne(rnd)) { kept++; accepted++ }
-            else if (accepted == 0 && levelTries >= LEVEL_TRIES) { if (secretsOn) secretsOn = false else level++; levelTries = 0 }
+            if (tryOne(rnd)) { kept++; classicAccepted++ }
+            else if (classicAccepted == 0 && levelTries >= LEVEL_TRIES) { if (secretsOn) secretsOn = false else classicLevel++; levelTries = 0 }
         }
         return kept
     }
@@ -674,7 +739,7 @@ class MapPredictor(private val view: MapView) {
             }
         }
 
-        weight += wgt
+        tally.weight += wgt
         // the doors between unknown rooms: the wither path runs from the head room down to blood
         val blood = (0 until all).firstOrNull { type[it] == Cls.BLOOD } ?: -1
         val onPath = BooleanArray(all)
@@ -682,7 +747,7 @@ class MapPredictor(private val view: MapView) {
         for (v in 0 until all) {
             val u = parent[v]; if (u < 0) continue
             val a = minOf(outTile[v], inTile[v]); val b = maxOf(outTile[v], inTile[v])
-            val d = doorCounts.getOrPut(a * n + b) { DoubleArray(4) }
+            val d = tally.doorCounts.getOrPut(a * n + b) { DoubleArray(4) }
             d[0] += wgt
             if (onPath[u] && onPath[v]) { if (v == blood) d[2] += wgt else d[1] += wgt }
             if (type[u] == Cls.FAIRY || type[v] == Cls.FAIRY) d[3] += wgt
@@ -692,12 +757,12 @@ class MapPredictor(private val view: MapView) {
             if (names != null && sn != null) {
                 var m = 0L; for (t in rooms[o]) m = m or (1L shl t)
                 val pool = poolOfCls(c, roomShape[o])
-                names.byPool[pool]?.forEachIndexed { k, share -> if (share > 0) nameCounts.merge(m * 256 + MapStats.NAMES.indexOf(sn.avail[pool][k]), wgt * share, Double::plus) }
+                names.byPool[pool]?.forEachIndexed { k, share -> if (share > 0) tally.nameCounts.merge(m * 256 + MapStats.NAMES.indexOf(sn.avail[pool][k]), wgt * share, Double::plus) }
             }
             val b = root[o]
-            if (b >= 0) { splitRooms[b] += wgt; splitTiles[b] += wgt * rooms[o].size; splitCls[b][c] += wgt }
-            for (t in rooms[o]) counts[tileIdx[t]][c] += wgt
-            if (roomShape[o] != Shape.ONE && n <= 64) { var m = 0L; for (t in rooms[o]) m = m or (1L shl t); bigCounts.merge(m, wgt, Double::plus) }
+            if (b >= 0) { tally.splitRooms[b] += wgt; tally.splitTiles[b] += wgt * rooms[o].size; tally.splitCls[b][c] += wgt }
+            for (t in rooms[o]) tally.counts[tileIdx[t]][c] += wgt
+            if (roomShape[o] != Shape.ONE && n <= 64) { var m = 0L; for (t in rooms[o]) m = m or (1L shl t); tally.bigCounts.merge(m, wgt, Double::plus) }
         }
         return true
     }
@@ -725,35 +790,32 @@ class MapPredictor(private val view: MapView) {
 
     private fun manhattan(t: Int): Int = if (entTile < 0) 0 else abs(t % w - entTile % w) + abs(t / w - entTile / w)
 
-    /** What the samples so far agree on; null before any was kept. */
+    /**
+     * What the samples so far agree on; null before any was kept. The classic sampler's chances go through its
+     * calibration ([FloorRules.calibration]); the game-process sampler's are as its samples give them.
+     */
     fun prediction(): Prediction? {
-        if (accepted == 0 || weight <= 0) return null
-        // over every sample: a puzzle column tile's chances add up to the chance of a room there
-        val raw = arrayOfNulls<FloatArray>(n)
-        cells.forEachIndexed { i, t ->
-            val c = counts[i]
-            if (c.sum() > 0) raw[t] = FloatArray(Cls.COUNT) { (c[it] / weight).toFloat() }
-        }
-        val probs = Array(n) { raw[it]?.let(::calibrated) }
-        val splits = entries.mapIndexed { i, t ->
-            Split(t, entryDoor[t], (splitRooms[i] / weight).toFloat(), (splitTiles[i] / weight).toFloat(), FloatArray(Cls.COUNT) { (splitCls[i][it] / weight).toFloat() })
-        }
-        val big = bigCounts.entries.filter { it.value / weight >= 0.05 }.sortedByDescending { it.value }
-            .map { (m, v) -> BigRoom((0 until n).filter { (m shr it) and 1L == 1L }.toIntArray(), (v / weight).toFloat()) }
-        val named = nameCounts.entries.filter { it.value / weight >= 0.001 }.sortedByDescending { it.value }.map { (key, v) ->
-            NamedRoom((0 until n).filter { ((key / 256) shr it) and 1L == 1L }.toIntArray(), MapStats.NAMES[(key % 256).toInt()], (v / weight).toFloat())
-        }
-        val doors = doorCounts.entries.filter { it.value[0] / weight >= 0.05 }.sortedByDescending { it.value[0] }.map { (key, d) ->
-            PredictedDoor(key / n, key % n, (d[0] / weight).toFloat(), (d[1] / weight).toFloat(), (d[2] / weight).toFloat(), (d[3] / weight).toFloat())
-        }
-        return Prediction(w, h, probs, splits, accepted, level, big, named, doors, raw)
+        gameSampler?.let { g -> try { return g.prediction() } catch (e: Exception) { dropGame(e) } }
+        return tally.prediction(w, h, cells, entries, entryDoor, classicAccepted, classicLevel, ::calibrated)
     }
 
     companion object {
         /** A puzzle room's name (Odin's map) is the tab's puzzle [tab]: the same, but both blaze rooms are "Higher Or Lower". */
         fun isTabPuzzle(room: String?, tab: String): Boolean = room != null && (room == tab || tab == "Higher Or Lower" && room.endsWith(" Blaze"))
 
-        private fun choose(m: Int, k: Int): Double {
+        /** A room's name pool from its class and shape. */
+        internal fun poolOfCls(c: Int, shape: Shape): Int = when (c) {
+            Cls.BIG -> shape.ordinal
+            Cls.NORMAL -> MapStats.POOL_1X1
+            Cls.PUZZLE -> MapStats.POOL_PUZZLE
+            Cls.TRAP -> MapStats.POOL_TRAP
+            Cls.YELLOW -> MapStats.POOL_YELLOW
+            Cls.BLOOD -> MapStats.POOL_BLOOD
+            Cls.FAIRY -> MapStats.POOL_FAIRY
+            else -> MapStats.POOL_RARE
+        }
+
+        internal fun choose(m: Int, k: Int): Double {
             if (k < 0 || k > m) return 0.0
             var c = 1.0; for (i in 0 until k) c = c * (m - i) / (i + 1)
             return c
@@ -768,7 +830,7 @@ class MapPredictor(private val view: MapView) {
         private const val LEVEL_TRIES = 30_000L
 
         /** Cells (dx, dz pairs) of each big shape's placements, in [Shape] order; an L never has its north-west corner missing. */
-        private val PLACEMENTS = arrayOf(
+        internal val PLACEMENTS = arrayOf(
             arrayOf(intArrayOf(0, 0, 1, 0), intArrayOf(0, 0, 0, 1)),
             arrayOf(intArrayOf(0, 0, 1, 0, 2, 0), intArrayOf(0, 0, 0, 1, 0, 2)),
             arrayOf(intArrayOf(0, 0, 1, 0, 2, 0, 3, 0), intArrayOf(0, 0, 0, 1, 0, 2, 0, 3)),
