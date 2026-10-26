@@ -179,6 +179,11 @@ object PosePov : Module(
         }
         // `/posepov export`: every room, variant and the arena built here and written out, for undonecoffee.com to hand out.
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            // `/posepov trace`: 6 seconds of every view's camera and its nearest entities, frame by frame, to a file (for finding shaking).
+            dispatcher.register(literal("posepov").then(literal("trace").executes {
+                mc.execute { traceStart() }
+                1
+            }))
             dispatcher.register(literal("posepov").then(literal("export").executes {
                 mc.execute {
                     KnownWorld.load {}
@@ -415,6 +420,7 @@ object PosePov : Module(
                     !(en is ArmorStand && en.isInvisible && d2 > NAME_RANGE * NAME_RANGE && EquipmentSlot.entries.all { en.getItemBySlot(it).isEmpty })
                 if (ok) Triple(en, s, d2) else null
             }.sortedBy { it.third }
+            if (trace != null) traceFeed(i, e, slot?.name, inSight, pt, now, w, h)
             val seen = ArrayList<EntityRenderState>()
             val boxes = ArrayList<Box>()
             for ((en, s, d2) in inSight) {
@@ -631,6 +637,44 @@ object PosePov : Module(
         if (dt > 0.25 || dx * dx + dy * dy + dz * dz > SMOOTH_SNAP * SMOOTH_SNAP) { m.x = tx; m.y = ty; m.z = tz }
         else { val k = 1 - Math.exp(-dt / SMOOTH_S); m.x += dx * k; m.y += dy * k; m.z += dz * k }
         return Vec3(m.x, m.y, m.z)
+    }
+
+    // --- /posepov trace -----------------------------------------------------------------------------------------------------
+
+    private var trace: StringBuilder? = null
+    private var traceUntil = 0L
+    private var traceFrame = 0L
+    private var traceT0 = 0L
+
+    private fun traceStart() {
+        trace = StringBuilder("ms,frame,pt,gametime,feed,name,camera,eyeX,eyeY,eyeZ,yaw,pitch,entity,type,drawnX,drawnY,drawnZ,tickX,tickY,tickZ,oldX,oldY,oldZ,screenX,screenY,full,bodyYaw,headYaw,stateBody,stateHead\n")
+        traceT0 = System.nanoTime(); traceUntil = traceT0 + 6_000_000_000L; traceFrame = 0
+        DevgineerClient.chat("§aPose POV: tracing for 6 seconds, keep the leap menu open on the shaking.")
+    }
+
+    private var traceFrameAt = 0L
+    private fun traceFeed(i: Int, e: Eye, name: String?, inSight: List<Triple<Entity, EntityRenderState?, Double>>, pt: Float, now: Long, w: Int, h: Int) {
+        val sb = trace ?: return
+        if (now > traceUntil) {
+            trace = null
+            val file = net.fabricmc.loader.api.FabricLoader.getInstance().gameDir.resolve("devgineerclient").resolve("posepov-trace.csv")
+            runCatching { java.nio.file.Files.createDirectories(file.parent); java.nio.file.Files.writeString(file, sb) }
+            DevgineerClient.chat("§aPose POV: trace written to $file")
+            return
+        }
+        if (now != traceFrameAt) { traceFrameAt = now; traceFrame++ }
+        val gt = mc.level?.gameTime ?: 0L
+        for ((en, st, _) in inSight.take(4)) {
+            val m = smooth[en.id]
+            val dx = st?.x ?: m?.x ?: en.x; val dy = st?.y ?: m?.y ?: en.y; val dz = st?.z ?: m?.z ?: en.z
+            val p = project(e, Vec3(dx, dy + en.bbHeight / 2, dz), w, h, 0, 0, w, h)
+            sb.append("%.3f,%d,%.4f,%d,%d,%s,%s,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s,%s,%b,%.3f,%.3f,%s,%s\n".format(
+                (now - traceT0) / 1e6, traceFrame, pt, gt, i, name ?: "", if (e.subject == null) "eye" else "guess",
+                e.pos.x, e.pos.y, e.pos.z, e.yaw, e.pitch, en.id, en.type.toString().substringAfterLast('.'),
+                dx, dy, dz, en.x, en.y, en.z, en.xOld, en.yOld, en.zOld, p?.first ?: "", p?.second ?: "", st != null,
+                (en as? net.minecraft.world.entity.LivingEntity)?.yBodyRot ?: en.yRot, en.yHeadRot,
+                (st as? net.minecraft.client.renderer.entity.state.LivingEntityRenderState)?.bodyRot?.toString() ?: "", (st as? net.minecraft.client.renderer.entity.state.LivingEntityRenderState)?.yRot?.toString() ?: ""))
+        }
     }
 
     /** A camera: where it is and looks, and for an estimate, the spot the teammate is thought to stand (eye height). */
