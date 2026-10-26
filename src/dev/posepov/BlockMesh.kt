@@ -43,7 +43,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Render thread only, except [dirty] (packets).
  */
 object BlockMesh {
-    class Mesh(val buffer: GpuBuffer, val indexCount: Int)
+    /** This run's own geometry ([CompactMesh]'s form), drawn with its frame's corner at world ([ox], 0, [oz]); its quads per group. */
+    class Mesh(val buffer: GpuBuffer, val counts: IntArray, val ox: Int, val oz: Int)
 
     private const val BUNDLE_FORMAT = 2
     const val ARENA = "arena"
@@ -76,7 +77,7 @@ object BlockMesh {
     /** The arena cluster a section is in: sections over 2 each way. */
     fun cluster(sectionKey: Long) = SectionPos.asLong(SectionPos.x(sectionKey) shr 1, SectionPos.y(sectionKey) shr 1, SectionPos.z(sectionKey) shr 1)
 
-    private val grids = HashMap<String, PieceGrid>()
+    private val grids = ConcurrentHashMap<String, PieceGrid>()
     fun grid(r: KnownWorld.Room): PieceGrid = r.inst.design.let { d -> grids.getOrPut(d.id) { PieceGrid(d.w, d.d, d.y0, d.h) } }
 
     /** Piece ([lx], [ly], [lz]) of [r]'s unturned box as cells of its placed box, into [out]: x0 y0 z0 x1 y1 z1, inclusive. */
@@ -93,7 +94,7 @@ object BlockMesh {
     }
 
     /** The bundles a room is drawn from: its design's, and its variant's when it has one. */
-    private fun bundleNames(r: KnownWorld.Room): Array<String> =
+    fun bundleNames(r: KnownWorld.Room): Array<String> =
         r.variant?.let { arrayOf(r.inst.design.id, "${r.inst.design.id}@$it") } ?: arrayOf(r.inst.design.id)
 
     // --- what changed ---------------------------------------------------------------------------------------------------
@@ -144,6 +145,8 @@ object BlockMesh {
         if (MeshDisk.check()) dropShared()
         KnownWorld.roomPack?.let { MeshBundles.version = "$BUNDLE_FORMAT-${it.version}" }
         PiecePool.load(minOf(budgetNs, LOAD_BUDGET_NS))
+        // (Everything built here goes up in the sprite table's numbers.)
+        if (!CompactMesh.SpriteTable.ready) return
         drainTouched()
         val now = System.currentTimeMillis()
 
@@ -157,7 +160,7 @@ object BlockMesh {
             if (now - at < DIRTY_DELAY_MS) continue
             dirtyAt.remove(key)
             nearDone = null; allDone = false
-            if (key in world) { world.remove(key)?.buffer?.close() }
+            if (key in world) { world.remove(key)?.buffer?.close(); worldKeys = null }
             changes++
         }
         if (!MeshDisk.ready) return
@@ -169,7 +172,7 @@ object BlockMesh {
                 for (i in 0 until g.size) {
                     val own = r.pieceKey(g.lx(i), g.ly(i), g.lz(i))
                     if (own in touchedRoom && own !in roomOwn && dirtyRoom[own] == null) {
-                        roomOwn[own] = upload(buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i)))
+                        roomOwn[own] = upload(buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i)), r.x0, r.z0, 0, 0)
                         if (overBudget()) return
                     }
                 }
@@ -202,7 +205,9 @@ object BlockMesh {
         if (inArena(sx, sz) && key !in touchedArena) return true
         if (key in world || dirtyAt[key]?.let { System.currentTimeMillis() - it < DIRTY_DELAY_MS } == true) return true
         allDone = false
-        world[key] = upload(buildWorld(level, sx, sy, sz))
+        // Each section in its own frame (its corner), so its corners fit the compact form's range wherever it is.
+        world[key] = upload(buildWorld(level, sx, sy, sz), sx shl 4, sz shl 4, sx shl 4, sz shl 4)
+        worldKeys = null
         return !overBudget()
     }
 
@@ -347,12 +352,18 @@ object BlockMesh {
         runCatching { Files.createDirectories(exportDir); Files.write(exportDir.resolve(name), bytes) }
     }
 
-    private fun upload(built: Pair<Int, ByteArray?>): Mesh? {
+    private val ownQuads = CompactMesh.Quads(1024)
+
+    /** Built geometry onto the GPU in [CompactMesh]'s form, drawn at world ([ox], [oz]), its corners less ([px], [pz]). */
+    private fun upload(built: Pair<Int, ByteArray?>, ox: Int, oz: Int, px: Int, pz: Int): Mesh? {
         changes++
         val bytes = built.second ?: return null
-        val buf = ByteBuffer.allocateDirect(bytes.size).put(bytes).flip()
-        if (built.first > ownMost) ownMost = built.first
-        return Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, buf), built.first)
+        ownQuads.clear()
+        if (!CompactMesh.fromVertices(ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()), ownQuads)) return null
+        val packed = CompactMesh.pack(ownQuads, px.toFloat(), pz.toFloat())
+        if (packed.quads == 0) return null
+        if (packed.quads * 6 > ownMost) ownMost = packed.quads * 6
+        return Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, packed.bytes), packed.counts, ox, oz)
     }
 
     private var pumpStart = 0L
@@ -418,101 +429,30 @@ object BlockMesh {
         }
     }
 
-    // --- drawing --------------------------------------------------------------------------------------------------------
+    // --- drawing (what PovCull picked, looked up) -----------------------------------------------------------------------
 
-    /**
-     * What a feed with its eye at ([ex], [ey], [ez]) draws, each as (buffer, first vertex, index count, the frame's x, z
-     * offset): of every room [room] lets through, the pieces the frustum ([inView], a world box) has, less their faces turned
-     * away from the eye; of the arena, the sections [clusterSeen] lets through, likewise; and the world sections in view.
-     * Pieces not on the GPU yet are asked for (those out of view too, after, so turning doesn't show them missing).
-     */
-    fun forEachDraw(
-        ex: Double, ey: Double, ez: Double,
-        room: (KnownWorld.Room) -> Boolean, clusterSeen: (Long) -> Boolean,
-        inView: (Float, Float, Float, Float, Float, Float) -> Boolean,
-        draw: (GpuBuffer, Int, Int, Int, Int) -> Unit,
-    ) {
-        val b = IntArray(6)
-        for (r in KnownWorld.rooms) {
-            if (!room(r)) continue
-            val roomInView = inView(r.x0.toFloat(), r.y0.toFloat(), r.z0.toFloat(), r.x1 + 1f, r.y1 + 1f, r.z1 + 1f)
-            val g = grid(r)
-            val names = bundleNames(r)
-            val base = MeshBundles.get(names[0]); val variant = if (names.size > 1) MeshBundles.get(names[1]) else null
-            if (base == null) continue
-            val rx = ex - r.x0; val rz = ez - r.z0
-            val changed = r.key in touchedRooms
-            // The piece the eye is in, when it's in this room: only what can be seen from there (RoomSight).
-            val from = if (base.hasSight) r.p.toCanonical(Math.floor(ex).toInt(), Math.floor(ez).toInt())?.let { (cx, cz) -> g.of(cx, Math.floor(ey).toInt(), cz) } ?: -1 else -1
-            for (i in 0 until g.size) {
-                if (from >= 0 && !base.sees(from, i)) continue
-                val lx = g.lx(i); val ly = g.ly(i); val lz = g.lz(i)
-                pieceBox(r, g, lx, ly, lz, b)
-                val seen = roomInView && inView(r.x0 + b[0].toFloat(), b[1].toFloat(), r.z0 + b[2].toFloat(), r.x0 + b[3] + 1f, b[4] + 1f, r.z0 + b[5] + 1f)
-                if (seen && changed) {
-                    val own = r.pieceKey(lx, ly, lz)
-                    if (own in touchedRoom && own in roomOwn) { roomOwn[own]?.let { draw(it.buffer, 0, it.indexCount, r.x0, r.z0) }; continue }
-                }
-                val vi = variant?.find(lx, ly, lz) ?: -1
-                val bundle = if (vi >= 0) variant!! else base
-                val pi = if (vi >= 0) vi else base.find(lx, ly, lz)
-                if (pi < 0) continue
-                val near = away(rx, ey, rz, b)
-                val res = PiecePool.get(bundle, pi, r.p.rot, g.w, g.d, if (seen) near else 1e9 + near) ?: continue
-                if (seen) groups(res, b, rx, ey, rz, r.x0, r.z0, draw)
-            }
-        }
-        if (KnownWorld.bossFloor()) MeshBundles.get(ARENA)?.let { a ->
-            for (i in a.places.indices) {
-                val p = a.places[i]
-                val sx = MeshBundles.placeX(p); val sy = MeshBundles.placeY(p); val sz = MeshBundles.placeZ(p)
-                val s = SectionPos.asLong(sx, sy, sz)
-                if (s in touchedArena || !clusterSeen(cluster(s))) continue
-                b[0] = sx shl 4; b[1] = sy shl 4; b[2] = sz shl 4; b[3] = b[0] + 15; b[4] = b[1] + 15; b[5] = b[2] + 15
-                val seen = inView(b[0].toFloat(), b[1].toFloat(), b[2].toFloat(), b[3] + 1f, b[4] + 1f, b[5] + 1f)
-                val near = away(ex, ey, ez, b)
-                val res = PiecePool.get(a, i, Rot.SOUTH, 0, 0, if (seen) near else 1e9 + near) ?: continue
-                if (seen) groups(res, b, ex, ey, ez, 0, 0, draw)
-            }
-        }
-        for ((k, m) in world) {
-            if (m == null) continue
-            val x = SectionPos.x(k) shl 4; val y = SectionPos.y(k) shl 4; val z = SectionPos.z(k) shl 4
-            if (inView(x.toFloat(), y.toFloat(), z.toFloat(), x + 16f, y + 16f, z + 16f)) draw(m.buffer, 0, m.indexCount, 0, 0)
-        }
+    /** This run's own piece of [r] at ([lx], [ly], [lz]) when it has one built: drawn in place of the design's. */
+    fun own(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int): Mesh? {
+        if (r.key !in touchedRooms) return null
+        val k = r.pieceKey(lx, ly, lz)
+        return if (k in touchedRoom) roomOwn[k] else null
     }
 
-    /** How far (squared) the eye is from the box [b] (cells, inclusive). */
-    private fun away(ex: Double, ey: Double, ez: Double, b: IntArray): Double {
-        val dx = maxOf(b[0] - ex, 0.0, ex - b[3] - 1); val dy = maxOf(b[1] - ey, 0.0, ey - b[4] - 1); val dz = maxOf(b[2] - ez, 0.0, ez - b[5] - 1)
-        return dx * dx + dy * dy + dz * dz
-    }
+    /** Whether this run changed arena section [s] (it's drawn as a world section then). */
+    fun arenaTouched(s: Long) = s in touchedArena
 
-    /** A piece's groups that face the eye (in the piece's frame, its box [b]), runs of them as one draw. */
-    private fun groups(res: PiecePool.Resident, b: IntArray, ex: Double, ey: Double, ez: Double, ox: Int, oz: Int, draw: (GpuBuffer, Int, Int, Int, Int) -> Unit) {
-        var v = res.first; var runFirst = -1; var runQuads = 0
-        for (g in 0 until MeshCodec.GROUPS) {
-            val n = res.quads[g]
-            if (n == 0) continue
-            val facing = when (res.dirs[g]) {
-                0 -> ey < b[4] + 1; 1 -> ey > b[1]
-                2 -> ez < b[5] + 1; 3 -> ez > b[2]
-                4 -> ex < b[3] + 1; 5 -> ex > b[0]
-                else -> true
-            }
-            if (facing) { if (runFirst < 0) runFirst = v; runQuads += n }
-            else if (runFirst >= 0) { draw(res.buffer, runFirst, runQuads * 6, ox, oz); runFirst = -1; runQuads = 0 }
-            v += n * 4
-        }
-        if (runFirst >= 0) draw(res.buffer, runFirst, runQuads * 6, ox, oz)
-    }
+    fun worldMesh(s: Long): Mesh? = world[s]
+
+    @Volatile private var worldKeys: LongArray? = null
+    /** The world sections with something to draw, as of now (made again when one comes or goes). */
+    fun worldSections(): LongArray = worldKeys ?: world.entries.filter { it.value != null }.map { it.key }.toLongArray().also { worldKeys = it }
 
     // --- lifetime -------------------------------------------------------------------------------------------------------
 
     /** This run's pieces; the shared design and arena ones stay for the next run. */
     fun newRun() {
         changes++
-        world.values.forEach { it?.buffer?.close() }; world.clear()
+        world.values.forEach { it?.buffer?.close() }; world.clear(); worldKeys = null
         roomOwn.values.forEach { it?.buffer?.close() }; roomOwn.clear()
         touchedRoom.clear(); touchedRooms.clear(); touchedArena.clear(); dirtyAt.clear(); dirtyRoom.clear()
         nearDone = null; allDone = false
@@ -525,7 +465,7 @@ object BlockMesh {
 
     private fun dropShared() {
         PiecePool.clear()
-        MeshBundles.atlasChanged()
+        CompactMesh.SpriteTable.clear()
         nearDone = null; allDone = false
     }
 

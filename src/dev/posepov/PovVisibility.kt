@@ -1,7 +1,6 @@
 package com.devgineerclient.posepov
 
 import com.engineerclient.p3sim.Arena
-import com.engineerclient.p3sim.pack.DungeonFrame
 import net.minecraft.core.SectionPos
 import net.minecraft.world.phys.Vec3
 import java.nio.ByteBuffer
@@ -12,19 +11,14 @@ import java.util.concurrent.Executors
 import java.util.zip.GZIPInputStream
 
 /**
- * What a feed's eye could possibly see, worked out ahead so a frame only looks it up ([BlockMesh.forEachDraw] draws the rest).
- * Always on the safe side: anything it can't be sure of is drawn.
- *  - Clear: rooms are walled boxes joined by doors, so from inside one only rooms a few doorways away can show: the rooms
- *    within [ROOM_STEPS] steps over the 6x6 grid (a step being into another room; tiles not placed yet count as rooms, so a gap
- *    in what's known never hides what's past it). Worked out once per room per layout.
- *  - Boss: which arena clusters can be seen from anywhere in the section the eye is in, by rays through the shipped arena with
- *    every cell a recorded run ever saw change (gates, crushers, devices: boss-dynamic.bin.gz) counted as open, then widened by
- *    a cluster each way for what the rays missed. Worked out off the game thread the first time an eye is in a section, and
- *    kept on disk: after that, never again.
- * Anywhere else (an eye above the rooms, in a hallway, a section not worked out yet) everything in view is drawn.
+ * What a feed's eye could possibly see in the boss, worked out ahead so a frame only looks it up ([PovCull] picks the rest; in
+ * clear its portals between rooms do this). Always on the safe side: anything it can't be sure of is drawn.
+ * Which arena clusters can be seen from anywhere in the section the eye is in, by rays through the shipped arena with every
+ * cell a recorded run ever saw change (gates, crushers, devices: boss-dynamic.bin.gz) counted as open, then widened by a
+ * cluster each way for what the rays missed. Worked out off the game thread the first time an eye is in a section, and kept
+ * on disk: after that, never again. A section not worked out yet draws everything in view.
  */
 object PovVisibility {
-    private const val ROOM_STEPS = 3
     private const val FAR = 156.0
     private const val SOURCES = 32
     private const val RAYS = 96
@@ -39,49 +33,6 @@ object PovVisibility {
     private const val AZ = 160
     private const val AY0 = -64
     private const val AY = 384
-
-    // --- clear ------------------------------------------------------------------------------------------------------------
-
-    private var layout: List<KnownWorld.Room>? = null
-    private val seenFrom = HashMap<String, Set<KnownWorld.Room>>()
-
-    /** The rooms an eye in a room can see, or null for everything (not in a placed room, or above it). */
-    fun rooms(eye: Vec3): Set<KnownWorld.Room>? {
-        val r = KnownWorld.roomAt(Math.floor(eye.x).toInt(), Math.floor(eye.z).toInt()) ?: return null
-        if (eye.y < r.y0 - 1 || eye.y > r.y1 + 1) return null
-        val rooms = KnownWorld.rooms
-        if (rooms !== layout) { layout = rooms; seenFrom.clear() }
-        return seenFrom.getOrPut(r.key) { reach(r) }
-    }
-
-    private fun tileRoom(tx: Int, tz: Int): KnownWorld.Room? =
-        KnownWorld.roomAt(DungeonFrame.ORIGIN + tx * DungeonFrame.PITCH + 15, DungeonFrame.ORIGIN + tz * DungeonFrame.PITCH + 15)
-
-    /** Tiles by steps from [from] (0-1: within a room free, into another room or an unplaced tile one), the rooms reached. */
-    private fun reach(from: KnownWorld.Room): Set<KnownWorld.Room> {
-        val dist = IntArray(36) { Int.MAX_VALUE }
-        val queue = ArrayDeque<Int>()
-        for (t in 0 until 36) if (tileRoom(t % 6, t / 6) === from) { dist[t] = 0; queue.addLast(t) }
-        val out = HashSet<KnownWorld.Room>().apply { add(from) }
-        while (queue.isNotEmpty()) {
-            val t = queue.removeFirst()
-            val tr = tileRoom(t % 6, t / 6)
-            for ((dx, dz) in STEPS) {
-                val nx = t % 6 + dx; val nz = t / 6 + dz
-                if (nx !in 0..5 || nz !in 0..5) continue
-                val n = nz * 6 + nx
-                val nr = tileRoom(nx, nz)
-                val d = dist[t] + if (nr != null && nr === tr) 0 else 1
-                if (d > ROOM_STEPS || d >= dist[n]) continue
-                dist[n] = d
-                if (d == dist[t]) queue.addFirst(n) else queue.addLast(n)
-                nr?.let { out += it }
-            }
-        }
-        return out
-    }
-
-    private val STEPS = listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)
 
     // --- boss -------------------------------------------------------------------------------------------------------------
 
@@ -187,7 +138,4 @@ object PovVisibility {
         }
         return g
     }
-
-    /** A new run's rooms: their views are worked out again (the arena's stay). */
-    fun newRun() { layout = null; seenFrom.clear() }
 }
