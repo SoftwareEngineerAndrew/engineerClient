@@ -799,6 +799,7 @@ object UploadPacker {
         private val groups = LinkedHashMap<String, ArrayList<JsonObject>>()
         private val blocks = ArrayList<IntArray>() // t, x, y, z, s
         private val cams = ArrayList<Pair<Int, JsonArray>>()
+        private val mice = ArrayList<Pair<Int, JsonArray>>()
 
         fun put(line: String) {
             val head = HEAD.find(line)
@@ -824,6 +825,12 @@ object UploadPacker {
                     if (l.keySet() != CAM_KEYS || d.any { f -> f !is JsonArray || f.size() != 3 || f.any { hundredths(it) == null } }) return false
                     cams += t to d; true
                 }
+                kind == "mouse" -> {
+                    val l = JsonParser.parseString(line).asJsonObject
+                    val d = l.getAsJsonArray("d")
+                    if (l.keySet() != CAM_KEYS || d.any { f -> f !is JsonArray || f.size() != 3 || hundredths(f[0]) == null || tenths(f[1]) == null || tenths(f[2]) == null }) return false
+                    mice += t to d; true
+                }
                 kind in GROUPED || (kind == "eq" && line.contains("\"id\":")) -> { groups.getOrPut(kind) { ArrayList() } += JsonParser.parseString(line).asJsonObject; true }
                 kind in SINGLES -> { groups.getOrPut(kind) { ArrayList() } += JsonParser.parseString(line).asJsonObject; true }
                 // (a window's lines in one "ui" group, each its kind in "of": the viewer needs a tick's in their order)
@@ -844,9 +851,10 @@ object UploadPacker {
             for ((kind, list) in groups) if (kind !in BEFORE_MOVES) write(list) { part -> group(kind, part) }
             if (blocks.isNotEmpty()) writeBlocks()
             if (cams.isNotEmpty()) write(cams) { camLine(it) }
+            if (mice.isNotEmpty()) write(mice) { miceLine(it) }
             for (l in others) { w.write(l); w.write(NL) }
             for (list in items.values) list.clear()
-            groups.clear(); blocks.clear(); cams.clear(); others.clear()
+            groups.clear(); blocks.clear(); cams.clear(); mice.clear(); others.clear()
         }
 
         /** One line of [list], or two of its halves (and so on) while it's longer than [COLS_MAX]. */
@@ -1130,6 +1138,16 @@ object UploadPacker {
             return JsonObject().apply { addProperty("k", "cams"); addProperty("s", 10); addProperty("ps", 10); add("t", t); add("n", n); add("pt", pt); add("yaw", yaw); add("pitch", pitch) }.toString()
         }
 
+        /** A "mice" line: each mouse line's tick (differences) and point count, its points' partial tick in hundredths, x and y in tenths of a GUI pixel (differences). */
+        private fun miceLine(list: List<Pair<Int, JsonArray>>): String {
+            val pt = ArrayList<Long>(); val x = ArrayList<Long>(); val y = ArrayList<Long>()
+            for ((_, d) in list) for (f in d) { val a = f.asJsonArray; pt += hundredths(a[0])!!; x += tenths(a[1])!!; y += tenths(a[2])!! }
+            return JsonObject().apply {
+                addProperty("k", "mice"); add("t", deltas(list.map { it.first.toLong() })); add("n", JsonArray().apply { for ((_, d) in list) add(d.size()) })
+                add("pt", JsonArray().apply { pt.forEach(::add) }); add("x", deltas(x)); add("y", deltas(y))
+            }.toString()
+        }
+
         private fun deltas(v: List<Long>) = JsonArray().apply { var prev = 0L; for (x in v) { add(x - prev); prev = x } }
 
         /**
@@ -1186,6 +1204,9 @@ object UploadPacker {
             /** A number with at most 2 decimals, in hundredths (exactly), else null. */
             fun hundredths(e: JsonElement): Long? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.let { p ->
                 runCatching { BigDecimal(p.asString).movePointRight(2).longValueExact() }.getOrNull()
+            }
+            fun tenths(e: JsonElement): Long? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.let { p ->
+                runCatching { BigDecimal(p.asString).movePointRight(1).longValueExact() }.getOrNull()
             }
         }
     }
