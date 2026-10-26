@@ -95,6 +95,13 @@ helps clearly so far): rarew (each rare past the 7th dead end x0.5) +0.002 (s.e.
 unreached big rooms in copied particles) -0.003, joined (an extra shown-door constraint) -0.004; prune and
 distinct still being measured.
 
+## Long rooms side by side
+
+- **Likely:** two long straight rooms of the same orientation in neighbouring rows sit side by side a little less
+  often than the model gives, and flush less often (`sidebyside.mjs`, 2476 maps; real / game-process predictor):
+  1x3 next to 1x4 0.306 / 0.322 a map, flush 53% / 57%; two 1x4s 0.075 / 0.084, flush 33% / 42%. A 1x2 next to a
+  1x3 is as the model gives (0.243 / 0.237, flush 66% / 65%). Not yet explained.
+
 ## Open questions, biggest first
 
 1. What the door tree does that the rule above doesn't (step 4).
