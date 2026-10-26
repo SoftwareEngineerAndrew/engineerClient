@@ -172,7 +172,7 @@ object BlockMesh {
                 for (i in 0 until g.size) {
                     val own = r.pieceKey(g.lx(i), g.ly(i), g.lz(i))
                     if (own in touchedRoom && own !in roomOwn && dirtyRoom[own] == null) {
-                        roomOwn[own] = upload(buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i)), r.x0, r.z0, 0, 0)
+                        roomOwn[own] = PovPerf.time(PovPerf.MAKE) { upload(buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i)), r.x0, r.z0, 0, 0) }
                         if (overBudget()) return
                     }
                 }
@@ -206,7 +206,7 @@ object BlockMesh {
         if (key in world || dirtyAt[key]?.let { System.currentTimeMillis() - it < DIRTY_DELAY_MS } == true) return true
         allDone = false
         // Each section in its own frame (its corner), so its corners fit the compact form's range wherever it is.
-        world[key] = upload(buildWorld(level, sx, sy, sz), sx shl 4, sz shl 4, sx shl 4, sz shl 4)
+        world[key] = PovPerf.time(PovPerf.MAKE) { upload(buildWorld(level, sx, sy, sz), sx shl 4, sz shl 4, sx shl 4, sz shl 4) }
         worldKeys = null
         return !overBudget()
     }
@@ -223,8 +223,10 @@ object BlockMesh {
     private fun make(level: ClientLevel, name: String): Boolean {
         val m = making.getOrPut(name) { spec(level, name) ?: return true }
         for (i in m.parts.indices) if (m.parts[i] == null) {
-            m.parts[i] = m.piece(i, m.names)
-            m.sight?.let { m.sights[i] = it(i) }
+            PovPerf.time(PovPerf.MAKE) {
+                m.parts[i] = m.piece(i, m.names)
+                m.sight?.let { m.sights[i] = it(i) }
+            }
             if (overBudget()) return false
         }
         making.remove(name)
