@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory
 /**
  * What a saved run (.jsonl.gz, as written while recording) is turned into to upload:
  *
- *  - xz (LZMA2) instead of gzip: about half the size on a typical run.
+ *  - xz (LZMA2, [xzOptions]) instead of gzip: well under half the size on a typical run.
  *    The site stores it as it comes; the viewer tells the two apart by their first bytes.
  *
  *  - When someone else in the party already uploaded their recording of the same run ([sibling]),
@@ -38,8 +38,8 @@ import org.slf4j.LoggerFactory
  *
  *  - Mobs as little as the viewer needs ([MobPlan], [MobWriter]): moves thinned to where it can't
  *    draw them from the ones either side (it slides between them, [MobPlan.LERP_GAP]), rounded;
- *    gone, a spawn's stand look and its name folded into the spawn; a mob coming back as it went
- *    marked so instead of sent again; nothing the viewer couldn't show (stands never seen).
+ *    gone, a spawn's stand look and its name folded into the spawn; a mob coming back into range
+ *    looking as it went the same life on; nothing the viewer couldn't show (stands never seen).
  *
  *  - Everything the viewer builds the world from comes first (after the meta line), with the
  *    whole room layout as a "roomsAll" line: those lines are written as the run goes, but none of
@@ -48,14 +48,14 @@ import org.slf4j.LoggerFactory
  *    has to be built again once the rest is in. The rest keeps its order.
  *
  *  - Other players the same way ([PlayerPlan]): rows thinned to where the viewer can't slide
- *    between them, rounded; the recording player's own as they are.
+ *    between them, rounded; the recording player's own the same, far finer.
  *
  *  - A projectile's whole life - its spawn and flight, new flights, where it stuck, when it was
  *    gone - is one "pj" line where it spawned: the few points the viewer needs to fly it from
  *    one to the next ([ProjPack]; most arrows are shot point-blank into a wall and stick a tick
  *    later: three lines and a move, for one arrow).
  *
- *  - Mob moves ("e") and player lines ("p") as columns ("cols"): each 30 s, every mob's (player's)
+ *  - Mob moves ("e") and player lines ("p") as columns ("cols"): the whole run's, every mob's (player's)
  *    values one after another, as differences from the last - mostly 0, 1 and -1, which pack to a
  *    fraction of the numbers written out (over a third smaller overall on an F7 run). Mob events,
  *    block changes and camera frames the same way ([Stretch]); the viewer turns them all back into
@@ -64,6 +64,8 @@ import org.slf4j.LoggerFactory
  *  - The recording player's camera frames thinned: one is left out where the frames either side of it, as the
  *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (a pixel or so), never
  *    leaving more than [CAM_GAP] ticks between two (more than 2 is "not rendering" to the viewer).
+ *    The mouse over an open window the same way ([thinMouse]), and the heads placed in the world
+ *    as one "skulls" line ([skullsLine]).
  *
  *  - Other players a party member's upload already has ([sibling]), and where it has them
  *    where this one does: their lines are left out while that recording has them, with a margin either side: the two recordings' ticks are
@@ -97,12 +99,15 @@ object UploadPacker {
     private const val RUN_START = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private val RUN_END = Regex("""^\s*☠ Defeated """)
 
-    /** Ticks a stretch of columns holds (see [Stretch]); a line bigger than [COLS_MAX] is split. */
-    private const val COLS_TICKS = 600
+    /** Ticks a stretch of columns holds (see [Stretch]): more than any run, so a run is one (its columns pack smaller whole); a line bigger than [COLS_MAX] is split. */
+    private const val COLS_TICKS = 1_000_000_000
     private const val COLS_MAX = 100_000 // (the site takes lines up to 128 KB)
     private const val NL = "\n" // never newLine(): on Windows that is "\r\n"
-    private const val CAM_TOLERANCE = 0.1
+    private const val CAM_TOLERANCE = 1.0
     private const val CAM_GAP = 1.95
+    /** GUI pixels the viewer's mouse may be off (see thinMouse), and how far apart (ticks) it slides between two points. */
+    private const val MOUSE_TOLERANCE = 1.0
+    private const val MOUSE_GAP = 2.0
     private const val COVER_MARGIN = 600
     private const val ALIGNED_MARGIN = 40
 
@@ -177,8 +182,12 @@ object UploadPacker {
         internal val startMs: Long,
         /** Per "cam" line (in order), which of its frames stay; null: all. */
         internal val camKeep: List<BooleanArray?>,
+        /** The times (tick - 1 + partial tick, as the viewer reads them) of the camera frames that stay, in order. */
+        internal val camTimes: DoubleArray,
         /** Block changes as (tick, "x,y,z,state"), for lining this recording up with another. */
         internal val blocks: List<Pair<Long, String>>,
+        /** Per "mouse" line (in order), which of its points stay; null: all. */
+        internal val mouseKeep: List<BooleanArray?> = emptyList(),
     ) {
         internal fun fold(id: Int) = projs[id]?.takeIf { it.foldable }
     }
@@ -198,6 +207,8 @@ object UploadPacker {
         var startMs = 0L
         val frames = ArrayList<DoubleArray>() // time, yaw, pitch, cam line, frame
         var camLines = 0
+        val mice = ArrayList<DoubleArray>() // time, x, y, mouse line, point
+        var mouseLines = 0
         val blocks = BlockReader()
         lines(Files.newInputStream(file)).use { r ->
             for (line in r.lineSequence()) {
@@ -216,6 +227,11 @@ object UploadPacker {
                         val d = JsonParser.parseString(line).asJsonObject.getAsJsonArray("d")
                         d.forEachIndexed { k, f -> val a = f.asJsonArray; frames += doubleArrayOf(t!! - 1 + a[0].asDouble, a[1].asDouble, a[2].asDouble, camLines.toDouble(), k.toDouble()) }
                         camLines++
+                    }
+                    "mouse" -> {
+                        val d = runCatching { JsonParser.parseString(line).asJsonObject.getAsJsonArray("d") }.getOrNull()
+                        d?.forEachIndexed { k, f -> val a = f.asJsonArray; mice += doubleArrayOf(t!! - 1 + a[0].asDouble, a[1].asDouble, a[2].asDouble, mouseLines.toDouble(), k.toDouble()) }
+                        mouseLines++
                     }
                     "floor" -> summary.add("floor", JsonParser.parseString(line).asJsonObject["floor"])
                     "party" -> summary.add("party", JsonParser.parseString(line).asJsonObject["m"])
@@ -268,7 +284,7 @@ object UploadPacker {
         summary.addProperty("cleared", if (cleared) 1 else 0)
         if (privateRun) summary.addProperty("private", 1)
         if (cleared) summary.addProperty("timeMs", (end!! - start!!) * 50L)
-        return Scan(summary, layout?.replaceFirst(""""k":"rooms"""", """"k":"roomsAll""""), world, counts, projs, self, startMs, thinCamera(frames, camLines), blocks.changes())
+        return Scan(summary, layout?.replaceFirst(""""k":"rooms"""", """"k":"roomsAll""""), world, counts, projs, self, startMs, thinCamera(frames, camLines), camTimes(frames), blocks.changes(), thinMouse(mice, mouseLines))
     }
 
     /**
@@ -276,6 +292,50 @@ object UploadPacker {
      * straight line to it stays within [CAM_TOLERANCE] of every frame between, at most [CAM_GAP]
      * ticks on. In time order, as the viewer sorts them.
      */
+    /** The frames thinCamera kept (it marks them, f[5]): their times as the viewer reads them (partial ticks in tenths). */
+    private fun camTimes(frames: List<DoubleArray>): DoubleArray =
+        frames.filter { it.size > 5 && it[5] > 0 }.map { f -> val t = Math.floor(f[0]) ; t + Math.round((f[0] - t) * 10) / 10.0 }.sorted().toDoubleArray()
+
+    /**
+     * Which mouse points to keep: the viewer draws the mouse on the straight line between two
+     * points up to [MOUSE_GAP] ticks apart (further, where the first was), so from each kept point
+     * the furthest one that line stays within [MOUSE_TOLERANCE] GUI pixels of every point between.
+     */
+    private fun thinMouse(pts: MutableList<DoubleArray>, lines: Int): List<BooleanArray?> {
+        val keep = arrayOfNulls<BooleanArray>(lines)
+        if (pts.size < 3) return keep.toList()
+        pts.sortBy { it[0] }
+        val kept = BooleanArray(pts.size)
+        kept[0] = true; kept[pts.size - 1] = true
+        var k = 0
+        while (k < pts.size - 1) {
+            var m = k + 1
+            var c = k + 2
+            while (c < pts.size) {
+                val pk = pts[k]; val pc = pts[c]
+                val span = pc[0] - pk[0]
+                var ok = true
+                // (held still till c: the point before it stays if the viewer slid from it to c)
+                if (span > MOUSE_GAP && c - k > 1 && pc[0] - pts[c - 1][0] <= MOUSE_GAP) break
+                for (j in k + 1 until c) {
+                    val a = if (span > MOUSE_GAP) 0.0 else (pts[j][0] - pk[0]) / span
+                    if (Math.hypot(pk[1] + (pc[1] - pk[1]) * a - pts[j][1], pk[2] + (pc[2] - pk[2]) * a - pts[j][2]) > MOUSE_TOLERANCE) { ok = false; break }
+                }
+                if (!ok) break
+                m = c; c++
+            }
+            kept[m] = true; k = m
+        }
+        val counts = IntArray(lines)
+        for (f in pts) counts[f[3].toInt()] = maxOf(counts[f[3].toInt()], f[4].toInt() + 1)
+        pts.forEachIndexed { i, f ->
+            val li = f[3].toInt()
+            val arr = keep[li] ?: BooleanArray(counts[li]).also { keep[li] = it }
+            arr[f[4].toInt()] = kept[i]
+        }
+        return keep.toList()
+    }
+
     private fun thinCamera(frames: MutableList<DoubleArray>, lines: Int): List<BooleanArray?> {
         val keep = arrayOfNulls<BooleanArray>(lines)
         if (frames.size < 3) return keep.toList()
@@ -303,6 +363,7 @@ object UploadPacker {
         val counts = IntArray(lines)
         for (f in frames) counts[f[3].toInt()] = maxOf(counts[f[3].toInt()], f[4].toInt() + 1)
         frames.forEachIndexed { i, f ->
+            if (kept[i]) frames[i] = f + 1.0
             val li = f[3].toInt()
             val arr = keep[li] ?: BooleanArray(counts[li]).also { keep[li] = it }
             arr[f[4].toInt()] = kept[i]
@@ -463,7 +524,7 @@ object UploadPacker {
         val ticks = scan.summary["ticks"]?.asInt ?: 0
         val left = sib?.let { s -> plan.lives.values.flatten().filter { covered(it, s, aligned!!.first, ticks) }.toHashSet() } ?: emptySet()
         val players = sib?.let { Players(scan, it, aligned!!, plan.players) }
-        val others = lines(Files.newInputStream(file)).use { r -> PlayerPlan.read(r.lineSequence(), scan.self) }
+        val others = lines(Files.newInputStream(file)).use { r -> PlayerPlan.read(r.lineSequence(), scan.self, scan.camTimes) }
         val out = Files.createTempFile("adr-upload-", ".jsonl.xz")
         try {
             writeTo(file, scan, out, plan, others, left, players, hideParty)
@@ -476,7 +537,8 @@ object UploadPacker {
 
     private fun writeTo(file: Path, scan: Scan, out: Path, plan: MobPlan, others: PlayerPlan, left: Set<MobPlan.Life>, players: Players?, hideParty: Boolean) {
         var camLine = 0
-        val stream = XZOutputStream(Files.newOutputStream(out), LZMA2Options(6))
+        var mouseLine = 0
+        val stream = XZOutputStream(Files.newOutputStream(out), xzOptions())
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             val cols = Stretch(w)
             val mobs = MobWriter(plan) { it in left }
@@ -484,6 +546,7 @@ object UploadPacker {
             fun put(line: String, timed: Boolean = true) {
                 var kept = fold(line, scan) ?: return
                 if (kept.startsWith("{\"k\":\"cam\"")) kept = thin(kept, scan.camKeep.getOrNull(camLine++)) ?: return
+                if (kept.startsWith("{\"k\":\"mouse\"")) kept = mouse(kept, scan.mouseKeep.getOrNull(mouseLine++)) ?: return
                 // (the world's lines carry ticks, but aren't in the timeline: none of them start a stretch)
                 if (!timed) { if (players?.keepsWorld(kept) != false) { w.write(kept); w.write(NL) }; return }
                 others.put(kept) { mobs.put(it, timeline) }
@@ -494,15 +557,18 @@ object UploadPacker {
                 for (line in r.lineSequence()) {
                     if (first) {
                         // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
-                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP) }.toString() }.getOrDefault(line), timed = false)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
-                        for (l in scan.world) put(l, timed = false)
+                        val skulls = ArrayList<String>()
+                        for (l in scan.world) if (kindOf(l) == "skull") skulls += l else put(l, timed = false)
+                        for (l in skullsLines(skulls)) { w.write(l); w.write(NL) }
                         continue
                     }
                     // A line cut short (a crash part way through writing it) would get the whole run refused.
                     if (!line.startsWith("{") || !line.endsWith("}")) continue
                     val kind = kindOf(line)
                     if (kind == "chat" && privateChatLine(line, hideParty)) continue
+                    if (kind == "chat") { put(plainChat(line)); continue }
                     if (kind !in WORLD) put(line)
                 }
             }
@@ -511,6 +577,47 @@ object UploadPacker {
             cols.end()
         }
     }
+
+    /**
+     * The heads placed in the world as "skulls" lines (the viewer has no use for when each was
+     * seen): by place, each [dx, dy, dz, texture] from the one before, the textures by number
+     * ("tex"); [SKULLS_LINE] to a line at most (each line on its own: the site takes lines up to 128 KB).
+     */
+    private fun skullsLines(lines: List<String>): List<String> {
+        val at = java.util.TreeMap<Triple<Int, Int, Int>, String>(compareBy<Triple<Int, Int, Int>>({ it.first }, { it.third }, { it.second }))
+        for (line in lines) runCatching {
+            val l = obj(line)
+            at[Triple(int(l["x"]), int(l["y"]), int(l["z"]))] = (l["tex"] as JsonPrimitive).asString
+        }
+        return at.entries.chunked(SKULLS_LINE).map { part ->
+            val tex = LinkedHashMap<String, Int>()
+            val d = JsonArray()
+            var p = Triple(0, 0, 0)
+            for ((q, t) in part) {
+                d.add(JsonArray().apply { add(q.first - p.first); add(q.second - p.second); add(q.third - p.third); add(tex.getOrPut(t) { tex.size }) })
+                p = q
+            }
+            JsonObject().apply { addProperty("k", "skulls"); add("tex", JsonArray().apply { tex.keys.forEach(::add) }); add("d", d) }.toString()
+        }
+    }
+    private const val SKULLS_LINE = 1200 // (every one a new texture: still under 100 KB)
+
+    /**
+     * xz as small as it gets for these files (a few percent under preset 6): preset 9's match finder
+     * with an 8 MB dictionary (the site takes up to 16; an upload unpacks to a few MB), and no
+     * position bits but four of literal context - it is text, where the byte before says more
+     * than where a byte is.
+     */
+    private fun xzOptions() = LZMA2Options(9).apply { niceLen = 273; dictSize = 8 shl 20; pb = 0; lc = 4; lp = 0 }
+
+    /** A chat line without its plain text ("m") where that is the coloured one ("c") without its § codes (the viewer works it out). */
+    private fun plainChat(line: String): String = runCatching {
+        val l = obj(line)
+        val c = (l["c"] as? JsonPrimitive)?.asString ?: return line
+        if ((l["m"] as? JsonPrimitive)?.asString != c.replace(CODES, "")) return line
+        l.remove("m"); l.toString()
+    }.getOrDefault(line)
+    private val CODES = Regex("§.")
 
     /** A line as it goes up: a projectile's spawn becomes its "proj" line, the rest of its lines go (null). */
     private fun fold(line: String, scan: Scan): String? {
@@ -601,8 +708,12 @@ object UploadPacker {
 
         /** One line of [list], or two of its halves (and so on) while it's longer than [COLS_MAX]. */
         private fun <T> write(list: List<T>, encode: (List<T>) -> String) {
+            val sizes = tables.mapValues { it.value.order.size }
             val line = encode(list)
-            if (line.length > COLS_MAX && list.size > 1) { write(list.subList(0, list.size / 2), encode); write(list.subList(list.size / 2, list.size), encode); return }
+            if (line.length > COLS_MAX && list.size > 1) {
+                for ((f, t) in tables) t.reset(sizes.getValue(f)) // (the halves number them again)
+                write(list.subList(0, list.size / 2), encode); write(list.subList(list.size / 2, list.size), encode); return
+            }
             w.write(line); w.write(NL)
         }
 
@@ -642,11 +753,29 @@ object UploadPacker {
         }
 
         /** A "grp" line: one kind's lines, a column per field ("n" of them; null where a line hasn't the field). */
+        /**
+         * Gear ("eq") and head skins ("headTex") on gear lines: each value whole the first time, then
+         * as its number in the order they first came ("eqtab" in the meta: the viewer keeps the same
+         * lists) - a run has a few dozen of each, over a thousand times.
+         */
+        private val tables = mapOf("eq" to Table(), "headTex" to Table())
+        private class Table {
+            val index = HashMap<String, Int>(); val order = ArrayList<String>()
+            fun of(v: JsonElement): JsonElement {
+                if (v.isJsonNull || (v is JsonPrimitive && v.isString && v.asString.isEmpty())) return v
+                val key = v.toString()
+                index[key]?.let { return JsonPrimitive(it) }
+                index[key] = order.size; order += key
+                return v
+            }
+            fun reset(size: Int) { while (order.size > size) index.remove(order.removeAt(order.size - 1)) }
+        }
+
         private fun group(kind: String, list: List<JsonObject>): String {
             val fields = LinkedHashSet<String>()
             for (o in list) for (f in o.keySet()) if (f != "k") fields += f
             val c = JsonObject()
-            for (f in fields) c.add(f, column(list.map { it[f] ?: JsonNull.INSTANCE }))
+            for (f in fields) c.add(f, column(list.map { o -> (o[f] ?: JsonNull.INSTANCE).let { v -> if (kind == "eq") tables[f]?.of(v) ?: v else v } }))
             return JsonObject().apply { addProperty("k", "grp"); addProperty("of", kind); addProperty("n", list.size); add("c", c) }.toString()
         }
 
@@ -667,13 +796,13 @@ object UploadPacker {
                 t.add(tick - pT); pT = tick; n.add(d.size())
                 for (f in d) {
                     val a = f.asJsonArray
-                    pt.add(hundredths(a[0])!!)
+                    pt.add(Math.round(a[0].asDouble * 10))
                     // (turns in tenths of a degree: "s")
                     val y = Math.round(a[1].asDouble * 10); val p = Math.round(a[2].asDouble * 10)
                     yaw.add(y - pY); pitch.add(p - pP); pY = y; pP = p
                 }
             }
-            return JsonObject().apply { addProperty("k", "cams"); addProperty("s", 10); add("t", t); add("n", n); add("pt", pt); add("yaw", yaw); add("pitch", pitch) }.toString()
+            return JsonObject().apply { addProperty("k", "cams"); addProperty("s", 10); addProperty("ps", 10); add("t", t); add("n", n); add("pt", pt); add("yaw", yaw); add("pitch", pitch) }.toString()
         }
 
         private fun deltas(v: List<Long>) = JsonArray().apply { var prev = 0L; for (x in v) { add(x - prev); prev = x } }
@@ -717,6 +846,16 @@ object UploadPacker {
     }
 
     /** A "cam" line with only the frames [keep] keeps, or null when none are left. */
+    /** A "mouse" line with only the points [keep] has (see thinMouse): when to a hundredth of a tick (it moves fast), where to a tenth of a GUI pixel. */
+    private fun mouse(line: String, keep: BooleanArray?): String? = runCatching {
+        val l = JsonParser.parseString(line).asJsonObject
+        val left = JsonArray()
+        l.getAsJsonArray("d").forEachIndexed { k, f -> if (keep?.getOrElse(k) { true } != false) left.add(JsonArray().apply { f.asJsonArray.forEachIndexed { i, v -> add(if (i == 0) MobPlan.hundredth(v.asDouble) else MobPlan.tenth(v.asDouble)) } }) }
+        if (left.size() == 0) return null
+        l.add("d", left)
+        l.toString()
+    }.getOrDefault(line)
+
     private fun thin(line: String, keep: BooleanArray?): String? {
         if (keep == null || keep.all { it }) return line
         if (keep.none { it }) return null
@@ -744,7 +883,8 @@ object UploadPacker {
         private fun same(name: String, a: Long, b: Long, offset: Long): Boolean {
             val pts = sample(ours[name]?.filter { it[0] >= a && it[0] <= b } ?: return true)
             val track = sib.playerAt[name] ?: return false
-            val ok = pts.count { q -> track.at(q[0].toLong() - offset, 0)?.let { dist(it, q) <= AGREE_DIST } == true }
+            // (slid between rows as the viewer does: their rows are thinned too)
+            val ok = pts.count { q -> track.at(q[0].toLong() - offset, sib.lerp)?.let { dist(it, q) <= AGREE_DIST } == true }
             return ok * 10 >= pts.size * 9
         }
         private val dropping = HashMap<String, Long>() // name -> the end of the stretch it's left out in
@@ -820,7 +960,13 @@ object UploadPacker {
         val types = HashMap<Long, String>() // (id shl 32 | spawn tick) -> type
         val gones = HashMap<Int, MutableList<Long>>()
         var lerp = 0
-        fun mob(id: Int, t: Long, x: Double?, y: Double?, z: Double?) { if (x == null || y == null || z == null) return; if (++rows > SIB_MAX_ROWS) throw Malformed("too many rows"); mobs.getOrPut(id) { Track() }.add(t, x, y, z) }
+        var erel = false
+        val relative = ArrayList<DoubleArray>() // ("erel": mob rows from where the mob spawned) id, t, x, y, z, till the spawns are in
+        fun mob(id: Int, t: Long, x: Double?, y: Double?, z: Double?) {
+            if (x == null || y == null || z == null) return
+            if (++rows > SIB_MAX_ROWS) throw Malformed("too many rows")
+            if (erel) relative += doubleArrayOf(id.toDouble(), t.toDouble(), x, y, z) else mobs.getOrPut(id) { Track() }.add(t, x, y, z)
+        }
         fun player(name: String, t: Long, x: Double?, y: Double?, z: Double?) { if (x == null || y == null || z == null) return; playerAt.getOrPut(name) { Track() }.add(t, x, y, z) }
         fun tick(t: Long): Long { if (t !in 0..SIB_MAX_TICK) throw Malformed("tick $t"); if (t < minT) minT = t; if (t > maxT) maxT = t; return t }
         fun row(name: String, t: Long) { if (++rows > SIB_MAX_ROWS) throw Malformed("too many player rows"); seen.getOrPut(name) { ArrayList() } += t }
@@ -838,6 +984,7 @@ object UploadPacker {
                         self = runCatching { str(m["self"]) }.getOrDefault("").takeIf { it.length <= 16 } ?: ""
                         startMs = runCatching { long(m["startMs"]) }.getOrDefault(0L)
                         lerp = runCatching { int(m["lerp"]) }.getOrDefault(0).coerceIn(0, 200)
+                        erel = runCatching { int(m["erel"]) }.getOrDefault(0) == 1
                     }
                     "p" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) { val r = arr(x); val name = str(at(r, 0)); row(name, t); if (r.size() >= 4) player(name, t, num(r[1]), num(r[2]), num(r[3])) } }
                     "e" -> { val l = obj(line); val t = tick(long(l["t"])); for (x in arr(l["d"])) { val r = arr(x); val id = int(at(r, 0)); count(id, 1); if (r.size() >= 4) mob(id, t, num(r[1]), num(r[2]), num(r[3])) } }
@@ -940,6 +1087,15 @@ object UploadPacker {
                 val end = if (s[1] > 0) t + s[1].toLong() - 1 else gs.firstOrNull { it >= t && it <= next } ?: minOf(next, maxT)
                 SibLife(t, end, s[2], s[3], s[4], type)
             } }
+        }
+        // Relative rows: from their life's spawn (to a fifth of a block, as MobPlan sends them).
+        if (relative.isNotEmpty()) {
+            val sorted = spawns.mapValues { (_, l) -> l.sortedBy { it[0] } }
+            for (r in relative) {
+                val s = sorted[r[0].toInt()]?.lastOrNull { it[0] <= r[1] } ?: continue
+                if (s[2].isNaN() || s[3].isNaN() || s[4].isNaN()) continue
+                mobs.getOrPut(r[0].toInt()) { Track() }.add(r[1].toLong(), r[2] + MobPlan.fifthOf(s[2]), r[3] + MobPlan.fifthOf(s[3]), r[4] + MobPlan.fifthOf(s[4]))
+            }
         }
         for (tr in mobs.values) tr.sort()
         for (tr in playerAt.values) tr.sort()
