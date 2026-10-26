@@ -53,13 +53,16 @@ import org.slf4j.LoggerFactory
  *  - A projectile's whole life - its spawn and flight, new flights, where it stuck, when it was
  *    gone - is one "pj" line where it spawned: the few points the viewer needs to fly it from
  *    one to the next ([ProjPack]; most arrows are shot point-blank into a wall and stick a tick
- *    later: three lines and a move, for one arrow).
+ *    later: three lines and a move, for one arrow). One of each set of twins (a bow sends some
+ *    twice over), none that never moved and were gone within a few ticks, and arrows the server
+ *    sent already stuck as "pj" rows too ([Stretch.stuckArrows]).
  *
- *  - Mob moves ("e") and player lines ("p") as columns ("cols"): the whole run's, every mob's (player's)
- *    values one after another, as differences from the last - mostly 0, 1 and -1, which pack to a
- *    fraction of the numbers written out (over a third smaller overall on an F7 run). Mob events,
- *    block changes and camera frames the same way ([Stretch]); the viewer turns them all back into
- *    the lines they were.
+ *  - Mob moves ("e") and player lines ("p") as columns ("cols"): the whole run's, a column per
+ *    value with every mob's (player's) one after another, as differences within each mob's -
+ *    mostly 0, 1 and -1, which pack to a fraction of the numbers written out. Mob events, the
+ *    lines that came one at a time (but chat, time and skins: the site reads those), block changes
+ *    and camera frames the same way ([Stretch]); the viewer turns them all back into the lines
+ *    they were.
  *
  *  - The recording player's camera frames thinned: one is left out where the frames either side of it, as the
  *    viewer draws between them, are within [CAM_TOLERANCE] degrees of it (a pixel or so), never
@@ -557,7 +560,7 @@ object UploadPacker {
                 for (line in r.lineSequence()) {
                     if (first) {
                         // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
-                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1) }.toString() }.getOrDefault(line), timed = false)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
                         val skulls = ArrayList<String>()
                         for (l in scan.world) if (kindOf(l) == "skull") skulls += l else put(l, timed = false)
@@ -647,8 +650,9 @@ object UploadPacker {
      * ahead of the rest of it (the viewer turns them back into the lines they were):
      *  - mob ("e") and player ("p") lines as "cols": per mob/player its values one after another
      *    as differences (mob ids too, in order);
-     *  - mob events (spawn, tag, stand, frame, eq, name, gone) and the server tick, map and swing
-     *    lines as "grp": per kind, a column per field the same way;
+     *  - mob events (spawn, tag, stand, frame, eq, name, gone), the server tick, map and swing
+     *    lines, projectiles and the lines that come one at a time ([SINGLES]; a window's, [UI],
+     *    all in one) as "grp": per kind, a column per field the same way;
      *  - block changes as "blocks": each tick's sorted by place, every one a difference from the one
      *    before;
      *  - camera frames as "cams": columns of hundredths (the turns tenths, as differences).
@@ -689,6 +693,9 @@ object UploadPacker {
                     cams += t to d; true
                 }
                 kind in GROUPED || (kind == "eq" && line.contains("\"id\":")) -> { groups.getOrPut(kind) { ArrayList() } += JsonParser.parseString(line).asJsonObject; true }
+                kind in SINGLES -> { groups.getOrPut(kind) { ArrayList() } += JsonParser.parseString(line).asJsonObject; true }
+                // (a window's lines in one "ui" group, each its kind in "of": the viewer needs a tick's in their order)
+                kind in UI -> { groups.getOrPut("ui") { ArrayList() } += JsonParser.parseString(line).asJsonObject.apply { remove("k"); addProperty("of", kind) }; true }
                 else -> false
             }
         }.getOrDefault(false)
@@ -696,6 +703,8 @@ object UploadPacker {
         fun end() = flush()
 
         private fun flush() {
+            stuckArrows()
+            groups["pj"]?.let { groups["pj"] = projectiles(it) }
             for (kind in BEFORE_MOVES) groups[kind]?.let { write(it) { part -> group(kind, part) } }
             for ((kind, list) in items) if (list.isNotEmpty()) write(list) { encode(kind, it) }
             for ((kind, list) in groups) if (kind !in BEFORE_MOVES) write(list) { part -> group(kind, part) }
@@ -717,7 +726,59 @@ object UploadPacker {
             w.write(line); w.write(NL)
         }
 
-        /** One "cols" line: the lines' ticks, then per mob/player (mobs by id, as differences) the lines it's in, its rows' lengths and its columns. */
+        /**
+         * Arrows the server sent already stuck (a spawn with no flight) and nothing else is about but
+         * their spawn: "pj" rows marked "spawn" ("pj2" in the meta), with its look and how long it
+         * lives ("g", the spawn's "life") - the viewer makes the spawn it was again. Far smaller than a spawn
+         * row; an F7 archer's run has hundreds.
+         */
+        private fun stuckArrows() {
+            val spawns = groups["spawn"] ?: return
+            val stuck = spawns.filter { s -> s.keySet().all { it in STUCK_KEYS } && (s["type"] as? JsonPrimitive)?.asString == "minecraft:arrow" && s.has("x") && s.has("y") && s.has("z") }
+            if (stuck.isEmpty()) return
+            // (only those no other line names: the order of a tick's events can't change)
+            val named = HashMap<Int, Int>()
+            for ((kind, list) in groups) for (o in list) (o["id"] as? JsonPrimitive)?.takeIf { it.isNumber }?.asInt?.let { named.merge(it, if (kind == "spawn") 1 else 2, Int::plus) }
+            for (it in items.getValue("e")) for (r in it.rows) named.merge(r.asJsonArray[0].asInt, 2, Int::plus)
+            for (l in others) ID.find(l)?.groupValues?.get(1)?.toIntOrNull()?.let { named.merge(it, 2, Int::plus) }
+            val moving = stuck.filter { named[it["id"].asInt] == 1 }.toSet()
+            if (moving.isEmpty()) return
+            groups["spawn"] = ArrayList(spawns.filter { it !in moving })
+            val rows = moving.map { s -> JsonObject().apply {
+                add("t", s["t"]); add("id", s["id"]); addProperty("spawn", 1); add("x", s["x"]); add("y", s["y"]); add("z", s["z"])
+                s["yaw"]?.let { add("yaw", it) }; s["life"]?.let { add("g", it) }
+            } }
+            groups["pj"] = ArrayList(((groups["pj"] ?: emptyList<JsonObject>()) + rows).sortedBy { it["t"].asInt })
+        }
+
+        /**
+         * The projectiles that go up ("pj2"): one of each where several are the same (a bow sends
+         * twins: the same tick, place and flight), none for an arrow that never moved and was gone
+         * within [DUD_TICKS] (shot into nothing the server keeps), and the gone tick ("g") counted
+         * from its last point, where it ends.
+         */
+        private fun projectiles(list: List<JsonObject>): ArrayList<JsonObject> {
+            val seen = HashSet<String>()
+            val out = ArrayList<JsonObject>()
+            for (o in list) {
+                val p = o["p"] as? JsonArray
+                val g = (o["g"] as? JsonPrimitive)?.asInt
+                if (p != null && !o.has("type") && g != null && g <= DUD_TICKS
+                    && (0 until p.size() / 4).all { i -> Math.hypot(Math.hypot(p[4 * i + 1].asDouble, p[4 * i + 2].asDouble), p[4 * i + 3].asDouble) < DUD_TENTHS }) continue
+                if (!seen.add(JsonObject().apply { for ((k, v) in o.entrySet()) if (k != "id") add(k, v) }.toString())) continue
+                out += if (p != null && g != null && p.size() >= 4) o.deepCopy().apply { addProperty("g", g - p[p.size() - 4].asInt) } else o
+            }
+            return out
+        }
+
+        /**
+         * One "cols" line ("flat"): the lines' ticks; each mob/player once (mobs by id, as differences
+         * from the one before: "kd") with how many rows it has ("n"); then every row's line (each
+         * one's first as it is, the rest as differences: "li") and length ("sz"); then a column per
+         * place in the rows, everyone's one after another - numbers as differences within each
+         * mob's (its first as it is), anything else as runs. One long stream per value packs
+         * smaller than each mob's own little table.
+         */
         private fun encode(kind: String, list: List<Item>): String {
             val tracks = LinkedHashMap<String, MutableList<Pair<Int, JsonArray>>>()
             val keys = HashMap<String, JsonElement>()
@@ -729,27 +790,46 @@ object UploadPacker {
                     tracks.getOrPut(key) { ArrayList() } += li to row
                 }
             }
-            // Mobs in id order, each id the difference from the one before ("kd").
             val byId = kind == "e" && keys.values.all { (it as? JsonPrimitive)?.isNumber == true && it.asString.toLongOrNull() != null }
             val order = if (byId) tracks.keys.sortedBy { keys.getValue(it).asLong } else tracks.keys.toList()
-            val tr = JsonArray()
+            val width = tracks.values.maxOfOrNull { rows -> rows.maxOf { it.second.size() } } ?: 1
+            val ks = JsonArray(); val n = JsonArray(); val li = JsonArray(); val sz = JsonArray()
+            val vals = List(maxOf(0, width - 1)) { ArrayList<JsonElement>() }
+            val starts = List(maxOf(0, width - 1)) { ArrayList<Boolean>() }
             var prevKey = 0L
             for (key in order) {
                 val rows = tracks.getValue(key)
-                val width = rows.maxOf { it.second.size() }
-                val cols = JsonArray()
-                for (c in 1 until width) cols.add(column(rows.filter { it.second.size() > c }.map { it.second[c] }))
-                val k: JsonElement = if (byId) keys.getValue(key).asLong.let { id -> JsonPrimitive(id - prevKey).also { prevKey = id } } else keys.getValue(key)
-                tr.add(JsonArray().apply {
-                    add(k); add(deltas(rows.map { it.first.toLong() })); add(column(rows.map { JsonPrimitive(it.second.size()) })); add(cols)
-                })
+                ks.add(if (byId) keys.getValue(key).asLong.let { id -> JsonPrimitive(id - prevKey).also { prevKey = id } } else keys.getValue(key))
+                n.add(rows.size)
+                var prevLi = 0
+                val first = BooleanArray(vals.size) { true }
+                rows.forEachIndexed { j, (at, row) ->
+                    li.add(if (j == 0) at else at - prevLi); prevLi = at
+                    sz.add(row.size())
+                    for (c in 1 until row.size()) { vals[c - 1] += row[c]; starts[c - 1] += first[c - 1]; first[c - 1] = false }
+                }
             }
             return JsonObject().apply {
-                addProperty("k", "cols"); addProperty("of", kind)
+                addProperty("k", "cols"); addProperty("of", kind); addProperty("flat", 1)
                 if (byId) addProperty("kd", 1)
                 add("t", deltas(list.map { it.t.toLong() }))
-                add("tr", tr)
+                add("keys", ks); add("n", n); add("li", li); add("sz", sz)
+                add("cols", JsonArray().apply { vals.forEachIndexed { c, v -> add(flatColumn(v, starts[c])) } })
             }.toString()
+        }
+
+        /** A "flat" cols column: numbers (at most 4 decimals) as [decimals, ...] each a difference from the one before it in its mob's (one starting a mob's: as it is); else runs. */
+        private fun flatColumn(values: List<JsonElement>, starts: List<Boolean>): JsonElement {
+            val nums = values.map { v -> (v as? JsonPrimitive)?.takeIf { it.isNumber }?.let { runCatching { BigDecimal(it.asString) }.getOrNull() } }
+            if (nums.all { it != null }) {
+                val dec = nums.maxOfOrNull { it!!.stripTrailingZeros().scale().coerceAtLeast(0) } ?: 0
+                if (dec <= 4) return JsonArray().apply {
+                    add(dec)
+                    var prev = 0L
+                    nums.forEachIndexed { i, b -> val q = b!!.movePointRight(dec).longValueExact(); add(if (starts[i]) q else q - prev); prev = q }
+                }
+            }
+            return column(values)
         }
 
         /** A "grp" line: one kind's lines, a column per field ("n" of them; null where a line hasn't the field). */
@@ -838,6 +918,18 @@ object UploadPacker {
             /** Kinds that go in "grp" lines; the first ones go ahead of the moves, the rest after. */
             private val BEFORE_MOVES = listOf("spawn", "tag", "stand", "frame", "eq", "name")
             private val GROUPED = BEFORE_MOVES.toSet() + setOf("gone", "st", "mp", "sw", "pj")
+            /**
+             * Lines that were each a line of their own, grouped too ("grp"; the viewer reads each kind into
+             * a list of its own). Not chat, time or skin: the site reads those lines as they are.
+             */
+            private val SINGLES = setOf("mouse", "pgone", "use", "hotbar", "tp", "slotclick", "rooms", "held", "ether", "room")
+            /** A window's lines, one "ui" group in their order. */
+            private val UI = setOf("gui", "slots", "carried", "click", "guiclose")
+            /** A spawn that can be a "pj" row (see stuckArrows). */
+            private val STUCK_KEYS = setOf("k", "t", "id", "type", "x", "y", "z", "yaw", "life")
+            /** An arrow that went no further than this (tenths of a block) and was gone within [DUD_TICKS] isn't sent. */
+            private const val DUD_TENTHS = 5.0
+            private const val DUD_TICKS = 3
             /** A number with at most 2 decimals, in hundredths (exactly), else null. */
             fun hundredths(e: JsonElement): Long? = (e as? JsonPrimitive)?.takeIf { it.isNumber }?.let { p ->
                 runCatching { BigDecimal(p.asString).movePointRight(2).longValueExact() }.getOrNull()
@@ -1009,6 +1101,21 @@ object UploadPacker {
                         var id = 0L
                         // Each one's first three columns (x, y, z: every row has them).
                         fun xyz(a: JsonArray, n: Int): List<List<Double?>> { val cols = arr(at(a, 3)); return (0..2).map { c -> if (c < cols.size()) nums(cols[c], n) else emptyList() } }
+                        if (l.has("flat")) {
+                            val of = l["of"]?.let(::str)
+                            for (f in flatRows(l, ticks.size)) {
+                                if (of == "e") {
+                                    id = if (byId) id + long(f.key) else long(f.key)
+                                    val mid = id.toInt().takeIf { i -> i.toLong() == id } ?: throw Malformed("id")
+                                    count(mid, f.lines.size)
+                                    f.lines.forEachIndexed { k, li -> mob(mid, ticks[li], f.x[k], f.y[k], f.z[k]) }
+                                } else if (of == "p") {
+                                    val name = str(f.key)
+                                    f.lines.forEachIndexed { k, li -> row(name, ticks[li]); player(name, ticks[li], f.x[k], f.y[k], f.z[k]) }
+                                }
+                            }
+                            continue
+                        }
                         when (l["of"]?.let(::str)) {
                             "e" -> for (t in arr(l["tr"])) arr(t).let {
                                 id = if (byId) id + long(at(it, 0)) else long(at(it, 0))
@@ -1032,6 +1139,24 @@ object UploadPacker {
                         val c = l["c"] as? JsonObject ?: throw Malformed("columns")
                         c["t"]?.let { col -> for (t in longs(col, n)) tick(t) }
                         if (of in ENTITY_KINDS || of == "eq") c["id"]?.let { col -> for (id in longs(col, n)) count(id.toInt().takeIf { it.toLong() == id } ?: throw Malformed("id"), 1) }
+                        if (of == "pgone") {
+                            val ts = longs(c["t"] ?: throw Malformed("t"), n); val names = strs(c["name"] ?: throw Malformed("name"), n)
+                            for (k in ts.indices) names.getOrNull(k)?.let { row(it, -(tick(ts[k]) + 1)) }
+                        }
+                        // (arrows sent already stuck: "pj" rows marked "spawn", a spawn each - see Stretch.stuckArrows)
+                        if (of == "pj" && c["spawn"] != null) {
+                            val ts = nums(c["t"] ?: throw Malformed("t"), n); val ids = nums(c["id"] ?: throw Malformed("id"), n)
+                            val sp = nums(c["spawn"]!!, n).map { it == 1.0 }; val g = c["g"]?.let { nums(it, n) }
+                            val xs = c["x"]?.let { nums(it, n) }; val ys = c["y"]?.let { nums(it, n) }; val zs = c["z"]?.let { nums(it, n) }
+                            for (k in ts.indices) {
+                                if (sp.getOrNull(k) != true) continue
+                                val t = ts[k] ?: continue; val i = ids.getOrNull(k)?.toInt() ?: continue
+                                count(i, 1)
+                                spawns.getOrPut(i) { ArrayList() } += doubleArrayOf(t, g?.getOrNull(k) ?: -1.0, xs?.getOrNull(k) ?: Double.NaN, ys?.getOrNull(k) ?: Double.NaN, zs?.getOrNull(k) ?: Double.NaN, 0.0)
+                                types[(i.toLong() shl 32) or t.toLong()] = "minecraft:arrow"
+                                if (spawns.size > SIB_MAX_IDS) throw Malformed("too many mobs")
+                            }
+                        }
                         // Lives: spawns (and how long, "life") and gone.
                         if (of == "spawn" || of == "gone") {
                             val ts = nums(c["t"] ?: throw Malformed("t"), n); val ids = nums(c["id"] ?: throw Malformed("id"), n)
@@ -1126,6 +1251,45 @@ object UploadPacker {
         }
         return out
     }
+
+    /** A "flat" cols line's mobs (players): each one's key, the lines it has a row in and its rows' x, y and z. */
+    private class FlatRows(val key: JsonElement, val lines: List<Int>, val x: List<Double?>, val y: List<Double?>, val z: List<Double?>)
+    private fun flatRows(l: JsonObject, lineCount: Int): List<FlatRows> {
+        val keys = arr(l["keys"]); val ns = arr(l["n"]); val li = arr(l["li"]); val sz = arr(l["sz"]); val cols = arr(l["cols"])
+        if (keys.size() != ns.size()) throw Malformed("keys")
+        if (li.size() != sz.size() || li.size() > SIB_MAX_ROWS) throw Malformed("rows")
+        // x, y, z: number columns, differences within each one's (its first as it is)
+        val xyz = (0..2).map { c -> (cols.getOrNull(c) as? JsonArray)?.takeIf { it.size() > 0 } }
+        val scale = xyz.map { col -> col?.let { Math.pow(10.0, long(it[0]).also { d -> if (d !in 0..8) throw Malformed("decimals") }.toDouble()) } }
+        val ptr = IntArray(3) { 1 }
+        val out = ArrayList<FlatRows>()
+        var row = 0
+        for (k in 0 until keys.size()) {
+            val n = long(ns[k]).also { if (it < 0 || row + it > li.size()) throw Malformed("rows") }.toInt()
+            val lines = ArrayList<Int>(n); val vals = List(3) { ArrayList<Double?>(n) }
+            val q = LongArray(3); val started = BooleanArray(3)
+            var at = 0L
+            for (j in 0 until n) {
+                val step = long(li[row])
+                if (step < 0 || (j > 0 && step == 0L)) throw Malformed("line order")
+                at = if (j == 0) step else at + step
+                if (at >= lineCount) throw Malformed("line $at of $lineCount")
+                lines += at.toInt()
+                val size = long(sz[row]).also { if (it < 1 || it > 64) throw Malformed("row size") }
+                for (c in 0..2) {
+                    val col = xyz[c]
+                    if (size <= c + 1 || col == null || ptr[c] >= col.size()) { vals[c] += null; continue }
+                    val d = long(col[ptr[c]++])
+                    q[c] = if (started[c]) q[c] + d else d; started[c] = true
+                    vals[c] += q[c] / scale[c]!!
+                }
+                row++
+            }
+            out += FlatRows(keys[k], lines, vals[0], vals[1], vals[2])
+        }
+        return out
+    }
+    private fun JsonArray.getOrNull(i: Int): JsonElement? = if (i in 0 until size()) get(i) else null
 
     /** Which rows of a run-length column have a value. */
     private fun present(col: JsonElement, n: Int): List<Boolean> {
