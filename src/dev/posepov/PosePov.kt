@@ -343,12 +343,15 @@ object PosePov : Module(
             val closest = near.minOfOrNull { it.pos.distanceToSqr(en.position()) } ?: break
             if (closest >= range2) continue
             if (en is ArmorStand && en.isInvisible && EquipmentSlot.entries.all { en.getItemBySlot(it).isEmpty } && (!en.isCustomNameVisible || closest > NAME_RANGE * NAME_RANGE)) continue
+            val at = smoothed(en, pt, now)
             val s = if (closest > ENTITY_FULL * ENTITY_FULL) null else runCatching { mc.entityRenderDispatcher.extractEntity(en, pt) }.getOrNull()?.also { s ->
+                s.x = at.x; s.y = at.y; s.z = at.z
                 s.lightCoords = LightCoordsUtil.FULL_BRIGHT; s.outlineColor = 0
                 if (closest > NAME_RANGE * NAME_RANGE) s.nameTag = null
             }
             entities += en to s
         }
+        if (now - smoothPruned > 2_000_000_000L) { smoothPruned = now; smooth.values.removeIf { now - it.at > 2_000_000_000L } }
 
         lap = PovPerf.lap(PovPerf.ENTITIES, lap)
 
@@ -421,7 +424,8 @@ object PosePov : Module(
             for ((en, s, d2) in inSight) {
                 if (s != null && d2 <= ENTITY_FULL * ENTITY_FULL && seen.size < ENTITY_CAP) { seen += s; continue }
                 if (en is ArmorStand && en.isInvisible) continue
-                val b = en.boundingBox
+                // Where the entity is drawn this frame (smoothed), not where its last tick left it: boxes otherwise step 20 times a second.
+                val b = smooth[en.id]?.let { m -> en.boundingBox.move(m.x - en.x, m.y - en.y, m.z - en.z) } ?: en.boundingBox
                 boxes += Box(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ, kindColor(en))
             }
             val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + it.bufferNs, now) } ?: 0f
@@ -595,7 +599,8 @@ object PosePov : Module(
      * lightly eased so a flick over the 20 updates a second reads as a quick turn rather than a jump.
      */
     private fun look(name: String, p: Player, pt: Float, now: Long): Eye {
-        val l = looks[name] ?: return Eye(p.getEyePosition(pt), p.yHeadRot, p.xRot, null)
+        val eye = smoothed(p, pt, now).add(0.0, p.eyeHeight.toDouble(), 0.0)
+        val l = looks[name] ?: return Eye(eye, p.yHeadRot, p.xRot, null)
         val yaw = Mth.rotLerp(pt, l.yawO, l.yaw); val pitch = Mth.lerp(pt, l.pitchO, l.pitch)
         val dt = ((now - l.outAt) / 1e9); l.outAt = now
         if (dt > 0.25) { l.outYaw = yaw; l.outPitch = pitch }
@@ -603,7 +608,32 @@ object PosePov : Module(
             val k = (1 - Math.exp(-dt / LOOK_EASE_S)).toFloat()
             l.outYaw += Mth.wrapDegrees(yaw - l.outYaw) * k; l.outPitch += (pitch - l.outPitch) * k
         }
-        return Eye(p.getEyePosition(pt), l.outYaw, l.outPitch, null)
+        return Eye(eye, l.outYaw, l.outPitch, null)
+    }
+
+    /**
+     * Where an entity is drawn in the views: its interpolated position eased over [SMOOTH_S]. Hypixel's position updates come
+     * unevenly (none one tick, two the next), which the game's own view hides because you never ride another entity's position;
+     * a view from a teammate's eye does, and every entity near it shook against it. The eye and the entities go through the same
+     * easing, so things moving with the teammate stay put relative to them. Jumps over [SMOOTH_SNAP] blocks aren't eased.
+     */
+    private class Smooth(var x: Double, var y: Double, var z: Double, var at: Long)
+    private val smooth = HashMap<Int, Smooth>()
+    private var smoothPruned = 0L
+    private const val SMOOTH_S = 0.05
+    private const val SMOOTH_SNAP = 4.0
+
+    private fun smoothed(en: Entity, pt: Float, now: Long): Vec3 {
+        val tx = Mth.lerp(pt.toDouble(), en.xOld, en.x); val ty = Mth.lerp(pt.toDouble(), en.yOld, en.y); val tz = Mth.lerp(pt.toDouble(), en.zOld, en.z)
+        val m = smooth[en.id]
+        if (m == null) { smooth[en.id] = Smooth(tx, ty, tz, now); return Vec3(tx, ty, tz) }
+        val dt = (now - m.at) / 1e9
+        if (dt <= 0.0) return Vec3(m.x, m.y, m.z)
+        m.at = now
+        val dx = tx - m.x; val dy = ty - m.y; val dz = tz - m.z
+        if (dt > 0.25 || dx * dx + dy * dy + dz * dz > SMOOTH_SNAP * SMOOTH_SNAP) { m.x = tx; m.y = ty; m.z = tz }
+        else { val k = 1 - Math.exp(-dt / SMOOTH_S); m.x += dx * k; m.y += dy * k; m.z += dz * k }
+        return Vec3(m.x, m.y, m.z)
     }
 
     /** A camera: where it is and looks, and for an estimate, the spot the teammate is thought to stand (eye height). */
