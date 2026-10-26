@@ -24,6 +24,7 @@ import net.minecraft.util.RandomSource
 import net.minecraft.world.level.block.LiquidBlock
 import net.minecraft.world.level.block.RenderShape
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.chunk.PalettedContainer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -40,11 +41,20 @@ import java.util.concurrent.ConcurrentHashMap
  *    this run only.
  * A piece's faces are grouped by the way they face, and a frame leaves out the groups facing away from the eye.
  * Faces are textured and shaded when built (by side, and at each corner by the blocks around it), so drawing is a lookup.
- * Render thread only, except [dirty] (packets).
+ * Building runs on [builder]'s threads from a copy of the chunk sections it needs ([Snapshot]: the game thread only copies
+ * those, a few arrays, and uploads); a chunk that arrives again is checked there too. Render thread only, except [dirty]
+ * (packets) and the building.
  */
 object BlockMesh {
-    /** This run's own geometry ([CompactMesh]'s form), drawn with its frame's corner at world ([ox], 0, [oz]); its quads per group. */
-    class Mesh(val buffer: GpuBuffer, val counts: IntArray, val ox: Int, val oz: Int)
+    /**
+     * This run's own geometry ([CompactMesh]'s form) in the shared pools ([PiecePool.putOwn]), drawn with its frame's corner at
+     * world ([ox], 0, [oz]); its quads per group.
+     */
+    class Mesh(val res: PiecePool.Resident, val ox: Int, val oz: Int) {
+        val buffer get() = res.buffer
+        val first get() = res.first
+        val counts get() = res.counts
+    }
 
     private const val BUNDLE_FORMAT = 2
     const val ARENA = "arena"
@@ -103,15 +113,37 @@ object BlockMesh {
     fun dirty(x: Int, y: Int, z: Int) {
         val now = System.currentTimeMillis()
         val sx = x shr 4; val sy = y shr 4; val sz = z shr 4
-        for (dx in edge(x)) for (dy in edge(y)) for (dz in edge(z)) dirtyAt[SectionPos.asLong(sx + dx, sy + dy, sz + dz)] = now
+        for (dx in edge(x)) for (dy in edge(y)) for (dz in edge(z)) SectionPos.asLong(sx + dx, sy + dy, sz + dz).let { dirtyAt[it] = now; chunkOnly.remove(it) }
     }
 
     private val MID = intArrayOf(0); private val LOW = intArrayOf(0, -1); private val HIGH = intArrayOf(0, 1)
     private fun edge(v: Int) = when (v and 15) { 0 -> LOW; 15 -> HIGH; else -> MID }
 
-    fun dirtyColumn(cx: Int, cz: Int, minSy: Int, maxSy: Int) {
+    /**
+     * A column's world sections need rebuilding: a room placed over it ([check] false), or its chunk arriving ([check] true).
+     * A chunk arriving is only looked at: its sections are rebuilt only where the blocks differ from what they were built
+     * from (moving about the dungeon reloads the same chunks over and over).
+     */
+    fun dirtyColumn(cx: Int, cz: Int, minSy: Int, maxSy: Int, check: Boolean = false) {
         val now = System.currentTimeMillis()
-        for (sy in minSy..maxSy) dirtyAt[SectionPos.asLong(cx, sy, cz)] = now
+        for (sy in minSy..maxSy) {
+            val k = SectionPos.asLong(cx, sy, cz)
+            if (check) { if (!dirtyAt.containsKey(k)) chunkOnly += k } else chunkOnly.remove(k)
+            dirtyAt[k] = now
+        }
+    }
+
+    /** Dirty world sections only because their chunk arrived (see [dirtyColumn]). */
+    private val chunkOnly = ConcurrentHashMap.newKeySet<Long>()
+    /** What the level held in each world section when it was last built ([levelHash]). */
+    private val builtFrom = HashMap<Long, Int>()
+
+    /** A section's own blocks as one number (1 when it's all air or not loaded: no copy). Any thread. */
+    private fun sectionHash(states: PalettedContainer<BlockState>?): Int {
+        if (states == null) return 1
+        var h = 17
+        for (y in 0..15) for (z in 0..15) for (x in 0..15) h = h * 31 + System.identityHashCode(states.get(x, y, z))
+        return h
     }
 
     /** Cells that are no longer what the room pack or the arena says: their pieces become this run's own. */
@@ -122,14 +154,32 @@ object BlockMesh {
             val x = BlockPos.getX(k); val y = BlockPos.getY(k); val z = BlockPos.getZ(k)
             dirty(x, y, z)
             if (inArena(x shr 4, z shr 4)) touchedArena += SectionPos.asLong(x shr 4, y shr 4, z shr 4)
-            val r = KnownWorld.roomAt(x, z) ?: continue
-            val (cx, cz) = r.p.toCanonical(x, z) ?: continue
-            for (dx in edge(cx)) for (dy in edge(y)) for (dz in edge(cz)) {
-                val key = r.pieceKey((cx shr 4) + dx, (y shr 4) + dy, (cz shr 4) + dz)
-                touchedRoom += key; dirtyRoom[key] = now
+            // Its room's pieces around it, and a room's across the gap (its outer wall, left out of its pieces, can show
+            // through a hole here: RoomCut). Next to a sealed pocket, that room's pockets are drawn from now on.
+            var seen: KnownWorld.Room? = null
+            for (dx in NEAR_ROOMS) for (dz in NEAR_ROOMS) {
+                val r = KnownWorld.roomAt(x + dx, z + dz) ?: continue
+                if (r === seen || (dx != 0 || dz != 0) && r === KnownWorld.roomAt(x, z)) continue
+                seen = r
+                touchPieces(r, x + dx, y, z + dz, now)
+                if (r.cutPockets && (dx == 0 && dz == 0) && SIDES.any { (ax, ay, az) -> r.inPocket(x + ax, y + ay, z + az) }) { r.cutPockets = false; changes++ }
             }
-            touchedRooms += r.key
         }
+    }
+    private val NEAR_ROOMS = intArrayOf(0, -2, 2)
+
+    /** A room's pieces are read differently now ([KnownWorld.Room.cutPockets]): what's drawn is worked out again. */
+    fun roomChanged() { changes++ }
+    private val SIDES = listOf(Triple(0, 0, 0), Triple(1, 0, 0), Triple(-1, 0, 0), Triple(0, 1, 0), Triple(0, -1, 0), Triple(0, 0, 1), Triple(0, 0, -1))
+
+    /** [r]'s pieces around world cell ([x], [y], [z]) become this run's own (built from the world as it is now). */
+    private fun touchPieces(r: KnownWorld.Room, x: Int, y: Int, z: Int, now: Long) {
+        val (cx, cz) = r.p.toCanonical(x, z) ?: return
+        for (dx in edge(cx)) for (dy in edge(y)) for (dz in edge(cz)) {
+            val key = r.pieceKey((cx shr 4) + dx, (y shr 4) + dy, (cz shr 4) + dz)
+            touchedRoom += key; dirtyRoom[key] = now
+        }
+        touchedRooms += r.key
     }
 
     // --- building -------------------------------------------------------------------------------------------------------
@@ -147,44 +197,59 @@ object BlockMesh {
         PiecePool.load(minOf(budgetNs, LOAD_BUDGET_NS))
         // (Everything built here goes up in the sprite table's numbers.)
         if (!CompactMesh.SpriteTable.ready) return
+        drainBuilt()
         drainTouched()
         val now = System.currentTimeMillis()
 
         for ((key, at) in dirtyRoom.entries.toList()) {
             if (now - at < DIRTY_DELAY_MS) continue
             dirtyRoom.remove(key)
-            roomOwn.remove(key)?.buffer?.close()
+            // What's built stays drawn until its rebuild comes back (no gap while it's on a builder).
+            if (key in roomOwn) staleOwn += key
+            ownPending.remove(key)
             changes++
         }
+        sectionCopies.clear()
         for ((key, at) in dirtyAt.entries.toList()) {
             if (now - at < DIRTY_DELAY_MS) continue
-            dirtyAt.remove(key)
+            // Its chunk came again: a builder checks it against what it was built from, and builds it again only if it differs
+            // (what's built stays drawn meanwhile).
+            if (chunkOnly.contains(key) && key in world && key !in worldPending && key !in stale) {
+                if (building >= IN_FLIGHT) break
+                dirtyAt.remove(key); chunkOnly.remove(key)
+                PovPerf.time(PovPerf.CHUNK_CHECK) { buildWorld(level, SectionPos.x(key), SectionPos.y(key), SectionPos.z(key), key, builtFrom[key]) }
+                continue
+            }
+            dirtyAt.remove(key); chunkOnly.remove(key)
             nearDone = null; allDone = false
-            if (key in world) { world.remove(key)?.buffer?.close(); worldKeys = null }
+            if (key in world) stale += key
+            worldPending.remove(key)
             changes++
         }
         if (!MeshDisk.ready) return
 
         for (r in KnownWorld.rooms) {
-            for (name in bundleNames(r)) if (MeshBundles.get(name) == null && MeshBundles.needsBuild(name) && !make(level, name)) return
+            for (name in bundleNames(r)) if (MeshBundles.get(name) == null && MeshBundles.needsBuild(name)) makeLater(level, name)
             if (r.key in touchedRooms) {
                 val g = grid(r)
                 for (i in 0 until g.size) {
                     val own = r.pieceKey(g.lx(i), g.ly(i), g.lz(i))
-                    if (own in touchedRoom && own !in roomOwn && dirtyRoom[own] == null) {
-                        roomOwn[own] = upload(buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i)), r.x0, r.z0, 0, 0)
+                    if (own in touchedRoom && (own !in roomOwn || own in staleOwn) && own !in ownPending && dirtyRoom[own] == null) {
+                        if (building >= IN_FLIGHT) return
+                        PovPerf.time(PovPerf.MAKE_OWN) { buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i), own) }
                         if (overBudget()) return
                     }
                 }
             }
             if (overBudget()) return
         }
-        if (KnownWorld.bossFloor() && MeshBundles.get(ARENA) == null && MeshBundles.needsBuild(ARENA) && !make(level, ARENA)) return
+        if (KnownWorld.bossFloor() && MeshBundles.get(ARENA) == null && MeshBundles.needsBuild(ARENA)) makeLater(level, ARENA)
         if (near !== nearDone) {
             for (key in near) if (!want(level, key)) return
             nearDone = near
         }
         if (!everything) return
+        prebuildRooms()
         val minSy = level.minSectionY; val maxSy = level.maxSectionY
         val d0 = DungeonFrame.ORIGIN shr 4; val d1 = DungeonFrame.DUNGEON_MAX shr 4
         if (!allDone) {
@@ -199,16 +264,185 @@ object BlockMesh {
     /** The whole dungeon and arena were looked over with nothing left to build (until something changes). */
     private var allDone = false
 
+    private var prebuiltAt = 0L
+    /**
+     * Every placed room's pieces asked onto the GPU (after anything a view wants, nearest you first), and those already there
+     * kept from going idle: the whole dungeon is up before anyone opens the menu. Once a second, while the pools are under 70%
+     * (past that, only what views ask for).
+     */
+    private fun prebuildRooms() {
+        val now = System.currentTimeMillis()
+        if (now - prebuiltAt < 1000 || PiecePool.usedBytes > PiecePool.CAP_BYTES * 7 / 10) return
+        prebuiltAt = now
+        val me = mc().player ?: return
+        for (r in KnownWorld.rooms) {
+            val names = bundleNames(r)
+            val base = MeshBundles.get(names[0]) ?: continue
+            val variant = if (names.size > 1) MeshBundles.get(names[1]) else null
+            val g = grid(r)
+            val dx = me.x - (r.x0 + r.x1) / 2.0; val dz = me.z - (r.z0 + r.z1) / 2.0
+            val away = dx * dx + dz * dz
+            for (i in 0 until g.size) {
+                val vi = variant?.find(g.lx(i), g.ly(i), g.lz(i)) ?: -1
+                val bundle = if (vi >= 0) variant!! else base
+                val pi = if (vi >= 0) vi else base.find(g.lx(i), g.ly(i), g.lz(i))
+                if (pi >= 0) PiecePool.get(bundle, pi, r.p.rot, g.w, g.d, r, 1e10 + away)
+            }
+        }
+    }
+
     /** Makes sure world section [key] has its geometry (the arena's own come from its bundle); false once the budget is spent. */
     private fun want(level: ClientLevel, key: Long): Boolean {
         val sx = SectionPos.x(key); val sy = SectionPos.y(key); val sz = SectionPos.z(key)
         if (inArena(sx, sz) && key !in touchedArena) return true
-        if (key in world || dirtyAt[key]?.let { System.currentTimeMillis() - it < DIRTY_DELAY_MS } == true) return true
+        if ((key in world && key !in stale) || dirtyAt[key]?.let { System.currentTimeMillis() - it < DIRTY_DELAY_MS } == true) return true
         allDone = false
-        // Each section in its own frame (its corner), so its corners fit the compact form's range wherever it is.
-        world[key] = upload(buildWorld(level, sx, sy, sz), sx shl 4, sz shl 4, sx shl 4, sz shl 4)
-        worldKeys = null
+        if (key in worldPending) return true
+        if (building >= IN_FLIGHT) return false
+        PovPerf.time(PovPerf.MAKE_WORLD) { buildWorld(level, sx, sy, sz, key) }
         return !overBudget()
+    }
+
+    // --- building, on the builders --------------------------------------------------------------------------------------
+
+    /** Builds at most this many at once (each holds a copy of its cells); the rest wait for the next frames. */
+    private const val IN_FLIGHT = 32
+    private val builder = java.util.concurrent.Executors.newFixedThreadPool(2) { r -> Thread(r, "pose pov build").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
+    private val meshers = ThreadLocal.withInitial { Mesher() }
+    private class Built(val world: Long, val own: String?, val bundle: String?, val token: Int, val packed: CompactMesh.Packed?, val bytes: ByteArray?, val ox: Int, val oz: Int, val hash: Int = 0, val unchanged: Boolean = false)
+    private val built = java.util.concurrent.ConcurrentLinkedQueue<Built>()
+    private var building = 0
+    private var tokens = 0
+    /** What's being built for each world section and changed room piece: a result whose token isn't here any more is stale. */
+    private val worldPending = HashMap<Long, Int>()
+    private val ownPending = HashMap<String, Int>()
+    private val bundlesPending = HashSet<String>()
+    /** Built, changed since, rebuild not back yet: still drawn. */
+    private val stale = HashSet<Long>()
+    private val staleOwn = HashSet<String>()
+
+    /**
+     * The level's chunk sections around a build, copied on the game thread (null: all air, not loaded or out of the world); a
+     * build reads its cells through [KnownWorld.known] and these on a builder.
+     */
+    private class Snapshot(val sx0: Int, val sy0: Int, val sz0: Int, val nx: Int, val ny: Int, val nz: Int, val sections: Array<PalettedContainer<BlockState>?>) {
+        fun section(sx: Int, sy: Int, sz: Int): PalettedContainer<BlockState>? {
+            val i = sx - sx0; val j = sy - sy0; val k = sz - sz0
+            if (i !in 0 until nx || j !in 0 until ny || k !in 0 until nz) return null
+            return sections[(j * nz + k) * nx + i]
+        }
+        fun get(x: Int, y: Int, z: Int): BlockState =
+            KnownWorld.known(x, y, z) ?: section(x shr 4, y shr 4, z shr 4)?.get(x and 15, y and 15, z and 15) ?: KnownWorld.AIR
+    }
+
+    /** This pump's section copies, shared by its builds. */
+    private val sectionCopies = HashMap<Long, PalettedContainer<BlockState>?>()
+
+    /** The sections under world cells [xs] x [ys] x [zs], copied (game thread). */
+    private fun snapshot(level: ClientLevel, xs: IntRange, ys: IntRange, zs: IntRange): Snapshot {
+        val sx0 = xs.first shr 4; val sy0 = ys.first shr 4; val sz0 = zs.first shr 4
+        val nx = (xs.last shr 4) - sx0 + 1; val ny = (ys.last shr 4) - sy0 + 1; val nz = (zs.last shr 4) - sz0 + 1
+        val out = arrayOfNulls<PalettedContainer<BlockState>>(nx * ny * nz)
+        for (j in 0 until ny) for (k in 0 until nz) for (i in 0 until nx) {
+            val sx = sx0 + i; val sy = sy0 + j; val sz = sz0 + k
+            out[(j * nz + k) * nx + i] = sectionCopies.getOrPut(SectionPos.asLong(sx, sy, sz)) {
+                if (sy < level.minSectionY || sy > level.maxSectionY || !level.hasChunk(sx, sz)) null
+                else level.getChunk(sx, sz).sections[level.getSectionIndexFromSectionY(sy)].takeIf { !it.hasOnlyAir() }?.states?.copy()
+            }
+        }
+        return Snapshot(sx0, sy0, sz0, nx, ny, nz, out)
+    }
+
+    /** The cells a build reads: a box of the world, filled on the builder. */
+    private class Cells(val x0: Int, val y0: Int, val z0: Int, val w: Int, val h: Int, val d: Int) {
+        val states = arrayOfNulls<BlockState>(w * h * d)
+        fun get(x: Int, y: Int, z: Int): BlockState {
+            val i = x - x0; val j = y - y0; val k = z - z0
+            if (i < 0 || j < 0 || k < 0 || i >= w || j >= h || k >= d) return KnownWorld.AIR
+            return states[(j * d + k) * w + i] ?: KnownWorld.AIR
+        }
+    }
+
+    /** The box [xs]×[ys]×[zs] and the two cells around it (the corner shading looks that far), through [at]. */
+    private inline fun cells(xs: IntRange, ys: IntRange, zs: IntRange, at: (Int, Int, Int) -> BlockState): Cells {
+        val c = Cells(xs.first - 2, ys.first - 2, zs.first - 2, xs.last - xs.first + 5, ys.last - ys.first + 5, zs.last - zs.first + 5)
+        var n = 0
+        for (y in c.y0 until c.y0 + c.h) for (z in c.z0 until c.z0 + c.d) for (x in c.x0 until c.x0 + c.w) c.states[n++] = at(x, y, z)
+        return c
+    }
+
+    /** Built geometry in [CompactMesh]'s form, its corners less ([px], [pz]) (any thread). */
+    private fun pack(built: Pair<Int, ByteArray?>, px: Int, pz: Int): CompactMesh.Packed? {
+        val bytes = built.second ?: return null
+        val q = packQuads.get(); q.clear()
+        if (!CompactMesh.fromVertices(ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()), q)) return null
+        return CompactMesh.pack(q, px.toFloat(), pz.toFloat()).takeIf { it.quads > 0 }
+    }
+    private val packQuads = ThreadLocal.withInitial { CompactMesh.Quads(1024) }
+
+    /** Finished builds onto the GPU (stale ones dropped). */
+    private fun drainBuilt() {
+        while (true) {
+            val b = built.poll() ?: break
+            building--
+            if (b.bundle != null) {
+                bundlesPending.remove(b.bundle)
+                if (b.bytes != null) { MeshBundles.built(b.bundle, b.bytes); changes++ } else bundlesFailed += b.bundle
+                continue
+            }
+            val own = b.own
+            if (own != null) {
+                if (ownPending[own] != b.token) continue
+                ownPending.remove(own); staleOwn.remove(own)
+                roomOwn.remove(own)?.let { PiecePool.release(it.res) }
+                roomOwn[own] = put(b)
+            } else {
+                if (worldPending[b.world] != b.token) continue
+                worldPending.remove(b.world); stale.remove(b.world)
+                builtFrom[b.world] = b.hash
+                // Checked and the same as it was built from: what's built stands.
+                if (b.unchanged) continue
+                world.remove(b.world)?.let { PiecePool.release(it.res) }
+                world[b.world] = put(b)
+                worldKeys = null
+            }
+            changes++
+        }
+    }
+
+    private fun put(b: Built): Mesh? {
+        val p = b.packed ?: return null
+        if (p.quads * 6 > ownMost) ownMost = p.quads * 6
+        val t0 = System.nanoTime()
+        val res = PiecePool.putOwn(p)
+        PovPerf.add(PovPerf.UPLOAD, System.nanoTime() - t0)
+        return res?.let { Mesh(it, b.ox, b.oz) }
+    }
+
+    /** [job] on a builder; [failed] stands in for it if it throws (an empty result: nothing is asked again forever). */
+    private fun submit(failed: Built, job: () -> Built) {
+        building++
+        builder.execute {
+            val t0 = System.nanoTime()
+            val b = runCatching(job).onFailure { com.devgineerclient.DevgineerClient.logger.warn("[pose pov] a build failed", it) }.getOrNull()
+            PovPerf.add(PovPerf.BUILD_WORKER, System.nanoTime() - t0)
+            built += b ?: failed
+        }
+    }
+    private val bundlesFailed = HashSet<String>()
+
+    /** Bundle [name], built whole on a builder and kept (rooms the site doesn't have, or offline). */
+    private fun makeLater(level: ClientLevel, name: String) {
+        if (name in bundlesPending || name in bundlesFailed || building >= IN_FLIGHT) return
+        bundlesPending += name
+        submit(Built(0, null, name, 0, null, null, 0, 0)) {
+            val m = spec(level, name, meshers.get())
+            val bytes = m?.let { mk ->
+                for (i in mk.parts.indices) { mk.parts[i] = mk.piece(i, mk.names); mk.sight?.let { mk.sights[i] = it(i) } }
+                MeshBundles.serialize(mk.names, mk.places, Array(mk.parts.size) { mk.parts[it]!! }, mk.sight?.let { Array(mk.sights.size) { mk.sights[it]!! } })
+            }
+            Built(0, null, name, 0, null, bytes, 0, 0)
+        }
     }
 
     /** A bundle being built here, a piece at a time within the budget. */
@@ -221,10 +455,12 @@ object BlockMesh {
 
     /** Builds bundle [name] on, within the budget: false once the budget is spent. */
     private fun make(level: ClientLevel, name: String): Boolean {
-        val m = making.getOrPut(name) { spec(level, name) ?: return true }
+        val m = making.getOrPut(name) { spec(level, name, gameMesher) ?: return true }
         for (i in m.parts.indices) if (m.parts[i] == null) {
-            m.parts[i] = m.piece(i, m.names)
-            m.sight?.let { m.sights[i] = it(i) }
+            PovPerf.time(PovPerf.MAKE) {
+                m.parts[i] = m.piece(i, m.names)
+                m.sight?.let { m.sights[i] = it(i) }
+            }
             if (overBudget()) return false
         }
         making.remove(name)
@@ -235,7 +471,7 @@ object BlockMesh {
     }
 
     /** What bundle [name] is made of: the arena, a design (`id`) or a variant (`id@variant`, only the pieces it changes). */
-    private fun spec(level: ClientLevel, name: String): Making? {
+    private fun spec(level: ClientLevel, name: String, mesher: Mesher): Making? {
         if (name == ARENA) {
             val a = Arena.data
             val xs = maxOf(KnownWorld.ARENA_SX.first, a.x0 shr 4)..minOf(KnownWorld.ARENA_SX.last, (a.x0 + a.w - 1) shr 4)
@@ -246,7 +482,7 @@ object BlockMesh {
             return Making(places.toIntArray()) { i, names ->
                 val p = places[i]
                 val x0 = MeshBundles.placeX(p) shl 4; val y0 = MeshBundles.placeY(p) shl 4; val z0 = MeshBundles.placeZ(p) shl 4
-                encoded(mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false }), names)
+                mesher.encoded(mesher.mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, { x, y, z -> a.get(x, y, z) }, { _, _, _ -> false }), names)
             }
         }
         val pack = KnownWorld.roomPack ?: return null
@@ -270,7 +506,7 @@ object BlockMesh {
             val x0 = MeshBundles.placeX(p) shl 4; val z0 = MeshBundles.placeZ(p) shl 4; val ly = MeshBundles.placeY(p)
             val ys = maxOf(ly shl 4, g.y0)..minOf((ly shl 4) + 15, g.y0 + g.h - 1)
             // Placed at the dungeon's corner for the tints and the model picks that go by position.
-            encoded(mesh(level, x0..minOf(x0 + 15, g.w - 1), ys, z0..minOf(z0 + 15, g.d - 1), DungeonFrame.ORIGIN, DungeonFrame.ORIGIN, cell, { _, _, _ -> false }), names)
+            mesher.encoded(mesher.mesh(level, x0..minOf(x0 + 15, g.w - 1), ys, z0..minOf(z0 + 15, g.d - 1), DungeonFrame.ORIGIN, DungeonFrame.ORIGIN, cell, { _, _, _ -> false }), names)
         }
     }
 
@@ -288,10 +524,6 @@ object BlockMesh {
         return hit.indices.filter { hit[it] }.toIntArray()
     }
 
-    private fun encoded(built: Pair<Int, ByteArray?>, names: MutableMap<String, Int>): ByteArray {
-        val bytes = built.second ?: return ByteArray(0)
-        return MeshCodec.encode(ByteBuffer.wrap(bytes), shades.copyOf(shadeCount), names) ?: ByteArray(0)
-    }
 
     // --- the export: every bundle built here and written out, for the site ---------------------------------------------
 
@@ -314,7 +546,10 @@ object BlockMesh {
         for (d in designs) for (v in d.variants) names += "${d.id}@${v.id}"
         if (!floor7) names += ARENA
         MeshBundles.prefetch(names)
+        prefetchStarted = true
     }
+    /** [prefetchAll] has handed its list over (for this launch). */
+    var prefetchStarted = false; private set
 
     /** Starts building every bundle (the arena, each design, each variant) to files; the number queued, or -1 without the pack. */
     fun startExport(): Int {
@@ -352,47 +587,73 @@ object BlockMesh {
         runCatching { Files.createDirectories(exportDir); Files.write(exportDir.resolve(name), bytes) }
     }
 
-    private val ownQuads = CompactMesh.Quads(1024)
-
-    /** Built geometry onto the GPU in [CompactMesh]'s form, drawn at world ([ox], [oz]), its corners less ([px], [pz]). */
-    private fun upload(built: Pair<Int, ByteArray?>, ox: Int, oz: Int, px: Int, pz: Int): Mesh? {
-        changes++
-        val bytes = built.second ?: return null
-        ownQuads.clear()
-        if (!CompactMesh.fromVertices(ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()), ownQuads)) return null
-        val packed = CompactMesh.pack(ownQuads, px.toFloat(), pz.toFloat())
-        if (packed.quads == 0) return null
-        if (packed.quads * 6 > ownMost) ownMost = packed.quads * 6
-        return Mesh(RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov" }, GpuBuffer.USAGE_VERTEX, packed.bytes), packed.counts, ox, oz)
-    }
-
     private var pumpStart = 0L
     private var pumpBudget = 0L
     private fun overBudget() = System.nanoTime() - pumpStart > pumpBudget
 
-    /** This run's own piece of [r]: the world as it is now over that piece's cells, in the room's placed box frame. */
-    private fun buildOwn(level: ClientLevel, r: KnownWorld.Room, g: PieceGrid, lx: Int, ly: Int, lz: Int): Pair<Int, ByteArray?> {
-        val pos = BlockPos.MutableBlockPos()
+    /**
+     * This run's own piece [own] of [r]: the world as it is now over that piece's cells, in the room's placed box frame, copied
+     * here and built on a builder.
+     */
+    private fun buildOwn(level: ClientLevel, r: KnownWorld.Room, g: PieceGrid, lx: Int, ly: Int, lz: Int, own: String) {
         val b = IntArray(6)
         pieceBox(r, g, lx, ly, lz, b)
-        return mesh(level, b[0]..b[3], b[1]..b[4], b[2]..b[5], r.x0, r.z0,
-            { x, y, z -> KnownWorld.stateAt(level, pos, r.x0 + x, y, r.z0 + z) },
-            { x, _, z -> KnownWorld.roomAt(r.x0 + x, r.z0 + z) !== r })
+        val xs = b[0]..b[3]; val ys = b[1]..b[4]; val zs = b[2]..b[5]
+        val x0 = r.x0; val z0 = r.z0
+        val snap = snapshot(level, x0 + xs.first - 2..x0 + xs.last + 2, ys.first - 2..ys.last + 2, z0 + zs.first - 2..z0 + zs.last + 2)
+        val token = ++tokens
+        ownPending[own] = token
+        // Drawn in the world's frame, like the room's own pieces.
+        submit(Built(0, own, null, token, null, null, 0, 0)) {
+            val cells = cells(xs, ys, zs) { x, y, z -> snap.get(x0 + x, y, z0 + z) }
+            val w = xs.last - xs.first + 1
+            val others = BooleanArray(w * (zs.last - zs.first + 1)) { KnownWorld.roomAt(x0 + xs.first + it % w, z0 + zs.first + it / w) !== r }
+            val m = meshers.get()
+            val built = m.mesh(level, xs, ys, zs, x0, z0, cells::get) { x, _, z -> others[(z - zs.first) * w + (x - xs.first)] }
+            Built(0, own, null, token, pack(built, -x0, -z0), null, 0, 0)
+        }
     }
 
-    private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int): Pair<Int, ByteArray?> {
-        if (sy < level.minSectionY || sy > level.maxSectionY) return 0 to null
-        if (!KnownWorld.mayHaveBlocks(level, sx, sy, sz)) return 0 to null
-        val pos = BlockPos.MutableBlockPos()
+    /**
+     * World section [key] built on a builder from a copy of the sections around it. Drawn in the shared frame at the world's
+     * corner when its corners fit the compact form's range from there (the dungeon and the arena do), else in its own. With
+     * [expect] (its chunk came again: the blocks it was built from), the builder first checks the section against that, and
+     * only builds it if it differs.
+     */
+    private fun buildWorld(level: ClientLevel, sx: Int, sy: Int, sz: Int, key: Long, expect: Int? = null) {
         val x0 = sx shl 4; val y0 = sy shl 4; val z0 = sz shl 4
-        // Which columns a room draws, looked up once per column rather than per cell; all of them, nothing to do here.
-        val covered = BooleanArray(256) { KnownWorld.coveredByRoom(x0 + (it and 15), z0 + (it shr 4)) }
-        if (covered.all { it }) return 0 to null
-        return mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0,
-            { x, y, z -> KnownWorld.stateAt(level, pos, x, y, z) },
-            { x, _, z -> covered[((z - z0) shl 4) or (x - x0)] })
+        // Nothing in it to draw (the sky over the dungeon, unloaded): no build.
+        if (sy < level.minSectionY || sy > level.maxSectionY || !KnownWorld.mayHaveBlocks(level, sx, sy, sz)) {
+            stale.remove(key); worldPending.remove(key)
+            val had = world.containsKey(key)
+            builtFrom[key] = 1
+            if (expect == 1 && had) return
+            world.remove(key)?.let { PiecePool.release(it.res) }
+            world[key] = null; worldKeys = null; changes++
+            return
+        }
+        val snap = snapshot(level, x0 - 2..x0 + 17, y0 - 2..y0 + 17, z0 - 2..z0 + 17)
+        val shared = x0 in -256..736 && z0 in -256..736
+        val ox = if (shared) 0 else x0; val oz = if (shared) 0 else z0
+        val token = ++tokens
+        worldPending[key] = token
+        submit(Built(key, null, null, token, null, null, ox, oz)) {
+            val hash = sectionHash(snap.section(sx, sy, sz))
+            if (expect != null && hash == expect) return@submit Built(key, null, null, token, null, null, ox, oz, hash, unchanged = true)
+            // Which columns a room draws, looked up once per column; all of them: nothing to build.
+            val covered = BooleanArray(256) { KnownWorld.coveredByRoom(x0 + (it and 15), z0 + (it shr 4)) }
+            if (covered.all { it }) return@submit Built(key, null, null, token, null, null, ox, oz, hash)
+            val cells = cells(x0..x0 + 15, y0..y0 + 15, z0..z0 + 15) { x, y, z -> snap.get(x, y, z) }
+            val m = meshers.get()
+            val built = m.mesh(level, x0..x0 + 15, y0..y0 + 15, z0..z0 + 15, 0, 0, cells::get) { x, _, z -> covered[((z - z0) shl 4) or (x - x0)] }
+            Built(key, null, null, token, pack(built, ox, oz), null, ox, oz, hash)
+        }
     }
 
+    private val gameMesher = Mesher()
+
+    /** One thread's meshing: what the faces were shaded for, the model parts, the cell lookup ([meshers], [gameMesher]). */
+    private class Mesher {
     /** The side each quad of the last [mesh] was shaded for (Direction order), quad by quad. */
     private var shades = ByteArray(4096)
     private var shadeCount = 0
@@ -401,10 +662,15 @@ object BlockMesh {
         shades[shadeCount++] = d.toByte()
     }
 
+    fun encoded(built: Pair<Int, ByteArray?>, names: MutableMap<String, Int>): ByteArray {
+        val bytes = built.second ?: return ByteArray(0)
+        return MeshCodec.encode(ByteBuffer.wrap(bytes), shades.copyOf(shadeCount), names) ?: ByteArray(0)
+    }
+
     /** The faces of the cells in the box, in [at]'s frame, whose origin is world ([ox], 0, [oz]): (index count, vertex bytes). */
-    private inline fun mesh(
+    fun mesh(
         level: ClientLevel, xs: IntRange, ys: IntRange, zs: IntRange, ox: Int, oz: Int,
-        noinline at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean,
+        at: (Int, Int, Int) -> BlockState, skip: (Int, Int, Int) -> Boolean,
     ): Pair<Int, ByteArray?> {
         shadeCount = 0
         if (xs.isEmpty() || ys.isEmpty() || zs.isEmpty()) return 0 to null
@@ -429,53 +695,12 @@ object BlockMesh {
         }
     }
 
-    // --- drawing (what PovCull picked, looked up) -----------------------------------------------------------------------
-
-    /** This run's own piece of [r] at ([lx], [ly], [lz]) when it has one built: drawn in place of the design's. */
-    fun own(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int): Mesh? {
-        if (r.key !in touchedRooms) return null
-        val k = r.pieceKey(lx, ly, lz)
-        return if (k in touchedRoom) roomOwn[k] else null
-    }
-
-    /** Whether this run changed arena section [s] (it's drawn as a world section then). */
-    fun arenaTouched(s: Long) = s in touchedArena
-
-    fun worldMesh(s: Long): Mesh? = world[s]
-
-    @Volatile private var worldKeys: LongArray? = null
-    /** The world sections with something to draw, as of now (made again when one comes or goes). */
-    fun worldSections(): LongArray = worldKeys ?: world.entries.filter { it.value != null }.map { it.key }.toLongArray().also { worldKeys = it }
-
-    // --- lifetime -------------------------------------------------------------------------------------------------------
-
-    /** This run's pieces; the shared design and arena ones stay for the next run. */
-    fun newRun() {
-        changes++
-        world.values.forEach { it?.buffer?.close() }; world.clear(); worldKeys = null
-        roomOwn.values.forEach { it?.buffer?.close() }; roomOwn.clear()
-        touchedRoom.clear(); touchedRooms.clear(); touchedArena.clear(); dirtyAt.clear(); dirtyRoom.clear()
-        nearDone = null; allDone = false
-    }
-
-    fun clear() {
-        newRun()
-        dropShared()
-    }
-
-    private fun dropShared() {
-        PiecePool.clear()
-        CompactMesh.SpriteTable.clear()
-        nearDone = null; allDone = false
-    }
-
     // --- one block ------------------------------------------------------------------------------------------------------
 
     /** Which of the six neighbours hide that side (Direction order: down, up, north, south, west, east); set per cell by [mesh]. */
     private val hidden = BooleanArray(6)
     private val parts = ArrayList<BlockStateModelPart>()
     private val random = RandomSource.create()
-    private val DIRS = Direction.entries.toTypedArray()
     /** The block lookup of the piece being meshed (its frame), for the corner shading. */
     private var cellAt: (Int, Int, Int) -> BlockState = { _, _, _ -> KnownWorld.AIR }
 
@@ -543,6 +768,52 @@ object BlockMesh {
 
     private fun tint(level: ClientLevel, state: BlockState, world: BlockPos, index: Int): Int =
         mc().blockColors.getTintSource(state, index)?.colorInWorld(state, level, world) ?: -1
+    }
+
+    // --- drawing (what PovCull picked, looked up) -----------------------------------------------------------------------
+
+    /** This run's own piece of [r] at ([lx], [ly], [lz]) when it has one built: drawn in place of the design's. */
+    fun own(r: KnownWorld.Room, lx: Int, ly: Int, lz: Int): Mesh? {
+        if (r.key !in touchedRooms) return null
+        val k = r.pieceKey(lx, ly, lz)
+        return if (k in touchedRoom) roomOwn[k] else null
+    }
+
+    /** Whether this run changed arena section [s] (it's drawn as a world section then). */
+    fun arenaTouched(s: Long) = s in touchedArena
+
+    fun worldMesh(s: Long): Mesh? = world[s]
+
+    @Volatile private var worldKeys: LongArray? = null
+    /** The world sections with something to draw, as of now (made again when one comes or goes). */
+    fun worldSections(): LongArray = worldKeys ?: world.entries.filter { it.value != null }.map { it.key }.toLongArray().also { worldKeys = it }
+
+    // --- lifetime -------------------------------------------------------------------------------------------------------
+
+    /** This run's pieces; the shared design and arena ones stay for the next run. */
+    fun newRun() {
+        changes++
+        world.values.forEach { it?.let { m -> PiecePool.release(m.res) } }; world.clear(); worldKeys = null
+        roomOwn.values.forEach { it?.let { m -> PiecePool.release(m.res) } }; roomOwn.clear()
+        touchedRoom.clear(); touchedRooms.clear(); touchedArena.clear(); dirtyAt.clear(); dirtyRoom.clear()
+        worldPending.clear(); ownPending.clear(); chunkOnly.clear(); builtFrom.clear(); stale.clear(); staleOwn.clear()
+        nearDone = null; allDone = false
+    }
+
+    fun clear() {
+        newRun()
+        dropShared()
+    }
+
+    private fun dropShared() {
+        // This run's own geometry lives in the pools too: built again with the new textures.
+        world.clear(); worldKeys = null; roomOwn.clear(); worldPending.clear(); ownPending.clear(); builtFrom.clear(); stale.clear(); staleOwn.clear(); changes++
+        PiecePool.clear()
+        CompactMesh.SpriteTable.clear()
+        nearDone = null; allDone = false
+    }
+
+    private val DIRS = Direction.entries.toTypedArray()
 
     private fun mul(rgb: Int, k: Float): Int {
         val r = ((rgb shr 16 and 255) * k).toInt(); val g = ((rgb shr 8 and 255) * k).toInt(); val b = ((rgb and 255) * k).toInt()

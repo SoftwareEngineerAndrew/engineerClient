@@ -172,21 +172,25 @@ object MeshBundles {
 
     /** How many bundles are in memory (one more arriving changes what a feed draws). */
     val count get() = loaded.size
+    /** Their bytes in memory (for the performance monitor). */
+    val bytes get() = loaded.values.sumOf { it.data.size.toLong() }
 
     fun cached(name: String): ByteArray? = MeshDisk.read(key(name))?.second
 }
 
 
 /**
- * The pieces on the GPU, in [CompactMesh]'s form: decoded and merged on worker threads only when a feed could show them, then
- * put into shared pools (one buffer holding many pieces, each piece's groups one after another). A piece nothing has drawn
- * for [IDLE_MS] gives its room back, and when the pools are at [MAX_POOLS] the ones unused longest go first, so the memory
- * stays under the cap however long the game runs. Render thread, except the decoding.
+ * The pieces on the GPU, in [CompactMesh]'s form: decoded and merged on worker threads only when a feed could show them (less
+ * what nobody sees: [RoomCut]), then put into shared pools (one buffer holding many pieces, each piece's groups one after
+ * another), already placed where they stand in the world (the frame at its corner), so a view draws a whole pool in one call.
+ * A room's pieces go next to each other where there's room, so a view's draws of them run on into one. A piece nothing has
+ * drawn for [IDLE_MS] gives its room back, and when the pools are at [MAX_POOLS] the ones unused longest go first, so the
+ * memory stays under the cap however long the game runs. Render thread, except the decoding.
  */
 object PiecePool {
-    private const val POOL_VERTICES = 1 shl 19
-    /** 32 pools of 8 MB: 256 MB at most. */
-    private const val MAX_POOLS = 32
+    private const val POOL_VERTICES = 1 shl 21
+    /** 8 pools of 32 MB: 256 MB at most (few, so a view's blocks are a few draws). */
+    private const val MAX_POOLS = 8
     private const val IDLE_MS = 60_000L
     /** When the pools are full, pieces unused this long make room. */
     private const val CROWDED_IDLE_MS = 2_000L
@@ -210,6 +214,17 @@ object PiecePool {
             return -1
         }
 
+        /** A run of [n] starting exactly at [at] when that's free; -1 otherwise. */
+        fun allocAt(at: Int, n: Int): Int {
+            val (s, len) = free.floorEntry(at) ?: return -1
+            if (s + len < at + n) return -1
+            free.remove(s)
+            if (at > s) free[s] = at - s
+            if (s + len > at + n) free[at + n] = s + len - at - n
+            used += n
+            return at
+        }
+
         fun release(at: Int, n: Int) {
             used -= n
             var start = at; var len = n
@@ -218,8 +233,8 @@ object PiecePool {
             free[start] = len
         }
     }
-    private class Want(val bundle: MeshBundles.Bundle, val piece: Int, val rot: Rot, val w: Int, val d: Int, var priority: Double)
-    private class Done(val key: Long, val epoch: Int, val packed: CompactMesh.Packed?)
+    private class Want(val bundle: MeshBundles.Bundle, val piece: Int, val rot: Rot, val w: Int, val d: Int, val room: KnownWorld.Room?, val pockets: Boolean, var priority: Double)
+    private class Done(val key: Long, val epoch: Int, val packed: CompactMesh.Packed?, val room: Long)
 
     private val pools = ArrayList<Pool>()
     private val resident = HashMap<Long, Resident>()
@@ -235,23 +250,31 @@ object PiecePool {
     private var idleCheckAt = 0L
     /** Bumped whenever what's on the GPU changes (a piece arrives or goes): what a feed resolved to draw is stale. */
     var version = 0L; private set
-    /** The most indices one draw can need: a whole pool. */
+    /** The most indices one piece needs. */
     var mostIndices = 0; private set
     var evictions = 0L; private set
     /** Bumped for every ask for a piece that isn't on the GPU yet (one that is never: nothing is missing). */
     var asked = 0L; private set
 
-    fun key(bundle: MeshBundles.Bundle, piece: Int, rot: Rot): Long = (bundle.id.toLong() shl 32) or (rot.ordinal.toLong() shl 28) or piece.toLong()
+    /** A piece of [bundle] turned [rot], its frame's corner at world ([ox], [oz]), with or without its room's sealed pockets. */
+    fun key(bundle: MeshBundles.Bundle, piece: Int, rot: Rot, ox: Int, oz: Int, pockets: Boolean): Long =
+        (bundle.id.toLong() shl 44) or (piece.toLong() shl 28) or (rot.ordinal.toLong() shl 26) or ((if (pockets) 1L else 0L) shl 25) or
+            (((ox + 512).toLong() and 1023L) shl 10) or ((oz + 512).toLong() and 1023L)
 
-    /** The piece when it's on the GPU (and now in use); otherwise asked for (nearest first: lower [priority]) and null. */
-    fun get(bundle: MeshBundles.Bundle, piece: Int, rot: Rot, w: Int, d: Int, priority: Double): Resident? {
-        val k = key(bundle, piece, rot)
+    /**
+     * The piece when it's on the GPU (and now in use); otherwise asked for (nearest first: lower [priority]) and null. A [room]'s
+     * piece is placed with its box's corner where the room's is, less what nobody sees of it ([KnownWorld.Room.cut]); the arena's
+     * (no room) where it is.
+     */
+    fun get(bundle: MeshBundles.Bundle, piece: Int, rot: Rot, w: Int, d: Int, room: KnownWorld.Room?, priority: Double): Resident? {
+        val pockets = room?.cutPockets ?: false
+        val k = key(bundle, piece, rot, room?.x0 ?: 0, room?.z0 ?: 0, pockets)
         resident[k]?.let { it.usedAt = now; return it }
         if (k in empty || bundle.lens[piece] == 0) return null
         asked++
         if (k in inFlight) return null
         val prev = wanted[k]
-        if (prev == null) wanted[k] = Want(bundle, piece, rot, w, d, priority) else if (priority < prev.priority) prev.priority = priority
+        if (prev == null) wanted[k] = Want(bundle, piece, rot, w, d, room, pockets, priority) else if (priority < prev.priority) prev.priority = priority
         return null
     }
 
@@ -266,7 +289,10 @@ object PiecePool {
             inFlight.remove(d.key)
             val p = d.packed
             if (p == null || p.quads == 0) { empty += d.key; continue }
-            upload(d.key, p)
+            val t0 = System.nanoTime()
+            upload(d.key, p, d.room)
+            PovPerf.add(PovPerf.UPLOAD, System.nanoTime() - t0)
+            PovPerf.count(PovPerf.C_UPLOADS); PovPerf.count(PovPerf.C_UPLOAD_BYTES, p.bytes.remaining().toLong())
         }
         if (now - idleCheckAt > 1000) { idleCheckAt = now; evict(IDLE_MS, Int.MAX_VALUE) }
         if (wanted.isEmpty()) return
@@ -275,33 +301,67 @@ object PiecePool {
             inFlight += k
             val e = epoch
             workers.execute {
+                val t0 = System.nanoTime()
                 val packed = runCatching {
                     val b = w.bundle
                     val sprites = b.spriteIndices() ?: return@runCatching null
                     val q = quads.get()
-                    MeshCodec.decode(b.data, b.offs[w.piece], b.lens[w.piece], sprites, w.rot, w.w, w.d, q)
-                    CompactMesh.pack(q)
+                    MeshCodec.decode(b.data, b.offs[w.piece], b.lens[w.piece], sprites, w.rot, w.w, w.d, q, w.room?.cut(), w.pockets)
+                    CompactMesh.pack(q, -(w.room?.x0 ?: 0).toFloat(), -(w.room?.z0 ?: 0).toFloat())
                 }.getOrNull()
-                done += Done(k, e, packed)
+                PovPerf.add(PovPerf.DECODE, System.nanoTime() - t0)
+                // Its room: the key less the piece, so the room's pieces can go side by side.
+                done += Done(k, e, packed, k and (0xFFFFL shl 28).inv())
             }
         }
         // What wasn't handed out is asked for again by the next frame that still wants it.
         wanted.clear()
     }
 
-    private fun upload(k: Long, p: CompactMesh.Packed) {
+    /** The last piece of each room put up (see [Done.room]): the next goes right after it when that's free. */
+    private val lastOfRoom = HashMap<Long, Resident>()
+
+    private fun upload(k: Long, p: CompactMesh.Packed, room: Long) {
+        val r = place(p, lastOfRoom[room]?.takeIf { it.pool in pools }) ?: return
+        r.usedAt = now
+        resident[k] = r
+        if (lastOfRoom.size > 2048) lastOfRoom.clear()
+        lastOfRoom[room] = r
+    }
+
+    /**
+     * [p] into the pools (right after [after] when that's free, else the first space; a new pool, or room made from the
+     * longest unused pieces, when none has any); null when it can't fit.
+     */
+    private fun place(p: CompactMesh.Packed, after: Resident? = null): Resident? {
         val vertices = p.quads * 4
         var pool: Pool? = null; var at = -1
-        fun tryAlloc(): Boolean { for (pl in pools) { val a = pl.alloc(vertices); if (a >= 0) { pool = pl; at = a; return true } }; return false }
+        fun tryAlloc(): Boolean {
+            if (after != null) { val a = after.pool.allocAt(after.first + after.vertices, vertices); if (a >= 0) { pool = after.pool; at = a; return true } }
+            for (pl in pools) { val a = pl.alloc(vertices); if (a >= 0) { pool = pl; at = a; return true } }
+            return false
+        }
         if (!tryAlloc()) {
             if (pools.size < MAX_POOLS) newPool(vertices)
             else evict(CROWDED_IDLE_MS, vertices)
-            if (!tryAlloc()) return
+            if (!tryAlloc()) return null
         }
         val pl = pool!!
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(pl.buffer.slice(at.toLong() * CompactMesh.VERTEX, p.bytes.remaining().toLong()), p.bytes)
-        resident[k] = Resident(pl.buffer, at, p.counts, pl, vertices).also { it.usedAt = now }
         version++
+        if (p.quads * 6 > mostIndices) mostIndices = p.quads * 6
+        return Resident(pl.buffer, at, p.counts, pl, vertices)
+    }
+
+    /**
+     * This run's own geometry (world sections, a room's changed pieces) in the same pools as the pieces, so a feed draws it
+     * with them in a few calls rather than one buffer each. Never evicted: [release] gives it back.
+     */
+    fun putOwn(p: CompactMesh.Packed): Resident? = place(p)
+
+    fun release(r: Resident) {
+        if (r.pool !in pools) return
+        r.pool.release(r.first, r.vertices); version++
     }
 
     /** Frees pieces unused for [idleMs], longest unused first, until a run of [need] vertices is free somewhere (or all of them). */
@@ -317,14 +377,13 @@ object PiecePool {
     private fun newPool(atLeast: Int) {
         val n = maxOf(POOL_VERTICES, atLeast)
         val buf = RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov pieces" }, GpuBuffer.USAGE_VERTEX or GpuBuffer.USAGE_COPY_DST, n.toLong() * CompactMesh.VERTEX)
-        if (n / 4 * 6 > mostIndices) mostIndices = n / 4 * 6
         pools += Pool(buf, n)
     }
 
     /** Everything off the GPU (an atlas change): pieces come back as they're wanted. */
     fun clear() {
         for (p in pools) p.buffer.close()
-        pools.clear(); resident.clear(); empty.clear(); wanted.clear(); inFlight.clear(); done.clear()
+        pools.clear(); resident.clear(); empty.clear(); wanted.clear(); inFlight.clear(); done.clear(); lastOfRoom.clear()
         epoch++; version++
     }
 
