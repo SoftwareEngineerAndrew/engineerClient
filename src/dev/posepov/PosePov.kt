@@ -131,6 +131,7 @@ object PosePov : Module(
     private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
     private val perfMonitor by BooleanSetting("Performance monitor", false, desc = "What every part of the views costs: each step of working out and drawing them (ms a frame and the worst), what runs every tick (sharing, prerender, prefetch), the background threads' CPU, GPU time, uploads, culling and memory. Over the views, top left on the HUD otherwise; also written to the log every 10 seconds.")
     private val gameMonitor by BooleanSetting("Game performance monitor", false, desc = "Temporary: the whole game's performance, top right over everything. Frame times and lows, where each frame goes (packets, ticks, world, GUI, waiting on the GPU), GPU time, which mods the game thread is in, heap, GC, threads' CPU, the world and the connection. Also written to the log every 10 seconds.")
+    private val overHuds by BooleanSetting("Show over HUDs", false, desc = "Draws the views on top of every HUD (yours and every mod's) instead of under them. The leap menu's own boxes and names stay on top either way.")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
     private val viewDistance by NumberSetting("View distance", 96, 32..160, 8, unit = " blocks", desc = "How far the views draw, fading into the sky over the last stretch. Lower is faster; past half of it only the bigger faces are drawn.")
 
@@ -264,6 +265,8 @@ object PosePov : Module(
     }
 
     fun drawUnderGui(gfx: GuiGraphicsExtractor) {
+        // "Show over HUDs": left to the screen's render instead (ScreenEvent.Render above), after the HUD.
+        if (overHuds) return
         DevgineerClient.safely("pose pov") { if (wants()) { timed(true) { draw(gfx) }; drewUnderGui = true } }
     }
     private var drewUnderGui = false
