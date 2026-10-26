@@ -32,7 +32,7 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
 
     companion object {
         const val BLOCKS = 1
-        const val VALUES = 1
+        const val VALUES = 2
         const val SKULLS = 1
         private const val MAX_BYTES = 16 shl 20 // (packed; a catalogue is under a MB)
         private const val MAX_TEXT = 256L shl 20
@@ -48,6 +48,9 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
             val blocks = section(dir, "blocks-$BLOCKS.json.xz", fetch) { readBlocks(it, BLOCKS) }
             val values = section(dir, "values-$VALUES.json.xz", fetch) { readValues(it, VALUES) }
             val skulls = section(dir, "skulls-$SKULLS.json.xz", fetch) { readSkulls(it, SKULLS) }
+            // (versions this build no longer sends numbers from)
+            val current = setOf("blocks-$BLOCKS.json.xz", "values-$VALUES.json.xz", "skulls-$SKULLS.json.xz")
+            runCatching { Files.list(dir).use { l -> l.filter { it.fileName.toString().let { n -> n.endsWith(".json.xz") && n !in current } }.toList() }.forEach(Files::deleteIfExists) }
             return Catalogue(blocks, values, skulls).also { cached = SoftReference(it) }
         }
 
@@ -98,7 +101,7 @@ class Catalogue(val blocks: Blocks?, val values: Values? = null, val skulls: Sku
             val lists = HashMap<String, List<com.google.gson.JsonElement>>()
             for ((f, list) in o.getAsJsonObject("fields").entrySet()) {
                 val m = HashMap<String, Int>()
-                list.asJsonArray.forEachIndexed { i, v -> m.putIfAbsent(canon(v), i) }
+                list.asJsonArray.forEachIndexed { i, v -> if (!v.isJsonNull) m.putIfAbsent(canon(v), i) } // (blank: one taken out)
                 fields[f] = m; lists[f] = list.asJsonArray.toList()
             }
             if (fields.isEmpty()) throw IllegalStateException("no fields")
