@@ -498,6 +498,7 @@ object PosePov : Module(
             cullRate[0], cullRate[1], cullRate[2], dbgRefs, dbgFar, dbgQuads, dbgRooms) to 0xFFB0B0B0.toInt()
         lines += "gpu: %d pieces · %.0f of %.0f MB (cap %d) · %d evicted · %d decoding".format(
             PiecePool.residentCount, PiecePool.usedBytes / 1048576.0, PiecePool.poolBytes / 1048576.0, PiecePool.CAP_BYTES shr 20, PiecePool.evictions, PiecePool.queued) to 0xFFB0B0B0.toInt()
+        PovPerf.log(lines)
         return lines
     }
 

@@ -135,7 +135,7 @@ object GameMonitor {
     private var shownGpuMax = 0L
 
     /** Frames a second over the last second (for others' "share of a frame"). */
-    fun fps(): Double = if (shownFps > 0) shownFps else mc.fps.toDouble()
+    fun fps(): Double = if (on && shownFps > 0) shownFps else mc.fps.toDouble()
 
     /** The start of a frame (Minecraft.runTick): closes the last one. */
     @JvmStatic fun frame() {
@@ -202,7 +202,7 @@ object GameMonitor {
     private fun samplerStop() { sampler?.interrupt() }
 
     private val infra = arrayOf("java.", "jdk.", "sun.", "kotlin.", "kotlinx.", "org.lwjgl.", "com.mojang.", "net.minecraft.", "it.unimi.", "com.google.",
-        "org.joml.", "io.netty.", "org.spongepowered.", "net.fabricmc.", "org.slf4j.", "org.apache.", "com.llamalad7.", "oshi.", "com.sun.")
+        "org.joml.", "io.netty.", "org.prismlauncher.", "org.multimc.", "net.minecraftforge.", "cpw.", "org.spongepowered.", "net.fabricmc.", "org.slf4j.", "org.apache.", "com.llamalad7.", "oshi.", "com.sun.")
     private val mixinHandlers = setOf("handler", "redirect", "modify", "wrapOperation", "wrapWithCondition", "localvar", "constant", "modifyExpressionValue", "modifyReturnValue", "modifyArg", "modifyArgs", "modifyVariable")
 
     private fun ownMod(cls: String): String? {
@@ -345,7 +345,18 @@ object GameMonitor {
     private fun mb(b: Long) = b / 1048576
     private fun mb(b: Double) = b / 1048576
 
+    private var cached: List<Pair<String, Int>> = emptyList()
+    private var cachedAt = 0L
+
     fun lines(): List<Pair<String, Int>> {
+        val now = System.nanoTime()
+        if (now - cachedAt < 250_000_000L && cached.isNotEmpty()) return cached
+        cachedAt = now
+        cached = build()
+        return cached
+    }
+
+    private fun build(): List<Pair<String, Int>> {
         val grey = 0xFFB0B0B0.toInt(); val white = 0xFFE8E8E8.toInt(); val yellow = 0xFFE0C040.toInt(); val red = 0xFFFF6060.toInt(); val head = 0xFF80C8FF.toInt()
         val out = ArrayList<Pair<String, Int>>()
         val n = shownFrames.coerceAtLeast(1)
