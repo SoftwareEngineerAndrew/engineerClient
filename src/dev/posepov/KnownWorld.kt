@@ -74,12 +74,30 @@ object KnownWorld {
             return if (v.contains(c.first, y, c.second)) states[v.paletteIndexAt(c.first, y, c.second)] else AIR
         }
         fun covers(x: Int, z: Int) = x in x0..x1 && z in z0..z1
+
+        /** Whether its pieces leave out what faces its sealed pockets ([RoomCut]): until this run opens a way into one. */
+        @Volatile var cutPockets = true
+        @Volatile private var cut: RoomCut? = null
+        /** What of it nobody sees, worked out the first time it's asked for (any thread; the pockets take a few ms). */
+        fun cut(): RoomCut = cut ?: synchronized(this) {
+            cut ?: run {
+                val d = inst.design
+                val opaque = { x: Int, y: Int, z: Int -> v.contains(x, y, z) && states[v.paletteIndexAt(x, y, z)].isSolidRender }
+                RoomCut(d.w, d.d, d.y0, d.h, runCatching { RoomCut.pockets(d.w, d.d, d.y0, d.h, opaque) }.getOrNull())
+            }.also { cut = it }
+        }
+        /** Whether world cell ([x], [y], [z]) is in one of its sealed pockets (false until they're worked out). */
+        fun inPocket(x: Int, y: Int, z: Int): Boolean {
+            val c = cut ?: return false
+            val (cx, cz) = p.toCanonical(x, z) ?: return false
+            return c.hiddenAt(cx, y, cz)
+        }
     }
 
     private val changed = ConcurrentHashMap<Long, BlockState>()
     /** Cells whose block isn't the known one any more (a change, or a door edit), for the mesher to rebuild around; any thread. */
     val touchedCells = ConcurrentLinkedQueue<Long>()
-    private var edits: Map<Long, BlockState> = emptyMap()
+    @Volatile private var edits: Map<Long, BlockState> = emptyMap()
     private var editSections: Set<Long> = emptySet()
     private val changedSections = ConcurrentHashMap.newKeySet<Long>()
     /** The placed room on each of the 6x6 tiles. */
@@ -271,12 +289,19 @@ object KnownWorld {
     fun coveredByRoom(x: Int, z: Int) = roomAt(x, z) != null
 
     /** The block at a cell, everything known and this run's changes included. */
-    fun stateAt(level: ClientLevel, pos: BlockPos.MutableBlockPos, x: Int, y: Int, z: Int): BlockState {
+    fun stateAt(level: ClientLevel, pos: BlockPos.MutableBlockPos, x: Int, y: Int, z: Int): BlockState =
+        known(x, y, z) ?: level.getBlockState(pos.set(x, y, z))
+
+    /**
+     * The block at a cell when anything but the loaded chunks says what it is (a change, a door edit, the arena, a room), else
+     * null. Any thread (a builder reads a copy of the chunks for the rest: BlockMesh's snapshots).
+     */
+    fun known(x: Int, y: Int, z: Int): BlockState? {
         val k = BlockPos.asLong(x, y, z)
         if (changed.isNotEmpty()) changed[k]?.let { return it }
         edits[k]?.let { return it }
         if (arena(x, z)) return Arena.data.get(x, y, z)
         roomAt(x, z)?.let { r -> return r.designAt(x - r.x0, y, z - r.z0) }
-        return level.getBlockState(pos.set(x, y, z))
+        return null
     }
 }

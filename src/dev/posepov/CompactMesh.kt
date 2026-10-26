@@ -30,13 +30,13 @@ import java.nio.ByteOrder
  *
  * Quads are grouped so a frame can leave out what it doesn't need: faces of at least half a block by the way they face (down
  * up north south west east), the rest that aren't square to an axis, then the small ones the same way. Far away only the first
- * seven groups are drawn (level of detail: no torches, plants, fence posts, buttons out there).
+ * six groups are drawn (level of detail: no torches, plants, slanted faces, fence posts, buttons out there).
  */
 object CompactMesh {
     const val VERTEX = 16
     const val GROUPS = 14
-    /** The groups drawn far away: the big faces (by side, then the rest). */
-    const val FAR_GROUPS = 7
+    /** The groups drawn far away: the big faces by side. */
+    const val FAR_GROUPS = 6
     private const val POS_SCALE = 64f
     private const val POS_OFFSET = 256f
     private const val UV_SCALE = 2048f
@@ -117,34 +117,39 @@ object CompactMesh {
 
 
     /**
-     * Merges and packs [q], every position less ([ox], 0, [oz]) (the frame it's drawn in). A flat face inside one cell, in
-     * one colour, whose texture follows its position the way a block model's does by default (a whole block's side, a slab's
-     * top or side, a stair's step), is merged with its like neighbours (same side, plane, shape in the cell, texture, colour
-     * and texture turn) into the biggest rectangles going, along the ways it fills its cell; everything else is kept as it was.
+     * Merges and packs [q], every position less ([ox], 0, [oz]) (the frame it's drawn in). A flat face inside one cell whose
+     * texture follows its position the way a block model's does by default (a whole block's side, a slab's top or side, a
+     * stair's step) is merged with its like neighbours (same side, plane, shape in the cell, texture, corner colours and texture
+     * turn) into the biggest rectangles going, along the ways it fills its cell and its colour doesn't change: corner shading
+     * that only darkens towards one edge (a wall's row along the floor) merges along that edge, since the colour across the
+     * merged face then changes exactly as it did across each cell. Everything else is kept as it was.
      */
     fun pack(q: Quads, ox: Float = 0f, oz: Float = 0f): Packed {
         // Faces by what may merge: key -> their cells (a, b).
-        class Run(val side: Int, val plane: Int, val sprite: Int, val colour: Int, val orient: Int, val pattern: IntArray, val frac: FloatArray) {
+        // [colours]: the face's colour at its low-a low-b, high-a low-b, low-a high-b and high-a high-b corners.
+        class Run(val side: Int, val plane: Int, val sprite: Int, val colours: IntArray, val orient: Int, val pattern: IntArray, val frac: FloatArray) {
             val cells = HashSet<Long>()
-            val fullA get() = frac[0] < EPS && frac[1] > 1 - EPS
-            val fullB get() = frac[2] < EPS && frac[3] > 1 - EPS
+            val alongA get() = frac[0] < EPS && frac[1] > 1 - EPS && colours[0] == colours[1] && colours[2] == colours[3]
+            val alongB get() = frac[2] < EPS && frac[3] > 1 - EPS && colours[0] == colours[2] && colours[1] == colours[3]
         }
         val runs = HashMap<String, Run>()
         val keep = BooleanArray(q.n)
         val pattern = IntArray(8)
         val frac = FloatArray(4)
         val cell = IntArray(2)
+        val corners = IntArray(4)
         for (i in 0 until q.n) {
             val side = q.dir[i].toInt()
             if (side !in 0..5 || !cellFace(q, i, side, ox, oz, pattern, frac, cell)) { keep[i] = true; continue }
-            val c = q.col[i * 4]
-            if (q.col[i * 4 + 1] != c || q.col[i * 4 + 2] != c || q.col[i * 4 + 3] != c) { keep[i] = true; continue }
+            for (k in 0 until 4) corners[pattern[k * 2] + 2 * pattern[k * 2 + 1]] = q.col[i * 4 + k]
+            // Shading that changes both ways can't be merged either way.
+            if (!(corners[0] == corners[1] && corners[2] == corners[3]) && !(corners[0] == corners[2] && corners[1] == corners[3])) { keep[i] = true; continue }
             val orient = orientation(q, i, pattern, frac)
             if (orient < 0) { keep[i] = true; continue }
             val n = AXIS_N[side]; val plane = Math.round((q.pos[i * 12 + n] - (if (n == 0) ox else if (n == 2) oz else 0f)) * PLANE_STEPS)
             val shape = "${Math.round(frac[0] * PLANE_STEPS)},${Math.round(frac[1] * PLANE_STEPS)},${Math.round(frac[2] * PLANE_STEPS)},${Math.round(frac[3] * PLANE_STEPS)}"
-            val key = "$side|$plane|${q.sprite[i]}|$c|$orient|$shape"
-            val run = runs.getOrPut(key) { Run(side, plane, q.sprite[i], c, orient, pattern.copyOf(), frac.copyOf()) }
+            val key = "$side|$plane|${q.sprite[i]}|${corners[0]},${corners[1]},${corners[2]},${corners[3]}|$orient|$shape"
+            val run = runs.getOrPut(key) { Run(side, plane, q.sprite[i], corners.copyOf(), orient, pattern.copyOf(), frac.copyOf()) }
             run.cells += (cell[0].toLong() shl 32) or (cell[1].toLong() and 0xFFFFFFFFL)
         }
 
@@ -155,8 +160,8 @@ object CompactMesh {
             groups[if (side in 0..5) (if (big) side else 7 + side) else (if (big) 6 else 13)] += quad
         }
         for (i in 0 until q.n) if (keep[i]) add(q.dir[i].toInt(), quadOf(q, i, ox, oz))
-        for (run in runs.values) for (rect in greedy(run.cells, if (run.fullA) MAX_RUN else 1, if (run.fullB) MAX_RUN else 1)) {
-            add(run.side, merged(run.side, run.plane, run.sprite, run.colour, run.orient, run.pattern, run.frac, rect))
+        for (run in runs.values) for (rect in greedy(run.cells, if (run.alongA) MAX_RUN else 1, if (run.alongB) MAX_RUN else 1)) {
+            add(run.side, merged(run.side, run.plane, run.sprite, run.colours, run.orient, run.pattern, run.frac, rect))
         }
 
         val total = groups.sumOf { it.size }
@@ -276,9 +281,10 @@ object CompactMesh {
 
     /**
      * A merged rectangle as a quad, its corners in [pattern]'s order: from the first cell's [frac] start to the last cell's end
-     * each way, the texture repeated across it as on each cell (flipped against the run's length when it's flipped).
+     * each way, the texture repeated across it as on each cell (flipped against the run's length when it's flipped), each
+     * corner the colour the cells had at that corner.
      */
-    private fun merged(side: Int, plane: Int, sprite: Int, colour: Int, orient: Int, pattern: IntArray, frac: FloatArray, r: IntArray): Out {
+    private fun merged(side: Int, plane: Int, sprite: Int, colours: IntArray, orient: Int, pattern: IntArray, frac: FloatArray, r: IntArray): Out {
         val f = Out(sprite)
         val na = AXIS_A[side]; val nb = AXIS_B[side]; val nn = AXIS_N[side]
         val w = r[2]; val h = r[3]
@@ -294,7 +300,7 @@ object CompactMesh {
             val uSpan = if (uAlongB) h else w; val vSpan = if (uAlongB) w else h
             f.uv[k * 2] = if (orient and 2 != 0) uSpan - uRaw else uRaw
             f.uv[k * 2 + 1] = if (orient and 1 != 0) vSpan - vRaw else vRaw
-            f.col[k] = colour
+            f.col[k] = colours[pattern[k * 2] + 2 * pattern[k * 2 + 1]]
         }
         return f
     }
@@ -342,9 +348,13 @@ object PoseShader {
 
     private val SPRITES: BindGroupLayout = BindGroupLayout.builder().withUniform("PoseSprites", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT).build()
 
-    val PIPELINE: RenderPipeline = RenderPipelines.register(
+    val PIPELINE: RenderPipeline = pipeline("pose_pov_compact", cull = false)
+    /** The blocks: their faces from behind left out (a block's model winds its faces the way the game culls them). */
+    val CULLED: RenderPipeline = pipeline("pose_pov_compact_culled", cull = true)
+
+    private fun pipeline(name: String, cull: Boolean): RenderPipeline = RenderPipelines.register(
         RenderPipeline.builder()
-            .withLocation(Identifier.fromNamespaceAndPath("devgineerclient", "pipeline/pose_pov_compact"))
+            .withLocation(Identifier.fromNamespaceAndPath("devgineerclient", "pipeline/$name"))
             .withVertexShader(Identifier.fromNamespaceAndPath("engineerclient", "core/pose_pov"))
             .withFragmentShader(Identifier.fromNamespaceAndPath("engineerclient", "core/pose_pov"))
             .withBindGroupLayout(BindGroupLayouts.GLOBALS)
@@ -355,7 +365,7 @@ object PoseShader {
             .withVertexBinding(0, FORMAT)
             .withPrimitiveTopology(PrimitiveTopology.QUADS)
             .withColorTargetState(ColorTargetState.DEFAULT)
-            .withCull(false)
+            .withCull(cull)
             // Reversed Z: depth is cleared to 0 and nearer is greater.
             .withDepthStencilState(DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, true))
             .build()

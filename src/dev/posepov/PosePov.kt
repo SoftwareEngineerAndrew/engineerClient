@@ -69,6 +69,9 @@ import com.devgineerclient.perf.GameMonitor
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.ExperienceOrb
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.client.renderer.entity.state.EntityRenderState
 import net.minecraft.client.renderer.state.level.CameraRenderState
@@ -76,6 +79,7 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.phys.Vec3
 import org.joml.FrustumIntersection
 import org.lwjgl.system.MemoryStack
+import org.lwjgl.system.MemoryUtil
 import org.joml.Matrix3x2f
 import org.joml.Matrix4f
 import org.joml.Quaternionf
@@ -117,6 +121,7 @@ object PosePov : Module(
     private const val SKY = 0xFF78A7FF.toInt()
 
     private val PIPELINE = PoseShader.PIPELINE
+    private val CULLED = PoseShader.CULLED
 
     /** Entities drawn in full per view at most (the nearest), and how far one is drawn in full rather than as a box. */
     private const val ENTITY_CAP = 32
@@ -138,10 +143,24 @@ object PosePov : Module(
     /** Whether the device draws many ranges in one call (glMultiDrawElementsBaseVertex and the like). */
     private var multiFailed = false
     private val multiDraw by lazy { runCatching { RenderSystem.getDevice().deviceInfo.features().multiDrawDirectSeparate() }.getOrDefault(false) }
-    private val feeds = arrayOfNulls<TextureTarget>(FEEDS)
+    /** Whether the device takes its draws from a buffer (glMultiDrawElementsIndirect): a view's blocks are then one call per buffer. */
+    private var indirectFailed = false
+    private val indirect by lazy { runCatching { RenderSystem.getDevice().deviceInfo.features().multiDrawIndirect() }.getOrDefault(false) }
+    /**
+     * Every view in one target, a quarter each (feed i: column i % 2, row i / 2, row 0 on top): their blocks in one pass, one
+     * pipeline and texture bind for all four. A view drawn again clears only its quarter, so a still one's picture stays.
+     */
+    private var allViews: TextureTarget? = null
     /** What each feed last drew, when that was only blocks and its own hand (see [draw]). */
     private data class FeedSig(val target: TextureTarget, val eye: Vec3, val yaw: Float, val pitch: Float, val swing: Float, val held: Int, val world: Long)
     private val lastSig = arrayOfNulls<FeedSig>(FEEDS)
+    /** Each feed's camera and world when it was last drawn with entities in it, and when (ns): see [STILL_NS]. */
+    private val lastCam = arrayOfNulls<FeedSig>(FEEDS)
+    private val lastDrawnAt = LongArray(FEEDS)
+    /** A view whose camera hasn't moved is drawn again at most this often for its entities alone (20 a second). */
+    private const val STILL_NS = 50_000_000L
+    /** Each view's projection, written once per frame (one buffer each: the blocks pass binds all four). */
+    private val viewProjections by lazy { Array(FEEDS) { ProjectionMatrixBuffer("devgineerclient pose pov $it") } }
     private val projection = Projection()
     private val projectionBuffer by lazy { ProjectionMatrixBuffer("devgineerclient pose pov") }
     private val view = Matrix4f()
@@ -172,9 +191,11 @@ object PosePov : Module(
             DevgineerClient.safely("pose pov warm up") { if (enabled && DungeonUtils.inDungeons && PoseShare.watching && !wants()) PovPerf.time(PovPerf.WARM) { warmUp() } }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) PovPerf.time(PovPerf.PRERENDER) { build(PRERENDER_BUDGET_NS, emptyList()) } }
             DevgineerClient.safely("pose pov export") { exportTick() }
-            // In a dungeon, every room's geometry onto disk in the background (once; paced), so none is ever built or waited for.
+            // From the first world joined (not the first dungeon), every room's geometry onto disk in the background (once;
+            // paced), so none is ever built or waited for. Looked at every 5 s until it has started.
             DevgineerClient.safely("pose pov prefetch") {
-                if (enabled && DungeonUtils.inDungeons) PovPerf.time(PovPerf.PREFETCH) { KnownWorld.load {}; BlockMesh.prefetchAll(DungeonUtils.floor.let { it == Floor.F7 || it == Floor.M7 }) }
+                if (enabled && mc.level != null && ++prefetchTicks % 100 == 1 && !BlockMesh.prefetchStarted)
+                    PovPerf.time(PovPerf.PREFETCH) { KnownWorld.load {}; BlockMesh.prefetchAll(!DungeonUtils.inDungeons || DungeonUtils.floor.let { it == Floor.F7 || it == Floor.M7 }) }
             }
         }
         // `/posepov export`: every room, variant and the arena built here and written out, for undonecoffee.com to hand out.
@@ -280,7 +301,8 @@ object PosePov : Module(
 
     private fun releaseFeeds() {
         queued.clear()
-        for (i in 0 until FEEDS) { feeds[i]?.destroyBuffers(); feeds[i] = null; lastSig[i] = null }
+        allViews?.destroyBuffers(); allViews = null
+        for (i in 0 until FEEDS) { lastSig[i] = null; lastCam[i] = null }
     }
 
     private fun draw(gfx: GuiGraphicsExtractor) {
@@ -336,21 +358,28 @@ object PosePov : Module(
         // Every entity near any eye, extracted once for all the feeds (only those near enough to one to be drawn in full): full
         // bright like the blocks, without outlines, and no name tag past NAME_RANGE of every eye. (Not an invisible armour stand
         // with nothing on it and no name showing: Hypixel's markers, which draw nothing.)
-        val entities = ArrayList<Pair<Entity, EntityRenderState?>>()
+        // What every view asks of an entity is worked out here once: its room, its arena cluster, its box where it's drawn.
+        val entities = frameEntities.also { it.clear() }
         val near = eyes.filterNotNull()
         val range = minOf(ENTITY_RANGE, viewDistance.toDouble())
         val range2 = range * range
         for (en in level.entitiesForRendering()) {
             val closest = near.minOfOrNull { it.pos.distanceToSqr(en.position()) } ?: break
             if (closest >= range2) continue
-            if (en is ArmorStand && en.isInvisible && EquipmentSlot.entries.all { en.getItemBySlot(it).isEmpty } && (!en.isCustomNameVisible || closest > NAME_RANGE * NAME_RANGE)) continue
+            // Nothing to draw: an invisible mob or armour stand with nothing on (Hypixel's markers) and no name showing near
+            // enough; a dropped item or orb past TINY_RANGE (a few pixels at most).
+            val bare = en.isInvisible && en is LivingEntity && !en.isCurrentlyGlowing && EquipmentSlot.entries.all { en.getItemBySlot(it).isEmpty }
+            if (bare && (!en.isCustomNameVisible || closest > NAME_RANGE * NAME_RANGE)) continue
+            if ((en is ItemEntity || en is ExperienceOrb) && closest > TINY_RANGE * TINY_RANGE) continue
             val at = smoothed(en, pt, now)
             val s = if (closest > ENTITY_FULL * ENTITY_FULL) null else runCatching { mc.entityRenderDispatcher.extractEntity(en, pt) }.getOrNull()?.also { s ->
                 s.x = at.x; s.y = at.y; s.z = at.z
                 s.lightCoords = LightCoordsUtil.FULL_BRIGHT; s.outlineColor = 0
                 if (closest > NAME_RANGE * NAME_RANGE) s.nameTag = null
             }
-            entities += en to s
+            val bx = Mth.floor(en.x); val by = Mth.floor(en.y); val bz = Mth.floor(en.z)
+            val b = en.boundingBox.move(at.x - en.x, at.y - en.y, at.z - en.z)
+            entities += Seen(en, s, at, b, KnownWorld.roomAt(bx, bz), PovVisibility.index(BlockMesh.cluster(SectionPos.asLong(bx shr 4, by shr 4, bz shr 4))), bare, kindColor(en))
         }
         if (now - smoothPruned > 2_000_000_000L) { smoothPruned = now; smooth.values.removeIf { now - it.at > 2_000_000_000L } }
 
@@ -392,9 +421,9 @@ object PosePov : Module(
                 }
                 continue
             }
-            val target = feeds[i]?.takeIf { it.width == w && it.height == h } ?: run {
-                feeds[i]?.destroyBuffers()
-                TextureTarget("dc:pose_pov$i", w, h, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { feeds[i] = it }
+            val target = allViews?.takeIf { it.width == w * 2 && it.height == h * 2 } ?: run {
+                allViews?.destroyBuffers()
+                TextureTarget("dc:pose_pov", w * 2, h * 2, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT).also { allViews = it }
             }
             val p = players[i]
             val item = handItems[i].also { it.clear() }
@@ -411,32 +440,43 @@ object PosePov : Module(
             // The nearest ENTITY_CAP within ENTITY_FULL drawn in full, the rest as boxes coloured by their kind.
             val roomsSeen = culls[i].result?.rooms
             val clustersSeen = PovVisibility.clusters(e.pos)
-            val inSight = entities.mapNotNull { (en, s) ->
-                val b = en.boundingBox
-                val d2 = en.position().distanceToSqr(e.pos)
-                val ok = en !== p && d2 < range2 && ef.testAab(b.minX.toFloat() - 1, b.minY.toFloat() - 1, b.minZ.toFloat() - 1, b.maxX.toFloat() + 1, b.maxY.toFloat() + 1, b.maxZ.toFloat() + 1) &&
-                    (roomsSeen == null || KnownWorld.roomAt(Mth.floor(en.x), Mth.floor(en.z)).let { it == null || it in roomsSeen }) &&
-                    (clustersSeen == null || PovVisibility.index(BlockMesh.cluster(SectionPos.asLong(Mth.floor(en.x) shr 4, Mth.floor(en.y) shr 4, Mth.floor(en.z) shr 4))).let { it < 0 || clustersSeen[it] }) &&
-                    !(en is ArmorStand && en.isInvisible && d2 > NAME_RANGE * NAME_RANGE && EquipmentSlot.entries.all { en.getItemBySlot(it).isEmpty })
-                if (ok) Triple(en, s, d2) else null
-            }.sortedBy { it.third }
-            if (trace != null) traceFeed(i, e, slot?.name, inSight, pt, now, w, h)
+            val inSight = sightLists[i].also { it.clear() }
+            for (x in entities) {
+                val b = x.box
+                val d2 = x.at.distanceToSqr(e.pos)
+                if (x.en === p || d2 >= range2) continue
+                if (x.bare && d2 > NAME_RANGE * NAME_RANGE) continue
+                if (roomsSeen != null && x.room != null && x.room !in roomsSeen) continue
+                if (clustersSeen != null && x.cluster >= 0 && !clustersSeen[x.cluster]) continue
+                if (!ef.testAab(b.minX.toFloat() - 1, b.minY.toFloat() - 1, b.minZ.toFloat() - 1, b.maxX.toFloat() + 1, b.maxY.toFloat() + 1, b.maxZ.toFloat() + 1)) continue
+                x.d2 = d2
+                inSight += x
+            }
+            inSight.sortBy { it.d2 }
+            if (trace != null) traceFeed(i, e, slot?.name, inSight.map { Triple(it.en, it.state, it.d2) }, pt, now, w, h)
             val seen = ArrayList<EntityRenderState>()
             val boxes = ArrayList<Box>()
-            for ((en, s, d2) in inSight) {
-                if (s != null && d2 <= ENTITY_FULL * ENTITY_FULL && seen.size < ENTITY_CAP) { seen += s; continue }
-                if (en is ArmorStand && en.isInvisible) continue
+            for (x in inSight) {
+                val s = x.state
+                if (s != null && x.d2 <= ENTITY_FULL * ENTITY_FULL && seen.size < ENTITY_CAP) { seen += s; continue }
+                if (x.bare || x.en is ArmorStand && x.en.isInvisible) continue
                 // Where the entity is drawn this frame (smoothed), not where its last tick left it: boxes otherwise step 20 times a second.
-                val b = smooth[en.id]?.let { m -> en.boundingBox.move(m.x - en.x, m.y - en.y, m.z - en.z) } ?: en.boundingBox
-                boxes += Box(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ, kindColor(en))
+                val b = x.box
+                boxes += Box(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ, x.rgb)
             }
             val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + it.bufferNs, now) } ?: 0f
             val others = bodies.filter { it.slot != i }
             // Nothing in it moved and nothing new to draw (a teammate standing still): last frame's picture stays.
             val held = (sh?.item ?: p?.mainHandItem)?.let { System.identityHashCode(it) * 31 + it.count } ?: 0
-            val sig = if (seen.isEmpty() && others.isEmpty() && boxes.isEmpty()) FeedSig(target, e.pos, e.yaw, e.pitch, swing, held, BlockMesh.changes + PiecePool.version + MeshBundles.count * 1_000_003L + System.identityHashCode(KnownWorld.rooms) * 7L + PovVisibility.knownCount * 131L + culls[i].generation * 1_000_033L + viewDistance.toLong() * 7919L) else null
-            if (sig == null || sig != lastSig[i]) queued += Job(i, target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, swing, seen, others, boxes)
-            else perfReused++
+            val cam = FeedSig(target, e.pos, e.yaw, e.pitch, swing, held, BlockMesh.changes + PiecePool.version + MeshBundles.count * 1_000_003L + System.identityHashCode(KnownWorld.rooms) * 7L + PovVisibility.knownCount * 131L + culls[i].generation * 1_000_033L + viewDistance.toLong() * 7919L)
+            val sig = if (seen.isEmpty() && others.isEmpty() && boxes.isEmpty()) cam else null
+            // With entities in it but its camera and world as they were: drawn again only every STILL_NS (they still move,
+            // 20 times a second as the server sends them).
+            val still = sig == null && cam == lastCam[i] && now - lastDrawnAt[i] < STILL_NS
+            if ((sig == null || sig != lastSig[i]) && !still) {
+                queued += Job(i, target, e.pos, e.yaw, e.pitch, w, h, item, if (right) 1f else -1f, swing, seen, others, boxes)
+                lastCam[i] = cam; lastDrawnAt[i] = now
+            } else perfReused++
             lastSig[i] = sig
             perfEntities += seen.size
             val colorView = target.colorTextureView ?: continue
@@ -446,8 +486,8 @@ object PosePov : Module(
                     TextureSetup.singleTexture(colorView, sampler),
                     pose,
                     x0, y0, x1, y1,
-                    // A render target's row 0 is the bottom of its image.
-                    0f, 1f, 1f, 0f,
+                    // Its quarter of the shared target; a render target's row 0 is the bottom of its image.
+                    col * 0.5f, 1f - row * 0.5f, col * 0.5f + 0.5f, 0.5f - row * 0.5f,
                     -1,
                     null,
                 )
@@ -465,7 +505,7 @@ object PosePov : Module(
                 }
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
-            if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: if (sh.direct) "fast · " else "relay · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
+            if (sh != null) footLabel(gfx, delayLabel(i, sh.via, sh.direct, sh.delayMs), Color(200, 200, 210), x0, x1, y1)
             slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
         lap = PovPerf.lap(PovPerf.FEEDS, lap)
@@ -483,6 +523,22 @@ object PosePov : Module(
         if (perfMonitor) lines += perfLines()
         if (lines.isNotEmpty()) panel(gfx, lines)
         PovPerf.lap(PovPerf.OVERLAY, lap)
+    }
+
+    /** What each view knows of an entity this frame (see [draw]); [d2] is set per view. */
+    private class Seen(val en: Entity, val state: EntityRenderState?, val at: Vec3, val box: net.minecraft.world.phys.AABB, val room: KnownWorld.Room?, val cluster: Int, val bare: Boolean, val rgb: Int) { var d2 = 0.0 }
+    private val frameEntities = ArrayList<Seen>()
+    private val sightLists = Array(FEEDS) { ArrayList<Seen>() }
+    /** Dropped items and orbs past this from every eye are left out (a few pixels at most). */
+    private const val TINY_RANGE = 24.0
+
+    /** A view's delay label, made again only when what it says changes. */
+    private val delayLabels = arrayOfNulls<String>(FEEDS)
+    private val delayKeys = LongArray(FEEDS) { -1 }
+    private fun delayLabel(i: Int, via: String?, direct: Boolean, ms: Int): String {
+        val key = (via?.hashCode()?.toLong() ?: 0L) * 31 + (if (direct) 1 else 0) * 1_000_003L + ms
+        if (key != delayKeys[i] || delayLabels[i] == null) { delayKeys[i] = key; delayLabels[i] = (via?.let { "via $it · " } ?: if (direct) "fast · " else "relay · ") + "~${ms}ms" }
+        return delayLabels[i]!!
     }
 
     /** The monitors outside the menu: the views' own (what runs every tick still costs), and the game's. */
@@ -991,6 +1047,11 @@ object PosePov : Module(
         var drawsKey = 0L
         var drawsAt = 0L
         var drawsComplete = false
+        /** [draws] as [Batch]es, and their indirect commands on the GPU (see [batches]). */
+        var batches: List<Batch> = emptyList()
+        var batchesFor: Any? = null
+        var batchesIndirect = false
+        var indirect: com.mojang.renderpearl.api.buffers.GpuBuffer? = null
 
         fun reset() { result = null; at = null; pending?.cancel(false); pending = null; drawsFor = null; draws = emptyMap(); generation++ }
     }
@@ -1043,6 +1104,10 @@ object PosePov : Module(
     private fun cullFor(i: Int, eye: Vec3, yaw: Float, pitch: Float, w: Int, h: Int, fov: Float, dist: Int): PovCull.Result {
         val c = culls[i]
         val rooms = KnownWorld.rooms
+        // An eye in a room's sealed pocket (a teleport, a stonk): that room's pockets are drawn from now on.
+        KnownWorld.roomAt(Mth.floor(eye.x), Mth.floor(eye.z))?.let { r ->
+            if (r.cutPockets && r.inPocket(Mth.floor(eye.x), Mth.floor(eye.y), Mth.floor(eye.z))) { r.cutPockets = false; BlockMesh.roomChanged() }
+        }
         val eyePiece = PovCull.eyePiece(eye.x, eye.y, eye.z)
         val sections = BlockMesh.worldSections()
         val inputs = MeshBundles.count * 1_000_003L + PovVisibility.knownCount * 131L + System.identityHashCode(sections) * 31L + System.identityHashCode(portals) + (if (KnownWorld.bossFloor()) 7L else 0L)
@@ -1113,14 +1178,14 @@ object PosePov : Module(
                     val r = ref.room!!
                     val own = BlockMesh.own(r, ref.lx, ref.ly, ref.lz)
                     if (own != null) emit(own.buffer, own.first, own.counts, own.ox, own.oz, ref.faces, ref.far)
-                    else if (ref.piece >= 0) PiecePool.get(ref.bundle!!, ref.piece, ref.rot, ref.w, ref.d, ref.dist2)?.let { emit(it.buffer, it.first, it.counts, r.x0, r.z0, ref.faces, ref.far) }
+                    else if (ref.piece >= 0) PiecePool.get(ref.bundle!!, ref.piece, ref.rot, ref.w, ref.d, r, ref.dist2)?.let { emit(it.buffer, it.first, it.counts, 0, 0, ref.faces, ref.far) }
                 }
-                PovCull.ARENA -> if (!BlockMesh.arenaTouched(ref.section)) PiecePool.get(ref.bundle!!, ref.piece, ref.rot, 0, 0, ref.dist2)?.let { emit(it.buffer, it.first, it.counts, 0, 0, ref.faces, ref.far) }
+                PovCull.ARENA -> if (!BlockMesh.arenaTouched(ref.section)) PiecePool.get(ref.bundle!!, ref.piece, ref.rot, 0, 0, null, ref.dist2)?.let { emit(it.buffer, it.first, it.counts, 0, 0, ref.faces, ref.far) }
                 else -> BlockMesh.worldMesh(ref.section)?.let { emit(it.buffer, it.first, it.counts, it.ox, it.oz, ref.faces, ref.far) }
             }
         }
         val complete = PiecePool.asked == asked
-        for (ref in res.around) if (ref.piece >= 0 && ref.bundle != null) PiecePool.get(ref.bundle, ref.piece, ref.rot, ref.w, ref.d, 1e9 + ref.dist2)
+        for (ref in res.around) if (ref.piece >= 0 && ref.bundle != null) PiecePool.get(ref.bundle, ref.piece, ref.rot, ref.w, ref.d, ref.room, 1e9 + ref.dist2)
         c.draws = out; c.drawsFor = res; c.drawsKey = key; c.drawsAt = now; c.drawsComplete = complete
         c.generation++
         return out
@@ -1132,6 +1197,7 @@ object PosePov : Module(
      * menu finds them on the GPU.
      */
     private var warmTicks = 0
+    private var prefetchTicks = 0
     private fun warmUp() {
         if (++warmTicks % 10 != 0) return
         val level = mc.level ?: return
@@ -1142,7 +1208,7 @@ object PosePov : Module(
                 ?: PoseShare.pose(slot.name, now)?.pos ?: continue
             val eye = pos.add(0.0, 1.62, 0.0)
             val res = PovCull.compute(cullInput(eye, Matrix4f(), 64, wide = true))
-            for (ref in res.refs) if (ref.piece >= 0 && ref.bundle != null) PiecePool.get(ref.bundle, ref.piece, ref.rot, ref.w, ref.d, 1e8 + ref.dist2)
+            for (ref in res.refs) if (ref.piece >= 0 && ref.bundle != null) PiecePool.get(ref.bundle, ref.piece, ref.rot, ref.w, ref.d, ref.room, 1e8 + ref.dist2)
         }
         if (!prerender) PiecePool.load(1_000_000L)
     }
@@ -1163,8 +1229,8 @@ object PosePov : Module(
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = quadIndices.getBuffer(most)
             PovPerf.gpuBegin()
+            renderBlocks(queued, quadIndices, indices)
             for (job in queued) {
-                renderFeed(job, quadIndices, indices)
                 PovPerf.time(PovPerf.FIGURES) { renderFigures(job) }
                 PovPerf.time(PovPerf.HAND) { renderHand(job) }
             }
@@ -1220,54 +1286,116 @@ object PosePov : Module(
         return n * 6
     }
 
-    private fun renderFeed(job: Job, quadIndices: RenderSystem.AutoStorageIndexBuffer, indices: com.mojang.renderpearl.api.buffers.GpuBuffer) {
-        val target = job.target; val eye = job.eye; val w = job.w; val h = job.h
+    /** Feed [i]'s quarter of the shared target, in the target's pixels (GL's: from the bottom left). */
+    private fun quarter(i: Int, w: Int, h: Int) = com.mojang.renderpearl.api.commands.RenderPass.RenderArea((i % 2) * w, (1 - i / 2) * h, w, h)
+
+    /** [p] squeezed into feed [i]'s quarter of the shared target (the viewport is always the whole target). */
+    private fun intoQuarter(i: Int, p: Matrix4f): Matrix4f = Matrix4f().translate((i % 2) - 0.5f, 0.5f - i / 2, 0f).scale(0.5f, 0.5f, 1f).mul(p)
+
+    /** What a view's blocks are drawn with: one frame and buffer's draws as a range of [Cull.indirect], or as commands. */
+    private class Batch(val frame: Long, val buffer: com.mojang.renderpearl.api.buffers.GpuBuffer, val cmds: List<Cmd>, val offset: Long)
+
+    /**
+     * Feed [c]'s draws as indirect commands (count, 1, first index 0, base vertex, 0), uploaded once each time they change
+     * ([resolve] keeps them otherwise): its blocks are then one call per frame and buffer.
+     */
+    private fun batches(c: Cull, draws: Map<Long, Map<com.mojang.renderpearl.api.buffers.GpuBuffer, List<Cmd>>>, useIndirect: Boolean): List<Batch> {
+        if (c.batchesFor === draws && c.batchesIndirect == useIndirect) return c.batches
+        val out = ArrayList<Batch>()
+        var n = 0
+        for ((k, byBuffer) in draws) for ((buffer, cmds) in byBuffer) { out += Batch(k, buffer, cmds, n * 20L); n += cmds.size }
+        if (useIndirect && n > 0) {
+            val bytes = MemoryUtil.memAlloc(n * 20)
+            try {
+                for (bt in out) for (m in bt.cmds) bytes.putInt(m.count).putInt(1).putInt(0).putInt(m.first).putInt(0)
+                bytes.flip()
+                val size = n * 20L
+                val buf = c.indirect?.takeIf { it.size() >= size } ?: run {
+                    c.indirect?.close()
+                    RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov draws" }, com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_INDIRECT_PARAMETERS or com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_COPY_DST, maxOf(size * 2, 4096L)).also { c.indirect = it }
+                }
+                RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buf.slice(0, size), bytes)
+            } finally { MemoryUtil.memFree(bytes) }
+        }
+        c.batches = out; c.batchesFor = draws; c.batchesIndirect = useIndirect
+        return out
+    }
+
+    /**
+     * Every queued view's blocks and entity boxes, in one pass over the shared target: each view's quarter cleared to the sky,
+     * then per view its quarter as the scissor, its projection (squeezed into the quarter), and its draws (back faces culled).
+     */
+    private fun renderBlocks(jobs: List<Job>, quadIndices: RenderSystem.AutoStorageIndexBuffer, indices: com.mojang.renderpearl.api.buffers.GpuBuffer) {
+        val target = jobs.firstOrNull()?.target ?: return
         val colorView = target.colorTextureView ?: return
         val depthView = target.depthTextureView ?: return
+        val colorTex = target.colorTexture ?: return
+        val depthTex = target.depthTexture ?: return
         val fov = mc.options.fov().get().toFloat()
         val dist = viewDistance.toInt()
-
-        view.rotation(Quaternionf().rotationYXZ(Math.PI.toFloat() - Math.toRadians(job.yaw.toDouble()).toFloat(), -Math.toRadians(job.pitch.toDouble()).toFloat(), 0f).conjugate())
-            .translate(-eye.x.toFloat(), -eye.y.toFloat(), -eye.z.toFloat())
-
-        val c = culls[job.feed]
-        val res = cullFor(job.feed, eye, job.yaw, job.pitch, w, h, fov, dist)
-        val draws = PovPerf.time(PovPerf.RESOLVE) { resolve(c, res) }
-        dbgRefs += res.refs.size; dbgRooms += res.rooms?.size ?: 0
-        val ox = Mth.floor(eye.x); val oz = Mth.floor(eye.z)
-        val boxQuads = PovPerf.time(PovPerf.BOXES) { boxQuads(job.feed, job.boxes, ox, oz) }
         val blocksAt = System.nanoTime()
+        val encoder = RenderSystem.getDevice().createCommandEncoder()
 
-        projection.setupPerspective(NEAR, dist.toFloat(), fov, w.toFloat(), h.toFloat())
-        RenderSystem.backupProjectionMatrix()
-        try {
-            RenderSystem.setProjectionMatrix(projectionBuffer.getBuffer(projection), ProjectionType.PERSPECTIVE)
+        class Prepared(val job: Job, val area: com.mojang.renderpearl.api.commands.RenderPass.RenderArea, val proj: com.mojang.renderpearl.api.buffers.GpuBufferSlice,
+            val batches: List<Batch>, val c: Cull, val transforms: Map<Long, com.mojang.renderpearl.api.buffers.GpuBufferSlice>, val boxQuads: Int, val boxTransform: com.mojang.renderpearl.api.buffers.GpuBufferSlice?)
+        val useIndirect = indirect && !indirectFailed
+        val prepared = ArrayList<Prepared>(jobs.size)
+        for (job in jobs) {
+            val eye = job.eye; val w = job.w; val h = job.h
+            view.rotation(Quaternionf().rotationYXZ(Math.PI.toFloat() - Math.toRadians(job.yaw.toDouble()).toFloat(), -Math.toRadians(job.pitch.toDouble()).toFloat(), 0f).conjugate())
+                .translate(-eye.x.toFloat(), -eye.y.toFloat(), -eye.z.toFloat())
+            val c = culls[job.feed]
+            val res = cullFor(job.feed, eye, job.yaw, job.pitch, w, h, fov, dist)
+            val draws = PovPerf.time(PovPerf.RESOLVE) { resolve(c, res) }
+            dbgRefs += res.refs.size; dbgRooms += res.rooms?.size ?: 0
+            val ox = Mth.floor(eye.x); val oz = Mth.floor(eye.z)
+            val boxQuads = PovPerf.time(PovPerf.BOXES) { boxQuads(job.feed, job.boxes, ox, oz) }
+            projection.setupPerspective(NEAR, dist.toFloat(), fov, w.toFloat(), h.toFloat())
+            val proj = viewProjections[job.feed].getBuffer(intoQuarter(job.feed, projection.getMatrix(Matrix4f())))
             // Fresh matrices: the uniform storage keeps the matrix by reference and skips a write equal to the last one, so
             // handing it the reused [view] made every feed match the previous write and draw with a stale slice. The fog's
             // start and end ride in the model offset (the shader has no other use for it).
             fun transform(x: Int, z: Int) = RenderSystem.getDynamicUniforms().writeTransform(
                 Matrix4f(view).translate(x.toFloat(), 0f, z.toFloat()), Vector4f(1f, 1f, 1f, 1f), org.joml.Vector3f(dist * 0.7f, dist.toFloat(), 0f), Matrix4f())
             val transforms = draws.keys.associateWith { k -> transform((k shr 32).toInt(), k.toInt()) }
-            val boxTransform = if (boxQuads > 0) transform(ox, oz) else null
-            RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+            val area = quarter(job.feed, w, h)
+            prepared += Prepared(job, area, proj, batches(c, draws, useIndirect), c, transforms, boxQuads, if (boxQuads > 0) transform(ox, oz) else null)
+            encoder.clearColorAndDepthTextures(colorTex, skyColor, depthTex, 0.0, area.x(), area.y(), area.width(), area.height(), 0)
+        }
+
+        try {
+            encoder.createRenderPass(
                 RenderPassDescriptor.builder { "devgineerclient pose pov" }
-                    .withColorAttachment(colorView, Optional.of(skyColor))
-                    .withDepthAttachment(depthView, OptionalDouble.of(0.0))
+                    .withColorAttachment(colorView, Optional.empty())
+                    .withDepthAttachment(depthView, OptionalDouble.empty())
                     .build()
             ).use { pass ->
                 val sprites = CompactMesh.SpriteTable.buffer ?: return@use
                 RenderSystem.bindDefaultUniforms(pass)
-                pass.setPipeline(RenderSystem.getCompiledPipeline(PIPELINE))
                 val atlas = mc.textureManager.getTexture(TextureAtlas.LOCATION_BLOCKS)
+                pass.setPipeline(RenderSystem.getCompiledPipeline(CULLED))
                 pass.setUniform("Sampler0", atlas.textureView, mipSampler)
                 pass.setUniform("PoseSprites", sprites)
                 pass.setIndexBuffer(indices, quadIndices.type())
-                // Nearest frame first, and per frame and buffer every range in one call where the device can (most do).
                 val multi = multiDraw && !multiFailed
-                for ((k, byBuffer) in draws) {
-                    pass.setUniform("DynamicTransforms", transforms.getValue(k))
-                    for ((buffer, cmds) in byBuffer) {
-                        pass.setVertexBuffer(0, buffer.slice())
+                for (p in prepared) {
+                    val area = p.area
+                    pass.enableScissor(area.x(), area.y(), area.width(), area.height())
+                    pass.setUniform("Projection", p.proj)
+                    // Nearest frame first; per frame and buffer one call where the device can (most do).
+                    var frame = Long.MIN_VALUE
+                    for (bt in p.batches) {
+                        if (bt.frame != frame) { frame = bt.frame; pass.setUniform("DynamicTransforms", p.transforms.getValue(bt.frame)) }
+                        pass.setVertexBuffer(0, bt.buffer.slice())
+                        val cmds = bt.cmds
+                        if (p.c.batchesIndirect && !indirectFailed && cmds.size > 1) {
+                            perfDraws += 1
+                            try { pass.drawIndexedIndirect(p.c.indirect!!.slice(bt.offset, cmds.size * 20L), cmds.size); continue }
+                            catch (e: Exception) {
+                                indirectFailed = true
+                                DevgineerClient.logger.warn("[pose pov] indirect drawing failed, drawing ranges from the CPU from now on", e)
+                            }
+                        }
                         perfDraws += if (multi) 1 else cmds.size
                         if (!multi || cmds.size == 1) { for (m in cmds) pass.drawIndexed(m.count, 1, 0, m.first, 0); continue }
                         MemoryStack.stackPush().use { stack ->
@@ -1283,14 +1411,20 @@ object PosePov : Module(
                         }
                     }
                 }
-                if (boxTransform != null) {
-                    pass.setUniform("DynamicTransforms", boxTransform)
-                    pass.setVertexBuffer(0, boxBuffers[job.feed]!!.slice())
-                    pass.drawIndexed(boxQuads * 6, 1, 0, 0, 0)
+                // Entity boxes are seen from inside too (a box around the camera): not culled.
+                var boxes = false
+                for (p in prepared) {
+                    val bt = p.boxTransform ?: continue
+                    if (!boxes) { pass.setPipeline(RenderSystem.getCompiledPipeline(PIPELINE)); boxes = true }
+                    val area = p.area
+                    pass.enableScissor(area.x(), area.y(), area.width(), area.height())
+                    pass.setUniform("Projection", p.proj)
+                    pass.setUniform("DynamicTransforms", bt)
+                    pass.setVertexBuffer(0, boxBuffers[p.job.feed]!!.slice())
+                    pass.drawIndexed(p.boxQuads * 6, 1, 0, 0, 0)
                 }
             }
         } finally {
-            RenderSystem.restoreProjectionMatrix()
             PovPerf.lap(PovPerf.BLOCKS, blocksAt)
         }
     }
@@ -1343,12 +1477,13 @@ object PosePov : Module(
         val modelView = RenderSystem.getModelViewStack()
         modelView.pushMatrix().identity()
         try {
-            RenderSystem.setProjectionMatrix(figureProjectionBuffer.getBuffer(figureProjection), ProjectionType.PERSPECTIVE)
+            RenderSystem.setProjectionMatrix(figureProjectionBuffer.getBuffer(intoQuarter(job.feed, figureProjection.getMatrix(Matrix4f()))), ProjectionType.PERSPECTIVE)
             mc.gameRenderer.featureRenderDispatcher().prepareFrame(handSubmits).use { frame ->
                 RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     RenderPassDescriptor.builder { "devgineerclient pose pov figures" }
                         .withColorAttachment(colorView, Optional.empty())
                         .withDepthAttachment(depthView, OptionalDouble.empty())
+                        .withRenderArea(quarter(job.feed, job.w, job.h))
                         .build()
                 ).use { pass ->
                     RenderSystem.bindDefaultUniforms(pass)
@@ -1389,12 +1524,14 @@ object PosePov : Module(
         val modelView = RenderSystem.getModelViewStack()
         modelView.pushMatrix().identity()
         try {
-            RenderSystem.setProjectionMatrix(handProjectionBuffer.getBuffer(handProjection), ProjectionType.PERSPECTIVE)
+            RenderSystem.setProjectionMatrix(handProjectionBuffer.getBuffer(intoQuarter(job.feed, handProjection.getMatrix(Matrix4f()))), ProjectionType.PERSPECTIVE)
             mc.gameRenderer.featureRenderDispatcher().prepareFrame(handSubmits).use { frame ->
                 RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     RenderPassDescriptor.builder { "devgineerclient pose pov hand" }
                         .withColorAttachment(colorView, Optional.empty())
+                        // Cleared within its quarter only (the render area is the scissor the clear keeps to).
                         .withDepthAttachment(depthView, OptionalDouble.of(0.0))
+                        .withRenderArea(quarter(job.feed, job.w, job.h))
                         .build()
                 ).use { pass ->
                     RenderSystem.bindDefaultUniforms(pass)
