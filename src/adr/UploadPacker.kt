@@ -78,6 +78,11 @@ import org.slf4j.LoggerFactory
  *    player's own, their equipment, skin and held head go too: the viewer takes those from it.
  *    Only when the two line up by block changes: by start time alone, nothing is left out.
  *
+ *  - Block changes as their numbers in the site's catalogue of what runs do, where it has them
+ *    ([BlockTemplates], [Catalogue]): a crusher's tick, a room's moving granite, each one number - and
+ *    the boss floors that go all at once (P1's end platforms, Goldor's floor) the same in every run
+ *    first ([Templates.ends]).
+ *
  *  - Private chat (see [privateChat]) never goes up, whatever the recording has in it: runs
  *    recorded with Hide Private Chats off, or from before it, are sent through Upload Missing Runs.
  *
@@ -447,11 +452,25 @@ object UploadPacker {
         return ok * 10 >= pts.size * 9
     }
 
-    /** A recording's block changes with their palette's states, as (tick, "x,y,z,state"). */
-    private class BlockReader {
+    /**
+     * A recording's block changes with their palette's states, as (tick, "x,y,z,state"). An upload's
+     * template lines ("btpl") too, with [cat] - the version its meta says, and its rooms' frames.
+     */
+    private class BlockReader(private val cat: Catalogue.Blocks? = null) {
         private val pal = HashMap<Int, String>()
         private val raw = ArrayList<Triple<Long, String, Int>>()
+        private val framed = ArrayList<Pair<Long, String>>()
+        private var frame: Templates.Frame? = null
+        private var catOk = false
         fun read(kind: String, line: String) {
+            if (kind == "meta" && cat != null) { val v = cat.version; catOk = runCatching { int((obj(line)["cat"] as? JsonObject)?.get("blocks")) == v }.getOrDefault(false); return }
+            if (kind == "roomsAll" && cat != null) { frame = Templates.Frame(obj(line)["r"] as? JsonArray); return }
+            if (kind == "btpl") {
+                val f = frame
+                if (cat == null || !catOk || f == null) return
+                for (c in decodeBtpl(obj(line), cat, f, MAX_BLOCKS - raw.size - framed.size)) framed += c.t.toLong() to "${c.x},${c.y},${c.z},${c.state}"
+                return
+            }
             if (kind != "pal" && kind != "block" && kind != "blocks") return
             val l = obj(line)
             // (past the limits the rest is left out: lining up needs only some of them)
@@ -468,8 +487,93 @@ object UploadPacker {
                 }
             }
         }
-        fun changes() = raw.map { (t, at, s) -> t to at + "," + (pal[s] ?: "?") }
+        fun changes() = raw.map { (t, at, s) -> t to at + "," + (pal[s] ?: "?") } + framed
     }
+
+    /**
+     * A "btpl" line's block changes (see [BlockTemplates]): per device, its first piece's tick (from
+     * the device before's first) and number, then each next piece's tick (from the one before) and
+     * its rank among the pieces the catalogue says come after that one - or -(number + 1).
+     */
+    private fun decodeBtpl(l: JsonObject, cat: Catalogue.Blocks, frame: Templates.Frame, max: Int): List<Templates.Change> {
+        val out = ArrayList<Templates.Change>()
+        var qt = 0L
+        for (e in arr(l["s"])) {
+            val s = arr(e)
+            if (s.size() < 2 || s.size() % 2 != 0) throw Malformed("device")
+            qt += long(s[0])
+            var t = qt
+            var id = int(s[1])
+            var i = 0
+            while (true) {
+                if (id !in cat.pieces.indices) throw Malformed("piece $id")
+                if (t !in 0..SIB_MAX_TICK) throw Malformed("tick $t")
+                out += Templates.pieceCells(cat.pieces[id], frame, t.toInt()) ?: throw Malformed("piece $id isn't in this run")
+                if (out.size > max) throw Malformed("too many block changes")
+                i += 2
+                if (i >= s.size()) break
+                t += long(s[i])
+                val c = int(s[i + 1])
+                id = if (c >= 0) cat.next.getOrNull(id)?.getOrNull(c) ?: throw Malformed("next") else -(c.toLong() + 1).toInt()
+            }
+        }
+        return out
+    }
+
+    /**
+     * Block changes as template numbers ([Templates]; "btpl" lines): the pieces the catalogue has, a
+     * device at a time - each piece as its rank among those the catalogue says usually come next, or
+     * its number - and the rest as "blocks" lines. The boss floors that go all at once go the same
+     * way in every run first ([Templates.ends]). Read back before it goes: anything not the same
+     * and the changes go up as they are.
+     */
+    private class BlockTemplates(val cat: Catalogue.Blocks, val frame: Templates.Frame, private val pal: Map<Int, String>) {
+        private val index = HashMap<String, Int>().apply { for ((i, st) in pal.entries.sortedBy { it.key }) putIfAbsent(st, i) }
+        class Result(val streams: List<List<Templates.Piece>>, val rest: List<IntArray>, val all: List<Templates.Change>)
+
+        /** [sorted]: [t, x, y, z, state number] by tick, y, z, x (as [Stretch.blockLine] has them). */
+        fun encode(sorted: List<IntArray>): Result? {
+            val changes = sorted.map { Templates.Change(it[0], it[1], it[2], it[3], pal[it[4]] ?: return null) }
+            val all = if (cat.ends.isEmpty() || AIR !in index) changes
+                else Templates.ends(changes, cat.ends).withIndex().sortedWith(compareBy({ it.value.t }, { it.value.y }, { it.value.z }, { it.value.x }, { it.index })).map { it.value }
+            val covered = Templates.pieces(all, frame).filter { p -> cat.id[p.key]?.also { p.id = it } != null }
+            val used = BooleanArray(all.size)
+            for (p in covered) for (i in p.idx) used[i] = true
+            val streams = Templates.streams(covered).map { s -> s.map { covered[it] } }.sortedWith(compareBy({ it[0].t }, { it[0].id }))
+            val rest = all.indices.filter { !used[it] }.map { val c = all[it]; intArrayOf(c.t, c.x, c.y, c.z, index[c.state] ?: return null) }
+            return Result(streams, rest, all)
+        }
+
+        fun line(streams: List<List<Templates.Piece>>): String {
+            var pt = 0
+            val s = JsonArray()
+            for (st in streams) s.add(JsonArray().apply {
+                add(st[0].t - pt); add(st[0].id); pt = st[0].t
+                for (i in 1 until st.size) {
+                    val r = cat.next[st[i - 1].id].indexOf(st[i].id)
+                    add(st[i].t - st[i - 1].t); add(if (r >= 0) r else -(st[i].id + 1))
+                }
+            })
+            return JsonObject().apply { addProperty("k", "btpl"); addProperty("v", cat.version); add("s", s) }.toString()
+        }
+
+        /** Whether [lines] read back as [all]: the same changes, and a block's in a tick in the same order. */
+        fun check(lines: List<String>, all: List<Templates.Change>): Boolean {
+            fun into(m: HashMap<String, MutableList<String>>, t: Long, x: Int, y: Int, z: Int, st: String) { m.getOrPut("$t,$x,$y,$z") { ArrayList() } += st }
+            val want = HashMap<String, MutableList<String>>(); val got = HashMap<String, MutableList<String>>()
+            for (c in all) into(want, c.t.toLong(), c.x, c.y, c.z, c.state)
+            for (line in lines) {
+                val l = obj(line)
+                when (str(l["k"])) {
+                    "btpl" -> for (c in decodeBtpl(l, cat, frame, MAX_BLOCKS)) into(got, c.t.toLong(), c.x, c.y, c.z, c.state)
+                    "blocks" -> { var t = 0L; var x = 0; var y = 0; var z = 0; for (e in arr(l["d"])) { val b = arr(e); t += long(b[0]); x += int(b[1]); y += int(b[2]); z += int(b[3]); into(got, t, x, y, z, pal[int(b[4])] ?: return false) } }
+                    else -> return false
+                }
+            }
+            return got == want
+        }
+    }
+    private const val AIR = "minecraft:air"
 
     /**
      * How many ticks to add to the sibling's to get this recording's, and how sure: the viewer's
@@ -501,22 +605,22 @@ object UploadPacker {
      * Preset 6: 17% smaller than 3 for about three times the CPU (a few seconds, on the upload's
      * low-priority thread, after the run) and about 100 MB while it packs.
      */
-    fun pack(file: Path, scan: Scan, sibling: ByteArray?, hideParty: Boolean = false): Pair<Path, Int> {
+    fun pack(file: Path, scan: Scan, sibling: ByteArray?, hideParty: Boolean = false, cat: Catalogue? = null): Pair<Path, Int> {
         // Whatever is wrong with a party member's upload, this one goes up - whole, if need be.
         val sib = sibling?.let { b ->
-            runCatching { readSibling(b.inputStream()) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
+            runCatching { readSibling(b.inputStream(), cat?.blocks) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
         }
         if (sib != null) {
             try {
-                return write(file, scan, sib, hideParty)
+                return write(file, scan, sib, hideParty, cat)
             } catch (e: Exception) {
                 log.warn("[ec] adr: packing with a party member's upload failed, packing it whole", e)
             }
         }
-        return write(file, scan, null, hideParty)
+        return write(file, scan, null, hideParty, cat)
     }
 
-    private fun write(file: Path, scan: Scan, sibling: Sibling?, hideParty: Boolean): Pair<Path, Int> {
+    private fun write(file: Path, scan: Scan, sibling: Sibling?, hideParty: Boolean, cat: Catalogue?): Pair<Path, Int> {
         // Nothing is left out unless the two recordings line up by their block changes: by start
         // time alone (or a recording that only claims to be of this run) is too unsure to trust.
         val aligned = sibling?.let { lineUp(scan, it) }
@@ -530,7 +634,7 @@ object UploadPacker {
         val others = lines(Files.newInputStream(file)).use { r -> PlayerPlan.read(r.lineSequence(), scan.self, scan.camTimes) }
         val out = Files.createTempFile("adr-upload-", ".jsonl.xz")
         try {
-            writeTo(file, scan, out, plan, others, left, players, hideParty)
+            writeTo(file, scan, out, plan, others, left, players, hideParty, cat)
         } catch (t: Throwable) {
             Files.deleteIfExists(out)
             throw t
@@ -538,12 +642,19 @@ object UploadPacker {
         return out to left.size
     }
 
-    private fun writeTo(file: Path, scan: Scan, out: Path, plan: MobPlan, others: PlayerPlan, left: Set<MobPlan.Life>, players: Players?, hideParty: Boolean) {
+    private fun writeTo(file: Path, scan: Scan, out: Path, plan: MobPlan, others: PlayerPlan, left: Set<MobPlan.Life>, players: Players?, hideParty: Boolean, cat: Catalogue?) {
         var camLine = 0
         var mouseLine = 0
+        // Block changes as template numbers: with the catalogue, and the rooms (their frames) and palette the viewer will have.
+        val blockTpl = cat?.blocks?.let { b ->
+            val rooms = scan.layout?.let { runCatching { obj(it)["r"] as? JsonArray }.getOrNull() } ?: return@let null
+            val pal = HashMap<Int, String>()
+            for (l in scan.world) if (kindOf(l) == "pal") runCatching { val o = obj(l); pal.putIfAbsent(int(o["i"]), str(o["s"])) }
+            BlockTemplates(b, Templates.Frame(rooms), pal)
+        }
         val stream = XZOutputStream(Files.newOutputStream(out), xzOptions())
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
-            val cols = Stretch(w)
+            val cols = Stretch(w, blockTpl)
             val mobs = MobWriter(plan) { it in left }
             val timeline: (String) -> Unit = { l -> if (players == null) cols.put(l) else players.put(l, cols::put) }
             fun put(line: String, timed: Boolean = true) {
@@ -560,7 +671,7 @@ object UploadPacker {
                 for (line in r.lineSequence()) {
                     if (first) {
                         // (the viewer fills mobs' and other players' moves in between the rows, up to this many ticks apart: MobPlan, PlayerPlan)
-                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1) }.toString() }.getOrDefault(line), timed = false)
+                        first = false; put(runCatching { obj(line).apply { addProperty("lerp", MobPlan.LERP_GAP); addProperty("plerp", MobPlan.LERP_GAP); addProperty("hy", 1); addProperty("selfcam", 1); addProperty("sthin", 1); addProperty("walkyaw", 1); addProperty("erel", 1); addProperty("eqtab", 1); addProperty("pj2", 1); if (blockTpl != null) add("cat", JsonObject().apply { addProperty("blocks", blockTpl.cat.version) }) }.toString() }.getOrDefault(line), timed = false)
                         scan.layout?.let { w.write(it); w.write(NL) }
                         val skulls = ArrayList<String>()
                         for (l in scan.world) if (kindOf(l) == "skull") skulls += l else put(l, timed = false)
@@ -659,7 +770,7 @@ object UploadPacker {
      * The order they come in keeps each tick's events in the order the viewer needs them (a mob's
      * spawn before its moves, its tag before them, gone after).
      */
-    private class Stretch(private val w: BufferedWriter) {
+    private class Stretch(private val w: BufferedWriter, private val blockTpl: BlockTemplates? = null) {
         private class Item(val t: Int, val rows: JsonArray)
         private var end = -1
         private val others = ArrayList<String>()
@@ -708,7 +819,7 @@ object UploadPacker {
             for (kind in BEFORE_MOVES) groups[kind]?.let { write(it) { part -> group(kind, part) } }
             for ((kind, list) in items) if (list.isNotEmpty()) write(list) { encode(kind, it) }
             for ((kind, list) in groups) if (kind !in BEFORE_MOVES) write(list) { part -> group(kind, part) }
-            if (blocks.isNotEmpty()) write(blocks) { blockLine(it) }
+            if (blocks.isNotEmpty()) writeBlocks()
             if (cams.isNotEmpty()) write(cams) { camLine(it) }
             for (l in others) { w.write(l); w.write(NL) }
             for (list in items.values) list.clear()
@@ -716,14 +827,28 @@ object UploadPacker {
         }
 
         /** One line of [list], or two of its halves (and so on) while it's longer than [COLS_MAX]. */
-        private fun <T> write(list: List<T>, encode: (List<T>) -> String) {
+        private fun <T> write(list: List<T>, encode: (List<T>) -> String) { for (l in lines(list, encode)) { w.write(l); w.write(NL) } }
+        private fun <T> lines(list: List<T>, encode: (List<T>) -> String): List<String> {
             val sizes = tables.mapValues { it.value.order.size }
             val line = encode(list)
             if (line.length > COLS_MAX && list.size > 1) {
                 for ((f, t) in tables) t.reset(sizes.getValue(f)) // (the halves number them again)
-                write(list.subList(0, list.size / 2), encode); write(list.subList(list.size / 2, list.size), encode); return
+                return lines(list.subList(0, list.size / 2), encode) + lines(list.subList(list.size / 2, list.size), encode)
             }
-            w.write(line); w.write(NL)
+            return listOf(line)
+        }
+
+        /** The block changes: as template numbers and the rest ([BlockTemplates]) where that reads back the same, else as they are. */
+        private fun writeBlocks() {
+            val sorted = blocks.sortedWith(BLOCK_ORDER)
+            val tpl = blockTpl
+            val res = tpl?.let { runCatching { it.encode(sorted) }.onFailure { e -> log.warn("[ec] adr: block templates failed, sent as they are", e) }.getOrNull() }
+            if (tpl != null && res != null) {
+                val out = (if (res.streams.isEmpty()) emptyList() else lines(res.streams) { tpl.line(it) }) + (if (res.rest.isEmpty()) emptyList() else lines(res.rest) { blockLine(it) })
+                if (runCatching { tpl.check(out, res.all) }.getOrDefault(false)) { for (l in out) { w.write(l); w.write(NL) }; return }
+                log.warn("[ec] adr: block templates didn't read back the same, sent as they are")
+            }
+            write(sorted) { blockLine(it) }
         }
 
         /**
@@ -861,7 +986,7 @@ object UploadPacker {
 
         /** A "blocks" line: [dt, dx, dy, dz, state] each, from the one before; a tick's changes by place (one block's in the order they came). */
         private fun blockLine(list: List<IntArray>): String {
-            val sorted = list.sortedWith(compareBy<IntArray>({ it[0] }, { it[2] }, { it[3] }, { it[1] }))
+            val sorted = list.sortedWith(BLOCK_ORDER)
             val d = JsonArray()
             var p = IntArray(4)
             for (b in sorted) { d.add(JsonArray().apply { for (i in 0 until 4) add(b[i] - p[i]); add(b[4]) }); p = b }
@@ -914,6 +1039,8 @@ object UploadPacker {
 
         companion object {
             private val BLOCK_KEYS = setOf("k", "t", "x", "y", "z", "s")
+            /** Block changes by tick, then y, z, x (stable: one block's in a tick in the order they came). */
+            private val BLOCK_ORDER = compareBy<IntArray>({ it[0] }, { it[2] }, { it[3] }, { it[1] })
             private val CAM_KEYS = setOf("k", "t", "d")
             /** Kinds that go in "grp" lines; the first ones go ahead of the moves, the rest after. */
             private val BEFORE_MOVES = listOf("spawn", "tag", "stand", "frame", "eq", "name")
@@ -1037,7 +1164,7 @@ object UploadPacker {
      * anything, so every field is checked and everything is limited (see [SIB_MAX_CHARS] and on);
      * anything off throws, and the run goes up as if there were no sibling.
      */
-    private fun readSibling(input: InputStream): Sibling {
+    private fun readSibling(input: InputStream, cat: Catalogue.Blocks? = null): Sibling {
         val out = HashMap<Int, Int>()
         var self = ""
         var startMs = 0L
@@ -1045,7 +1172,7 @@ object UploadPacker {
         var maxT = -1L
         var rows = 0
         val seen = HashMap<String, MutableList<Long>>() // name -> ticks it had a row at, and pgone ticks as -(t + 1)
-        val blocks = BlockReader()
+        val blocks = BlockReader(cat)
         val mobs = HashMap<Int, Track>()
         val playerAt = HashMap<String, Track>()
         val spawns = HashMap<Int, MutableList<DoubleArray>>() // id -> [t, life (or -1), x, y, z, back], and their types
