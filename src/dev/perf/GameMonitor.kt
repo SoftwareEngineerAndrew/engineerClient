@@ -182,7 +182,7 @@ object GameMonitor {
 
     // --- the game thread, sampled -----------------------------------------------------------------------------------------
 
-    private class Sample(val bucket: String, val code: String?, val top: String)
+    private class Sample(val bucket: String, val code: String?, val top: String, val gl: String?)
     private val samples = ConcurrentLinkedQueue<Sample>()
     private const val KEEP = 500
     private val kept = ArrayDeque<Sample>()
@@ -227,12 +227,19 @@ object GameMonitor {
 
     private fun short(e: StackTraceElement) = e.className.substringAfterLast('.') + "." + e.methodName
 
+    private val glLayers = arrayOf("org.lwjgl.", "com.mojang.renderpearl.")
+
     private fun classify(st: Array<StackTraceElement>): Sample? {
         if (st.isEmpty()) return null
         val top = short(st[0])
+        // In the driver: who called it (the first two frames above the GL layers), e.g. which buffer is being unmapped and by what.
+        val gl = if (!st[0].className.startsWith("org.lwjgl.")) null else {
+            val i = st.indexOfFirst { e -> glLayers.none { e.className.startsWith(it) } }
+            if (i < 0) null else short(st[i]) + (st.getOrNull(i + 1)?.let { " ← " + short(it) } ?: "") + " (" + st[0].methodName + ")"
+        }
         for (e in st) {
             val m = modOf(e.className, e.methodName) ?: continue
-            return Sample(m, short(e), top)
+            return Sample(m, short(e), top, gl)
         }
         // No mod's code on the stack: what Minecraft (or the driver) is doing.
         val waiting = st.take(12).any { it.methodName == "limitDisplayFPS" || it.methodName == "present" || it.methodName == "acquireNextTexture" || it.methodName == "sleep" || it.methodName == "park" }
@@ -241,17 +248,18 @@ object GameMonitor {
             st[0].className.startsWith("org.lwjgl.") -> "GL/driver calls"
             else -> "Minecraft"
         }
-        return Sample(bucket, null, top)
+        return Sample(bucket, null, top, gl)
     }
 
     private var shownBuckets = emptyList<Pair<String, Double>>()
     private var shownCode = emptyList<Pair<String, Double>>()
     private var shownTop = emptyList<Pair<String, Double>>()
+    private var shownGl = emptyList<Pair<String, Double>>()
     private fun drainSamples() {
         while (true) { val s = samples.poll() ?: break; kept.addLast(s); if (kept.size > KEEP) kept.removeFirst() }
         val n = kept.size.toDouble().coerceAtLeast(1.0)
         fun top(key: (Sample) -> String?, k: Int) = kept.mapNotNull(key).groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(k).map { it.key to it.value / n * 100 }
-        shownBuckets = top({ it.bucket }, 8); shownCode = top({ it.code }, 6); shownTop = top({ it.top }, 5)
+        shownBuckets = top({ it.bucket }, 8); shownCode = top({ it.code }, 6); shownTop = top({ it.top }, 5); shownGl = top({ it.gl }, 5)
     }
 
     // --- the JVM ----------------------------------------------------------------------------------------------------------
@@ -408,6 +416,7 @@ object GameMonitor {
         out += shownBuckets.joinToString(" · ") { "%s %.0f%%".format(it.first, it.second) } to white
         if (shownCode.isNotEmpty()) out += ("mods' hottest: " + shownCode.joinToString(" · ") { "%s %.0f%%".format(it.first, it.second) }) to grey
         out += ("top of stack: " + shownTop.joinToString(" · ") { "%s %.0f%%".format(it.first, it.second) }) to grey
+        if (shownGl.isNotEmpty()) out += ("in the GL driver for: " + shownGl.joinToString(" · ") { "%s %.0f%%".format(it.first, it.second) }) to grey
 
         out += "JVM" to head
         out += "heap %d / %d MB (max %d) · direct %d MB · process %d MB · allocating %.0f MB/s (game thread %.0f)".format(

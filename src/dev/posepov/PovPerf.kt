@@ -39,17 +39,19 @@ object PovPerf {
     const val MAKE = 18
     const val MAKE_WORLD = 19
     const val MAKE_OWN = 20
+    const val CHUNK_CHECK = 21
     // Other threads.
-    const val DECODE = 21
-    const val CULL_AHEAD = 22
-    private const val N = 23
+    const val DECODE = 22
+    const val CULL_AHEAD = 23
+    const val BUILD_WORKER = 24
+    private const val N = 25
 
     private val names = arrayOf(
         "eyes", "entities", "build", "per view", "labels",
         "cull (waited)", "resolve", "boxes", "blocks", "figures", "hand",
         "sharing", "warm up", "prerender", "prefetch", "looks", "packets",
-        "uploads", "room builds", "section builds", "changed-room builds",
-        "decode", "cull ahead",
+        "uploads", "room builds", "section copies", "changed-room copies", "chunk checks",
+        "decode", "cull ahead", "builds",
     )
 
     private val sum = AtomicLongArray(N)
@@ -188,7 +190,7 @@ object PovPerf {
         run {
             val sb = StringBuilder("ticks ms/s:")
             var total = 0L
-            for (i in SHARE..MAKE_OWN) {
+            for (i in SHARE..CHUNK_CHECK) {
                 total += shownSum[i]
                 if (shownCalls[i] == 0L) continue
                 sb.append(" · ").append(names[i]).append(' ').append("%.1f".format(shownSum[i] / 1e6))
@@ -196,7 +198,8 @@ object PovPerf {
             }
             out += sb.toString() to (if (total > 30_000_000L) yellow else grey)
         }
-        out += "workers ms/s: decode %.1f (%d pieces, %.1f ms each) · cull ahead %.1f (%d) · uploads %d (%.1f MB/s)".format(
+        out += "workers ms/s: builds %.1f (%d, %.1f ms each) · decode %.1f (%d pieces, %.1f ms each) · cull ahead %.1f (%d) · uploads %d (%.1f MB/s)".format(
+            shownSum[BUILD_WORKER] / 1e6, shownCalls[BUILD_WORKER], if (shownCalls[BUILD_WORKER] > 0) shownSum[BUILD_WORKER] / 1e6 / shownCalls[BUILD_WORKER] else 0.0,
             shownSum[DECODE] / 1e6, shownCalls[DECODE], if (shownCalls[DECODE] > 0) shownSum[DECODE] / 1e6 / shownCalls[DECODE] else 0.0,
             shownSum[CULL_AHEAD] / 1e6, shownCalls[CULL_AHEAD], shownCounts[C_UPLOADS], shownCounts[C_UPLOAD_BYTES] / 1048576.0) to grey
         val ts = threadsNow()

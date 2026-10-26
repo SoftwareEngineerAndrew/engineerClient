@@ -297,18 +297,34 @@ object PiecePool {
     }
 
     private fun upload(k: Long, p: CompactMesh.Packed) {
+        resident[k] = place(p)?.also { it.usedAt = now } ?: return
+    }
+
+    /** [p] into the pools (a new one, or room made from the longest unused pieces, when none has space); null when it can't fit. */
+    private fun place(p: CompactMesh.Packed): Resident? {
         val vertices = p.quads * 4
         var pool: Pool? = null; var at = -1
         fun tryAlloc(): Boolean { for (pl in pools) { val a = pl.alloc(vertices); if (a >= 0) { pool = pl; at = a; return true } }; return false }
         if (!tryAlloc()) {
             if (pools.size < MAX_POOLS) newPool(vertices)
             else evict(CROWDED_IDLE_MS, vertices)
-            if (!tryAlloc()) return
+            if (!tryAlloc()) return null
         }
         val pl = pool!!
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(pl.buffer.slice(at.toLong() * CompactMesh.VERTEX, p.bytes.remaining().toLong()), p.bytes)
-        resident[k] = Resident(pl.buffer, at, p.counts, pl, vertices).also { it.usedAt = now }
         version++
+        return Resident(pl.buffer, at, p.counts, pl, vertices)
+    }
+
+    /**
+     * This run's own geometry (world sections, a room's changed pieces) in the same pools as the pieces, so a feed draws it
+     * with them in a few calls rather than one buffer each. Never evicted: [release] gives it back.
+     */
+    fun putOwn(p: CompactMesh.Packed): Resident? = place(p)
+
+    fun release(r: Resident) {
+        if (r.pool !in pools) return
+        r.pool.release(r.first, r.vertices); version++
     }
 
     /** Frees pieces unused for [idleMs], longest unused first, until a run of [need] vertices is free somewhere (or all of them). */

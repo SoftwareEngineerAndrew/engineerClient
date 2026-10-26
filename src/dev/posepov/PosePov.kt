@@ -203,15 +203,11 @@ object PosePov : Module(
         onReceive<ClientboundLevelChunkWithLightPacket> {
             val level = mc.level ?: return@onReceive
             PovPerf.time(PovPerf.PACKETS) {
-                BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY)
+                BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY, check = true)
                 RoomEdges.chunk(x, z)
             }
         }
-        // An unloaded chunk falls back to what is known about it (or nothing).
-        onReceive<ClientboundForgetLevelChunkPacket> {
-            val level = mc.level ?: return@onReceive
-            BlockMesh.dirtyColumn(pos.minBlockX shr 4, pos.minBlockZ shr 4, level.minSectionY, level.maxSectionY)
-        }
+        // (An unloaded chunk keeps what was built from it: the best there is until it comes back, checked then.)
         // Arm swings, timed from the packet: the game's own swing state sticks for some remote players, as their head yaw does.
         onReceive<ClientboundSwingAnimationPacket> { if (hand() == InteractionHand.MAIN_HAND) swings[entityId()] = System.nanoTime() }
         on<LevelEvent.Load> { KnownWorld.reset(); BlockMesh.newRun(); portals = null; for (c in culls) c.reset() }
@@ -1072,11 +1068,11 @@ object PosePov : Module(
                 PovCull.ROOM -> {
                     val r = ref.room!!
                     val own = BlockMesh.own(r, ref.lx, ref.ly, ref.lz)
-                    if (own != null) emit(own.buffer, 0, own.counts, own.ox, own.oz, ref.faces, ref.far)
+                    if (own != null) emit(own.buffer, own.first, own.counts, own.ox, own.oz, ref.faces, ref.far)
                     else if (ref.piece >= 0) PiecePool.get(ref.bundle!!, ref.piece, ref.rot, ref.w, ref.d, ref.dist2)?.let { emit(it.buffer, it.first, it.counts, r.x0, r.z0, ref.faces, ref.far) }
                 }
                 PovCull.ARENA -> if (!BlockMesh.arenaTouched(ref.section)) PiecePool.get(ref.bundle!!, ref.piece, ref.rot, 0, 0, ref.dist2)?.let { emit(it.buffer, it.first, it.counts, 0, 0, ref.faces, ref.far) }
-                else -> BlockMesh.worldMesh(ref.section)?.let { emit(it.buffer, 0, it.counts, it.ox, it.oz, ref.faces, ref.far) }
+                else -> BlockMesh.worldMesh(ref.section)?.let { emit(it.buffer, it.first, it.counts, it.ox, it.oz, ref.faces, ref.far) }
             }
         }
         val complete = PiecePool.asked == asked
