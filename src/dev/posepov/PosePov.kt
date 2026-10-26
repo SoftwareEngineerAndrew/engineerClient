@@ -61,6 +61,11 @@ import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket
+import net.minecraft.network.protocol.game.ClientboundSetTimePacket
+import net.minecraft.resources.Identifier
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
+import com.devgineerclient.perf.GameMonitor
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
@@ -123,7 +128,9 @@ object PosePov : Module(
     private val optimizeLocation by BooleanSetting("Optimize server location", true, desc = "Times each teammate's two ways separately (Cloudflare's nearest location to each of you, or undonecoffee.com's relay) and sends your view to them by whichever is quicker right now. Off: Cloudflare's whenever it's up. Nobody ever sees your IP either way.")
     private val shareFps by NumberSetting("Sharing FPS", 60, 20..240, 1, desc = "How many times a second your look goes to teammates. Higher is smoother for them.")
     private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
-    private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses, buffering, and the render's timings. Also written to the log every 10 seconds.")
+    private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
+    private val perfMonitor by BooleanSetting("Performance monitor", false, desc = "What every part of the views costs: each step of working out and drawing them (ms a frame and the worst), what runs every tick (sharing, prerender, prefetch), the background threads' CPU, GPU time, uploads, culling and memory. Over the views, top left on the HUD otherwise; also written to the log every 10 seconds.")
+    private val gameMonitor by BooleanSetting("Game performance monitor", false, desc = "Temporary: the whole game's performance, top right over everything. Frame times and lows, where each frame goes (packets, ticks, world, GUI, waiting on the GPU), GPU time, which mods the game thread is in, heap, GC, threads' CPU, the world and the connection. Also written to the log every 10 seconds.")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
     private val viewDistance by NumberSetting("View distance", 96, 32..160, 8, unit = " blocks", desc = "How far the views draw, fading into the sky over the last stretch. Lower is faster; past half of it only the bigger faces are drawn.")
 
@@ -149,7 +156,9 @@ object PosePov : Module(
             DevgineerClient.safely("pose pov release") { if (!wants()) releaseFeeds() }
             // Swings are kept only as long as one lasts (the packet comes for every entity in sight).
             DevgineerClient.safely("pose pov swings") { val now = System.nanoTime(); swings.values.removeIf { now - it > SWING_NS } }
-            DevgineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) sampleLooks() }
+            PovPerf.on = enabled && perfMonitor
+            GameMonitor.on = gameMonitor
+            DevgineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) PovPerf.time(PovPerf.LOOKS) { sampleLooks() } }
             // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching.
             DevgineerClient.safely("pose share") {
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
@@ -157,14 +166,14 @@ object PosePov : Module(
                 PoseShare.skipTiny = skipTiny
                 PoseShare.debug = enabled && debugInfo
                 PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
-                PoseShare.tick()
+                PovPerf.time(PovPerf.SHARE) { PoseShare.tick() }
             }
-            DevgineerClient.safely("pose pov warm up") { if (enabled && DungeonUtils.inDungeons && PoseShare.watching && !wants()) warmUp() }
-            DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
+            DevgineerClient.safely("pose pov warm up") { if (enabled && DungeonUtils.inDungeons && PoseShare.watching && !wants()) PovPerf.time(PovPerf.WARM) { warmUp() } }
+            DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) PovPerf.time(PovPerf.PRERENDER) { build(PRERENDER_BUDGET_NS, emptyList()) } }
             DevgineerClient.safely("pose pov export") { exportTick() }
             // In a dungeon, every room's geometry onto disk in the background (once; paced), so none is ever built or waited for.
             DevgineerClient.safely("pose pov prefetch") {
-                if (enabled && DungeonUtils.inDungeons) { KnownWorld.load {}; BlockMesh.prefetchAll(DungeonUtils.floor.let { it == Floor.F7 || it == Floor.M7 }) }
+                if (enabled && DungeonUtils.inDungeons) PovPerf.time(PovPerf.PREFETCH) { KnownWorld.load {}; BlockMesh.prefetchAll(DungeonUtils.floor.let { it == Floor.F7 || it == Floor.M7 }) }
             }
         }
         // `/posepov export`: every room, variant and the arena built here and written out, for undonecoffee.com to hand out.
@@ -180,12 +189,22 @@ object PosePov : Module(
             }))
         }
         // This run's block changes, on top of the known rooms and arena (see KnownWorld).
-        onReceive<ClientboundBlockUpdatePacket> { KnownWorld.change(pos, blockState) }
-        onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, state -> KnownWorld.change(pos, state) } }
+        onReceive<ClientboundBlockUpdatePacket> { PovPerf.time(PovPerf.PACKETS) { KnownWorld.change(pos, blockState) } }
+        onReceive<ClientboundSectionBlocksUpdatePacket> { PovPerf.time(PovPerf.PACKETS) { runUpdates { pos, state -> KnownWorld.change(pos, state) } } }
+        // Game performance monitor: the server's ticks a second, and how long since anything arrived.
+        onReceive<ClientboundSetTimePacket> { if (GameMonitor.on) GameMonitor.timePacket(gameTime()) }
+        onReceive<net.minecraft.network.protocol.Packet<*>>(priority = Int.MIN_VALUE) { if (GameMonitor.on) GameMonitor.packet() }
+        // The monitors: on the HUD without a screen, over everything with one (the menu draws the views' own, see draw).
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("devgineerclient", "perf_monitors")) { gfx, _ ->
+            DevgineerClient.safely("perf monitors") { if (mc.gui.screen() == null) monitors(gfx) }
+        }
+        on<ScreenEvent.Render>(EventPriority.LOWEST) { DevgineerClient.safely("perf monitors") { monitors(guiGraphics) } }
         onReceive<ClientboundLevelChunkWithLightPacket> {
             val level = mc.level ?: return@onReceive
-            BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY)
-            RoomEdges.chunk(x, z)
+            PovPerf.time(PovPerf.PACKETS) {
+                BlockMesh.dirtyColumn(x, z, level.minSectionY, level.maxSectionY)
+                RoomEdges.chunk(x, z)
+            }
         }
         // An unloaded chunk falls back to what is known about it (or nothing).
         onReceive<ClientboundForgetLevelChunkPacket> {
@@ -222,11 +241,15 @@ object PosePov : Module(
     private var dbgEntities = 0
     private var dbgDrawsMark = 0L
     private var dbgEntitiesMark = 0L
+    private var perfAlloc = 0L
     private inline fun timed(prep: Boolean, f: () -> Unit) {
+        val a0 = PovPerf.allocated()
         val t0 = System.nanoTime()
         f()
         val dt = System.nanoTime() - t0
-        if (prep) { perfPrep += dt; perfFrameNs = dt; return }
+        GameMonitor.pov(if (prep) GameMonitor.POV_PREP else GameMonitor.POV, dt)
+        if (prep) { perfPrep += dt; perfFrameNs = dt; perfAlloc = PovPerf.allocated() - a0; return }
+        PovPerf.frame(perfFrameNs + dt, perfAlloc + PovPerf.allocated() - a0)
         perfRender += dt; perfFrames++; perfWorst = maxOf(perfWorst, perfFrameNs + dt)
         dbgPrep = dbgPrep * 0.95 + perfFrameNs * 0.05; dbgDraw = dbgDraw * 0.95 + dt * 0.05
         dbgDraws = (perfDraws - dbgDrawsMark).toInt(); dbgEntities = (perfEntities - dbgEntitiesMark).toInt(); dbgDrawsMark = perfDraws; dbgEntitiesMark = perfEntities
@@ -268,6 +291,7 @@ object PosePov : Module(
 
         // Each slot's eye: the teammate's own when they're loaded, otherwise a camera behind where their map icon puts them.
         val now = System.nanoTime()
+        var lap = now
         val eyes = arrayOfNulls<Eye>(FEEDS)
         val players = arrayOfNulls<Player>(FEEDS)
         val bodies = ArrayList<Body>()
@@ -303,6 +327,8 @@ object PosePov : Module(
             else if (p == null && guess != null && g != null) slot.playerSkin?.let { bodies += Body(guess.subtract(0.0, 1.62, 0.0), g.yaw, g.walkPos, g.walkSpeed, it, -1) }
         }
 
+        lap = PovPerf.lap(PovPerf.EYES, lap)
+
         // Every entity near any eye, extracted once for all the feeds (only those near enough to one to be drawn in full): full
         // bright like the blocks, without outlines, and no name tag past NAME_RANGE of every eye. (Not an invisible armour stand
         // with nothing on it and no name showing: Hypixel's markers, which draw nothing.)
@@ -320,6 +346,8 @@ object PosePov : Module(
             }
             entities += en to s
         }
+
+        lap = PovPerf.lap(PovPerf.ENTITIES, lap)
 
         // The sections around every eye, nearest first, built (within budget) before anything is drawn: made again only when an
         // eye moves into another section (the same list again tells the builder nothing new is wanted).
@@ -339,6 +367,7 @@ object PosePov : Module(
             nearList = wanted.toList()
         }
         build(DRAW_BUDGET_NS, nearList)
+        lap = PovPerf.lap(PovPerf.BUILD, lap)
 
         for (i in 0 until FEEDS) {
             val col = i % 2; val row = i / 2
@@ -430,6 +459,7 @@ object PosePov : Module(
             if (sh != null) footLabel(gfx, (sh.via?.let { "via $it · " } ?: if (sh.direct) "fast · " else "relay · ") + "~${sh.delayMs}ms", Color(200, 200, 210), x0, x1, y1)
             slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
+        lap = PovPerf.lap(PovPerf.FEEDS, lap)
         // Whether sharing is up, and how many teammates are sharing with you.
         val n = PoseShare.sharingCount
         val (dot, status) = when {
@@ -439,22 +469,42 @@ object PosePov : Module(
         }
         gfx.fill(4, 5, 9, 10, dot)
         gfx.text(status, 12, 4, Color(200, 200, 200), shadow = true)
-        if (debugInfo) debugOverlay(gfx)
+        val lines = ArrayList<Pair<String, Int>>()
+        if (debugInfo) lines += PoseShare.debugLines()
+        if (perfMonitor) lines += perfLines()
+        if (lines.isNotEmpty()) panel(gfx, lines)
+        PovPerf.lap(PovPerf.OVERLAY, lap)
     }
 
-    /** "Debug info": sharing's lines (PoseShare.debugLines), then the render's, top left over the views. */
-    private fun debugOverlay(gfx: GuiGraphicsExtractor) {
-        val lines = PoseShare.debugLines().toMutableList()
+    /** The monitors outside the menu: the views' own (what runs every tick still costs), and the game's. */
+    private fun monitors(gfx: GuiGraphicsExtractor) {
+        if (perfMonitor && enabled && !wants()) panel(gfx, perfLines())
+        if (gameMonitor) GameMonitor.draw(gfx)
+    }
+
+    /** "Performance monitor": PovPerf's lines, then the render's counts. */
+    private fun perfLines(): List<Pair<String, Int>> {
+        val lines = PovPerf.lines().toMutableList()
         lines += "render: prepare %.2f ms · draw %.2f ms · %d draws · %d entities · %d bundles loaded%s".format(
             dbgPrep / 1e6, dbgDraw / 1e6, dbgDraws, dbgEntities, MeshBundles.count, if (multiDraw && !multiFailed) " · multidraw" else "") to 0xFFB0B0B0.toInt()
         lines += "cull: %d kept · %d ahead · %d waited for a second · %d pieces · %d far · %d quads · %d rooms seen".format(
             cullRate[0], cullRate[1], cullRate[2], dbgRefs, dbgFar, dbgQuads, dbgRooms) to 0xFFB0B0B0.toInt()
         lines += "gpu: %d pieces · %.0f of %.0f MB (cap %d) · %d evicted · %d decoding".format(
             PiecePool.residentCount, PiecePool.usedBytes / 1048576.0, PiecePool.poolBytes / 1048576.0, PiecePool.CAP_BYTES shr 20, PiecePool.evictions, PiecePool.queued) to 0xFFB0B0B0.toInt()
+        return lines
+    }
+
+    /** Lines in a dark box, top left under the sharing status; scaled down to fit the screen's width. */
+    private fun panel(gfx: GuiGraphicsExtractor, lines: List<Pair<String, Int>>) {
         var y = 16
         val w = lines.maxOf { mc.font.width(it.first) }
+        val scale = minOf(1f, (gfx.guiWidth() - 12f) / (w + 8))
+        val pose = gfx.pose()
+        pose.pushMatrix()
+        pose.scale(scale, scale)
         gfx.fill(2, y - 2, 8 + w, y + lines.size * 10, 0xA0000000.toInt())
         for ((text, color) in lines) { gfx.text(text, 5, y, Color((color shr 16) and 255, (color shr 8) and 255, color and 255), shadow = true); y += 10 }
+        pose.popMatrix()
     }
 
     private fun footLabel(gfx: GuiGraphicsExtractor, label: String, color: Color, x0: Int, x1: Int, y1: Int) {
@@ -936,7 +986,7 @@ object PosePov : Module(
         val a = c.at
         if (a == null || c.result == null || !holds(a)) {
             val now = at()
-            c.result = PovCull.compute(cullInput(eye, cullMatrix(eye, yaw, pitch, w, h, fov, dist), dist))
+            c.result = PovPerf.time(PovPerf.CULL_WAIT) { PovCull.compute(cullInput(eye, cullMatrix(eye, yaw, pitch, w, h, fov, dist), dist)) }
             c.at = now; c.generation++; cullCount[2]++
             c.pending?.cancel(false); c.pending = null
         } else {
@@ -944,7 +994,7 @@ object PosePov : Module(
             if (c.pending == null && (moved(a) > PovCull.MARGIN / 2 || turned(a) > PovCull.ANGLE_MARGIN / 2 || a.inputs != inputs)) {
                 val next = at()
                 val input = cullInput(eye, cullMatrix(eye, yaw, pitch, w, h, fov, dist), dist)
-                c.pending = cullWorker.submit<Pair<At, PovCull.Result>> { next to PovCull.compute(input) }
+                c.pending = cullWorker.submit<Pair<At, PovCull.Result>> { next to PovPerf.time(PovPerf.CULL_AHEAD) { PovCull.compute(input) } }
             }
         }
         return c.result!!
@@ -1038,11 +1088,13 @@ object PosePov : Module(
             val most = maxOf(BlockMesh.mostIndices, BOX_INDICES)
             val quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
             val indices = quadIndices.getBuffer(most)
+            PovPerf.gpuBegin()
             for (job in queued) {
                 renderFeed(job, quadIndices, indices)
-                renderFigures(job)
-                renderHand(job)
+                PovPerf.time(PovPerf.FIGURES) { renderFigures(job) }
+                PovPerf.time(PovPerf.HAND) { renderHand(job) }
             }
+            PovPerf.gpuEnd()
         } }
         queued.clear()
     }
@@ -1106,10 +1158,11 @@ object PosePov : Module(
 
         val c = culls[job.feed]
         val res = cullFor(job.feed, eye, job.yaw, job.pitch, w, h, fov, dist)
-        val draws = resolve(c, res)
+        val draws = PovPerf.time(PovPerf.RESOLVE) { resolve(c, res) }
         dbgRefs += res.refs.size; dbgRooms += res.rooms?.size ?: 0
         val ox = Mth.floor(eye.x); val oz = Mth.floor(eye.z)
-        val boxQuads = boxQuads(job.feed, job.boxes, ox, oz)
+        val boxQuads = PovPerf.time(PovPerf.BOXES) { boxQuads(job.feed, job.boxes, ox, oz) }
+        val blocksAt = System.nanoTime()
 
         projection.setupPerspective(NEAR, dist.toFloat(), fov, w.toFloat(), h.toFloat())
         RenderSystem.backupProjectionMatrix()
@@ -1164,6 +1217,7 @@ object PosePov : Module(
             }
         } finally {
             RenderSystem.restoreProjectionMatrix()
+            PovPerf.lap(PovPerf.BLOCKS, blocksAt)
         }
     }
 

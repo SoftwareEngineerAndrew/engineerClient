@@ -172,6 +172,8 @@ object MeshBundles {
 
     /** How many bundles are in memory (one more arriving changes what a feed draws). */
     val count get() = loaded.size
+    /** Their bytes in memory (for the performance monitor). */
+    val bytes get() = loaded.values.sumOf { it.data.size.toLong() }
 
     fun cached(name: String): ByteArray? = MeshDisk.read(key(name))?.second
 }
@@ -266,7 +268,10 @@ object PiecePool {
             inFlight.remove(d.key)
             val p = d.packed
             if (p == null || p.quads == 0) { empty += d.key; continue }
+            val t0 = System.nanoTime()
             upload(d.key, p)
+            PovPerf.add(PovPerf.UPLOAD, System.nanoTime() - t0)
+            PovPerf.count(PovPerf.C_UPLOADS); PovPerf.count(PovPerf.C_UPLOAD_BYTES, p.bytes.remaining().toLong())
         }
         if (now - idleCheckAt > 1000) { idleCheckAt = now; evict(IDLE_MS, Int.MAX_VALUE) }
         if (wanted.isEmpty()) return
@@ -275,6 +280,7 @@ object PiecePool {
             inFlight += k
             val e = epoch
             workers.execute {
+                val t0 = System.nanoTime()
                 val packed = runCatching {
                     val b = w.bundle
                     val sprites = b.spriteIndices() ?: return@runCatching null
@@ -282,6 +288,7 @@ object PiecePool {
                     MeshCodec.decode(b.data, b.offs[w.piece], b.lens[w.piece], sprites, w.rot, w.w, w.d, q)
                     CompactMesh.pack(q)
                 }.getOrNull()
+                PovPerf.add(PovPerf.DECODE, System.nanoTime() - t0)
                 done += Done(k, e, packed)
             }
         }
