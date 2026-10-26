@@ -50,8 +50,12 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
   map over the best rule before it on 300 maps, +0.495 on 600 maps it wasn't tuned on. Into a big room with two
   shared sides the door is on the one nearer the parent's entry 67% of the time (old rule 51%), with three 70%
   (37%).
-- **Open:** real trees are still less likely under it than its own trees are, so something is missing; it sends
-  doors into a 1x1 in an L's notch 70% of the time against 51%.
+- **Open:** real trees are still less likely under it than its own trees are, so something is missing - but only
+  by 0.23 a map (s.e. 0.10, 600 maps, its own trees regrown to the same dead-end count), not the 0.4-0.7 an earlier
+  self-check suggested. It sends doors into a 1x1 in an L's notch 70% of the time against 51%. Real doors lean
+  more than the rule toward cells on the map's edge or in a corner and away from cells with many free sides
+  (scorediag.mjs: z +5.2, +3.2, -6.1); being tested. Tried and no better: growing cell by cell with a room's own
+  sides weighted (its own-tree gap is 0.78 a map), a different pull for doors into 1x1s, a room-then-cell mix.
 
 ## 5. Keep the map or make it again
 
@@ -71,11 +75,25 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
 - **Sure:** each room's name comes from its shape's (or type's) pool, at most once a map, always with the same
   secrets (MapStats.NAMES).
 
+## Room mix given what the map shows
+
+- **Sure** (by construction, and measured): maps with 6 big rooms are possible (1%), so the predictor allows those
+  mixes; and a mix with c rooms of a shape of which k are already on the map is c!/(c-k)! times as likely to have
+  put them there (two 1x3s are twice as likely as one to have a 1x3 where the map shows one). Without the two
+  the game-process predictor scores 0.007 worse at 9-12 rooms known (s.e. 0.004, 1500 samples, fresh maps).
+
 ## How good it is as a predictor
 
 `sampler3.mjs` with the rule above, on held-out maps (independently checked on fresh maps and a new seed): +0.037
 ll/tile over its first version at 9-12 rooms known, and ahead of the mod's current predictor at every stage
-(+0.020 at 9-12 rooms known, +0.022 at 2-4). Being ported into the mod (`src/mappred`) for F7.
+(+0.020 at 9-12 rooms known, +0.022 at 2-4); with 1500 samples per snapshot, on 150 maps it was never tuned
+on, -1.0737 against the current predictor's -1.0847 at 2-6 rooms known (+0.011, s.e. 0.0045). Being ported into
+the mod (`src/mappred`) for F7.
+
+Sampler switches measured at 1500 samples on fresh maps, late stages (9-12 known; all off by default, none
+helps clearly so far): rarew (each rare past the 7th dead end x0.5) +0.002 (s.e. 0.002), move (shifting
+unreached big rooms in copied particles) -0.003, joined (an extra shown-door constraint) -0.004; prune and
+distinct still being measured.
 
 ## Open questions, biggest first
 

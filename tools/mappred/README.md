@@ -312,6 +312,20 @@ Every candidate tried, and what it showed:
   On held-out maps 100-199 (OFFSET=100, all stages): as it was -1.0466, res5 -1.0471, now -1.0307 (+0.016 over
   both, s.e. 0.004 / 0.005; stages 2/4/6/9/12: -1.128/-1.103/-1.038/-0.923/-0.779 against res5's
   -1.141/-1.116/-1.054/-0.951/-0.796), with about the same time as before (29 min against 25 for 500 snapshots).
+- Four changes written against the old sampler3 (specials, mix, efficiency, rules) are in it as options, each a
+  rule name=value (evalbig game:room/node/0/0/alpha=0.5/beta=0.5/mu=0.2/prune=2/move=1; the list in sampler3's
+  header), not yet measured at high sample counts. Two fix the model and are on (=0 turns them off): the mixes
+  with 6 big rooms (10 of 1198 training maps; evalbig now hands sampler3 mixesFor(train)), and the mix weight
+  times c!/(c-k)! for k seen rooms of a shape the mix has c of (the game places c labelled rooms, the sampler
+  only the c - k unseen ones). The rest are off: prune=1/2 (the dead ends out of reach, counting the map's walls
+  - deadkill=1 without them did worse; 2 also blood out of reach, on every 2x2 inside), distinct, move (big
+  rooms the tree hasn't come next to moved after a resample, an MCMC move that keeps the target), rarew,
+  ess, endrs, joined, lshare, legacy (sampler3 as first written). With mixes6=0/mixfac=0 the numbers are
+  f7ef0ba's to the last digit (evalbig's per-snapshot DUMPLL, 6 maps, 9 and 12 known; legacy=1 matches
+  room/side/0.15/0.1/inside=draw/types=draw/batches=0/dmax=8 too). prune=2 and joined=1 drop only trees
+  finishTree would drop (opts.check: of 715537 marked finished trees on 100 snapshots, it kept none). Exact
+  speedups always on: a bit-mask placement prefilter, each room's shown doors listed for mapOk, tree3 skipping
+  nodes with no free side left, and no steps after every tree is done.
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 

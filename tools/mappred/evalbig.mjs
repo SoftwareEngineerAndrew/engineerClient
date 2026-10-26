@@ -3,12 +3,14 @@
 const T0 = './';
 const { split, snapshots } = await import(T0 + 'evalcore.mjs');
 const { sample: sample2, combosFor, OUT } = await import(T0 + 'sampler2.mjs');
-const { sample: sample3 } = await import(T0 + 'sampler3.mjs');
+const { sample: sample3, mixesFor } = await import(T0 + 'sampler3.mjs');
 // variants with game: true run sampler3 (the game's own steps); ZMIX=file (placelik MIXRATE) for its mix weights
 const zmix = process.env.ZMIX ? JSON.parse((await import('node:fs')).readFileSync(process.env.ZMIX, 'utf8')) : {};
 // PARTICLES=n: sampler3's batch size
 // BATCHES=n: sampler3 goes on until n batches' worth of weight too (a rule's own np= / batches= win)
-const sample = (obs, c, o) => o.game ? sample3(obs, c, { ...o, zmix, particles: process.env.PARTICLES ? +process.env.PARTICLES : undefined, batches: process.env.BATCHES ? +process.env.BATCHES : undefined }) : sample2(obs, c, o);
+// sampler3 gets every F7 mix of the training maps, 6-room ones too (its rule mixes6=0: the 7-room ones only)
+let mixesAll;
+const sample = (obs, c, o) => o.game ? sample3(obs, mixesAll, { ...o, zmix, particles: process.env.PARTICLES ? +process.env.PARTICLES : undefined, batches: process.env.BATCHES ? +process.env.BATCHES : undefined }) : sample2(obs, c, o);
 const { makeRng } = await import(T0 + 'mlp.mjs');
 const { CLS } = await import(T0 + 'sim.mjs');
 const { readFileSync } = await import('node:fs');
@@ -16,6 +18,7 @@ const [nTest = '150', N = '300', ...variants] = process.argv.slice(2);
 const tables = JSON.parse(readFileSync(process.env.TABLES || 'tables-current.json', 'utf8'));
 const { train, test } = split();
 const combos = combosFor(train);
+mixesAll = mixesFor(train);
 let snaps;
 if (process.env.REAL) {
   // REAL=<timelines.jsonl>: the order rooms showed on the map in real runs (tools/mappred tl.mjs), held-out maps only
@@ -40,7 +43,7 @@ if (process.env.REAL) {
       snaps.push({ L, k, known, obs, A, Y: A.unknown.map(([x, z]) => C2[classOf(L.rooms[L.grid[z][x]])]) });
     }
   }
-} else snaps = snapshots((process.env.SET === 'train' ? train : test).slice(+(process.env.OFFSET || 0), +(process.env.OFFSET || 0) + +nTest), 99, 1, (process.env.STAGES || '2,4,6,9,12').split(',').map(Number));  // STAGES=9,12: only those  // SET=train: training maps (to fit a correction on)  // OFFSET=k: the maps from the k-th on
+} else snaps = snapshots((process.env.SET === 'train' ? train : test).filter(L => !process.env.PUZZLES || L.rooms.filter(r => r.type === 'PUZZLE').length === +process.env.PUZZLES).slice(+(process.env.OFFSET || 0), +(process.env.OFFSET || 0) + +nTest), 99, 1, (process.env.STAGES || '2,4,6,9,12').split(',').map(Number));  // STAGES=9,12: only those  // SET=train: training maps (to fit a correction on)  // OFFSET=k: the maps from the k-th on  // PUZZLES=n: only the maps with n puzzles
 console.log(`${snaps.length} snapshots from ${process.env.REAL ? 'real discovery order on' : Math.min(+nTest, test.length)} held-out maps (${train.length} train)`);
 const VAR = { old: { fourL: true }, lfix: {}, ...Object.fromEntries([0.15, 0.25, 0.35].map(b => [`lfix+bunch${b}`, { bunch: b }])) };
 Object.assign(VAR, { prim: { grow: 0 }, 'oldest0.3': { grow: 0, oldest: 0.3 }, 'oldest0.5': { grow: 0, oldest: 0.5 }, 'oldest0.3+res5': { grow: 0, oldest: 0.3, reserve: 5 }, 'res5': { reserve: 5 }, 'res3': { reserve: 3 }, 'res7': { reserve: 7 } });
@@ -49,7 +52,9 @@ Object.assign(VAR, { 'res5+detour0.1': { reserve: 5, detour: 0.1 }, 'res5+detour
 for (const pn of [0, 0.15, 0.3]) for (const qn of [0, 0.1]) VAR[`game-p${pn}-q${qn}`] = { game: true, rule: { level: 'cell', pick: 'side', p: pn, q: qn } };
 // game-<level>-<pick>-<p>-<q>: sampler3 with that door-tree rule (tree3.mjs)
 for (const v of process.argv.slice(4)) { const m = /^game-(cell|room)-(side|node)-([\d.]+)-([\d.]+)$/.exec(v); if (m) VAR[v] = { game: true, rule: { level: m[1], pick: m[2], p: +m[3], q: +m[4] } }; }
-// game:<rule>: sampler3 with any tree3.mjs rule as level/pick/p/q[/name=value...], e.g. game:room/node/0/0/alpha=0.5/beta=0.5
+// game:<rule>: sampler3 with any tree3.mjs rule as level/pick/p/q[/name=value...], e.g. game:room/node/0/0/alpha=0.5/beta=0.5;
+// sampler3's own options go the same way (sampler3.mjs header), e.g. game:room/node/0/0/alpha=0.5/beta=0.5/mu=0.2/prune=2/move=1
+// (f7ef0ba's sampler3: .../mu=0.2/mixes6=0/mixfac=0)
 const { parseRule } = await import(T0 + 'tree3.mjs');
 for (const v of process.argv.slice(4)) if (v.startsWith('game:')) VAR[v] = { game: true, rule: parseRule(v.slice(5)) };
 Object.assign(VAR, { 'lfix-noBW': { noBW: true }, 'res5-noBW': { reserve: 5, noBW: true }, 'try1-noBW': { tries: 1, noBW: true }, 'try2-noBW': { tries: 2, noBW: true }, 'rnd+res5-noBW': { order: 'rnd', reserve: 5, noBW: true }, 'rnd+try2-noBW': { order: 'rnd', tries: 2, noBW: true }, 'rnd+try2': { order: 'rnd', tries: 2 } });
@@ -59,7 +64,7 @@ Object.assign(VAR, { place: { place: PLACE }, 'place-noBW': { place: PLACE, noBW
 const dumpRows = [];  // DUMPP=<file>: per tile [rooms known, true class, class chances...]
 const perSnap = [];   // each variant's log-likelihood per snapshot, for the paired differences at the end
 for (const v of variants.length ? variants : Object.keys(VAR)) {
-  const rnd = makeRng(+(process.env.SEED || 5));
+  const rnd = makeRng(+(process.env.SEED || 5)); const t0 = Date.now();
   const by = {}; const mine = []; perSnap.push([v, mine]);
   for (const s of snaps) {
     const r = sample(s.obs, combos['7'], { samples: +N, rnd, tables: VAR[v].noBW ? { ...tables, BW: new Array(36).fill(1) } : tables, ...VAR[v] });
@@ -72,12 +77,13 @@ for (const v of variants.length ? variants : Object.keys(VAR)) {
       st.ll += Math.log(Math.max(p ? p[y] : 1 / OUT.length, 1e-4));
       st.bigLL += y === CLS.n ? Math.log(pb) : Math.log(1 - pb);
       st.tiles++;
-      if (process.env.DUMPP && p) dumpRows.push([s.k, y, ...Array.from(p, v => +v.toFixed(4))]);
+      // (a snapshot with no sample: the 1/9 its tiles are scored at, so every variant's rows line up)
+      if (process.env.DUMPP) dumpRows.push([s.k, y, ...(p ? Array.from(p, v => +v.toFixed(4)) : OUT.map(() => +(1 / OUT.length).toFixed(4)))]);
       if (p && p[CLS.n] >= 0.7) { st.sure++; if (y === CLS.n) st.sureRight++; }
     });
     mine.push([st.ll - ll0, s.A.unknown.length]);
   }
-  console.log(`\n== ${v}`);
+  console.log(`\n== ${v}   (${((Date.now() - t0) / snaps.length).toFixed(0)} ms a snapshot)`);
   console.log('known  ll/tile  big-tile ll  sure-big tiles (right)');
   let tot = { ll: 0, bigLL: 0, tiles: 0 };
   for (const [k, st] of Object.entries(by)) {

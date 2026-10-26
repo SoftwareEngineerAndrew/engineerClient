@@ -35,7 +35,8 @@ export function parseRule(s) {
 
 /** A fresh tree over owner (cell -> room), rooms ({cells}), from the entrance cell: its first door taken. */
 export function startTree(owner, rooms, ent) {
-  const st = { owner, rooms, inT: new Uint8Array(N), parent: new Int32Array(N).fill(-1), depth: new Int32Array(N), entered: new Uint8Array(rooms.length), rentry: new Int32Array(rooms.length).fill(-1), kids: new Int32Array(N), rdepth: new Int32Array(rooms.length), rdist: new Int8Array(N), born: new Int32Array(N), nodes: [], head: 0, w: 1, done: false };
+  // closed: a node with no free side left (it never gets one again: the tree only grows), skipped by growStep
+  const st = { owner, rooms, inT: new Uint8Array(N), parent: new Int32Array(N).fill(-1), depth: new Int32Array(N), entered: new Uint8Array(rooms.length), rentry: new Int32Array(rooms.length).fill(-1), kids: new Int32Array(N), rdepth: new Int32Array(rooms.length), rdist: new Int8Array(N), born: new Int32Array(N), closed: new Uint8Array(N), nodes: [], head: 0, w: 1, done: false };
   st.inT[ent] = 1; st.entered[owner[ent]] = 1; st.rentry[owner[ent]] = ent; st.ent = ent;
   return st;
 }
@@ -108,7 +109,8 @@ function nodeW(st, rule, nd, sw) {
  */
 export function growStep(st, rule, allowed) {
   const nodes = st.nodes; const per = new Map(); let total = 0;
-  for (const nd of nodes) { const s = sidesOf(st, rule, nd); if (s.length) { const ws = s.map(([u, v]) => sideW(st, rule, u, v)); let sw = 0; for (const x of ws) sw += x; per.set(nd, { s, ws, sw }); total += sw; } }
+  const closed = st.closed;
+  for (const nd of nodes) { if (closed && closed[nd]) continue; const s = sidesOf(st, rule, nd); if (s.length) { const ws = s.map(([u, v]) => sideW(st, rule, u, v)); let sw = 0; for (const x of ws) sw += x; per.set(nd, { s, ws, sw }); total += sw; } else if (closed) closed[nd] = 1; }
   if (!per.size) { st.done = true; return false; }
   while (st.head < nodes.length && !per.has(nodes[st.head])) st.head++;
   const old = nodes[st.head], last = nodes[nodes.length - 1];
@@ -147,7 +149,7 @@ export function growStep(st, rule, allowed) {
   return true;
 }
 export function cloneTree(st, w) {
-  return { ...st, inT: Uint8Array.from(st.inT), parent: Int32Array.from(st.parent), depth: Int32Array.from(st.depth), entered: Uint8Array.from(st.entered), rentry: Int32Array.from(st.rentry), kids: Int32Array.from(st.kids), rdepth: Int32Array.from(st.rdepth), rdist: Int8Array.from(st.rdist), born: Int32Array.from(st.born), nodes: [...st.nodes], w };
+  return { ...st, inT: Uint8Array.from(st.inT), parent: Int32Array.from(st.parent), depth: Int32Array.from(st.depth), entered: Uint8Array.from(st.entered), rentry: Int32Array.from(st.rentry), kids: Int32Array.from(st.kids), rdepth: Int32Array.from(st.rdepth), rdist: Int8Array.from(st.rdist), born: Int32Array.from(st.born), closed: st.closed && Uint8Array.from(st.closed), nodes: [...st.nodes], w };
 }
 
 /**
