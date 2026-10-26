@@ -844,6 +844,7 @@ object UploadPacker {
         private fun flush() {
             stuckArrows()
             groups["pj"]?.let { groups["pj"] = projectiles(it) }
+            groups["pj"]?.let { list -> groups.remove("pj"); writeProjectiles(list) }
             groups["eq"]?.let { groups["eq"] = gear(it) }
             foldGear()
             for (kind in BEFORE_MOVES) groups[kind]?.let { write(it) { part -> group(kind, part) } }
@@ -855,6 +856,53 @@ object UploadPacker {
             for (l in others) { w.write(l); w.write(NL) }
             for (list in items.values) list.clear()
             groups.clear(); blocks.clear(); cams.clear(); mice.clear(); others.clear()
+        }
+
+        /**
+         * The projectiles as "pjc" lines, one per type (arrows, wither skulls, fireballs, arrows sent
+         * already stuck: each alike, so each column packs as one kind): ticks, ids and starts as
+         * differences ("d": decimals of the starts), how many points each has ("np") and all of their
+         * points one after another (dt, dx, dy, dz: "pt", "px", "py", "pz"), the rest as a group's
+         * columns ("c"). Rows that aren't like that stay a "pj" group.
+         */
+        private fun writeProjectiles(list: List<JsonObject>) {
+            val odd = ArrayList<JsonObject>()
+            val byType = LinkedHashMap<String, ArrayList<JsonObject>>()
+            for (o in list) {
+                if (!pjcRow(o)) { odd += o; continue }
+                val type = (o["type"] as? JsonPrimitive)?.asString ?: ""
+                byType.getOrPut(if (o.has("spawn")) "\u0000stuck" else type) { ArrayList() } += o
+            }
+            for ((key, rows) in byType) write(rows) { pjcLine(if (key.startsWith("\u0000")) null else key, it) }
+            if (odd.isNotEmpty()) write(odd) { part -> group("pj", part) }
+        }
+        private fun pjcRow(o: JsonObject): Boolean {
+            if (!PJC_KEYS.containsAll(o.keySet())) return false
+            if (listOf("t", "id").any { (o[it] as? JsonPrimitive)?.takeIf { p -> p.isNumber }?.asString?.toLongOrNull() == null }) return false
+            if (listOf("x", "y", "z").any { k -> (o[k] as? JsonPrimitive)?.takeIf { it.isNumber }?.let { runCatching { BigDecimal(it.asString).stripTrailingZeros().scale() <= 4 }.getOrNull() } != true }) return false
+            val p = o["p"] ?: return true
+            return p is JsonArray && p.size() % 4 == 0 && p.all { (it as? JsonPrimitive)?.takeIf { q -> q.isNumber }?.asString?.toLongOrNull() != null }
+        }
+        private fun pjcLine(type: String?, rows: List<JsonObject>): String {
+            val dec = rows.maxOf { o -> listOf("x", "y", "z").maxOf { BigDecimal(o[it].asString).stripTrailingZeros().scale().coerceAtLeast(0) } }
+            fun at(o: JsonObject, k: String) = BigDecimal(o[k].asString).movePointRight(dec).longValueExact()
+            val np = JsonArray(); val pts = List(4) { ArrayList<Long>() }
+            for (o in rows) {
+                val p = o["p"] as? JsonArray
+                np.add((p?.size() ?: 0) / 4)
+                p?.forEachIndexed { i, v -> pts[i % 4] += v.asLong }
+            }
+            val rest = rows.map { o -> JsonObject().apply { for ((k, v) in o.entrySet()) if (k !in PJC_COLUMNS) add(k, v) } }
+            val fields = LinkedHashSet<String>().apply { for (o in rest) addAll(o.keySet()) }
+            return JsonObject().apply {
+                addProperty("k", "pjc"); type?.let { addProperty("type", it) }; if (type == null) addProperty("stuck", 1)
+                addProperty("d", dec)
+                add("t", deltas(rows.map { it["t"].asLong })); add("id", deltas(rows.map { it["id"].asLong }))
+                for (k in listOf("x", "y", "z")) add(k, deltas(rows.map { at(it, k) }))
+                add("np", np)
+                listOf("pt", "px", "py", "pz").forEachIndexed { i, k -> add(k, JsonArray().apply { pts[i].forEach(::add) }) }
+                add("c", JsonObject().apply { for (f in fields) add(f, column(rest.map { it[f] ?: JsonNull.INSTANCE })) })
+            }.toString()
         }
 
         /** One line of [list], or two of its halves (and so on) while it's longer than [COLS_MAX]. */
@@ -1181,6 +1229,8 @@ object UploadPacker {
             private val BLOCK_ORDER = compareBy<IntArray>({ it[0] }, { it[2] }, { it[3] }, { it[1] })
             private val CAM_KEYS = setOf("k", "t", "d")
             /** Kinds that go in "grp" lines; the first ones go ahead of the moves, the rest after. */
+            private val PJC_COLUMNS = setOf("k", "t", "id", "x", "y", "z", "p", "type")
+            private val PJC_KEYS = PJC_COLUMNS + setOf("g", "s", "pw", "spawn", "yaw", "life")
             private val BEFORE_MOVES = listOf("spawn", "tag", "stand", "frame", "eq", "name")
             private val GROUPED = BEFORE_MOVES.toSet() + setOf("gone", "st", "mp", "sw", "pj")
             /**
