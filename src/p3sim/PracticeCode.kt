@@ -64,7 +64,7 @@ object PracticeCode {
         val all = P3Plan.allJobs()
         val jobs = if (r.get(1) == 1) List(r.count()) { all[r.get(bitsFor(all.size))] }.toSet()
             else all.filter { r.get(1) == 1 }.toSet()
-        val cps = List(r.count()) { r.spot("Checkpoint ${it + 1}", false) }
+        val cps = List(r.count().also { require(it <= 32) }) { r.spot("Checkpoint ${it + 1}", false) }
         val leaps = List(r.get(3).coerceAtMost(4)) { r.spot("Leap ${it + 1}", true) }
         Custom(start, jobs, cps, leaps, delay.coerceIn(0.0, 5.0))
     }.getOrNull()

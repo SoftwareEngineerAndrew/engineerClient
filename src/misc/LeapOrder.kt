@@ -14,6 +14,12 @@ import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.PartyUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
+import com.odtheking.odin.events.ScreenEvent
+import com.odtheking.odin.events.core.EventBus
+import com.odtheking.odin.events.core.EventPriority
+import com.odtheking.odin.events.core.on
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
@@ -86,9 +92,15 @@ object LeapOrder {
         // Saved on any change, also from Odin's own command.
         ClientTickEvents.END_CLIENT_TICK.register {
             val now = DungeonUtils.customLeapOrder
-            if (now != saved) EngineerClient.safely("leap order save") { save(now); if (now.isNotEmpty()) useCustom() }
+            if (now != saved) EngineerClient.safely("leap order save") { save(now); spots.fill(""); if (now.isNotEmpty()) useCustom() }
             EngineerClient.safely("leap order party") { checkParty() }
+            EngineerClient.safely("leap order spots") { keepSpots() }
         }
+        // Again just before Odin's leap menu draws or takes a click or key (it redoes its list on every tab list update).
+        on<ScreenEvent.Render>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
+        on<ScreenEvent.MouseClick>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
+        on<ScreenEvent.KeyPress>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
+        EventBus.subscribe(this)
 
         // After Odin's commands, without adding or merging any node into /odin or /od (so nothing else under /od can
         // be affected): Odin's own "leaporder" node just gets a run for the
@@ -231,6 +243,34 @@ object LeapOrder {
             PartyTracker.state.members.keys.toList().takeIf { PartyTracker.state.known && PartyTracker.state.doubt == null }
         } ?: return null
         return names.map { it.lowercase(Locale.ROOT) }.filter { it != me }.toSet()
+    }
+
+    /** Who had each leap menu spot last (lower case, "" for none), so that someone leaving doesn't move anyone else. */
+    private val spots = Array(4) { "" }
+    private val EMPTY = DungeonPlayer("Empty", DungeonClass.EMPTY, 0, null)
+
+    /**
+     * Odin's Custom sorting packs the teammates in the order's ranks, so with someone gone everyone after them moves up a
+     * spot. Instead each keeps the spot they had: a leaver's spot stays empty until someone new comes, who takes it (the
+     * first free one, when the order doesn't rank them), and a changed order starts the spots over from its ranks.
+     */
+    private fun keepSpots() {
+        if (!custom || !DungeonUtils.inDungeons) return
+        val team = DungeonListener.leapTeammates.filter { it.clazz != DungeonClass.EMPTY }
+        if (team.isEmpty()) return
+        val byName = team.associateBy { it.name.lowercase(Locale.ROOT) }
+        val out = arrayOfNulls<DungeonPlayer>(4)
+        for (i in 0 until 4) spots[i].takeIf { it.isNotEmpty() }?.let { byName[it] }?.let { out[i] = it }
+        val order = DungeonUtils.customLeapOrder
+        for (p in team) {
+            if (out.any { it === p }) continue
+            val rank = order.indexOf(p.name.lowercase(Locale.ROOT))
+            val i = if (rank in 0 until 4 && out[rank] == null) rank else out.indexOfFirst { it == null }
+            if (i >= 0) out[i] = p
+        }
+        for (i in 0 until 4) spots[i] = out[i]?.name?.lowercase(Locale.ROOT) ?: spots[i].takeIf { it.isNotEmpty() && it !in byName }.orEmpty()
+        val list = out.map { it ?: EMPTY }
+        if (list != DungeonListener.leapTeammates) DungeonListener.leapTeammates = list
     }
 
     /** Its name as Odin's setting shows it ("Odin Sorting"). */

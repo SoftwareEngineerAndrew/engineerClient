@@ -266,7 +266,9 @@ object ClearBreakdown : Module(
         for (item in items) when (item) {
             is Relayed.Secret -> {
                 val candidates = item.candidates.filter { it in roster }.toSet()
-                if (candidates.isNotEmpty()) secrets.sighting(item.key, item.roomKey, item.roomName, candidates, item.exact, now)
+                // The room's name is this game's own for that key (never the sender's text); a key not in this run is dropped.
+                val room = DungeonScan.rooms.firstOrNull { roomKey(it) == item.roomKey } ?: continue
+                if (candidates.isNotEmpty()) secrets.sighting(item.key, item.roomKey, roomName(room), candidates, item.exact, now)
             }
             is Relayed.Presence -> if (item.player in roster) relayed.update(from, item.player, item.roomKey, now)
         }
