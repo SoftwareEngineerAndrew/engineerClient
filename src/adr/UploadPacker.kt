@@ -613,7 +613,7 @@ object UploadPacker {
     fun pack(file: Path, scan: Scan, sibling: ByteArray?, hideParty: Boolean = false, cat: Catalogue? = null): Pair<Path, Int> {
         // Whatever is wrong with a party member's upload, this one goes up - whole, if need be.
         val sib = sibling?.let { b ->
-            runCatching { readSibling(b.inputStream(), cat?.blocks, cat?.values) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
+            runCatching { readSibling(b.inputStream(), cat?.blocks, cat?.values, cat?.dict) }.onFailure { log.warn("[ec] adr: a party member's upload couldn't be read, nothing left out: {}", it.toString()) }.getOrNull()
         }
         if (sib != null) {
             try {
@@ -657,7 +657,11 @@ object UploadPacker {
             for (l in scan.world) if (kindOf(l) == "pal") runCatching { val o = obj(l); pal.putIfAbsent(int(o["i"]), str(o["s"])) }
             BlockTemplates(b, Templates.Frame(rooms), pal)
         }
-        val stream = XZOutputStream(Files.newOutputStream(out), xzOptions())
+        val file0 = Files.newOutputStream(out)
+        val dict = cat?.dict?.takeIf { dictUsable(it) }
+        val cut = dict?.let { DictCut(file0, it) }
+        val stream = XZOutputStream(cut ?: file0, xzOptions())
+        if (dict != null) { stream.write(dict.text); stream.flush(); cut!!.cut() }
         BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 1 shl 16).use { w ->
             val cols = Stretch(w, blockTpl, cat?.values)
             val mobs = MobWriter(plan) { it in left }
@@ -753,6 +757,38 @@ object UploadPacker {
         l.remove("m"); l.toString()
     }.getOrDefault(line)
     private val CODES = Regex("§.")
+
+    /**
+     * Whether this build packs the dictionary's text to exactly the bytes the site has for it (the
+     * same xz library, the same settings): only then can the site and viewer put them back.
+     */
+    private fun dictUsable(d: Catalogue.Dict): Boolean = d.usable ?: runCatching {
+        val b = java.io.ByteArrayOutputStream()
+        XZOutputStream(b, xzOptions()).apply { write(d.text); flush() }
+        val all = b.toByteArray()
+        val start = 12 + ((all[12].toInt() and 0xff) + 1) * 4
+        all.copyOfRange(start, all.size).contentEquals(d.packed)
+    }.getOrDefault(false).also { d.usable = it; if (!it) log.warn("[ec] adr: the shared dictionary doesn't pack the same here, uploading without it") }
+
+    /**
+     * An upload packed after the shared dictionary: "ADRd", its version, then the xz stream without
+     * the dictionary's own bytes (the stream's header and its block's, then straight on after them).
+     * The xz stream goes in up to the end of the dictionary ([cut]); then everything goes through.
+     */
+    private class DictCut(private val out: java.io.OutputStream, private val dict: Catalogue.Dict) : java.io.OutputStream() {
+        private var head: java.io.ByteArrayOutputStream? = java.io.ByteArrayOutputStream()
+        fun cut() {
+            val b = head!!.toByteArray(); head = null
+            val start = b.size - dict.packed.size
+            if (start != 12 + ((b[12].toInt() and 0xff) + 1) * 4 || !b.copyOfRange(start, b.size).contentEquals(dict.packed)) throw IllegalStateException("the dictionary packed differently")
+            out.write(byteArrayOf('A'.code.toByte(), 'D'.code.toByte(), 'R'.code.toByte(), 'd'.code.toByte(), dict.version.toByte()))
+            out.write(b, 0, start)
+        }
+        override fun write(b: Int) { head?.write(b) ?: out.write(b) }
+        override fun write(b: ByteArray, off: Int, len: Int) { head?.write(b, off, len) ?: out.write(b, off, len) }
+        override fun flush() { if (head == null) out.flush() }
+        override fun close() = out.close()
+    }
 
     /** A line as it goes up: a projectile's spawn becomes its "proj" line, the rest of its lines go (null). */
     private fun fold(line: String, scan: Scan): String? {
@@ -1361,7 +1397,7 @@ object UploadPacker {
      * anything, so every field is checked and everything is limited (see [SIB_MAX_CHARS] and on);
      * anything off throws, and the run goes up as if there were no sibling.
      */
-    private fun readSibling(input: InputStream, cat: Catalogue.Blocks? = null, values: Catalogue.Values? = null): Sibling {
+    private fun readSibling(input: InputStream, cat: Catalogue.Blocks? = null, values: Catalogue.Values? = null, dict: Catalogue.Dict? = null): Sibling {
         val out = HashMap<Int, Int>()
         var self = ""
         var startMs = 0L
@@ -1393,7 +1429,7 @@ object UploadPacker {
             out.merge(id, n) { a, b -> minOf(a.toLong() + b, Int.MAX_VALUE.toLong()).toInt() }
             if (out.size > SIB_MAX_IDS) throw Malformed("too many mobs")
         }
-        lines(input).use { r ->
+        lines(input, dict).use { r ->
             for (line in capped(r)) {
                 val kind = kindOf(line) ?: continue
                 HEAD.find(line)?.let { if (kind !in WORLD) tick(it.groupValues[2].toLongOrNull() ?: throw Malformed("tick")) }
@@ -1714,12 +1750,25 @@ object UploadPacker {
      * xz with a memory limit: its header says how big a dictionary to make, and a made-up one would
      * have it allocate gigabytes.
      */
-    private fun lines(raw: InputStream): BufferedReader {
-        val input = BufferedInputStream(raw, 1 shl 16)
+    private fun lines(raw: InputStream, dict: Catalogue.Dict? = null): BufferedReader {
+        var input = BufferedInputStream(raw, 1 shl 16)
         input.mark(6)
-        val head = input.readNBytes(6)
+        var head = input.readNBytes(6)
         input.reset()
+        // (packed after the shared dictionary, DictCut: its bytes put back, its text skipped)
+        var skip = 0L
+        if (head.size >= 5 && String(head, 0, 4, Charsets.ISO_8859_1) == "ADRd") {
+            if (dict == null || head[4].toInt() != dict.version) throw Malformed("packed after dictionary ${head[4]}, which isn't here")
+            input.skipNBytes(5)
+            val sh = input.readNBytes(13)
+            if (sh.size < 13) throw Malformed("cut short")
+            val bh = input.readNBytes(((sh[12].toInt() and 0xff) + 1) * 4 - 1)
+            input = BufferedInputStream(java.io.SequenceInputStream(java.util.Collections.enumeration(listOf(java.io.ByteArrayInputStream(sh + bh), java.io.ByteArrayInputStream(dict.packed), input))), 1 shl 16)
+            head = sh.copyOf(6); skip = dict.text.size.toLong()
+        }
         val xz = head.size >= 3 && head[0] == 0xFD.toByte() && head[1] == '7'.code.toByte() && head[2] == 'z'.code.toByte()
-        return BufferedReader(InputStreamReader(if (xz) XZInputStream(input, XZ_MEMORY_KIB) else GZIPInputStream(input), Charsets.UTF_8), 1 shl 16)
+        val unpacked = if (xz) XZInputStream(input, XZ_MEMORY_KIB) else GZIPInputStream(input)
+        if (skip > 0) unpacked.skipNBytes(skip)
+        return BufferedReader(InputStreamReader(unpacked, Charsets.UTF_8), 1 shl 16)
     }
 }
