@@ -18,7 +18,8 @@ from an empty data folder (they read and write their data in the current folder)
 The Kotlin predictor can be checked against the same maps: `node export-snaps.mjs` writes snaps.txt, then
 `ADS_MAP_SNAPSHOTS=<data>/snaps.txt gradle test --tests com.engineerclient.mappred.MapSnapshotsCheck --rerun`
 writes snaps.txt.out and `node score-kt.mjs` scores it (each snapshot run as the game's worker runs it; F7 by
-the game process, `ADS_MAP_MODEL=classic` for the classic sampler). Keep the data folder out of the repo.
+the game process, `ADS_MAP_MODEL=classic` for the classic sampler). `node targets.mjs` scores such outputs
+against each other on blood, puzzles and big rooms separately (its header). Keep the data folder out of the repo.
 
 ## What every recorded F7/M7 map does (4494 complete maps, Sep-Oct 2026)
 
