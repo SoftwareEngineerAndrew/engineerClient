@@ -169,7 +169,10 @@ class NamedRoom(val tiles: IntArray, val name: RoomName, val chance: Float)
 class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val splits: List<Split>, val samples: Int, val level: Int,
                  val bigRooms: List<BigRoom> = emptyList(), val namedRooms: List<NamedRoom> = emptyList(),
                  val doors: List<PredictedDoor> = emptyList(),
-                 /** The chances as the samples give them, before [FloorRules.calibration] (what [probs] draws from). */
+                 /**
+                  * The chances as the samples give them, before [FloorRules.calibration] or [GameSampler.CALIBRATION]
+                  * (what [probs] draws from).
+                  */
                  val raw: Array<FloatArray?> = probs)
 
 /**
@@ -219,11 +222,12 @@ internal class Tally(cells: Int, entries: Int) {
  * shows and the rules every recorded map of its floor follows ([FloorRules]), and the prediction is what
  * they agree on. [run] can be called again to add samples (each call refines the same prediction).
  *
- * Two samplers: on floors with [FloorRules.game] (F7) the game's own steps ([GameSampler]: the big rooms one random
- * spot each, the door tree grown from the entrance, nothing fitted), unless [gameProcess] is false; else, and for a
- * map the game's steps can't fit (a misread one) or hardly fit (too few trees come out right in the time it gets:
- * [GameSampler.failed]), the classic one below (big rooms biggest first with held cells, a tree grown from the doors
- * into the unknown, fitted tables and calibration).
+ * Two samplers: on floors with [FloorRules.game] (F7, 5-puzzle maps and their rare rooms too) the game's own steps
+ * ([GameSampler]: the big rooms one random spot each, the door tree grown from the entrance, no fitted tables, only a
+ * calibration of the chances), unless [gameProcess] is false; else, and for a map the game's steps can't fit (a
+ * misread one) or hardly fit (too few trees come out right in the time it gets: [GameSampler.failed]), the classic
+ * one below (big rooms biggest first with held cells, a tree grown from the doors into the unknown, fitted tables
+ * and calibration).
  */
 class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.game) {
     private val w = view.w
@@ -343,10 +347,13 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
         }
         tally = Tally(cells.size, entries.size)
         // the game's own steps where the floor has them worked out (F7's grid, every tile of it a room); if setting it
-        // up throws, the classic sampler has the map from the start (as when it throws later: see [run]). Not on 5-puzzle
-        // maps yet: there the game process's rare rooms (the dead ends past the puzzles) make it score below the classic
-        // sampler (-0.032 a tile, s.e. 0.013, on 45 held-out snapshots), which the classic tables have fitted
-        if (gameProcess && rules.game && view.puzzles < 5 && !bad && w == rules.w && h == rules.h && !rules.puzzleColumn && cells.isNotEmpty()) {
+        // up throws, the classic sampler has the map from the start (as when it throws later: see [run]). 5-puzzle maps
+        // too: their rare rooms (the dead ends past the puzzles) are in the game's steps ([GameSampler]), and run as the
+        // worker runs it the game process is ahead of the classic sampler there as on the rest (147 held-out 5-puzzle
+        // maps, 735 snapshots: -1.0350 against -1.0539, +0.0189, s.e. 0.0037 by map; +0.0131, s.e. 0.0041, on the 117
+        // of them without a rare room). The -0.032 (s.e. 0.013) that once kept them on the classic sampler was 45
+        // snapshots of 9 maps without a rare room (rerun with the calibration: -0.012, s.e. 0.014)
+        if (gameProcess && rules.game && !bad && w == rules.w && h == rules.h && !rules.puzzleColumn && cells.isNotEmpty()) {
             try {
                 val g = GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, secrets, secretsOn, unnamedKnown.toIntArray())
                 if (g.possible) gameSampler = g
@@ -774,12 +781,7 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
      */
     private fun calibrated(p: FloatArray): FloatArray {
         val cal = rules.calibration ?: return p
-        val k = (view.kinds.size - 6) / 3.0
-        val s = DoubleArray(p.size); var z = 0.0
-        for (c in p.indices) if (p[c] > 0f) { s[c] = exp(cal[0][c] * ln(p[c] + 0.001) + cal[1][c] + cal[2][c] * k); z += s[c] }
-        if (z <= 0) return p
-        val total = p.sum()  // a puzzle column tile's chances add up to the chance of a room there
-        return FloatArray(p.size) { (s[it] / z * total).toFloat() }
+        return calibrate(p, cal, view.kinds.size)
     }
 
     /** Tile [t] is a 1x1 room: discovered, or in this sample. */
@@ -792,7 +794,7 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
 
     /**
      * What the samples so far agree on; null before any was kept. The classic sampler's chances go through its
-     * calibration ([FloorRules.calibration]); the game-process sampler's are as its samples give them.
+     * calibration ([FloorRules.calibration]), the game-process sampler's through [GameSampler.CALIBRATION].
      */
     fun prediction(): Prediction? {
         gameSampler?.let { g -> try { return g.prediction() } catch (e: Exception) { dropGame(e) } }
@@ -800,6 +802,21 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
     }
 
     companion object {
+        /**
+         * A tile's chances [p] through a calibration [cal] (per [Cls] the sharpness a, offset b and change d per 3 rooms
+         * known, as [MapStats.CALIBRATION]) with [roomsKnown] rooms on the map: q ∝ (p + 0.001)^a * e^(b + d * (rooms
+         * known - 6) / 3) per class, what no sample had kept at 0, the tile's total kept (a puzzle column tile's chances
+         * add up to the chance of a room there).
+         */
+        internal fun calibrate(p: FloatArray, cal: Array<DoubleArray>, roomsKnown: Int): FloatArray {
+            val k = (roomsKnown - 6) / 3.0
+            val s = DoubleArray(p.size); var z = 0.0
+            for (c in p.indices) if (p[c] > 0f) { s[c] = exp(cal[0][c] * ln(p[c] + 0.001) + cal[1][c] + cal[2][c] * k); z += s[c] }
+            if (z <= 0) return p
+            val total = p.sum()
+            return FloatArray(p.size) { (s[it] / z * total).toFloat() }
+        }
+
         /** A puzzle room's name (Odin's map) is the tab's puzzle [tab]: the same, but both blaze rooms are "Higher Or Lower". */
         fun isTabPuzzle(room: String?, tab: String): Boolean = room != null && (room == tab || tab == "Higher Or Lower" && room.endsWith(" Blaze"))
 

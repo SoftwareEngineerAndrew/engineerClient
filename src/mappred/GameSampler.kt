@@ -31,13 +31,14 @@ class TreeRule(val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double =
  *     the game's step was one of them: sequential Monte Carlo, batches of [PARTICLES] resampled as their weights
  *     spread out
  *  3. kept when every door the map shows is in the tree and the 1x1 dead ends besides blood are the puzzles, trap and
- *     yellow (7 to 10 on 5-puzzle maps, rares on the rest); blood any 1x1 dead end 9 or 10 steps out with a 1x1 four
+ *     yellow (7 to 10 on 5-puzzle maps, the ones past the puzzles rares); blood any 1x1 dead end 9 or 10 steps out with a 1x1 four
  *     steps back (the fairy), all alike, with the wither and blood doors the map shows on its path; trap, yellow,
  *     puzzles and rares on the other dead ends at random, the puzzles in the tab list's order ([FloorRules.puzzleOrder]).
  *     Those draws (a 2x2's inside, blood among its spots, the specials' shuffle) are summed over rather than drawn,
  *     and the secret total's names ([SecretNames]) weigh the last few rooms.
  *
- * No fitted tables: what the samples agree on is the prediction. A batch's samples come from few ancestors, so it goes
+ * No fitted tables: what the samples agree on is the prediction, each tile's chances through [CALIBRATION] (the one fitted
+ * thing: the samples are a little too sure of themselves). A batch's samples come from few ancestors, so it goes
  * on until [MIN_BATCHES] batches' worth of weight as well as [MIN_SAMPLES] samples, and shows nothing before
  * [MIN_SHOW] batches' worth. A hard map (few of the trees grown come out right) can use up [MAX_TRIES] particles
  * without getting that far: then it is [failed] and the classic sampler is used instead.
@@ -218,11 +219,12 @@ internal class GameSampler(
     /**
      * What the samples so far agree on; null before any was kept, and while they are too few to show ([MIN_SHOW]
      * batches' worth of weight: right after a door opens the first batch's few samples come from few ancestors and
-     * would show rooms as near certain; the caller keeps the last prediction up meanwhile). Not calibrated: nothing
-     * here is fitted.
+     * would show rooms as near certain; the caller keeps the last prediction up meanwhile). The tiles' chances go
+     * through [CALIBRATION] ([Prediction.raw] has them as the samples give them).
      */
     fun prediction(): Prediction? =
-        if (kept == 0 || !done && effectiveBatches() < MIN_SHOW) null else tally.prediction(w, h, cells, entries, entryDoor, kept, 0, null)
+        if (kept == 0 || !done && effectiveBatches() < MIN_SHOW) null
+        else tally.prediction(w, h, cells, entries, entryDoor, kept, 0) { MapPredictor.calibrate(it, CALIBRATION, nKnown) }
 
     // ---- the particles: a layout and its door tree so far ----
 
@@ -699,7 +701,9 @@ internal class GameSampler(
                 val d = fin.dist[r]
                 var rest = 1.0
                 if (d != null) for (c in 0 until Cls.COUNT) { p[c] = d[c]; rest -= d[c] }
-                p[Cls.NORMAL] += maxOf(0.0, rest)
+                // as sampler3.mjs: a rounding residue (1 - 1.0 = 1e-16 on a surely-puzzle tile) is no chance of a normal 1x1,
+                // which the calibration's + 0.001 would lift to one
+                if (rest > 1e-12) p[Cls.NORMAL] += rest
             }
             for (tile in cs) { val row = t.counts[tileIdx[tile]]; for (c in 0 until Cls.COUNT) if (p[c] > 0) row[c] += wgt * p[c] }
             // the door from the discovered part its side of the map hangs off
@@ -762,6 +766,21 @@ internal class GameSampler(
         const val CALL_TRIES = 2_000L
         const val MAX_TRIES = 400_000L
         const val EMPTY_TRIES = 20_000L
+        /**
+         * The calibration of the tiles' chances ([MapPredictor.calibrate]; tools/mappred sampler3.mjs CAL_MOD, calfit.mjs
+         * KEEPZERO on this sampler's own run, 2000 samples and 120 batches' worth, of 148 5-puzzle and 120 2-4 puzzle
+         * training maps at 2/4/6/9/12 rooms known): per [Cls] (big, 1x1, puzzle, trap, yellow, blood, fairy, rare) the
+         * sharpness a, the offset b and the change d per 3 rooms known. The samples are too sure of themselves: a 0.81 to
+         * 0.97 (the rares 1.03), most for the big rooms and the normal 1x1s. Held out, 147 5-puzzle maps (735 snapshots)
+         * -1.0369 to -1.0350 (+0.0019, s.e. 0.0012 by map) and 100 2-4 puzzle maps +0.0007 (s.e. 0.0011); at sampler3's
+         * 300 samples (CAL, a 0.75 to 0.95) +0.0062 and +0.0034.
+         */
+        val CALIBRATION = arrayOf(
+            doubleArrayOf(0.8123, 0.8378, 0.8816, 0.9570, 0.9706, 0.9312, 0.9158, 1.0328),
+            doubleArrayOf(0.0656, -0.1019, -0.0325, 0.0128, 0.0441, 0.0454, 0.0341, -0.0677),
+            doubleArrayOf(-0.0236, 0.0047, 0.0020, -0.0030, -0.0076, 0.0283, 0.0005, -0.0014),
+        )
+
         /** The most dead ends besides blood on a 5-puzzle map (9 in 7 of 294 recorded maps, 10 in 2). */
         const val MAX_DEAD_5 = 10
         /** The wither path's walk (9 or 10 steps, entrance to blood) and the fairy's steps before blood. */

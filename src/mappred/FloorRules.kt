@@ -53,7 +53,8 @@ class FloorRules(
     val calibration: Array<DoubleArray>? = null,
     /**
      * Predicted by the game's own steps ([GameSampler]: the big rooms one random spot each, the door tree grown from the
-     * entrance; none of the fitted numbers above), unless the classic sampler is asked for. F7 only so far.
+     * entrance; none of the fitted numbers above, only its own [GameSampler.CALIBRATION]), unless the classic sampler is
+     * asked for. F7 only so far, 5-puzzle maps (rare rooms) too.
      */
     val game: Boolean = false,
 ) {

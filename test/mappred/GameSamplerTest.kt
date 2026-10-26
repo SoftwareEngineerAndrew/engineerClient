@@ -1,5 +1,6 @@
 package com.engineerclient.mappred
 
+import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -87,10 +88,43 @@ class GameSamplerTest {
         }
     }
 
-    @Test fun fivePuzzleMapsGoByTheClassicSampler() {
-        for (n in 2..4) assertTrue(MapPredictor(opening(puzzles = n)).usesGameProcess, "$n puzzles")
-        assertFalse(MapPredictor(opening(puzzles = 5)).usesGameProcess)
-        assertFalse(MapPredictor(opening(puzzles = 5), gameProcess = true).usesGameProcess)
+    @Test fun fivePuzzleMapsGoByTheGameProcessToo() {
+        // their rare rooms (the dead ends past the puzzles) are in the game's steps; the classic sampler only when asked for
+        for (n in 2..5) assertTrue(MapPredictor(opening(puzzles = n)).usesGameProcess, "$n puzzles")
+        assertTrue(MapPredictor(opening(puzzles = 5), gameProcess = true).usesGameProcess)
+        assertFalse(MapPredictor(opening(puzzles = 5), gameProcess = false).usesGameProcess)
+    }
+
+    @Test fun aFivePuzzleMapHasItsRaresAmongTheDeadEndsPastThePuzzles() {
+        // 7 to 10 dead ends besides blood: the 5 puzzles, trap and yellow, then 0 to 3 rares (0.24 a map in the recorded
+        // ones). Every special once, the puzzles all five, the rares few
+        val p = predict(opening(puzzles = 5), samples = 400)
+        assertEquals(0, p.level)
+        for (c in intArrayOf(Cls.TRAP, Cls.YELLOW, Cls.BLOOD, Cls.FAIRY)) assertEquals(1.0, total(p, c), 1e-3, "class $c")
+        assertEquals(5.0, total(p, Cls.PUZZLE), 1e-3)
+        val rares = total(p, Cls.RARE)
+        assertTrue(rares > 0.0 && rares < 3.0, "rare rooms: $rares")
+        // a rare only where a puzzle, trap or yellow room can be: the same tiles, never a big room or a normal 1x1 alone
+        for (t in 0 until 36) {
+            val pr = p.probs[t] ?: continue
+            assertEquals(1f, pr.sum(), 1e-4f, "tile $t")
+            if (pr[Cls.RARE] > 0f) assertTrue(pr[Cls.PUZZLE] > 0f, "tile $t")
+        }
+    }
+
+    @Test fun aFivePuzzleMapShowingARareRoomCountsItAmongTheRares() {
+        // a brown 1x1 dead end east of the 2x2: it is one of the rares, so 8 to 10 dead ends and at most two more rares
+        val v = MapView(6, 6, 5, FloorRules.F7)
+        assertNotNull(v.addRoom(Kind.ENTRANCE, intArrayOf(1))); assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(7, 8, 13, 14)))
+        assertNotNull(v.addRoom(Kind.RARE, intArrayOf(9)))
+        val d = mapOf((1 to 7) to Edge.DOOR, (14 to 20) to Edge.WITHER, (8 to 9) to Edge.DOOR, (6 to 7) to Edge.DOOR)
+        v.closeEdges { a, b -> d[minOf(a, b) to maxOf(a, b)] }
+        val pr = predict(v, samples = 400)
+        assertEquals(0, pr.level)
+        for (c in intArrayOf(Cls.TRAP, Cls.YELLOW, Cls.BLOOD, Cls.FAIRY)) assertEquals(1.0, total(pr, c), 1e-3, "class $c")
+        assertEquals(5.0, total(pr, Cls.PUZZLE), 1e-3)
+        val rares = total(pr, Cls.RARE)
+        assertTrue(rares > 0.0 && rares <= 2.0 + 1e-3, "rare rooms besides the one shown: $rares")
     }
 
     @Test fun bothModelsKeepEverySpecialOnce() {
@@ -109,9 +143,43 @@ class GameSamplerTest {
                 if (v.roomAt[t] >= 0) continue
                 val pr = assertNotNull(p.probs[t], "tile $t")
                 assertEquals(1f, pr.sum(), 1e-4f, "tile $t")
-                assertTrue(pr.contentEquals(assertNotNull(p.raw[t])), "nothing calibrated")
+                assertEquals(1f, assertNotNull(p.raw[t]).sum(), 1e-4f, "tile $t as the samples give it")
             }
         }
+    }
+
+    @Test fun theCalibrationKeepsWhatTheMapRulesOutAtNothing() {
+        // the game process's chances go through GameSampler.CALIBRATION: the samples are too sure of themselves, so the
+        // likeliest class loses a little, a class with no sample stays at 0, a tile's total is kept
+        val p = predict(opening())
+        var changed = false
+        for (t in 0 until 36) {
+            val raw = p.raw[t] ?: continue; val q = assertNotNull(p.probs[t])
+            for (c in raw.indices) if (raw[c] == 0f) assertEquals(0f, q[c], "tile $t class $c")
+            assertEquals(raw.sum(), q.sum(), 1e-4f)
+            if (raw.indices.any { abs(raw[it] - q[it]) > 1e-3f }) changed = true
+            val top = raw.indices.maxBy { raw[it] }
+            if (raw[top] > 0.9f) assertTrue(q[top] <= raw[top] + 1e-6f, "tile $t")
+        }
+        assertTrue(changed)
+    }
+
+    @Test fun theCalibrationIsAPowerOfTheChancesAndAnOffsetPerClass() {
+        // q ~ (p + 0.001)^a * e^(b + d * (rooms known - 6) / 3) per class, over the sum, times the tile's total
+        val cal = GameSampler.CALIBRATION
+        assertEquals(3, cal.size)
+        for (row in cal) assertEquals(Cls.COUNT, row.size)
+        val p = floatArrayOf(0.5f, 0.2f, 0.1f, 0.1f, 0f, 0.05f, 0.05f, 0f)
+        val q = MapPredictor.calibrate(p, cal, 9)
+        val s = DoubleArray(p.size) { c -> if (p[c] > 0f) Math.exp(cal[0][c] * Math.log(p[c] + 0.001) + cal[1][c] + cal[2][c] * 1.0) else 0.0 }
+        for (c in p.indices) assertEquals((s[c] / s.sum()).toFloat(), q[c], 1e-5f, "class $c")
+        assertEquals(1f, q.sum(), 1e-5f)
+        assertEquals(0f, q[Cls.YELLOW]); assertEquals(0f, q[Cls.RARE])
+        // sharpness under 1 for the common classes: a sure class gives a little, an unlikely one gains
+        assertTrue(MapPredictor.calibrate(floatArrayOf(0.98f, 0.02f, 0f, 0f, 0f, 0f, 0f, 0f), cal, 6)[0] < 0.98f)
+        // nothing to calibrate: as it was
+        val none = FloatArray(Cls.COUNT)
+        assertTrue(none.contentEquals(MapPredictor.calibrate(none, cal, 6)))
     }
 
     @Test fun theLastRoomIsWhatTheRestLeave() {
@@ -162,12 +230,12 @@ class GameSamplerTest {
         // order (column by column) (1,4) comes before it, the other two after
         val names = mapOf('R' to "Quiz")
         val free = predict(shown("QTU", names))
-        for (t in intArrayOf(25, 28, 29)) assertEquals(2f / 3, assertNotNull(free.probs[t])[Cls.PUZZLE], 1e-4f)
+        for (t in intArrayOf(25, 28, 29)) assertEquals(2f / 3, assertNotNull(free.raw[t])[Cls.PUZZLE], 1e-4f)
         val second = predict(shown("QTU", names).also { it.puzzleSlots = listOf(null, "Quiz", null) })
         assertEquals(1f, assertNotNull(second.probs[25])[Cls.PUZZLE], 1e-4f)
         for (t in intArrayOf(28, 29)) {
-            assertEquals(0.5f, assertNotNull(second.probs[t])[Cls.PUZZLE], 1e-4f)
-            assertEquals(0.5f, assertNotNull(second.probs[t])[Cls.TRAP], 1e-4f)
+            assertEquals(0.5f, assertNotNull(second.raw[t])[Cls.PUZZLE], 1e-4f)
+            assertEquals(0.5f, assertNotNull(second.raw[t])[Cls.TRAP], 1e-4f)
         }
         val first = predict(shown("QTU", names).also { it.puzzleSlots = listOf("Quiz", null, null) })
         assertEquals(1f, assertNotNull(first.probs[25])[Cls.TRAP], 1e-4f)

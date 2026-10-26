@@ -32,12 +32,17 @@
 //           another spot it fits that the tree hasn't come next to either (an MCMC move that keeps the target:
 //           the growth so far never looked there, and every layout is alike)
 //   rarew=w a 5-puzzle tree with D dead ends besides blood weighs w^(D - 7) (the trees make more rares than the
-//           maps: real over this tree's own falls about x0.5 a dead end)
+//           maps: real over this tree's own falls about x0.7 a dead end, x0.5 with the whole layout given; MODEL.md "5-puzzle
+//           maps": the rare mass comes out right at 0.7 and no score moves, 109 fresh + 148 training maps)
 //   ess=f   resample when the ESS falls below f x the batch (0.5)
 //   endrs=0 no resampling once every tree is finished (it only adds noise; matters with prune / deadkill)
 //   joined=1  when the discovered rooms are all joined to the entrance by the doors the map shows between
 //           them: a discovered room only entered from a discovered one, a room behind a shown door only by it
 //   lshare=f  go on until the samples are also worth NS x f different layouts (copies of one layout: one)
+//   cal=1   the tiles' chances through CAL (below), as the classic sampler's go through MapStats.CALIBRATION: the samples are
+//           too sure of themselves (fitted a = 0.75-0.95 per class on game samples of 5-puzzle and 2-4 puzzle training maps);
+//           cal=2: CAL_MOD, the same fitted on the mod's own run (GameSampler.kt: 2000 samples, 120 batches' worth), which is
+//           less sure of itself to start with (a = 0.81-0.97): for porting, not for the 300-sample runs of evalbig
 //   legacy=1  sampler3 as first written: inside=draw/types=draw/batches=0/dmax=8/mixes6=0/mixfac=0
 import { edgeId } from './features.mjs';
 import { SHAPES, PLACEMENTS, OUT } from './sampler2.mjs';
@@ -57,6 +62,17 @@ export function mixesFor(Ls) {
   return [...m].map(([k, w]) => ({ counts: [...k].map(Number), w }));
 }
 
+/** Calibration of the tiles' chances (calfit.mjs, KEEPZERO, on the game process's own samples - 300 samples, 20 batches' worth -
+ *  of 148 5-puzzle and 120 2-4 puzzle training maps at 2/4/6/9/12 rooms known): q_c ~ (p_c + 0.001)^a_c * e^(b_c + d_c * (rooms
+ *  known - 6) / 3), a class with no sample stays at 0; per class in sampler2's OUT order (big, 1x1, puzzle, trap, yellow,
+ *  blood, fairy, rare). Held out (calfit on the training rows alone, 300 samples): 147 5-puzzle maps -1.0548 -> -1.0486, 100 2-4 puzzle
+ *  maps -1.0315 -> -1.0281 */
+export const CAL = { a: [0.7545, 0.7603, 0.8309, 0.9276, 0.9469, 0.8820, 0.8809, 1.0158, 1], b: [0.1099, -0.1581, -0.0394, 0.0045, 0.0491, 0.0443, 0.0530, -0.0633, 0], d: [-0.0326, 0.0070, 0.0029, -0.0028, -0.0093, 0.0448, -0.0036, -0.0064, 0] };
+
+/** The same on the mod's GameSampler.kt runs (MapSnapshotsCheck, 2000 samples, 120 batches' worth) of the same training maps: held-out
+ *  5-puzzle maps (147, 735 snapshots) -1.0369 -> -1.0350 */
+export const CAL_MOD = { a: [0.8123, 0.8378, 0.8816, 0.9570, 0.9706, 0.9312, 0.9158, 1.0328, 1], b: [0.0656, -0.1019, -0.0325, 0.0128, 0.0441, 0.0454, 0.0341, -0.0677, 0], d: [-0.0236, 0.0047, 0.0020, -0.0030, -0.0076, 0.0283, 0.0005, -0.0014, 0] };
+
 export function sample(obs, combos, opts) {
   const rnd = opts.rnd, NS = opts.samples || 300, maxTries = opts.maxTries || NS * 400;
   // the door tree's rule (tree3.mjs): treelik.mjs's best on the real maps; legacy=1: the old sampling's defaults
@@ -65,7 +81,7 @@ export function sample(obs, combos, opts) {
   // the options (header): the rule's name=value, else opts, else the default
   const opt = (k, d) => rule[k] ?? opts[k] ?? d;
   const O = { mixes6: opt('mixes6', 1), mixfac: opt('mixfac', 1), prune: opt('prune', 0), distinct: opt('distinct', 0), move: opt('move', 0),
-    rarew: opt('rarew', 1), ess: opt('ess', 0.5), endrs: opt('endrs', 1), joined: opt('joined', 0), lshare: opt('lshare', 0) };
+    rarew: opt('rarew', 1), cal: opt('cal', 0), ess: opt('ess', 0.5), endrs: opt('endrs', 1), joined: opt('joined', 0), lshare: opt('lshare', 0) };
   const { tile, edge } = obs;
   // what each cell side shows: 'door' (with its kind), 'wall', or null (nobody has seen it); inside a room: 'same'
   const side = new Map(); const kindOf = new Map();
@@ -88,7 +104,12 @@ export function sample(obs, combos, opts) {
   // many layouts the samples are worth (their weights' effective number)
   const linW = new Map(); let nLin = 0;
   const layoutsNow = () => { let a = 0, b = 0; for (const v of linW.values()) { a += v; b += v * v; } return b ? a * a / b : 0; };
-  const finish = () => { const a = result.weight; result.probs = counts.map(c => a ? Array.from(c, v => v / a) : null); result.layouts = layoutsNow(); return result; };
+  // cal=1: each tile's chances through CAL (what the samples gave a class none of stays 0, the tile's total is kept)
+  const CT = O.cal === 2 ? CAL_MOD : CAL;
+  const calibrate = p => { const k = (known.length - 6) / 3, q = new Float64Array(p.length); let z = 0, tot = 0;
+    for (let c = 0; c < p.length; c++) { tot += p[c]; if (p[c] > 0) { q[c] = Math.exp(CT.a[c] * Math.log(p[c] + 0.001) + CT.b[c] + CT.d[c] * k); z += q[c]; } }
+    return z > 0 ? Array.from(q, v => v / z * tot) : p; };
+  const finish = () => { const a = result.weight; result.probs = counts.map(c => a ? Array.from(c, v => v / a) : null); if (O.cal) result.probs = result.probs.map(p => p && calibrate(p)); result.layouts = layoutsNow(); return result; };
   if (entCell < 0) return finish();
   const inward = entCell < W ? entCell + W : entCell >= N - W ? entCell - W : entCell % W === 0 ? entCell + 1 : entCell - 1;
   // unknown cells with a door the map shows from a discovered room
@@ -277,7 +298,7 @@ export function sample(obs, combos, opts) {
     }
     // rarew: a 5-puzzle tree weighs rarew per dead end past 7 besides blood (its rares)
     const fr5 = puzzles >= 5 && O.rarew !== 1 ? O.rarew ** (D - 7) : 1;
-    return { f: fr5 === 1 ? fsum * wType : fsum * wType * fr5, type, parent: va.parent, dist };
+    return { f: fr5 === 1 ? fsum * wType : fsum * wType * fr5, type, parent: va.parent, dist, D };
   };
   const ess = ps => { let a = 0, b = 0; for (const x of ps) { a += x.w; b += x.w * x.w; } return b ? a * a / b : 0; };
   const resample = ps => { const tot = ps.reduce((a, x) => a + x.w, 0); if (!tot) return ps; const n = ps.length, mean = tot / n, out = []; let u = rnd() * tot / n, c = 0, i = 0;
@@ -358,7 +379,7 @@ export function sample(obs, combos, opts) {
         const d = fin.dist && !rm.big && fin.dist.get(r);
         if (d) { let o = 1; for (let c = 0; c < OUT.length; c++) if (d[c]) { o -= d[c]; for (const t of rm.cells) counts[uIdx[t]][c] += wgt * d[c]; } if (o > 1e-12) for (const t of rm.cells) counts[uIdx[t]][OI.o] += wgt * o; continue; }
         const c = OI[rm.big ? 'n' : fin.dist ? 'o' : fin.type[r] || 'o']; for (const t of rm.cells) counts[uIdx[t]][c] += wgt; }
-      if (opts.onSample) opts.onSample({ owner: pt.owner, rooms: pt.rooms, type: fin.type, parent: fin.parent, weight: wgt });
+      if (opts.onSample) opts.onSample({ owner: pt.owner, rooms: pt.rooms, type: fin.type, parent: fin.parent, weight: wgt, D: fin.D });
     }
     bw1 += bs.w; bw2 += bs.w * bs.w;
     // onBatch({ start, grown, kept, w }): per batch, the particles placed, fully grown, kept, and their weight

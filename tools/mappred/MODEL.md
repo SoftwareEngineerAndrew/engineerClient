@@ -82,6 +82,46 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
   put them there (two 1x3s are twice as likely as one to have a 1x3 where the map shows one). Without the two
   the game-process predictor scores 0.007 worse at 9-12 rooms known (s.e. 0.004, 1500 samples, fresh maps).
 
+## 5-puzzle maps (the rares)
+
+- **Sure:** the puzzle count follows from the dead-end count: besides entrance and blood 4, 5, 6 dead ends on 2, 3, 4 puzzles
+  and 7-10 on 5 (2486 maps: 710, 899, 582, then 236, 49, 7, 2 - one smooth fall), the ones past the 5th puzzle, trap and yellow
+  rares, placed among the dead ends at random (depth-rank percentile 0.496, 70 rares).
+- **Likely:** given the puzzle count the layout moves as the sampler's trees with that many dead ends do (2 to 5 puzzles; 2x2
+  blocks of 1x1s real 1.54/1.28/1.03/0.83, sampler from the entrance alone 1.28/1.11/0.92/0.67; leaves 8.0 to 10.2, 8.1 to 10.4;
+  the room behind the entrance a 1x1 in 37% to 15%, 49% to 25%; deepest room, blood, the dead ends' depth and the normal 1x1s'
+  places within 0.3 of the maps), so the predictor, which has the puzzle count from the tab list, needs no dead-end process of
+  its own. The tree rule fits 5-puzzle maps as it does the rest (treelik PUZ=5, 294 maps, against the rule: alpha 0.2-0.4 and mu
+  0.15-0.25 within +0.07, beta 0.35 +0.11 s.e. 0.05, 0.65 -0.17; on 2-4 puzzle maps beta 0.35 +0.015).
+- **Open:** what sets the count. The tree's own counts run high: from 2 rooms known on 300 training maps, D = 4..10 dead ends
+  real 81/127/64/21/7/0/0, the sampler's trees (kept at 4-10) 61/91/84/47/14/2.4/0.3, about x0.7 a dead end, so 5-puzzle maps
+  come out 21% against 9%. A count drawn first and the tree grown again until it fits, or something the tree rule lacks (step 4).
+  Within 5-puzzle maps the same lean: the sampler makes 0.32 rares a map, the maps 0.24 (7/8/9/10 dead ends 73/22/4/0.4% against
+  80/17/2.4/0.7%; the whole layout given, 62 maps 73/23/3/0.4 against 86/13/2/0); rarew=0.7 puts the mass of R right but moves no
+  score (fresh maps +0.0012 s.e. 0.0040, training maps -0.0035 s.e. 0.0033: its places are no better), so it stays off.
+  5-puzzle maps have the mix of two 1x2, a 1x3, two 1x4, a 2x2 and an L (21211) 18% against 12% (chi-square 25 on about 16, the
+  sampler's own 5-puzzle samples 12%): handing the 5-puzzle snapshots the 5-puzzle training maps' mixes (20 maps' worth of the
+  all-map shares added) +0.0035 s.e. 0.0034 on the 147 held-out maps (sampler3 at 300 samples), not kept.
+- **Sure, and the answer to why it seemed to lose:** run as the mod runs them (2000 samples, 120 batches' worth) the game process
+  is ahead of the classic sampler on 5-puzzle maps, as on the rest: 147 held-out 5-puzzle maps (the 38 in the test split and 109
+  recorded since, 735 snapshots at 2/4/6/9/12 rooms known) -1.0369 against -1.0539, +0.0170 s.e. 0.0045 (by map), -1.0350 and
+  +0.0189 s.e. 0.0037 with its calibration (below); ahead on 97 of the 147 maps and at every stage, +0.013 s.e. 0.004 on the 117
+  maps without a rare room, +0.042 on the 30 with one. With the mix table made without the 109 (GameStats.kt counts every map, as
+  the classic sampler's tables from the older snapshot do not): +0.0156 s.e. 0.0046 on them (the table's own maps were worth
+  0.0036). 100 held-out 2-4 puzzle maps -1.0198 against -1.0368, +0.0170 s.e. 0.0049. The 45 snapshots that had it 0.032 behind
+  were 9 maps without a single rare room, where sampler3 puts 0.24 tiles a snapshot on R against the classic sampler's 0.13 (a
+  map's gap has a standard deviation of 0.05, so 9 maps are good for +-0.017; the same 9 maps on other snapshots, both in the mod:
+  -0.001, the other 29 test maps +0.018; the 45 rerun with the calibration -0.012 s.e. 0.014).
+  What the game loses on every 5-puzzle set is the normal 1x1s (-0.009 a tile) - its chances for them are too sure; it gains the
+  puzzles (+0.013) and the rares (+0.006). At sampler3's 300 samples it is ahead of the classic sampler at 300 samples (+0.015 on
+  38 test maps, +0.031 on 148 training ones) and level with the classic one at 2000 and calibrated (+0.002 s.e. 0.007, 109 fresh
+  maps): the classic sampler needs its 2000, sampler3 gains 0.02 from the mod's budget.
+- **Calibration** (`cal=1`, `CAL`; `cal=2`, `CAL_MOD`): the game's samples are too sure of themselves, more at 300 samples (a
+  0.75-0.95 per class, the rares 1.0) than at the mod's budget (0.81-0.97), as the classic sampler's are. Fitted on training maps
+  (148 5-puzzle, 120 2-4 puzzle) and held out: +0.0047 s.e. 0.0019 on 109 fresh 5-puzzle maps and +0.0034 s.e. 0.0018 on 100 2-4
+  puzzle maps at 300 samples; the mod's own samples, `cal=2` (GameSampler.CALIBRATION), +0.0019 s.e. 0.0012 on the 147 5-puzzle
+  maps and +0.0007 s.e. 0.0011 on the 2-4 puzzle ones (the same samples with and without it).
+
 ## How good it is as a predictor
 
 `sampler3.mjs` with the rule above, on held-out maps (independently checked on fresh maps and a new seed): +0.037
