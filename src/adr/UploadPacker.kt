@@ -55,7 +55,8 @@ import org.slf4j.LoggerFactory
  *    one to the next ([ProjPack]; most arrows are shot point-blank into a wall and stick a tick
  *    later: three lines and a move, for one arrow). One of each set of twins (a bow sends some
  *    twice over), none that never moved and were gone within a few ticks, and arrows the server
- *    sent already stuck as "pj" rows too ([Stretch.stuckArrows]).
+ *    sent already stuck as "pj" rows too ([Stretch.stuckArrows]); one moved after it stuck has
+ *    those places as more points.
  *
  *  - Mob moves ("e") and player lines ("p") as columns ("cols"): the whole run's, a column per
  *    value with every mob's (player's) one after another, as differences within each mob's -
@@ -117,6 +118,7 @@ object UploadPacker {
     private const val MOUSE_TOLERANCE = 1.0
     private const val MOUSE_GAP = 2.0
     private const val COVER_MARGIN = 600
+    private const val MAX_MOVES = 50 // (the viewer flies a projectile through at most 64 points)
     private const val ALIGNED_MARGIN = 40
 
     // Limits on a party member's upload (a real one is a few MB, 100-odd thousand lines, 50-odd
@@ -174,6 +176,8 @@ object UploadPacker {
         val t0 = spawn["t"].asInt
         val arcs = JsonArray()
         var stuck: JsonArray? = null
+        /** Where it was moved after that (dt, x, y, z, yaw each): settling into the block, or carried on. */
+        val moves = JsonArray()
         var gone: Int? = null
         /** Anything more than a flight, a stick and gone (moved after sticking, a name...): kept as lines. */
         var foldable = true
@@ -261,7 +265,8 @@ object UploadPacker {
                             val rows = mine ?: JsonParser.parseString(line).asJsonObject.getAsJsonArray("d").also { mine = it }
                             val row = rows.first { it.asJsonArray[0].asInt == id }.asJsonArray
                             val p = projs.getValue(id)
-                            if (p.stuck == null) p.stuck = JsonArray().apply { add(t!! - p.t0); for (i in 1 until row.size()) add(row[i]) } else p.foldable = false
+                            val at = JsonArray().apply { add(t!! - p.t0); for (i in 1 until row.size()) add(row[i]) }
+                            if (p.stuck == null) p.stuck = at else if (p.moves.size() < MAX_MOVES) p.moves.add(at) else p.foldable = false
                         }
                     }
                 } else if (kind in ENTITY_KINDS || kind == "tag" || (kind == "eq" && line.contains("\"id\":"))) {
