@@ -147,14 +147,15 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
      * wall and same-room edge it showed shown the same, the tab's puzzles it named named the same. More may have
      * been added (rooms, edges, names); a secret total the older view allowed and this one doesn't is no loss of
      * what it said ([GameSampler.reuse] looks at those). A misread corrected, a room that went, a door that changed
-     * kind, a different dungeon: not a refinement, and the samples can't be carried over.
+     * kind, a different dungeon: not a refinement, and the samples can't be carried over. One change of kind is none to
+     * the game process: a 1x1 with one door read as normal one time and rare the other ([sameKind]).
      */
     fun refines(older: MapView): Boolean {
         if (w != older.w || h != older.h || puzzles != older.puzzles || rules.floor != older.rules.floor) return false
         for (i in older.kinds.indices) {
             val tiles = older.roomTiles[i]
             val j = roomAt[tiles[0]]
-            if (j < 0 || kinds[j] != older.kinds[i] || roomTiles[j].size != tiles.size) return false
+            if (j < 0 || roomTiles[j].size != tiles.size || !sameKind(j, older.kinds[i])) return false
             for (t in tiles) if (roomAt[t] != j) return false
             val name = older.names[i]
             if (name != null && names[j] != name) return false
@@ -166,6 +167,20 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
             for (i in older.puzzleSlots.indices) if (older.puzzleSlots[i] != null && puzzleSlots[i] != older.puzzleSlots[i]) return false
         }
         return true
+    }
+
+    /**
+     * Room [j] is of the kind [old] said, to the game process: the same kind, or a brown 1x1 with one door (a dead end)
+     * that was normal and is rare or the other way round, which [GameSampler] (its specials shown) and [MapPredictor]
+     * (the names' pools) both read as a rare room. Odin has a room it has seen only on the map as rare until it has
+     * scanned its core, so a room can be read normal, then rare (OdinMapPrediction reads Odin's unscanned rare as normal).
+     */
+    private fun sameKind(j: Int, old: Kind): Boolean {
+        val k = kinds[j]
+        if (k == old) return true
+        if (k != Kind.NORMAL && k != Kind.RARE || old != Kind.NORMAL && old != Kind.RARE) return false
+        val ts = roomTiles[j]
+        return ts.size == 1 && neighbours(ts[0]).count { Edge.isDoor(edge(ts[0], it)) } == 1
     }
 
     companion object {
@@ -348,6 +363,8 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
     internal fun newGameLane(): GameSampler? = makeGame?.invoke()
     /** The secret total's names weigh this view's samples (a total is known and the named rooms are on the list). */
     internal val secretsActive: Boolean get() = secretsOn
+    /** The tab's named puzzles this view's samples are pinned by ([pinPuzzles]; none when the tab doesn't fit the map). */
+    internal val pinCount: Int get() = pinKeys.size
 
     /** Samples kept so far (the game-process sampler's once it has enough, 0 while it goes on: [GameSampler.accepted]). */
     val accepted: Int get() = gameSampler?.accepted ?: classicAccepted
