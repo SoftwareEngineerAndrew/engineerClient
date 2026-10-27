@@ -70,7 +70,7 @@ object OdinMapPrediction {
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
         desc = "Threads the F7/M7 guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
     private val aheadSetting = BooleanSetting("Predict Ahead", true,
-        desc = "F7/M7: keep making guesses while you're in a room (a little CPU, about 5 MB), so the next room that opens updates the map at once.").withDependency { on }
+        desc = "F7/M7: keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val hidden = BooleanSetting("Hidden Tile Hints", true,
@@ -156,7 +156,9 @@ object OdinMapPrediction {
             val kind = when (room.type) {
                 RoomType.ENTRANCE -> Kind.ENTRANCE
                 RoomType.NORMAL -> Kind.NORMAL
-                RoomType.RARE -> Kind.RARE
+                // a brown room Odin has seen only on the map is RARE (its map colour is both's) until it scans the room's
+                // core, often tens of seconds for a room far off: a normal one to the predictor until then
+                RoomType.RARE -> if (room.data == null) Kind.NORMAL else Kind.RARE
                 RoomType.PUZZLE -> Kind.PUZZLE
                 RoomType.TRAP -> Kind.TRAP
                 RoomType.CHAMPION -> Kind.YELLOW
@@ -208,7 +210,12 @@ object OdinMapPrediction {
     private val PUZZLE_LINE = Regex("^ (\\w+(?: \\w+)*|\\?\\?\\?): \\[([✖✔✦])] ?(?:\\((\\w+)\\))?$")
 
     private fun update() {
-        if (!on || !DungeonMap.enabled || !supported()) return
+        if (!on || !DungeonMap.enabled || !supported()) {
+            // off, or out of the clear (the boss): no more guessing ahead for a map nobody opens; it starts again (from
+            // its pool) if the map comes back
+            if (lastKey.isNotEmpty()) { lastKey = ""; generation.incrementAndGet(); session.cancel() }
+            return
+        }
         // Odin fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
         val game = model.value == Model.GAME

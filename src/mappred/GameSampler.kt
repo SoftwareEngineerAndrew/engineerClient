@@ -361,15 +361,17 @@ internal class GameSampler(
      * total's names) is in the finish, which is worked out again here for each: the weight is w times that, as when the
      * sample was kept. What does not fit, or has no finish now, can never fit a view that says more: it is not kept.
      *
-     * A sample whose names weighed ([Stored.names]) under a secret total this view doesn't allow is left out too: the
-     * samples that total (and no other) would have let through were thrown away when it was kept, so those that are
-     * left would count for too much.
+     * Samples whose names weighed ([Stored.names]) under a secret total this view doesn't allow ([namesBlocked]) leave none
+     * of [from] to reuse: the samples that total (and no other) would have let through were thrown away when they were
+     * kept, so those that are left would count for too much, and the ones whose names did not weigh are only the maps
+     * with more rooms still to come (nobody named them), which, without the others, would pull the mean towards such maps.
      *
      * [from] has each batch's samples together (the batch's identity, for its weight in [Part.w1]/[Part.w2]).
      */
     internal fun reuse(from: List<Stored>): Reused {
         val t = Tally(cells.size, entries.size)
         val out = ArrayList<Stored>()
+        if (namesBlocked(from)) return Reused(out, Part(t, 0, 0.0, 0.0), false, Int.MAX_VALUE)
         val totals = view.secretTotals
         var count = 0; var w1 = 0.0; var w2 = 0.0; var bw = 0.0; var s2 = 0.0
         var anyNames = false; var minRooms = Int.MAX_VALUE
@@ -377,7 +379,6 @@ internal class GameSampler(
         for (s in from) {
             val key = (s.src.toLong() shl 32) or (s.batch.toLong() and 0xffffffffL)
             if (key != cur) { w1 += bw; w2 += bw * bw; bw = 0.0; cur = key }
-            if (s.names && !(totals.isNotEmpty() && totals.all { it in s.totals })) continue
             val pt = rebuild(s) ?: continue
             val fin = finish(pt) ?: continue
             val wgt = s.w * fin.f
@@ -392,6 +393,17 @@ internal class GameSampler(
         }
         w1 += bw; w2 += bw * bw
         return Reused(out, Part(t, count, w1, w2, s2), anyNames, minRooms)
+    }
+
+    /**
+     * Some sample of [from] was finished with the secret total's names under totals that do not hold all of this view's,
+     * or under none: it let through only the maps that total allowed, so what a total the view adds would let through is
+     * missing, and the samples without names left are a pool of the maps with more rooms ([reuse]).
+     */
+    internal fun namesBlocked(from: List<Stored>): Boolean {
+        val totals = view.secretTotals
+        for (s in from) if (s.names && !(totals.isNotEmpty() && totals.all { it in s.totals })) return true
+        return false
     }
 
     private val noBools = BooleanArray(0)

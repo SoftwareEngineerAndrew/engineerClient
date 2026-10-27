@@ -26,7 +26,7 @@ class PredictionSessionTest {
     }
 
     /** The map with [hidden]'s rooms not on it yet, [names] on the rooms someone has been in, as the game shows it. */
-    private fun shown(hidden: String, names: Map<Char, String> = emptyMap(), totals: IntArray = IntArray(0)): MapView {
+    private fun shown(hidden: String, names: Map<Char, String> = emptyMap(), totals: IntArray = IntArray(0), slots: List<String?> = emptyList()): MapView {
         val v = MapView(6, 6, 3, FloorRules.F7)
         for (r in 'A' until 'A' + kinds.length) if (r !in hidden) assertNotNull(v.addRoom(kindOf(r), tilesOf(r), names[r]))
         val byPair = doors.split(' ').associate { d ->
@@ -36,6 +36,7 @@ class PredictionSessionTest {
         }
         v.closeEdges { a, b -> byPair[minOf(a, b) to maxOf(a, b)] }
         v.secretTotals = totals
+        v.puzzleSlots = slots
         return v.connectedPart()
     }
 
@@ -107,6 +108,35 @@ class PredictionSessionTest {
         assertTrue(shown(h0).also { it.puzzleSlots = listOf("Weirdos", "Quiz", null) }.refines(named))
     }
 
+    /** A 5-puzzle opening (as GameSamplerTest's): the entrance, a 2x2 behind it, a brown 1x1 of [kind] east of it (one door), [extra] doors more. */
+    private fun brownOneByOne(kind: Kind, extra: Map<Pair<Int, Int>, Byte> = emptyMap(), boxKind: Kind = Kind.NORMAL): MapView {
+        val v = MapView(6, 6, 5, FloorRules.F7)
+        assertNotNull(v.addRoom(Kind.ENTRANCE, intArrayOf(1))); assertNotNull(v.addRoom(boxKind, intArrayOf(7, 8, 13, 14)))
+        assertNotNull(v.addRoom(kind, intArrayOf(9)))
+        val d = mapOf((1 to 7) to Edge.DOOR, (14 to 20) to Edge.WITHER, (8 to 9) to Edge.DOOR, (6 to 7) to Edge.DOOR) + extra
+        v.closeEdges { a, b -> d[minOf(a, b) to maxOf(a, b)] }
+        return v
+    }
+
+    @Test fun aBrownDeadEndReadNormalThenRareIsNoChangeToTheGameProcess() {
+        // Odin has a brown room it has only seen on the map as rare until it scans its core (OdinMapPrediction reads that as
+        // normal, then rare once the core says so): a 1x1 with one door is a rare room to the game process either way
+        val normal = brownOneByOne(Kind.NORMAL); val rare = brownOneByOne(Kind.RARE)
+        assertTrue(rare.refines(normal)); assertTrue(normal.refines(rare))
+        val a = lane(normal, 20_000, 9); val b = lane(rare, 20_000, 9)
+        assertTrue(a.kept > 50, "${a.kept} kept")
+        assertEquals(a.kept, b.kept); assertEquals(a.tally.weight, b.tally.weight)
+        assertEquals(0f, maxDiff(assertNotNull(a.predictionOf(a.tally, a.kept)), assertNotNull(b.predictionOf(b.tally, b.kept))))
+        // the samples carried from one reading to the other all fit, at the same weight
+        val r = freshGame(rare).reuse(a.store!!)
+        assertEquals(a.kept, r.survivors.size); assertEquals(a.tally.weight, r.part.tally.weight, a.tally.weight * 1e-12)
+        // not so for a 1x1 with two doors (a rare room is a dead end), nor a big room
+        val two = mapOf((9 to 10) to Edge.DOOR)
+        assertFalse(brownOneByOne(Kind.RARE, two).refines(brownOneByOne(Kind.NORMAL, two)))
+        assertFalse(brownOneByOne(Kind.NORMAL, boxKind = Kind.RARE).refines(normal))
+        assertFalse(brownOneByOne(Kind.PUZZLE).refines(normal))
+    }
+
     @Test fun twoViewsWithTheSameRoomsAndDoorsDrawFromTheSameLaw() {
         assertEquals(shown(h1).structureKey(), shown(h1, mapOf('G' to "Mushroom"), intArrayOf(40)).structureKey())
         assertTrue(shown(h1).structureKey() != shown(h2).structureKey())
@@ -166,6 +196,45 @@ class PredictionSessionTest {
             val rooms = tilesOf('O')
             assertTrue(rooms.all { s.whole.owner[it] == s.whole.owner[rooms[0]] })
         }
+    }
+
+    /** Every sample drawn for [later] (a view that says all [earlier] did and more) fits [earlier] and has a finish there: nothing the pool kept of [earlier] is missing for [later]. */
+    private fun everySampleOfTheLaterViewIsOneOfTheEarlier(label: String, earlier: MapView, later: MapView, particles: Int = 30_000) {
+        assertTrue(later.refines(earlier), "$label: not a refinement")
+        val st = lane(later, particles, 7).store!!
+        assertTrue(st.size > 50, "$label: only ${st.size} samples")
+        // the roles of the totals' check are the other way round here
+        for (s in st) { s.names = false }
+        val r = freshGame(earlier).reuse(st)
+        assertEquals(st.size, r.survivors.size, label)
+    }
+
+    @Test fun whatTheViewBeforeLetThroughHoldsEverySampleOfTheViewAfter() {
+        // the pool of the earlier view is complete for the later one only if no map the later view allows was thrown away for the earlier
+        everySampleOfTheLaterViewIsOneOfTheEarlier("1x1 off the first big room", shown(h0), shown(h1))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("1x1 off the 1x3", shown(h1), shown(h2))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("puzzle", shown(h2), shown(h3))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("yellow", shown("ICPHQSTUF"), shown("CPHQSTUF"))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("trap", shown(h3), shown("ICKPHQSUF"))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("2x2 and the blood door", shown("DJMOPHQRSTUF"), shown("JMOPHQRSTUF"))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("blood", shown("JMOPHQRSTUF"), shown("MOPHQRSTUF"))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("2x2 on the way", shown("ENLDJPUSFT"), shown("NLDJPUSFT"))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("1x3", shown("BENLDJPUSFTOCHQR"), shown("ENLDJPUSFTOCHQR"))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("two rooms at once", shown(h0), shown(h2))
+        // the tab's puzzle lines, and a puzzle room's name
+        val (nm, _) = namedRooms("")
+        val base = "IKPHSTUF"
+        everySampleOfTheLaterViewIsOneOfTheEarlier("a puzzle named in the tab", shown(base, mapOf('R' to nm['R']!!)),
+            shown(base, mapOf('R' to nm['R']!!), slots = listOf(null, nm['R'], null)))
+        everySampleOfTheLaterViewIsOneOfTheEarlier("a second puzzle named", shown(base, mapOf('R' to nm['R']!!), slots = listOf(null, nm['R'], null)),
+            shown(base, mapOf('R' to nm['R']!!, 'Q' to nm['Q']!!), slots = listOf(nm['Q'], nm['R'], null)))
+        // the last rooms with the secret total's names: more rooms named, the total narrowed
+        val (names, known) = namedRooms("KI")
+        val nameK = MapStats.NAMES.first { it.pool == MapStats.POOL_1X1 && it.name !in names.values }
+        val nameI = MapStats.NAMES.first { it.pool == MapStats.POOL_YELLOW && it.name !in names.values }
+        val total = known + nameK.secrets + nameI.secrets
+        everySampleOfTheLaterViewIsOneOfTheEarlier("a room named, the total narrower", shown("KI", names, intArrayOf(total - 1, total, total + 1)),
+            shown("I", names + ('K' to nameK.name), intArrayOf(total, total + 1)))
     }
 
     @Test fun reusedSamplesAgreeWithAFreshRunOfTheNewView() {
@@ -237,6 +306,86 @@ class PredictionSessionTest {
         assertEquals(0, freshGame(shown("KI", names, intArrayOf(known + 5))).reuse(g.store!!).survivors.size)
         // no total at all any more: the names stop weighing, which the old samples can't say
         assertEquals(0, freshGame(shown("KI", names)).reuse(g.store!!).survivors.size)
+    }
+
+    /** Names for every room but [skip]'s, one each from its pool, and what their secrets add up to. */
+    private fun namedRooms(skip: String): Pair<Map<Char, String>, Int> {
+        val used = HashSet<String>()
+        fun free(pool: Int) = MapStats.NAMES.first { it.pool == pool && it.name !in used }.name
+        val names = HashMap<Char, String>()
+        for (r in 'A' until 'A' + kinds.length) {
+            if (r in skip) continue
+            val name = when (kinds[r - 'A']) {
+                'E', 'B', 'F' -> continue
+                'P' -> free(MapStats.POOL_PUZZLE); 'T' -> free(MapStats.POOL_TRAP); 'Y' -> free(MapStats.POOL_YELLOW)
+                'o' -> if ("Logs" in used) free(MapStats.POOL_1X1) else "Logs"
+                else -> free(assertNotNull(MapView.shapeOf(tilesOf(r), 6)).ordinal)
+            }
+            used += name; names[r] = name
+        }
+        return names to names.values.sumOf { n -> MapStats.NAMES.first { it.name == n }.secrets }
+    }
+
+    @Test fun aGroupWhoseNamesWeighedForSomeOfItIsLeftOutWholeByATotalTheOldOneDidntAllow() {
+        // A group is the maps with few rooms to name (the secret total's names weighed them) and those with more (they didn't):
+        // the total it was kept with let through only some of the first, so with a total outside it the first are missing, and
+        // the second alone are no fair sample of the new view's maps (they are the ones with more rooms): none of the group is reused
+        val (names, known) = namedRooms("KI")
+        val wide = shown("KI", names, intArrayOf(known + 3, known + 4))
+        val st = lane(wide, 20_000, 33).store!!
+        assertTrue(st.size > 200 && st.all { it.names })
+        val plain = HashSet<Stored>()
+        fun group(): List<Stored> = st.mapIndexed { i, s ->
+            Stored(s.whole, s.parent, s.w, s.src, s.batch).also { c -> if (i % 2 == 1) { c.names = true; c.totals = s.totals } else plain += c }
+        }
+        // the same total, or one inside it: the whole group counts, the samples without names too
+        plain.clear()
+        val same = freshGame(shown("KI", names, intArrayOf(known + 3, known + 4))).reuse(group())
+        assertEquals(st.size, same.survivors.size)
+        assertTrue(same.survivors.any { it in plain })
+        plain.clear()
+        val inside = freshGame(shown("KI", names, intArrayOf(known + 4))).reuse(group())
+        assertTrue(inside.survivors.size in 1..st.size, "${inside.survivors.size} of ${st.size}")
+        assertTrue(inside.survivors.any { it in plain } && inside.survivors.any { it !in plain })
+        // a total outside it, or none: nothing, not even the samples that had no names weigh
+        for (totals in listOf(intArrayOf(known + 4, known + 5), intArrayOf(known + 5), IntArray(0))) {
+            val gs = freshGame(shown("KI", names, totals))
+            val g = group()
+            assertTrue(gs.namesBlocked(g))
+            val r = gs.reuse(g)
+            assertEquals(0, r.survivors.size, "total ${totals.toList()}")
+            assertEquals(0, r.part.kept)
+        }
+        // no names weighed anywhere: any total does
+        val none = st.map { Stored(it.whole, it.parent, it.w, it.src, it.batch) }
+        assertFalse(freshGame(shown("KI", names, intArrayOf(known + 5))).namesBlocked(none))
+    }
+
+    @Test fun aTotalOutsideTheOldOneLeavesNothingToReuseOnSeveralLanesToo() {
+        // a group big enough to be imported in cuts by several lanes: all of it or none, the same on any number of lanes
+        val (names, known) = namedRooms("KI")
+        for (lanes in listOf(1, 2)) {
+            fun filled(): PredictionSession {
+                val s = session(threads = lanes, config = PredictionSession.Config(cap = 8_000))
+                s.begin(shown("KI", names, intArrayOf(known + 4)))
+                var n = 0
+                while (s.poolSize < PredictionSession.PARALLEL_IMPORT + 500 && s.step()) assertTrue(++n < 3_000)
+                assertTrue(s.poolSize >= PredictionSession.PARALLEL_IMPORT + 500, "pool ${s.poolSize} ($lanes lanes)")
+                return s
+            }
+            val s = filled()
+            val pool = s.poolSize
+            s.begin(shown("KI", names, intArrayOf(known + 3, known + 4)))
+            assertEquals(0, assertNotNull(s.reveal).fit, "a total more: $lanes lanes")
+            s.close()
+            val t = filled()
+            t.begin(shown("KI", names, intArrayOf(known + 4)))
+            while (t.importing) assertTrue(t.step())
+            val rev = assertNotNull(t.reveal)
+            assertEquals(pool, rev.seen, "$lanes lanes")
+            assertEquals(rev.seen, rev.fit, "the same total ($lanes lanes)")
+            t.close()
+        }
     }
 
     @Test fun twoPartsOfOneLawMakeTheirMeanByTheirWeights() {
@@ -337,6 +486,48 @@ class PredictionSessionTest {
         assertTrue(s.tries < 200_000)
     }
 
+    @Test fun aBigPoolComesInAShareAtATimeAndAddsUpToTheSame() {
+        // the first few thousand samples (whole batches, the newest view's first) in begin, more only until something can
+        // be shown, the rest in the steps after it and before any fresh batch: something is up at once, and once the pool
+        // is in it is what carrying it in one go makes
+        fun filled(chunk: Int): PredictionSession {
+            val s = session(seed = 23, config = PredictionSession.Config(importChunk = chunk))
+            s.begin(shown(late)); runUntilDone(s); repeat(30) { s.step() }
+            return s
+        }
+        val a = filled(1_000); val b = filled(1_000_000)
+        assertEquals(b.poolSize, a.poolSize)
+        assertTrue(a.poolSize > 8_000, "pool ${a.poolSize}")
+        val next = shown("QT")
+        a.begin(next); b.begin(next)
+        assertTrue(a.importing); assertFalse(b.importing)
+        assertTrue(assertNotNull(a.reveal).fit < assertNotNull(b.reveal).fit)
+        assertNotNull(a.prediction(), "nothing up after the first share: ${a.kept} samples, ${a.batches} batches' worth")
+        val tries = a.tries
+        var steps = 0
+        while (a.importing) { assertTrue(a.step()); assertTrue(++steps < 1_000) }
+        assertTrue(steps > 1)
+        assertEquals(tries, a.tries, "no fresh batch while the pool comes in")
+        assertEquals(b.kept, a.kept)
+        assertEquals(assertNotNull(b.reveal).fit, assertNotNull(a.reveal).fit)
+        assertEquals(b.poolSize, a.poolSize)
+        assertEquals(b.batches, a.batches, 1e-6 * b.batches)
+        val d = maxDiff(assertNotNull(a.prediction()), assertNotNull(b.prediction()))
+        assertTrue(d < 1e-5f, "differs by $d")
+        // a new view before the pool is in: what was not looked at yet comes along as it is, nothing is lost
+        val c = filled(1_000)
+        c.begin(next)
+        assertTrue(c.importing)
+        val pool = c.poolSize
+        c.begin(shown("Q"))
+        assertTrue(assertNotNull(c.reveal).carried)
+        assertEquals(pool, assertNotNull(c.reveal).seen)
+        while (c.importing) assertTrue(c.step())
+        assertTrue(assertNotNull(c.reveal).fit > 0)
+        assertNotNull(c.prediction())
+        a.close(); b.close(); c.close()
+    }
+
     @Test fun aViewThatIsNoRefinementStartsFromNothing() {
         val s = session()
         s.begin(shown(h1)); repeat(30) { s.step() }
@@ -357,6 +548,26 @@ class PredictionSessionTest {
         assertFalse(assertNotNull(off.reveal).carried)
         assertEquals(0, off.kept)
         assertEquals(0, off.poolSize)
+    }
+
+    @Test fun aViewThatLostItsTabPinsDoesntTakeSamplesKeptByThem() {
+        // the tab's Quiz is R, the second puzzle in the tab's order, and the samples are kept by that pin; a read that names Q
+        // Quiz too (both can't be) still says all the view before said, but has no pins, so samples kept by R's can't be its own
+        val slots = listOf(null, "Quiz", null)
+        val pinned = shown(late, mapOf('R' to "Quiz"), slots = slots)
+        val unpinned = shown("T", mapOf('R' to "Quiz", 'Q' to "Quiz"), slots = slots)
+        val control = shown("T", mapOf('R' to "Quiz"), slots = slots)
+        assertEquals(1, MapPredictor(pinned).pinCount)
+        assertEquals(0, MapPredictor(unpinned).pinCount)
+        assertEquals(1, MapPredictor(control).pinCount)
+        assertTrue(unpinned.refines(pinned) && control.refines(pinned))
+        for ((later, carries) in listOf(unpinned to false, control to true)) {
+            val s = session()
+            s.begin(pinned); repeat(30) { s.step() }
+            assertTrue(s.poolSize > 0)
+            s.begin(later)
+            assertEquals(carries, assertNotNull(s.reveal).carried)
+        }
     }
 
     @Test fun aGlitchOfOneViewDoesntCostThePool() {
@@ -381,6 +592,29 @@ class PredictionSessionTest {
         assertTrue(assertNotNull(s.reveal).carried)
     }
 
+    @Test fun aGlitchTheGameProcessCantFitDoesntCostThePoolEither() {
+        // a read with more 2x2 rooms than any game has: the classic sampler takes that view, and the view after it, with the glitch gone, has the pool
+        val glitch = MapView(6, 6, 3, FloorRules.F7)
+        assertNotNull(glitch.addRoom(Kind.ENTRANCE, intArrayOf(1)))
+        for (box in listOf(intArrayOf(7, 8, 13, 14), intArrayOf(9, 10, 15, 16), intArrayOf(19, 20, 25, 26))) assertNotNull(glitch.addRoom(Kind.NORMAL, box))
+        glitch.closeEdges { a, b -> if (minOf(a, b) == 1 && maxOf(a, b) == 7) Edge.DOOR else null }
+        val s = session()
+        s.begin(shown(h1)); repeat(40) { s.step() }
+        val pool = s.poolSize
+        assertTrue(pool > 1_000)
+        s.begin(glitch)
+        assertFalse(s.usesGameProcess)
+        repeat(3) { s.step() }
+        s.begin(shown(h2))
+        val rev = assertNotNull(s.reveal)
+        assertTrue(rev.carried && rev.seen >= pool && rev.fit > 0, "carried ${rev.carried}, seen ${rev.seen} of $pool, fit ${rev.fit}")
+        // asked for the classic model, the pool isn't kept
+        s.begin(shown(h2), game = false)
+        assertFalse(s.usesGameProcess)
+        s.begin(shown(h3))
+        assertEquals(0, assertNotNull(s.reveal).seen)
+    }
+
     @Test fun aRoomGettingItsNameKeepsEverySampleAndASecretTotalDoesToo() {
         val s = session()
         s.begin(shown(h1)); runUntilDone(s)
@@ -397,6 +631,33 @@ class PredictionSessionTest {
         s.begin(shown(h1, mapOf('G' to "Mushroom"), intArrayOf(80, 81)))
         assertEquals(k, s.kept)
         assertEquals(1, assertNotNull(s.reveal).groups)
+    }
+
+    @Test fun aNameOrASecretTotalCostsNoNewWork() {
+        // the same rooms, doors and walls, finished as before (a name, or a secret total no finish weighs): the samples are the
+        // new view's own law, whole, so it is done as the one before was, and a full pool stays full (no room cut for more)
+        val s = session(ahead = false)
+        s.begin(shown(late)); runUntilDone(s)
+        assertFalse(s.step())
+        val shownBefore = assertNotNull(s.prediction())
+        s.begin(shown(late, mapOf('G' to "Mushroom"), intArrayOf(120, 121)))
+        assertTrue(s.isDone)
+        assertFalse(s.step())
+        assertEquals(0L, s.tries)
+        assertEquals(0f, maxDiff(shownBefore, assertNotNull(s.prediction())))
+        val config = PredictionSession.Config(cap = 6_000)
+        val t = session(config = config)
+        t.begin(shown(late)); while (t.step()) {}
+        assertTrue(t.poolSize >= 6_000, "pool ${t.poolSize}")
+        t.begin(shown(late, mapOf('G' to "Mushroom")))
+        while (t.importing) assertTrue(t.step())
+        assertTrue(t.poolSize > 6_000 - 1_000, "pool ${t.poolSize}")
+        var steps = 0
+        while (t.step()) assertTrue(++steps <= 3, "drew $steps rounds more")
+        // a room more is a new law: room is made for its own samples
+        t.begin(shown("QT"))
+        while (t.importing) assertTrue(t.step())
+        assertTrue(t.poolSize <= (6_000 * PredictionSession.OLD_SHARE).toInt(), "pool ${t.poolSize}")
     }
 
     @Test fun aSessionKeepsDrawingForTheNextRoomUntilThePoolIsFull() {
@@ -429,6 +690,7 @@ class PredictionSessionTest {
         s.begin(shown(late)); repeat(80) { s.step() }
         assertTrue(s.poolSize >= 4_000)
         s.begin(shown("QT"))
+        while (s.importing) assertTrue(s.step())
         // what fits is kept up to three quarters of the cap, the new view has the rest
         assertTrue(s.poolSize <= (4_000 * PredictionSession.OLD_SHARE).toInt() + 1_000, "pool ${s.poolSize}")
         assertTrue(s.kept > 0)

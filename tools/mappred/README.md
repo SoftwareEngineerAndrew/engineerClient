@@ -407,8 +407,10 @@ Every candidate tried, and what it showed:
   map that says more, so it goes for good. `MapView.refines` says when a map says all the one before did (the same grid, every
   older room with its tiles, kind and name, every door, wall and same-room edge as it was, the tab's puzzle names kept); a map that
   doesn't (Odin's misread corrected, a room gone, another dungeon) starts a new pool, the old one put by once in case the next
-  map undoes a glitch of a tick. A secret total the older map allowed and the new one doesn't also drops the samples whose
-  names weighed (what only that total let through was thrown away when they were kept).
+  map undoes a glitch of a tick (also a map the game process can't fit at all). A secret total the older map allowed and the new
+  one doesn't drops every sample of the group (the maps drawn for one earlier map) in which any finish let the names weigh: what
+  only that total let through was thrown away when they were kept, and the samples whose names did not weigh (the maps with more
+  rooms to come) are no fair sample of the new map's maps without them.
   The weights of two maps are on different scales: the sampler leaves out two constants of a map, the mixes' weight total and
   the 1/spots of each big room already shown (GameSampler.scale puts them on the game's own scale; PredictionSessionTest checks that
   the share of an older map's weight that fits a newer one is the newer's chance over the older's found from fresh runs, within
@@ -454,6 +456,37 @@ Every candidate tried, and what it showed:
   are kept at 2-5 rooms, 8% at 6-8, 18% at 9-11, 40% at 12-15, 80% from 16). Time: the old loop 2553 ms CPU a snapshot (60 held-out snapshots over all stages, slowest
   10.1 s), a session on one thread 2500 ms, on 2 threads 1342 ms wall (CPU 2527 ms), on 4 threads 732 ms wall (slowest 2.7 s).
   The import of the pool at a reveal takes 1 ms at 2-3 rooms to 150 ms at 16 and more (40,000 samples in the pool).
+  Since then (two reviews and a final check): a secret total outside the older one drops the whole group, not only its samples
+  whose names weighed; a map the game process can't fit puts the pool by as a glitch does; a pool that throws on import is
+  dropped, not the map. The pool comes in a share at a time (Config.importChunk, 3,000 stored samples a lane, whole batches, the
+  newest map's first): `begin` imports only until there is something to show, the steps after it import the rest before any fresh
+  batch, so at 16 or more rooms the first new prediction is up after 16 ms of CPU (mean) instead of the whole import's 100 (a fresh
+  run's first needs 25); once the pool is in, the parts are those of importing it in one go (the finished predictions of 24
+  held-out maps identical). A name or a secret total no finish weighs (most secret totals, every time a secret is found) leaves
+  the samples of the map's own rooms and doors as they were: they are what more batches of the same map would be, so they count
+  for their whole batches' worth (PredictionSession.sameLaw), the map is done as the one before was and nothing is drawn again, and
+  the pool isn't cut for room either. (The old worker started over on each, and showed a 5-batch prediction until it caught up.)
+  A brown room Odin has seen only on the map is RARE to Odin until it scans the room's core (the map colour is both kinds'): in
+  139 recorded F7 runs 17 rooms went RARE to NORMAL so, some after 30 to 50 s, 1x2 and 1x3 rooms among them (a rare big room no
+  game map has: the game process gave the map up to the classic sampler, and the pool was lost). OdinMapPrediction reads such a
+  room as normal until Odin knows it, and MapView.refines takes a 1x1 with one door read normal, then rare, as no change (both are
+  a rare room to the game process). Out of the clear (the boss) the worker stops drawing ahead.
+  Checked again on maps none of the builders or reviewers used (held-out test split, simulated order, 24 maps, 452 views, each run
+  until done, seed 11): the instant prediction +0.0312 ± 0.0029 a tile over the stale one (+0.0029, +0.0189, +0.0187, +0.0370,
+  +0.0622, +0.0975 by rooms known), the finished prediction +0.0006 ± 0.0004 (no bin below -0.0005 ± 0.0014), in 0.80 of the
+  CPU; real order and time between rooms (20 maps of the train split, 351 views, 25,000 particles a second): instant +0.0382 ±
+  0.0028, at the end of the stay +0.0034 ± 0.0017 (no bin below -0.0010 ± 0.0011), 1.45 times the CPU a stay for the sampling
+  ahead. At the same CPU time since the room opened (24 more held-out maps, 455 views; MapSequenceCheck's ADS_SEQ_CPU: what was
+  published at the last look before that time, the stale prediction until the first), against the old worker: 5 ms +0.0141 ±
+  0.0025, 10 ms +0.0238 ± 0.0030, 20 ms +0.0281 ± 0.0037, 40 ms +0.0462 ± 0.0081, 80 ms +0.0321 ± 0.0073, 160 ms +0.0179 ±
+  0.0057, 320 ms +0.0057 ± 0.0024, 640 ms +0.0031 ± 0.0019, 1.3 s +0.0009 ± 0.0009, done -0.0001 ± 0.0004 (12-15 rooms there
+  -0.0021 ± 0.0010; over every set run until done that bin is -0.0001 ± 0.0004); the share at a time against importing the pool in
+  one go: +0.0027 ± 0.0014 at 5 ms, +0.0091 ± 0.0023 at 20 ms, +0.0128 ± 0.0049 at 40 ms, the same once done.
+  Speed (12 more held-out maps, 227 views, each run until done, process CPU on a quiet 4-core box): the first new prediction
+  after 39 ms CPU (p90 70) for the old loop, 17 (p90 30) with the pool on one thread, and there at the reveal itself in 76% of
+  views (13% at 2-3 rooms, 98% at 16 and more); the full one after 1138 ms CPU and 1132 ms wall (p90 2641, slowest 8.5 s) for the
+  old loop, 935 ms CPU / 938 ms wall on one thread, 963 / 527 ms (p90 1342, slowest 4.4 s) on two, 1042 / 321 ms (p90 740,
+  slowest 2.4 s) on four.
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 

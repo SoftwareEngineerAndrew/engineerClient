@@ -16,7 +16,8 @@ import kotlin.random.Random
  *    view's maps too, at the weight it had ([GameSampler.reuse]; [MapView.refines] says when that holds). Those
  *    samples are the prediction for the new view at once, however the map opened up (every room it could have opened
  *    is a share of the samples), and fresh samples for the new view then top them up. A view that isn't the one before
- *    plus facts (a misread corrected, another dungeon) starts a fresh pool.
+ *    plus facts (a misread corrected, another dungeon) starts a fresh pool. [begin] carries the first few thousand
+ *    samples (whole batches, the newest first) and the first [step]s the rest ([Config.importChunk], [importing]).
  *  - [step]: a round of work, the last one's results in [prediction]: first until the prediction is as good as a fresh
  *    run's ([GameSampler.MIN_SAMPLES] samples and [GameSampler.MIN_BATCHES] batches' worth), then, with [ahead], on
  *    drawing more for the same view until the pool is full ([Config.cap] samples), which is what a reveal keeps a share of.
@@ -67,6 +68,12 @@ internal class PredictionSession(
         val showSamples: Int = 0,
         /** Batches' worth a prediction has to be worth to be shown before it is done (with [showSamples]). */
         val showBatches: Double = GameSampler.MIN_SHOW,
+        /**
+         * Stored samples a lane carries into the new view in [begin] and in each [step] after it, whole batches, the newest
+         * view's first, until the pool is in ([importing]): the prediction is up after the first share (a few ms), not
+         * after all of it (at 16 or more rooms known 30,000 samples, about 100 ms, when a fresh run shows its first in 25).
+         */
+        val importChunk: Int = 3_000,
     )
 
     /**
@@ -80,6 +87,22 @@ internal class PredictionSession(
         var sig = ""
         var anyNames = false
         var minRooms = Int.MAX_VALUE
+        /**
+         * Its import into the current view while it goes on ([slot] >= 0): the samples of [stored] before [next] are done,
+         * those that fit in [fitted], what they add up to in [sum] and the counts after it (the part at [slot] of the
+         * reused ones); [seen] samples it had, [old] its part before.
+         */
+        var slot = -1
+        var next = 0
+        var fitted = ArrayList<Stored>()
+        var sum: Tally? = null
+        var kept = 0; var w1 = 0.0; var w2 = 0.0; var s2 = 0.0
+        var namesNow = false; var minNow = Int.MAX_VALUE
+        var seen = 0
+        var old: Part? = null
+        val importing: Boolean get() = slot >= 0
+        /** Its samples as they stand: those that fit the view so far and those not looked at yet. */
+        val size: Int get() = if (importing) fitted.size + stored.size - next else stored.size
     }
 
     /** What a [begin] made of the pool, for the harness: how many stored samples fit the new view, and what the newest group (the view before's own samples) kept. */
@@ -103,8 +126,8 @@ internal class PredictionSession(
         val nanos: Long,
     )
 
-    /** A pool put by: the groups that fitted [view] (and whether the secret total's names weighed them), for a view that refines it. */
-    private class Stash(val view: MapView, val groups: ArrayList<Group>, val secrets: Boolean)
+    /** A pool put by: the groups that fitted [view] (whether the secret total's names weighed them, how many tab pins), for a view that refines it. */
+    private class Stash(val view: MapView, val groups: ArrayList<Group>, val secrets: Boolean, val pins: Int)
 
     private enum class Mode { IDLE, GAME, CLASSIC }
 
@@ -113,6 +136,8 @@ internal class PredictionSession(
     private var viewKey = ""
     private var viewSig = ""
     private var viewSecrets = false
+    /** The tab pins the groups' samples were kept by: a view with fewer (the tab read mid-update) would get samples it doesn't allow kept out. */
+    private var viewPins = 0
     private var viewSeq = 0
     private var srcSeq = 0
     private var lanes: Array<GameSampler> = emptyArray()
@@ -124,6 +149,19 @@ internal class PredictionSession(
     /** The newest group: the view before's own samples. */
     private var latest: Group? = null
     private var reused = ArrayList<Part>()
+    /**
+     * The reused parts that are the current view's own law, whole: the samples drawn for a view of the same rooms, doors and
+     * walls, finished as before (nothing the finish reads has changed: a name, a secret total). They are what more fresh
+     * batches of this view would be, so they count for their batches' worth, as the fresh ones do.
+     */
+    private val sameLaw = HashSet<Part>()
+    /** The groups still being carried into the current view, the newest view's first ([Config.importChunk]). */
+    private val pending = ArrayList<Group>()
+    // what the import into the current view has done so far, for [reveal]
+    private var revealCarried = false
+    private var revealSeen = 0
+    private var importNanos = 0L
+    private var importSig = ""
     private var done = false
     private var emptyFrom = 0L
     /** Samples' worth of a fresh batch in the view before's own samples (what a reused batch is measured against until this view has its own). */
@@ -135,8 +173,11 @@ internal class PredictionSession(
     private var helpers: ExecutorService? = null
     private var helperCount = 0
 
-    /** What the last [begin] did with the pool. */
+    /** What the last [begin] did with the pool (so far, while [importing]). */
     var reveal: Reveal? = null; private set
+
+    /** The pool is still being carried into the current view (a [step] goes on with it before drawing fresh samples). */
+    val importing: Boolean get() = pending.isNotEmpty()
 
     /** The game-process sampler was dropped for the classic one for this view (it threw, or ended with too little). */
     var fellBack = false; private set
@@ -155,7 +196,7 @@ internal class PredictionSession(
     val kept: Int get() = reused.sumOf { it.kept } + lanes.sumOf { it.kept }
 
     /** Samples stored for the next reveal. */
-    val poolSize: Int get() = groups.sumOf { it.stored.size } + lanes.sumOf { it.store?.size ?: 0 }
+    val poolSize: Int get() = groups.sumOf { it.size } + lanes.sumOf { it.store?.size ?: 0 }
 
     /** What the reused parts and the new view's own samples are worth together, in fresh batches. */
     val batches: Double get() = weights(freshCounts()).sum()
@@ -164,7 +205,7 @@ internal class PredictionSession(
 
     /** Throws the pool away (a new dungeon); the helper threads stay. */
     fun clear() {
-        groups.clear(); stash = null; reused = ArrayList(); lanes = emptyArray(); view = null; predictor = null; mode = Mode.IDLE; latest = null
+        groups.clear(); pending.clear(); stash = null; reused = ArrayList(); sameLaw.clear(); lanes = emptyArray(); view = null; predictor = null; mode = Mode.IDLE; latest = null
     }
 
     fun close() { helpers?.shutdownNow(); helpers = null; helperCount = 0; clear() }
@@ -176,43 +217,84 @@ internal class PredictionSession(
      */
     fun begin(v: MapView, game: Boolean = v.rules.game) {
         cancelled = false
+        settle()
         val before = view
         val beforeKey = viewKey
         // the view before's own samples join the pool (kept whole, in the lanes' stores)
         latest = null
         if (mode == Mode.GAME) closeLanes(beforeKey)
-        lanes = emptyArray(); reused = ArrayList(); predictor = null
+        lanes = emptyArray(); reused = ArrayList(); sameLaw.clear(); predictor = null
         view = v; viewKey = v.structureKey(); fellBack = false; error = null; done = false; emptyFrom = 0L; classicDone = false
         viewSeq++
         val mp = try { MapPredictor(v, gameProcess = game) } catch (e: Exception) { error = e; null }
         val g0 = mp?.game
         if (mp == null || g0 == null) {
-            groups.clear(); stash = null; reveal = null
+            // a map the game process can't fit (a misread: two doors into one tile, more big rooms than any game has) costs the
+            // pool no more than a glitch that isn't one more fact: it is put by for the view after, which may undo it
+            stash = if (!game || !config.pool) null else if (before != null && groups.isNotEmpty()) Stash(before, ArrayList(groups), viewSecrets, viewPins) else stash
+            groups.clear(); reveal = null
             mode = Mode.CLASSIC; predictor = mp ?: MapPredictor(v, gameProcess = false)
             classicRnd = Random(seed + viewSeq * 7_919L)
             return
         }
         mode = Mode.GAME
-        var carried = config.pool && before != null && v.refines(before) && !(viewSecrets && !mp.secretsActive)
+        var carried = config.pool && before != null && v.refines(before) && !(viewSecrets && !mp.secretsActive) && mp.pinCount >= viewPins
         if (!config.pool) groups.clear()
         else {
             // A view that isn't the one before plus facts costs the pool, unless the next view undoes it: a glitch (a room gone
             // for a tick, a tab list mid-update) would otherwise cost all of it. So the pool is put by, once, for a view
             // that says all the view it fitted did (and added to the pool of the glitch, if that view builds on it too).
             val s = stash
-            val back = s != null && v.refines(s.view) && !(s.secrets && !mp.secretsActive)
+            val back = s != null && v.refines(s.view) && !(s.secrets && !mp.secretsActive) && mp.pinCount >= s.pins
             if (carried) { if (back) { groups.addAll(0, s!!.groups); stash = null } }
             else if (back) { groups.clear(); groups.addAll(s!!.groups); stash = null; carried = true }
-            else { stash = if (before != null && groups.isNotEmpty()) Stash(before, ArrayList(groups), viewSecrets) else stash; groups.clear() }
+            else { stash = if (before != null && groups.isNotEmpty()) Stash(before, ArrayList(groups), viewSecrets, viewPins) else stash; groups.clear() }
         }
-        viewSecrets = mp.secretsActive
+        viewSecrets = mp.secretsActive; viewPins = mp.pinCount
         val n = threads.coerceIn(1, MAX_THREADS)
         lanes = Array(n) { if (it == 0) g0 else mp.newGameLane()!! }
         rnds = Array(n) { Random(seed xor (viewSeq.toLong() shl 20) xor (it.toLong() shl 44)) }
         for (l in lanes) { l.store = if (config.pool) ArrayList() else null; l.srcId = ++srcSeq }
         if (n > 1) ensureHelpers(n - 1)
-        reveal = importGroups(carried, latest)
+        // the pool is an extra: whatever goes wrong with it, the view still has samples of its own to draw
+        try {
+            startImport(carried)
+            // a share of the pool, and more until there is something to show (early on few of the samples fit, and they are
+            // quick to look at; late most do, and the first share is plenty)
+            do importSome(config.importChunk * n) while (pending.isNotEmpty() && !canShow())
+        } catch (e: Exception) { dropPool(e) }
         evaluate()
+    }
+
+    /** The parts so far are enough to show ([prediction] isn't null). */
+    private fun canShow(): Boolean {
+        val k = kept
+        return k > 0 && (done || weights(freshCounts()).sum() >= config.showBatches && k >= config.showSamples)
+    }
+
+    /** The pool is dropped (its import threw): the view goes on with its own samples. */
+    private fun dropPool(e: Exception) {
+        error = e; groups.clear(); pending.clear(); stash = null; reused = ArrayList(); sameLaw.clear(); latest = null
+        reveal = Reveal(false, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0L)
+    }
+
+    /**
+     * A group still being carried into the view before (a new view came first) keeps the samples that fitted it and those
+     * not looked at yet, as they are: whatever fits a view that says more fitted that one too, so the next import sorts
+     * them all alike. Its part is not the whole group's, so it is worked out again.
+     */
+    private fun settle() {
+        for (grp in pending) {
+            val rest = ArrayList<Stored>(grp.fitted.size + grp.stored.size - grp.next)
+            rest.addAll(grp.fitted); rest.addAll(grp.stored.subList(grp.next, grp.stored.size))
+            grp.stored = rest; grp.part = null
+            endImport(grp)
+        }
+        pending.clear()
+    }
+
+    private fun endImport(grp: Group) {
+        grp.slot = -1; grp.next = 0; grp.fitted = ArrayList(); grp.sum = null; grp.old = null
     }
 
     /** The lanes of the view before into a group of its own (or the one with the same structure: the same law, the same scale). */
@@ -248,6 +330,8 @@ internal class PredictionSession(
     private fun reuseAll(stored: List<Stored>): GameSampler.Reused {
         val n = lanes.size
         if (n == 1 || stored.size < PARALLEL_IMPORT) return lanes[0].reuse(stored)
+        // all or none of the group, whatever the cut ([GameSampler.reuse])
+        if (lanes[0].namesBlocked(stored)) return GameSampler.Reused(ArrayList(), Part(Tally(0, 0), 0, 0.0, 0.0), false, Int.MAX_VALUE)
         val cuts = IntArray(n + 1); cuts[n] = stored.size
         for (i in 1 until n) {
             var c = maxOf(cuts[i - 1], stored.size * i / n)
@@ -269,45 +353,107 @@ internal class PredictionSession(
         return GameSampler.Reused(survivors, Part(sum, kept, w1, w2, s2), anyNames, minRooms)
     }
 
-    /** Every group's samples that fit the new view, finished for it: the reused parts. */
-    private fun importGroups(carried: Boolean, newest: Group?): Reveal {
+    // what the newest group did at the reveal, for [reveal]
+    private var revealFit = 0
+    private var lastSeen = 0
+    private var lastFit = 0
+    private var lastShare = 0.0
+    private var lastB0 = 0.0
+    private var lastB1 = 0.0
+
+    /**
+     * The groups to carry into the new view, each a reused part: one nothing its finish reads has changed for keeps its
+     * part as it is; one whose names weighed under a secret total the view doesn't allow goes whole
+     * ([GameSampler.namesBlocked]); the rest are imported batch by batch ([importSome]), the newest view's first, their
+     * parts growing as they come (a part of whole batches is a fair estimate on its own: the batches are alike).
+     */
+    private fun startImport(carried: Boolean) {
         val t0 = threadCpuNanos()
         val g = lanes[0]
         val sig = g.finishSignature
-        viewSig = sig
+        viewSig = sig; importSig = sig
         val namesUpTo = g.namesUpTo
-        var seen = 0; var fit = 0
-        var lastSeen = 0; var lastFit = 0; var lastShare = 0.0; var lastB0 = 0.0; var lastB1 = 0.0
+        revealCarried = carried; revealSeen = 0; revealFit = 0; importNanos = 0L
+        lastSeen = 0; lastFit = 0; lastShare = 0.0; lastB0 = 0.0; lastB1 = 0.0
         val it = groups.iterator()
         while (it.hasNext()) {
             val grp = it.next()
-            val before = grp.stored.size
+            val size = grp.stored.size
             val old = grp.part
-            val r: GameSampler.Reused
+            revealSeen += size
+            if (grp === latest) { lastSeen = size; lastB0 = old?.batches ?: 0.0 }
             if (old != null && grp.sig == sig && !grp.anyNames && grp.minRooms > namesUpTo) {
                 // nothing the finish reads has changed (a name, a secret total that no sample's finish weighs): the part is as it was
-                r = GameSampler.Reused(grp.stored, old, false, grp.minRooms)
-            } else {
-                r = reuseAll(grp.stored)
-                grp.part = r.part; grp.sig = sig; grp.anyNames = r.anyNames; grp.minRooms = r.minRooms
+                revealFit += size
+                if (grp === latest) { lastFit = size; lastShare = 1.0; lastB1 = old.batches }
+                reused += old
+                if (grp.key == viewKey) sameLaw += old
+                continue
             }
-            seen += before; fit += r.survivors.size
-            if (grp === newest) {
-                lastSeen = before; lastFit = r.survivors.size
-                lastShare = if (old != null && old.tally.weight > 0) r.part.tally.weight / old.tally.weight else 1.0
-                lastB0 = old?.batches ?: 0.0; lastB1 = r.part.batches
-            }
-            if (r.survivors.isEmpty()) { it.remove(); continue }
-            grp.stored = r.survivors
-            reused += r.part
+            // all of a group or none ([GameSampler.reuse])
+            if (g.namesBlocked(grp.stored)) { it.remove(); continue }
+            grp.slot = reused.size; grp.next = 0; grp.fitted = ArrayList(); grp.sum = Tally(g.tally.counts.size, g.tally.splitRooms.size)
+            grp.kept = 0; grp.w1 = 0.0; grp.w2 = 0.0; grp.s2 = 0.0; grp.namesNow = false; grp.minNow = Int.MAX_VALUE
+            grp.seen = size; grp.old = old
+            reused += Part(grp.sum!!, 0, 0.0, 0.0)
+            pending += grp
         }
-        trim()
-        return Reveal(carried, groups.size, seen, fit, lastSeen, lastFit, lastShare, lastB0, lastB1, batches, kept, threadCpuNanos() - t0)
+        // the newest view's samples first: most of them fit, and their batches are the most like the new view's own
+        pending.reverse()
+        importNanos += threadCpuNanos() - t0
+        if (pending.isEmpty()) finishImport() else reveal = makeReveal()
     }
+
+    /** About [budget] more stored samples carried into the view, whole batches, the first pending group's; done ones join the pool as they now fit. */
+    private fun importSome(budget: Int) {
+        if (pending.isEmpty()) return
+        val t0 = threadCpuNanos()
+        var left = budget
+        while (left > 0 && pending.isNotEmpty()) {
+            val grp = pending[0]
+            val st = grp.stored
+            var end = minOf(st.size, grp.next + left)
+            while (end in 1 until st.size && st[end].src == st[end - 1].src && st[end].batch == st[end - 1].batch) end++
+            val r = reuseAll(st.subList(grp.next, end))
+            left -= end - grp.next
+            grp.next = end
+            if (r.part.kept > 0) {
+                grp.fitted.addAll(r.survivors); grp.sum!!.addScaled(r.part.tally, 1.0)
+                grp.kept += r.part.kept; grp.w1 += r.part.w1; grp.w2 += r.part.w2; grp.s2 += r.part.s2
+                grp.namesNow = grp.namesNow || r.anyNames; grp.minNow = minOf(grp.minNow, r.minRooms)
+                revealFit += r.survivors.size
+            }
+            val part = Part(grp.sum!!, grp.kept, grp.w1, grp.w2, grp.s2)
+            reused[grp.slot] = part
+            if (grp === latest) {
+                val old = grp.old
+                lastFit = grp.fitted.size; lastB1 = part.batches
+                lastShare = if (old != null && old.tally.weight > 0) part.tally.weight / old.tally.weight else 1.0
+            }
+            if (grp.next >= st.size) {
+                pending.removeAt(0)
+                if (grp.fitted.isEmpty()) groups.remove(grp)
+                else { grp.stored = grp.fitted; grp.part = part; grp.sig = importSig; grp.anyNames = grp.namesNow; grp.minRooms = grp.minNow }
+                endImport(grp)
+            }
+        }
+        importNanos += threadCpuNanos() - t0
+        if (pending.isEmpty()) finishImport() else reveal = makeReveal()
+    }
+
+    /** The whole pool is in: back down to the cap, and what the reveal did. */
+    private fun finishImport() {
+        trim()
+        reveal = makeReveal()
+    }
+
+    private fun makeReveal() = Reveal(revealCarried, groups.size, revealSeen, revealFit, lastSeen, lastFit, lastShare, lastB0, lastB1, batches, kept, importNanos)
 
     /** The pool back down to [Config.cap] less room for the new view's own samples: the oldest views' first batches go. */
     private fun trim() {
-        val room = (config.cap * OLD_SHARE).toInt()
+        // a view of the same rooms, doors and walls as samples already in the pool (a name, a secret total) needs no room
+        // for samples of its own: they would be more of the same, and the pool full is the pool full
+        val room = if (groups.any { it.key == viewKey }) config.cap else (config.cap * OLD_SHARE).toInt()
         var extra = groups.sumOf { it.stored.size } - room
         var gi = 0
         while (extra > 0 && gi < groups.size) {
@@ -364,10 +510,13 @@ internal class PredictionSession(
     private fun worth(p: Part, rho: Double): Double =
         (if (config.byInfo) minOf(p.batches, p.samples / rho) else p.batches) * config.reusedWeight
 
-    /** The weights of the parts, the reused ones first and the new view's own last: what each is worth in fresh batches. */
+    /**
+     * The weights of the parts, the reused ones first and the new view's own last: what each is worth in fresh batches (a
+     * part of the view's own law, [sameLaw], its batches' worth as the fresh ones).
+     */
     private fun weights(fresh: Counts): DoubleArray {
         val r = if (fresh.batches >= RHO_BATCHES && fresh.samples > 0) maxOf(1.0, fresh.samples / fresh.batches) else rho
-        return DoubleArray(reused.size + 1) { if (it < reused.size) worth(reused[it], r) else fresh.batches }
+        return DoubleArray(reused.size + 1) { if (it == reused.size) fresh.batches else if (reused[it] in sameLaw) reused[it].batches else worth(reused[it], r) }
     }
 
     /** True when the prediction is as good as a fresh run's: the stop rule of [GameSampler.run] over the parts together. */
@@ -395,7 +544,7 @@ internal class PredictionSession(
     private fun fallBack(e: Exception?) {
         val v = view ?: return
         error = e
-        groups.clear(); stash = null; reused = ArrayList(); lanes = emptyArray(); fellBack = true; latest = null
+        groups.clear(); pending.clear(); stash = null; reused = ArrayList(); sameLaw.clear(); lanes = emptyArray(); fellBack = true; latest = null
         mode = Mode.CLASSIC; predictor = MapPredictor(v, gameProcess = false)
         classicRnd = Random(seed + viewSeq * 7_919L)
         classicDone = false
@@ -415,6 +564,13 @@ internal class PredictionSession(
     }
 
     private fun gameStep(budget: Int): Boolean {
+        // the rest of the pool first (whatever the target says: it costs a few ms, and a share of it that fits is worth more
+        // than fresh batches of that time)
+        if (pending.isNotEmpty()) {
+            try { importSome(config.importChunk * lanes.size) } catch (e: Exception) { dropPool(unwrap(e)) }
+            evaluate()
+            return true
+        }
         if (done && !(ahead && poolSize < config.cap && tries < config.aheadTries)) return false
         try { runLanes(budget) } catch (e: Exception) { fallBack(unwrap(e)); return true }
         // a hard map keeps few of its particles for long: the pool is for the next room, it doesn't grow without bound meanwhile
@@ -461,10 +617,9 @@ internal class PredictionSession(
 
     private fun gamePrediction(): Prediction? {
         val g = lanes.firstOrNull() ?: return null
+        if (!canShow()) return null
         val parts = reused + fresh()
         val w = weights(freshCounts())
-        val samples = parts.sumOf { it.kept }
-        if (samples == 0 || !done && (w.sum() < config.showBatches || samples < config.showSamples)) return null
         return try { g.predictionOf(parts, w) } catch (e: Exception) { error = e; fallBack(e); null }
     }
 
