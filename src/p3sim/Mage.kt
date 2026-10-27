@@ -1,6 +1,5 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.p3sim.clear.damage.DamageModule
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.server.level.ServerPlayer
@@ -81,7 +80,7 @@ object Mage {
         while (clicks.size > 3) clicks.removeFirst()
         if (clicks.size == 3 && clicks.zipWithNext().all { (a, b) -> b - a in 2..5 } && now >= sheepReady) {
             clicks.clear()
-            Fight.later(1, "guided sheep") { if (!p.isRemoved && !com.engineerclient.p3sim.clear.damage.ClassAbilities.burst(p)) launchSheep(p) }
+            Fight.later(1, "guided sheep") { if (!p.isRemoved) launchSheep(p) }
         }
     }
 
@@ -103,9 +102,7 @@ object Mage {
     private fun firstMob(from: Vec3, to: Vec3, p: ServerPlayer): Pair<LivingEntity, Vec3>? {
         val box = AABB(from, to).inflate(1.0)
         return Sim.level.getEntitiesOfClass(LivingEntity::class.java, box) {
-            // In a full run a dungeon mob is a target whatever its body is (a disguised or sleeping one included).
-            it !== p && it.isAlive && (DamageModule.mobFor(it) != null ||
-                it !is net.minecraft.world.entity.player.Player && it !is Mannequin && it !is ArmorStand && it !is Sheep && !it.isInvisible)
+            it !== p && it.isAlive && it !is net.minecraft.world.entity.player.Player && it !is Mannequin && it !is ArmorStand && it !is Sheep && !it.isInvisible
         }.mapNotNull { e -> e.boundingBox.inflate(0.3).clip(from, to).orElse(null)?.let { e to it } }.minByOrNull { it.second.distanceToSqr(from) }
     }
 
@@ -129,7 +126,6 @@ object Mage {
         // P2: a beam at Storm frees him from a pin.
         (Fight.phase as? P2Storm)?.beam()
         mob?.first?.let { e ->
-            DamageModule.beamHit(e, p)
             p.connection.send(net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket(e))
             // Hypixel's hit sound: the victim's hurt sound at your feet, a tick later.
             Fight.later(1, "beam hit") {
@@ -147,7 +143,7 @@ object Mage {
         spawnSheep(p)
     }
 
-    /** The sheep itself, with no cooldown of its own: the clear's class abilities ([com.engineerclient.p3sim.clear.damage.ClassAbilities]) keep theirs. */
+    /** The sheep itself, with no cooldown of its own. */
     internal fun spawnSheep(p: ServerPlayer) {
         val e = GhostSheep(Sim.level)
         e.setNoAi(true); e.setNoGravity(true); e.isPermanentlyInvulnerable = true; e.isSilent = true
@@ -186,13 +182,7 @@ object Mage {
                 f.boomAt = now
                 Sim.sound(SoundEvents.GENERIC_EXPLODE, 1f, 0.8f + kotlin.random.Random.nextFloat() * 0.18f, at, SoundSource.MASTER)
                 Sim.level.sendParticles(ParticleTypes.EXPLOSION, at.x, at.y + 0.5, at.z, 1, 0.0, 0.0, 0.0, 0.0)
-                // A full run: the blast takes HP off every mob within reach, and the line says how many and how much.
-                val hit = DamageModule.blast(at.x, at.y, at.z, com.engineerclient.p3sim.run.DamageSource.MAGE_BEAM, p?.uuid)
-                if (hit > 0) {
-                    val total = "%,.1f".format(java.util.Locale.ROOT, hit * DamageModule.blastDamage).removeSuffix(".0")
-                    Sim.chat("§7Your Guided Sheep hit §c$hit §7${if (hit == 1) "enemy" else "enemies"} for §c$total §7damage.")
-                }
-                else if (mob != null && DamageModule.activeRun() == null) Sim.chat("§7Your Guided Sheep hit §c1 §7enemy for §c0 §7damage.")
+                if (mob != null) Sim.chat("§7Your Guided Sheep hit §c1 §7enemy for §c0 §7damage.")
                 // Like Explosive Shot: a blast within 2 blocks of a gate blows it.
                 (Fight.phase as? GoldorPhase)?.let { g -> g.gateNear(at, 2.0).takeIf { it > 0 }?.let { g.blowGate(it, Sim.me) } }
             }

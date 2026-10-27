@@ -1,6 +1,6 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.p3sim.pack.Rot
+import com.engineerclient.ads.pack.Rot
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.texture.TextureAtlas
 import net.minecraft.client.renderer.texture.TextureAtlasSprite
