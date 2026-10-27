@@ -1015,12 +1015,12 @@ object PoseShare {
         repeat(n) {
             if (b.remaining() < 6) return
             val core = b.int
-            val rot = com.engineerclient.p3sim.pack.Rot.entries.getOrNull(b.get().toInt() and 255) ?: return
+            val rot = com.engineerclient.ads.pack.Rot.entries.getOrNull(b.get().toInt() and 255) ?: return
             val count = b.get().toInt() and 255
             if (count !in 1..4 || b.remaining() < count) return
             val tiles = List(count) { b.get().toInt() and 255 }
             if (tiles.any { it !in 0 until 36 || !used.add(it) }) return
-            out += KnownWorld.SharedRoom(core, rot, tiles.map { com.engineerclient.p3sim.pack.Tile(it % 6, it / 6) })
+            out += KnownWorld.SharedRoom(core, rot, tiles.map { com.engineerclient.ads.pack.Tile(it % 6, it / 6) })
         }
         if (b.hasRemaining()) return
         KnownWorld.shared(sender, out)

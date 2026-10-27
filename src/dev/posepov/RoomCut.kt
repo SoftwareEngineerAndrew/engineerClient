@@ -1,6 +1,6 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.p3sim.pack.DungeonFrame
+import com.engineerclient.ads.pack.DungeonFrame
 import java.util.BitSet
 
 /**
