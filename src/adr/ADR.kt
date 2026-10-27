@@ -28,6 +28,11 @@ import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
+import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket
+import net.minecraft.network.protocol.game.ClientboundBossEventPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket
@@ -99,6 +104,8 @@ object ADR : Module(
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
     private var session: RunRecorder? = null
+    /** This world's recording once it is known to be a Hypixel dungeon run (for layers that ride on it, like Better Recorder). */
+    internal val recording: RunRecorder? get() = session?.takeIf { it.isConfirmed && !it.abandoned && !EngineerClient.mc.isLocalServer }
     private val simDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("sim")
     private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("runs")
     private val catDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("catalogue")
@@ -185,7 +192,7 @@ object ADR : Module(
         // Chat straight off the network, before any mod can hide it (chat cleaners hide the terminal /
         // device / gate messages the report needs). Handed to the client thread, where ticks happen.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
-            if (overlay) return@onReceive
+            if (overlay) { val c = content; EngineerClient.mc.execute { EngineerClient.safely("adr action bar") { session?.let { it.hud.actionBar(it.currentTick, c) } } }; return@onReceive }
             val text = content.string.replace(CONTROL_CODES, "")
             val colored = legacyText(content)
             // The answer to a /p list ADR sent itself: read, and kept out of chat.
@@ -203,6 +210,15 @@ object ADR : Module(
             if (b0 != 1 || (block != Blocks.CHEST && block != Blocks.TRAPPED_CHEST && block != Blocks.ENDER_CHEST)) return@onReceive
             val at = pos.immutable(); val open = b1
             EngineerClient.mc.execute { EngineerClient.safely("adr chest") { session?.onChestEvent(at, open) } }
+        }
+        // The HUD as the server sends it (HudCapture): the action bar (also sent as overlay chat, above), titles and boss bars.
+        onReceive<ClientboundSetActionBarTextPacket> { val c = text(); EngineerClient.mc.execute { EngineerClient.safely("adr action bar") { session?.let { it.hud.actionBar(it.currentTick, c) } } } }
+        onReceive<ClientboundSetTitleTextPacket> { val c = text(); EngineerClient.mc.execute { EngineerClient.safely("adr title") { session?.let { it.hud.title(it.currentTick, false, c) } } } }
+        onReceive<ClientboundSetSubtitleTextPacket> { val c = text(); EngineerClient.mc.execute { EngineerClient.safely("adr title") { session?.let { it.hud.title(it.currentTick, true, c) } } } }
+        onReceive<ClientboundClearTitlesPacket> { EngineerClient.mc.execute { EngineerClient.safely("adr title") { session?.let { it.hud.title(it.currentTick, false, null) } } } }
+        onReceive<ClientboundBossEventPacket> {
+            val packet = this
+            EngineerClient.mc.execute { EngineerClient.safely("adr boss bar") { session?.let { s -> packet.dispatch(BossBars(s)) } } }
         }
         on<RoomEnterEvent> { EngineerClient.safely("adr room") { session?.onRoomEnter(room?.name) } }
 
@@ -562,4 +578,13 @@ object ADR : Module(
         OnlineLink.close()
         super.onDisable()
     }
+}
+
+/** A boss bar packet into the recording (HudCapture.bossBar). */
+private class BossBars(private val s: RunRecorder) : ClientboundBossEventPacket.Handler {
+    override fun add(id: java.util.UUID, name: Component, progress: Float, color: net.minecraft.world.BossEvent.BossBarColor, overlay: net.minecraft.world.BossEvent.BossBarOverlay, darkenScreen: Boolean, playMusic: Boolean, createWorldFog: Boolean) =
+        s.hud.bossBar(s.currentTick, id, name, progress, false)
+    override fun remove(id: java.util.UUID) = s.hud.bossBar(s.currentTick, id, null, null, true)
+    override fun updateProgress(id: java.util.UUID, progress: Float) = s.hud.bossBar(s.currentTick, id, null, progress, false)
+    override fun updateName(id: java.util.UUID, name: Component) = s.hud.bossBar(s.currentTick, id, name, null, false)
 }
