@@ -56,6 +56,7 @@ object SimServer {
     }
 
     fun register() {
+        AdsServer.register()
         ServerLifecycleEvents.SERVER_STARTING.register { s ->
             if (isSim(s)) { server = s; EngineerClient.logger.info("[p3sim] sim server starting"); com.engineerclient.p3sim.run.EngineSpikes.mark("server-starting") }
             SimWorld.opening = false
@@ -75,7 +76,7 @@ object SimServer {
             // Saved as built: no fight entities, every changed block back.
             // A run ends first (its modules clean up, the view distance pin is released), then the boss sim's own cleanup as before.
             EngineerClient.safely("p3sim stopping run") { com.engineerclient.p3sim.run.Runs.stop() }
-            EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
+            EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); AdsServer.stop(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
         }
         ServerLifecycleEvents.SERVER_STOPPED.register { s ->
             if (s !== server) return@register

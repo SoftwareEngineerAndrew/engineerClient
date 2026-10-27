@@ -70,7 +70,7 @@ object P3Party {
     val hosting get() = host != null
 
     /** In someone's party right now: connected to a host through the relay (the server entry [join] makes). */
-    val joined: Boolean get() = !mc.hasSingleplayerServer() && mc.currentServer?.name?.startsWith(PARTY_NAME) == true
+    val joined: Boolean get() = !mc.hasSingleplayerServer() && (mc.currentServer?.name?.startsWith(PARTY_NAME) == true || AdsServer.inHostsSim)
     private const val PARTY_NAME = "ADS party"
     /** The party's code, null until the relay gives it. */
     val code: String? get() = host?.code

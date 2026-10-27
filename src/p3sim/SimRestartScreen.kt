@@ -610,6 +610,14 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
                 .tooltip(tip("Drops everyone who joined; your sim goes on.")).bounds(x, y, PARTY_W, 20).build())
             return
         }
+        if (AdsServer.active) {
+            val names = P3Party.players()
+            line(if (AdsServer.listed) "§aListed on the ADS server" else "§7Connecting to the ADS server...")
+            line("§7${names.joinToString(", ").ifEmpty { "Just you" }} §8${names.size.coerceAtLeast(1)}/5")
+            addRenderableWidget(Button.builder(Component.literal("Stop Hosting")) { AdsServer.stop(); rebuildWidgets() }
+                .tooltip(tip("Takes your sim off the ADS server and drops everyone who joined through it; your sim goes on.")).bounds(x, y, PARTY_W, 20).build())
+            return
+        }
         if (PartyClient.joiner) {
             // In someone's sim: who's in it (the server's roster), and the way out.
             val names = listOf(mc.player?.name?.string ?: "You") + PartyClient.team.filter { it.player }.map { it.name }
@@ -623,6 +631,9 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         if (!com.engineerclient.EngineerClient.BETA) return
         addRenderableWidget(Button.builder(Component.literal("Host Party")) { P3Party.host(); rebuildWidgets() }
             .tooltip(tip("Friends join your sim: you get a 4-letter code to send them.")).bounds(x, y, PARTY_W, 20).build())
+        y += ROW
+        addRenderableWidget(Button.builder(Component.literal("Host on Server")) { AdsServer.start(); rebuildWidgets() }
+            .tooltip(tip("Lists your sim in the ADS server's lobby: anyone there can click your head to join, no mod needed.")).bounds(x, y, PARTY_W, 20).build())
         y += ROW
         val box = EditBox(font, x, y, PARTY_W - 42, 20, Component.literal("Code"))
         box.setMaxLength(4)
