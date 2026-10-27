@@ -1,192 +1,284 @@
 package com.devgineerclient.betterrecorder
 
 import com.devgineerclient.DevgineerClient
+import com.engineerclient.adr.ADR
+import com.engineerclient.adr.RunRecorder
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.itemId
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
-import net.minecraft.network.protocol.Packet
+import net.minecraft.core.component.DataComponents
+import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
+import net.minecraft.network.protocol.game.ClientboundExplodePacket
+import net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket
+import net.minecraft.network.protocol.game.ClientboundSetHealthPacket
+import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket
+import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket
+import net.minecraft.network.protocol.game.ServerboundAttackPacket
+import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.item.ItemStack
+import java.io.OutputStreamWriter
+import java.io.Writer
 import java.nio.file.Files
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.zip.GZIPOutputStream
 
 /**
- * Better Recorder: everything ADS needs to copy the clear 1:1, in one small file per dungeon.
+ * Better Recorder: what All Data (undonecoffee.com/alldata) still needs and ADR doesn't record - the numbers behind
+ * combat. A layer on ADR: it records only while ADR is recording a Hypixel dungeon run, counts ticks with ADR's own
+ * clock, and its file is named after ADR's, so each line lines up with the ADR run it belongs to. Local only,
+ * nothing is uploaded. Off by default.
  *
- * Where the Dungeon Recorder keeps every packet's bytes (gigabytes, read back with a decoder), this keeps what the clear is made of,
- * already decoded and placed: every mob and its gear, skin, name tag and path; every block change, sound, particle, chat, title,
- * action bar, tab, sidebar, boss bar and map change; your position, input, items and every click with what it was on; Odin's rooms,
- * doors and puzzles; and a block snapshot of each room the first time it is seen whole. Positions in rooms also come in the room's own
- * frame (Odin's rotation and corner), so a recording lines up with the ADS room library directly. A run is a few MB, so it can stay
- * on all the time (and in a party, everyone can run it: the files line up by the server's tick count).
+ * Files: <game dir>/devgineerclient-recordings/better/<ADR's yyyy-MM-dd_HH-mm-ss>.br.jsonl.gz, gzipped JSON Lines,
+ * every line {"k":kind,"t":ADR's tick,...}. Only changes are written:
  *
- * Nothing to do but play: every capture is always on, and the guide (a HUD and a pillar in the world) says which room of this run to
- * go to and what to do there (stay until it is done, stand still a moment) for what ADS still lacks. `/brec guide` shows the counts.
- * Files: <game dir>/devgineerclient-recordings/better/, gzipped JSON Lines; the format is docs/better-recorder.md.
+ *  - meta {"adr":stamp,"startMs","v":2}; mark {"m":note} (/brec mark [note])
+ *  - hp {"d":[[entity id, health, max health on first sight], ...]}: every mob's health as the server sends it
+ *    (players and armor stands left out)
+ *  - dmg {"id","type","by","via"}: the server's damage event - who was hurt, the damage type, the entity it came
+ *    from and the one that hit (a projectile); -1 none
+ *  - atk {"id"}: you attacked that entity
+ *  - dtag {"id","x","y","z","m"}: a damage number (an armor stand's name of digits) as it appeared
+ *  - me {"hp","food","sat","abs"}: your health, hunger and absorption
+ *  - att {"d":[[attribute, base, [[modifier, amount, operation], ...]], ...]}: your attributes that changed
+ *  - fx {"e","a","d"} an effect on you (amplifier, ticks); {"e","x":1} removed
+ *  - vel {"v":[x,y,z]}: the server set your motion (knockback); boom {"at","r","kb"}: an explosion
+ *  - item {"s","id","name","lore":[...]}: your hotbar (0-8), armour (36 feet - 39 head) and offhand (40) item,
+ *    with its lore, when it changes
+ *  - snd {"d":[[sound, x, y, z, volume, pitch] or [sound, entity id, volume, pitch], ...]}: every sound the
+ *    server played that tick
  */
 object BetterRecorder : Module(
     name = "Better Recorder",
     key = null,
     category = Category.custom("Devgineer Client", 860, 10),
-    description = "Records everything ADS needs to copy the clear 1:1 - mobs, blocks, sounds, chat, HUD, your clicks, Odin's rooms, room snapshots - with positions in each room's own frame. Its guide shows where to go in the run for what is still missing.",
+    description = "Records the numbers behind combat that ADR doesn't (mob health, damage events, your stats and gear, sounds) into a small file next to each ADR run, for All Data. Records only while ADR does; local only.",
 ) {
-    private enum class Where(private val label: String) {
-        DUNGEONS("Dungeons"), DUNGEONS_AND_ADS("Dungeons + ADS"), EVERYWHERE("Everywhere");
-        override fun toString() = label
-    }
-    private enum class Snaps(private val label: String) {
-        OFF("Off"), SPECIAL("Puzzles, traps, blood, fairy"), ALL("Every room");
-        override fun toString() = label
-    }
-
-    private val where by SelectorSetting("Where", Where.DUNGEONS_AND_ADS, desc = "Hypixel dungeons only, also ADS (the same format, so a sim run compares straight against a real one), or always.")
-    private val snaps by SelectorSetting("Room Snapshots", Snaps.ALL, desc = "Every block of a room the first time it is seen with its rotation known (and puzzle and trap rooms again when done). About 20 KB a room.")
-    private val hidePrivate by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat out (a line says one was there).")
-    private val announce by BooleanSetting("Announce Sightings", true, desc = "Says in chat when a wanted sighting is caught for the first time (Wandering Soul, Crypt Undead...).")
-    private val guideHud by HUD("Guide", "Points at a rare room when the run has one (the only thing the recordings still lack that a run can give); hidden otherwise.", true, 8, 300, 1.2f) { example -> BrGuide.draw(this, example) }
-    private val guidePillar by BooleanSetting("Guide Pillar", true, desc = "A pillar over the room the guide sends you to, seen through walls.")
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         DevgineerClient.safely("better recorder folder") { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
     }
 
-    private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
-    private var guideShown by BooleanSetting("Guide Shown", false, desc = "").hide()
+    private val dir get() = DevgineerClient.mc.gameDirectory.toPath().resolve("devgineerclient-recordings").resolve("better")
 
-    /** On by default, existing installs included (once: turning it off sticks). */
-    fun enableByDefault() {
-        if (switchedOn) return
-        switchedOn = true
-        if (!enabled) toggle()
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+    private class Session(val run: RunRecorder, val writer: Writer) {
+        val hp = HashMap<Int, Float>()
+        val names = HashMap<Int, String>()
+        val items = HashMap<Int, ItemStack>()
+        val itemText = HashMap<Int, String>()
+        val attrs = HashMap<String, String>()
+        var abs = -1f
+        val sounds = StringBuilder()
+        var lines = 0L
     }
 
-    val dir get() = DevgineerClient.mc.gameDirectory.toPath().resolve("devgineerclient-recordings").resolve("better")
-
-    @Volatile var session: BrSession? = null
-        private set
-    @Volatile var clientTick = 0
-        private set
-
-    val snapshotMode: Int get() = when (snaps) { Snaps.OFF -> 0; Snaps.SPECIAL -> 1; else -> 2 }
-
-    private val PRIVATE_CHAT = Regex("""^(?:(?:From|To) (?:\[[^\]]+] )?\w{1,16}: |(?:Guild|Officer|Co-op|Friend) > |\w{1,16} whispers to you: |You whisper to \w{1,16}: )""")
-    private val COLOR = Regex("§(?:#[0-9a-fA-F]{6}|.)")
-    fun privateText(text: String): Boolean = hidePrivate && PRIVATE_CHAT.containsMatchIn(COLOR.replace(text, ""))
-
-    private val counts = HashMap<String, Long>()
-    fun lineWritten(kind: String) { counts.merge(kind, 1L, Long::plus) }
+    private var session: Session? = null
+    private val io = Executors.newSingleThreadExecutor { Thread(it, "better-recorder-writer").apply { isDaemon = true } }
+    private val pending = StringBuilder()
 
     init {
         on<TickEvent.End> { DevgineerClient.safely("better recorder tick") { tick() } }
-        on<RenderExtractEvent> { if (guidePillar && session != null) DevgineerClient.safely("better recorder pillar") { BrGuide.render(this) } }
-        on<LevelEvent.Load> { DevgineerClient.safely("better recorder world") { stop("world change") } }
-        onReceive<Packet<*>>(priority = Int.MIN_VALUE) { DevgineerClient.safely("better recorder in") { BrNet.inbound(this) } }
-        onSend<Packet<*>>(priority = Int.MIN_VALUE) { DevgineerClient.safely("better recorder out") { BrNet.outbound(this) } }
-        ClientLifecycleEvents.CLIENT_STOPPING.register { DevgineerClient.safely("better recorder exit") { stop("game closed"); } }
+        ClientLifecycleEvents.CLIENT_STOPPING.register { DevgineerClient.safely("better recorder exit") { stop() } }
+
+        // Packets: read on the network thread, written on the game thread at ADR's tick.
+        onReceive<ClientboundDamageEventPacket> {
+            val id = entityId(); val type = sourceType().unwrapKey().map { it.identifier().path }.orElse("?"); val by = sourceCauseId(); val via = sourceDirectId()
+            later { line("dmg", ""","id":$id,"type":${q(type)},"by":$by,"via":$via""") }
+        }
+        onSend<ServerboundAttackPacket> { val id = entityId(); later { line("atk", ""","id":$id""") } }
+        onReceive<ClientboundSetHealthPacket> {
+            val h = health; val f = food; val s = saturation
+            later { line("me", ""","hp":${f1(h)},"food":$f,"sat":${f1(s)}""") }
+        }
+        onReceive<ClientboundUpdateAttributesPacket> {
+            val id = entityId; val values = values
+            later { if (id == DevgineerClient.mc.player?.id) attributes(values) }
+        }
+        onReceive<ClientboundUpdateMobEffectPacket> {
+            val id = entityId; val e = effect.unwrapKey().map { it.identifier().path }.orElse("?"); val a = effectAmplifier; val d = effectDurationTicks
+            later { if (id == DevgineerClient.mc.player?.id) line("fx", ""","e":${q(e)},"a":$a,"d":$d""") }
+        }
+        onReceive<ClientboundRemoveMobEffectPacket> {
+            val id = entityId(); val e = effect().unwrapKey().map { it.identifier().path }.orElse("?")
+            later { if (id == DevgineerClient.mc.player?.id) line("fx", ""","e":${q(e)},"x":1""") }
+        }
+        onReceive<ClientboundSetEntityMotionPacket> {
+            val id = id(); val v = movement()
+            later { if (id == DevgineerClient.mc.player?.id) line("vel", ""","v":[${f3(v.x)},${f3(v.y)},${f3(v.z)}]""") }
+        }
+        onReceive<ClientboundExplodePacket> {
+            val c = center(); val r = radius(); val kb = playerKnockback().orElse(null)
+            later { line("boom", ""","at":[${f2(c.x)},${f2(c.y)},${f2(c.z)}],"r":${f2(r.toDouble())}""" + (kb?.let { ""","kb":[${f3(it.x)},${f3(it.y)},${f3(it.z)}]""" } ?: "")) }
+        }
+        onReceive<ClientboundSoundPacket> {
+            val row = "[${q(sound.unwrapKey().map { it.identifier().path }.orElse("?"))},${f2(x)},${f2(y)},${f2(z)},${f2(volume.toDouble())},${f2(pitch.toDouble())}]"
+            later { sound(row) }
+        }
+        onReceive<ClientboundSoundEntityPacket> {
+            val row = "[${q(sound.unwrapKey().map { it.identifier().path }.orElse("?"))},$id,${f2(volume.toDouble())},${f2(pitch.toDouble())}]"
+            later { sound(row) }
+        }
+
         ClientCommandRegistrationCallback.EVENT.register { d, _ ->
             d.register(literal("brec")
                 .executes { DevgineerClient.msg(status()); 1 }
-                .then(literal("mark").executes { mark(null); 1 }.then(argument("note", StringArgumentType.greedyString()).executes { c -> mark(StringArgumentType.getString(c, "note")); 1 }))
-                .then(literal("guidetest").executes { BrGuide.inAds = !BrGuide.inAds; DevgineerClient.msg("§7Guide in ADS: ${BrGuide.inAds}"); 1 })
-                .then(literal("guide").executes { DevgineerClient.msg("§aGuide§7 (caught so far / wanted):"); BrGuide.summary().forEach { DevgineerClient.chat(it) }; 1 })
-                .then(literal("wanted").executes { listWanted(); 1 })
-                .then(literal("folder").executes { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir); 1 }))
+                .then(literal("mark").executes { mark(null); 1 }.then(argument("note", StringArgumentType.greedyString()).executes { c -> mark(StringArgumentType.getString(c, "note")); 1 })))
         }
     }
 
     override fun onDisable() {
-        stop("turned off")
+        stop()
         super.onDisable()
     }
 
-    private fun shouldRecord(): Boolean {
-        val mc = DevgineerClient.mc
-        if (mc.player == null || mc.level == null) return false
-        val ads = mc.isLocalServer
-        return when (where) {
-            Where.EVERYWHERE -> true
-            Where.DUNGEONS -> !ads && DungeonUtils.inDungeons
-            Where.DUNGEONS_AND_ADS -> DungeonUtils.inDungeons
-        }
+    private fun later(block: () -> Unit) {
+        if (session == null) return
+        DevgineerClient.mc.execute { DevgineerClient.safely("better recorder") { if (session != null) block() } }
     }
 
     private fun tick() {
-        clientTick++
-        // The guide HUD on by default (Odin HUDs start off), once: hiding it sticks.
-        if (!guideShown) { guideShown = true; guideHud.enabled = true; com.odtheking.odin.features.ModuleManager.saveConfigurations() }
-        val s = session
-        if (s == null) {
-            if (enabled && shouldRecord()) start()
-            return
+        val run = if (enabled) ADR.recording else null
+        if (session?.run !== run) { stop(); if (run != null) start(run) }
+        val s = session ?: return
+        health(s)
+        me(s)
+        gear(s)
+        if (s.sounds.isNotEmpty()) { line("snd", ""","d":[${s.sounds}]"""); s.sounds.setLength(0) }
+        if (pending.isNotEmpty()) {
+            val chunk = pending.toString(); pending.setLength(0)
+            val w = s.writer
+            io.execute { runCatching { w.write(chunk) } }
         }
-        s.tick()
     }
 
-    private fun start() {
-        val mc = DevgineerClient.mc
-        val floor = runCatching { DungeonUtils.floor?.name }.getOrNull() ?: "X"
-        val tag = if (mc.isLocalServer) "ADS" else "HYP"
-        val name = "${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}_${tag}_$floor.brec.jsonl.gz"
-        val s = BrSession(dir.resolve(name), tag)
-        counts.clear()
-        session = s
-        s.start()
-        BrExtras.newRun()
-        BrGuide.newRun()
+    private fun start(run: RunRecorder) {
+        Files.createDirectories(dir)
+        val out = Files.newOutputStream(dir.resolve("${run.stamp}.br.jsonl.gz"))
+        session = Session(run, OutputStreamWriter(GZIPOutputStream(out, 1 shl 16), Charsets.UTF_8))
+        line("meta", ""","adr":${q(run.stamp)},"startMs":${System.currentTimeMillis()},"v":2""")
     }
 
-    private fun stop(why: String) {
+    private fun stop() {
         val s = session ?: return
         session = null
-        s.end(why)
+        val chunk = pending.toString(); pending.setLength(0)
+        io.execute { runCatching { s.writer.write(chunk); s.writer.close() } }
+    }
+
+    private fun line(kind: String, body: String) {
+        val s = session ?: return
+        s.lines++
+        pending.append("{\"k\":\"").append(kind).append("\",\"t\":").append(s.run.currentTick).append(body).append("}\n")
+    }
+
+    private fun sound(row: String) {
+        val s = session ?: return
+        if (s.sounds.isNotEmpty()) s.sounds.append(',')
+        s.sounds.append(row)
+    }
+
+    /** Every mob's health, when it changes; damage numbers as they appear. */
+    private fun health(s: Session) {
+        val level = DevgineerClient.mc.level ?: return
+        val rows = StringBuilder()
+        for (e in level.entitiesForRendering()) {
+            if (e is ArmorStand) { damageTag(s, e); continue }
+            if (e !is LivingEntity || e is Player) continue
+            val h = e.health
+            val was = s.hp.put(e.id, h)
+            if (was == h) continue
+            if (rows.isNotEmpty()) rows.append(',')
+            rows.append('[').append(e.id).append(',').append(f1(h.toDouble()))
+            if (was == null) rows.append(',').append(f1(e.maxHealth.toDouble()))
+            rows.append(']')
+        }
+        if (rows.isNotEmpty()) line("hp", ""","d":[$rows]""")
+    }
+
+    private fun damageTag(s: Session, e: ArmorStand) {
+        val name = e.customName?.string ?: return
+        if (s.names.put(e.id, name) == name) return
+        if (!DAMAGE.matches(name)) return
+        line("dtag", ""","id":${e.id},"x":${f2(e.x)},"y":${f2(e.y)},"z":${f2(e.z)},"m":${q(name)}""")
+    }
+
+    private fun me(s: Session) {
+        val abs = DevgineerClient.mc.player?.absorptionAmount ?: return
+        if (abs == s.abs) return
+        s.abs = abs
+        line("me", ""","abs":${f1(abs.toDouble())}""")
+    }
+
+    private fun attributes(values: List<ClientboundUpdateAttributesPacket.AttributeSnapshot>) {
+        val s = session ?: return
+        val rows = values.mapNotNull { a ->
+            val name = a.attribute().unwrapKey().map { it.identifier().path }.orElse("?")
+            val mods = a.modifiers().joinToString(",") { m -> "[${q(m.id().path)},${f3(m.amount())},${m.operation().ordinal}]" }
+            val row = "[${q(name)},${f3(a.base())},[$mods]]"
+            if (s.attrs.put(name, row) == row) null else row
+        }
+        if (rows.isNotEmpty()) line("att", ""","d":[${rows.joinToString(",")}]""")
+    }
+
+    /** Your hotbar, armour and offhand, with lore, when an item changes (the same stack object is skipped). */
+    private fun gear(s: Session) {
+        val player = DevgineerClient.mc.player ?: return
+        for (slot in GEAR_SLOTS) {
+            val stack = when (slot) {
+                in 0..8 -> player.inventory.getItem(slot)
+                40 -> player.getItemBySlot(EquipmentSlot.OFFHAND)
+                else -> player.getItemBySlot(ARMOR[slot - 36])
+            }
+            if (s.items.put(slot, stack) === stack) continue
+            val lore = stack.get(DataComponents.LORE)?.lines()?.joinToString(",") { q(it.string) } ?: ""
+            val text = if (stack.isEmpty) "" else ""","id":${q(stack.itemId)},"name":${q(stack.hoverName.string)},"lore":[$lore]"""
+            if (s.itemText.put(slot, text) == text) continue
+            line("item", ""","s":$slot$text""")
+        }
     }
 
     private fun mark(note: String?) {
-        val s = session ?: run { DevgineerClient.msg("§7Better Recorder: not recording."); return }
-        s.line("mark") { it.s("note", note) }
-        DevgineerClient.msg("§aMarked§7 at tick ${s.t}${if (note != null) ": $note" else ""}")
+        if (session == null) { DevgineerClient.msg("§7Better Recorder: not recording."); return }
+        line("mark", ""","m":${q(note ?: "")}""")
+        DevgineerClient.msg("§aMarked§7 at tick ${session?.run?.currentTick}${if (note != null) ": $note" else ""}")
     }
 
     private fun status(): String {
-        val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else ""}. /brec guide shows what is still wanted."
-        val top = counts.entries.sortedByDescending { it.value }.take(6).joinToString(", ") { "${it.key} ${it.value}" }
-        return "§aBetter Recorder§7: ${s.path.fileName}, tick ${s.t}, ${s.file.lines.get()} lines, ${s.file.bytes.get() / 1024} KB raw. $top."
+        val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else " (it records while ADR records a Hypixel dungeon run)"}."
+        return "§aBetter Recorder§7: ${s.run.stamp}.br.jsonl.gz, tick ${s.run.currentTick}, ${s.lines} lines."
     }
 
-    // ------------------------------------------------------------------ wanted sightings, counted across recordings
+    private val DAMAGE = Regex("""^[^\d\s]*[\d,]+[^\d\s]*$""")
+    private val GEAR_SLOTS = (0..8) + (36..40)
+    private val ARMOR = arrayOf(EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD)
 
-    private val wantedFile get() = dir.resolve("wanted.properties")
-
-    private fun wantedCounts(): java.util.Properties {
-        val p = java.util.Properties()
-        runCatching { Files.newInputStream(wantedFile).use { p.load(it) } }
-        return p
-    }
-
-    fun caught(id: String, title: String) {
-        val p = wantedCounts()
-        val n = (p.getProperty(id)?.toIntOrNull() ?: 0) + 1
-        p.setProperty(id, n.toString())
-        runCatching { Files.createDirectories(dir); Files.newOutputStream(wantedFile).use { p.store(it, "Better Recorder: runs each wanted sighting was caught in") } }
-        if (announce) DevgineerClient.msg("§aBetter Recorder caught: §f$title§7 (${if (n == 1) "first time" else "$n runs"})")
-    }
-
-    private fun listWanted() {
-        val p = wantedCounts()
-        DevgineerClient.msg("§aWanted sightings§7 (runs caught in):")
-        for (w in BrExtras.WANTED) DevgineerClient.chat("§7- ${w.title}: §f${p.getProperty(w.id) ?: "0"}")
+    private fun f1(v: Double) = String.format(Locale.ROOT, "%.1f", v)
+    private fun f1(v: Float) = f1(v.toDouble())
+    private fun f2(v: Double) = String.format(Locale.ROOT, "%.2f", v)
+    private fun f3(v: Double) = String.format(Locale.ROOT, "%.3f", v)
+    private fun q(s: String): String {
+        val sb = StringBuilder(s.length + 2).append('"')
+        for (ch in s) when {
+            ch == '"' -> sb.append("\\\"")
+            ch == '\\' -> sb.append("\\\\")
+            ch < ' ' -> sb.append(String.format(Locale.ROOT, "\\u%04x", ch.code))
+            else -> sb.append(ch)
+        }
+        return sb.append('"').toString()
     }
 }

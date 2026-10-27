@@ -43,7 +43,6 @@ object DevgineerClient : ClientModInitializer {
 
         // On by default, existing installs included (once: turning it off sticks).
         safely("boss recorder default") { BossRecorder.enableByDefault() }
-        safely("better recorder default") { com.devgineerclient.betterrecorder.BetterRecorder.enableByDefault() }
         safely("maxor crystals default") { MaxorCrystals.enableByDefault() }
     }
 

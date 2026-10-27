@@ -116,6 +116,9 @@ class RunRecorder(
 
     // Geometry: the rooms are all in the server's room library; each run only reads its doorways (GeometryCapture).
     private val geometry = GeometryCapture(::emit)
+    // The HUD (tab list, sidebar, boss bars, titles, action bar), and the research probes (Probes: removable).
+    val hud = HudCapture(::emit)
+    private val probes = Probes(::emit)
     private val palette = HashMap<BlockState, Int>()
 
     // ------------------------------------------------------------------ inputs
@@ -158,6 +161,8 @@ class RunRecorder(
         recordEntities(level)
         if (confirmed) recordSkulls(level)
         if (confirmed && captureGeometry) geometry.tick(level, tick)
+        hud.tick(tick)
+        if (confirmed) probes.tick(level, tick)
         flushPending()
     }
 
@@ -209,6 +214,11 @@ class RunRecorder(
 
     /** The server tick count right now: read on the network thread, where the pings are counted. */
     val serverTickCount: Int get() = serverTicks
+    /** Ticks since the world loaded: what every line's "t" counts. */
+    val currentTick: Int get() = tick
+    val isConfirmed: Boolean get() = confirmed
+    /** When the world loaded, as the saved file's name starts (yyyy-MM-dd_HH-mm-ss). */
+    val stamp: String get() = startedAt.format(STAMP)
 
     // ------------------------------------------------------------------ what you do
     /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
