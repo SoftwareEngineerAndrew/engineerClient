@@ -44,6 +44,7 @@
     "PovLevelExtractorMixin",
     "PovLevelRendererMixin",
     "P3SimWorldMixin",
+    "AdsWorldGenMixin",
     "P3SimLevelInfoMixin",
     "UseItemRotSimMixin",
     "SimMoveGuardMixin",
