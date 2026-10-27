@@ -18,6 +18,8 @@
     "AdsTrapsQuietDispenserMixin",
     "LastBreathSimMixin",
     "SimPartyLanMixin",
+    "AdsServerLoginMixin",
+    "AdsServerLoginAccessor",
     "ArcherDropSimMixin",
     "BlurRadiusMixin",
     "CameraAccessor",
