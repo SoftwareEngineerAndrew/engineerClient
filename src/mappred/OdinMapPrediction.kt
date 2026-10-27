@@ -27,7 +27,6 @@ import net.minecraft.world.level.GameType
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 /**
  * Map Prediction on Odin's Dungeon Map (F1-F7, M1-M7): what the unknown tiles probably are, from what the
@@ -50,6 +49,9 @@ import kotlin.random.Random
  * as rooms open. Only what the map shows is used (never the world scan of rooms nobody has seen).
  * Prediction Model picks F7's sampler: Game Process (the default; [GameSampler], the game's own steps) or
  * Classic (the older one); the other floors always use Classic.
+ * The Game Process doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
+ * agree with the new room are the new guess at once ([PredictionSession]); more guesses top them up, and Predict Ahead
+ * keeps guessing while the map stays, on Prediction Threads threads, for the next room.
  *
  * Like the other Odin additions, the settings are registered into Odin's module and saved with it.
  * `MapPathHintsMixin` draws this instead of Odin's "?" tiles while it is on. With LCM Style on, LcmStyle
@@ -65,6 +67,10 @@ object OdinMapPrediction {
     private val on: Boolean get() = mode.value == Mode.ADM
     private val model = SelectorSetting("Prediction Model", Model.GAME,
         desc = "F7/M7: Game Process makes each guess the way the game makes its maps (big rooms one random spot each, the door tree grown from the entrance); Classic is the older sampler with its fitted tables. Other floors always use Classic.").withDependency { on }
+    private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
+        desc = "Threads the F7/M7 guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
+    private val aheadSetting = BooleanSetting("Predict Ahead", true,
+        desc = "F7/M7: keep making guesses while you're in a room (a little CPU, about 5 MB), so the next room that opens updates the map at once.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val hidden = BooleanSetting("Hidden Tile Hints", true,
@@ -103,13 +109,13 @@ object OdinMapPrediction {
     private var lastKey = ""
     private val generation = AtomicInteger()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-map-prediction").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
+    /** The guesses, kept from one map to the next of a dungeon (only the worker thread uses it, but for [PredictionSession.cancel]). */
+    private val session = PredictionSession()
 
     /** Doors the map has shown as wither or blood doors this run (the map stops showing that once they're open). */
     private val pathDoors = HashMap<Int, Byte>()
 
     private const val W = 6
-    private const val SAMPLES = 2000
-    private const val BATCH = 100
     private const val TILE = 20
     private const val ROOM = 16
     /** From this sure (percent) a dead end always gets Odin's guess tile, whatever Dead End Chance is. */
@@ -119,7 +125,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, model, splitText, hidden, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
+        for (s in listOf(mode, model, threadsSetting, aheadSetting, splitText, hidden, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
         EventBus.subscribe(this)
@@ -127,6 +133,8 @@ object OdinMapPrediction {
 
     private fun reset() {
         generation.incrementAndGet()
+        session.cancel()
+        worker.execute { session.clear() }
         shown = null; shownView = null; lastKey = ""
         pathDoors.clear()
     }
@@ -208,18 +216,21 @@ object OdinMapPrediction {
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
+        session.cancel()
+        val threads = threadsSetting.value.let { if (it <= 0) PredictionSession.autoThreads() else it }
+        val ahead = aheadSetting.value
         worker.execute {
             EngineerClient.safely("map prediction worker") {
-                val predictor = MapPredictor(v, gameProcess = game)
-                val rnd = Random(System.nanoTime())
-                // batches until enough samples agree, publishing as it goes; stops when the map changes
-                // again, when nothing fits even the loosest rules, or when no more fit
-                while (generation.get() == gen && predictor.accepted < SAMPLES) {
-                    val kept = predictor.run(BATCH, 40_000, rnd)
+                if (generation.get() != gen) return@safely
+                // the guesses made for the maps before carry over to this one (what fits it is up at once), batches
+                // then top them up, publishing as it goes, and go on for the next room while the map stays;
+                // stops when the map changes again, when nothing fits even the loosest rules, or when no more fit
+                session.threads = threads; session.ahead = ahead
+                session.begin(v, game)
+                do {
                     if (generation.get() != gen) return@safely
-                    predictor.prediction()?.let { shown = it; shownView = v }
-                    if (kept == 0 && (predictor.accepted > 0 || predictor.level > 2)) break
-                }
+                    session.prediction()?.let { shown = it; shownView = v }
+                } while (session.step())
             }
         }
     }

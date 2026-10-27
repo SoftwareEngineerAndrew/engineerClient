@@ -127,6 +127,47 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
         append(edges.joinToString(""))
     }
 
+    /**
+     * What the game-process sampler draws its samples from, and nothing else: the rooms' tiles (and the entrance), the
+     * doors and walls. Two views with the same key draw from the same law at the same scale, whatever else differs
+     * (a room's kind or name, the secret totals, the tab's puzzles): their samples can be pooled as they are.
+     */
+    fun structureKey(): String = buildString {
+        append(w).append('x').append(h).append(':').append(rules.floor).append(':')
+        for (i in kinds.indices.sortedBy { roomTiles[it].min() }) {
+            append(if (kinds[i] == Kind.ENTRANCE) 'E' else 'r').append(roomTiles[i].sorted().joinToString(",")).append(';')
+        }
+        append(':').append(edges.joinToString(""))
+    }
+
+    /**
+     * This view says everything [older] said: every map this view allows, [older] allowed too, so samples drawn for
+     * [older] that fit this view are samples of this view's maps (reweighted, [GameSampler.reuse]). The same dungeon
+     * grid and floor, every older room here with the same tiles and kind (and its name, once it had one), every door,
+     * wall and same-room edge it showed shown the same, the tab's puzzles it named named the same. More may have
+     * been added (rooms, edges, names); a secret total the older view allowed and this one doesn't is no loss of
+     * what it said ([GameSampler.reuse] looks at those). A misread corrected, a room that went, a door that changed
+     * kind, a different dungeon: not a refinement, and the samples can't be carried over.
+     */
+    fun refines(older: MapView): Boolean {
+        if (w != older.w || h != older.h || puzzles != older.puzzles || rules.floor != older.rules.floor) return false
+        for (i in older.kinds.indices) {
+            val tiles = older.roomTiles[i]
+            val j = roomAt[tiles[0]]
+            if (j < 0 || kinds[j] != older.kinds[i] || roomTiles[j].size != tiles.size) return false
+            for (t in tiles) if (roomAt[t] != j) return false
+            val name = older.names[i]
+            if (name != null && names[j] != name) return false
+        }
+        for (k in edges.indices) { val o = older.edges[k]; if (o != Edge.UNKNOWN && edges[k] != o) return false }
+        // the tab's puzzle lines: once it listed them, it still does, the names it gave the same
+        if (older.puzzleSlots.isNotEmpty()) {
+            if (puzzleSlots.size != older.puzzleSlots.size) return false
+            for (i in older.puzzleSlots.indices) if (older.puzzleSlots[i] != null && puzzleSlots[i] != older.puzzleSlots[i]) return false
+        }
+        return true
+    }
+
     companion object {
         fun shapeOf(tiles: IntArray, w: Int): Shape? {
             if (tiles.isEmpty()) return null
@@ -189,6 +230,19 @@ internal class Tally(cells: Int, entries: Int) {
     val nameCounts = HashMap<Long, Double>()
     val doorCounts = HashMap<Int, DoubleArray>()
     var weight = 0.0
+
+    /** Adds [o]'s sums times [k]. */
+    fun addScaled(o: Tally, k: Double) {
+        for (i in counts.indices) { val a = counts[i]; val b = o.counts[i]; for (c in a.indices) a[c] += k * b[c] }
+        for (i in splitRooms.indices) {
+            splitRooms[i] += k * o.splitRooms[i]; splitTiles[i] += k * o.splitTiles[i]
+            val a = splitCls[i]; val b = o.splitCls[i]; for (c in a.indices) a[c] += k * b[c]
+        }
+        for ((key, v) in o.bigCounts) bigCounts.merge(key, k * v, Double::plus)
+        for ((key, v) in o.nameCounts) nameCounts.merge(key, k * v, Double::plus)
+        for ((key, v) in o.doorCounts) { val a = doorCounts.getOrPut(key) { DoubleArray(4) }; for (c in 0 until 4) a[c] += k * v[c] }
+        weight += k * o.weight
+    }
 
     /** What the samples agree on, each tile's chances through [calibrate] when there is one; null before any was kept. */
     fun prediction(w: Int, h: Int, cells: IntArray, entries: IntArray, entryDoor: ByteArray, samples: Int, level: Int,
@@ -289,6 +343,12 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
 
     private fun dropGame(e: Exception) { gameError = e; gameSampler = null }
 
+    /** Another game-process sampler for this view, set up as [game] is (null when the game process isn't used for it): the lanes [PredictionSession] runs at once. */
+    private var makeGame: (() -> GameSampler)? = null
+    internal fun newGameLane(): GameSampler? = makeGame?.invoke()
+    /** The secret total's names weigh this view's samples (a total is known and the named rooms are on the list). */
+    internal val secretsActive: Boolean get() = secretsOn
+
     /** Samples kept so far (the game-process sampler's once it has enough, 0 while it goes on: [GameSampler.accepted]). */
     val accepted: Int get() = gameSampler?.accepted ?: classicAccepted
     /** 0 keeps every rule; 1-2 the classic sampler's looser fallbacks; 3 nothing fits (or nothing is left to predict). */
@@ -355,8 +415,10 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
         // snapshots of 9 maps without a rare room (rerun with the calibration: -0.012, s.e. 0.014)
         if (gameProcess && rules.game && !bad && w == rules.w && h == rules.h && !rules.puzzleColumn && cells.isNotEmpty()) {
             try {
-                val g = GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, secrets, secretsOn, unnamedKnown.toIntArray())
-                if (g.possible) gameSampler = g
+                val sn = secrets; val on = secretsOn; val unnamed = unnamedKnown.toIntArray()
+                val make = { GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, sn, on, unnamed) }
+                val g = make()
+                if (g.possible) { gameSampler = g; makeGame = make }
             } catch (e: Exception) { gameError = e }
         }
     }

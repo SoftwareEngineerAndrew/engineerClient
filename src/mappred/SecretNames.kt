@@ -12,7 +12,9 @@ class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set
     private val poolWeight = DoubleArray(MapStats.POOLS) { p -> avail[p].sumOf { it.seen.toDouble() } }
     private val minSec = IntArray(MapStats.POOLS) { p -> avail[p].minOfOrNull { it.secrets } ?: 0 }
     private val maxSec = IntArray(MapStats.POOLS) { p -> avail[p].maxOfOrNull { it.secrets } ?: 0 }
-    private val cache = HashMap<String, Result?>()
+    /** [solve]'s answers by pools; several threads of one session ([PredictionSession]) share them. */
+    private class Box(val result: Result?)
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Box>()
     private val minT = targets.minOrNull() ?: 0
     private val maxT = targets.maxOrNull() ?: -1
 
@@ -27,10 +29,9 @@ class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set
         if (pools.size > MAX_ROOMS || targets.isEmpty()) return null
         val sorted = pools.sortedArray()
         val key = sorted.joinToString(",")
-        if (key in cache) return cache[key]
+        cache[key]?.let { return it.result }
         val res = try { enumerate(sorted) } catch (_: TooMany) { null }
-        cache[key] = res
-        return res
+        return cache.getOrPut(key) { Box(res) }.result
     }
 
     private object TooMany : RuntimeException() { private fun readResolve(): Any = TooMany }

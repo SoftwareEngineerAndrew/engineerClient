@@ -11,7 +11,8 @@ import kotlin.test.Test
  * as <file>.out for scoring by the analysis scripts. Skipped when the variable isn't set. Each is run as
  * the game's map prediction worker runs it (OdinMapPrediction: chunks until enough samples, the prediction
  * taken after every chunk and the last one that was there kept), its own seed (5 + its line), by the
- * floor's default model, or the classic one with ADS_MAP_MODEL=classic.
+ * floor's default model, or the classic one with ADS_MAP_MODEL=classic. (That is the worker without its pool of samples
+ * from the maps before: PredictionSession with pool off draws the same way; MapSequenceCheck plays a map's views in turn.)
  */
 class MapSnapshotsCheck {
     @Test fun predictSnapshots() {

@@ -19,6 +19,37 @@ class TreeRule(val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double =
 }
 
 /**
+ * A layout the samples grown from one ancestor share: each tile's room (the sampler's own ids: the discovered rooms
+ * first, then the big rooms drawn, then 1x1s) and each room's [Shape] ordinal.
+ */
+internal class Whole(val owner: ByteArray, val shape: ByteArray)
+
+/**
+ * One kept sample, compact: a whole map to reuse when the map shows more ([GameSampler.reuse]). Its door tree is the
+ * parent of each tile (-1 for the entrance's); [w] is the particle's weight before [GameSampler.finish], on the scale of
+ * the view it was drawn for; [src] and [batch] say which batch of which sampler it came from: samples with the same
+ * pair grew from the same ancestors and are no more than one batch's worth together.
+ */
+internal class Stored(val whole: Whole, val parent: ByteArray, val w: Double, val src: Int, val batch: Int) {
+    /** Its last finish weighed the secret total's names, with these totals ([GameSampler.reuse]: a total it didn't allow may have ruled out samples never kept). */
+    var names = false
+    var totals: IntArray = NO_TOTALS
+
+    companion object { val NO_TOTALS = IntArray(0) }
+}
+
+/**
+ * What a set of samples of one law adds up to: their tally, how many, the sum and sum of squares of their batches'
+ * weights ([w1], [w2]) and the sum of squares of their own ([s2]; the sum is the tally's weight).
+ */
+internal class Part(val tally: Tally, val kept: Int, val w1: Double, val w2: Double, val s2: Double = 0.0) {
+    /** Batches' worth: (sum of batch weights)^2 / sum of their squares. */
+    val batches: Double get() = if (w2 > 0) w1 * w1 / w2 else 0.0
+    /** Samples' worth, counting each as if it stood alone: (sum of weights)^2 / sum of their squares. */
+    val samples: Double get() = if (s2 > 0) tally.weight * tally.weight / s2 else 0.0
+}
+
+/**
  * F7 completion by the game's own steps (tools/mappred sampler3.mjs with tree3.mjs; its README's "How the maps are
  * made" and "What the game's code could be doing"), each sample a whole map that fits what the map shows:
  *
@@ -42,6 +73,10 @@ class TreeRule(val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double =
  * on until [MIN_BATCHES] batches' worth of weight as well as [MIN_SAMPLES] samples, and shows nothing before
  * [MIN_SHOW] batches' worth. A hard map (few of the trees grown come out right) can use up [MAX_TRIES] particles
  * without getting that far: then it is [failed] and the classic sampler is used instead.
+ *
+ * With [store] set, every kept sample is also kept whole and compact ([Stored]), and [reuse] carries such samples to a
+ * sampler of a later map (one that shows the same and more): the ones that agree with it are its samples too, finished
+ * again. [PredictionSession] runs several of these side by side and keeps the pool from map to map.
  */
 internal class GameSampler(
     private val view: MapView,
@@ -82,6 +117,9 @@ internal class GameSampler(
     private val shownA: IntArray
     private val shownB: IntArray
     private val shownKind: ByteArray
+    /** Every wall the map shows (tiles a < b): no door tree crosses one. */
+    private val wallA: IntArray
+    private val wallB: IntArray
     private val knownBig = IntArray(5)
     /** The specials the map shows: trap, yellow, puzzles, rares (a brown 1x1 dead end is a rare room, a normal 1x1 never is one). */
     private val knownSpecial = IntArray(4)
@@ -111,6 +149,7 @@ internal class GameSampler(
     var tries = 0L; private set
     private var batchW1 = 0.0
     private var batchW2 = 0.0
+    private var sampleW2 = 0.0
     private var emptyFrom = 0L
     /** Some particle got as far as the secret total's names ([finishNamed]), so turning them off could change what fits. */
     private var namesTried = false
@@ -118,6 +157,12 @@ internal class GameSampler(
     var done = false; private set
     /** The most particles started in all, before it is [done] with what it has ([MAX_TRIES]; a test lowers it). */
     internal var triesCap = MAX_TRIES
+    /** When set, every kept sample is also stored here, whole, for [reuse] when the map shows more; [srcId] names this sampler's batches. */
+    internal var store: ArrayList<Stored>? = null
+    internal var srcId = 0
+    /** The most samples [store] takes (checked at each batch: no more once it holds this many). */
+    internal var storeLimit = Int.MAX_VALUE
+    private var batchNo = 0
 
     init {
         val ent = view.kinds.indexOf(Kind.ENTRANCE)
@@ -130,14 +175,17 @@ internal class GameSampler(
             else -> entCell - 1
         }
         val a = ArrayList<Int>(); val b = ArrayList<Int>(); val k = ArrayList<Byte>()
+        val wa = ArrayList<Int>(); val wb = ArrayList<Int>()
         for (t in 0 until n) for (u in nb[t]) {
             val e = view.edge(t, u)
+            if (e == Edge.NONE && u > t) { wa += t; wb += u }
             if (!Edge.isDoor(e)) continue
             touchesDoor[t] = true
             if (u > t) { a += t; b += u; k += e }
             if (view.roomAt[t] < 0 && view.roomAt[u] >= 0) doorIn[t] = true
         }
         shownA = a.toIntArray(); shownB = b.toIntArray(); shownKind = k.toByteArray()
+        wallA = wa.toIntArray(); wallB = wb.toIntArray()
         for (i in 0 until nKnown) {
             val shape = view.shapes[i]
             if (shape != Shape.ONE) knownBig[shape.ordinal]++
@@ -225,6 +273,169 @@ internal class GameSampler(
     fun prediction(): Prediction? =
         if (kept == 0 || !done && effectiveBatches() < MIN_SHOW) null
         else tally.prediction(w, h, cells, entries, entryDoor, kept, 0) { MapPredictor.calibrate(it, CALIBRATION, nKnown) }
+
+    // ---- lanes and the pool: several samplers of one view side by side, and samples carried from earlier views ([PredictionSession]) ----
+
+    /**
+     * Batches until about [maxTries] more particles have been started or [until] (asked after each batch) says stop.
+     * None of [run]'s stop rule: the caller adds this sampler's [part] to the other lanes' and to the carried-over
+     * samples', and decides when that is enough.
+     */
+    internal fun runBatches(maxTries: Int, rnd: Random, until: () -> Boolean = { false }) {
+        val t0 = tries
+        while (tries - t0 < maxTries && !until()) batch(rnd)
+    }
+
+    /** What this sampler's own samples add up to so far. */
+    internal fun part(): Part = Part(tally, kept, batchW1, batchW2, sampleW2)
+
+    /** The secret total's names off (nothing fit with them: a misread total). */
+    internal fun dropNames() { secretsOn = false }
+
+    /** Some particle got as far as the names ([run]'s reason to try without them). */
+    internal val namesWereTried: Boolean get() = namesTried
+
+    /** The tiles' chances through [CALIBRATION], for a [tally] of [samples] kept samples. */
+    internal fun predictionOf(tally: Tally, samples: Int): Prediction? =
+        tally.prediction(w, h, cells, entries, entryDoor, samples, 0) { MapPredictor.calibrate(it, CALIBRATION, nKnown) }
+
+    /**
+     * The prediction of several [parts] together, each counted by its [weights] (its batches' worth: each part is a
+     * self-normalised estimate, and the mean of independent estimates weighted by how many batches' worth stand
+     * behind each is the one with the least spread); null while there is no sample.
+     */
+    internal fun predictionOf(parts: List<Part>, weights: DoubleArray): Prediction? {
+        var live = 0; var only = -1; var samples = 0
+        for (i in parts.indices) if (parts[i].kept > 0 && parts[i].tally.weight > 0 && weights[i] > 0) { live++; only = i; samples += parts[i].kept }
+        if (live == 0) return null
+        if (live == 1) return predictionOf(parts[only].tally, samples)
+        val sum = Tally(cells.size, entries.size)
+        for (i in parts.indices) {
+            val p = parts[i]
+            if (p.kept > 0 && p.tally.weight > 0 && weights[i] > 0) sum.addScaled(p.tally, weights[i] / p.tally.weight)
+        }
+        return predictionOf(sum, samples)
+    }
+
+    /**
+     * What [reuse] makes of a set of stored samples under this view: the samples that fit it ([survivors], batch by
+     * batch as they came) and their [part] with this view's finish.
+     */
+    internal class Reused(val survivors: ArrayList<Stored>, val part: Part, val anyNames: Boolean, val minRooms: Int)
+
+    /**
+     * Everything but the secret total's names that a sample's finish reads of the view: its rooms, doors and walls, the
+     * specials shown, the tab's puzzle order. Two views with the same signature finish every sample alike unless the
+     * names weigh it ([namesUpTo]), so a part worked out for one is the other's too.
+     */
+    internal val finishSignature: String by lazy {
+        view.structureKey() + "|" + view.kinds.indices.sortedBy { view.roomTiles[it].min() }.joinToString(",") { "${view.roomTiles[it].min()}k${view.kinds[it].ordinal}" } +
+            "|" + pinKeys.contentToString() + pinBefore.contentToString() + "|" + view.puzzles
+    }
+
+    /** A sample of at most this many rooms has its finish weigh the secret total's names (-1: none does, there is no total or it was given up). */
+    internal val namesUpTo: Int get() = if (secrets != null && secretsOn) SecretNames.MAX_ROOMS - unnamedKnown.size + nKnown else -1
+
+    /**
+     * The factor that takes this view's particle weights ([Tally.weight] is their sum over the kept) to the one scale all
+     * views share: the game's chance of a map (restricted to what the view allows) over the chance a particle came out as
+     * that map. The code leaves out two factors that are constant within a view: the mixes are drawn by their weights, whose
+     * total [mixTotal] is the weight of drawing one, and each big room already on the map is one of the `1 / spots` of
+     * the game's draws a room of its shape gets. So for views A and B (B showing more), `tally.weight * scale / particles
+     * started` estimates the same thing for both: the chance of the map showing A or B at all, and the share of A's weight
+     * that fits B ([reuse]) is B's over A's (a test checks it). The mean of the parts is taken without it ([Part]s are
+     * self-normalised estimates, weighed by their batches' worth); this is for tests and checks.
+     */
+    internal val scale: Double
+        get() { var k = mixTotal; for (s in 0 until 5) repeat(knownBig[s]) { k /= spots[s].size }; return k }
+
+    private val cntBuf = IntArray(64)
+    private val idBuf = IntArray(64)
+
+    /**
+     * Samples drawn for an earlier view this one refines ([MapView.refines]), carried over. The sample was drawn with
+     * weight w = (the game's chance of its map, restricted to what the earlier view allowed) / (the chance this
+     * sampler's kind of particle came out that way), so it is a draw of this view's maps too, at the same weight, if it
+     * fits this view: its rooms where this view's are (the same tiles), every door of this view's in its tree, no wall of
+     * this view's crossed. The rest of what this view says (the specials, blood and the fairy, the tab's order, the secret
+     * total's names) is in the finish, which is worked out again here for each: the weight is w times that, as when the
+     * sample was kept. What does not fit, or has no finish now, can never fit a view that says more: it is not kept.
+     *
+     * A sample whose names weighed ([Stored.names]) under a secret total this view doesn't allow is left out too: the
+     * samples that total (and no other) would have let through were thrown away when it was kept, so those that are
+     * left would count for too much.
+     *
+     * [from] has each batch's samples together (the batch's identity, for its weight in [Part.w1]/[Part.w2]).
+     */
+    internal fun reuse(from: List<Stored>): Reused {
+        val t = Tally(cells.size, entries.size)
+        val out = ArrayList<Stored>()
+        val totals = view.secretTotals
+        var count = 0; var w1 = 0.0; var w2 = 0.0; var bw = 0.0; var s2 = 0.0
+        var anyNames = false; var minRooms = Int.MAX_VALUE
+        var cur = -1L
+        for (s in from) {
+            val key = (s.src.toLong() shl 32) or (s.batch.toLong() and 0xffffffffL)
+            if (key != cur) { w1 += bw; w2 += bw * bw; bw = 0.0; cur = key }
+            if (s.names && !(totals.isNotEmpty() && totals.all { it in s.totals })) continue
+            val pt = rebuild(s) ?: continue
+            val fin = finish(pt) ?: continue
+            val wgt = s.w * fin.f
+            if (!(wgt > 0) || wgt.isInfinite()) continue
+            add(t, pt, fin, wgt); count++
+            bw += wgt; s2 += wgt * wgt
+            val names = fin.names != null
+            s.names = names; s.totals = if (names) totals else Stored.NO_TOTALS
+            if (names) anyNames = true
+            if (pt.rooms.size < minRooms) minRooms = pt.rooms.size
+            out += s
+        }
+        w1 += bw; w2 += bw * bw
+        return Reused(out, Part(t, count, w1, w2, s2), anyNames, minRooms)
+    }
+
+    private val noBools = BooleanArray(0)
+    private val noInts = IntArray(0)
+
+    /** A stored sample as a particle of this view's, or null when it doesn't fit it ([reuse]). */
+    private fun rebuild(s: Stored): Particle? {
+        val par = s.parent; val wo = s.whole.owner; val sh = s.whole.shape
+        for (e in shownA.indices) if (par[shownA[e]].toInt() != shownB[e] && par[shownB[e]].toInt() != shownA[e]) return null
+        for (e in wallA.indices) if (par[wallA[e]].toInt() == wallB[e] || par[wallB[e]].toInt() == wallA[e]) return null
+        val nr = sh.size
+        val cnt = cntBuf; val id = idBuf
+        java.util.Arrays.fill(cnt, 0, nr, 0); java.util.Arrays.fill(id, 0, nr, -1)
+        for (t in 0 until n) cnt[wo[t].toInt()]++
+        // the discovered rooms are the sample's rooms with the same tiles; the others keep their order after them
+        for (i in 0 until nKnown) {
+            val ts = view.roomTiles[i]; val r = wo[ts[0]].toInt()
+            if (cnt[r] != ts.size || sh[r].toInt() != view.shapes[i].ordinal) return null
+            for (tile in ts) if (wo[tile].toInt() != r) return null
+            id[r] = i
+        }
+        var next = nKnown
+        for (r in 0 until nr) if (id[r] < 0) id[r] = next++
+        val owner = IntArray(n) { id[wo[it].toInt()] }
+        val shape = IntArray(nr); val size = IntArray(nr)
+        for (r in 0 until nr) { shape[id[r]] = sh[r].toInt(); size[id[r]] = cnt[r] }
+        val rooms = Array(nr) { r -> if (r < nKnown) view.roomTiles[r] else IntArray(size[r]) }
+        val at = IntArray(nr)
+        for (tile in 0 until n) { val r = owner[tile]; if (r >= nKnown) rooms[r][at[r]++] = tile }
+        val parent = IntArray(n) { par[it].toInt() }
+        val depth = IntArray(n) { -1 }
+        for (tile in 0 until n) depthOf(parent, depth, tile)
+        val rentry = IntArray(nr) { -1 }
+        for (tile in 0 until n) { val p = parent[tile]; if (p < 0 || owner[p] != owner[tile]) rentry[owner[tile]] = tile }
+        return Particle(owner, rooms, shape, noBools, noBools, parent, depth, noBools, rentry, noInts, noInts, 0, s.w, true)
+    }
+
+    private fun depthOf(parent: IntArray, depth: IntArray, t: Int): Int {
+        if (depth[t] >= 0) return depth[t]
+        val p = parent[t]
+        val d = if (p < 0) 0 else depthOf(parent, depth, p) + 1
+        depth[t] = d
+        return d
+    }
 
     // ---- the particles: a layout and its door tree so far ----
 
@@ -411,15 +622,27 @@ internal class GameSampler(
             if (ess(ps) < PARTICLES / 2.0) ps = resample(ps, rnd)
         }
         var bw = 0.0
+        val sink = store?.takeIf { it.size < storeLimit }
+        val wholes = if (sink != null) java.util.IdentityHashMap<IntArray, Whole>() else null
         for (pt in ps) {
             if (!(pt.w > 0) || !pt.inT.all { it }) continue
             val fin = finish(pt) ?: continue
             val wgt = pt.w * fin.f
             if (!(wgt > 0) || wgt.isInfinite()) continue
-            add(pt, fin, wgt)
-            bw += wgt
+            add(tally, pt, fin, wgt); kept++
+            bw += wgt; sampleW2 += wgt * wgt
+            if (sink != null) sink += keep(pt, fin, wholes!!)
         }
         batchW1 += bw; batchW2 += bw * bw
+        batchNo++
+    }
+
+    /** A kept particle as a [Stored] sample; the particles of one ancestor share their layout. */
+    private fun keep(pt: Particle, fin: Finish, wholes: java.util.IdentityHashMap<IntArray, Whole>): Stored {
+        val whole = wholes.getOrPut(pt.owner) { Whole(ByteArray(n) { pt.owner[it].toByte() }, ByteArray(pt.shape.size) { pt.shape[it].toByte() }) }
+        val s = Stored(whole, ByteArray(n) { pt.parent[it].toByte() }, pt.w, srcId, batchNo)
+        if (fin.names != null) { s.names = true; s.totals = view.secretTotals }
+        return s
     }
 
     // ---- 3. the finished tree ----
@@ -688,10 +911,9 @@ internal class GameSampler(
         return true
     }
 
-    /** A kept sample into the tally: each unknown room's classes on its tiles and its door's split, its big room, the doors between unknown rooms. */
-    private fun add(pt: Particle, fin: Finish, wgt: Double) {
-        val t = tally
-        t.weight += wgt; kept++
+    /** A kept sample into the tally [t]: each unknown room's classes on its tiles and its door's split, its big room, the doors between unknown rooms. */
+    private fun add(t: Tally, pt: Particle, fin: Finish, wgt: Double) {
+        t.weight += wgt
         val p = DoubleArray(Cls.COUNT)
         for (r in nKnown until pt.rooms.size) {
             val cs = pt.rooms[r]
