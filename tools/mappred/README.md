@@ -21,6 +21,17 @@ writes snaps.txt.out and `node score-kt.mjs` scores it (each snapshot run as the
 the game process, `ADS_MAP_MODEL=classic` for the classic sampler). `node targets.mjs` scores such outputs
 against each other on blood, puzzles and big rooms separately (its header). Keep the data folder out of the repo.
 
+The map as a player gets it, room by room (the worker keeps its guesses from one room to the next: PredictionSession, see
+"Instant updates in the mod" below): `LAYOUTS=<layouts> node export-seq.mjs <maps> [offset]` (env SET=test|train,
+ORDER=sim|real, TIMELINES=timelines.jsonl for the real order) writes seq.txt, each held-out map's views in the order its
+rooms showed. `ADS_MAP_SEQUENCE=<data>/seq.txt gradle test --tests com.engineerclient.mappred.MapSequenceCheck --rerun`
+plays them as the worker does, a variant after the other (ADS_SEQ_VARIANTS=nopool,pool: the worker as it was, and with the
+pool; test/mappred/MapSequenceCheck.kt's header has the rest: the points in particles started in a view where the
+prediction shown is scored, the dwell before the next room opens, threads, cap), and writes
+`<seq>.<variant>.pts.tsv` and `.views.tsv`; `node score-seq.mjs <data>/seq.txt nopool pool` prints the per-tile
+log-likelihood by rooms known at each point (0 = the instant prediction when the room opens), paired to the first
+variant with the s.e. over maps, what that is averaged over the stay in the room, and what the pool did at each reveal.
+
 ## What every recorded F7/M7 map does (4494 complete maps, Sep-Oct 2026)
 
 - The doors make one tree (no loops); the entrance is on an edge, never a corner, with one door.
@@ -386,6 +397,63 @@ Every candidate tried, and what it showed:
   each other (0.030), with the same class totals (0.20-0.21 rare tiles a snapshot). A tile's
   rounding residue (1 - 1.0 on a tile that is surely a puzzle) must not count as a chance of a normal 1x1, which the
   calibration's + 0.001 would lift to 0.3%: sampler3 drops it (`o > 1e-12`) and so does GameSampler.add.
+- Instant updates in the mod (PredictionSession.kt, GameSampler.reuse, MapView.refines): the worker no longer starts over when a
+  room opens. Every map the game shows later is the one now plus facts that are a function of the true map, so a sample drawn for the
+  one now (a whole map: the room of each tile, the shapes, the door tree's parent of each tile, its weight before the finish and
+  its batch; 115 bytes, the layout shared by the samples of one ancestor) that agrees with the later map is a sample of the later
+  map's maps too, at the weight it had: its rooms are where the later map's are (the same tiles), every door that map shows is in
+  its tree and no wall it shows is crossed. The rest of what the later map says (the specials, blood and the fairy, the tab's puzzle
+  order, the secret total's names) is in the finish, worked out again for each survivor; one with no finish now has none in any
+  map that says more, so it goes for good. `MapView.refines` says when a map says all the one before did (the same grid, every
+  older room with its tiles, kind and name, every door, wall and same-room edge as it was, the tab's puzzle names kept); a map that
+  doesn't (Odin's misread corrected, a room gone, another dungeon) starts a new pool, the old one put by once in case the next
+  map undoes a glitch of a tick. A secret total the older map allowed and the new one doesn't also drops the samples whose
+  names weighed (what only that total let through was thrown away when they were kept).
+  The weights of two maps are on different scales: the sampler leaves out two constants of a map, the mixes' weight total and
+  the 1/spots of each big room already shown (GameSampler.scale puts them on the game's own scale; PredictionSessionTest checks that
+  the share of an older map's weight that fits a newer one is the newer's chance over the older's found from fresh runs, within
+  0.6 in the log on average of 3 seeds where without the scale they are a factor 100 apart). So they are not added: each earlier
+  map's samples are a part of their own, a self-normalised estimate, and the prediction is the mean of the parts weighted by
+  what each is worth in fresh batches. A batch keeps its identity when its samples are reused (the survivors of a batch come from a
+  few ancestors, so a part has its batches' worth, (sum of the batches' weights)^2 / sum of their squares); a part counts for no more
+  than its effective samples, (sum of weights)^2 / sum of their squares, are worth next to the effective samples of a fresh batch
+  (measured on the map before's own batches: a batch most of whose samples are gone is a poor batch; counting batches alone, the
+  instant prediction at 4-8 rooms was 0.03 a tile behind the stale one), and for half of that (reusedWeight: at 1 the finished
+  prediction was a little behind a fresh run's on 2-3 rooms, -0.0014 a tile s.e. 0.0005, at 0.5 -0.0010 s.e. 0.0003, the same
+  gain over the stay). What is shown at once is that mean when it is worth MIN_SHOW (5) batches, else the last prediction stays up
+  as before; fresh samples for the new map then top it up, the map is done at 2000 samples and 120 batches' worth of all parts
+  together as before, and with Predict Ahead the worker goes on drawing for the same map until the pool is 40,000 samples (4.6
+  MB; a rise to 120,000 gave nothing more) or 1.5 million particles, which is what the next room keeps a share of. Prediction Threads (default half the cores, at most 4) run lanes of the
+  same sampler side by side, each with its own random numbers and tally (SecretNames' cache is shared, now a ConcurrentHashMap).
+  Simulated order, 12 held-out maps (226 views, a stay of 40,000 particles, one thread; the stale prediction of the map before is
+  what is shown until there is a new one, as before) and the real order of the rooms and the time between them (10 maps, 185 views,
+  25,000 particles a second; the median time between two rooms opening is 1.5 to 3.5 s); log-likelihood per tile, paired to the worker as it was, s.e. over maps:
+
+      rooms known     the instant prediction (0 particles)                  averaged over the stay
+                      simulated order        real order                     simulated        real
+      2-3             +0.0070 ± 0.0045       +0.0048 ± 0.0037               +0.0061          +0.0008
+      4-5             +0.0182 ± 0.0055       +0.0247 ± 0.0090               +0.0220          +0.0098
+      6-8             -0.0010 ± 0.0116       +0.0388 ± 0.0088               +0.0147          +0.0452
+      9-11            +0.0231 ± 0.0114       +0.0334 ± 0.0107               +0.0059          +0.0099
+      12-15           +0.0780 ± 0.0154       +0.0571 ± 0.0090               +0.0163          +0.0041
+      16 and more     +0.1167 ± 0.0250       +0.1796 ± 0.0245               +0.0098          +0.0143
+      all             +0.0267 ± 0.0036       +0.0384 ± 0.0048               +0.0127 ± 0.0030 +0.0139 ± 0.0062
+
+  With two threads (50,000 particles a second, real order, 10 maps) the worker as it was scores -0.9700 averaged over the stay
+  (-0.9846 on one: +0.0146 for the threads alone) and the pool on top -0.9627 (+0.0078 ± 0.0034 over two threads, +0.0219 over one),
+  the instant prediction +0.0339 ± 0.0047.
+  And when the map has been worked out as far as the worker used to (40,000 particles, or done): +0.0002 ± 0.0003 simulated
+  (a bin worst -0.0010 ± 0.0003 at 2-3 rooms), +0.0019 ± 0.0022 real; run to done with the old stop rule (2000 samples, 120
+  batches' worth, nothing sampled ahead) -0.0001 ± 0.0005, in 22% less CPU time (1090 ms against 1400 ms a view; 25% fewer
+  particles). Samples drawn after the map is done score the same (+0.0003 ± 0.0004 at 150,000 particles) and a little less at
+  9-11 rooms (-0.0042 ± 0.0017: the calibration's slope was fitted on raw chances of 120 batches' worth, which are noisier
+  than these and so shrunk more than they need). How much of the map before's weight fits the next one (the share, quartiles
+  of the views): 3 rooms median 4.7% (p10 0.0%, p90 20.9%), 4-5 rooms 7.8% (0.4, 50), 6-8 12.8% (0.4, 85), 9-11 16.4% (1.3, 75),
+  12-15 29.7% (1.4, 100), 16 and more 90% (17, 100); by count of samples 5%/20%/14%/18%/39%/100% (median). So the pool is
+  worth most late: early on the next room is rarely what the samples guessed, and the samples are few (3 to 4 in 100 particles
+  are kept at 2-5 rooms, 8% at 6-8, 18% at 9-11, 40% at 12-15, 80% from 16). Time: the old loop 2553 ms CPU a snapshot (60 held-out snapshots over all stages, slowest
+  10.1 s), a session on one thread 2500 ms, on 2 threads 1342 ms wall (CPU 2527 ms), on 4 threads 732 ms wall (slowest 2.7 s).
+  The import of the pool at a reveal takes 1 ms at 2-3 rooms to 150 ms at 16 and more (40,000 samples in the pool).
 
 ## The other floors (1209 complete F1-F6/M1-M6 maps, Sep-Oct 2026)
 
