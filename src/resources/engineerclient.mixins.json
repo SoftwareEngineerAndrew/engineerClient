@@ -46,6 +46,7 @@
     "P3SimWorldMixin",
     "AdsWorldGenMixin",
     "AdsMobCadenceMixin",
+    "AdsNoDespawnMixin",
     "AdsNoPlaceMixin",
     "AdsNoDropMixin",
     "P3SimLevelInfoMixin",
