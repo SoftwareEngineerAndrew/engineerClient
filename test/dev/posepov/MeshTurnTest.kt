@@ -1,9 +1,9 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.p3sim.pack.PackReport
-import com.engineerclient.p3sim.pack.Rot
-import com.engineerclient.p3sim.pack.rooms.Placement
-import com.engineerclient.p3sim.pack.rooms.RoomPack
+import com.engineerclient.ads.pack.PackReport
+import com.engineerclient.ads.pack.Rot
+import com.engineerclient.ads.pack.rooms.Placement
+import com.engineerclient.ads.pack.rooms.RoomPack
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import kotlin.test.assertEquals

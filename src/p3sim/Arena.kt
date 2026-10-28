@@ -77,14 +77,8 @@ object Arena {
     /**
      * Fills a freshly generated chunk of the sim world with its part of the arena (straight into the
      * sections: no updates, nothing ticks). Called from the generator on a worker thread.
-     *
-     * In a full run the arena is the engine's clipped [com.engineerclient.p3sim.run.ArenaRegion]: [WorldRegions.fillAll] has then already
-     * written it (with the dungeon), so only the boss practice's own world takes the path below.
      */
     fun fill(chunk: ChunkAccess) {
-        // The full-run regions (the dungeon, the clipped arena...) fill their part first; a no-op while none is registered.
-        com.engineerclient.p3sim.run.WorldRegions.fillAll(chunk)
-        if (com.engineerclient.p3sim.run.ArenaRegion.active) return
         if (fillBlocks(chunk)) Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG))
     }
 

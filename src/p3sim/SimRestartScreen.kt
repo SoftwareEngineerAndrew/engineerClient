@@ -59,19 +59,6 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
             SimActions.send("stop")
         }.tooltip(tip("Ends the run: the fight stops and the splits clear." + if (inParty) " For the whole party." else "")).bounds(cx - RESTART_W / 2, restartY - ROW, RESTART_W, 20).build())
 
-        // The full run: its start screen, and while one is on, a restart of the room or of the whole run (savepoint restores, not a rebuilt world).
-        if (com.engineerclient.EngineerClient.BETA) addRenderableWidget(Button.builder(Component.literal("§bFull Run")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
-            .tooltip(tip("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first. Rebuilds the world."))
-            .bounds(cx - RESTART_W / 2, restartY - 2 * ROW, RESTART_W, 20).build())
-        if (com.engineerclient.p3sim.run.ClientRun.inClear) {
-            addRenderableWidget(Button.builder(Component.literal("§eRestart Room")) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart", "room") }
-                .tooltip(tip("Back to where you entered the room you stand in: the run's state, the clock and your gear as they were."))
-                .bounds(cx - RESTART_W / 2, restartY - 3 * ROW, RESTART_W, 20).build())
-            addRenderableWidget(Button.builder(Component.literal("§eRestart Run")) { mc.gui.setScreen(null); com.engineerclient.p3sim.clear.ui.UiServer.send("restart") }
-                .tooltip(tip("Back to the start of this run (the same dungeon, no rebuild)."))
-                .bounds(cx - RESTART_W / 2, restartY - 4 * ROW, RESTART_W, 20).build())
-        }
-
         party()
 
         // Left: the tabs, Practice level with Restart, then Plan, Teleport, Settings and Boss above it.
@@ -610,6 +597,14 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
                 .tooltip(tip("Drops everyone who joined; your sim goes on.")).bounds(x, y, PARTY_W, 20).build())
             return
         }
+        if (AdsServer.active) {
+            val names = P3Party.players()
+            line(if (AdsServer.listed) "§aListed on the ADS server" else "§7Connecting to the ADS server...")
+            line("§7${names.joinToString(", ").ifEmpty { "Just you" }} §8${names.size.coerceAtLeast(1)}/5")
+            addRenderableWidget(Button.builder(Component.literal("Stop Hosting")) { AdsServer.stop(); rebuildWidgets() }
+                .tooltip(tip("Takes your sim off the ADS server and drops everyone who joined through it; your sim goes on.")).bounds(x, y, PARTY_W, 20).build())
+            return
+        }
         if (PartyClient.joiner) {
             // In someone's sim: who's in it (the server's roster), and the way out.
             val names = listOf(mc.player?.name?.string ?: "You") + PartyClient.team.filter { it.player }.map { it.name }
@@ -623,6 +618,9 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         if (!com.engineerclient.EngineerClient.BETA) return
         addRenderableWidget(Button.builder(Component.literal("Host Party")) { P3Party.host(); rebuildWidgets() }
             .tooltip(tip("Friends join your sim: you get a 4-letter code to send them.")).bounds(x, y, PARTY_W, 20).build())
+        y += ROW
+        addRenderableWidget(Button.builder(Component.literal("Host on Server")) { AdsServer.start(); rebuildWidgets() }
+            .tooltip(tip("Lists your sim in the ADS server's lobby: anyone there can click your head to join, no mod needed.")).bounds(x, y, PARTY_W, 20).build())
         y += ROW
         val box = EditBox(font, x, y, PARTY_W - 42, 20, Component.literal("Code"))
         box.setMaxLength(4)

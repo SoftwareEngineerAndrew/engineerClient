@@ -94,6 +94,8 @@ object P3Sim : Module(
     val termsOnlyS = +BooleanSetting("Stop After Terms", false, desc = "The run stops (as Stop does) when the core opens: no Goldor fight.")
     val p3OnlyS = +BooleanSetting("Stop After Goldor", false, desc = "The run stops (as Stop does) when Necron would speak, after Goldor's death, instead of going on to Necron.")
     val autoStartS = +BooleanSetting("Start On Join", false, desc = "Start P3 as soon as you join the sim world.")
+    val lagPresetS = +SelectorSetting("Lag Preset", LagPreset.OFF, desc = "Makes the sim's server lose ticks the way Hypixel's does: it freezes for a moment, then runs a burst to catch up, and part of the lost time never comes back. Good, Typical and Bad lose 14.5, 30.3 and 56.6 ticks a minute (the measured 10th, 50th and 90th percentile of F7 runs); High slot is an instance slot above 200 (about 1.8 times Typical).")
+    val lagBurstS = +NumberSetting("Lag Burst Rate", LagBurst.DEFAULT_RATE, 1.0..6.0, 0.5, desc = "How many times faster than normal the server runs the ticks it catches up after a freeze. Not measured on Hypixel (only how many ticks come back is), so this is a guess; 2 is the default.")
     val showTimesS = +BooleanSetting("Section Times", true, desc = "Each section's time in chat as it ends, and a summary at the core.")
 
     /** Practice: each task's time as you do it (like the Simon Says sim's). */
@@ -128,8 +130,6 @@ object P3Sim : Module(
     init {
         // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
         practiceHud.enabled = true; practiceTimeHud.enabled = true; practiceStartHud.enabled = true
-        // The full-run modules add their own settings here (docs/ads/ARCHITECTURE.md).
-        com.engineerclient.p3sim.run.AdsBootstrap.registerSettings(this)
     }
 
     val autoStart: Boolean get() = autoStartS.value
@@ -248,7 +248,6 @@ object P3Sim : Module(
         get() = localSim || (P3Party.joined && mc.level != null)
 
     fun init() {
-        com.engineerclient.p3sim.run.AdsBootstrap.init()
         SimNet.register()
         PartyServer.register()
         PartyClient.register()
@@ -276,8 +275,6 @@ object P3Sim : Module(
                 })
                 cmd.then(ClientCommands.literal("stop").executes { SimActions.send("stop"); 1 })
                 cmd.then(ClientCommands.literal("rebuild").executes { SimWorld.rebuild(); 1 })
-                // /ads dev ... and /ads run ...: the full-run modules' commands.
-                com.engineerclient.p3sim.run.AdsCommands.attach(cmd)
                 dispatcher.register(cmd)
             }
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
@@ -305,24 +302,10 @@ object P3Sim : Module(
                 fun key(b: Button) = (b.message.contents as? net.minecraft.network.chat.contents.TranslatableContents)?.key
                 val buttons = widgets.filterIsInstance<Button>()
                 val single = buttons.firstOrNull { key(it) == "menu.singleplayer" }
-                // The ADS button keeps the boss practice; in the beta a small "Run" button beside it opens the full run's start screen.
-                val runW = 44
-                // Room left for Run in the beta; in ADM the ADS button is the full width.
-                val runRoom = if (EngineerClient.BETA) runW + 4 else 0
                 val ads = Button.builder(Component.literal(FULL_NAME)) { SimWorld.open() }.let {
-                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width - runRoom, single.height) else it.bounds(w - 164, 4, 160 - runRoom, 16)
+                    if (single != null) it.bounds(single.x, single.y - single.height - 4, single.width, single.height) else it.bounds(w - 164, 4, 160, 16)
                 }.build()
                 widgets.add(ads)
-                if (EngineerClient.BETA) {
-                    val run = Button.builder(Component.literal("§bRun")) { com.engineerclient.p3sim.clear.ui.UiModule.openStartScreen() }
-                        .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Starts a full F7 run: countdown, the dungeon, the blood room, then the boss. Choose the layout, party and lag first.")))
-                        .let { if (single != null) it.bounds(single.x + single.width - runW, single.y - single.height - 4, runW, single.height) else it.bounds(w - 4 - runW, 4, runW, 16) }.build()
-                    widgets.add(run)
-                    // GUI: ADS's own front page (AdsHubScreen), a small button right of Run; no world is opened.
-                    val gx = if (single != null) run.x + run.width + 4 else ads.x - 40
-                    widgets.add(Button.builder(Component.literal("GUI")) { mc.gui.setScreen(AdsHubScreen(screen)) }
-                        .bounds(gx, ads.y, 36, ads.height).build())
-                }
                 val realms = buttons.firstOrNull { key(it) == "menu.online" } ?: return@safely
                 widgets.remove(realms)
                 widgets.add(Button.builder(Component.literal("Join Hypixel")) { com.engineerclient.misc.RandomStuff.joinHypixel(screen) }
@@ -391,9 +374,6 @@ object P3Sim : Module(
         bridged = true
         // On in the sim, so its HUDs (practice) show: the module's switch does nothing else.
         if (!enabled) toggle()
-        // The clear of a full run: Odin is left to derive the dungeon itself (see [clearBridge]).
-        if (com.engineerclient.p3sim.run.ClientRun.bridgeAsClear) { clearBridge(); return }
-        inClearBridge = false
         val me = mc.player?.name?.string ?: return
         setArea(Island.Dungeon)
         DungeonListener.floor = Floor.F7
@@ -421,35 +401,10 @@ object P3Sim : Module(
         }
     }
 
-    /** The bridge is in its clear mode (the stage is COUNTDOWN, CLEAR or BLOOD), so the switch back to the boss rewrites everything it left alone. */
-    private var inClearBridge = false
-
-    /**
-     * During the countdown, the clear and the blood room of a full run the bridge does NOT force "in boss": Odin's room scan, map scan and
-     * room-enter events switch themselves off while `inBoss` is set. It sets the floor once (Odin also reads it from the sidebar the server sends),
-     * puts the area back to SinglePlayer, which Odin treats as every area (setting Dungeon would lose that and leave Odin waiting for a location
-     * event that never comes), lets Odin work out inBoss from where the player stands (F7: x and z beyond -7 is the arena), and stops writing the
-     * party: Odin derives it from the tab list the server sends, and two writers would fight. In the boss stages the bridge is what it always was.
-     */
-    private fun clearBridge() {
-        if (!inClearBridge) {
-            inClearBridge = true
-            setArea(Island.SinglePlayer)
-            DungeonListener.inBoss = false
-            // What the bridge wrote for the boss practice goes; Odin's tab parser fills the party in again.
-            DungeonListener.dungeonTeammates = arrayListOf()
-            DungeonListener.dungeonTeammatesNoSelf = emptyList()
-            DungeonListener.leapTeammates = emptyList()
-            teamClass = -1; roster = ""
-        }
-        if (DungeonListener.floor == null) DungeonListener.floor = Floor.F7
-    }
-
     private var teamClass = -1
     private var roster = ""
 
     private fun unbridge() {
-        inClearBridge = false
         teamClass = -1
         DungeonListener.floor = null
         DungeonListener.inBoss = false
