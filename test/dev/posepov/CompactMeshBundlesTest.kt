@@ -1,6 +1,6 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.p3sim.pack.Rot
+import com.engineerclient.ads.pack.Rot
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files

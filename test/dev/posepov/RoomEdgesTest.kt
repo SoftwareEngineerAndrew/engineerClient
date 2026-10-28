@@ -1,9 +1,9 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.p3sim.pack.DungeonFrame
-import com.engineerclient.p3sim.pack.PackReport
-import com.engineerclient.p3sim.pack.rooms.Placement
-import com.engineerclient.p3sim.pack.rooms.RoomPack
+import com.engineerclient.ads.pack.DungeonFrame
+import com.engineerclient.ads.pack.PackReport
+import com.engineerclient.ads.pack.rooms.Placement
+import com.engineerclient.ads.pack.rooms.RoomPack
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import kotlin.test.assertNotNull
@@ -19,7 +19,7 @@ class RoomEdgesTest {
         val misses = ArrayList<String>()
         for (d in ds) {
             val vol = pack.volume(d) ?: continue
-            val rots = if (d.type.equals("fairy", true)) listOf(com.engineerclient.p3sim.pack.Rot.SOUTH) else d.rotations.ifEmpty { Placement.legalRotations(d.shape) }
+            val rots = if (d.type.equals("fairy", true)) listOf(com.engineerclient.ads.pack.Rot.SOUTH) else d.rotations.ifEmpty { Placement.legalRotations(d.shape) }
             for (rot in rots) {
                 val tiles = Placement.tilesFor(d.shape, rot, 1, 1)
                 val p = runCatching { d.place(rot, tiles) }.getOrNull() ?: continue
