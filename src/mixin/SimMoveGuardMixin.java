@@ -1,5 +1,6 @@
 package com.engineerclient.mixin;
 
+import com.engineerclient.ads.world.Game;
 import com.engineerclient.p3sim.SimServer;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -19,11 +20,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * ADS: the sim's server never kicks for "Invalid move player packet received" over timing alone. 26.x disconnects a
+ * ADS and the boss practice: the sim's server never kicks for "Invalid move player packet received" over timing alone. 26.x disconnects a
  * player whose second position packet lands in the same server tick, and one whose teleport accept comes with no
  * teleport waiting. The sim's lag layer holds client packets back and lets them go together, so a teleport (etherwarp's
  * accept plus the client's position right after) did both. In the sim a second position in a tick is taken like the
- * first (as before 26.x) and a stale accept is dropped. NaN or out-of-world values still disconnect.
+ * first (as before 26.x) and a stale accept is dropped. The ADS world gets the same: a client catching up ticks after a hitch
+ * (the world finishing loading) sends two positions in one server tick, which kicked within 2 s of joining (2026-10-27). NaN or out-of-world values still disconnect.
  * <p>
  * Nor does it pull you back for "moved wrongly": the sim's world and your client's differ in places (blocks sent to the
  * client only, puzzle and door blocks set a tick apart), and the snap back, sent in the tick of an etherwarp, put you at
@@ -37,8 +39,11 @@ public class SimMoveGuardMixin {
     @Shadow private Vec3 awaitingPositionFromClient;
     @Shadow private int awaitingTeleport;
 
+    /** The boss practice's server or the ADS world's: both are Hypixel's server, which never kicks or snaps back over this. */
     private boolean ec$simServer() {
-        return SimServer.INSTANCE.getServer() != null && this.player != null && this.player.level().getServer() == SimServer.INSTANCE.getServer();
+        if (this.player == null) return false;
+        if (Game.isAdsLevel(this.player.level())) return true;
+        return SimServer.INSTANCE.getServer() != null && this.player.level().getServer() == SimServer.INSTANCE.getServer();
     }
 
     @Inject(method = "handleMovePlayer", at = @At("HEAD"))
