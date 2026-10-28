@@ -250,7 +250,10 @@ object PiecePool {
     private var idleCheckAt = 0L
     /** Bumped whenever what's on the GPU changes (a piece arrives or goes): what a feed resolved to draw is stale. */
     var version = 0L; private set
-    /** The most indices one piece needs. */
+    /**
+     * The most indices one draw can need: a whole pool (a room's pieces sit side by side, so a view's draws of them run on
+     * across pieces, as far as the pool goes).
+     */
     var mostIndices = 0; private set
     var evictions = 0L; private set
     /** Bumped for every ask for a piece that isn't on the GPU yet (one that is never: nothing is missing). */
@@ -377,6 +380,7 @@ object PiecePool {
     private fun newPool(atLeast: Int) {
         val n = maxOf(POOL_VERTICES, atLeast)
         val buf = RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov pieces" }, GpuBuffer.USAGE_VERTEX or GpuBuffer.USAGE_COPY_DST, n.toLong() * CompactMesh.VERTEX)
+        if (n / 4 * 6 > mostIndices) mostIndices = n / 4 * 6
         pools += Pool(buf, n)
     }
 
