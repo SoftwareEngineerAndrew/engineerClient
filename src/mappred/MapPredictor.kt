@@ -291,14 +291,14 @@ internal class Tally(cells: Int, entries: Int) {
  * shows and the rules every recorded map of its floor follows ([FloorRules]), and the prediction is what
  * they agree on. [run] can be called again to add samples (each call refines the same prediction).
  *
- * Two samplers: on floors with [FloorRules.game] (F7, 5-puzzle maps and their rare rooms too) the game's own steps
- * ([GameSampler]: the big rooms one random spot each, the door tree grown from the entrance, no fitted tables, only a
- * calibration of the chances), unless [gameProcess] is false; else, and for a map the game's steps can't fit (a
+ * Two samplers: on every floor the game's own steps ([GameSampler]: the big rooms one random spot each, the door tree
+ * grown from the entrance, the puzzle column after it, no fitted tables, on F7 a calibration of the chances; 5-puzzle
+ * maps and their rare rooms too), unless [gameProcess] is false; else, and for a map the game's steps can't fit (a
  * misread one) or hardly fit (too few trees come out right in the time it gets: [GameSampler.failed]), the classic
  * one below (big rooms biggest first with held cells, a tree grown from the doors into the unknown, fitted tables
  * and calibration).
  */
-class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.game) {
+class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
     private val w = view.w
     private val h = view.h
     private val n = w * h
@@ -423,14 +423,14 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = view.rules.
             for (t in 0 until n) { val (x, z) = f(t % w, t / w); frame[t] = z * w + x }
         }
         tally = Tally(cells.size, entries.size)
-        // the game's own steps where the floor has them worked out (F7's grid, every tile of it a room); if setting it
-        // up throws, the classic sampler has the map from the start (as when it throws later: see [run]). 5-puzzle maps
-        // too: their rare rooms (the dead ends past the puzzles) are in the game's steps ([GameSampler]), and run as the
+        // the game's own steps (every floor: held-out lower-floor maps score better by them than by the classic sampler
+        // on each floor and at every stage, [GameSampler]); if setting it up throws, the classic sampler has the map from
+        // the start (as when it throws later: see [run]). 5-puzzle maps too: their rare rooms (the dead ends past the puzzles) are in the game's steps ([GameSampler]), and run as the
         // worker runs it the game process is ahead of the classic sampler there as on the rest (147 held-out 5-puzzle
         // maps, 735 snapshots: -1.0350 against -1.0539, +0.0189, s.e. 0.0037 by map; +0.0131, s.e. 0.0041, on the 117
         // of them without a rare room). The -0.032 (s.e. 0.013) that once kept them on the classic sampler was 45
         // snapshots of 9 maps without a rare room (rerun with the calibration: -0.012, s.e. 0.014)
-        if (gameProcess && rules.game && !bad && w == rules.w && h == rules.h && !rules.puzzleColumn && cells.isNotEmpty()) {
+        if (gameProcess && !bad && cells.isNotEmpty()) {
             try {
                 val sn = secrets; val on = secretsOn; val unnamed = unnamedKnown.toIntArray()
                 val make = { GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, sn, on, unnamed) }

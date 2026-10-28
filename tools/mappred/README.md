@@ -341,8 +341,7 @@ Every candidate tried, and what it showed:
   speedups always on: a bit-mask placement prefilter, each room's shown doors listed for mapOk, tree3 skipping
   nodes with no free side left, and no steps after every tree is done.
 
-- In the mod (src/mappred GameSampler.kt, F7's default; Room Prediction's Prediction Model setting picks Classic
-  instead): sampler3 with the two rule fixes (the 6-room mixes, 1% of maps, and c!/(c-k)! for a mix with c rooms
+- In the mod (src/mappred GameSampler.kt, every floor's; the classic sampler only takes a map it can't fit): sampler3 with the two rule fixes (the 6-room mixes, 1% of maps, and c!/(c-k)! for a mix with c rooms
   of a shape when the map shows k of them) and room/node/0/0/alpha=0.5/beta=0.5/mu=0.2, the mixes from gen-game.mjs;
   the tab's puzzle order and the secret total's names weigh the specials' shuffle, nothing held. Its tiles' chances
   go through GameSampler.CALIBRATION (sampler3's cal=2, fitted on the mod's own run: MODEL.md "5-puzzle maps"), and

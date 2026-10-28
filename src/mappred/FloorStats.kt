@@ -93,6 +93,16 @@ object FloorStats {
     val FAIRY_FROM_ENTRANCE_5_6 = floatArrayOf(0f, 0.431f, 0.623f, 0.82f, 0.757f, 1f, 0.874f, 0.851f, 0.851f, 0.851f, 0.851f, 0.851f, 0.851f, 0.851f, 0.851f, 0.851f)
 
     /**
+     * [GameSampler]'s [GameStats.MIX_RATE] for the combos above, row by row: the chance one try with that mix places its
+     * big rooms (one random spot each in the main grid, none clashing with each other or the entrance, the entrance on a
+     * recorded map's cell), 1,000,000 tries each (placelik.mjs's big/try1, as F7's). A mix is drawn by maps / rate.
+     */
+    val MIX_RATE_1 = doubleArrayOf(0.02222, 0.02273, 0.01250, 0.01637, 0.006403)
+    val MIX_RATE_2 = doubleArrayOf(0.004391)
+    val MIX_RATE_3_4 = doubleArrayOf(0.002283, 0.007668, 0.008564, 0.006750, 0.009645, 0.008012, 0.008557, 0.01059, 0.01139, 0.004351, 0.009962, 0.004957, 0.003651, 0.008358, 0.006028, 0.005727, 0.002205, 0.003488, 0.003606, 0.004369)
+    val MIX_RATE_5_6 = doubleArrayOf(0.003073, 0.003505, 0.002780, 0.003935, 0.003168, 0.004527, 0.002868, 0.003297, 0.004152, 0.002067, 0.001469, 0.001780, 0.003363, 0.001476, 0.004097, 0.001740, 0.001893, 0.001979, 0.002332, 0.002471, 0.001734, 0.005462, 0.0007840, 0.004960, 0.006891, 0.005595, 0.0007600, 0.007365, 0.001230, 0.003287, 0.0008250, 0.0009620)
+
+    /**
      * Room names a floor never has. A room on one floor is on every floor above it, so these are the names first
      * seen on a higher floor where the floors up to it would have had them at least 5 times between them.
      */

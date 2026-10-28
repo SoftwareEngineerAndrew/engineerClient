@@ -8,7 +8,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/** The game-process sampler (F7's default), on synthetic maps only. */
+/** The game-process sampler (every floor's), on synthetic maps only. */
 class GameSamplerTest {
 
     /**
@@ -77,14 +77,30 @@ class GameSamplerTest {
 
     private fun total(p: Prediction, c: Int) = p.raw.sumOf { (it?.get(c) ?: 0f).toDouble() }
 
-    @Test fun f7GoesByTheGameProcessAndTheOtherFloorsDont() {
-        assertTrue(FloorRules.F7.game)
-        for (f in 1..6) assertFalse(assertNotNull(FloorRules.of(f)).game)
-        assertTrue(MapPredictor(opening()).usesGameProcess)
-        assertFalse(MapPredictor(opening(), gameProcess = false).usesGameProcess)
-        for (rules in listOf(FloorRules.F1, FloorRules.F3, FloorRules.F5, FloorRules.F6)) {
-            assertFalse(MapPredictor(opening(rules = rules)).usesGameProcess)
-            assertFalse(MapPredictor(opening(rules = rules), gameProcess = true).usesGameProcess)
+    @Test fun everyFloorGoesByTheGameProcess() {
+        for (f in 1..7) {
+            val rules = assertNotNull(FloorRules.of(f))
+            assertTrue(MapPredictor(opening(rules = rules)).usesGameProcess, "F$f")
+            assertFalse(MapPredictor(opening(rules = rules), gameProcess = false).usesGameProcess, "F$f")
+            assertEquals(rules.gameMixes.size, rules.gameMixRate.size, "F$f")
+        }
+    }
+
+    @Test fun theLowerFloorsKeepToTheirOwnGrid() {
+        // each floor's main grid (and F4-F6's puzzle column east of it, puzzles only): nothing off it, blood 7-8 steps out
+        // on F1-F4 (9-10 on F5-F6), every special once
+        for (f in 1..6) {
+            val rules = assertNotNull(FloorRules.of(f))
+            val p = predict(opening(rules = rules, puzzles = 2), samples = 400)
+            for (t in 0 until 36) {
+                val x = t % 6; val z = t / 6
+                val probs = p.raw[t] ?: continue
+                assertTrue(z < rules.h && (x < rules.w || rules.puzzleColumn && x == rules.w), "F$f tile $t")
+                if (x == rules.w) for (c in intArrayOf(Cls.BIG, Cls.NORMAL, Cls.BLOOD, Cls.FAIRY)) assertEquals(0f, probs[c], "F$f column tile $t")
+            }
+            assertEquals(if (rules.trap) 1.0 else 0.0, total(p, Cls.TRAP), 1e-4, "F$f")
+            for (c in intArrayOf(Cls.YELLOW, Cls.BLOOD, Cls.FAIRY)) assertEquals(1.0, total(p, c), 1e-4, "F$f class $c")
+            assertEquals(2.0, total(p, Cls.PUZZLE), 1e-4, "F$f")
         }
     }
 

@@ -47,9 +47,9 @@ import kotlin.math.roundToInt
  * leave only one way for the last rooms to be, they're drawn in full with their names. Everything
  * is worked out again on a background thread whenever the map shows more, so a wrong guess changes
  * as rooms open. Only what the map shows is used (never the world scan of rooms nobody has seen).
- * Prediction Model picks F7's sampler: Game Process (the default; [GameSampler], the game's own steps) or
- * Classic (the older one); the other floors always use Classic.
- * The Game Process doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
+ * Every floor is predicted by the game's own steps ([GameSampler]: the big rooms one random spot each, the door tree
+ * grown from the entrance, the puzzle column after it); the older classic sampler only takes a map those can't fit.
+ * The prediction doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
  * agree with the new room are the new guess at once ([PredictionSession]); more guesses top them up, and Predict Ahead
  * keeps guessing while the map stays, on Prediction Threads threads, for the next room.
  *
@@ -60,25 +60,20 @@ import kotlin.math.roundToInt
 object OdinMapPrediction {
 
     private enum class Mode { ADM, ODIN }
-    private enum class Model(private val label: String) { GAME("Game Process"), CLASSIC("Classic"); override fun toString() = label }
 
     private val mode = SelectorSetting("Room Prediction", Mode.ADM,
         desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Odin: Odin's own guess. Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
-    private val model = SelectorSetting("Prediction Model", Model.GAME,
-        desc = "F7/M7: Game Process makes each guess the way the game makes its maps (big rooms one random spot each, the door tree grown from the entrance); Classic is the older sampler with its fitted tables. Other floors always use Classic.").withDependency { on }
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
-        desc = "Threads the F7/M7 guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
+        desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
     private val aheadSetting = BooleanSetting("Predict Ahead", true,
-        desc = "F7/M7: keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
+        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val hidden = BooleanSetting("Hidden Tile Hints", true,
         desc = "A small mark on unknown tiles further in where a special room is likely.").withDependency { on }
     private val chances = BooleanSetting("Show Chances", false,
         desc = "The most likely special room's chance on each \"?\" tile.").withDependency { on }
-    private val minChance = NumberSetting("Min Chance", 0.3f, 0.1..0.9, 0.05f,
-        desc = "A room type shows on a tile only from this chance up.").withDependency { on }
     private val deadEndDropdown = DropdownSetting("Dead End Prediction",
         desc = "Tiles that are probably a puzzle, trap, yellow or rare room (a 1x1 dead end; blood and fairy have their own) drawn as Odin's guess tile: the types it can be, in their colours, with a \"?\".").withDependency { on }
     private val deadEndChance = NumberSetting("Dead End Chance", 60, 0..100, 1, unit = "%",
@@ -118,6 +113,8 @@ object OdinMapPrediction {
     private const val W = 6
     private const val TILE = 20
     private const val ROOM = 16
+    /** A room type shows on a "?" tile (its band, a hidden tile's mark) only from this chance up. */
+    private const val MIN_CHANCE = 0.3f
     /** From this sure (percent) a dead end always gets Odin's guess tile, whatever Dead End Chance is. */
     private const val ALWAYS_DEAD_END = 95
     /** An exact last room: every sample agrees (allowing for float sums). */
@@ -125,7 +122,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, model, threadsSetting, aheadSetting, splitText, hidden, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
+        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, hidden, chances, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
         EventBus.subscribe(this)
@@ -218,8 +215,7 @@ object OdinMapPrediction {
         }
         // Odin fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
-        val game = model.value == Model.GAME
-        val key = v.key() + if (game) ":game" else ":classic"
+        val key = v.key()
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
@@ -233,7 +229,7 @@ object OdinMapPrediction {
                 // then top them up, publishing as it goes, and go on for the next room while the map stays;
                 // stops when the map changes again, when nothing fits even the loosest rules, or when no more fit
                 session.threads = threads; session.ahead = ahead
-                session.begin(v, game)
+                session.begin(v)
                 do {
                     if (generation.get() != gen) return@safely
                     session.prediction()?.let { shown = it; shownView = v }
@@ -349,7 +345,6 @@ object OdinMapPrediction {
         // behind a blood door is the blood room: drawn as itself, never as a guess
         val blood = bloodTiles(known)
         for (t in blood) bloodRoom(g, t)
-        val min = minChance.value
         val deadEndAt = minOf(deadEndChance.value, ALWAYS_DEAD_END) / 100f
         val oneAt = oneChance.value / 100f
         val bloodFairyAt = bloodFairyChance.value / 100f
@@ -387,7 +382,7 @@ object OdinMapPrediction {
                 if (split != null || t in hints) overlay(g, x, y, split, room.chance, true)
                 continue
             }
-            val shownCls = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3)
+            val shownCls = SPECIALS.filter { probs[it] >= MIN_CHANCE }.sortedByDescending { probs[it] }.take(3)
             val split = splits[t]
             // dead end (puzzle, trap, yellow, rare), blood or fairy, or a normal 1x1: each on its own slider, the likeliest that passes
             val deadEnd = probs[Cls.PUZZLE] + probs[Cls.TRAP] + probs[Cls.YELLOW] + probs[Cls.RARE]
