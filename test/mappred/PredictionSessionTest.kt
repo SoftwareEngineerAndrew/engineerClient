@@ -732,13 +732,19 @@ class PredictionSessionTest {
         s.close()
     }
 
-    @Test fun otherFloorsAndTheClassicModelKeepTheOldLoop() {
+    @Test fun theLowerFloorsGoByTheGameProcessAndTheClassicModelKeepsTheOldLoop() {
         val f5 = MapView(6, 6, 3, FloorRules.F5)
         assertNotNull(f5.addRoom(Kind.ENTRANCE, intArrayOf(1))); assertNotNull(f5.addRoom(Kind.NORMAL, intArrayOf(7, 8, 13, 14)))
         val d = mapOf((1 to 7) to Edge.DOOR, (14 to 20) to Edge.WITHER, (8 to 9) to Edge.DOOR, (6 to 7) to Edge.DOOR)
         f5.closeEdges { a, b -> d[minOf(a, b) to maxOf(a, b)] }
-        val s = session()
+        val s = session(ahead = false)
         s.begin(f5)
+        assertTrue(s.usesGameProcess)
+        runUntilDone(s)
+        assertFalse(s.fellBack)
+        assertNotNull(s.prediction())
+        // the classic model asked for: the worker's loop as it was
+        s.begin(f5, game = false)
         assertFalse(s.usesGameProcess)
         var steps = 0
         while (s.step()) assertTrue(++steps < 1_000)

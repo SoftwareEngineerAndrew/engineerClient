@@ -14,7 +14,9 @@ package com.engineerclient.mappred
  *  - the wither path walks 7 or 8 steps with the fairy 3 before blood on F1-F4, 9 or 10 and 4 on F5-F7
  *  - the lower floors don't have every room ([missingNames])
  *  - the tab list's puzzles in their order on the map, column by column ([puzzleOrder]; F7 only so far)
- *  - how the game makes the maps is worked out for F7 ([game]: [GameSampler]); the other floors use the classic sampler
+ *
+ * Every floor is predicted by the game's own steps ([GameSampler]: its [gameMixes], blood [bloodWalk] steps out, the
+ * puzzle column after the door tree); the classic sampler (the tables here) only takes a map those can't fit.
  */
 class FloorRules(
     val floor: Int,
@@ -51,32 +53,34 @@ class FloorRules(
     val reserve: Int = 0,
     /** a, b, d per [Cls] for the tiles' chances (MapPredictor.calibrated); null leaves them as the samples give them. */
     val calibration: Array<DoubleArray>? = null,
-    /**
-     * Predicted by the game's own steps ([GameSampler]: the big rooms one random spot each, the door tree grown from the
-     * entrance; none of the fitted numbers above, only its own [GameSampler.CALIBRATION]), unless the classic sampler is
-     * asked for. F7 only so far, 5-puzzle maps (rare rooms) too.
-     */
-    val game: Boolean = false,
+    /** [GameSampler]'s big-room mixes (as [combos]) and the chance one try with each places its rooms ([GameStats.MIX_RATE]). */
+    val gameMixes: Array<IntArray> = combos,
+    val gameMixRate: DoubleArray = DoubleArray(0),
+    /** [GameSampler]'s calibration of the tiles' chances (as [calibration]); null leaves them as the samples give them. */
+    val gameCalibration: Array<DoubleArray>? = null,
 ) {
+    /** The wither path's walk, entrance to blood: this or one more (7-8 on F1-F4, 9-10 on F5-F7). */
+    val bloodWalk = fairyBeforeBlood * 2 + 1
+
     /** The most big rooms a map of this floor has (the loosest fallback's cap). */
     val maxBig = combos.maxOf { c -> (0 until 5).sumOf { c[it] } }
 
     companion object {
         val F1 = FloorRules(1, 4, 5, false, 0, false, 3, FloorStats.COMBOS_1, FloorStats.WALK_SHORT,
-            FloorStats.BLOOD_FROM_ENTRANCE_1, FloorStats.FAIRY_FROM_ENTRANCE_1, null, FloorStats.MISSING_1)
+            FloorStats.BLOOD_FROM_ENTRANCE_1, FloorStats.FAIRY_FROM_ENTRANCE_1, null, FloorStats.MISSING_1, gameMixRate = FloorStats.MIX_RATE_1)
         val F2 = FloorRules(2, 5, 5, false, 0, false, 3, FloorStats.COMBOS_2, FloorStats.WALK_SHORT,
-            FloorStats.BLOOD_FROM_ENTRANCE_2_4, FloorStats.FAIRY_FROM_ENTRANCE_2_4, null, FloorStats.MISSING_2)
+            FloorStats.BLOOD_FROM_ENTRANCE_2_4, FloorStats.FAIRY_FROM_ENTRANCE_2_4, null, FloorStats.MISSING_2, gameMixRate = FloorStats.MIX_RATE_2)
         val F3 = FloorRules(3, 5, 5, false, 0, true, 3, FloorStats.COMBOS_3_4, FloorStats.WALK_SHORT,
-            FloorStats.BLOOD_FROM_ENTRANCE_2_4, FloorStats.FAIRY_FROM_ENTRANCE_2_4, null, FloorStats.MISSING_3)
+            FloorStats.BLOOD_FROM_ENTRANCE_2_4, FloorStats.FAIRY_FROM_ENTRANCE_2_4, null, FloorStats.MISSING_3, gameMixRate = FloorStats.MIX_RATE_3_4)
         val F4 = FloorRules(4, 5, 5, true, 6, true, 3, FloorStats.COMBOS_3_4, FloorStats.WALK_SHORT,
-            FloorStats.BLOOD_FROM_ENTRANCE_2_4, FloorStats.FAIRY_FROM_ENTRANCE_2_4, null, FloorStats.MISSING_4)
+            FloorStats.BLOOD_FROM_ENTRANCE_2_4, FloorStats.FAIRY_FROM_ENTRANCE_2_4, null, FloorStats.MISSING_4, gameMixRate = FloorStats.MIX_RATE_3_4)
         val F5 = FloorRules(5, 5, 6, true, 5, true, 4, FloorStats.COMBOS_5_6, MapStats.WALK,
-            FloorStats.BLOOD_FROM_ENTRANCE_5_6, FloorStats.FAIRY_FROM_ENTRANCE_5_6, null, FloorStats.MISSING_5)
+            FloorStats.BLOOD_FROM_ENTRANCE_5_6, FloorStats.FAIRY_FROM_ENTRANCE_5_6, null, FloorStats.MISSING_5, gameMixRate = FloorStats.MIX_RATE_5_6)
         val F6 = FloorRules(6, 5, 6, true, 5, true, 4, FloorStats.COMBOS_5_6, MapStats.WALK,
-            FloorStats.BLOOD_FROM_ENTRANCE_5_6, FloorStats.FAIRY_FROM_ENTRANCE_5_6, null, FloorStats.MISSING_6)
+            FloorStats.BLOOD_FROM_ENTRANCE_5_6, FloorStats.FAIRY_FROM_ENTRANCE_5_6, null, FloorStats.MISSING_6, gameMixRate = FloorStats.MIX_RATE_5_6)
         val F7 = FloorRules(7, 6, 6, false, 0, true, MapStats.FAIRY_BEFORE_BLOOD, MapStats.COMBOS, MapStats.WALK,
             MapStats.BLOOD_FROM_ENTRANCE, MapStats.FAIRY_FROM_ENTRANCE, MapStats.BIG_TILE, emptySet(), puzzleOrder = true, reserve = 5,
-            calibration = MapStats.CALIBRATION, game = true)
+            calibration = MapStats.CALIBRATION, gameMixes = GameStats.MIXES, gameMixRate = GameStats.MIX_RATE, gameCalibration = GameSampler.CALIBRATION)
 
         /** The rules for floor [floor] (1-7, F or M); null for the entrance floor. */
         fun of(floor: Int): FloorRules? = when (floor) {

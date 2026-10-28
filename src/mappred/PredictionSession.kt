@@ -29,8 +29,8 @@ import kotlin.random.Random
  * prediction is the parts' mean weighted by what each is worth in fresh batches ([worth]). A batch keeps its identity
  * when its samples are reused (a batch's samples grew from a few ancestors, so the survivors of it carry no more than
  * the batch's weight), and a part is worth no more fresh batches than it has samples to match a fresh batch's, so the
- * count stays honest. The classic sampler's path (the other floors, a map the game process can't fit, or the Prediction
- * Model setting) is the worker's loop as it was.
+ * count stays honest. The classic sampler's path (a map the game process can't fit, or [begin] asked for it) is the
+ * worker's loop as it was.
  */
 internal class PredictionSession(
     /** Samplers at once for the game process (the caller's worker thread is one of them; the rest are helper threads of the lowest priority). */
@@ -212,10 +212,9 @@ internal class PredictionSession(
 
     /**
      * Starts [v] as the map to predict: the pool of the views before is carried over when [v] says all they said and
-     * more, else dropped. [game]: F7's game process where the floor has it (else, or when it can't fit the map, the
-     * classic sampler). What the pool gives is [prediction] at once, when it has enough for one.
+     * more, else dropped. [game]: the game process (false, or when it can't fit the map: the classic sampler). What the pool gives is [prediction] at once, when it has enough for one.
      */
-    fun begin(v: MapView, game: Boolean = v.rules.game) {
+    fun begin(v: MapView, game: Boolean = true) {
         cancelled = false
         settle()
         val before = view

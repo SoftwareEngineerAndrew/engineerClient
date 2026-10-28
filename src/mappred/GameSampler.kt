@@ -50,7 +50,7 @@ internal class Part(val tally: Tally, val kept: Int, val w1: Double, val w2: Dou
 }
 
 /**
- * F7 completion by the game's own steps (tools/mappred sampler3.mjs with tree3.mjs; its README's "How the maps are
+ * Map completion by the game's own steps (tools/mappred sampler3.mjs with tree3.mjs; its README's "How the maps are
  * made" and "What the game's code could be doing"), each sample a whole map that fits what the map shows:
  *
  *  1. the big rooms not on the map yet: one random spot inside the map each, all again if any clashes, so every
@@ -68,8 +68,19 @@ internal class Part(val tally: Tally, val kept: Int, val w1: Double, val w2: Dou
  *     Those draws (a 2x2's inside, blood among its spots, the specials' shuffle) are summed over rather than drawn,
  *     and the secret total's names ([SecretNames]) weigh the last few rooms.
  *
- * No fitted tables: what the samples agree on is the prediction, each tile's chances through [CALIBRATION] (the one fitted
- * thing: the samples are a little too sure of themselves). A batch's samples come from few ancestors, so it goes
+ * Every floor alike, in its own main grid ([FloorRules]: F1 4x5, F2-F4 5x5, F5-F6 5x6, F7 6x6, on the map's 6x6 tiles)
+ * with its own mixes ([FloorRules.gameMixes]); blood 7 or 8 steps out with the fairy 3 back on F1-F4
+ * ([FloorRules.bloodWalk]); no trap on F1-F2. A tree with no blood spot there is made again: the maps that have blood 2
+ * steps nearer (1-5% of the lower floors') are fewer than a fallback to that would give (75-80% of the trees grown have
+ * no spot), and leaving them out scored best. F4-F6: once the tree is done, the puzzle column east of the main grid tops
+ * its dead ends up to [FloorRules.deadEndTarget] (as many as the tab list's puzzles, trap and yellow are short of): 1x1
+ * puzzles, each behind one door from a normal room west of it with two doors or more (a big one, or a 1x1; never the
+ * fairy), on such tiles at random; trap and yellow on the main grid's dead ends unless it has fewer than two. Held out
+ * on the lower floors (1,082 maps recorded on ADR; F1-F4 151, F5 200, F6 200, at 2/4/6/9/12 rooms known) against the
+ * classic sampler: +0.021, +0.015 and +0.014 a tile (s.e. 0.005, 0.002, 0.003), ahead at every stage.
+ *
+ * No fitted tables: what the samples agree on is the prediction, on F7 each tile's chances through [CALIBRATION] (the one
+ * fitted thing: the samples are a little too sure of themselves; [FloorRules.gameCalibration], none fitted on the lower floors yet). A batch's samples come from few ancestors, so it goes
  * on until [MIN_BATCHES] batches' worth of weight as well as [MIN_SAMPLES] samples, and shows nothing before
  * [MIN_SHOW] batches' worth. A hard map (few of the trees grown come out right) can use up [MAX_TRIES] particles
  * without getting that far: then it is [failed] and the classic sampler is used instead.
@@ -99,13 +110,25 @@ internal class GameSampler(
     private val w = view.w
     private val h = view.h
     private val n = w * h
-    /** Each tile's neighbours, in tree3.mjs's order (east, west, south, north). */
+    private val rules = view.rules
+    /** The floor's main grid (the door tree's), from the map's north-west corner. */
+    private val gw = rules.w
+    private val gh = rules.h
+    /** Each main grid tile's neighbours in it, in tree3.mjs's order (east, west, south, north); none off it. */
     private val nb = Array(n) { t ->
         val x = t % w; val z = t / w; val o = ArrayList<Int>(4)
-        if (x + 1 < w) o += t + 1; if (x > 0) o += t - 1; if (z + 1 < h) o += t + w; if (z > 0) o += t - w
+        if (inMain(t)) { if (x + 1 < gw) o += t + 1; if (x > 0) o += t - 1; if (z + 1 < gh) o += t + w; if (z > 0) o += t - w }
         o.toIntArray()
     }
     private val nKnown = view.kinds.size
+    /** The main grid's tiles, and its unknown ones (the 1x1s a layout fills in). */
+    private val mainTiles = (0 until n).filter { inMain(it) }.toIntArray()
+    private val mainCells = cells.filter { inMain(it) }.toIntArray()
+    /** F4-F6: the puzzle column's tiles (east of the main grid, north to south), and what the map shows west of each: 1 a door (or its room), 0 a wall, -1 nothing yet. */
+    private val colTiles = if (rules.puzzleColumn && gw < w) IntArray(gh) { it * w + gw } else IntArray(0)
+    private val colSide = IntArray(colTiles.size)
+    /** The specials the map shows in the column: trap, yellow, puzzles, rares (puzzles but where the main grid has too few dead ends). */
+    private val colKnown = IntArray(4)
     private val entCell: Int
     /** The tile the entrance's one door leads to: inward, off the edge it is on. */
     private val inward: Int
@@ -126,9 +149,17 @@ internal class GameSampler(
     private var knownBlood = -1
     private var knownFairy = -1
     private val puzzles = view.puzzles
-    /** The 1x1 dead ends a map has besides the entrance, blood among them: puzzles + trap + yellow + blood, with 5 puzzles 8 to 11 (rares on the rest). */
-    private val deadMin = if (puzzles < 5) puzzles + 3 else 8
-    private val deadMax = if (puzzles < 5) puzzles + 3 else MAX_DEAD_5 + 1
+    /** Trap (none on F1-F2) and yellow; with the puzzles, the specials the tab list says. */
+    private val ty = (if (rules.trap) 1 else 0) + 1
+    private val specials = puzzles + ty
+    /** The puzzle column tops the dead ends up ([FloorRules.deadEndTarget]): the specials don't go past it. */
+    private val topUp = colTiles.isNotEmpty() && specials <= rules.deadEndTarget
+    /**
+     * The main grid's 1x1 dead ends besides the entrance, blood among them: the specials and blood, with 5 puzzles up to
+     * [MAX_RARES] more (rares on the rest); from blood alone up where the column tops them up.
+     */
+    private val deadMin = if (topUp) 1 else specials + 1
+    private val deadMax = if (topUp || puzzles < 5) specials + 1 else specials + MAX_RARES + 1
     /** The mixes the map's big rooms allow, and the weight to draw each by. */
     private val mixes = ArrayList<IntArray>()
     private val mixW: DoubleArray
@@ -137,6 +168,8 @@ internal class GameSampler(
     private val spots: Array<Array<IntArray>>
     private val sideBeta = DoubleArray(5) { exp(-rule.beta * it) }
     private val sideMu: DoubleArray
+    /** The tiles' chances through the floor's calibration ([FloorRules.gameCalibration]; none: as the samples give them). */
+    private val calibrate: ((FloatArray) -> FloatArray)? = rules.gameCalibration?.let { cal -> { p: FloatArray -> MapPredictor.calibrate(p, cal, nKnown) } }
 
     /** False when no game map can be grown here at all (no entrance, no mix fits the big rooms shown). */
     val possible: Boolean
@@ -167,12 +200,15 @@ internal class GameSampler(
     init {
         val ent = view.kinds.indexOf(Kind.ENTRANCE)
         entCell = if (ent < 0) -1 else view.roomTiles[ent][0]
-        inward = when {
-            entCell < 0 -> -1
-            entCell < w -> entCell + w
-            entCell >= n - w -> entCell - w
-            entCell % w == 0 -> entCell + 1
-            else -> entCell - 1
+        // off the edge it is on, the way its door shows (an entrance in a corner, F1's, can face either way)
+        inward = if (entCell < 0 || !inMain(entCell)) -1 else nb[entCell].firstOrNull { Edge.isDoor(view.edge(entCell, it)) } ?: run {
+            val off = when {
+                entCell / w == 0 -> entCell + w
+                entCell / w == gh - 1 -> entCell - w
+                entCell % w == 0 -> entCell + 1
+                else -> entCell - 1
+            }
+            if (inMain(off) && view.edge(entCell, off) != Edge.NONE) off else nb[entCell].firstOrNull { view.edge(entCell, it) != Edge.NONE } ?: -1
         }
         val a = ArrayList<Int>(); val b = ArrayList<Int>(); val k = ArrayList<Byte>()
         val wa = ArrayList<Int>(); val wb = ArrayList<Int>()
@@ -186,8 +222,17 @@ internal class GameSampler(
         }
         shownA = a.toIntArray(); shownB = b.toIntArray(); shownKind = k.toByteArray()
         wallA = wa.toIntArray(); wallB = wb.toIntArray()
+        for (k in colTiles.indices) {
+            val c = colTiles[k]
+            colSide[k] = when { view.roomAt[c] >= 0 || Edge.isDoor(view.edge(c - 1, c)) -> 1; view.edge(c - 1, c) == Edge.NONE -> 0; else -> -1 }
+        }
         for (i in 0 until nKnown) {
             val shape = view.shapes[i]
+            if (!inMain(view.roomTiles[i][0])) {
+                // a room in the puzzle column (no part of the layout or the tree)
+                colKnown[when (view.kinds[i]) { Kind.TRAP -> T; Kind.YELLOW -> Y; Kind.PUZZLE -> P; else -> R }]++
+                continue
+            }
             if (shape != Shape.ONE) knownBig[shape.ordinal]++
             when (view.kinds[i]) {
                 Kind.TRAP -> knownSpecial[T]++
@@ -201,9 +246,9 @@ internal class GameSampler(
             }
         }
         val ws = ArrayList<Double>()
-        for (i in GameStats.MIXES.indices) {
-            val x = mixWeight(i, knownBig)
-            if (x > 0) { mixes += GameStats.MIXES[i]; ws += x }
+        for (i in rules.gameMixes.indices) {
+            val x = if (i < rules.gameMixRate.size) mixWeight(i, knownBig, rules.gameMixes, rules.gameMixRate) else 0.0
+            if (x > 0) { mixes += rules.gameMixes[i]; ws += x }
         }
         mixW = ws.toDoubleArray(); mixTotal = mixW.sum()
         spots = Array(5) { s ->
@@ -213,7 +258,7 @@ internal class GameSampler(
                 val cs = IntArray(offs.size / 2); var ok = true
                 for (c in cs.indices) {
                     val x = x0 + offs[c * 2]; val z = z0 + offs[c * 2 + 1]
-                    if (x >= w || z >= h) { ok = false; break }
+                    if (x >= gw || z >= gh) { ok = false; break }
                     cs[c] = z * w + x
                 }
                 if (ok) out += cs
@@ -221,11 +266,13 @@ internal class GameSampler(
             out.toTypedArray()
         }
         sideMu = DoubleArray(n) { t -> if (entCell < 0) 1.0 else exp(-rule.mu * (abs(t % w - entCell % w) + abs(t / w - entCell / w))) }
-        possible = entCell >= 0 && inward in 0 until n && mixTotal > 0 && cells.isNotEmpty()
+        possible = gw <= w && gh <= h && inward >= 0 && mixTotal > 0 && cells.isNotEmpty()
         if (!possible) done = true
     }
 
     private fun doorsOf(t: Int) = nb[t].count { Edge.isDoor(view.edge(t, it)) }
+
+    private fun inMain(t: Int) = t % w < gw && t / w < gh
 
     /** Batches' worth of weight so far: (sum of batch weights)^2 / sum of their squares. */
     fun effectiveBatches(): Double = if (batchW2 > 0) batchW1 * batchW1 / batchW2 else 0.0
@@ -268,11 +315,11 @@ internal class GameSampler(
      * What the samples so far agree on; null before any was kept, and while they are too few to show ([MIN_SHOW]
      * batches' worth of weight: right after a door opens the first batch's few samples come from few ancestors and
      * would show rooms as near certain; the caller keeps the last prediction up meanwhile). The tiles' chances go
-     * through [CALIBRATION] ([Prediction.raw] has them as the samples give them).
+     * through the floor's calibration ([FloorRules.gameCalibration]; [Prediction.raw] has them as the samples give them).
      */
     fun prediction(): Prediction? =
         if (kept == 0 || !done && effectiveBatches() < MIN_SHOW) null
-        else tally.prediction(w, h, cells, entries, entryDoor, kept, 0) { MapPredictor.calibrate(it, CALIBRATION, nKnown) }
+        else tally.prediction(w, h, cells, entries, entryDoor, kept, 0, calibrate)
 
     // ---- lanes and the pool: several samplers of one view side by side, and samples carried from earlier views ([PredictionSession]) ----
 
@@ -295,9 +342,9 @@ internal class GameSampler(
     /** Some particle got as far as the names ([run]'s reason to try without them). */
     internal val namesWereTried: Boolean get() = namesTried
 
-    /** The tiles' chances through [CALIBRATION], for a [tally] of [samples] kept samples. */
+    /** The tiles' chances through the floor's calibration, for a [tally] of [samples] kept samples. */
     internal fun predictionOf(tally: Tally, samples: Int): Prediction? =
-        tally.prediction(w, h, cells, entries, entryDoor, samples, 0) { MapPredictor.calibrate(it, CALIBRATION, nKnown) }
+        tally.prediction(w, h, cells, entries, entryDoor, samples, 0, calibrate)
 
     /**
      * The prediction of several [parts] together, each counted by its [weights] (its batches' worth: each part is a
@@ -417,27 +464,32 @@ internal class GameSampler(
         val nr = sh.size
         val cnt = cntBuf; val id = idBuf
         java.util.Arrays.fill(cnt, 0, nr, 0); java.util.Arrays.fill(id, 0, nr, -1)
-        for (t in 0 until n) cnt[wo[t].toInt()]++
-        // the discovered rooms are the sample's rooms with the same tiles; the others keep their order after them
+        // the main grid's tiles only (off it, and in the puzzle column, the owner is -1)
+        for (t in 0 until n) { val o = wo[t].toInt(); if (o >= 0) cnt[o]++ }
+        // the discovered rooms are the sample's rooms with the same tiles; the others keep their order after them (the
+        // puzzle column's rooms aren't the layout's: they keep their places, as in [newParticle])
         for (i in 0 until nKnown) {
-            val ts = view.roomTiles[i]; val r = wo[ts[0]].toInt()
-            if (cnt[r] != ts.size || sh[r].toInt() != view.shapes[i].ordinal) return null
+            val ts = view.roomTiles[i]
+            if (!inMain(ts[0])) continue
+            val r = wo[ts[0]].toInt()
+            if (r < 0 || cnt[r] != ts.size || sh[r].toInt() != view.shapes[i].ordinal) return null
             for (tile in ts) if (wo[tile].toInt() != r) return null
             id[r] = i
         }
         var next = nKnown
-        for (r in 0 until nr) if (id[r] < 0) id[r] = next++
-        val owner = IntArray(n) { id[wo[it].toInt()] }
-        val shape = IntArray(nr); val size = IntArray(nr)
-        for (r in 0 until nr) { shape[id[r]] = sh[r].toInt(); size[id[r]] = cnt[r] }
-        val rooms = Array(nr) { r -> if (r < nKnown) view.roomTiles[r] else IntArray(size[r]) }
-        val at = IntArray(nr)
+        for (r in 0 until nr) if (id[r] < 0 && cnt[r] > 0) id[r] = next++
+        val owner = IntArray(n) { val o = wo[it].toInt(); if (o < 0) -1 else id[o] }
+        val shape = IntArray(next); val size = IntArray(next)
+        for (i in 0 until nKnown) shape[i] = view.shapes[i].ordinal
+        for (r in 0 until nr) if (id[r] >= 0) { shape[id[r]] = sh[r].toInt(); size[id[r]] = cnt[r] }
+        val rooms = Array(next) { r -> if (r < nKnown) view.roomTiles[r] else IntArray(size[r]) }
+        val at = IntArray(next)
         for (tile in 0 until n) { val r = owner[tile]; if (r >= nKnown) rooms[r][at[r]++] = tile }
         val parent = IntArray(n) { par[it].toInt() }
         val depth = IntArray(n) { -1 }
         for (tile in 0 until n) depthOf(parent, depth, tile)
-        val rentry = IntArray(nr) { -1 }
-        for (tile in 0 until n) { val p = parent[tile]; if (p < 0 || owner[p] != owner[tile]) rentry[owner[tile]] = tile }
+        val rentry = IntArray(next) { -1 }
+        for (tile in mainTiles) { val p = parent[tile]; if (p < 0 || owner[p] != owner[tile]) rentry[owner[tile]] = tile }
         return Particle(owner, rooms, shape, noBools, noBools, parent, depth, noBools, rentry, noInts, noInts, 0, s.w, true)
     }
 
@@ -491,7 +543,7 @@ internal class GameSampler(
         val todo = ArrayList<Int>(7)
         for (s in 0 until 5) repeat(mix[s] - knownBig[s]) { todo += s }
         todo.shuffle(rnd)
-        val owner = view.roomAt.copyOf()
+        val owner = IntArray(n) { if (inMain(it)) view.roomAt[it] else -1 }
         val rooms = ArrayList<IntArray>(24); val shape = ArrayList<Int>(24)
         for (i in 0 until nKnown) { rooms += view.roomTiles[i]; shape += view.shapes[i].ordinal }
         var wt = 1.0
@@ -504,7 +556,7 @@ internal class GameSampler(
             for (t in cs) owner[t] = rooms.size
             rooms += cs; shape += s
         }
-        for (t in cells) if (owner[t] < 0) { owner[t] = rooms.size; rooms += intArrayOf(t); shape += Shape.ONE.ordinal }
+        for (t in mainCells) if (owner[t] < 0) { owner[t] = rooms.size; rooms += intArrayOf(t); shape += Shape.ONE.ordinal }
         val nr = rooms.size
         val roomArr = rooms.toTypedArray()
         val shown = BooleanArray(nr) { r -> roomArr[r].any { touchesDoor[it] } }
@@ -560,9 +612,9 @@ internal class GameSampler(
         return true
     }
 
-    private val sideU = IntArray(4 * 36)
-    private val sideV = IntArray(4 * 36)
-    private val sideP = DoubleArray(4 * 36)
+    private val sideU = IntArray(4 * n)
+    private val sideV = IntArray(4 * n)
+    private val sideP = DoubleArray(4 * n)
 
     private fun nodeWeight(sw: Double) = when (rule.alpha) { 0.5 -> sqrt(sw); 1.0 -> sw; 0.0 -> 1.0; else -> sw.pow(rule.alpha) }
 
@@ -637,7 +689,7 @@ internal class GameSampler(
         val sink = store?.takeIf { it.size < storeLimit }
         val wholes = if (sink != null) java.util.IdentityHashMap<IntArray, Whole>() else null
         for (pt in ps) {
-            if (!(pt.w > 0) || !pt.inT.all { it }) continue
+            if (!(pt.w > 0) || mainTiles.any { !pt.inT[it] }) continue
             val fin = finish(pt) ?: continue
             val wgt = pt.w * fin.f
             if (!(wgt > 0) || wgt.isInfinite()) continue
@@ -685,7 +737,7 @@ internal class GameSampler(
             for (i in set.indices step 2) parent[set[i]] = set[i + 1]
             val depth = IntArray(n) { -1 }; depth[entCell] = 0
             fun dep(c: Int): Int { if (depth[c] < 0) depth[c] = dep(parent[c]) + 1; return depth[c] }
-            for (c in 0 until n) dep(c)
+            for (c in mainTiles) dep(c)
             Inside(parent, depth, p)
         }
     }
@@ -702,14 +754,45 @@ internal class GameSampler(
         val rEntry: IntArray,
         /** (room tiles mask * 256 + name index) -> chance, with the secret total's names; null without. */
         val names: HashMap<Long, Double>?,
+        /** F4-F6: each puzzle column tile's chance of each class (the rest: no room there); null where it has none. */
+        val col: Array<DoubleArray?>,
     )
+
+    /**
+     * F4-F6: the puzzle column of a finished tree, its rooms at random on the tiles west of which is a normal room with two
+     * doors or more ([ok]): [w] the chance of what the map shows of it, [pIn] each such tile's chance of a room where the
+     * map shows nothing yet.
+     */
+    private class Col(val w: Double, val pIn: Double, val ok: BooleanArray)
+
+    /** The column of [c] rooms for a tree whose fairy is room [fr] (never a host: the column comes after the fairy); null when the map's doesn't fit. */
+    private fun colFor(pt: Particle, deg: IntArray, entR: Int, fr: Int, c: Int): Col? {
+        val ok = BooleanArray(colTiles.size)
+        var el = 0; var forced = 0; var free = 0
+        for (k in colTiles.indices) {
+            val r = pt.owner[colTiles[k] - 1]
+            ok[k] = r != entR && r != fr && (r >= nKnown || view.kinds[r] == Kind.NORMAL) && (pt.big(r) || deg[r] >= 2)
+            if (ok[k]) el++
+            when (colSide[k]) { 1 -> if (ok[k]) forced++ else return null; -1 -> if (ok[k]) free++ }
+        }
+        if (c > el || forced > c || c - forced > free) return null
+        return Col(MapPredictor.choose(free, c - forced) / MapPredictor.choose(el, c), if (free > 0) (c - forced).toDouble() / free else 0.0, ok)
+    }
+
+    /** Column tile [k]'s chance of a room in a sample with column [col]. */
+    private fun colPin(col: Col, k: Int): Double = when {
+        view.roomAt[colTiles[k]] >= 0 -> 0.0
+        colSide[k] == 1 -> 1.0
+        colSide[k] == -1 && col.ok[k] -> col.pIn
+        else -> 0.0
+    }
 
     private fun finish(pt: Particle): Finish? {
         val owner = pt.owner; val nr = pt.rooms.size; val parent = pt.parent
         // every door the map shows is in the tree
         for (i in shownA.indices) { val a = shownA[i]; val b = shownB[i]; if (parent[a] != b && parent[b] != a) return null }
         val deg = IntArray(nr); val rParent = IntArray(nr) { -1 }; val rEntry = IntArray(nr) { -1 }
-        for (v in 0 until n) {
+        for (v in mainTiles) {
             val u = parent[v]
             if (u < 0) { rEntry[owner[v]] = v; continue }
             if (owner[u] != owner[v]) { deg[owner[u]]++; deg[owner[v]]++; rParent[owner[v]] = owner[u]; rEntry[owner[v]] = v }
@@ -718,48 +801,77 @@ internal class GameSampler(
         val dead = (0 until nr).filter { it != entR && !pt.big(it) && deg[it] == 1 }
         if (dead.size < deadMin || dead.size > deadMax) return null
         val d = dead.size - 1  // besides blood
-        // the specials besides blood and the fairy: one on each other dead end, the ones on the map where they are
-        val need = intArrayOf(1, 1, puzzles, maxOf(0, d - 2 - minOf(puzzles, 5)))
-        val left = IntArray(4) { need[it] - knownSpecial[it] }
+        // F4-F6: the puzzle column's rooms, as many as the specials are short of; past the specials, rares (5 puzzles)
+        val c = if (topUp) maxOf(0, specials - d) else 0
+        val rares = d + c - specials
+        if (rares < 0 || rares > 0 && puzzles < 5) return null
+        // a main grid with fewer dead ends than trap and yellow: the specials go over the column's rooms too
+        val both = c > 0 && d < ty
+        // the specials besides blood and the fairy: one on each other dead end (the column's puzzles apart), the ones on
+        // the map where they are
+        val need = intArrayOf(ty - 1, 1, if (both) puzzles else d - ty - rares, rares)
+        if (need[P] < 0 || !both && colKnown[T] + colKnown[Y] + colKnown[R] > 0) return null
+        val left = IntArray(4) { need[it] - knownSpecial[it] - (if (both) colKnown[it] else 0) }
         if (left.any { it < 0 }) return null
         val m = left.sum()
         val deadU = dead.filter { it >= nKnown }
-        if (deadU.size - (if (knownBlood >= 0) 0 else 1) != m) return null
+        val colRooms = c - colKnown.sum()  // the column's rooms not on the map yet
+        if (deadU.size - (if (knownBlood >= 0) 0 else 1) + (if (both) colRooms else 0) != m) return null
         // the chance a shuffle of every special over the dead ends puts the map's ones where they are
+        val slots = if (both) d + c else d
         val wType = (fact(m) / (fact(left[T]) * fact(left[Y]) * fact(left[P]) * fact(left[R]))) /
-            (fact(d) / (fact(need[T]) * fact(need[Y]) * fact(need[P]) * fact(need[R])))
+            (fact(slots) / (fact(need[T]) * fact(need[Y]) * fact(need[P]) * fact(need[R])))
 
-        // blood and the fairy over the 2x2s' insides: each dead end 9 or 10 steps out with a 1x1 four steps back is
-        // the game's pick alike; the ones that fit the map keep their share
-        val pb = ArrayList<Int>(); val pf = ArrayList<Int>(); val pw = ArrayList<Double>()
+        // blood and the fairy over the 2x2s' insides: each dead end [FloorRules.bloodWalk] or one more steps out with a 1x1
+        // [FloorRules.fairyBeforeBlood] steps back is the game's pick alike; the ones that fit the map keep their share
+        // (times, F4-F6, the chance of the column the map shows)
+        val walk = rules.bloodWalk; val back = rules.fairyBeforeBlood
+        val pb = ArrayList<Int>(); val pf = ArrayList<Int>(); val pw = ArrayList<Double>(); val pc = ArrayList<Col?>()
         val fitsPath = HashMap<Int, Boolean>()
+        val cols = HashMap<Int, Col?>()
         for (va in insides(pt)) {
             var nAll = 0; val start = pb.size
             for (b in dead) {
                 val t = pt.rooms[b][0]; val dep = va.depth[t]
-                if (dep != WALK && dep != WALK + 1) continue
-                var f = t; repeat(FAIRY_BEFORE) { f = va.parent[f] }
+                if (dep != walk && dep != walk + 1) continue
+                var f = t; repeat(back) { f = va.parent[f] }
                 val fr = owner[f]
                 if (fr == entR || pt.big(fr)) continue
                 nAll++
                 if (b < nKnown && view.kinds[b] != Kind.BLOOD || fr < nKnown && view.kinds[fr] != Kind.FAIRY) continue
                 if (knownBlood >= 0 && b != knownBlood || knownFairy >= 0 && fr != knownFairy) continue
                 if (!fitsPath.getOrPut(b) { pathFits(b, rParent, rEntry, parent) }) continue
-                pb += b; pf += fr; pw += va.p
+                var col: Col? = null
+                if (colTiles.isNotEmpty()) {
+                    if (fr !in cols) cols[fr] = colFor(pt, deg, entR, fr, c)
+                    col = cols[fr] ?: continue
+                }
+                pb += b; pf += fr; pw += va.p * (col?.w ?: 1.0); pc += col
             }
             for (i in start until pb.size) pw[i] = pw[i] / nAll
         }
         if (pb.isEmpty()) return null
 
-        val names = secretsOn && secrets != null && unnamedKnown.size + nr - nKnown <= SecretNames.MAX_ROOMS
+        val names = secretsOn && secrets != null && !both && unnamedKnown.size + nr - nKnown + colRooms <= SecretNames.MAX_ROOMS
         if (names) namesTried = true
-        return if (names) finishNamed(pt, deadU, left, pb, pf, pw, rParent, rEntry, wType)
-            else finishSummed(pt, deadU, left, pb, pf, pw, rParent, rEntry, wType)
+        return if (names) finishNamed(pt, deadU, left, pb, pf, pw, pc, colRooms, rParent, rEntry, wType)
+            else finishSummed(pt, deadU, left, pb, pf, pw, pc, both, rParent, rEntry, wType)
+    }
+
+    /** Adds the column's tiles of a sample with column [col] and chance [q] to [dist]: puzzles, or with [both] the specials [left]'s shares. */
+    private fun addColumn(dist: Array<DoubleArray?>, col: Col?, q: Double, both: Boolean, left: IntArray, m: Int) {
+        if (col == null || both && m == 0) return
+        for (k in colTiles.indices) {
+            val pin = colPin(col, k); if (pin <= 0) continue
+            val dk = dist[k] ?: DoubleArray(Cls.COUNT).also { dist[k] = it }
+            if (!both) dk[Cls.PUZZLE] += q * pin
+            else for (c in 0 until 4) if (left[c] > 0) dk[CLS[c]] += q * pin * left[c] / m
+        }
     }
 
     /** The specials summed over in closed form: every (blood, fairy) pick, and each other dead end's share of the shuffle. */
-    private fun finishSummed(pt: Particle, deadU: List<Int>, left: IntArray, pb: List<Int>, pf: List<Int>, pw: List<Double>,
-                             rParent: IntArray, rEntry: IntArray, wType: Double): Finish? {
+    private fun finishSummed(pt: Particle, deadU: List<Int>, left: IntArray, pb: List<Int>, pf: List<Int>, pw: List<Double>, pc: List<Col?>,
+                             both: Boolean, rParent: IntArray, rEntry: IntArray, wType: Double): Finish? {
         val nr = pt.rooms.size; val m = left.sum()
         val pins = pinKeys.isNotEmpty()
         val pinCache = HashMap<Int, PinShare?>()
@@ -774,6 +886,7 @@ internal class GameSampler(
         val dist = arrayOfNulls<DoubleArray>(nr)
         val at = { r: Int -> dist[r] ?: DoubleArray(Cls.COUNT).also { dist[r] = it } }
         val onPath = DoubleArray(nr); val blood = DoubleArray(nr); val fairy = DoubleArray(nr)
+        val col = arrayOfNulls<DoubleArray>(colTiles.size)
         val entR = pt.owner[entCell]
         for (i in pb.indices) {
             val q = ws[i] / fsum; if (q <= 0) continue
@@ -782,6 +895,7 @@ internal class GameSampler(
             if (fr >= nKnown) at(fr)[Cls.FAIRY] += q
             blood[b] += q; fairy[fr] += q
             var x = b; while (x >= 0 && x != entR) { onPath[x] += q; x = rParent[x] }
+            addColumn(col, pc[i], q, both, left, m)
             if (m == 0) continue
             val pin = pinOf(b)
             for (r in deadU) {
@@ -795,7 +909,7 @@ internal class GameSampler(
                 if (others > 0) for (c in intArrayOf(T, Y, R)) if (left[c] > 0) dr[CLS[c]] += q * (1 - pp) * left[c] / others
             }
         }
-        return Finish(fsum * wType, dist, onPath, blood, fairy, rParent, rEntry, null)
+        return Finish(fsum * wType, dist, onPath, blood, fairy, rParent, rEntry, null, col)
     }
 
     /** How the tab's named puzzles split the dead ends: the share of puzzle placements that fit, and each dead end's chance of a puzzle. */
@@ -824,8 +938,8 @@ internal class GameSampler(
      * The last few rooms with the secret total's names: every (blood, fairy) pick and every shuffle of the specials
      * worked out, each weighted by the chance names drawn for its rooms make the total ([SecretNames.solve]).
      */
-    private fun finishNamed(pt: Particle, deadU: List<Int>, left: IntArray, pb: List<Int>, pf: List<Int>, pw: List<Double>,
-                            rParent: IntArray, rEntry: IntArray, wType: Double): Finish? {
+    private fun finishNamed(pt: Particle, deadU: List<Int>, left: IntArray, pb: List<Int>, pf: List<Int>, pw: List<Double>, pc: List<Col?>,
+                            colRooms: Int, rParent: IntArray, rEntry: IntArray, wType: Double): Finish? {
         val sn = secrets ?: return null
         val nr = pt.rooms.size; val m = left.sum()
         val classes = ArrayList<Int>(m); for (c in 0 until 4) repeat(left[c]) { classes += CLS[c] }
@@ -834,10 +948,12 @@ internal class GameSampler(
         val dist = arrayOfNulls<DoubleArray>(nr)
         val at = { r: Int -> dist[r] ?: DoubleArray(Cls.COUNT).also { dist[r] = it } }
         val onPath = DoubleArray(nr); val blood = DoubleArray(nr); val fairy = DoubleArray(nr)
+        val col = arrayOfNulls<DoubleArray>(colTiles.size)
         val names = HashMap<Long, Double>()
         val entR = pt.owner[entCell]
         val cls = IntArray(nr)
-        val pools = IntArray(unnamedKnown.size + nr - nKnown)
+        // the puzzle column's rooms not on the map yet last: puzzles, wherever they are
+        val pools = IntArray(unnamedKnown.size + nr - nKnown + colRooms) { MapStats.POOL_PUZZLE }
         for (i in unnamedKnown.indices) pools[i] = unnamedKnown[i]
         var fsum = 0.0
         for (i in pb.indices) {
@@ -859,6 +975,7 @@ internal class GameSampler(
                 for (r in nKnown until nr) if (!pt.big(r) && cls[r] != Cls.NORMAL) at(r)[cls[r]] += q
                 blood[b] += q; fairy[fr] += q
                 var x = b; while (x >= 0 && x != entR) { onPath[x] += q; x = rParent[x] }
+                addColumn(col, pc[i], q, false, left, m)
                 if (res != null) for (r in nKnown until nr) {
                     val pool = MapPredictor.poolOfCls(cls[r], Shape.entries[pt.shape[r]])
                     res.byPool[pool]?.forEachIndexed { k, share ->
@@ -869,9 +986,10 @@ internal class GameSampler(
         }
         if (!(fsum > 0)) return null
         for (r in 0 until nr) dist[r]?.let { for (c in it.indices) it[c] /= fsum }
+        for (d in col) d?.let { for (c in it.indices) it[c] /= fsum }
         for (r in 0 until nr) { onPath[r] /= fsum; blood[r] /= fsum; fairy[r] /= fsum }
         for (k in names.keys) names[k] = names.getValue(k) / fsum
-        return Finish(fsum * wType, dist, onPath, blood, fairy, rParent, rEntry, names)
+        return Finish(fsum * wType, dist, onPath, blood, fairy, rParent, rEntry, names, col)
     }
 
     /** The shuffle [perm] of the specials over [slots] puts as many puzzles between the tab's named ones as it lists. */
@@ -958,6 +1076,24 @@ internal class GameSampler(
                 dc[3] += wgt * (fin.fairy[r] + fin.fairy[u])
             }
         }
+        // the puzzle column's tiles (a room or none), on the side of the map their host hangs off (their own door's, when
+        // the host is discovered), with their door when the host isn't
+        for (k in colTiles.indices) {
+            val d = fin.col[k] ?: continue
+            val ct = colTiles[k]; val i = tileIdx[ct]
+            if (i < 0) continue
+            var pin = 0.0
+            val row = t.counts[i]
+            for (c in 0 until Cls.COUNT) if (d[c] > 0) { row[c] += wgt * d[c]; pin += d[c] }
+            if (pin <= 0) continue
+            val host = pt.owner[ct - 1]
+            val e = if (host < nKnown) entryIndex[ct] else { var x = host; while (fin.rParent[x] >= nKnown) x = fin.rParent[x]; entryIndex[fin.rEntry[x]] }
+            if (e >= 0) {
+                t.splitRooms[e] += wgt * pin; t.splitTiles[e] += wgt * pin
+                for (c in 0 until Cls.COUNT) t.splitCls[e][c] += wgt * d[c]
+            }
+            if (host >= nKnown) t.doorCounts.getOrPut((ct - 1) * n + ct) { DoubleArray(4) }[0] += wgt * pin
+        }
         fin.names?.forEach { (k, s) -> t.nameCounts.merge(k, wgt * s, Double::plus) }
     }
 
@@ -1001,7 +1137,7 @@ internal class GameSampler(
         const val MAX_TRIES = 400_000L
         const val EMPTY_TRIES = 20_000L
         /**
-         * The calibration of the tiles' chances ([MapPredictor.calibrate]; tools/mappred sampler3.mjs CAL_MOD, calfit.mjs
+         * F7's calibration of the tiles' chances ([FloorRules.gameCalibration], [MapPredictor.calibrate]; tools/mappred sampler3.mjs CAL_MOD, calfit.mjs
          * KEEPZERO on this sampler's own run, 2000 samples and 120 batches' worth, of 148 5-puzzle and 120 2-4 puzzle
          * training maps at 2/4/6/9/12 rooms known): per [Cls] (big, 1x1, puzzle, trap, yellow, blood, fairy, rare) the
          * sharpness a, the offset b and the change d per 3 rooms known. The samples are too sure of themselves: a 0.81 to
@@ -1015,11 +1151,8 @@ internal class GameSampler(
             doubleArrayOf(-0.0236, 0.0047, 0.0020, -0.0030, -0.0076, 0.0283, 0.0005, -0.0014),
         )
 
-        /** The most dead ends besides blood on a 5-puzzle map (9 in 7 of 294 recorded maps, 10 in 2). */
-        const val MAX_DEAD_5 = 10
-        /** The wither path's walk (9 or 10 steps, entrance to blood) and the fairy's steps before blood. */
-        const val WALK = 9
-        const val FAIRY_BEFORE = MapStats.FAIRY_BEFORE_BLOOD
+        /** The most rares on a 5-puzzle map: dead ends past the specials (F7: 9 dead ends besides blood in 7 of 294 recorded maps, 10 in 2). */
+        const val MAX_RARES = 3
 
         // the specials' order in the shuffle, and their classes
         private const val T = 0
@@ -1031,15 +1164,15 @@ internal class GameSampler(
         private fun fact(k: Int): Double { var r = 1.0; for (i in 2..k) r *= i; return r }
 
         /**
-         * The weight to draw [GameStats.MIXES] row [i] by on a map that shows [knownBig] big rooms of each shape: maps /
-         * success rate, times c!/(c-k)! for c rooms of a shape with k on the map (the ways its rooms can be the ones
-         * shown); 0 when the map shows more of a shape than the mix has.
+         * The weight to draw [mixes] row [i] (F7's [GameStats.MIXES] unless given) by on a map that shows [knownBig] big
+         * rooms of each shape: maps / success rate ([rate]), times c!/(c-k)! for c rooms of a shape with k on the map (the
+         * ways its rooms can be the ones shown); 0 when the map shows more of a shape than the mix has.
          */
-        internal fun mixWeight(i: Int, knownBig: IntArray): Double {
-            val c = GameStats.MIXES[i]
+        internal fun mixWeight(i: Int, knownBig: IntArray, mixes: Array<IntArray> = GameStats.MIXES, rate: DoubleArray = GameStats.MIX_RATE): Double {
+            val c = mixes[i]
             var mult = 1.0
             for (s in 0 until 5) for (j in 0 until knownBig[s]) mult *= (c[s] - j).toDouble()
-            return if (mult > 0) c[5] / GameStats.MIX_RATE[i] * mult else 0.0
+            return if (mult > 0) c[5] / rate[i] * mult else 0.0
         }
     }
 }
