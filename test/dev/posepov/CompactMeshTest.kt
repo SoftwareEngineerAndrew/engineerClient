@@ -1,6 +1,6 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.ads.pack.DungeonFrame
+import com.engineerclient.dungeonpack.pack.DungeonFrame
 import org.junit.jupiter.api.Test
 import java.nio.ByteBuffer
 import kotlin.test.assertEquals

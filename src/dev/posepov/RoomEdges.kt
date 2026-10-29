@@ -1,13 +1,13 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.ads.pack.DungeonFrame
-import com.engineerclient.ads.pack.Rot
-import com.engineerclient.ads.pack.Tile
-import com.engineerclient.ads.pack.rooms.OdinCore
-import com.engineerclient.ads.pack.rooms.Placement
-import com.engineerclient.ads.pack.rooms.RoomDesign
-import com.engineerclient.ads.pack.rooms.RoomPack
-import com.engineerclient.ads.pack.rooms.RoomVolume
+import com.engineerclient.dungeonpack.pack.DungeonFrame
+import com.engineerclient.dungeonpack.pack.Rot
+import com.engineerclient.dungeonpack.pack.Tile
+import com.engineerclient.dungeonpack.pack.rooms.OdinCore
+import com.engineerclient.dungeonpack.pack.rooms.Placement
+import com.engineerclient.dungeonpack.pack.rooms.RoomDesign
+import com.engineerclient.dungeonpack.pack.rooms.RoomPack
+import com.engineerclient.dungeonpack.pack.rooms.RoomVolume
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos

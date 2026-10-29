@@ -122,8 +122,6 @@ object EngineerClient : ClientModInitializer {
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
-        // The new ADS (the rebuild), beta only until it can do a whole run.
-        if (BETA) safely("ads") { com.engineerclient.ads.Ads.init() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.

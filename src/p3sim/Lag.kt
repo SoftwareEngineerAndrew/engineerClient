@@ -1,6 +1,6 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.ads.pack.runstate.LagTier
+import com.engineerclient.dungeonpack.pack.runstate.LagTier
 import com.google.gson.JsonObject
 import kotlin.math.exp
 import kotlin.math.ln

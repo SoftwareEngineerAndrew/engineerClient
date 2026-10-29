@@ -1,6 +1,5 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.ads.world.Game;
 import com.engineerclient.p3sim.SimServer;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -20,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * ADS and the boss practice: the sim's server never kicks for "Invalid move player packet received" over timing alone. 26.x disconnects a
+ * The boss practice: the sim's server never kicks for "Invalid move player packet received" over timing alone. 26.x disconnects a
  * player whose second position packet lands in the same server tick, and one whose teleport accept comes with no
  * teleport waiting. The sim's lag layer holds client packets back and lets them go together, so a teleport (etherwarp's
  * accept plus the client's position right after) did both. In the sim a second position in a tick is taken like the
@@ -39,10 +38,9 @@ public class SimMoveGuardMixin {
     @Shadow private Vec3 awaitingPositionFromClient;
     @Shadow private int awaitingTeleport;
 
-    /** The boss practice's server or the ADS world's: both are Hypixel's server, which never kicks or snaps back over this. */
+    /** The boss practice's server is Hypixel's server, which never kicks or snaps back over this (the ADS mod has its own copy for its world). */
     private boolean ec$simServer() {
         if (this.player == null) return false;
-        if (Game.isAdsLevel(this.player.level())) return true;
         return SimServer.INSTANCE.getServer() != null && this.player.level().getServer() == SimServer.INSTANCE.getServer();
     }
 

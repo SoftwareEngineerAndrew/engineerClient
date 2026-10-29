@@ -1,10 +1,10 @@
 package com.devgineerclient.posepov
 
 import com.engineerclient.p3sim.Arena
-import com.engineerclient.ads.rooms.BlockStates
-import com.engineerclient.ads.pack.DungeonFrame
-import com.engineerclient.ads.pack.Rot
-import com.engineerclient.ads.pack.rooms.RoomVolume
+import com.engineerclient.dungeonpack.rooms.BlockStates
+import com.engineerclient.dungeonpack.pack.DungeonFrame
+import com.engineerclient.dungeonpack.pack.Rot
+import com.engineerclient.dungeonpack.pack.rooms.RoomVolume
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.BufferBuilder
 import com.mojang.blaze3d.vertex.ByteBufferBuilder
