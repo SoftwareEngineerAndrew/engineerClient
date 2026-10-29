@@ -37,7 +37,7 @@ fi
 # Replace the public tree with the dev HEAD, then drop the extras.
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
-rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
+rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/test/coffee" "$PUB/test/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
   "$PUB/src/resources/rotation" "$PUB/tools/partyskill"
@@ -154,7 +154,7 @@ rsync -a --delete --exclude .git --exclude build --exclude .gradle --exclude .ko
   cd "$CHECK"
   export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
   # The default 512 MB heap runs out on EngineerLook's tables.
-  if ! "$GRADLE" -q -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava > build.log 2>&1; then
+  if ! "$GRADLE" -q -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava compileTestKotlin > build.log 2>&1; then
     grep -v '^w:' build.log >&2; echo "promote: the public tree does not compile" >&2; exit 1
   fi
 )
