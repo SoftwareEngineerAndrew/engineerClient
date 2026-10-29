@@ -50,8 +50,8 @@ import kotlin.math.roundToInt
  * Every floor is predicted by the game's own steps ([GameSampler]: the big rooms one random spot each, the door tree
  * grown from the entrance, the puzzle column after it); the older classic sampler only takes a map those can't fit.
  * The prediction doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
- * agree with the new room are the new guess at once ([PredictionSession]); more guesses top them up, and Predict Ahead
- * keeps guessing while the map stays, on Prediction Threads threads, for the next room.
+ * agree with the new room are the new guess at once ([PredictionSession]); more guesses top them up, on Prediction
+ * Threads threads, and stop when the map is worked out.
  *
  * Like the other Odin additions, the settings are registered into Odin's module and saved with it.
  * `MapPathHintsMixin` draws this instead of Odin's "?" tiles while it is on. With LCM Style on, LcmStyle
@@ -66,8 +66,6 @@ object OdinMapPrediction {
     private val on: Boolean get() = mode.value == Mode.ADM
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
         desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
-    private val aheadSetting = BooleanSetting("Predict Ahead", true,
-        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val hidden = BooleanSetting("Hidden Tile Hints", true,
@@ -122,7 +120,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, hidden, chances, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
+        for (s in listOf(mode, threadsSetting, splitText, hidden, chances, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
         EventBus.subscribe(this)
@@ -221,14 +219,13 @@ object OdinMapPrediction {
         val gen = generation.incrementAndGet()
         session.cancel()
         val threads = threadsSetting.value.let { if (it <= 0) PredictionSession.autoThreads() else it }
-        val ahead = aheadSetting.value
         worker.execute {
             EngineerClient.safely("map prediction worker") {
                 if (generation.get() != gen) return@safely
                 // the guesses made for the maps before carry over to this one (what fits it is up at once), batches
-                // then top them up, publishing as it goes, and go on for the next room while the map stays;
-                // stops when the map changes again, when nothing fits even the loosest rules, or when no more fit
-                session.threads = threads; session.ahead = ahead
+                // then top them up, publishing as it goes; stops when the map is worked out, when it changes again,
+                // when nothing fits even the loosest rules, or when no more fit
+                session.threads = threads; session.ahead = false
                 session.begin(v)
                 do {
                     if (generation.get() != gen) return@safely

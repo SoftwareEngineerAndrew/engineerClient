@@ -423,8 +423,9 @@ Every candidate tried, and what it showed:
   prediction was a little behind a fresh run's on 2-3 rooms, -0.0014 a tile s.e. 0.0005, at 0.5 -0.0010 s.e. 0.0003, the same
   gain over the stay). What is shown at once is that mean when it is worth MIN_SHOW (5) batches, else the last prediction stays up
   as before; fresh samples for the new map then top it up, the map is done at 2000 samples and 120 batches' worth of all parts
-  together as before, and with Predict Ahead the worker goes on drawing for the same map until the pool is 40,000 samples (4.6
-  MB; a rise to 120,000 gave nothing more) or 1.5 million particles, which is what the next room keeps a share of. Prediction Threads (default half the cores, at most 4) run lanes of the
+  together as before. (PredictionSession's ahead option goes on drawing for the same map until the pool is 40,000 samples (4.6
+  MB; a rise to 120,000 gave nothing more) or 1.5 million particles, which is what the next room keeps a share of; the mod no
+  longer uses it - its Predict Ahead setting was taken out - so the worker stops when the map is worked out.) Prediction Threads (default half the cores, at most 4) run lanes of the
   same sampler side by side, each with its own random numbers and tally (SecretNames' cache is shared, now a ConcurrentHashMap).
   Simulated order, 12 held-out maps (226 views, a stay of 40,000 particles, one thread; the stale prediction of the map before is
   what is shown until there is a new one, as before) and the real order of the rooms and the time between them (10 maps, 185 views,
