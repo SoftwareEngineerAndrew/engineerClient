@@ -108,11 +108,12 @@ object ADR : Module(
      * Connected to Hypixel itself, by the address typed in (hypixel.net or one of its subdomains, like
      * mc.hypixel.net). A server that copies the dungeons can copy everything inside the game, its
      * scoreboard, chat and bosses, but not its address; "hypixel" anywhere else in a name isn't enough.
+     * Not Hypixel Alpha (alpha.hypixel.net), its test network: its runs aren't the live game's.
      */
     fun onHypixel(): Boolean {
         if (EngineerClient.mc.hasSingleplayerServer()) return false
         val host = EngineerClient.mc.currentServer?.ip?.trim()?.lowercase()?.substringBefore(':')?.trimEnd('.') ?: return false
-        return HYPIXEL_HOSTS.any { host == it || host.endsWith(".$it") }
+        return HYPIXEL_HOSTS.any { (host == it || host.endsWith(".$it")) && host != "alpha.$it" && !host.endsWith(".alpha.$it") }
     }
     private val HYPIXEL_HOSTS = listOf("hypixel.net", "hypixel.io")
     /** This world's recording once it is known to be a Hypixel dungeon run (for layers that ride on it, like Better Recorder). */
