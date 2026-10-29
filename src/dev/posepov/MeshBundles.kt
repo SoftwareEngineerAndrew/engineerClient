@@ -1,6 +1,6 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.ads.pack.Rot
+import com.engineerclient.dungeonpack.pack.Rot
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.renderpearl.api.buffers.GpuBuffer
 import java.io.ByteArrayInputStream

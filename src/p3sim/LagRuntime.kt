@@ -1,6 +1,6 @@
 package com.engineerclient.p3sim
 
-import com.engineerclient.ads.pack.Packs
+import com.engineerclient.dungeonpack.pack.Packs
 import net.minecraft.server.MinecraftServer
 import net.minecraft.util.Util
 import org.slf4j.LoggerFactory

@@ -1,9 +1,9 @@
 package com.devgineerclient.posepov
 
-import com.engineerclient.ads.pack.PackReport
-import com.engineerclient.ads.pack.Rot
-import com.engineerclient.ads.pack.rooms.Placement
-import com.engineerclient.ads.pack.rooms.RoomPack
+import com.engineerclient.dungeonpack.pack.PackReport
+import com.engineerclient.dungeonpack.pack.Rot
+import com.engineerclient.dungeonpack.pack.rooms.Placement
+import com.engineerclient.dungeonpack.pack.rooms.RoomPack
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import kotlin.test.assertEquals
@@ -12,7 +12,7 @@ import kotlin.test.assertNotNull
 /** Pieces kept unturned and turned as they're read land where the room pack places the room's cells, facing the right way. */
 class MeshTurnTest {
     @Test fun turnedCellsLandWherePlacementPutsThem() {
-        val pack = assertNotNull(RoomPack.load(Path.of("src/resources/assets/engineerclient/ads/packs"), PackReport()))
+        val pack = assertNotNull(RoomPack.load(Path.of("src/resources/assets/engineerclient/dungeonpack/packs"), PackReport()))
         var checked = 0
         for (d in pack.designs) for (rot in d.rotations.ifEmpty { Placement.legalRotations(d.shape) }) {
             val tiles = Placement.tilesFor(d.shape, rot, 1, 1)
