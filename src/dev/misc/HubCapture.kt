@@ -180,7 +180,7 @@ object HubCapture : Module(
             for ((side, dx, dz) in listOf(Triple("north", 0, -1), Triple("south", 0, 1), Triple("west", -1, 0), Triple("east", 1, 0)))
                 if (ChunkPos(c.x() + dx, c.z() + dz).pack() !in chunks) open.getOrPut(side) { ArrayList() } += c
         }
-        val line = if (open.isEmpty()) "no open edges" else open.entries.sortedBy { it.key }.joinToString(", ") { (side, cs) ->
+        val line = if (open.isEmpty()) (if (pending.isEmpty()) "no open edges" else "none yet, still copying") else open.entries.sortedBy { it.key }.joinToString(", ") { (side, cs) ->
             val near = cs.minBy { (it.x() - at.x()) * (it.x() - at.x()) + (it.z() - at.z()) * (it.z() - at.z()) }
             "$side ${cs.size} (nearest block ${near.minBlockX + 8} ${near.minBlockZ + 8})"
         }
