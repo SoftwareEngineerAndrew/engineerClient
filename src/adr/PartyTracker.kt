@@ -49,7 +49,7 @@ object PartyTracker {
      * party stays as known.
      */
     fun onJoin() = synchronized(state) {
-        onHypixel = EngineerClient.mc.currentServer?.ip?.contains("hypixel", ignoreCase = true) == true
+        onHypixel = ADR.onHypixel()
         if (connected) return
         connected = true
         joinedAt = System.currentTimeMillis()
