@@ -34,10 +34,10 @@ import kotlin.math.roundToInt
  * On F4-F6 that includes the puzzle column east of the main grid, where a tile is a puzzle or nothing.
  *
  * Each "?" tile behind a door is coloured by its chances (purple puzzle, orange trap, yellow
- * miniboss, red blood, pink fairy; the grey rest is a normal room; the tile behind a blood door is the
- * blood room, drawn as itself), and with Split Contents on it
+ * miniboss, red blood, pink fairy, each from Min Chance up; the grey rest is a normal room; the tile behind
+ * a blood door is the blood room, drawn as itself), and with Split Contents on it
  * says what that door's side of the map holds: its puzzles, trap, yellow and blood, and about how
- * many rooms. Tiles further in get a small mark where a special room is likely. Each kind of guess
+ * many rooms. Each kind of guess
  * has its own slider: a tile Dead End Chance sure to be a puzzle, trap, yellow or rare 1x1 (always
  * from 95%) gets Odin's own guess tile (the types it can be, side by side, with a "?"); one Blood &
  * Fairy Chance sure to be blood or the fairy room gets a guess tile in that room's colour; a big
@@ -70,10 +70,10 @@ object OdinMapPrediction {
         desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
-    private val hidden = BooleanSetting("Hidden Tile Hints", true,
-        desc = "A small mark on unknown tiles further in where a special room is likely.").withDependency { on }
     private val chances = BooleanSetting("Show Chances", false,
         desc = "The most likely special room's chance on each \"?\" tile.").withDependency { on }
+    private val minChance = NumberSetting("Min Chance", 0.3f, 0.1..0.9, 0.05f,
+        desc = "A room type shows on a \"?\" tile only from this chance up.").withDependency { on }
     private val deadEndDropdown = DropdownSetting("Dead End Prediction",
         desc = "Tiles that are probably a puzzle, trap, yellow or rare room (a 1x1 dead end; blood and fairy have their own) drawn as Odin's guess tile: the types it can be, in their colours, with a \"?\".").withDependency { on }
     private val deadEndChance = NumberSetting("Dead End Chance", 60, 0..100, 1, unit = "%",
@@ -113,8 +113,6 @@ object OdinMapPrediction {
     private const val W = 6
     private const val TILE = 20
     private const val ROOM = 16
-    /** A room type shows on a "?" tile (its band, a hidden tile's mark) only from this chance up. */
-    private const val MIN_CHANCE = 0.3f
     /** From this sure (percent) a dead end always gets Odin's guess tile, whatever Dead End Chance is. */
     private const val ALWAYS_DEAD_END = 95
     /** An exact last room: every sample agrees (allowing for float sums). */
@@ -122,7 +120,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, hidden, chances, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
+        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
         EventBus.subscribe(this)
@@ -345,6 +343,7 @@ object OdinMapPrediction {
         // behind a blood door is the blood room: drawn as itself, never as a guess
         val blood = bloodTiles(known)
         for (t in blood) bloodRoom(g, t)
+        val min = minChance.value
         val deadEndAt = minOf(deadEndChance.value, ALWAYS_DEAD_END) / 100f
         val oneAt = oneChance.value / 100f
         val bloodFairyAt = bloodFairyChance.value / 100f
@@ -382,7 +381,7 @@ object OdinMapPrediction {
                 if (split != null || t in hints) overlay(g, x, y, split, room.chance, true)
                 continue
             }
-            val shownCls = SPECIALS.filter { probs[it] >= MIN_CHANCE }.sortedByDescending { probs[it] }.take(3)
+            val shownCls = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3)
             val split = splits[t]
             // dead end (puzzle, trap, yellow, rare), blood or fairy, or a normal 1x1: each on its own slider, the likeliest that passes
             val deadEnd = probs[Cls.PUZZLE] + probs[Cls.TRAP] + probs[Cls.YELLOW] + probs[Cls.RARE]
@@ -415,12 +414,6 @@ object OdinMapPrediction {
                     at += wdt
                 }
                 overlay(g, x, y, split, shownCls.firstOrNull()?.let { probs[it] }, true)
-            } else if (hidden.value && shownCls.isNotEmpty()) {
-                val c = shownCls[0]
-                val a = (0.35f + 0.65f * probs[c]).coerceAtMost(1f)
-                val inset = 5
-                val color = if (lcm) (LcmStyle.darker(lcmColor(c)) and 0xFFFFFF) or ((a * 255).roundToInt() shl 24) else Color(colorOf(c).darker(0.6f).rgba, a).rgba
-                g.fill(x + inset, y + inset, x + ROOM - inset, y + ROOM - inset, color)
             }
         }
         // the doors it's sure of between unknown tiles, over everything else
