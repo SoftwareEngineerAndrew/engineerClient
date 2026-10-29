@@ -23,7 +23,7 @@ GRADLE="$HOME/.cache/ec-build/gradle-9.6.1/bin/gradle"
 # Every Minecraft version with a release (tag release-<mc>, jar ADM-<mc>.jar), newest first.
 VERSIONS="26.3 26.2 26.1.2"
 # ADM's own version (the jar's mod version and the release notes); this dev build keeps its date+commit versions.
-export ADM_VERSION="1.0.7"
+export ADM_VERSION="1.0.8"
 
 [ -z "$(git -C "$PUB" status --porcelain)" ] || { echo "promote: $PUB has uncommitted changes" >&2; exit 1; }
 git -C "$PUB" fetch -q origin
@@ -34,13 +34,16 @@ else
   git -C "$PUB" checkout -q -B "$BRANCH" origin/main
 fi
 
-# Replace the public tree with the dev HEAD, then drop the extras.
+# Replace the public tree with the dev HEAD, then drop the extras and what only the dev repo needs (notes, tests, tools).
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
-rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/test/coffee" "$PUB/test/dev" "$PUB/promote.sh" \
+rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
+  "$PUB/docs" "$PUB/test" "$PUB/tools" "$PUB/.github/workflows/test-build.yml" \
   "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
-  "$PUB/src/resources/rotation" "$PUB/tools/partyskill"
+  "$PUB/src/resources/rotation" \
+  "$PUB/src/resources/assets/engineerclient/dungeonpack" "$PUB/src/resources/posepov" \
+  "$PUB/src/resources/assets/engineerclient/shaders"
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \
