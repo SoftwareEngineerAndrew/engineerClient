@@ -103,6 +103,18 @@ object ADR : Module(
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
     private var session: RunRecorder? = null
+
+    /**
+     * Connected to Hypixel itself, by the address typed in (hypixel.net or one of its subdomains, like
+     * mc.hypixel.net). A server that copies the dungeons can copy everything inside the game, its
+     * scoreboard, chat and bosses, but not its address; "hypixel" anywhere else in a name isn't enough.
+     */
+    fun onHypixel(): Boolean {
+        if (EngineerClient.mc.hasSingleplayerServer()) return false
+        val host = EngineerClient.mc.currentServer?.ip?.trim()?.lowercase()?.substringBefore(':')?.trimEnd('.') ?: return false
+        return HYPIXEL_HOSTS.any { host == it || host.endsWith(".$it") }
+    }
+    private val HYPIXEL_HOSTS = listOf("hypixel.net", "hypixel.io")
     /** This world's recording once it is known to be a Hypixel dungeon run (for layers that ride on it, like Better Recorder). */
     internal val recording: RunRecorder? get() = session?.takeIf { it.isConfirmed && !it.abandoned && !EngineerClient.mc.isLocalServer }
     private val runsDir get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("adr").resolve("runs")
@@ -114,9 +126,9 @@ object ADR : Module(
             EngineerClient.safely("adr start") {
                 session?.finish()
                 RoomKeys.reset()
-                // Never the ADS world (the boss practice): it is not a Hypixel run.
-                val adsWorld = com.engineerclient.p3sim.SimServer.server != null && EngineerClient.mc.hasSingleplayerServer()
-                session = if (adsWorld) null else RunRecorder(runsDir, true, ::upload)
+                // Only Hypixel itself: the ADS world (the boss practice) and other servers that copy
+                // Hypixel's dungeons (their scoreboard, chat and boss) are not Hypixel runs.
+                session = if (onHypixel()) RunRecorder(runsDir, true, ::upload) else null
             }
         }
 
