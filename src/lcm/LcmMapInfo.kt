@@ -118,11 +118,8 @@ object LcmMapInfo {
             else listOf(line1, line2)
     }
 
-    /**
-     * The secrets in the rooms someone in the party has walked into (the ones the map names): yours, and your
-     * teammates' from Odin's map websocket.
-     */
-    private fun knownRoomSecrets(): Int = DungeonScan.rooms.sumOf { if (it.shouldShowName) it.data?.maxSecrets ?: 0 else 0 }
+    /** The secrets in the rooms the map names: every open room Odin has scanned ([LcmStyle.knownName]). */
+    private fun knownRoomSecrets(): Int = DungeonScan.rooms.sumOf { if (LcmStyle.knownName(it) != null) it.data?.maxSecrets ?: 0 else 0 }
 
     /** One bat per player in the run, at most 5 (dtMap: 5, or 1 when solo clearing); 5 until the tab list has the team. */
     private fun batsPossible(): Int = DungeonUtils.dungeonTeammates.size.takeIf { it > 0 }?.coerceAtMost(5) ?: 5
