@@ -69,7 +69,7 @@ object ADR : Module(
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the ADR viewer (undonecoffee.com/adr), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {
-    private val privateRuns by BooleanSetting("Private Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, private ones included.")
+    private val privateRuns by BooleanSetting("Unlisted Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, unlisted ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way).")
     private val hidePartyChat by BooleanSetting("Hide Party Chat", false, desc = "Leaves party chat out of recordings and uploads. Off, the viewer shows what your party said during the run.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
@@ -77,7 +77,7 @@ object ADR : Module(
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
     /**
      * A secret this install sends with every upload, so the site can list this player's runs -
-     * private ones included - for whoever has it: the link /adr gives. Made on first use.
+     * unlisted ones included - for whoever has it: the link /adr gives. Made on first use.
      */
     private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /adr's link.", placeholder = "").hide()
 
@@ -327,7 +327,7 @@ object ADR : Module(
                     }
                 }
                 uploadFailSaid = false
-                if (uploadedMessage) EngineerClient.msg("§7ADR: uploaded${if (privateRuns) " privately" else ""}${if (id.isNullOrEmpty()) "" else " - §f$SITE/adr/$id"}")
+                if (uploadedMessage) EngineerClient.msg("§7ADR: uploaded${if (privateRuns) " unlisted" else ""}${if (id.isNullOrEmpty()) "" else " - §f$SITE/adr/$id"}")
             } catch (t: Throwable) {
                 if (t !is Refused) EngineerClient.logger.error("[ec] adr upload failed", t)
                 else EngineerClient.logger.warn("[ec] adr upload refused: ${t.message}")
@@ -508,7 +508,7 @@ object ADR : Module(
         EngineerClient.logger.info("[ec] adr: saved $lines lines of an unfinished recording as ${target.fileName}")
     }
 
-    /** /adr: the link to every run this install has uploaded (with its owner token), private ones included. */
+    /** /adr: the link to every run this install has uploaded (with its owner token), unlisted ones included. */
     fun myRunsLink() {
         val token = token()
         Thread.ofVirtual().name("adr-mine").start {
@@ -518,7 +518,7 @@ object ADR : Module(
                     s.withClickEvent(net.minecraft.network.chat.ClickEvent.OpenUrl(URI.create(url)))
                         .withHoverEvent(net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("§7$url")))
                 }
-            ).append(Component.literal(" §8(private ones too - keep this link to yourself)")))
+            ).append(Component.literal(" §8(unlisted ones too - keep this link to yourself)")))
         }
     }
 
@@ -526,7 +526,7 @@ object ADR : Module(
 
     /**
      * Uploads every finished run in the runs folder the site doesn't have. A run is on the site if a
-     * run there has the same recorder and start time - private ones included: the site says so only
+     * run there has the same recorder and start time - unlisted ones included: the site says so only
      * to their owner, so the owner token goes with the question.
      * The one being recorded is still a .part file, so it is never picked up. Runs even with Upload
      * Runs off - pressing the button is the ask.
@@ -537,8 +537,8 @@ object ADR : Module(
         catchingUp = true
         Thread.ofVirtual().name("adr-catch-up").start {
             try {
-                // Asks by name rather than reading the run list, which leaves private runs off; with the
-                // owner token, without which the site doesn't say whether it has a private run.
+                // Asks by name rather than reading the run list, which leaves unlisted runs off; with the
+                // owner token, without which the site doesn't say whether it has an unlisted run.
                 val local = Files.list(runsDir).use { s -> s.filter { it.fileName.toString().endsWith(".jsonl.gz") }.sorted().toList() }
                 val keys = local.associateWith { runKey(it) }
                 val ask = JsonArray().also { arr -> keys.values.filterNotNull().forEach { arr.add(it) } }
