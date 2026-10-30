@@ -4,6 +4,9 @@
   "package": "com.devgineerclient.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "BrecDecoderMixin",
+    "BrecEncoderMixin",
+    "BrecKeyClicksAccessor",
     "BlockChangeSourceMixin",
     "CameraFovMixin",
     "ChatDisplayTapMixin",
