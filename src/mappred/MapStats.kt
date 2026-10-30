@@ -239,6 +239,16 @@ object MapStats {
         RoomName("Fairy", 11, 0, 4494),
         RoomName("Entrance", 12, 0, 4494),
     )
+
+    /**
+     * Each pool's average secrets over its names but [skip] (the names the map already has, the names the floor never
+     * has), each as often as it comes up; a pool [skip] empties keeps its average over every name.
+     */
+    fun meanSecrets(skip: Set<String> = emptySet()): DoubleArray = DoubleArray(POOLS) { p ->
+        val left = NAMES.filter { it.pool == p && it.name !in skip }.ifEmpty { NAMES.filter { it.pool == p } }
+        val seen = left.sumOf { it.seen.toDouble() }
+        if (seen > 0) left.sumOf { it.secrets * it.seen.toDouble() } / seen else 0.0
+    }
 }
 
 /** A room name: its pool (MapStats.POOL_*), its secrets, and how many recorded maps had it. */

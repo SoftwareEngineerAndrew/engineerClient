@@ -64,6 +64,34 @@ class MapPredictorTest {
         assertNull(MapView.shapeOf(intArrayOf(0, 1, 7, 8, 9), 6))
     }
 
+    @Test fun eachSplitHasItsRoomsSecretsOnBothSamplers() {
+        for (game in listOf(true, false)) {
+            val p = predict(opening(), 300, game)
+            for (s in p.splits) {
+                // every room holds between a puzzle's 0.25 and a 2x2's 6.6 on average
+                assertTrue(s.secrets > 0f && s.secrets <= s.rooms * 7f, "game=$game: ${s.secrets} secrets for ${s.rooms} rooms")
+            }
+            // the 19 unknown rooms: about 6 big ones at 5-6 secrets, 7 normal 1x1s at 1.8, the specials hardly any
+            val sum = p.splits.sumOf { it.secrets.toDouble() }
+            assertTrue(sum in 38.0..60.0, "game=$game: $sum secrets behind the doors")
+        }
+    }
+
+    @Test fun theSecretTotalSharesItselfOutAmongTheSplits() {
+        val v = opening()
+        val p = predict(v, 300)
+        // no total yet: the averages as they are
+        val avg = MapPredictor.splitSecrets(v, p.splits)
+        p.splits.forEachIndexed { i, s -> assertEquals(s.secrets, avg[i]) }
+        // a total: what the 2x2 (unnamed, its average) leaves, in the splits' proportions
+        v.secretTotals = intArrayOf(120, 121)
+        val fit = MapPredictor.splitSecrets(v, p.splits)
+        val box = MapStats.meanSecrets()[Shape.BOX.ordinal]
+        assertEquals(120.5 - box, fit.sum().toDouble(), 0.01)
+        val k = fit[0] / avg[0]
+        for (i in fit.indices) assertEquals(avg[i] * k, fit[i], 0.001f)
+    }
+
     @Test fun noDoorIntoTheUnknownPredictsNothingRatherThanThrowing() {
         // A run just started: the entrance and no door from it known yet. No tree to grow, so no samples (it read
         // order[-1] of an empty list: "Index -1 out of bounds for length 0" in a teammate's log).

@@ -105,6 +105,8 @@ internal class GameSampler(
     secretsOn: Boolean,
     /** The name pools of the discovered rooms nobody has named. */
     private val unnamedKnown: IntArray,
+    /** Each name pool's average secrets ([MapStats.meanSecrets]): what a split's rooms hold. */
+    private val poolSecrets: DoubleArray = MapStats.meanSecrets(),
     private val rule: TreeRule = TreeRule.DEFAULT,
 ) {
     private val w = view.w
@@ -1064,6 +1066,7 @@ internal class GameSampler(
             if (e >= 0) {
                 t.splitRooms[e] += wgt; t.splitTiles[e] += wgt * cs.size
                 for (c in 0 until Cls.COUNT) t.splitCls[e][c] += wgt * p[c]
+                t.splitSecrets[e] += wgt * if (pt.big(r)) poolSecrets[MapView.shapeOf(cs, w)?.ordinal ?: 0] else oneSecrets(p)
             }
             if (pt.big(r)) { var mask = 0L; for (tile in cs) mask = mask or (1L shl tile); t.bigCounts.merge(mask, wgt, Double::plus) }
             val u = fin.rParent[r]
@@ -1091,10 +1094,18 @@ internal class GameSampler(
             if (e >= 0) {
                 t.splitRooms[e] += wgt * pin; t.splitTiles[e] += wgt * pin
                 for (c in 0 until Cls.COUNT) t.splitCls[e][c] += wgt * d[c]
+                t.splitSecrets[e] += wgt * oneSecrets(d)
             }
             if (host >= nKnown) t.doorCounts.getOrPut((ct - 1) * n + ct) { DoubleArray(4) }[0] += wgt * pin
         }
         fin.names?.forEach { (k, s) -> t.nameCounts.merge(k, wgt * s, Double::plus) }
+    }
+
+    /** A 1x1's average secrets, its classes' chances [p] (a puzzle column tile's add up to the chance it's a room). */
+    private fun oneSecrets(p: DoubleArray): Double {
+        var s = 0.0
+        for (c in 1 until Cls.COUNT) if (p[c] > 0) s += p[c] * poolSecrets[MapPredictor.poolOfCls(c, Shape.ONE)]
+        return s
     }
 
     companion object {
