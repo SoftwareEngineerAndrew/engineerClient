@@ -12,10 +12,10 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * 1. **Your saved hotbar** for this part and class, on every skill (P3Plan's preset): "Save Hotbar" (sim menu) records
  *    where each sim item is right now (hotbar and inventory, by item id), the slot you hold, what you wear and your pet,
- *    in `config/engineerclient/p3sim-hotbar.json`. Every reset lays it out again. Older files' per-skill layouts are
+ *    in `config/engineerclient/p3sim-hotbar.json`; leaving the sim saves it the same way ([keep] with save). Every reset lays it out again. Older files' per-skill layouts are
  *    used on their skill until this class's part is saved again; their shared ones where a class has none.
  * 2. **As you left them**, with none saved: whatever you did with your items, armour and pet since the last reset
- *    stays (for each part and class: [keep]; in the file too, so a relaunch keeps them).
+ *    stays (for each part and class: [keep], at every reset and on leaving the sim; in the file too, so a rejoin or relaunch keeps them).
  *    Black Cat At Start puts Black Cat back on at every start; Terror At Terms still puts the Terror loadout on at P3.
  * 3. **The sim's default.** "Default Hotbar" forgets this part's and class's saved one.
  *
@@ -96,8 +96,11 @@ object HotbarLayout {
         return if (slots.isEmpty()) null else Layout(slots, selected, worn)
     }
 
-    /** Before a reset: [p]'s items, armour and pet as they are now become what their last layout's next reset gives. */
-    fun keep(p: ServerPlayer) {
+    /**
+     * Before a reset: [p]'s items, armour and pet as they are now become what their last layout's next reset gives.
+     * [save]: leaving the sim, so they're also saved as that part's and class's hotbar (as "Save Hotbar" would): the next arrival lays them out.
+     */
+    fun keep(p: ServerPlayer, save: Boolean = false) {
         // A ghost's kit isn't theirs (their own comes back with them).
         if (Masks.ghost) return
         val (k, held) = given[owner()] ?: return
@@ -105,7 +108,13 @@ object HotbarLayout {
         // Terror At Terms put that on (it does again): what they wore before stays.
         val worn = if (k.contains("/P3/") && P3Sim.terrorAtTerms) was?.worn else Loadouts.capture(p)
         // The slot held is the layout's (a restart mid-swing shouldn't start you on that item).
-        capture(p, worn, held)?.let { lives()[k] = it; keepLives() }
+        val l = capture(p, worn, held) ?: return
+        lives()[k] = l
+        if (!save) return keepLives()
+        val s = saved()
+        // Older per-skill ones of this part and class go, as with Save Hotbar.
+        val part = k.substringBefore('/') == "P3"
+        write(s.copy(roles = s.roles.orEmpty().filterKeys { !isSkillKey(it, part) } + (k to l), live = lives().toMap()))
     }
 
     /** [p3]'s part was just laid out, holding [held]: the player's items are its from now on. */

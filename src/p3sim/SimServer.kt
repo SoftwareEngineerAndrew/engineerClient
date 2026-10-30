@@ -72,6 +72,8 @@ object SimServer {
         }
         ServerLifecycleEvents.SERVER_STOPPING.register { s ->
             if (s !== server) return@register
+            // How everyone left their items is saved as their hotbar: their next arrival lays it out (the world is made fresh, so nothing else keeps it).
+            EngineerClient.safely("p3sim keep hotbars") { Sim.forEachPlayer { HotbarLayout.keep(it, save = true); HotbarLayout.forgetGiven() } }
             // Saved as built: no fight entities, every changed block back.
             EngineerClient.safely("p3sim stopping") { P3Party.stopHosting(unpublish = false); AdsServer.stop(unpublish = false); Fight.stop(); Party.clear(); Sim.clearEntities(); Blocks.restoreAll() }
         }
