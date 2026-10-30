@@ -36,8 +36,9 @@ import kotlin.math.roundToInt
  * Each "?" tile behind a door is coloured by its chances (purple puzzle, orange trap, yellow
  * miniboss, red blood, pink fairy, each from Min Chance up; the grey rest is a normal room; the tile behind
  * a blood door is the blood room, drawn as itself), and with Split Contents on it
- * says what that door's side of the map holds: its puzzles, trap, yellow and blood, and about how
- * many rooms. Each kind of guess
+ * says what that door's side of the map holds: its puzzles, trap, yellow and blood, about how
+ * many rooms, and with Split Secrets about how many secrets (its rooms' averages, fitted to the tab's
+ * secret total once it shows one: [MapPredictor.splitSecrets]; a guess beside the rooms, never steering them). Each kind of guess
  * has its own slider: a tile Dead End Chance sure to be a puzzle, trap, yellow or rare 1x1 (always
  * from 95%) gets Odin's own guess tile (the types it can be, side by side, with a "?"); one Blood &
  * Fairy Chance sure to be blood or the fairy room gets a guess tile in that room's colour; a big
@@ -70,6 +71,8 @@ object OdinMapPrediction {
         desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
+    private val splitSecrets = BooleanSetting("Split Secrets", true,
+        desc = "With Split Contents: about how many secrets that side of the map holds (blue), from the rooms it probably has and, once you've found a secret, the dungeon's secret total. Only a guess; it doesn't change the room prediction.").withDependency { on && splitText.value }
     private val chances = BooleanSetting("Show Chances", false,
         desc = "The most likely special room's chance on each \"?\" tile.").withDependency { on }
     private val minChance = NumberSetting("Min Chance", 0.3f, 0.1..0.9, 0.05f,
@@ -120,7 +123,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
+        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
         EventBus.subscribe(this)
@@ -351,6 +354,7 @@ object OdinMapPrediction {
         // every tile behind a door the map shows is drawn anyway, never left blank
         val hints = hintTiles(known)
         val splits = p.splits.associateBy { it.tile }
+        secretsAt = if (splitSecrets.value) MapPredictor.splitSecrets(v, p.splits).let { s -> p.splits.indices.associate { p.splits[it].tile to s[it] } } else emptyMap()
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
         val exact = BooleanArray(W * W)
         if (exactRooms.value) for ((_, names) in p.namedRooms.groupBy { it.tiles.joinToString(",") }) {
@@ -548,7 +552,10 @@ object OdinMapPrediction {
         g.blit(RenderPipelines.GUI_TEXTURED, question, x + 2, y + 2, size.toFloat(), size.toFloat(), size, size, size, size)
     }
 
-    /** "2P T Y B" (what's more likely there than not, puzzles by their expected count) over "~6" rooms. */
+    /** Each split's secrets, by its door's tile, for the prediction being drawn (Split Secrets). */
+    private var secretsAt: Map<Int, Float> = emptyMap()
+
+    /** "2P T Y B" (what's more likely there than not, puzzles by their expected count) over "~6" rooms (and "23s" secrets). */
     private fun splitLabel(g: GuiGraphicsExtractor, x: Int, y: Int, s: Split) {
         val parts = ArrayList<String>()
         val pz = s.expect[Cls.PUZZLE].roundToInt()
@@ -558,7 +565,8 @@ object OdinMapPrediction {
         if (s.expect[Cls.BLOOD] >= 0.5f) parts += "§cB"
         val top = parts.joinToString(" ").ifEmpty { "§7-" }
         small(g, top, x + ROOM / 2, y + 3, -1)
-        small(g, "§f~${s.rooms.roundToInt()}", x + ROOM / 2, y + 8, -1)
+        val sec = secretsAt[s.tile]?.let { " §b${it.roundToInt()}s" } ?: ""
+        small(g, "§f~${s.rooms.roundToInt()}$sec", x + ROOM / 2, y + 8, -1)
     }
 
     private fun small(g: GuiGraphicsExtractor, text: String, cx: Int, cy: Int, color: Int) {

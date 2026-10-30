@@ -112,7 +112,7 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
         return out
     }
 
-    private fun neighbours(t: Int): IntArray {
+    internal fun neighbours(t: Int): IntArray {
         val x = t % w; val z = t / w; val o = ArrayList<Int>(4)
         if (x + 1 < w) o += t + 1; if (x > 0) o += t - 1; if (z + 1 < h) o += t + w; if (z > 0) o += t - w
         return o.toIntArray()
@@ -200,8 +200,12 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
     }
 }
 
-/** One door from the discovered rooms into the unknown, and what its side of the map (its subtree) holds. */
-class Split(val tile: Int, val door: Byte, val rooms: Float, val tiles: Float, val expect: FloatArray)
+/**
+ * One door from the discovered rooms into the unknown, and what its side of the map (its subtree) holds: rooms, tiles,
+ * rooms of each [Cls], and [secrets], its rooms' average secrets by their pools ([MapStats.meanSecrets]; [splitSecrets]
+ * fits them to the tab's secret total).
+ */
+class Split(val tile: Int, val door: Byte, val rooms: Float, val tiles: Float, val expect: FloatArray, val secrets: Float = 0f)
 
 /** A big room the samples put in the same place, and how often (its exact tiles). */
 class BigRoom(val tiles: IntArray, val chance: Float)
@@ -241,6 +245,7 @@ internal class Tally(cells: Int, entries: Int) {
     val splitRooms = DoubleArray(entries)
     val splitTiles = DoubleArray(entries)
     val splitCls = Array(entries) { DoubleArray(Cls.COUNT) }
+    val splitSecrets = DoubleArray(entries)
     val bigCounts = HashMap<Long, Double>()
     val nameCounts = HashMap<Long, Double>()
     val doorCounts = HashMap<Int, DoubleArray>()
@@ -250,7 +255,7 @@ internal class Tally(cells: Int, entries: Int) {
     fun addScaled(o: Tally, k: Double) {
         for (i in counts.indices) { val a = counts[i]; val b = o.counts[i]; for (c in a.indices) a[c] += k * b[c] }
         for (i in splitRooms.indices) {
-            splitRooms[i] += k * o.splitRooms[i]; splitTiles[i] += k * o.splitTiles[i]
+            splitRooms[i] += k * o.splitRooms[i]; splitTiles[i] += k * o.splitTiles[i]; splitSecrets[i] += k * o.splitSecrets[i]
             val a = splitCls[i]; val b = o.splitCls[i]; for (c in a.indices) a[c] += k * b[c]
         }
         for ((key, v) in o.bigCounts) bigCounts.merge(key, k * v, Double::plus)
@@ -272,7 +277,8 @@ internal class Tally(cells: Int, entries: Int) {
         }
         val probs = if (calibrate == null) raw else Array(n) { raw[it]?.let(calibrate) }
         val splits = entries.mapIndexed { i, t ->
-            Split(t, entryDoor[t], (splitRooms[i] / weight).toFloat(), (splitTiles[i] / weight).toFloat(), FloatArray(Cls.COUNT) { (splitCls[i][it] / weight).toFloat() })
+            Split(t, entryDoor[t], (splitRooms[i] / weight).toFloat(), (splitTiles[i] / weight).toFloat(), FloatArray(Cls.COUNT) { (splitCls[i][it] / weight).toFloat() },
+                (splitSecrets[i] / weight).toFloat())
         }
         val big = bigCounts.entries.filter { it.value / weight >= 0.05 }.sortedByDescending { it.value }
             .map { (m, v) -> BigRoom((0 until n).filter { (m shr it) and 1L == 1L }.toIntArray(), (v / weight).toFloat()) }
@@ -342,6 +348,8 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
     private var secrets: SecretNames? = null
     private var secretsOn = false
     private val unnamedKnown = ArrayList<Int>()
+    /** Each name pool's average secrets, but the names the map already has or the floor never has: what a split's rooms hold. */
+    private val poolSecrets = MapStats.meanSecrets(view.names.filterNotNull().toSet() + rules.missingNames)
     private var classicAccepted = 0
     private var classicLevel = 0
     private var levelTries = 0L
@@ -433,7 +441,7 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
         if (gameProcess && !bad && cells.isNotEmpty()) {
             try {
                 val sn = secrets; val on = secretsOn; val unnamed = unnamedKnown.toIntArray()
-                val make = { GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, sn, on, unnamed) }
+                val make = { GameSampler(view, cells, tileIdx, entries, entryIndex, entryDoor, pinKeys, pinBefore, sn, on, unnamed, poolSecrets) }
                 val g = make()
                 if (g.possible) { gameSampler = g; makeGame = make }
             } catch (e: Exception) { gameError = e }
@@ -489,22 +497,7 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
 
     private fun fixedName(k: Kind): String? = when (k) { Kind.ENTRANCE -> "Entrance"; Kind.BLOOD -> "Blood"; Kind.FAIRY -> "Fairy"; else -> null }
 
-    /** A discovered room's name pool from its colour and shape; a brown 1x1 dead end is a rare room (a normal 1x1 never is one). */
-    private fun poolOfKnown(i: Int): Int {
-        val shape = view.shapes[i]
-        return when (view.kinds[i]) {
-            Kind.NORMAL, Kind.RARE -> if (shape != Shape.ONE) shape.ordinal else {
-                val t = view.roomTiles[i][0]
-                if (view.kinds[i] == Kind.RARE || neighbours(t).count { Edge.isDoor(view.edge(t, it)) } == 1) MapStats.POOL_RARE else MapStats.POOL_1X1
-            }
-            Kind.PUZZLE -> MapStats.POOL_PUZZLE
-            Kind.TRAP -> MapStats.POOL_TRAP
-            Kind.YELLOW -> MapStats.POOL_YELLOW
-            Kind.BLOOD -> MapStats.POOL_BLOOD
-            Kind.FAIRY -> MapStats.POOL_FAIRY
-            Kind.ENTRANCE -> MapStats.POOL_ENTRANCE
-        }
-    }
+    private fun poolOfKnown(i: Int): Int = poolOfKnown(view, i)
 
     private fun neighbours(t: Int): IntArray {
         val x = t % w; val z = t / w
@@ -846,7 +839,10 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
                 names.byPool[pool]?.forEachIndexed { k, share -> if (share > 0) tally.nameCounts.merge(m * 256 + MapStats.NAMES.indexOf(sn.avail[pool][k]), wgt * share, Double::plus) }
             }
             val b = root[o]
-            if (b >= 0) { tally.splitRooms[b] += wgt; tally.splitTiles[b] += wgt * rooms[o].size; tally.splitCls[b][c] += wgt }
+            if (b >= 0) {
+                tally.splitRooms[b] += wgt; tally.splitTiles[b] += wgt * rooms[o].size; tally.splitCls[b][c] += wgt
+                tally.splitSecrets[b] += wgt * poolSecrets[poolOfCls(c, roomShape[o])]
+            }
             for (t in rooms[o]) tally.counts[tileIdx[t]][c] += wgt
             if (roomShape[o] != Shape.ONE && n <= 64) { var m = 0L; for (t in rooms[o]) m = m or (1L shl t); tally.bigCounts.merge(m, wgt, Double::plus) }
         }
@@ -898,6 +894,47 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
 
         /** A puzzle room's name (Odin's map) is the tab's puzzle [tab]: the same, but both blaze rooms are "Higher Or Lower". */
         fun isTabPuzzle(room: String?, tab: String): Boolean = room != null && (room == tab || tab == "Higher Or Lower" && room.endsWith(" Blaze"))
+
+        /** A discovered room's name pool from its colour and shape; a brown 1x1 dead end is a rare room (a normal 1x1 never is one). */
+        internal fun poolOfKnown(view: MapView, i: Int): Int {
+            val shape = view.shapes[i]
+            return when (view.kinds[i]) {
+                Kind.NORMAL, Kind.RARE -> if (shape != Shape.ONE) shape.ordinal else {
+                    val t = view.roomTiles[i][0]
+                    if (view.kinds[i] == Kind.RARE || view.neighbours(t).count { Edge.isDoor(view.edge(t, it)) } == 1) MapStats.POOL_RARE else MapStats.POOL_1X1
+                }
+                Kind.PUZZLE -> MapStats.POOL_PUZZLE
+                Kind.TRAP -> MapStats.POOL_TRAP
+                Kind.YELLOW -> MapStats.POOL_YELLOW
+                Kind.BLOOD -> MapStats.POOL_BLOOD
+                Kind.FAIRY -> MapStats.POOL_FAIRY
+                Kind.ENTRANCE -> MapStats.POOL_ENTRANCE
+            }
+        }
+
+        /**
+         * Each split's secrets, fitted to the tab's secret total: what the total leaves for the unknown rooms (its middle
+         * when the tab allows several, less the named rooms' secrets and the unnamed discovered ones' averages) shared out
+         * as the splits' averages ([Split.secrets]) share it. Only a guess at the count, read after the prediction: the
+         * rooms predicted are the samples' whatever this says. The averages as they are while the total is unknown, a
+         * named room isn't on the list, or the total leaves nothing for them.
+         */
+        fun splitSecrets(view: MapView, splits: List<Split>): FloatArray {
+            val avg = FloatArray(splits.size) { splits[it].secrets }
+            val sum = avg.sum()
+            if (view.secretTotals.isEmpty() || sum <= 0f) return avg
+            val byName = MapStats.NAMES.associateBy { it.name }
+            val mean = MapStats.meanSecrets(view.names.filterNotNull().toSet() + view.rules.missingNames)
+            var known = 0.0
+            for (i in view.kinds.indices) {
+                val name = view.names[i]
+                known += if (name != null) (byName[name] ?: return avg).secrets.toDouble() else mean[poolOfKnown(view, i)]
+            }
+            val left = view.secretTotals.average() - known
+            if (left <= 0) return avg
+            val k = (left / sum).toFloat()
+            return FloatArray(avg.size) { avg[it] * k }
+        }
 
         /** A room's name pool from its class and shape. */
         internal fun poolOfCls(c: Int, shape: Shape): Int = when (c) {
