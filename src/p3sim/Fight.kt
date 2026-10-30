@@ -226,6 +226,8 @@ object Fight {
 
     /** A party's player left: their window, their class's place (its bot comes back at the next start). */
     fun leave(player: ServerPlayer) {
+        // How they left their items is saved as their hotbar, for their next arrival (before their ghost state and files go).
+        Sim.asPlayer(player) { HotbarLayout.keep(player, save = true); HotbarLayout.forgetGiven() }
         // A crystal they carried goes back on its stand (else Maxor's side waits for it forever).
         (phase as? P1Maxor)?.playerLeft(player)
         // Their ghost state goes (a pending revive with it), so a rejoin starts clean.

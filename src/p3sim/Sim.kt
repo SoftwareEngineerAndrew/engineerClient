@@ -49,7 +49,8 @@ object Sim {
     /** The host: the player whose game it is (the first in), whoever [player] is now. */
     val host: ServerPlayer? get() = SimServer.player
 
-    fun isHost(p: ServerPlayer?) = p != null && p === SimServer.player
+    // By account too: while the host joins they aren't in the player list yet (their arrival's hotbar was read as a joiner's: none).
+    fun isHost(p: ServerPlayer?) = p != null && (p === SimServer.player || p.uuid == SimServer.server?.singleplayerProfile?.id())
 
     /** Runs [run] as [p]'s: [player], [me], chat, titles and sounds are theirs, and so is what [run] queues ([Fight.later]). */
     fun <T> asPlayer(p: ServerPlayer?, toAll: Boolean = false, run: () -> T): T {
