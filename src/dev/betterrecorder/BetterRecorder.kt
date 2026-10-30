@@ -1,137 +1,96 @@
 package com.devgineerclient.betterrecorder
 
 import com.devgineerclient.DevgineerClient
+import com.devgineerclient.mixin.BrecKeyClicksAccessor
+import com.devgineerclient.mixin.RecTabOverlayAccessor
+import com.devgineerclient.recorder.RecConfig
+import com.devgineerclient.recorder.Rec
+import com.devgineerclient.recorder.RecorderFiles
+import com.devgineerclient.recorder.RecorderSession
+import com.devgineerclient.recorder.RichJson
 import com.engineerclient.adr.ADR
 import com.engineerclient.adr.RunRecorder
+import com.mojang.blaze3d.platform.InputConstants
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.itemId
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
-import net.minecraft.core.component.DataComponents
-import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
-import net.minecraft.network.protocol.game.ClientboundExplodePacket
-import net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket
-import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket
-import net.minecraft.network.protocol.game.ClientboundSetHealthPacket
-import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket
-import net.minecraft.network.protocol.game.ClientboundSoundPacket
-import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket
-import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket
-import net.minecraft.network.protocol.game.ServerboundAttackPacket
-import net.minecraft.world.entity.EquipmentSlot
-import net.minecraft.world.entity.LivingEntity
-import net.minecraft.world.entity.decoration.ArmorStand
-import net.minecraft.world.entity.player.Player
-import net.minecraft.world.item.ItemStack
-import java.io.OutputStreamWriter
-import java.io.Writer
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+import net.minecraft.SharedConstants
+import net.minecraft.client.KeyMapping
+import net.minecraft.client.player.LocalPlayer
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.nio.file.Files
-import java.util.Locale
-import java.util.concurrent.Executors
-import java.util.zip.GZIPOutputStream
+import java.nio.file.Path
 
 /**
- * Better Recorder: what All Data (undonecoffee.com/alldata) still needs and ADR doesn't record - the numbers behind
- * combat. A layer on ADR: it records only while ADR is recording a Hypixel dungeon run, counts ticks with ADR's own
- * clock, and its file is named after ADR's, so each line lines up with the ADR run it belongs to. Local only,
- * nothing is uploaded. Off by default.
+ * Better Recorder: every Hypixel dungeon run, losslessly, cheap enough to leave on - for ADS's fidelity replay. While ADR
+ * records a run (Hypixel only), it keeps every packet both ways as raw bytes ([BrecWire]: with the configuration data a
+ * reader needs and the world's packets from before the run was known), what never goes over the wire (keys held,
+ * presses, look, position, motion, the open screen, frame and tick timing, ping) as a line per client tick with only
+ * what changed, and a profile snapshot at the start. Local only, nothing is uploaded. On by default.
  *
- * Files: <game dir>/devgineerclient-recordings/better/<ADR's yyyy-MM-dd_HH-mm-ss>.br.jsonl.gz, gzipped JSON Lines,
- * every line {"k":kind,"t":ADR's tick,...}. Only changes are written:
- *
- *  - meta {"adr":stamp,"startMs","v":2}; mark {"m":note} (/brec mark [note])
- *  - hp {"d":[[entity id, health, max health on first sight], ...]}: every mob's health as the server sends it
- *    (players and armor stands left out)
- *  - dmg {"id","type","by","via"}: the server's damage event - who was hurt, the damage type, the entity it came
- *    from and the one that hit (a projectile); -1 none
- *  - atk {"id"}: you attacked that entity
- *  - dtag {"id","x","y","z","m"}: a damage number (an armor stand's name of digits) as it appeared
- *  - me {"hp","food","sat","abs"}: your health, hunger and absorption
- *  - att {"d":[[attribute, base, [[modifier, amount, operation], ...]], ...]}: your attributes that changed
- *  - fx {"e","a","d"} an effect on you (amplifier, ticks); {"e","x":1} removed
- *  - vel {"v":[x,y,z]}: the server set your motion (knockback); boom {"at","r","kb"}: an explosion
- *  - item {"s","id","name","lore":[...]}: your hotbar (0-8), armour (36 feet - 39 head) and offhand (40) item,
- *    with its lore, when it changes
- *  - snd {"d":[[sound, x, y, z, volume, pitch] or [sound, entity id, volume, pitch], ...]}: every sound the
- *    server played that tick
+ * Written with the Dungeon Recorder's machinery ([RecorderSession]: writer thread, bounded queue, gap lines, raw
+ * sidecar, crash recovery) into devgineerclient-recordings/better/<ADR stamp>.br/. FORMAT.md next to this file says
+ * what is in it.
  */
 object BetterRecorder : Module(
     name = "Better Recorder",
     key = null,
     category = Category.custom("Devgineer Client", 860, 10),
-    description = "Records the numbers behind combat that ADR doesn't (mob health, damage events, your stats and gear, sounds) into a small file next to each ADR run, for All Data. Records only while ADR does; local only.",
+    description = "Records every Hypixel dungeon run in full (every packet raw, your inputs and look per tick, your profile at the start) into a folder next to the ADR run, for ADS's replay. Records only while ADR does; local only.",
 ) {
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         DevgineerClient.safely("better recorder folder") { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
     }
 
-    private val dir get() = DevgineerClient.mc.gameDirectory.toPath().resolve("devgineerclient-recordings").resolve("better")
+    /** Whether the module has had its one-time switch-on (on by default, existing installs too). */
+    private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
 
-    private class Session(val run: RunRecorder, val writer: Writer) {
-        val hp = HashMap<Int, Float>()
-        val names = HashMap<Int, String>()
-        val items = HashMap<Int, ItemStack>()
-        val itemText = HashMap<Int, String>()
-        val attrs = HashMap<String, String>()
-        var abs = -1f
-        val sounds = StringBuilder()
-        var lines = 0L
+    fun enableByDefault() {
+        if (switchedOn) return
+        switchedOn = true
+        if (!enabled) toggle()
+        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+    }
+
+    private val dir: Path get() = DevgineerClient.mc.gameDirectory.toPath().resolve("devgineerclient-recordings").resolve("better")
+
+    private class Session(val run: RunRecorder, val rec: RecorderSession) {
+        /** The last value written per input field. */
+        val last = HashMap<String, String>()
+        var lastTickNs = 0L
+        var ticks = 0L
     }
 
     private var session: Session? = null
-    private val io = Executors.newSingleThreadExecutor { Thread(it, "better-recorder-writer").apply { isDaemon = true } }
-    private val pending = StringBuilder()
+    /** A run whose recording the session stopped itself (disk nearly full): not started again. */
+    private var stoppedRun: RunRecorder? = null
+    /** Client ticks since the game started (the n of every line). */
+    private var clientTick = 0
+    /** Presses waiting at the start of this tick, before the game took them: use, attack, drop. */
+    private val clicks = IntArray(3)
+    private var keyBits = 0
+    /** From chat: "Profile ID: ..." and "You are playing on profile: ..." (Hypixel says these as you join SkyBlock). */
+    @Volatile private var profileId: String? = null
+    @Volatile private var profileName: String? = null
 
     init {
-        on<TickEvent.End> { DevgineerClient.safely("better recorder tick") { tick() } }
-        ClientLifecycleEvents.CLIENT_STOPPING.register { DevgineerClient.safely("better recorder exit") { stop() } }
+        ClientTickEvents.START_CLIENT_TICK.register { DevgineerClient.safely("better recorder input") { tickStart() } }
+        ClientTickEvents.END_CLIENT_TICK.register { DevgineerClient.safely("better recorder tick") { tickEnd() } }
+        ClientLifecycleEvents.CLIENT_STOPPING.register { DevgineerClient.safely("better recorder exit") { stop(wait = true) } }
 
-        // Packets: read on the network thread, written on the game thread at ADR's tick.
-        onReceive<ClientboundDamageEventPacket> {
-            val id = entityId(); val type = sourceType().unwrapKey().map { it.identifier().path }.orElse("?"); val by = sourceCauseId(); val via = sourceDirectId()
-            later { line("dmg", ""","id":$id,"type":${q(type)},"by":$by,"via":$via""") }
-        }
-        onSend<ServerboundAttackPacket> { val id = entityId(); later { line("atk", ""","id":$id""") } }
-        onReceive<ClientboundSetHealthPacket> {
-            val h = health; val f = food; val s = saturation
-            later { line("me", ""","hp":${f1(h)},"food":$f,"sat":${f1(s)}""") }
-        }
-        onReceive<ClientboundUpdateAttributesPacket> {
-            val id = entityId; val values = values
-            later { if (id == DevgineerClient.mc.player?.id) attributes(values) }
-        }
-        onReceive<ClientboundUpdateMobEffectPacket> {
-            val id = entityId; val e = effect.unwrapKey().map { it.identifier().path }.orElse("?"); val a = effectAmplifier; val d = effectDurationTicks
-            later { if (id == DevgineerClient.mc.player?.id) line("fx", ""","e":${q(e)},"a":$a,"d":$d""") }
-        }
-        onReceive<ClientboundRemoveMobEffectPacket> {
-            val id = entityId(); val e = effect().unwrapKey().map { it.identifier().path }.orElse("?")
-            later { if (id == DevgineerClient.mc.player?.id) line("fx", ""","e":${q(e)},"x":1""") }
-        }
-        onReceive<ClientboundSetEntityMotionPacket> {
-            val id = id(); val v = movement()
-            later { if (id == DevgineerClient.mc.player?.id) line("vel", ""","v":[${f3(v.x)},${f3(v.y)},${f3(v.z)}]""") }
-        }
-        onReceive<ClientboundExplodePacket> {
-            val c = center(); val r = radius(); val kb = playerKnockback().orElse(null)
-            later { line("boom", ""","at":[${f2(c.x)},${f2(c.y)},${f2(c.z)}],"r":${f2(r.toDouble())}""" + (kb?.let { ""","kb":[${f3(it.x)},${f3(it.y)},${f3(it.z)}]""" } ?: "")) }
-        }
-        onReceive<ClientboundSoundPacket> {
-            val row = "[${q(sound.unwrapKey().map { it.identifier().path }.orElse("?"))},${f2(x)},${f2(y)},${f2(z)},${f2(volume.toDouble())},${f2(pitch.toDouble())}]"
-            later { sound(row) }
-        }
-        onReceive<ClientboundSoundEntityPacket> {
-            val row = "[${q(sound.unwrapKey().map { it.identifier().path }.orElse("?"))},$id,${f2(volume.toDouble())},${f2(pitch.toDouble())}]"
-            later { sound(row) }
+        onReceive<ClientboundSystemChatPacket> {
+            if (overlay) return@onReceive
+            val text = content.string
+            PROFILE_ID.find(text)?.let { profileId = it.groupValues[1] }
+            PROFILE_NAME.find(text)?.let { profileName = it.groupValues[1] }
         }
 
         ClientCommandRegistrationCallback.EVENT.register { d, _ ->
@@ -139,146 +98,228 @@ object BetterRecorder : Module(
                 .executes { DevgineerClient.msg(status()); 1 }
                 .then(literal("mark").executes { mark(null); 1 }.then(argument("note", StringArgumentType.greedyString()).executes { c -> mark(StringArgumentType.getString(c, "note")); 1 })))
         }
+
+        // Recordings a crash left unfinished are cut back to their last whole member.
+        Thread({ runCatching { RecorderFiles.recover(dir) } }, "better-recorder-recover").apply { isDaemon = true; start() }
+    }
+
+    override fun onEnable() {
+        BrecWire.on = true
+        super.onEnable()
     }
 
     override fun onDisable() {
-        stop()
+        stop(wait = false)
+        BrecWire.on = false
+        BrecWire.buffering = false
+        BrecWire.reset()
         super.onDisable()
     }
 
-    private fun later(block: () -> Unit) {
+    private fun tickStart() {
+        clientTick++
+        BrecWire.tick = clientTick
         if (session == null) return
-        DevgineerClient.mc.execute { DevgineerClient.safely("better recorder") { if (session != null) block() } }
+        val o = DevgineerClient.mc.options
+        clicks[0] = (o.keyUse as BrecKeyClicksAccessor).`brec$clicks`()
+        clicks[1] = (o.keyAttack as BrecKeyClicksAccessor).`brec$clicks`()
+        clicks[2] = (o.keyDrop as BrecKeyClicksAccessor).`brec$clicks`()
+        var b = 0
+        val keys = arrayOf<KeyMapping>(o.keyUp, o.keyDown, o.keyLeft, o.keyRight, o.keyJump, o.keyShift, o.keySprint, o.keyUse, o.keyAttack, o.keyDrop)
+        for (i in keys.indices) if (keys[i].isDown) b = b or (1 shl i)
+        if (InputConstants.isKeyDown(InputConstants.KEY_LCONTROL) || InputConstants.isKeyDown(InputConstants.KEY_RCONTROL)) b = b or (1 shl 10)
+        keyBits = b
     }
 
-    private fun tick() {
-        val run = if (enabled) ADR.recording else null
-        if (session?.run !== run) { stop(); if (run != null) start(run) }
+    private fun tickEnd() {
+        BrecWire.on = enabled
+        BrecWire.buffering = enabled && ADR.onHypixel()
+        if (!BrecWire.buffering) BrecWire.dropWorld()
+        val run = if (enabled && ADR.onHypixel()) ADR.recording else null
+        if (session?.run !== run) { stop(wait = false); if (run != null && run !== stoppedRun) start(run) }
         val s = session ?: return
-        health(s)
-        me(s)
-        gear(s)
-        if (s.sounds.isNotEmpty()) { line("snd", ""","d":[${s.sounds}]"""); s.sounds.setLength(0) }
-        if (pending.isNotEmpty()) {
-            val chunk = pending.toString(); pending.setLength(0)
-            val w = s.writer
-            io.execute { runCatching { w.write(chunk) } }
+        if (!s.rec.running) { stoppedRun = s.run; stop(wait = false); return }
+        val now = System.nanoTime()
+        val sb = StringBuilder(160)
+        sb.append(",\"dt\":").append((now - s.lastTickNs) / 1000)
+        s.lastTickNs = now
+        val times = BrecWire.drainTimes()
+        if (times.isNotEmpty()) {
+            sb.append(",\"fr\":[")
+            var i = 0
+            while (i < times.size) {
+                if (i > 0) sb.append(',')
+                sb.append(times[i]).append(',').append((times[i + 1] - s.rec.startNs) / 1000)
+                i += 2
+            }
+            sb.append(']')
         }
+        val input = input(s)
+        if (input.isNotEmpty()) sb.append(",\"in\":{").append(input).append('}')
+        line(s, "tk", sb)
+        s.ticks++
+    }
+
+    /** This tick's inputs and own state, only the fields that changed (as `"key":value` members). */
+    private fun input(s: Session): String {
+        val mc = DevgineerClient.mc
+        val out = StringBuilder()
+        fun put(key: String, value: String) {
+            if (s.last.put(key, value) == value) return
+            if (out.isNotEmpty()) out.append(',')
+            out.append('"').append(key).append("\":").append(value)
+        }
+        put("k", keyBits.toString())
+        // Presses are events, not state: written whenever there are any.
+        if (clicks[0] or clicks[1] or clicks[2] != 0) {
+            if (out.isNotEmpty()) out.append(',')
+            out.append("\"c\":[").append(clicks[0]).append(',').append(clicks[1]).append(',').append(clicks[2]).append(']')
+        }
+        val p = mc.player
+        if (p != null) {
+            put("sl", p.inventory.selectedSlot.toString())
+            put("r", "[${p.yRot},${p.xRot}]")
+            put("p", "[${p.x},${p.y},${p.z}]")
+            val v = p.deltaMovement
+            put("v", "[${v.x},${v.y},${v.z}]")
+            put("g", if (p.onGround()) "1" else "0")
+            put("st", (if (p.isSprinting) 1 else 0).or(if (p.isShiftKeyDown) 2 else 0).or(if (p.isUsingItem) 4 else 0).toString())
+            put("ping", (mc.connection?.getPlayerInfo(p.uuid)?.latency ?: -1).toString())
+        }
+        val scr = mc.gui.screen()
+        put("scr", if (scr == null) "null" else "[${RecorderFiles.q(scr.javaClass.simpleName)},${RecorderFiles.q(scr.title.string)}]")
+        put("fps", mc.fps.toString())
+        return out.toString()
     }
 
     private fun start(run: RunRecorder) {
         Files.createDirectories(dir)
-        val out = Files.newOutputStream(dir.resolve("${run.stamp}.br.jsonl.gz"))
-        session = Session(run, OutputStreamWriter(GZIPOutputStream(out, 1 shl 16), Charsets.UTF_8))
-        line("meta", ""","adr":${q(run.stamp)},"startMs":${System.currentTimeMillis()},"v":2""")
+        val mc = DevgineerClient.mc
+        val p = mc.player
+        val v = SharedConstants.getCurrentVersion()
+        val meta = buildString {
+            append("\"brec\":").append(FORMAT_VERSION)
+            append(",\"brecFormat\":").append(RecorderFiles.q(FORMAT_NOTE))
+            append(",\"adr\":").append(RecorderFiles.q(run.stamp))
+            append(",\"mc\":").append(RecorderFiles.q(v.name()))
+            append(",\"protocol\":").append(v.protocolVersion())
+            append(",\"uuid\":").append(RecorderFiles.q(p?.uuid?.toString()))
+            append(",\"name\":").append(RecorderFiles.q(p?.gameProfile?.name()))
+            append(",\"server\":").append(RecorderFiles.q(mc.currentServer?.ip))
+            append(",\"profileId\":").append(RecorderFiles.q(profileId))
+            append(",\"profileName\":").append(RecorderFiles.q(profileName))
+        }
+        val rec = RecorderSession(dir, meta, { CONFIG }) { msg ->
+            if (!msg.contains("Dungeon Recorder saved")) DevgineerClient.msg(msg.replace("Dungeon Recorder", "Better Recorder"))
+        }
+        rec.confirm("brec")
+        val s = Session(run, rec)
+        s.lastTickNs = System.nanoTime()
+        session = s
+        val (frames, dropped) = BrecWire.goLive(rec)
+        // The frames from before the run was known: their (seq, µs since start (negative), client tick).
+        val pre = StringBuilder(frames.size * 24 + 32).append(",\"fr\":[")
+        frames.forEachIndexed { i, f ->
+            if (i > 0) pre.append(',')
+            pre.append(f.seq).append(',').append((f.ns - rec.startNs) / 1000).append(',').append(f.tick)
+        }
+        pre.append(']')
+        if (dropped > 0) pre.append(",\"dropped\":").append(dropped)
+        line(s, "pre", pre)
+        p?.let { line(s, "prof", profile(it)) }
     }
 
-    private fun stop() {
+    /** What the client can see of you without opening a menu, as the run starts. */
+    private fun profile(p: LocalPlayer): StringBuilder {
+        val sb = StringBuilder(32 * 1024)
+        sb.append(",\"profileId\":").append(RecorderFiles.q(profileId)).append(",\"profileName\":").append(RecorderFiles.q(profileName))
+        sb.append(",\"hp\":").append(p.health).append(",\"maxHp\":").append(p.maxHealth).append(",\"abs\":").append(p.absorptionAmount)
+            .append(",\"food\":").append(p.foodData.foodLevel).append(",\"sat\":").append(p.foodData.saturationLevel)
+            .append(",\"xp\":[").append(p.experienceLevel).append(',').append(p.experienceProgress).append(']')
+        // Slots 0-8 hotbar, 9-35 inventory, 36-39 armour (feet to head), 40 offhand; every component.
+        sb.append(",\"inv\":[")
+        val inv = p.inventory
+        for (i in 0 until inv.containerSize) {
+            if (i > 0) sb.append(',')
+            val stack = inv.getItem(i)
+            if (stack.isEmpty) sb.append("null") else RichJson.item(sb, stack)
+        }
+        sb.append(']')
+        sb.append(",\"attrs\":[")
+        p.attributes.syncableAttributes.forEachIndexed { i, a ->
+            if (i > 0) sb.append(',')
+            sb.append('[').append(RecorderFiles.q(a.attribute.registeredName)).append(',').append(a.baseValue).append(',').append(a.value).append(",[")
+            a.modifiers.forEachIndexed { j, m ->
+                if (j > 0) sb.append(',')
+                sb.append('[').append(RecorderFiles.q(m.id().toString())).append(',').append(m.amount()).append(',').append(m.operation().ordinal).append(']')
+            }
+            sb.append("]]")
+        }
+        sb.append(']')
+        sb.append(",\"fx\":[")
+        p.activeEffects.forEachIndexed { i, e ->
+            if (i > 0) sb.append(',')
+            sb.append('[').append(RecorderFiles.q(e.effect.registeredName)).append(',').append(e.amplifier).append(',').append(e.duration).append(']')
+        }
+        sb.append(']')
+        // The tab list as drawn (Hypixel's widgets: stats, pet, ...), its header and footer.
+        val overlay = DevgineerClient.mc.gui.hud.tabList
+        val acc = overlay as RecTabOverlayAccessor
+        sb.append(",\"tab\":[")
+        acc.`dc$recPlayerInfos`().forEachIndexed { i, info ->
+            if (i > 0) sb.append(',')
+            RichJson.component(sb, overlay.getNameForDisplay(info))
+        }
+        sb.append(']')
+        sb.append(",\"tabHeader\":"); acc.`dc$recHeader`()?.let { RichJson.component(sb, it) } ?: sb.append("null")
+        sb.append(",\"tabFooter\":"); acc.`dc$recFooter`()?.let { RichJson.component(sb, it) } ?: sb.append("null")
+        return sb
+    }
+
+    private fun stop(wait: Boolean) {
         val s = session ?: return
         session = null
-        val chunk = pending.toString(); pending.setLength(0)
-        io.execute { runCatching { s.writer.write(chunk); s.writer.close() } }
-    }
-
-    private fun line(kind: String, body: String) {
-        val s = session ?: return
-        s.lines++
-        pending.append("{\"k\":\"").append(kind).append("\",\"t\":").append(s.run.currentTick).append(body).append("}\n")
-    }
-
-    private fun sound(row: String) {
-        val s = session ?: return
-        if (s.sounds.isNotEmpty()) s.sounds.append(',')
-        s.sounds.append(row)
-    }
-
-    /** Every mob's health, when it changes; damage numbers as they appear. */
-    private fun health(s: Session) {
-        val level = DevgineerClient.mc.level ?: return
-        val rows = StringBuilder()
-        for (e in level.entitiesForRendering()) {
-            if (e is ArmorStand) { damageTag(s, e); continue }
-            if (e !is LivingEntity || e is Player) continue
-            val h = e.health
-            val was = s.hp.put(e.id, h)
-            if (was == h) continue
-            if (rows.isNotEmpty()) rows.append(',')
-            rows.append('[').append(e.id).append(',').append(f1(h.toDouble()))
-            if (was == null) rows.append(',').append(f1(e.maxHealth.toDouble()))
-            rows.append(']')
+        BrecWire.stopLive(s.rec)
+        line(s, "end", StringBuilder(",\"ticks\":").append(s.ticks))
+        val adr = s.run.stamp
+        val finish = Runnable {
+            if (!s.rec.closeAndWait(if (wait) 3000 else 120_000)) return@Runnable
+            // Named after the ADR run (the session names itself by its own start), unless that name is taken.
+            val target = dir.resolve("$adr.br")
+            runCatching { if (!Files.exists(target)) Files.move(s.rec.dir, target) }
         }
-        if (rows.isNotEmpty()) line("hp", ""","d":[$rows]""")
+        if (wait) finish.run() else Thread(finish, "better-recorder-close").apply { isDaemon = false; start() }
     }
 
-    private fun damageTag(s: Session, e: ArmorStand) {
-        val name = e.customName?.string ?: return
-        if (s.names.put(e.id, name) == name) return
-        if (!DAMAGE.matches(name)) return
-        line("dtag", ""","id":${e.id},"x":${f2(e.x)},"y":${f2(e.y)},"z":${f2(e.z)},"m":${q(name)}""")
-    }
-
-    private fun me(s: Session) {
-        val abs = DevgineerClient.mc.player?.absorptionAmount ?: return
-        if (abs == s.abs) return
-        s.abs = abs
-        line("me", ""","abs":${f1(abs.toDouble())}""")
-    }
-
-    private fun attributes(values: List<ClientboundUpdateAttributesPacket.AttributeSnapshot>) {
-        val s = session ?: return
-        val rows = values.mapNotNull { a ->
-            val name = a.attribute().unwrapKey().map { it.identifier().path }.orElse("?")
-            val mods = a.modifiers().joinToString(",") { m -> "[${q(m.id().path)},${f3(m.amount())},${m.operation().ordinal}]" }
-            val row = "[${q(name)},${f3(a.base())},[$mods]]"
-            if (s.attrs.put(name, row) == row) null else row
-        }
-        if (rows.isNotEmpty()) line("att", ""","d":[${rows.joinToString(",")}]""")
-    }
-
-    /** Your hotbar, armour and offhand, with lore, when an item changes (the same stack object is skipped). */
-    private fun gear(s: Session) {
-        val player = DevgineerClient.mc.player ?: return
-        for (slot in GEAR_SLOTS) {
-            val stack = when (slot) {
-                in 0..8 -> player.inventory.getItem(slot)
-                40 -> player.getItemBySlot(EquipmentSlot.OFFHAND)
-                else -> player.getItemBySlot(ARMOR[slot - 36])
-            }
-            if (s.items.put(slot, stack) === stack) continue
-            val lore = stack.get(DataComponents.LORE)?.lines()?.joinToString(",") { q(it.string) } ?: ""
-            val text = if (stack.isEmpty) "" else ""","id":${q(stack.itemId)},"name":${q(stack.hoverName.string)},"lore":[$lore]"""
-            if (s.itemText.put(slot, text) == text) continue
-            line("item", ""","s":$slot$text""")
-        }
+    private fun line(s: Session, kind: String, body: CharSequence) {
+        val seq = Rec.nextSeq()
+        val ms = System.currentTimeMillis()
+        val t = s.run.currentTick
+        val text = StringBuilder(body.length + 96).append(RecorderFiles.envelope(kind, seq, t, clientTick, ms, System.nanoTime() - s.rec.startNs))
+            .append(body).append('}').toString()
+        s.rec.line(seq, kind, ms, text, t = t, n = clientTick)
     }
 
     private fun mark(note: String?) {
-        if (session == null) { DevgineerClient.msg("§7Better Recorder: not recording."); return }
-        line("mark", ""","m":${q(note ?: "")}""")
-        DevgineerClient.msg("§aMarked§7 at tick ${session?.run?.currentTick}${if (note != null) ": $note" else ""}")
+        val s = session ?: run { DevgineerClient.msg("§7Better Recorder: not recording."); return }
+        line(s, "mark", StringBuilder(",\"note\":").append(RecorderFiles.q(note)))
+        s.rec.addMark(Rec.nextSeq(), System.currentTimeMillis(), note)
+        DevgineerClient.msg("§aMarked§7 at tick ${s.run.currentTick}${if (note != null) ": $note" else ""}")
     }
 
     private fun status(): String {
         val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else " (it records while ADR records a Hypixel dungeon run)"}."
-        return "§aBetter Recorder§7: ${s.run.stamp}.br.jsonl.gz, tick ${s.run.currentTick}, ${s.lines} lines."
+        return "§aBetter Recorder§7: ${s.run.stamp}.br, tick ${s.run.currentTick}, ${s.ticks} client ticks."
     }
 
-    private val DAMAGE = Regex("""^[^\d\s]*[\d,]+[^\d\s]*$""")
-    private val GEAR_SLOTS = (0..8) + (36..40)
-    private val ARMOR = arrayOf(EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD)
+    private const val FORMAT_VERSION = 3
+    private const val FORMAT_NOTE = "Better Recorder v3 (src/dev/betterrecorder/FORMAT.md): Dungeon Recorder layout (manifest.json, partNNNN.jsonl.gz + .raw.gz sidecar + .idx.jsonl). " +
+        "Lines: envelope {k,seq,t=ADR tick,n=client tick,ms,ns}. pre {fr:[seq,us,clientTick]...} frames buffered before the run; " +
+        "tk {dt us, fr:[seq,us]... live frames this tick, in:{changed: k key bits fwd,back,left,right,jump,sneak,sprint,use,attack,drop,ctrl; c [use,attack,drop] presses; sl; r [yaw,pitch]; p; v; g; st sprint|sneak<<1|using<<2; ping; scr; fps}}; " +
+        "prof (profile at start); mark; end. Raw sidecar: [u32 len][varlong seq][dir 0 in/1 out][phase 3 config/4 play][withheld][packet id + payload, uncompressed]."
 
-    private fun f1(v: Double) = String.format(Locale.ROOT, "%.1f", v)
-    private fun f1(v: Float) = f1(v.toDouble())
-    private fun f2(v: Double) = String.format(Locale.ROOT, "%.2f", v)
-    private fun f3(v: Double) = String.format(Locale.ROOT, "%.3f", v)
-    private fun q(s: String): String {
-        val sb = StringBuilder(s.length + 2).append('"')
-        for (ch in s) when {
-            ch == '"' -> sb.append("\\\"")
-            ch == '\\' -> sb.append("\\\\")
-            ch < ' ' -> sb.append(String.format(Locale.ROOT, "\\u%04x", ch.code))
-            else -> sb.append(ch)
-        }
-        return sb.append('"').toString()
-    }
+    /** Small enough to always leave on: stops (with a line) under 5 GB free; no folder cap. */
+    private val CONFIG = RecConfig(minFreeGb = 5.0)
+    private val PROFILE_ID = Regex("""^Profile ID: ([0-9a-f-]{32,36})""")
+    private val PROFILE_NAME = Regex("""^You are playing on profile: (\w+)""")
 }
