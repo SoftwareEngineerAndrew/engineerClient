@@ -165,8 +165,8 @@ object OdinMapPrediction {
                 else -> continue
             }
             val tiles = room.tiles.map { it.z * W + it.x }.distinct().toIntArray()
-            // a name only once someone has been in the room (what Odin shows on its map too)
-            v.addRoom(kind, tiles, if (room.shouldShowName) room.name else null) ?: return null
+            // the name once the room is open, as dtMap has it (Odin knows it then, but shows it only once someone's been in)
+            v.addRoom(kind, tiles, LcmStyle.knownName(room)) ?: return null
         }
         if (v.kinds.none { it == Kind.ENTRANCE }) return null
         v.secretTotals = SecretNames.totals(DungeonUtils.secretCount, DungeonUtils.secretPercentage)

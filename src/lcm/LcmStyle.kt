@@ -207,6 +207,12 @@ object LcmStyle {
     /** Opened on the map (or walked into), not just seen behind a door. */
     internal fun opened(room: DungeonRoom?): Boolean = room != null && room.isViewable && room.checkmark != MapCheckmark.QUESTION_MARK
 
+    /**
+     * The room's name once it's open (as dtMap has it), not only once someone has walked in (Odin's [DungeonRoom.shouldShowName]):
+     * Odin knows it from the room's core as soon as it has scanned it, and only holds it back. Null until then.
+     */
+    internal fun knownName(room: DungeonRoom): String? = room.name?.takeIf { room.shouldShowName || opened(room) }
+
     /** Each tile, and the gaps between neighbouring tiles of the room (the middle of a 2x2 too, never an L's missing corner). */
     private fun fillTiles(g: GuiGraphicsExtractor, room: DungeonRoom, color: Int) {
         val tiles = room.tiles
@@ -344,8 +350,8 @@ object LcmStyle {
     private fun drawName(g: GuiGraphicsExtractor, room: DungeonRoom) {
         if (!opened(room) || room.type == RoomType.ENTRANCE || room.type == RoomType.BLOOD || room.type == RoomType.FAIRY || room.type == RoomType.UNDISCOVERED) return
         val (cx, cz) = center(room) ?: return
-        // as Odin: the name once someone has been in the room, its check mark before that
-        val name = room.name?.takeIf { room.shouldShowName }
+        // as dtMap: the name once the room is open (and Odin has scanned it), its check mark before that
+        val name = knownName(room)
         if (name == null) {
             val icon = when (room.checkmark) {
                 MapCheckmark.GREEN -> greenCheck
