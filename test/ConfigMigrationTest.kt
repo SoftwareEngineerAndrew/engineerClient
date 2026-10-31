@@ -41,4 +41,23 @@ class ConfigMigrationTest {
         assertFalse(t.has("Necron Drop"))
         assertEquals(12, t.getAsJsonObject("Necron DPS")["x"].asInt)
     }
+
+    private fun migrateAds(adsSettings: String): com.google.gson.JsonObject {
+        val odin = Files.createTempDirectory("odin")
+        Files.createDirectories(odin.resolve("addons"))
+        val file = odin.resolve("addons").resolve("engineerclient.json")
+        Files.writeString(file, """[{"name":"ADS","enabled":true,"settings":$adsSettings}]""")
+        ConfigMigration.run(odin)
+        return JsonParser.parseString(Files.readString(file)).asJsonArray.first().asJsonObject.getAsJsonObject("settings")
+    }
+
+    @Test fun shortbowCooldownOfTwoIsDropped() {
+        val s = migrateAds("""{"Shortbow Cooldown":2.0}""")
+        assertFalse(s.has("Shortbow Cooldown"))
+        assertFalse(s.has("Shortbow Shot Cooldown"))
+    }
+
+    @Test fun shortbowCooldownSetByHandIsKept() {
+        assertEquals(7, migrateAds("""{"Shortbow Cooldown":7.0}""")["Shortbow Shot Cooldown"].asInt)
+    }
 }
