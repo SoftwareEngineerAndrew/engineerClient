@@ -60,4 +60,30 @@ class ConfigMigrationTest {
     @Test fun shortbowCooldownSetByHandIsKept() {
         assertEquals(7, migrateAds("""{"Shortbow Cooldown":7.0}""")["Shortbow Shot Cooldown"].asInt)
     }
+
+    private fun migrateAdr(adrSettings: String): com.google.gson.JsonObject {
+        val odin = Files.createTempDirectory("odin")
+        Files.createDirectories(odin.resolve("addons"))
+        val file = odin.resolve("addons").resolve("engineerclient.json")
+        Files.writeString(file, """[{"name":"ADR","enabled":true,"settings":$adrSettings}]""")
+        ConfigMigration.run(odin)
+        return JsonParser.parseString(Files.readString(file)).asJsonArray.first().asJsonObject.getAsJsonObject("settings")
+    }
+
+    @Test fun privateRunsOffIsUnlistedRunsOff() {
+        val s = migrateAdr("""{"Private Runs":false}""")
+        assertFalse(s["Unlisted Runs"].asBoolean)
+        assertFalse(s.has("Private Runs"))
+        assertEquals(true, s["Unlisted Runs Checked"].asBoolean)
+    }
+
+    @Test fun privateRunsOnIsUnlistedRunsOn() {
+        assertEquals(true, migrateAdr("""{"Private Runs":true}""")["Unlisted Runs"].asBoolean)
+    }
+
+    @Test fun unlistedRunsAlreadySetIsKept() {
+        val s = migrateAdr("""{"Private Runs":false,"Unlisted Runs":true}""")
+        assertEquals(true, s["Unlisted Runs"].asBoolean)
+        assertFalse(s.has("Unlisted Runs Checked"))
+    }
 }
