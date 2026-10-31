@@ -109,4 +109,66 @@ class SecretNamesTest {
         assertEquals(1.0, p.namedRooms.sumOf { it.chance.toDouble() }, 1e-4)
         assertEquals(setOf("Crypt", "Pedestal", "Purple Flags", "Doors"), p.namedRooms.map { it.name.name }.toSet())
     }
+
+    /** [SecretNames.solve] by every assignment of names to rooms, as it was worked out before. */
+    private fun brute(sn: SecretNames, targets: IntArray, pools: IntArray): Pair<Double, Map<Int, DoubleArray>> {
+        val pw = DoubleArray(MapStats.POOLS) { p -> sn.avail[p].sumOf { it.seen.toDouble() } }
+        val pick = IntArray(pools.size)
+        val marg = Array(pools.size) { DoubleArray(sn.avail[pools[it]].size) }
+        var total = 0.0
+        fun dfs(i: Int, sum: Int, w: Double) {
+            if (i == pools.size) { if (sum in targets) { total += w; for (j in pools.indices) marg[j][pick[j]] += w }; return }
+            val names = sn.avail[pools[i]]
+            for (k in names.indices) {
+                if ((0 until i).any { pools[it] == pools[i] && pick[it] == k }) continue
+                pick[i] = k; dfs(i + 1, sum + names[k].secrets, w * names[k].seen / pw[pools[i]])
+            }
+        }
+        dfs(0, 0, 1.0)
+        val by = HashMap<Int, DoubleArray>()
+        for (j in pools.indices) if (pools[j] !in by) by[pools[j]] = DoubleArray(marg[j].size) { if (total > 0) marg[j][it] / total else 0.0 }
+        return total to by
+    }
+
+    @Test fun anyNumberOfRoomsIsWorkedOutExactly() {
+        val rnd = Random(7)
+        val choice = intArrayOf(0, 1, 2, 3, 4, MapStats.POOL_1X1, MapStats.POOL_PUZZLE, MapStats.POOL_TRAP, MapStats.POOL_RARE)
+        repeat(40) {
+            val pools = IntArray(1 + rnd.nextInt(4)) { choice[rnd.nextInt(choice.size)] }
+            val targets = intArrayOf(rnd.nextInt(3, 22), rnd.nextInt(3, 22)).distinct().toIntArray()
+            val sn = SecretNames(setOf("Gold", "Mossy"), targets)
+            val r = assertNotNull(sn.solve(pools))
+            val (lik, by) = brute(sn, targets, pools)
+            assertEquals(lik, r.likelihood, 1e-9 * maxOf(1.0, lik), "pools ${pools.toList()} targets ${targets.toList()}")
+            if (lik > 0) for ((pool, a) in by) for (k in a.indices) assertEquals(a[k], r.byPool.getValue(pool)[k], 1e-9)
+        }
+        // far past what the enumeration could: 14 rooms at once
+        val many = IntArray(14) { if (it < 8) MapStats.POOL_1X1 else it - 8 }
+        val r = assertNotNull(SecretNames(emptySet(), intArrayOf(45)).solve(many))
+        assertTrue(r.likelihood > 0)
+        assertEquals(1.0, r.byPool.getValue(MapStats.POOL_1X1).sum(), 1e-9)
+    }
+
+    @Test fun aMapAllDiscoveredNamesEveryRoomHoweverMany() {
+        // the last room on the map too (a 1x2 at 28-29, its door from the L above), and six rooms nobody has been in
+        val v0 = lastRoom(0)
+        val v = MapView(6, 6, 4)
+        val unnamed = setOf("Flags", "Mossy", "Diagonal", "Cell", "Mural", "Quiz")
+        var named = 0
+        for (i in v0.kinds.indices) {
+            val name = v0.names[i]!!
+            if (name !in unnamed) named += MapStats.NAMES.first { it.name == name }.secrets
+            assertNotNull(v.addRoom(v0.kinds[i], v0.roomTiles[i], name.takeIf { it !in unnamed }))
+        }
+        assertNotNull(v.addRoom(Kind.NORMAL, intArrayOf(28, 29)))
+        v.closeEdges { a, b -> v0.edge(a, b).takeIf { Edge.isDoor(it) } }
+        val total = named + 30
+        v.secretTotals = intArrayOf(total)
+        val names = assertNotNull(MapPredictor(v, gameProcess = false).certainNames(null))
+        val rooms = names.groupBy { it.tiles.toList() }
+        assertEquals(7, rooms.size)
+        for ((tiles, ns) in rooms) assertEquals(1.0, ns.sumOf { it.chance.toDouble() }, 1e-4, "room $tiles")
+        // every way the names can go adds up to the 30 the named rooms leave
+        assertEquals(30.0, names.sumOf { it.chance.toDouble() * it.name.secrets }, 1e-3)
+    }
 }

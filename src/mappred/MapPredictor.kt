@@ -492,6 +492,47 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
         return pins
     }
 
+    /**
+     * Every unnamed room's names from the secret total, however many there are, once the map is known for sure: every
+     * tile discovered, or [p] (this view's prediction) sure of every unknown room's size, place and type. Each room
+     * (its tiles) with each name that fits and its chance (from 0.1%), as [Prediction.namedRooms] has the last few; null
+     * while the map isn't known (or there's no total, a named room isn't on the list, or no names fit it: a misread).
+     */
+    fun certainNames(p: Prediction?): List<NamedRoom>? {
+        val sn = secrets ?: return null
+        if (bad || n > 64) return null
+        val rooms = ArrayList<IntArray>(); val pools = ArrayList<Int>()
+        for (i in view.kinds.indices) if (view.names[i] == null && fixedName(view.kinds[i]) == null) { rooms += view.roomTiles[i]; pools += poolOfKnown(i) }
+        if (cells.isNotEmpty()) {
+            val raw = (p ?: return null).raw
+            val big = HashMap<Int, IntArray>()
+            for (b in p.bigRooms) if (b.chance >= CERTAIN) for (t in b.tiles) big[t] = b.tiles
+            val taken = HashSet<Int>()
+            for (t in cells) {
+                val q = raw[t] ?: continue
+                val room = q.sum()
+                if (room <= 1 - CERTAIN) continue // a puzzle column tile with no room
+                if (room < CERTAIN) return null
+                if (q[Cls.BIG] >= CERTAIN) {
+                    val b = big[t] ?: return null
+                    if (taken.add(b.min())) { rooms += b; pools += (MapView.shapeOf(b, w) ?: return null).ordinal }
+                    continue
+                }
+                val c = (0 until Cls.COUNT).maxBy { q[it] }
+                if (c == Cls.BIG || q[c] < CERTAIN) return null
+                rooms += intArrayOf(t); pools += poolOfCls(c, Shape.ONE)
+            }
+        }
+        if (rooms.isEmpty()) return null
+        val res = sn.solve(pools.toIntArray()) ?: return null
+        if (!(res.likelihood > 0)) return null
+        val out = ArrayList<NamedRoom>()
+        rooms.forEachIndexed { r, tiles ->
+            res.byPool[pools[r]]?.forEachIndexed { k, share -> if (share >= 0.001) out += NamedRoom(tiles, sn.avail[pools[r]][k], share.toFloat()) }
+        }
+        return out
+    }
+
     /** A tile's place in the tab's puzzle order: column by column, west to east, each north to south. */
     private fun orderKey(t: Int): Int = (t % w) * h + t / w
 
@@ -877,6 +918,9 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
     }
 
     companion object {
+        /** Sure, for [certainNames]: every sample agrees (allowing for float sums). */
+        const val CERTAIN = 0.999f
+
         /**
          * A tile's chances [p] through a calibration [cal] (per [Cls] the sharpness a, offset b and change d per 3 rooms
          * known, as [MapStats.CALIBRATION]) with [roomsKnown] rooms on the map: q ∝ (p + 0.001)^a * e^(b + d * (rooms
