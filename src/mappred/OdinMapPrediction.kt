@@ -104,6 +104,8 @@ object OdinMapPrediction {
 
     @Volatile private var shown: Prediction? = null
     @Volatile private var shownView: MapView? = null
+    /** Every unnamed room's names once the map is known for sure ([MapPredictor.certainNames]); null until then. */
+    @Volatile private var shownNames: List<NamedRoom>? = null
     private var lastKey = ""
     private val generation = AtomicInteger()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-map-prediction").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
@@ -133,7 +135,7 @@ object OdinMapPrediction {
         generation.incrementAndGet()
         session.cancel()
         worker.execute { session.clear() }
-        shown = null; shownView = null; lastKey = ""
+        shown = null; shownView = null; shownNames = null; lastKey = ""
         pathDoors.clear()
     }
 
@@ -231,9 +233,13 @@ object OdinMapPrediction {
                 // stops when the map changes again, when nothing fits even the loosest rules, or when no more fit
                 session.threads = threads; session.ahead = ahead
                 session.begin(v)
+                // the names from the secret total once the map is known for sure, however many rooms are unnamed: a map
+                // all discovered at once, else once the prediction is sure of every room left
+                val namer = try { MapPredictor(v, gameProcess = false) } catch (_: Exception) { null }
+                shownNames = namer?.certainNames(null)
                 do {
                     if (generation.get() != gen) return@safely
-                    session.prediction()?.let { shown = it; shownView = v }
+                    session.prediction()?.let { shown = it; shownView = v; shownNames = namer?.certainNames(it) }
                 } while (session.step())
             }
         }
@@ -256,6 +262,8 @@ object OdinMapPrediction {
         }
         return out
     }
+
+    private fun knownTile(t: Int): Boolean = DungeonScan.rooms.any { r -> r.isViewable && r.tiles.any { it.z * W + it.x == t } }
 
     private fun knownTiles(): BooleanArray {
         val known = BooleanArray(W * W)
@@ -357,9 +365,12 @@ object OdinMapPrediction {
         secretsAt = if (splitSecrets.value) MapPredictor.splitSecrets(v, p.splits).let { s -> p.splits.indices.associate { p.splits[it].tile to s[it] } } else emptyMap()
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
         val exact = BooleanArray(W * W)
-        if (exactRooms.value) for ((_, names) in p.namedRooms.groupBy { it.tiles.joinToString(",") }) {
+        // (every room, discovered ones nobody has opened too, once the map is known for sure)
+        if (exactRooms.value) for ((_, names) in (shownNames ?: p.namedRooms).groupBy { it.tiles.joinToString(",") }) {
             val tiles = names[0].tiles
-            if (names.sumOf { it.chance.toDouble() } < EXACT || tiles.any { known[it] || exact[it] || it in blood }) continue
+            if (names.sumOf { it.chance.toDouble() } < EXACT) continue
+            if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, tiles, names); continue }
+            if (tiles.any { known[it] || exact[it] || it in blood }) continue
             for (t in tiles) exact[t] = true
             exactRoom(g, tiles, names)
         }
@@ -472,10 +483,20 @@ object OdinMapPrediction {
         val color = if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (0xBF shl 24)
             else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, 0.75f).rgba
         fillTiles(g, tiles, color)
+        roomText(g, tiles, names)
+    }
+
+    /** The map names the room on tile [t] itself (it's open: [LcmStyle.knownName]). */
+    private fun namedOnMap(t: Int): Boolean =
+        DungeonScan.rooms.any { r -> r.tiles.any { it.z * W + it.x == t } && LcmStyle.knownName(r) != null }
+
+    /** Odin's name text over a room: its name when only one fits, else "?" (nothing in LCM Style), with the secrets when every name that fits has the same count. */
+    private fun roomText(g: GuiGraphicsExtractor, tiles: IntArray, names: List<NamedRoom>) {
+        val best = names.maxBy { it.chance }
         val cx = tiles.map { (it % W) * TILE + ROOM / 2f }.average().toFloat()
         val cz = tiles.map { (it / W) * TILE + ROOM / 2f }.average().toFloat()
         val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
-        val name = if (best.chance >= EXACT) best.name.name else if (lcm) "" else "?"
+        val name = if (best.chance >= EXACT) best.name.name else if (lcm || tiles.all { knownTile(it) }) "" else "?"
         val text = name + if (secrets != null && secrets > 0) " 0/$secrets" else ""
         val lines = text.trim().split(" ").filter { it.isNotEmpty() }
         val fontH = mc.font.lineHeight
