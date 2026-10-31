@@ -118,7 +118,7 @@ object QuietMedia : Module(
         on<TickEvent.Server> { serverTicks++ }
         on<TickEvent.End> {
             when (phase) {
-                Phase.CLEAR -> if (if (role == Role.MAGE) bloodDone() else DungeonUtils.neededSecretsAmount.let { it > 0 && DungeonUtils.secretCount >= it } || DungeonUtils.inBoss) enter(Phase.AFTER_CLEAR)
+                Phase.CLEAR -> if (if (role == Role.MAGE) bloodDone() else com.engineerclient.OdinCompat.neededSecretsAmount().let { it > 0 && DungeonUtils.secretCount >= it } || DungeonUtils.inBoss) enter(Phase.AFTER_CLEAR)
                 Phase.STORM_WAIT -> if (serverTicks >= stormQuietAt) enter(Phase.STORM)
                 Phase.STORM -> if ((TermInfo.sectionNumber() ?: 0) >= (if (role == Role.MAGE) 2 else 4)) enter(Phase.DONE)
                 else -> {}
