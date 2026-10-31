@@ -69,7 +69,7 @@ object ADR : Module(
     description = "Records everything about each dungeon run (players, mobs, blocks, chat, rooms) and uploads it to the ADR viewer (undonecoffee.com/adr), where it can be replayed in the browser. Runs here older than 30 days that the viewer has are deleted from this computer.",
     key = null,
 ) {
-    private val privateRuns by BooleanSetting("Unlisted Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, unlisted ones included.")
+    private var privateRuns by BooleanSetting("Unlisted Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, unlisted ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way).")
     private val hidePartyChat by BooleanSetting("Hide Party Chat", false, desc = "Leaves party chat out of recordings and uploads. Off, the viewer shows what your party said during the run.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
@@ -79,6 +79,8 @@ object ADR : Module(
      * A secret this install sends with every upload, so the site can list this player's runs -
      * unlisted ones included - for whoever has it: the link /adr gives. Made on first use.
      */
+    // Asked the site once (runs/relist) whether the rename from "Private Runs" reset this player's choice.
+    private var unlistedChecked by BooleanSetting("Unlisted Runs Checked", false, desc = "").hide()
     private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /adr's link.", placeholder = "").hide()
 
     internal fun token(): String {
@@ -123,7 +125,7 @@ object ADR : Module(
 
     init {
         on<LevelEvent.Load> {
-            if (!tidied) { tidied = true; tidyRunsFolder(); uploadMissing(auto = true) }
+            if (!tidied) { tidied = true; tidyRunsFolder(); checkUnlisted(); uploadMissing(auto = true) }
             EngineerClient.safely("adr start") {
                 session?.finish()
                 RoomKeys.reset()
@@ -519,6 +521,33 @@ object ADR : Module(
                         .withHoverEvent(net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("§7$url")))
                 }
             ).append(Component.literal(" §8(unlisted ones too - keep this link to yourself)")))
+        }
+    }
+
+    /**
+     * Once per install: "Private Runs" became "Unlisted Runs" (2026-10-30, ADM 1.0.10), and the
+     * saved choice didn't carry over, so everyone who had turned it off was back to unlisted. The
+     * site knows (their last upload before was listed): it lists their uploads since, and the
+     * setting goes back off here.
+     */
+    private fun checkUnlisted() {
+        if (unlistedChecked) return
+        Thread.ofVirtual().name("adr-unlisted-check").start {
+            try {
+                val res = http.send(HttpRequest.newBuilder(URI.create("$RUNS_URL/relist")).header("X-Run-Owner", token())
+                    .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString())
+                if (res.statusCode() != 200) return@start
+                val o = JsonParser.parseString(res.body()).asJsonObject
+                if (o["listed"]?.asBoolean == true) {
+                    privateRuns = false
+                    val n = o["relisted"]?.asInt ?: 0
+                    EngineerClient.msg("§7ADR: an update had switched §fUnlisted Runs§7 on - it's off again, as you had it${if (n > 0) ", and your $n runs since are listed again" else ""}.")
+                }
+                unlistedChecked = true
+                com.odtheking.odin.features.ModuleManager.saveConfigurations()
+            } catch (t: Throwable) {
+                EngineerClient.logger.warn("[ec] adr: unlisted check failed", t)
+            }
         }
     }
 
