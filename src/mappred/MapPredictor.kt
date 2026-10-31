@@ -966,21 +966,23 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
         private const val MAX_TYPINGS = 4096.0
 
         /**
-         * The unknown rooms [p] is sure of the size and place of (every sample agrees), whatever their type or name: each
-         * big room every sample puts on the same tiles, and each tile every sample makes a 1x1 room. Its tiles, each.
+         * The unknown rooms [p] is sure of the size and place of, whatever their type or name: each big room put on the
+         * same tiles in at least [at] of samples, and each tile a 1x1 room at least [at] of the time, by the chances shown
+         * ([Prediction.probs]) or as the samples gave them ([Prediction.raw]). Its tiles, each.
          */
-        fun certainShapes(p: Prediction): List<IntArray> {
+        fun certainShapes(p: Prediction, at: Float = CERTAIN): List<IntArray> {
+            fun sureBig(t: Int) = maxOf(p.probs.getOrNull(t)?.get(Cls.BIG) ?: 0f, p.raw.getOrNull(t)?.get(Cls.BIG) ?: 0f) >= at
+            fun sure1x1(q: FloatArray?) = q != null && q.sum() >= at && q[Cls.BIG] <= 1 - at
             val out = ArrayList<IntArray>()
             val inBig = HashSet<Int>()
             for (b in p.bigRooms) {
-                if (b.chance < CERTAIN || b.tiles.any { it in inBig || (p.raw.getOrNull(it)?.get(Cls.BIG) ?: 0f) < CERTAIN }) continue
+                if (b.chance < at || b.tiles.any { it in inBig || !sureBig(it) }) continue
                 inBig += b.tiles.toList()
                 out += b.tiles
             }
             for (t in p.raw.indices) {
-                val q = p.raw[t] ?: continue
-                if (t in inBig || q.sum() < CERTAIN || q[Cls.BIG] > 1 - CERTAIN) continue
-                out += intArrayOf(t)
+                if (t in inBig) continue
+                if (sure1x1(p.probs.getOrNull(t)) || sure1x1(p.raw[t])) out += intArrayOf(t)
             }
             return out
         }

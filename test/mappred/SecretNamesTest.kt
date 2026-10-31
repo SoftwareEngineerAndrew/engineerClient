@@ -212,5 +212,11 @@ class SecretNamesTest {
         val p = Prediction(6, 6, raw, emptyList(), 1, 0,
             bigRooms = listOf(BigRoom(intArrayOf(28, 29), 1f), BigRoom(intArrayOf(3, 4), 0.7f)), raw = raw)
         assertEquals(setOf(listOf(28, 29), listOf(12)), MapPredictor.certainShapes(p).map { it.toList() }.toSet())
+        // a room the samples give 99% that's shown (calibrated, rounded) as 100% counts from 99.5%
+        val raw2 = raw.copyOf().also { it[5] = FloatArray(Cls.COUNT).also { q -> q[Cls.TRAP] = 0.99f } }
+        val shown = raw2.copyOf().also { it[5] = FloatArray(Cls.COUNT).also { q -> q[Cls.TRAP] = 0.997f } }
+        val p2 = Prediction(6, 6, shown, emptyList(), 1, 0, bigRooms = p.bigRooms, raw = raw2)
+        assertEquals(setOf(listOf(28, 29), listOf(12)), MapPredictor.certainShapes(p2).map { it.toList() }.toSet())
+        assertEquals(setOf(listOf(28, 29), listOf(12), listOf(5)), MapPredictor.certainShapes(p2, 0.995f).map { it.toList() }.toSet())
     }
 }
