@@ -66,6 +66,7 @@ object ConfigMigration {
      *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
      *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
+     *  - ADS's Shortbow Cooldown is its Shortbow Shot Cooldown (the wrong default 2 dropped, so it reads 5).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -89,6 +90,14 @@ object ConfigMigration {
         // P3 Sim -> P3 Sim Beta -> ADS (Advanced Dungeon Simulator): its settings keep under the new name.
         for (old in listOf("P3 Sim Beta", "P3 Sim")) module(modules, old)?.let {
             if (module(modules, "ADS") == null) { it.addProperty("name", "ADS"); changed = true }
+        }
+
+        // ADS's Shortbow Cooldown is its Shortbow Shot Cooldown; 2 (a wrong default from 2026-10-07: shots every 2 ticks)
+        // becomes the recorded 5, any other value is kept. The old key goes, so this runs once.
+        module(modules, "ADS")?.let(::settings)?.let { ads ->
+            val old = ads.remove("Shortbow Cooldown") ?: return@let
+            changed = true
+            if (!ads.has("Shortbow Shot Cooldown") && old.isJsonPrimitive && old.asDouble != 2.0) ads.add("Shortbow Shot Cooldown", old)
         }
 
         module(modules, "Random Stuff")?.let(::settings)?.let { rs ->

@@ -44,7 +44,7 @@ import kotlin.random.Random
  * every one counts for the i4 target.
  *
  * Clicks: right click shoots (left click too, but the Mosquito's left click is Nasty Bite), one shot per
- * Shortbow Cooldown; Nasty Bite has its own 10 ticks. A click inside a cooldown fires the tick it ends.
+ * Shortbow Shot Cooldown; Nasty Bite has its own 10 ticks. A click inside a cooldown fires the tick it ends.
  *
  * Aim: a shot is aimed with the newest look the server has of you on the tick it fires (your last move packet it
  * has), never the use_item packet's own rotation or your look at the click: a flick right after a click still turns
